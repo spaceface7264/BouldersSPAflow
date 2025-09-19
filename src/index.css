@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  body {
+    @apply bg-boulders-dark text-white;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-boulders-magenta hover:bg-boulders-pink text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-secondary {
+    @apply bg-transparent border-2 border-boulders-magenta text-boulders-magenta hover:bg-boulders-magenta hover:text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200;
+  }
+}
+
