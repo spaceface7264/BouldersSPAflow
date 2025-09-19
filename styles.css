@@ -1072,7 +1072,7 @@ body {
         50% { transform: scale(1.1); background: #f0f; color: white; }
         100% { transform: scale(1); }
     }
-
+}
 /* Mobile Optimizations */
 @media (max-width: 640px) {
     .quantity-selector {
