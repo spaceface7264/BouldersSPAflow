@@ -16,7 +16,7 @@ This build ships the Boulders membership purchase flow as a pure front‑end imp
 
 ## DOM Bindings
 
-- Elements that will be hydrated or read by the backend are tagged with `data-api-field`, `data-summary-field`, `data-component`, or `data-action` attributes in `index-simple.html`.
+- Elements that will be hydrated or read by the backend are tagged with `data-api-field`, `data-summary-field`, `data-component`, or `data-action` attributes in `index.html`.
 - Templates (`<template id="membership-plan-template">`, etc.) are used to avoid duplicate markup. Inject real content by cloning these nodes the same way `app.js` currently does with seed data.
 - Dynamic confirmation values (order number, member name, totals) are updated through `data-summary-field` selectors.
 
@@ -101,7 +101,7 @@ The backend can accept this payload as-is or adapt the transformer to match fina
 ## Files to Modify for Integration
 
 - `API Prod2/app.js` – replace static data, implement fetches, and connect checkout/payment logic.
-- `API Prod2/index-simple.html` – only extend data attributes if new backend properties are introduced.
+- `API Prod2/index.html` – only extend data attributes if new backend properties are introduced.
 - `API Prod2/styles.css` – adjust styling for any backend-driven state (e.g., additional badges or error states).
 
 Ping the front-end team before altering the templates so we can keep CSS selectors stable and avoid regressions.
