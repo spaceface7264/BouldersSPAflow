@@ -6,7 +6,7 @@ The visuals, step logic, validation, and payload construction are finished. All 
 
 ## Tech Stack
 
-- Static HTML entry (`index-simple.html`) plus a single orchestrating script (`app.js`)
+- Static HTML entry (`index.html`) plus a single orchestrating script (`app.js`)
 - CSS authored in `styles.css` with utility-inspired structure (no Tailwind runtime)
 - Vite + TypeScript scaffold remains in `src/` for future migration, but the production build currently ships the static bundle
 - Tooling: ESLint, TypeScript, Vite dev server (see `package.json`)
@@ -15,7 +15,7 @@ The visuals, step logic, validation, and payload construction are finished. All 
 
 ```
 API Prod2/
-├── index-simple.html    # Markup, templates, data-* bindings
+├── index.html    # Markup, templates, data-* bindings
 ├── styles.css           # Complete design system and component styles
 ├── app.js               # Catalog rendering, wizard state, payload builder
 ├── INTEGRATION.md       # Backend integration guide & endpoint map
@@ -51,11 +51,11 @@ Backend engineers can rely on the data attributes (`data-api-field`, `data-compo
 
 ```bash
 npm install
-npm run dev    # Serves index-simple.html and assets through Vite
+npm run dev    # Serves index.html and assets through Vite
 npm run build  # Optional: produces a static bundle in dist/
 ```
 
-No build step is required to inspect the hand-off: opening `index-simple.html` in a browser works because the assets are plain HTML/CSS/JS. The Vite toolchain is useful if you want hot reloads or TypeScript support while iterating.
+No build step is required to inspect the hand-off: opening `index.html` in a browser works because the assets are plain HTML/CSS/JS. The Vite toolchain is useful if you want hot reloads or TypeScript support while iterating.
 
 ## What Remains for Backend
 
