@@ -918,9 +918,15 @@ body {
         font-size: 13px;
     }
 
+    .step-panel-content {
+        margin: 0 -22px;
+    }
+    
+
     /* Quantity Cards */
     .quantity-card {
         position: relative;
+        max-width: 80%;
     }
 
     .quantity-selector {
