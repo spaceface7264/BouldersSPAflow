@@ -20,6 +20,17 @@
     box-sizing: border-box;
 }
 
+html {
+    overflow-x: hidden;
+    height: 100%;
+}
+
+/* Prevent overflow from negative margins */
+body > * {
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
 body {
     background-color: #1a1a1a;
     background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
@@ -30,6 +41,8 @@ body {
     color: white;
     font-family: 'Inter', system-ui, sans-serif;
     min-height: 100vh;
+    overflow-x: hidden;
+    height: 100%;
 }
 
 .header {
@@ -918,7 +931,7 @@ body {
         font-size: 13px;
     }
 
-    .step-panel-content {
+    .step-content {
         margin: 0 -22px;
     }
     
@@ -1068,6 +1081,10 @@ body {
         margin-left: 2px;
     }
 
+    .order-summary {
+        margin: 0 22px;
+    }
+
     /* Animation for quantity change */
     .quantity-display.updated {
         animation: quantityPulse 0.3s ease-out;
@@ -1172,6 +1189,11 @@ body {
         height: 52px;
         min-width: 60px;
     }
+}
+
+.info-form-section {
+    min-width: 0;
+    margin: 0 22px;
 }
 
 /* Dark mode support - removed for light theme only */
@@ -2576,6 +2598,10 @@ body {
     .step-connector {
         width: 20px;
         margin: 0 4px;
+    }
+
+    .step-content {
+        margin: 0 -22px;
     }
 
     /* Mobile Plan Cards Carousel */

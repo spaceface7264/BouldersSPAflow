@@ -1241,11 +1241,14 @@ function updateStepIndicator() {
 }
 
 function updateNavigationButtons() {
-  DOM.prevBtn.disabled = state.currentStep === 1;
-  DOM.nextBtn.disabled = state.currentStep === TOTAL_STEPS;
-  DOM.nextBtn.textContent = state.currentStep === TOTAL_STEPS ? 'Complete' : 'Next';
+  if (DOM.prevBtn) {
+    DOM.prevBtn.disabled = state.currentStep === 1;
+  }
+  if (DOM.nextBtn) {
+    DOM.nextBtn.disabled = state.currentStep === TOTAL_STEPS;
+    DOM.nextBtn.textContent = state.currentStep === TOTAL_STEPS ? "Complete" : "Next";
+  }
 }
-
 function updateMainSubtitle() {
   if (!DOM.mainSubtitle || !DOM.mainTitle) return;
 
