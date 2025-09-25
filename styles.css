@@ -2697,3 +2697,13 @@ body {
     color: #9CA3AF;
     font-size: 14px;
 }
+
+
+/* Hide parent/guardian toggle section */
+.toggle-container:has(#parentGuardian) {
+    display: none;
+}
+
+.parent-guardian-reminder {
+    display: none !important;
+}
