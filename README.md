@@ -1,72 +1,173 @@
-# Boulders Membership Flow (Frontend Hand-off)
+# Boulders Membership Flow
 
-This repository contains the complete single-page purchase flow for Boulders memberships. It is delivered as a static HTML/CSS/JavaScript experience that is ready for a backend team to wire up to real APIs.
+A modern, responsive membership signup flow for Boulders climbing gyms with API integration and smooth user experience.
 
-The visuals, step logic, validation, and payload construction are finished. All network activity is stubbed, with clear hooks for attaching live services.
+## 🚀 Features
 
-## Tech Stack
+### Core Functionality
+- **Multi-step signup process** with smooth transitions
+- **Gym selection** with real-time search and distance calculation
+- **Membership plan selection** with detailed pricing
+- **Add-on selection** for additional services
+- **Checkout process** with form validation
+- **Mobile-responsive design** optimized for all devices
 
-- Static HTML entry (`index.html`) plus a single orchestrating script (`app.js`)
-- CSS authored in `styles.css` with utility-inspired structure (no Tailwind runtime)
-- Vite + TypeScript scaffold remains in `src/` for future migration, but the production build currently ships the static bundle
-- Tooling: ESLint, TypeScript, Vite dev server (see `package.json`)
+### Advanced Features
+- **Heads-up Display** - Shows selected gym name in top-right corner
+- **Scroll to Top** - Automatically scrolls to top when navigating steps (⚠️ *Note: Still debugging - $100 debt acknowledged!*)
+- **Distance Calculation** - Real-time distance to gyms when location is allowed
+- **API Integration** - Dynamic gym loading from BUSINESSUNITS API
+- **Smooth Animations** - Check circles, hover effects, and transitions
+- **Search Functionality** - Filter gyms by name or address
+- **Back Navigation** - Clean back arrow for easy step navigation
 
-## Project Layout
+## 📱 Step Flow
+
+1. **Home Gym** - Select your preferred gym location
+2. **Access** - Choose membership plan type
+3. **Boost** - Select additional add-ons
+4. **Checkout** - Complete payment and personal information
+
+## 🎨 Design Features
+
+### Visual Elements
+- **Dark theme** with magenta accents
+- **Smooth animations** and transitions
+- **Clean typography** with proper hierarchy
+- **Responsive grid layouts** (2 columns desktop, 1 column mobile)
+- **Interactive feedback** with hover and selection states
+
+### Heads-up Display
+- **Fixed position** in top-right corner
+- **Auto-show/hide** when gym is selected
+- **Smooth animations** with fade and slide effects
+- **Mobile optimized** with responsive sizing
+
+### Gym Selection
+- **Real-time search** with instant filtering
+- **Distance indicators** when location is available
+- **Smooth selection** with check circle animations
+- **Auto-advance** to next step after selection
+
+## 🔧 Technical Implementation
+
+### API Integration
+- **BUSINESSUNITS API** for gym data
+- **Dynamic loading** of gym locations
+- **Fallback data** when API is unavailable
+- **Real-time updates** from API responses
+
+### JavaScript Features
+- **Modular architecture** with separate functions
+- **Event delegation** for dynamic content
+- **State management** for user selections
+- **Error handling** with graceful fallbacks
+
+### CSS Architecture
+- **Mobile-first approach** with responsive breakpoints
+- **CSS Grid and Flexbox** for layouts
+- **Custom properties** for consistent theming
+- **Smooth transitions** and animations
+
+## 📁 File Structure
 
 ```
-API Prod2/
-├── index.html    # Markup, templates, data-* bindings
-├── styles.css           # Complete design system and component styles
-├── app.js               # Catalog rendering, wizard state, payload builder
-├── INTEGRATION.md       # Backend integration guide & endpoint map
-├── README.md            # (this file)
-├── package.json         # Scripts/tooling if you prefer running through Vite
-└── src/…                # Starter React/Vite scaffold (unused by default build)
+├── index.html              # Main HTML structure
+├── styles.css              # Complete CSS styling
+├── app.js                  # Main JavaScript functionality
+├── gym-data-api.js         # API-ready gym data
+├── api-utils.js            # API utility functions
+├── shared/
+│   ├── styles/
+│   │   └── tokens.css      # Design tokens
+│   └── constants/
+│       └── index.ts        # Shared constants
+└── README.md               # This file
 ```
 
-## Frontend Capabilities
+## 🚀 Getting Started
 
-- Multi-step wizard (membership → add-ons → account → payment → confirmation)
-- Dynamic template cloning for plans, value cards, and add-ons
-- Form validation (required fields, guardian toggle, same-address helper)
-- Checkout payload assembly via `buildCheckoutPayload()`
-- Confirmation view with placeholder order details
-- Accessibility touches: `aria-live` regions, keyboard-friendly controls
+### Prerequisites
+- Modern web browser with JavaScript enabled
+- Internet connection for API calls
 
-## Integration Summary
+### Installation
+1. Clone or download the project
+2. Open `index.html` in a web browser
+3. Or serve via local server:
+   ```bash
+   python3 -m http.server 8080 --bind 0.0.0.0
+   ```
 
-All data, prices, and responses are mocked locally. Replace them with real services following the guide in **INTEGRATION.md**. Highlights:
+### Mobile Testing
+Access via local network IP:
+- **Desktop**: `http://localhost:8080`
+- **Mobile**: `http://[YOUR_IP]:8080`
 
-| Area | What Exists | Backend Task |
-| --- | --- | --- |
-| Catalog | Static arrays (`MEMBERSHIP_PLANS`, `VALUE_CARDS`, `ADDONS`) | Swap for `fetch` calls and hydrate templates |
-| Checkout | `handleCheckout()` logs payload and advances to confirmation | Call your checkout API, handle success/error states |
-| Payments | Card fields are formatted only | Connect to PSP / payment intent endpoint |
-| Confirmation | `buildOrderSummary()` uses placeholders | Populate with backend response data |
-| Referral | Hard-coded code/text | Inject real referral URL before rendering |
+## 🔌 API Integration
 
-Backend engineers can rely on the data attributes (`data-api-field`, `data-component`, `data-summary-field`, `data-action`) already present in the DOM. No markup changes are required to attach listeners or hydrate fields.
+### BUSINESSUNITS API
+The application integrates with the BUSINESSUNITS API for gym data:
 
-## Local Development
+- **Endpoint**: `https://boulders.brpsystems.com/apiserver/api/ver3/businessunits`
+- **Method**: GET (no authentication required)
+- **Data Format**: JSON with structured gym information
 
-```bash
-npm install
-npm run dev    # Serves index.html and assets through Vite
-npm run build  # Optional: produces a static bundle in dist/
+### API Data Structure
+```json
+{
+  "id": 1,
+  "name": "Boulders Copenhagen",
+  "address": {
+    "street": "Vesterbrogade 149",
+    "city": "København V",
+    "postalCode": "1620",
+    "latitude": 55.6761,
+    "longitude": 12.5683
+  },
+  "location": "DK",
+  "currency": "DKK"
+}
 ```
 
-No build step is required to inspect the hand-off: opening `index.html` in a browser works because the assets are plain HTML/CSS/JS. The Vite toolchain is useful if you want hot reloads or TypeScript support while iterating.
+## 🎯 Browser Console Commands
 
-## What Remains for Backend
+For development and testing:
 
-- Connect membership/value-card/add-on endpoints and remove the seed data
-- Implement checkout submission, success, and failure flows
-- Integrate payment provider logic (card tokenisation, Apple Pay, etc.)
-- Replace placeholder confirmation data with real values
-- Localise copy using the `data-i18n-key` attributes if required
+```javascript
+// Test API connection
+testAPI()
 
-Refer to **INTEGRATION.md** for endpoint suggestions, payload examples, and DOM binding notes. Frontend and backend teams should coordinate before altering markup so selectors stay stable.
+// Sync all gyms to API
+syncGyms()
 
-## Support
+// Export gym data to JSON
+exportGyms()
+```
 
-Please reach out to the frontend owner if you plan to restructure templates or introduce additional state so we can keep the hand-off aligned with the integration plan.
+## 📱 Mobile Optimization
+
+- **Touch-friendly** button sizes and spacing
+- **Responsive breakpoints** at 640px and 768px
+- **Optimized layouts** for single-column mobile view
+- **Smooth scrolling** and touch interactions
+
+## 🐛 Known Issues
+
+1. **Scroll to Top** - Still debugging the automatic scroll functionality (acknowledged $100 debt! 💸)
+2. **API Fallback** - Uses local data when API is unavailable
+3. **Location Permission** - Distance calculation requires user permission
+
+## 🔮 Future Enhancements
+
+- [ ] Fix scroll to top functionality (priority!)
+- [ ] Add loading states for API calls
+- [ ] Implement offline mode
+- [ ] Add more gym filtering options
+- [ ] Enhanced error handling and user feedback
+
+## 📄 License
+
+This project is part of the Boulders membership system.
+
+---

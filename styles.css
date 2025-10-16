@@ -10,6 +10,9 @@
     --color-card-fill: #f1f1f1;    /* card fill */
     --plan-section-gap: 32px;      /* spacing below category toggle */
     --plan-info-horizontal-padding: 0px; /* default info text padding */
+    --color-buttons-secondary: #1F2837;
+    --color-button-primary: #fff;
+    --color-text-secondary: #D1D5DB;
     
 }
 
@@ -45,9 +48,11 @@ body {
 
 .header-content {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 20px 16px;
+    gap: 16px;
 }
 
 .logo-section {
@@ -205,13 +210,16 @@ body {
 }
 
 .main-title {
-    font-size: 36px;
+    font-size: 24px;
+    text-transform: uppercase;
     font-weight: bold;
+    text-align: center;
     margin-bottom: 16px;
 }
 
 .main-subtitle {
     font-size: 20px;
+    padding-bottom: 20px;
     color: #D1D5DB;
 }
 
@@ -235,7 +243,7 @@ body {
 }
 
 .step-panel-content {
-    max-width: 1000px;
+    max-width: 600px;
     margin: 0 auto;
     text-align: center;
 }
@@ -299,6 +307,12 @@ body {
     animation: contentFadeOut 0.2s ease-out forwards;
 }
 
+.full-bleed {
+    margin-left: calc(-1 * var(--main-padding));
+    margin-right: calc(-1 * var(--main-padding));
+    width: calc(100% + (2 * var(--main-padding)));
+  }
+
 @keyframes expandSection {
     from {
         max-height: 0;
@@ -358,6 +372,242 @@ body {
     align-items: center;
     width: 100%;
     margin-top: 24px;
+}
+
+/* Gym Selection Styles */
+.search-wrapper {
+    position: relative;
+    margin-bottom: 32px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+    width: 20px;
+    height: 20px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 16px 16px 16px 48px;
+    background: #1e293b;
+    border: 2px solid #334155;
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.search-input:focus {
+    border-color: #f0f;
+    box-shadow: 0 0 0 3px rgba(240, 0, 240, 0.1);
+}
+
+.search-input::placeholder {
+    color: #64748b;
+}
+
+.gym-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.gym-item {
+    background: #1e293b;
+    border: 2px solid #334155;
+    border-radius: 12px;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.gym-item:hover {
+    border-color: #f0f;
+    transform: translateX(4px);
+}
+
+.gym-item.selected {
+    background: #27193F;
+    border-color: #f0f;
+}
+
+.gym-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.gym-name {
+    font-size: 16px;
+    font-weight: 600;
+    text-align: left;
+    color: #ffffff;
+    margin-bottom: 4px;
+}
+
+.gym-details {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.gym-address {
+    font-size: 13px;
+    color: #94a3b8;
+}
+
+.gym-distance {
+    font-size: 13px;
+    color: #f0f;
+    font-weight: 500;
+}
+
+.check-circle {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #334155;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.gym-item.selected .check-circle {
+    background: #f0f;
+    border-color: #f0f;
+}
+
+.check-circle::after {
+    content: '✓';
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.2s ease;
+}
+
+.gym-item.selected .check-circle::after {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.no-results {
+    text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
+    font-size: 15px;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Back Arrow Button */
+.back-arrow-btn {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: none;
+    border: none;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #D1D5DB;
+    z-index: 10;
+    padding: 0;
+}
+
+.back-arrow-btn:hover {
+    color: #f0f;
+    transform: translateX(-2px);
+}
+
+.back-arrow-btn:active {
+    transform: translateX(-4px);
+}
+
+.back-arrow-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Hide back arrow on all steps except step 2 */
+.step-panel:not(#step-2) .back-arrow-btn {
+    display: none;
+}
+
+/* Gym Heads-up Display */
+.gym-heads-up {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(30, 41, 59, 0.95);
+    border: 2px solid #334155;
+    border-radius: 12px;
+    padding: 12px 16px;
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.gym-heads-up.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.gym-heads-up-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gym-heads-up-label {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.gym-heads-up-name {
+    font-size: 14px;
+    color: #f0f;
+    font-weight: 600;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+    .gym-heads-up {
+        top: 10px;
+        right: 10px;
+        padding: 10px 12px;
+    }
+    
+    .gym-heads-up-label {
+        font-size: 11px;
+    }
+    
+    .gym-heads-up-name {
+        font-size: 13px;
+    }
 }
 
 /* Mobile Responsive */
@@ -779,8 +1029,8 @@ body {
     display: flex;
     justify-content: center;
     margin: 32px auto;
-    background-color: #2a2a2a;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background-color: #1e293b;
+    border: 1px solid #334155;
     border-radius: 999px;
     padding: 4px;
     max-width: 300px;
@@ -917,6 +1167,12 @@ body {
         padding: 10px 20px;
         font-size: 13px;
     }
+
+    .plan-options {
+  margin-left: -22px;
+  margin-right: -22px;
+  width: calc(100% + 44px); /* 22px + 22px */
+}
 
     /* Quantity Cards */
     .quantity-card {
@@ -2252,6 +2508,23 @@ body {
 }
 
 /* Mobile Responsive */
+@media (max-width: 640px) {
+    h1 {
+        font-size: 24px;
+    }
+
+    .gym-item {
+        padding: 14px 16px;
+    }
+
+    .gym-details {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+}
+
+/* Mobile Responsive */
 @media (max-width: 1024px) {
     .confirmation-layout {
         grid-template-columns: 1fr;
@@ -2392,7 +2665,7 @@ body {
     .plan-options {
         margin-left: 0;
         margin-right: 0;
-        padding-left: clamp(16px, 4vw, 32px);
+        padding-left: -22px;
         padding-right: clamp(16px, 4vw, 32px);
     }
 }

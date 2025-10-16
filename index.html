@@ -25,28 +25,41 @@
                     </div>
                 </div>
 
+                <h1 class="main-title">JOIN BOULDERS</h1>
                 
             </div>
         </div>
     </header>
-    <main class="main">
-        <h1 class="main-title">JOIN BOULDERS</h1> </main>
+    
+    <!-- Selected Gym Heads-up Display -->
+    <div class="gym-heads-up" id="gymHeadsUp">
+        <div class="gym-heads-up-content">
+            <span class="gym-heads-up-label">Home gym selected:</span>
+            <span class="gym-heads-up-name" id="selectedGymName">-</span>
+        </div>
+    </div>
+    
     <!-- Step Indicator -->
     <div class="step-indicator">
         <div class="step-indicator-container">
             <div class="step-indicator-content">
                 <div class="step active">
                     <div class="step-circle active">1</div>
-                    <div class="step-label">Start</div>
+                    <div class="step-label">Home Gym</div>
                 </div>
                 <div class="step-connector"></div>
                 <div class="step inactive">
                     <div class="step-circle inactive">2</div>
-                    <div class="step-label">Boost</div>
+                    <div class="step-label">Access</div>
                 </div>
                 <div class="step-connector"></div>
                 <div class="step inactive">
                     <div class="step-circle inactive">3</div>
+                    <div class="step-label">Boost</div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step inactive">
+                    <div class="step-circle inactive">4</div>
                     <div class="step-label">Send</div>
                 </div>
             </div>
@@ -55,13 +68,45 @@
 
     <main class="main">
         
-        <p class="main-subtitle" id="mainSubtitle">Choose your access type.</p>
         
         <!-- Step Content -->
         <div class="step-content">
-            <!-- Step 1: Choose Plan -->
+            <!-- Step 1: Gym Selection -->
             <div class="step-panel active" id="step-1">
                 <div class="step-panel-content">
+                    <p class="main-subtitle">Choose your home gym</p>
+                    
+                    <!-- Search Input -->
+                    <div class="search-wrapper">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                        <input type="text" class="search-input" placeholder="Search gyms..." id="gymSearch">
+                    </div>
+                    
+                    <!-- Gym List -->
+                    <div class="gym-list">
+                        <!-- Gym items will be dynamically loaded here -->
+                    </div>
+                    
+                    <!-- No Results Message -->
+                    <div class="no-results hidden" id="noResults">
+                        No gyms found matching your search.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Choose Plan -->
+            <div class="step-panel" id="step-2">
+                <div class="step-panel-content">
+                    <!-- Back Arrow -->
+                    <button class="back-arrow-btn" id="backToGymBtn" title="Back to gym selection">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                    </button>
+                    <p class="main-subtitle" id="mainSubtitle">Choose your access type.</p>
 
                     <!-- Category Toggle -->
                     <div class="category-toggle">
@@ -172,13 +217,15 @@
                 </div>
             </div>
             
-            <!-- Step 2: Add-ons -->
-            <div class="step-panel" id="step-2">
+            <!-- Step 3: Add-ons -->
+            <div class="step-panel" id="step-3">
                 <div class="step-panel-content">
+                            <p class="main-subtitle" id="mainSubtitle">Would you like fries with that?</p>
+
                     <!-- Add-on Products -->
                     <div class="plan-section">
                         <div class="plan-info-text">
-                            <p data-i18n-key="addons.intro">Enhance your climbing experience with our premium add-on products. All items are available at special member prices and can be added to your order.</p>
+                            <p data-i18n-key="addons.intro">Enhance your climbing experience with our add-on products.</p>
                         </div>
                         
                         <div class="plan-options" id="addonMode" data-scroll-container data-component="addon-plans"></div>
@@ -197,8 +244,8 @@
                 </div>
             </div>
             
-            <!-- Step 3: Info -->
-            <div class="step-panel" id="step-3">
+            <!-- Step 4: Info -->
+            <div class="step-panel" id="step-4">
                 <div class="step-panel-content">
                     <p class="step-panel-description"></p>
                     
@@ -310,18 +357,6 @@
                                  <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" data-api-field="customer.passwordConfirmation" required>
                              </div>
                              
-                             <div class="form-group">
-                                 <label for="primaryGym">Primary Boulders gym / Pick-up point*</label>
-                                 <div class="select-container">
-                                     <select id="primaryGym" name="primaryGym" data-api-field="customer.primaryGym" required>
-                                         <option value="">Select a gym</option>
-                                         <option value="boulders-copenhagen">Boulders Copenhagen</option>
-                                         <option value="boulders-aarhus">Boulders Aarhus</option>
-                                         <option value="boulders-odense">Boulders Odense</option>
-                                     </select>
-                                     <span class="dropdown-arrow">▼</span>
-                                 </div>
-                        </div>
                     </form>
                 </div>
                         
@@ -567,8 +602,8 @@
                 </div>
             </div>
             
-            <!-- Step 4: Confirmation -->
-            <div class="step-panel" id="step-4">
+            <!-- Step 5: Confirmation -->
+            <div class="step-panel" id="step-5">
                 <div class="step-panel-content">
                     <!-- Top Section - Success Confirmation -->
                     <div class="confirmation-header">
@@ -704,6 +739,8 @@
         </div>
     </main>
 
+    <script type="module" src="./gym-data-api.js"></script>
+    <script type="module" src="./api-utils.js"></script>
     <script type="module" src="./app.js"></script>
 
 </body>

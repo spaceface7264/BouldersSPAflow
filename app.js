@@ -139,11 +139,370 @@ const PARENT_REQUIRED_FIELDS = [
 
 const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 
+// Gym coordinates for distance calculation (legacy - now using API data)
+const GYM_COORDINATES = {
+  'boulders-copenhagen': { lat: 55.6761, lng: 12.5683 },
+  'boulders-odense': { lat: 55.4038, lng: 10.4024 },
+  'boulders-aarhus': { lat: 56.1572, lng: 10.2107 },
+  'boulders-aalborg': { lat: 57.0488, lng: 9.9217 },
+  'boulders-esbjerg': { lat: 55.4703, lng: 8.4549 },
+  'boulders-herning': { lat: 56.1393, lng: 8.9756 },
+  'boulders-kolding': { lat: 55.4904, lng: 9.4722 },
+  'boulders-randers': { lat: 56.4606, lng: 10.0363 },
+  'boulders-vejle': { lat: 55.7093, lng: 9.5357 },
+  'boulders-viborg': { lat: 56.4531, lng: 9.4021 }
+};
+
+// API-ready gym data mapping
+const GYM_API_MAPPING = {
+  'boulders-copenhagen': 1,
+  'boulders-aarhus': 2,
+  'boulders-odense': 3,
+  'boulders-aalborg': 4,
+  'boulders-esbjerg': 5,
+  'boulders-herning': 6,
+  'boulders-kolding': 7,
+  'boulders-randers': 8,
+  'boulders-vejle': 9,
+  'boulders-viborg': 10
+};
+
+// Calculate distance between two coordinates using Haversine formula
+function calculateDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// Get user location and update distances
+async function getUserLocation() {
+  if (!navigator.geolocation) {
+    console.log('Geolocation is not supported by this browser.');
+    return;
+  }
+
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        state.userLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        state.locationPermission = 'granted';
+        updateGymDistances();
+        resolve(state.userLocation);
+      },
+      (error) => {
+        console.log('Location access denied or error:', error.message);
+        state.locationPermission = 'denied';
+        resolve(null);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000 // 5 minutes
+      }
+    );
+  });
+}
+
+// Update distance display for all gyms
+function updateGymDistances() {
+  if (!state.userLocation) return;
+
+  document.querySelectorAll('.gym-item').forEach(item => {
+    const gymId = item.dataset.gymId;
+    const gymCoords = GYM_COORDINATES[gymId];
+    
+    if (gymCoords) {
+      const distance = calculateDistance(
+        state.userLocation.lat,
+        state.userLocation.lng,
+        gymCoords.lat,
+        gymCoords.lng
+      );
+      
+      const distanceElement = item.querySelector('.gym-distance');
+      if (distanceElement) {
+        distanceElement.textContent = `${distance.toFixed(1)} km`;
+        distanceElement.style.display = 'block';
+      }
+    }
+  });
+}
+
+// API Integration Functions
+class BusinessUnitsAPI {
+  constructor(baseUrl = 'https://boulders.brpsystems.com/apiserver') {
+    this.baseUrl = baseUrl;
+  }
+
+  // Get all business units from API
+  async getBusinessUnits() {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/ver3/businessunits`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching business units:', error);
+      // Fallback to local data if API fails
+      return this.getLocalGymData();
+    }
+  }
+
+  // Get local gym data as fallback
+  getLocalGymData() {
+    return [
+      {
+        id: 1,
+        name: "Boulders Copenhagen",
+        address: {
+          street: "Vesterbrogade 149",
+          city: "København V",
+          postalCode: "1620",
+          latitude: 55.6761,
+          longitude: 12.5683
+        }
+      },
+      {
+        id: 2,
+        name: "Boulders Aarhus",
+        address: {
+          street: "Søren Frichs Vej 42",
+          city: "Åbyhøj",
+          postalCode: "8230",
+          latitude: 56.1572,
+          longitude: 10.2107
+        }
+      },
+      {
+        id: 3,
+        name: "Boulders Odense",
+        address: {
+          street: "Hjallesevej 91",
+          city: "Odense M",
+          postalCode: "5230",
+          latitude: 55.4038,
+          longitude: 10.4024
+        }
+      },
+      {
+        id: 4,
+        name: "Boulders Aalborg",
+        address: {
+          street: "Hobrovej 333",
+          city: "Aalborg SV",
+          postalCode: "9200",
+          latitude: 57.0488,
+          longitude: 9.9217
+        }
+      },
+      {
+        id: 5,
+        name: "Boulders Esbjerg",
+        address: {
+          street: "Gammel Vardevej 2",
+          city: "Esbjerg",
+          postalCode: "6700",
+          latitude: 55.4703,
+          longitude: 8.4549
+        }
+      },
+      {
+        id: 6,
+        name: "Boulders Herning",
+        address: {
+          street: "Industrivej 15",
+          city: "Herning",
+          postalCode: "7400",
+          latitude: 56.1393,
+          longitude: 8.9756
+        }
+      },
+      {
+        id: 7,
+        name: "Boulders Kolding",
+        address: {
+          street: "Vestre Ringvej 36",
+          city: "Kolding",
+          postalCode: "6000",
+          latitude: 55.4904,
+          longitude: 9.4722
+        }
+      },
+      {
+        id: 8,
+        name: "Boulders Randers",
+        address: {
+          street: "Industrivej 8",
+          city: "Randers C",
+          postalCode: "8900",
+          latitude: 56.4606,
+          longitude: 10.0363
+        }
+      },
+      {
+        id: 9,
+        name: "Boulders Vejle",
+        address: {
+          street: "Vejlevej 25",
+          city: "Vejle",
+          postalCode: "7100",
+          latitude: 55.7093,
+          longitude: 9.5357
+        }
+      },
+      {
+        id: 10,
+        name: "Boulders Viborg",
+        address: {
+          street: "Industrivej 12",
+          city: "Viborg",
+          postalCode: "8800",
+          latitude: 56.4531,
+          longitude: 9.4021
+        }
+      }
+    ];
+  }
+
+  // Create a new business unit
+  async createBusinessUnit(businessUnitData) {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/ver3/businessunits`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(businessUnitData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating business unit:', error);
+      throw error;
+    }
+  }
+
+  // Update an existing business unit
+  async updateBusinessUnit(id, businessUnitData) {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/ver3/businessunits/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(businessUnitData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Error updating business unit:', error);
+      throw error;
+    }
+  }
+}
+
+// Initialize API instance
+const businessUnitsAPI = new BusinessUnitsAPI();
+
+// Load gyms from API and update UI
+async function loadGymsFromAPI() {
+  try {
+    const gyms = await businessUnitsAPI.getBusinessUnits();
+    console.log('Loaded gyms from API:', gyms);
+    
+    // Clear existing gym list
+    const gymList = document.querySelector('.gym-list');
+    if (gymList) {
+      gymList.innerHTML = '';
+    }
+    
+    // Create gym items from API data
+    gyms.forEach(gym => {
+      if (gym.name && gym.address) {
+        const gymItem = createGymItem(gym);
+        if (gymList) {
+          gymList.appendChild(gymItem);
+        }
+        
+        // Update gym coordinates with API data if available
+        if (gym.address.latitude && gym.address.longitude) {
+          const gymKey = Object.keys(GYM_API_MAPPING).find(key => GYM_API_MAPPING[key] === gym.id);
+          if (gymKey) {
+            GYM_COORDINATES[gymKey] = {
+              lat: gym.address.latitude,
+              lng: gym.address.longitude
+            };
+          }
+        }
+      }
+    });
+    
+    // Re-setup event listeners for new gym items
+    setupGymEventListeners();
+    
+    // Update distances if user location is available
+    if (state.userLocation) {
+      updateGymDistances();
+    }
+  } catch (error) {
+    console.error('Failed to load gyms from API:', error);
+  }
+}
+
+// Create gym item element from API data
+function createGymItem(gym) {
+  const gymItem = document.createElement('div');
+  gymItem.className = 'gym-item';
+  gymItem.setAttribute('data-gym-id', `gym-${gym.id}`);
+  
+  const address = gym.address;
+  const addressString = `${address.street}, ${address.postalCode} ${address.city}`;
+  
+  gymItem.innerHTML = `
+    <div class="gym-info">
+      <div class="gym-name">${gym.name}</div>
+      <div class="gym-details">
+        <div class="gym-address">${addressString}</div>
+        <div class="gym-distance" style="display: none;">-- km</div>
+      </div>
+    </div>
+    <div class="check-circle"></div>
+  `;
+  
+  return gymItem;
+}
+
+// Setup event listeners for gym items
+function setupGymEventListeners() {
+  const gymItems = document.querySelectorAll('.gym-item');
+  gymItems.forEach(item => {
+    item.addEventListener('click', () => handleGymSelection(item));
+  });
+}
+
 const state = {
   currentStep: 1,
+  selectedGymId: null,
   membershipPlanId: null,
   valueCardQuantities: new Map(),
   addonIds: new Set(),
+  userLocation: null,
+  locationPermission: 'prompt', // 'granted', 'denied', 'prompt'
   totals: {
     cartTotal: 0,
     membershipMonthly: 0,
@@ -156,7 +515,7 @@ const state = {
 
 const DOM = {};
 const templates = {};
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 const buttonGlareTimeouts = new WeakMap();
 const carouselResizeObservers = new WeakMap();
 const carouselScrollHandlers = new WeakMap();
@@ -173,6 +532,12 @@ function init() {
   handleCategoryToggle('single');
   updateStepIndicator();
   updateNavigationButtons();
+  
+  // Load gyms from API
+  loadGymsFromAPI();
+  
+  // Request user location for distance calculation
+  getUserLocation();
   updateMainSubtitle();
 }
 
@@ -242,6 +607,16 @@ function setupEventListeners() {
   DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
   DOM.termsConsent?.addEventListener('change', updateCheckoutButton);
 
+  // Gym selection event listeners will be set up dynamically when gyms are loaded
+
+  // Search functionality
+  const gymSearch = document.getElementById('gymSearch');
+  gymSearch?.addEventListener('input', handleGymSearch);
+
+  // Back arrow event listener
+  const backToGymBtn = document.getElementById('backToGymBtn');
+  backToGymBtn?.addEventListener('click', () => handleBackToGym());
+
   DOM.toggleButtons?.forEach((btn) => {
     btn.addEventListener('click', () => {
       const category = btn.dataset.category ?? 'single';
@@ -310,6 +685,125 @@ function renderMembershipPlans() {
 
     DOM.membershipPlans.appendChild(card);
   });
+}
+
+function handleGymSelection(item) {
+  // Remove selected class from all gym items
+  document.querySelectorAll('.gym-item').forEach(gymItem => {
+    gymItem.classList.remove('selected');
+  });
+  
+  // Add selected class to clicked item
+  item.classList.add('selected');
+  
+  // Store selected gym ID
+  state.selectedGymId = item.dataset.gymId;
+  
+  // Update heads-up display
+  updateGymHeadsUp(item);
+  
+  // Auto-advance to next step after a short delay
+  setTimeout(() => {
+    nextStep();
+  }, 500);
+}
+
+// Update gym heads-up display
+function updateGymHeadsUp(selectedItem) {
+  const headsUp = document.getElementById('gymHeadsUp');
+  const gymName = document.getElementById('selectedGymName');
+  
+  if (selectedItem && headsUp && gymName) {
+    const gymNameText = selectedItem.querySelector('.gym-name').textContent;
+    gymName.textContent = gymNameText;
+    
+    // Show heads-up with animation
+    headsUp.classList.add('show');
+    
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      headsUp.classList.remove('show');
+    }, 3000);
+  }
+}
+
+// Scroll to top function with multiple approaches
+function scrollToTop() {
+  // Method 1: Direct scroll to top
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  
+  // Method 2: Smooth scroll with requestAnimationFrame
+  requestAnimationFrame(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'smooth'
+    });
+  });
+  
+  // Method 3: Force scroll after a brief delay
+  setTimeout(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, 50);
+}
+
+function handleGymSearch(event) {
+  const searchTerm = event.target.value.toLowerCase();
+  const gymItems = document.querySelectorAll('.gym-item');
+  const noResults = document.getElementById('noResults');
+  let visibleCount = 0;
+  
+  gymItems.forEach(item => {
+    const gymName = item.querySelector('.gym-name').textContent.toLowerCase();
+    const gymAddress = item.querySelector('.gym-address').textContent.toLowerCase();
+    
+    if (gymName.includes(searchTerm) || gymAddress.includes(searchTerm)) {
+      item.classList.remove('hidden');
+      visibleCount++;
+    } else {
+      item.classList.add('hidden');
+    }
+  });
+  
+  // Show/hide no results message
+  if (visibleCount === 0 && searchTerm.length > 0) {
+    noResults.classList.remove('hidden');
+  } else {
+    noResults.classList.add('hidden');
+  }
+}
+
+function handleBackToGym() {
+  // Go back to step 1 (gym selection)
+  state.currentStep = 1;
+  showStep(state.currentStep);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  
+  // Scroll to top immediately and with delay
+  scrollToTop();
+  setTimeout(() => {
+    scrollToTop();
+  }, 200);
+  
+  // Restore previously selected gym if any
+  if (state.selectedGymId) {
+    const selectedGymItem = document.querySelector(`[data-gym-id="${state.selectedGymId}"]`);
+    if (selectedGymItem) {
+      // Remove selected class from all items first
+      document.querySelectorAll('.gym-item').forEach(item => {
+        item.classList.remove('selected');
+      });
+      // Add selected class to previously selected item
+      selectedGymItem.classList.add('selected');
+      
+      // Show heads-up for previously selected gym
+      updateGymHeadsUp(selectedGymItem);
+    }
+  }
 }
 
 function handleMembershipCardClick(event, card) {
@@ -618,7 +1112,7 @@ function selectMembershipPlan(planId) {
 
   updateCartSummary();
   updateCheckoutButton();
-  if (state.currentStep === 1) {
+  if (state.currentStep === 2) {
     setTimeout(() => nextStep(), 300);
   }
   showToast(`${selectedPlan?.name ?? 'Membership'} selected.`, 'success');
@@ -753,13 +1247,13 @@ function updateAddonSkipButton() {
 }
 
 function handleAddonContinue() {
-  // Whether skipping or continuing after picking add-ons, we proceed to step 3
+  // Whether skipping or continuing after picking add-ons, we proceed to step 4
   nextStep();
 }
 
 function handleEditCart() {
-  // Jump back to step 1
-  state.currentStep = 1;
+  // Jump back to step 2 (plan selection)
+  state.currentStep = 2;
   showStep(state.currentStep);
   updateStepIndicator();
   updateNavigationButtons();
@@ -1180,6 +1674,12 @@ function nextStep() {
   updateNavigationButtons();
   updateMainSubtitle();
 
+  // Scroll to top immediately and with delay
+  scrollToTop();
+  setTimeout(() => {
+    scrollToTop();
+  }, 200);
+
   if (state.currentStep === TOTAL_STEPS) {
     renderConfirmationView();
   }
@@ -1192,6 +1692,12 @@ function prevStep() {
   updateStepIndicator();
   updateNavigationButtons();
   updateMainSubtitle();
+
+  // Scroll to top immediately and with delay
+  scrollToTop();
+  setTimeout(() => {
+    scrollToTop();
+  }, 200);
 }
 
 function showStep(stepNumber) {
@@ -1250,10 +1756,11 @@ function updateMainSubtitle() {
   if (!DOM.mainSubtitle || !DOM.mainTitle) return;
 
   const subtitles = {
-    1: 'Choose your access type',
-    2: 'Need an add-on?',
-    3: 'Log in to your existing account or create a new one',
-    4: 'Welcome to Boulders!',
+    1: 'Choose your home gym',
+    2: 'Choose your access type',
+    3: 'Need an add-on?',
+    4: 'Log in to your existing account or create a new one',
+    5: 'Welcome to Boulders!',
   };
 
   DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? 'Choose your access type';
