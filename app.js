@@ -826,6 +826,16 @@ function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
+
+// Re-initialize form scrolling on window resize
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    setupFormFieldScrolling();
+  }, 250);
+});
+
 function cacheDom() {
   DOM.stepPanels = Array.from(document.querySelectorAll('.step-panel'));
   DOM.stepCircles = Array.from(document.querySelectorAll('.step-circle'));
@@ -926,6 +936,9 @@ function setupEventListeners() {
   cardNumber?.addEventListener('input', formatCardNumber);
   expiryDate?.addEventListener('input', formatExpiryDate);
   cvv?.addEventListener('input', stripNonDigits);
+  
+  // Setup form field scrolling for mobile
+  setupFormFieldScrolling();
 }
 
 function renderCatalog() {
@@ -1085,6 +1098,53 @@ function scrollToTop() {
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   }, 50);
+}
+
+function scrollToElement(element, options = {}) {
+  // Only apply on mobile (screen width <= 768px)
+  if (window.innerWidth > 768) return;
+  
+  const {
+    offset = -20,           // Padding from top
+    delay = 300,            // Delay before scroll
+    behavior = 'smooth'     // Scroll behavior
+  } = options;
+  
+  setTimeout(() => {
+    if (!element) return;
+    
+    // For fixed viewport, scroll within the main container
+    const mainContainer = document.querySelector('main');
+    if (!mainContainer) return;
+    
+    // Get element position relative to the main container
+    const elementRect = element.getBoundingClientRect();
+    const mainRect = mainContainer.getBoundingClientRect();
+    
+    // Calculate scroll position within the main container
+    const relativeTop = elementRect.top - mainRect.top;
+    const scrollPosition = mainContainer.scrollTop + relativeTop + offset;
+    
+    // Scroll within the main container
+    mainContainer.scrollTo({
+      top: scrollPosition,
+      behavior: behavior
+    });
+  }, delay);
+}
+
+// Setup form field focus scrolling for mobile
+function setupFormFieldScrolling() {
+  // Only on mobile
+  if (window.innerWidth > 768) return;
+  
+  const formInputs = document.querySelectorAll('input, select, textarea');
+  
+  formInputs.forEach((input) => {
+    input.addEventListener('focus', function() {
+      scrollToElement(this, { delay: 100, offset: -100 });
+    });
+  });
 }
 
 function handleGymSearch(event) {
@@ -1367,6 +1427,12 @@ function setupNewAccessStep() {
         category.classList.add('expanded', 'selected');
         currentCategory = categoryType;
         footerText.innerHTML = footerTexts[categoryType];
+        
+        // Scroll to show the expanded content
+        const categoryContent = category.querySelector('.category-content');
+        if (categoryContent) {
+          scrollToElement(categoryContent, { delay: 100, offset: -80 });
+        }
       } else {
         currentCategory = null;
         footerText.innerHTML = 'Select a category above to view available plans.';
@@ -1468,6 +1534,9 @@ function setupNewAccessStep() {
             panel.classList.add('show');
             panel.style.display = 'block';
             syncPunchCardQuantityUI(card, planId);
+            
+            // Scroll to show quantity panel for punch cards
+            scrollToElement(panel, { delay: 400, offset: -60 });
           }
           
           // Grey out the other punch card type
@@ -2380,11 +2449,13 @@ function nextStep() {
   updateNavigationButtons();
   updateMainSubtitle();
 
-  // Scroll to top immediately and with delay
-  scrollToTop();
-  setTimeout(() => {
+  // Scroll to top on mobile only
+  if (window.innerWidth <= 768) {
     scrollToTop();
-  }, 200);
+    setTimeout(() => {
+      scrollToTop();
+    }, 200);
+  }
 
   if (state.currentStep === TOTAL_STEPS) {
     renderConfirmationView();
@@ -2538,7 +2609,7 @@ function updateMainSubtitle() {
     5: 'Welcome to Boulders!',
   };
 
-  DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? 'Choose your access type';
+  DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? 'Choose your membership type';
   DOM.mainTitle.textContent = state.currentStep === TOTAL_STEPS ? 'WELCOME TO BOULDERS' : 'JOIN BOULDERS';
 }
 

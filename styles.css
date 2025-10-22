@@ -74,8 +74,8 @@
     min-height: 0;
   }
   
-.addons-image { display: none !important; }
-.addons-image img { display: none !important; }
+.addons-image { display: none; }
+.addons-image img { display: none; }
   
   .addons-main { 
     flex: 1 1 auto; 
@@ -132,7 +132,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    text-align: left !important;
+    text-align: left;
   }
   
   .addons-grid .addon-card .plan-price {
@@ -385,6 +385,7 @@
   
   :root {
       --color-text-primary: #1F2837;
+      --color-text-white: #FFFFFF;
       --color-brand-accent: #F0F;
       --color-brand-accent-hover: #E608E6;
       --color-student: #3B83F6;
@@ -432,9 +433,17 @@ body {
     background-position: center center;
     background-repeat: no-repeat;
     background-attachment: fixed;
+    min-height: 110vh;
+    display: flex;
+    flex-direction: column;
     color: white;
     font-family: 'Inter', system-ui, sans-serif;
-    min-height: 100vh;
+    /* Ensure fixed background works across all browsers */
+    -webkit-background-attachment: fixed;
+    -moz-background-attachment: fixed;
+    -o-background-attachment: fixed;
+    /* Optimize for mobile performance */
+    will-change: auto;
 }
 
 .header {
@@ -620,14 +629,27 @@ body {
 }
 
 .main-subtitle {
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-lg);
+    padding-bottom: 20px;
+    color: var(--color-text-white);
+}
+
+.secondary-subtitle {
+    font-size: var(--font-size-base);
     padding-bottom: 20px;
     color: var(--color-text-secondary);
+    margin-top: -10px;
+    line-height: 1.4;
 }
 
 /* Step Content Styles */
 .step-content {
     margin-top: 50px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    /* Ensure step content doesn't interfere with fixed background */
+    background: transparent;
 }
 
 .step-panel {
@@ -668,7 +690,7 @@ body {
 /* Plan Cards */
 .plan-section {
     position: relative;
-    margin-top: 12px !important;
+    margin-top: 12px;
     overflow: hidden;
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -676,7 +698,7 @@ body {
 /* Toggleable Plan Sections */
 .plan-section.collapsed {
     max-height: 0;
-    margin-top: 12px !important;
+    margin-top: 12px;
     margin-bottom: 0;
     opacity: 0;
     transform: translateY(-20px);
@@ -1110,6 +1132,9 @@ body {
 
 /* Mobile responsive */
 @media (max-width: 640px) {
+    body {
+        min-height: 150vh;
+    }
     .gym-heads-up {
         top: 10px;
         right: 10px;
@@ -1652,7 +1677,7 @@ body {
 
 /* Quantity Panel Container - Separate element below card */
 .quantity-panel {
-    display: none !important;
+    display: none;
     padding: 16px;
     background: rgba(15, 23, 42, 0.8);
     border-top: #f0f 1px solid;
@@ -1667,7 +1692,7 @@ body {
 }
 
 .quantity-panel.show {
-    display: block !important;
+    display: block;
 }
 
 /* Quantity Header */
@@ -2310,7 +2335,7 @@ body {
 }
 @media (max-width: 480px) {
     .main {
-      padding: 0 !important; /* reset it so it's not affected */
+      padding: 0; /* reset it so it's not affected */
       margin: 0; /* optional, if you also want to reset spacing */
     }
   
@@ -2674,7 +2699,7 @@ body {
     border: 2px solid #374151;
     border-radius: 8px;
     color: white;
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-base);
     transition: border-color 0.3s ease;
 }
 
@@ -2694,7 +2719,7 @@ body {
 }
 
 .info-section-title {
-    font-size: var(--font-size-2xl);
+    font-size: var(--font-size-md);
     text-align: left;
     font-weight: bold;
     margin-bottom: 24px;
@@ -2706,8 +2731,9 @@ body {
 }
 
 .buyer-title {
+    display: none;
     text-align: left;
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-base);
     font-weight: bold;
     margin-bottom: 16px;
     color: white;
@@ -2890,6 +2916,7 @@ body {
 .country-selector select#countryCode {
     padding: 10px 1px;        /* tighten the left/right space */
     margin-right: 4px;        /* shrink the gap before the arrow */
+    font-size: var(--font-size-base);
 }
 
 
@@ -2944,26 +2971,26 @@ body {
 
 /* Readonly Field Styling */
 .readonly-field {
-    background-color: #374151 !important;
-    color: #9CA3AF !important;
-    cursor: not-allowed !important;
+    background-color: #374151;
+    color: #9CA3AF;
+    cursor: not-allowed;
     opacity: 0.7;
 }
 
 .readonly-field:focus {
-    outline: none !important;
-    border-color: #374151 !important;
+    outline: none;
+    border-color: #374151;
 }
 
 .country-selector.readonly-field {
-    background-color: #374151 !important;
-    border-color: #374151 !important;
+    background-color: #374151;
+    border-color: #374151;
     opacity: 0.7;
 }
 
 .country-selector.readonly-field select {
-    color: #9CA3AF !important;
-    cursor: not-allowed !important;
+    color: #9CA3AF;
+    cursor: not-allowed;
 }
 
 /* Info Layout */
@@ -3068,6 +3095,9 @@ body {
     padding: 24px;
     position: sticky;
     top: 20px;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .summary-header {
@@ -3360,6 +3390,184 @@ body {
     background-color: #D401D5;
 }
 
+/* Main content area - grows to fill available space */
+main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    /* Ensure main doesn't interfere with fixed background */
+    background: transparent;
+    position: relative;
+    z-index: 1;
+}
+
+/* Global Footer - now direct child of body */
+.global-footer {
+    background: var(--color-surface-dark);
+    border-top: 1px solid var(--color-item-border);
+    padding: 40px 0 20px;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: footerFadeIn 0.6s ease-out 0.3s forwards;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0; /* Prevent footer from shrinking */
+    width: 100%; /* Ensure full width */
+    margin: 0; /* Reset any inherited margins */
+}
+
+@keyframes footerFadeIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.footer-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 32px;
+    margin-bottom: 32px;
+}
+
+
+.footer-section h4 {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    margin: 0 0 12px 0;
+}
+
+.footer-section p {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.footer-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.footer-section ul li {
+    margin-bottom: 8px;
+}
+
+.footer-section ul li a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    transition: color 0.2s ease;
+}
+
+.footer-section ul li a:hover {
+    color: var(--color-brand-accent);
+}
+
+.security-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.certified-icon {
+    color: var(--color-success);
+    font-weight: bold;
+    font-size: var(--font-size-base);
+}
+
+.footer-bottom {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 20px 0;
+    border-top: 1px solid var(--color-item-border);
+    text-align: center;
+}
+
+.footer-bottom p {
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-xs);
+    margin: 0;
+}
+.global-footer {
+        padding: 2px 0 16px;
+        margin-top: 0; /* Reset any inherited margins */
+        margin-left: -16px; /* Counteract main content padding */
+        margin-right: -16px; /* Counteract main content padding */
+        margin-bottom: -12px;
+        width: calc(100% + 32px); /* Extend to full width */
+    }
+    
+    .footer-content {
+        grid-template-columns: 1fr;
+        gap: 20px;
+        padding: 16px 16px 0;
+        margin-bottom: auto;
+    }
+    
+    .footer-bottom {
+        padding: 16px 16px 0;
+    }
+    
+    .footer-section h4 {
+        font-size: var(--font-size-xs);
+        font-weight: 300;
+        text-align: center;
+        margin-bottom: 8px;
+    }
+    
+    .footer-section p,
+    .footer-section ul li a {
+        font-size: var(--font-size-xs);
+    }
+
+
+/* Mobile Footer - Best Practice */
+@media (max-width: 768px) {
+    .global-footer {
+        padding: 2px 0 16px;
+        margin-top: 12px; /* Reset any inherited margins */
+        margin-left: -16px; /* Counteract main content padding */
+        margin-right: -16px; /* Counteract main content padding */
+        margin-bottom: -12px;
+        width: calc(100% + 32px); /* Extend to full width */
+    }
+    
+    .footer-content {
+        grid-template-columns: 1fr;
+        gap: 20px;
+        padding: 0 16px;
+        margin-bottom: auto;
+    }
+}
+
+/* Extra small mobile screens */
+@media (max-width: 480px) {
+    .global-footer {
+        margin-left: -20px; /* Counteract any remaining padding */
+        margin-right: -20px;
+        width: calc(100% + 40px);
+        padding: 20px 0 12px;
+    }
+    
+    .footer-content {
+        padding: 0 20px;
+        gap: 16px;
+    }
+    
+    .footer-bottom {
+        padding: 12px 20px 0;
+    }
+}
+
 /* Footer Note */
 .footer-note {
     margin-top: 16px;
@@ -3370,11 +3578,6 @@ body {
     align-items: center;
     justify-content: center;
     gap: 6px;
-}
-
-.certified-icon {
-    color: #10B981;
-    font-weight: bold;
 }
 
 /* Card Payment Form */
@@ -3814,25 +4017,25 @@ body {
 /* Mobile Add-on Cards - Stacked Layout */
 @media (max-width: 768px) {
     #addonMode.plan-options {
-        display: flex !important;
-        flex-direction: column !important;
+        display: flex;
+        flex-direction: column;
         gap: 16px;
-        overflow: visible !important;
-        scroll-snap-type: none !important;
+        overflow: visible;
+        scroll-snap-type: none;
         padding: 0;
-        grid-template-columns: none !important;
+        grid-template-columns: none;
     }
 
     #addonMode .plan-card {
-        width: 100% !important;
-        flex: none !important;
-        scroll-snap-align: none !important;
+        width: 100%;
+        flex: none;
+        scroll-snap-align: none;
         margin: 0;
-        min-width: auto !important;
+        min-width: auto;
     }
 
     #addonMode + .scroll-indicator {
-        display: none !important;
+        display: none;
     }
 
     /* Mobile background positioning - focal point more to the left */

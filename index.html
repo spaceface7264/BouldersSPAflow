@@ -90,6 +90,7 @@
                     </button>
                     
                     <p class="main-subtitle">Choose your home gym</p>
+                    <p class="secondary-subtitle">This is where you will primarily train − you will have access to all gyms.</p>
                     
                     <!-- Search Input -->
                     <div class="search-wrapper">
@@ -129,8 +130,8 @@
                         </svg>
                     </button>
                     <div class="container">
-                        <p class="main-subtitle">Choose your access type.</p>
-                        
+                        <p class="main-subtitle">Choose your access type</p>
+                        <p class="secondary-subtitle">Choose membership if you climb at least once a month.</p>
                         <div class="category-list">
                             <!-- Membership Category -->
                             <div class="category-item" data-category="membership">
@@ -333,8 +334,9 @@
                         </svg>
                     </button>
                     
-                    <p class="step-panel-description"></p>
-                    
+                    <p class="main-subtitle">Confirm and complete your purchase</p>
+                    <p class="secondary-subtitle">Log in to your existing account or create a new one to complete your purchase.</p>
+
                     <div class="info-layout">
                         <div class="info-form-section">
                             <!-- Mode Toggle -->
@@ -356,7 +358,7 @@
                                     <form class="login-form">
                                         <div class="form-group">
                                             <label for="loginEmail">E-mail*</label>
-                                            <input type="email" id="loginEmail" name="loginEmail" placeholder="Enter your email">
+                                            <input type="email" id="loginEmail" name="loginEmail" placeholder="E-mail">
                                     </div>
                                             
                                         <div class="form-group">
@@ -444,7 +446,6 @@
                              </div>
                              
                     </form>
-                </div>
                         
                         <!-- Parent/Guardian Registration Form -->
                         <div class="parent-guardian-form" id="parentGuardianForm" style="display: none;">
@@ -619,7 +620,7 @@
                                     <label class="consent-checkbox">
                                         <input type="checkbox" id="marketingConsent" data-api-field="consent.marketing">
                                         <span class="checkmark"></span>
-                                        I want to receive marketing emails. Read our <a href="#" target="_blank">Data policy</a>.
+                                        I want to receive marketing emails. <br>Read our <a href="#" target="_blank">Data policy</a>.
                                     </label>
 
                                 </div>
@@ -712,6 +713,7 @@
                     </div>
                 </div>
             </div>
+        </div>
             
             <!-- Step 5: Confirmation -->
             <div class="step-panel" id="step-5">
@@ -849,6 +851,14 @@
             </div>
         </div>
     </main>
+    
+    <!-- Global Footer -->
+    <footer class="global-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>Developed by Rami El-Daoud</h4>            </div>
+            
+    </footer>
 
     <script type="module" src="./gym-data-api.js"></script>
     <script type="module" src="./api-utils.js"></script>
