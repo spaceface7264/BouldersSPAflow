@@ -1100,38 +1100,6 @@ function scrollToTop() {
   }, 50);
 }
 
-function scrollToElement(element, options = {}) {
-  // Only apply on mobile (screen width <= 768px)
-  if (window.innerWidth > 768) return;
-  
-  const {
-    offset = -20,           // Padding from top
-    delay = 300,            // Delay before scroll
-    behavior = 'smooth'     // Scroll behavior
-  } = options;
-  
-  setTimeout(() => {
-    if (!element) return;
-    
-    // For fixed viewport, scroll within the main container
-    const mainContainer = document.querySelector('main');
-    if (!mainContainer) return;
-    
-    // Get element position relative to the main container
-    const elementRect = element.getBoundingClientRect();
-    const mainRect = mainContainer.getBoundingClientRect();
-    
-    // Calculate scroll position within the main container
-    const relativeTop = elementRect.top - mainRect.top;
-    const scrollPosition = mainContainer.scrollTop + relativeTop + offset;
-    
-    // Scroll within the main container
-    mainContainer.scrollTo({
-      top: scrollPosition,
-      behavior: behavior
-    });
-  }, delay);
-}
 
 // Setup form field focus scrolling for mobile
 function setupFormFieldScrolling() {
@@ -1142,7 +1110,7 @@ function setupFormFieldScrolling() {
   
   formInputs.forEach((input) => {
     input.addEventListener('focus', function() {
-      scrollToElement(this, { delay: 100, offset: -100 });
+      // Auto-scroll removed - will be revisited later
     });
   });
 }
@@ -1428,11 +1396,7 @@ function setupNewAccessStep() {
         currentCategory = categoryType;
         footerText.innerHTML = footerTexts[categoryType];
         
-        // Scroll to show the expanded content
-        const categoryContent = category.querySelector('.category-content');
-        if (categoryContent) {
-          scrollToElement(categoryContent, { delay: 100, offset: -80 });
-        }
+        // Auto-scroll removed - will be revisited later
       } else {
         currentCategory = null;
         footerText.innerHTML = 'Select a category above to view available plans.';
@@ -1535,8 +1499,7 @@ function setupNewAccessStep() {
             panel.style.display = 'block';
             syncPunchCardQuantityUI(card, planId);
             
-            // Scroll to show quantity panel for punch cards
-            scrollToElement(panel, { delay: 400, offset: -60 });
+            // Auto-scroll removed - will be revisited later
           }
           
           // Grey out the other punch card type
