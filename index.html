@@ -13,40 +13,57 @@
     <header class="header">
         <div class="header-container">
             <div class="header-content">
-                <!-- Logo -->
+                <!-- Logo Section (Left) -->
                 <div class="logo-section">
-                    <div class="logo-icon">
-                        <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'; this.parentElement.nextElementSibling.style.display='flex';" />
-                        <div class="logo-fallback">BOULDERS</div>
-                    </div>
-                    <div class="logo-text">
-                        <div class="logo-title">BOULDERS</div>
-                        <div class="logo-subtitle">Join Your Bouldering Network</div>
-                    </div>
+                    <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                    <div class="logo-fallback">BOULDERS</div>
                 </div>
 
-                
+                <!-- Title Section (Right) -->
+                <div class="title-section">
+                    <h1 class="main-title"></h1>
+                </div>
             </div>
         </div>
     </header>
-    <main class="main">
-        <h1 class="main-title">JOIN BOULDERS</h1> </main>
+    
+    <!-- Selected Gym Heads-up Display -->
+    <div class="gym-heads-up" id="gymHeadsUp">
+        <div class="gym-heads-up-content">
+            <span class="gym-heads-up-label">Home gym selected:</span>
+            <span class="gym-heads-up-name" id="selectedGymName">-</span>
+        </div>
+    </div>
+    
+    <!-- Selected Access Type Heads-up Display -->
+    <div class="access-heads-up" id="accessHeadsUp">
+        <div class="access-heads-up-content">
+            <span class="access-heads-up-label">Access type selected:</span>
+            <span class="access-heads-up-name" id="selectedAccessName">-</span>
+        </div>
+    </div>
+    
     <!-- Step Indicator -->
     <div class="step-indicator">
         <div class="step-indicator-container">
             <div class="step-indicator-content">
                 <div class="step active">
                     <div class="step-circle active">1</div>
-                    <div class="step-label">Start</div>
+                    <div class="step-label">Home Gym</div>
                 </div>
                 <div class="step-connector"></div>
                 <div class="step inactive">
                     <div class="step-circle inactive">2</div>
-                    <div class="step-label">Boost</div>
+                    <div class="step-label">Access</div>
                 </div>
                 <div class="step-connector"></div>
                 <div class="step inactive">
                     <div class="step-circle inactive">3</div>
+                    <div class="step-label">Boost</div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step inactive">
+                    <div class="step-circle inactive">4</div>
                     <div class="step-label">Send</div>
                 </div>
             </div>
@@ -55,130 +72,233 @@
 
     <main class="main">
         
-        <p class="main-subtitle" id="mainSubtitle">Choose your access type.</p>
         
         <!-- Step Content -->
         <div class="step-content">
-            <!-- Step 1: Choose Plan -->
+            <!-- Step 1: Gym Selection -->
             <div class="step-panel active" id="step-1">
                 <div class="step-panel-content">
-
-                    <!-- Category Toggle -->
-                    <div class="category-toggle">
-                        <button class="toggle-btn active" data-category="single">Membership</button>
-                        <button class="toggle-btn" data-category="quantity">Punch Card</button>
+                    <!-- Forward Arrow -->
+                    <button class="forward-arrow-btn" id="forwardArrowBtn" title="Next step">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                    
+                    <p class="main-subtitle">Choose your home gym</p>
+                    <p class="secondary-subtitle">This is where you will primarily train − you will have access to all gyms.</p>
+                    
+                    <!-- Search Input -->
+                    <div class="search-wrapper">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                        <input type="text" class="search-input" placeholder="Search gyms..." id="gymSearch">
                     </div>
                     
-                    <!-- Reusable card templates -->
-                    <template id="membership-plan-template">
-                        <div class="plan-card" data-mode="single">
-                            <div class="plan-card-image" data-element="image"></div>
-                            <div class="plan-card-content">
-                                <div class="plan-content">
-                                    <h3 data-element="name"></h3>
-                                    <div class="plan-price">
-                                        <span data-element="priceValue"></span><span data-element="priceSuffix"></span>
-                                    </div>
-                                    <div class="plan-info" data-element="description"></div>
-                                    <div class="plan-separator"></div>
-                                    <ul class="plan-features" data-element="features"></ul>
-                                </div>
-                                <button type="button" class="plan-select-btn" data-action="select-membership">Select</button>
-                            </div>
-                        </div>
-                    </template>
-
-                    <template id="value-card-template">
-                        <div class="plan-card quantity-card" data-mode="quantity">
-                            <div class="plan-card-image" data-element="image"></div>
-                            <div class="plan-card-content">
-                                <div class="plan-content">
-                                    <h3 data-element="name"></h3>
-                                    <div class="plan-price">
-                                        <span data-element="priceValue"></span><span data-element="priceSuffix"></span>
-                                    </div>
-                                    <div class="plan-info" data-element="description"></div>
-                                    <div class="plan-separator"></div>
-                                    <ul class="plan-features" data-element="features"></ul>
-                                    <div class="quantity-selector" data-base-price="" data-max="" data-min="">
-                                        <div class="quantity-controls">
-                                            <button type="button" class="quantity-btn" data-action="decrement-quantity" aria-label="Decrease quantity">−</button>
-                                            <span class="quantity-display" data-element="quantityValue">0</span>
-                                            <button type="button" class="quantity-btn plus" data-action="increment-quantity" aria-label="Increase quantity">+</button>
-                                        </div>
-                                        <div class="total-display">
-                                            <div class="total-label">Total</div>
-                                            <div class="total-amount"><span class="quantity-total" data-element="quantityTotal">0</span><span class="currency">kr</span></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-
-                    <template id="addon-card-template">
-                        <div class="plan-card addon-card" data-mode="addon">
-                            <div class="plan-card-image" data-element="image"></div>
-                            <div class="plan-card-content">
-                                <div class="plan-content">
-                                    <h3 data-element="name"></h3>
-                                    <div class="plan-price">
-                                        <span class="original-price" data-element="originalPrice"></span>
-                                        <span class="discounted-price" data-element="discountedPrice"></span>
-                                    </div>
-                                    <div class="plan-info" data-element="description"></div>
-                                    <div class="plan-separator"></div>
-                                    <ul class="plan-features" data-element="features"></ul>
-                                    <div class="plan-separator"></div>
-                                </div>
-                                <button type="button" class="plan-select-btn addon-btn" data-action="toggle-addon">Select Add-on</button>
-                            </div>
-                        </div>
-                    </template>
-
-                    <!-- Membership Plans -->
-                    <div class="plan-section expanded" id="singlePlans" data-category="single" data-state="visible">
-                        <div class="plan-options" id="singleChoiceMode" data-scroll-container data-component="membership-plans" data-initial-plan-id="membership-adult"></div>
-                        <div class="scroll-indicator" aria-hidden="true"></div>
-                        <div class="plan-info-text">
-                            <p data-i18n-key="membership.terms">
-                                Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. By signing up you accept
-                                <a href="https://boulders.dk/en/regelst-for-medlemmer-af-boulders" target="_blank" rel="noopener noreferrer">terms and Conditions</a>.
-                            </p>
-                        </div>
+                    <!-- Gym List -->
+                    <div class="gym-list">
+                        <!-- Gym items will be dynamically loaded here -->
                     </div>
+                    
+                    <!-- No Results Message -->
+                    <div class="no-results hidden" id="noResults">
+                        No gyms found matching your search.
+                    </div>
+                </div>
+            </div>
 
-                    <!-- Value Card Plans -->
-                    <div class="plan-section collapsed" id="quantityPlans" data-category="quantity" data-state="hidden">
-                        <div class="plan-options" id="quantityMode" data-scroll-container data-component="value-plans" data-initial-plan-id="value-adult"></div>
-                        <div class="scroll-indicator" aria-hidden="true"></div>
-                        
-                        <div class="plan-info-text">
-                            <p data-i18n-key="valueCard.terms">
-                                You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits.
-                                Refill within 14 days after your last clip and get 100 kr off at the gym.
-                                By purchasing a value card, you accept
-                                <a href="https://boulders.dk/regelsaetklippekort" target="_blank" rel="noopener noreferrer">terms and Conditions</a>.
-                            </p>
+            <!-- Step 2: Choose Plan -->
+            <div class="step-panel" id="step-2">
+                <div class="step-panel-content">
+                    <!-- Back Arrow -->
+                    <button class="back-arrow-btn" id="backToGymBtn" title="Back to gym selection">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                    </button>
+                    
+                    <!-- Forward Arrow -->
+                    <button class="forward-arrow-btn" id="forwardArrowBtn" title="Next step">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                    <div class="container">
+                        <p class="main-subtitle">Choose your access type</p>
+                        <p class="secondary-subtitle">Choose membership if you climb at least once a month.</p>
+                        <div class="category-list">
+                            <!-- Membership Category -->
+                            <div class="category-item" data-category="membership">
+                                <div class="category-header">
+                                    <div class="category-info">
+                                        <div class="category-title">Membership</div>
+                                        <div class="category-subtitle">Ongoing subscription, unlimited access</div>
+                                    </div>
+                                    <i data-lucide="chevron-down" class="category-icon"></i>
+                                </div>
+                                <div class="category-content">
+                                    <div class="category-description">
+                                        <p>Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. </p>
+                                    </div>
+                                    <div class="plans-list">
+                                        <div class="plan-card" data-plan="student">
+                                            <div class="plan-info">
+                                                <div class="plan-type">Student</div>
+                                                <div class="plan-details">
+                                                    <div class="plan-price">
+                                                        <span class="price-amount">379</span>
+                                                        <span class="price-unit">kr/mo</span>
+                                                    </div>
+                                                    <span class="plan-description">Valid student ID required</span>
+                                                </div>
+                                            </div>
+                                            <div class="check-circle"></div>
+                                        </div>
+
+                                        <div class="plan-card" data-plan="adult">
+                                            <div class="plan-info">
+                                                <div class="plan-type">Adult</div>
+                                                <div class="plan-details">
+                                                    <div class="plan-price">
+                                                        <span class="price-amount">445</span>
+                                                        <span class="price-unit">kr/mo</span>
+                                                    </div>
+                                                    <span class="plan-description">Ages 16+</span>
+                                                </div>
+                                            </div>
+                                            <div class="check-circle"></div>
+                                        </div>
+
+                                        <div class="plan-card" data-plan="junior">
+                                            <div class="plan-info">
+                                                <div class="plan-type">Junior</div>
+                                                <div class="plan-details">
+                                                    <div class="plan-price">
+                                                        <span class="price-amount">249</span>
+                                                        <span class="price-unit">kr/mo</span>
+                                                    </div>
+                                                    <span class="plan-description">Under 16 years</span>
+                                                </div>
+                                            </div>
+                                            <div class="check-circle"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Punch Card Category -->
+                            <div class="category-item" data-category="punchcard">
+                                <div class="category-header">
+                                    <div class="category-info">
+                                        <div class="category-title">Punch Card</div>
+                                        <div class="category-subtitle">10 entries, shareable physical card</div>
+                                    </div>
+                                    <i data-lucide="chevron-down" class="category-icon"></i>
+                                </div>
+                                <div class="category-content">
+                                    <div class="category-description">
+                                        <p>You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym.</p>
+                                    </div>
+                                    <div class="plans-list">
+                                        <div class="plan-card" data-plan="adult-punch" data-price="1200">
+                                            <div class="plan-info">
+                                                <div class="plan-type">Adult</div>
+                                                <div class="plan-details">
+                                                    <div class="plan-price">
+                                                        <span class="price-amount">1,200</span>
+                                                        <span class="price-unit">kr</span>
+                                                    </div>
+                                                    <span class="plan-description">10 entries • Ages 16+</span>
+                                                </div>
+                                            </div>
+                                            <div class="check-circle"></div>
+                                        </div>
+                                        
+                                        <!-- Quantity Selection Panel (initially hidden) -->
+                                        <div class="quantity-panel" style="display: none;">
+                                            <div class="quantity-header">
+                                                <span class="quantity-label">Select Quantity</span>
+                                                <span class="quantity-total" data-element="quantityTotal">1,200 kr</span>
+                                            </div>
+                                            
+                                            <div class="quantity-selector">
+                                                <div class="quantity-controls">
+                                                    <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="adult-punch" disabled="">−</button>
+                                                    <div class="quantity-display">
+                                                        <span data-element="quantityValue">1</span>
+                                                    </div>
+                                                    <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="adult-punch">+</button>
+                                                </div>
+                                                
+                                                <button class="continue-arrow" data-action="continue-punch-card">
+                                                    <i data-lucide="arrow-right"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div class="plan-card" data-plan="junior-punch" data-price="800">
+                                            <div class="plan-info">
+                                                <div class="plan-type">Junior</div>
+                                                <div class="plan-details">
+                                                    <div class="plan-price">
+                                                        <span class="price-amount">800</span>
+                                                        <span class="price-unit">kr</span>
+                                                    </div>
+                                                    <span class="plan-description">10 entries • Up to 15 years</span>
+                                                </div>
+                                            </div>
+                                            <div class="check-circle"></div>
+                                        </div>
+                                        
+                                        <!-- Junior Punch Card Quantity Selection Panel (initially hidden) -->
+                                        <div class="quantity-panel" style="display: none;">
+                                            <div class="quantity-header">
+                                                <span class="quantity-label">Select Quantity</span>
+                                                <span class="quantity-total" data-element="quantityTotal">800 kr</span>
+                                            </div>
+                                            
+                                            <div class="quantity-selector">
+                                                <div class="quantity-controls">
+                                                    <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="junior-punch" disabled="">−</button>
+                                                    <div class="quantity-display">
+                                                        <span data-element="quantityValue">1</span>
+                                                    </div>
+                                                    <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="junior-punch">+</button>
+                                                </div>
+                                                
+                                                <button class="continue-arrow" data-action="continue-punch-card">
+                                                    <i data-lucide="arrow-right"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="value-card-summary" aria-live="polite">
-                            <button type="button" class="value-card-continue-btn" data-action="continue-value-cards" disabled>
-                                <span class="value-card-continue-prefix">Continue with</span>
-                                <span class="value-card-summary-value" data-value-card-punches>0</span>
-                                <span class="value-card-continue-suffix" data-entry-label>entries</span>
-                            </button>
-                        </div>
+
+
                     </div>
                 </div>
             </div>
             
-            <!-- Step 2: Add-ons -->
-            <div class="step-panel" id="step-2">
+            <!-- Step 3: Add-ons -->
+            <div class="step-panel" id="step-3">
                 <div class="step-panel-content">
+                    <!-- Forward Arrow -->
+                    <button class="forward-arrow-btn" id="forwardArrowBtn" title="Next step">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                    
+                            <p class="main-subtitle" id="mainSubtitle">Would you like fries with that?</p>
+
                     <!-- Add-on Products -->
                     <div class="plan-section">
                         <div class="plan-info-text">
-                            <p data-i18n-key="addons.intro">Enhance your climbing experience with our premium add-on products. All items are available at special member prices and can be added to your order.</p>
+                            <p data-i18n-key="addons.intro">Enhance your climbing experience with our add-on products.</p>
                         </div>
                         
                         <div class="plan-options" id="addonMode" data-scroll-container data-component="addon-plans"></div>
@@ -198,52 +318,60 @@
                 </div>
             </div>
             
-            <!-- Step 3: Info -->
-            <div class="step-panel" id="step-3">
+            <!-- Step 4: Info -->
+            <div class="step-panel" id="step-4">
                 <div class="step-panel-content">
-                    <p class="step-panel-description"></p>
+                    <!-- Forward Arrow -->
+                    <button class="forward-arrow-btn" id="forwardArrowBtn" title="Next step">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </button>
                     
+                    <p class="main-subtitle">Confirm and complete your purchase</p>
+                    <p class="secondary-subtitle">Log in to your existing account or create a new one to complete your purchase.</p>
+
                     <div class="info-layout">
                         <div class="info-form-section">
+                            <!-- Mode Toggle -->
+                            <div class="auth-mode-toggle">
+                                <button class="auth-mode-btn" data-mode="create" data-action="switch-auth-mode">
+                                    Create Account
+                                </button>
+                                <button class="auth-mode-btn" data-mode="login" data-action="switch-auth-mode">
+                                    Login
+                                </button>
+                                <div class="auth-mode-slider"></div>
+                            </div>
                     
-                    <!-- Login Section -->
-                    <div class="info-section">
-                        <div class="form-container">
-                            <h3 class="info-section-title">LOG IN</h3>
+                            <!-- Login Section (initially hidden) -->
+                            <div class="info-section" data-auth-section="login" style="display: none;">
+                                <div class="form-container">
+                                    <h3 class="info-section-title">LOG IN</h3>
 
-                            <form class="login-form">
-                                <div class="form-group">
-                                    <label for="loginEmail">E-mail*</label>
-                                    <input type="email" id="loginEmail" name="loginEmail" placeholder="Enter your email">
-                        </div>
-                                
-                                <div class="form-group">
-                                    <label for="loginPassword">Password*</label>
-                                    <input type="password" id="loginPassword" name="loginPassword" placeholder="Enter your password">
-                        </div>
-                                
-                                <button type="submit" class="login-btn">LOG IN</button>
-                            </form>
-                        </div>
-                    </div>
-                    
-                    <!-- Registration Section -->
-                    <div class="info-section">
+                                    <form class="login-form">
+                                        <div class="form-group">
+                                            <label for="loginEmail">E-mail*</label>
+                                            <input type="email" id="loginEmail" name="loginEmail" placeholder="E-mail">
+                                    </div>
+                                            
+                                        <div class="form-group">
+                                            <label for="loginPassword">Password*</label>
+                                            <input type="password" id="loginPassword" name="loginPassword" placeholder="Enter your password">
+                                    </div>
+                                            
+                                        <button type="submit" class="login-btn">LOG IN</button>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <!-- Registration Section (initially visible) -->
+                            <div class="info-section" data-auth-section="create" style="display: block;">
                         <div class="form-container">
                             <h3 class="info-section-title">CREATE PROFILE</h3>
                         <div class="buyer-section">
                             <div class="buyer-header">
                                 <h4 class="buyer-title">Buyer</h4>
-                                <div class="toggle-container">
-                                    <label class="toggle-label">
-                                        <input type="checkbox" class="toggle-input" id="parentGuardian" data-api-field="purchase.isGuardian">
-                                        <span class="toggle-slider"></span>
-                                        I am buying as a parent/guardian
-                                    </label>
-                                                                <p class="parent-guardian-reminder" data-role="parent-guardian-reminder" hidden role="status" aria-live="polite">
-                                Please complete the guardian details below so we can link them to this membership.
-                            </p>
-                                </div>
                             </div>
                         </div>
                             <form class="registration-form">
@@ -310,24 +438,7 @@
                                  <label for="confirmPassword">Confirm password*</label>
                                  <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" data-api-field="customer.passwordConfirmation" required>
                              </div>
-                             
-                             <div class="form-group">
-                                 <label for="primaryGym">Primary Boulders gym / Pick-up point*</label>
-                                 <div class="select-container">
-                                     <select id="primaryGym" name="primaryGym" data-api-field="customer.primaryGym" required>
-                                         <option value="">Select a gym</option>
-                                         <option value="boulders-copenhagen">Boulders Copenhagen</option>
-                                         <option value="boulders-aarhus">Boulders Aarhus</option>
-                                         <option value="boulders-odense">Boulders Odense</option>
-                                     </select>
-                                     <span class="dropdown-arrow">▼</span>
-                                 </div>
-                                 <p class="parent-guardian-reminder" data-role="parent-guardian-reminder" hidden role="status" aria-live="polite">
-                                    Complete the guardian details below.
-                                </p>
-                        </div>
                     </form>
-                </div>
                         
                         <!-- Parent/Guardian Registration Form -->
                         <div class="parent-guardian-form" id="parentGuardianForm" style="display: none;">
@@ -422,6 +533,7 @@
                             </form>
                         </div>
                     </div>
+                            </div>
                         </div>
                         
                         <!-- Order Summary Section -->
@@ -442,6 +554,30 @@
                                     <div class="cart-item" data-cart-item>
                                         <span class="item-name" data-element="name"></span>
                                         <span class="item-price" data-element="price"></span>
+                                    </div>
+                                </template>
+
+                                <!-- Add-on Card Template for modal and in-page rendering -->
+                                <template id="addon-card-template">
+                                    <div class="plan-card addon-card" data-plan-id>
+                                        <div class="plan-info">
+                                            <div class="plan-type" data-element="name">Add-on</div>
+                                            <div class="plan-details">
+                                                <span data-element="originalPrice"></span>
+                                                <div class="plan-price">
+                                                    <span class="price-amount" data-element="discountedPrice">0</span>
+                                                    <span class="price-unit">kr</span>
+                                                </div>
+                                                <span class="plan-description" data-element="description"></span>
+                                            </div>
+                                        </div>
+                                        <div class="plan-meta">
+                                            <div class="plan-original" style="text-decoration: line-through; opacity: .6;">
+                                                
+                                            </div>
+                                            <ul class="plan-features" data-element="features"></ul>
+                                        </div>
+                                        <div class="check-circle" data-action="toggle-addon"></div>
                                     </div>
                                 </template>
 
@@ -477,7 +613,7 @@
                                     <label class="consent-checkbox">
                                         <input type="checkbox" id="marketingConsent" data-api-field="consent.marketing">
                                         <span class="checkmark"></span>
-                                        I want to receive marketing emails. Read our <a href="#" target="_blank">Data policy</a>.
+                                        I want to receive marketing emails. <br>Read our <a href="#" target="_blank">Data policy</a>.
                                     </label>
 
                                 </div>
@@ -566,9 +702,10 @@
                     </div>
                 </div>
             </div>
+        </div>
             
-            <!-- Step 4: Confirmation -->
-            <div class="step-panel" id="step-4">
+            <!-- Step 5: Confirmation -->
+            <div class="step-panel" id="step-5">
                 <div class="step-panel-content">
                     <!-- Top Section - Success Confirmation -->
                     <div class="confirmation-header">
@@ -703,7 +840,17 @@
             </div>
         </div>
     </main>
+    
+    <!-- Global Footer -->
+    <footer class="global-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                     </div>
+            
+    </footer>
 
+    <script type="module" src="./gym-data-api.js"></script>
+    <script type="module" src="./api-utils.js"></script>
     <script type="module" src="./app.js"></script>
 
 </body>
