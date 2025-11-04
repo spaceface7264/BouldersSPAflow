@@ -51,6 +51,8 @@ export const MembershipStep: React.FC = () => {
   return (
     <BaseStep
       stepId="membership"
+      title="Choose Your Membership"
+      description="Select the membership plan or punch card that best fits your needs"
       canProceed={!!selectedPlan}
       onNext={handleNext}
     >

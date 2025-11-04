@@ -53,6 +53,14 @@ export const BaseStep: React.FC<BaseStepProps> = ({
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+        {title && (
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+            {description && (
+              <p className="mt-2 text-gray-600">{description}</p>
+            )}
+          </div>
+        )}
         {children}
       </div>
 

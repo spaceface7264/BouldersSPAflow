@@ -26,6 +26,8 @@ export const ReviewStep: React.FC = () => {
   return (
     <BaseStep
       stepId="review"
+      title="Review Your Order"
+      description="Please review your selections before proceeding to payment"
       canProceed={true}
       onNext={handleNext}
       nextButtonText="Proceed to Payment"

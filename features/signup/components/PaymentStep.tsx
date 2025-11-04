@@ -48,6 +48,8 @@ export const PaymentStep: React.FC = () => {
   return (
     <BaseStep
       stepId="payment"
+      title="Payment"
+      description="Complete your purchase by selecting a payment method"
       canProceed={false}
       onNext={handleNext}
       showNavigation={false}

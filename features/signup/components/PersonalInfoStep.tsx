@@ -35,6 +35,8 @@ export const PersonalInfoStep: React.FC = () => {
   return (
     <BaseStep
       stepId="personal"
+      title="Personal Information"
+      description="Please provide your personal details to continue"
       canProceed={isValid}
       onNext={handleSubmit(onSubmit)}
       nextButtonText={isSubmitting ? 'Saving...' : 'Continue'}

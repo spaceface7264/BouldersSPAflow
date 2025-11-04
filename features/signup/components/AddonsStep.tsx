@@ -57,6 +57,8 @@ export const AddonsStep: React.FC = () => {
   return (
     <BaseStep
       stepId="addons"
+      title="Select Add-ons"
+      description="Enhance your membership with additional products and services"
       canProceed={true}
       onNext={handleNext}
       nextButtonText="Continue to Review"
