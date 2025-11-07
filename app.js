@@ -436,10 +436,16 @@ function renderProductsFromAPI() {
       planCard.dataset.plan = `membership-${productId}`; // For backward compatibility
       planCard.dataset.productId = productId; // Store API product ID (numeric)
       
-      // Extract price from API structure: price.amount is in cents/øre (e.g., 46900 = 469.00 DKK)
-      const priceInCents = product.price?.amount || product.amount || 0;
-      const price = priceInCents / 100; // Convert from cents to main currency unit
-      const currency = product.price?.currency || product.currency || 'DKK';
+      // Extract price from API structure: priceWithInterval.price.amount is in cents/øre (e.g., 46900 = 469.00 DKK)
+      const priceInCents = product.priceWithInterval?.price?.amount || 
+                           product.price?.amount || 
+                           product.amount || 
+                           0;
+      const price = priceInCents > 0 ? priceInCents / 100 : 0; // Convert from cents to main currency unit
+      const currency = product.priceWithInterval?.price?.currency || 
+                       product.price?.currency || 
+                       product.currency || 
+                       'DKK';
       
       // Determine price unit from interval (e.g., "MONTH" = "kr/mo")
       const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
@@ -1245,6 +1251,9 @@ function syncPunchCardQuantityUI(card, planId) {
   // Disable buttons based on min/max
   if (decrementBtn) decrementBtn.disabled = quantity <= 1;
   if (incrementBtn) incrementBtn.disabled = quantity >= 5;
+  
+  // Update cart when quantity changes
+  updateCartSummary();
 }
 
 // Scroll to top function with multiple approaches
@@ -1544,6 +1553,9 @@ function handlePlanSelection(selectedCard) {
   // Reevaluate Boost visibility based on plan type
   applyConditionalSteps();
   
+  // Update cart to reflect selection
+  updateCartSummary();
+  
   // Auto-advance to next step after a short delay
   setTimeout(() => {
     nextStep();
@@ -1738,6 +1750,9 @@ function setupNewAccessStep() {
           // Update access heads-up
           updateAccessHeadsUp(card);
           
+          // Update cart to reflect selection
+          updateCartSummary();
+          
           // Auto-advance to next step after a short delay
           setTimeout(() => {
             nextStep();
@@ -1750,6 +1765,9 @@ function setupNewAccessStep() {
           card.style.transition = 'all 0.3s ease';
           card.style.transform = 'scale(1.02)';
           card.style.boxShadow = '0 8px 25px rgba(240, 0, 240, 0.3)';
+          
+          // Update cart to reflect selection
+          updateCartSummary();
           
           // Reset card animation and auto-advance to next step
           setTimeout(() => {
@@ -2317,31 +2335,79 @@ function updateCartSummary() {
   const items = [];
   state.totals.membershipMonthly = 0;
 
-  if (state.membershipPlanId) {
-    const membership = findMembershipPlan(state.membershipPlanId);
+  // Step 5: Use API data for cart items
+  // Handle membership selection
+  if (state.selectedProductType === 'membership' && state.selectedProductId) {
+    // Try to find membership by ID - handle both numeric and string comparisons
+    const productIdNum = typeof state.selectedProductId === 'string' 
+      ? parseInt(state.selectedProductId) 
+      : state.selectedProductId;
+    
+    const membership = state.subscriptions.find(p => 
+      p.id === state.selectedProductId || 
+      p.id === productIdNum ||
+      String(p.id) === String(state.selectedProductId)
+    );
+    
     if (membership) {
+      // Extract price from API structure (cents to DKK)
+      // The API uses priceWithInterval, not price directly
+      // priceWithInterval contains: { interval: { numberOf: 1, unit: "MONTH" }, price: { amount: 46900, currency: "DKK" } }
+      const priceInCents = membership.priceWithInterval?.price?.amount || 
+                           membership.price?.amount || 
+                           membership.amount || 
+                           membership.monthlyPrice ||
+                           0;
+      const price = priceInCents > 0 ? priceInCents / 100 : 0;
+      
       items.push({
         id: membership.id,
-        name: `${membership.name} membership`,
-        amount: membership.price,
+        name: membership.name || 'Membership',
+        amount: price,
         type: 'membership',
+        productId: membership.id, // Store API product ID for order creation
       });
-      state.totals.membershipMonthly = membership.price;
+      state.totals.membershipMonthly = price;
+    } else {
+      console.warn('Cart: Membership not found', {
+        selectedProductId: state.selectedProductId,
+        selectedProductType: state.selectedProductType,
+        availableSubscriptions: state.subscriptions.map(s => ({ id: s.id, name: s.name }))
+      });
     }
   }
 
-  state.valueCardQuantities.forEach((quantity, planId) => {
-    if (quantity <= 0) return;
-    const valueCard = findValueCard(planId);
-    if (!valueCard) return;
-    items.push({
-      id: valueCard.id,
-      name: `${valueCard.name} value card ×${quantity}`,
-      amount: valueCard.price * quantity,
-      type: 'value-card',
+  // Handle punch card selection
+  if (state.selectedProductType === 'punch-card' && state.selectedProductId) {
+    state.valueCardQuantities.forEach((quantity, planId) => {
+      if (quantity <= 0) return;
+      
+      // Find the product by ID - check both the stored productId and planId format
+      const productId = state.selectedProductId || planId.replace('punch-', '');
+      const valueCard = state.valueCards.find(p => 
+        p.id === productId || 
+        p.id === parseInt(productId) ||
+        planId.includes(String(p.id))
+      );
+      
+      if (valueCard) {
+        // Extract price from API structure (cents to DKK)
+        const priceInCents = valueCard.price?.amount || valueCard.amount || 0;
+        const price = priceInCents / 100;
+        
+        items.push({
+          id: valueCard.id,
+          name: `${valueCard.name || 'Punch Card'} ×${quantity}`,
+          amount: price * quantity,
+          type: 'value-card',
+          quantity: quantity,
+          productId: valueCard.id, // Store API product ID for order creation
+        });
+      }
     });
-  });
+  }
 
+  // Handle add-ons (if any were selected - currently disabled but keeping for future)
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
@@ -2652,6 +2718,11 @@ function nextStep() {
     if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
       loadProductsFromAPI();
     }
+  }
+
+  // Update cart when step 4 (Send/Info) is shown
+  if (state.currentStep === 4) {
+    updateCartSummary();
   }
 
   // Scroll to top on mobile only
