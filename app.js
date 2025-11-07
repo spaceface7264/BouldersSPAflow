@@ -143,11 +143,25 @@ const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 // API Integration Functions
 class BusinessUnitsAPI {
   constructor(baseUrl = null) {
-    // In development, use proxy (relative URL). In production, use full URL
-    // Vite proxy will forward /api requests to https://api-join.boulders.dk
+    // In development, use Vite proxy (relative URL)
+    // In production on Netlify, use Netlify Function proxy to avoid CORS
     // Detect if we're in development by checking if we're on localhost
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    this.baseUrl = baseUrl || (isDevelopment ? '' : 'https://api-join.boulders.dk');
+    const isNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('boulders.dk');
+    
+    if (baseUrl) {
+      this.baseUrl = baseUrl;
+    } else if (isDevelopment) {
+      // Use Vite proxy in development
+      this.baseUrl = '';
+    } else if (isNetlify) {
+      // Use Netlify Function proxy in production
+      this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else {
+      // Fallback to direct API (may have CORS issues)
+      this.baseUrl = 'https://api-join.boulders.dk';
+    }
   }
 
   // Get all business units from API
@@ -155,7 +169,13 @@ class BusinessUnitsAPI {
   // Note: This endpoint uses "No Auth" according to Postman docs
   async getBusinessUnits() {
     try {
-      const url = `${this.baseUrl}/api/reference/business-units`;
+      // Build URL - if using Netlify proxy, add path as query parameter
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/reference/business-units`;
+      } else {
+        url = `${this.baseUrl}/api/reference/business-units`;
+      }
       console.log('Fetching business units from:', url);
       
       const headers = {

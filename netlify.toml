@@ -1,12 +1,19 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "18"
   VITE_BASE_PATH = "/"
 
-# Redirect all requests to index.html for client-side routing
+# Don't redirect Netlify Functions - they need to be accessible
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Redirect all other requests to index.html for client-side routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
