@@ -3,20 +3,35 @@ import react from '@vitejs/plugin-react'
 import fs from 'fs'
 import path from 'path'
 
+// Helper to safely read certificate files if they exist
+const readIfExists = (file: string) => {
+  try {
+    return fs.readFileSync(path.resolve(__dirname, file));
+  } catch {
+    return undefined;
+  }
+};
+
+const key = readIfExists('key.pem');
+const cert = readIfExists('cert.pem');
+
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
   base: process.env.VITE_BASE_PATH || '/',
   server: {
     host: true,
     port: 5173,
     strictPort: false,
-    https: {
-      // Self-signed certificate for local development
-      // Required for geolocation API to work on mobile devices
-      key: fs.readFileSync(path.resolve(__dirname, 'key.pem')),
-      cert: fs.readFileSync(path.resolve(__dirname, 'cert.pem')),
-    },
+    // Only use HTTPS in dev mode when certificate files are present
+    ...(key && cert && command === 'serve' ? {
+      https: {
+        // Self-signed certificate for local development
+        // Required for geolocation API to work on mobile devices
+        key,
+        cert,
+      },
+    } : {}),
     // Proxy API requests to avoid CORS issues in development
     proxy: {
       '/api': {
@@ -37,5 +52,5 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets'
   }
-})
+}))
 
