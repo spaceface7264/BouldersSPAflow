@@ -734,6 +734,12 @@ body {
     text-align: center;
 }
 
+/* Step 4 (Send/Info) needs full width for two-column layout */
+#step-4 .step-panel-content {
+    max-width: 1200px;
+    text-align: left;
+}
+
 
 .step-panel-title {
     font-size: var(--font-size-3xl);
@@ -3054,19 +3060,28 @@ body {
 /* Info Layout */
 .info-layout {
     display: grid;
-    grid-template-columns: 600px 400px;
+    grid-template-columns: 1fr 400px;
     gap: 40px;
     margin-top: 40px;
     justify-content: center;
     max-width: 1200px;
     margin-left: auto;
     margin-right: auto;
+    align-items: start;
+}
+
+@media (min-width: 1024px) {
+    .info-layout {
+        grid-template-columns: minmax(500px, 600px) minmax(350px, 400px);
+    }
 }
 
 .info-form-section {
     min-width: 0;
     max-width: 600px;
     margin-bottom: -32px;
+    position: relative;
+    z-index: 1;
 }
 
 .order-summary-section {
@@ -3142,6 +3157,8 @@ body {
     border-radius: 12px;
     padding: 24px;
     margin-top: auto;
+    position: relative;
+    z-index: 2;
 }
 
 .order-summary-section {

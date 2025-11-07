@@ -943,14 +943,13 @@ function applyConditionalSteps() {
     }
   }
 
-  // 2) Show/hide Boost page (step 3) based on whether membership is selected
+  // 2) Always hide Boost/Add-ons page (step 3) - disabled for now
   const boostPanel = document.getElementById('step-3');
   if (boostPanel) {
-    const shouldShowBoost = isMembershipSelected();
-    boostPanel.style.display = shouldShowBoost ? 'block' : 'none';
+    boostPanel.style.display = 'none'; // Always hidden
 
-    // If user is currently on a hidden step, move to the next visible
-    if (!shouldShowBoost && state.currentStep === 3) {
+    // If user is currently on step 3, move to the next visible step
+    if (state.currentStep === 3) {
       nextStep();
     }
   }
@@ -1739,9 +1738,12 @@ function setupNewAccessStep() {
           // Update access heads-up
           updateAccessHeadsUp(card);
           
-          // Don't auto-advance for punch cards - let user adjust quantity first
+          // Auto-advance to next step after a short delay
+          setTimeout(() => {
+            nextStep();
+          }, 500);
         } else {
-          // Membership - update access heads-up and open interstitial modal
+          // Membership - update access heads-up
           updateAccessHeadsUp(card);
           
           // Add subtle visual cue on selected card
@@ -1749,16 +1751,12 @@ function setupNewAccessStep() {
           card.style.transform = 'scale(1.02)';
           card.style.boxShadow = '0 8px 25px rgba(240, 0, 240, 0.3)';
           
-          // Add subtle delay and animation to guide user to modal
+          // Reset card animation and auto-advance to next step
           setTimeout(() => {
-            showAddonsModal();
-            
-            // Reset card animation after modal appears
-            setTimeout(() => {
-              card.style.transform = 'scale(1)';
-              card.style.boxShadow = '';
-            }, 300);
-          }, 800); // 800ms delay
+            card.style.transform = 'scale(1)';
+            card.style.boxShadow = '';
+            nextStep();
+          }, 500);
         }
     });
   });
@@ -2624,15 +2622,23 @@ function nextStep() {
   if (state.currentStep >= TOTAL_STEPS) return;
   // advance to next visible panel (skip any hidden ones)
   let target = state.currentStep + 1;
-  // Ensure membership goes to Boost (step 3) right after Access (step 2)
-  if (state.currentStep === 2 && isMembershipSelected()) {
-    target = 3;
+  // Add-ons step (step 3) is disabled - always skip it
+  if (target === 3) {
+    target = 4; // Skip directly to step 4
   }
+  // Ensure membership goes to Boost (step 3) right after Access (step 2) - DISABLED
+  // if (state.currentStep === 2 && isMembershipSelected()) {
+  //   target = 3;
+  // }
   while (target <= TOTAL_STEPS) {
     const panel = DOM.stepPanels[target - 1];
     const hidden = panel && panel.style && panel.style.display === 'none';
     if (!hidden) break;
     target += 1;
+    // Skip step 3 if we land on it
+    if (target === 3) {
+      target = 4;
+    }
   }
   state.currentStep = Math.min(target, TOTAL_STEPS);
   showStep(state.currentStep);
@@ -2665,11 +2671,19 @@ function prevStep() {
   if (state.currentStep <= 1) return;
   // go back to previous visible panel (skip any hidden ones)
   let target = state.currentStep - 1;
+  // Add-ons step (step 3) is disabled - always skip it
+  if (target === 3) {
+    target = 2; // Go back to step 2 instead
+  }
   while (target >= 1) {
     const panel = DOM.stepPanels[target - 1];
     const hidden = panel && panel.style && panel.style.display === 'none';
     if (!hidden) break;
     target -= 1;
+    // Skip step 3 if we land on it
+    if (target === 3) {
+      target = 2;
+    }
   }
   state.currentStep = Math.max(target, 1);
   showStep(state.currentStep);
