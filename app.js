@@ -139,102 +139,6 @@ const PARENT_REQUIRED_FIELDS = [
 
 const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 
-// Gym coordinates for distance calculation (legacy - now using API data)
-const GYM_COORDINATES = {
-  'boulders-copenhagen': { lat: 55.6761, lng: 12.5683 },
-  'boulders-odense': { lat: 55.4038, lng: 10.4024 },
-  'boulders-aarhus': { lat: 56.1572, lng: 10.2107 },
-  'boulders-aalborg': { lat: 57.0488, lng: 9.9217 },
-  'boulders-esbjerg': { lat: 55.4703, lng: 8.4549 },
-  'boulders-herning': { lat: 56.1393, lng: 8.9756 },
-  'boulders-kolding': { lat: 55.4904, lng: 9.4722 },
-  'boulders-randers': { lat: 56.4606, lng: 10.0363 },
-  'boulders-vejle': { lat: 55.7093, lng: 9.5357 },
-  'boulders-viborg': { lat: 56.4531, lng: 9.4021 }
-};
-
-// API-ready gym data mapping
-const GYM_API_MAPPING = {
-  'boulders-copenhagen': 1,
-  'boulders-aarhus': 2,
-  'boulders-odense': 3,
-  'boulders-aalborg': 4,
-  'boulders-esbjerg': 5,
-  'boulders-herning': 6,
-  'boulders-kolding': 7,
-  'boulders-randers': 8,
-  'boulders-vejle': 9,
-  'boulders-viborg': 10
-};
-
-// Calculate distance between two coordinates using Haversine formula
-function calculateDistance(lat1, lng1, lat2, lng2) {
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng/2) * Math.sin(dLng/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
-// Get user location and update distances
-async function getUserLocation() {
-  if (!navigator.geolocation) {
-    console.log('Geolocation is not supported by this browser.');
-    return;
-  }
-
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        state.userLocation = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        };
-        state.locationPermission = 'granted';
-        updateGymDistances();
-        resolve(state.userLocation);
-      },
-      (error) => {
-        console.log('Location access denied or error:', error.message);
-        state.locationPermission = 'denied';
-        resolve(null);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000 // 5 minutes
-      }
-    );
-  });
-}
-
-// Update distance display for all gyms
-function updateGymDistances() {
-  if (!state.userLocation) return;
-
-  document.querySelectorAll('.gym-item').forEach(item => {
-    const gymId = item.dataset.gymId;
-    const gymCoords = GYM_COORDINATES[gymId];
-    
-    if (gymCoords) {
-      const distance = calculateDistance(
-        state.userLocation.lat,
-        state.userLocation.lng,
-        gymCoords.lat,
-        gymCoords.lng
-      );
-      
-      const distanceElement = item.querySelector('.gym-distance');
-      if (distanceElement) {
-        distanceElement.textContent = `${distance.toFixed(1)} km`;
-        distanceElement.style.display = 'block';
-      }
-    }
-  });
-}
 
 // API Integration Functions
 class BusinessUnitsAPI {
@@ -252,125 +156,9 @@ class BusinessUnitsAPI {
       return await response.json();
     } catch (error) {
       console.error('Error fetching business units:', error);
-      // Fallback to local data if API fails
-      return this.getLocalGymData();
+      // Don't use fallback mock data - throw error so caller can handle it
+      throw error;
     }
-  }
-
-  // Get local gym data as fallback
-  getLocalGymData() {
-    return [
-      {
-        id: 1,
-        name: "Boulders Copenhagen",
-        address: {
-          street: "Vesterbrogade 149",
-          city: "København V",
-          postalCode: "1620",
-          latitude: 55.6761,
-          longitude: 12.5683
-        }
-      },
-      {
-        id: 2,
-        name: "Boulders Aarhus",
-        address: {
-          street: "Søren Frichs Vej 42",
-          city: "Åbyhøj",
-          postalCode: "8230",
-          latitude: 56.1572,
-          longitude: 10.2107
-        }
-      },
-      {
-        id: 3,
-        name: "Boulders Odense",
-        address: {
-          street: "Hjallesevej 91",
-          city: "Odense M",
-          postalCode: "5230",
-          latitude: 55.4038,
-          longitude: 10.4024
-        }
-      },
-      {
-        id: 4,
-        name: "Boulders Aalborg",
-        address: {
-          street: "Hobrovej 333",
-          city: "Aalborg SV",
-          postalCode: "9200",
-          latitude: 57.0488,
-          longitude: 9.9217
-        }
-      },
-      {
-        id: 5,
-        name: "Boulders Esbjerg",
-        address: {
-          street: "Gammel Vardevej 2",
-          city: "Esbjerg",
-          postalCode: "6700",
-          latitude: 55.4703,
-          longitude: 8.4549
-        }
-      },
-      {
-        id: 6,
-        name: "Boulders Herning",
-        address: {
-          street: "Industrivej 15",
-          city: "Herning",
-          postalCode: "7400",
-          latitude: 56.1393,
-          longitude: 8.9756
-        }
-      },
-      {
-        id: 7,
-        name: "Boulders Kolding",
-        address: {
-          street: "Vestre Ringvej 36",
-          city: "Kolding",
-          postalCode: "6000",
-          latitude: 55.4904,
-          longitude: 9.4722
-        }
-      },
-      {
-        id: 8,
-        name: "Boulders Randers",
-        address: {
-          street: "Industrivej 8",
-          city: "Randers C",
-          postalCode: "8900",
-          latitude: 56.4606,
-          longitude: 10.0363
-        }
-      },
-      {
-        id: 9,
-        name: "Boulders Vejle",
-        address: {
-          street: "Vejlevej 25",
-          city: "Vejle",
-          postalCode: "7100",
-          latitude: 55.7093,
-          longitude: 9.5357
-        }
-      },
-      {
-        id: 10,
-        name: "Boulders Viborg",
-        address: {
-          street: "Industrivej 12",
-          city: "Viborg",
-          postalCode: "8800",
-          latitude: 56.4531,
-          longitude: 9.4021
-        }
-      }
-    ];
   }
 
   // Create a new business unit
@@ -432,36 +220,22 @@ async function loadGymsFromAPI() {
     }
     
     // Create gym items from API data
-    gyms.forEach(gym => {
+    for (let i = 0; i < gyms.length; i++) {
+      const gym = gyms[i];
       if (gym.name && gym.address) {
+        // Create and display gym item
         const gymItem = createGymItem(gym);
         if (gymList) {
           gymList.appendChild(gymItem);
         }
-        
-        // Update gym coordinates with API data if available
-        if (gym.address.latitude && gym.address.longitude) {
-          const gymKey = Object.keys(GYM_API_MAPPING).find(key => GYM_API_MAPPING[key] === gym.id);
-          if (gymKey) {
-            GYM_COORDINATES[gymKey] = {
-              lat: gym.address.latitude,
-              lng: gym.address.longitude
-            };
-          }
-        }
       }
-    });
-    
-  // Re-setup event listeners for new gym items
-  setupGymEventListeners();
-  
-  // Re-setup forward arrow event listener
-  setupForwardArrowEventListeners();
-    
-    // Update distances if user location is available
-    if (state.userLocation) {
-      updateGymDistances();
     }
+    
+    // Re-setup event listeners for new gym items
+    setupGymEventListeners();
+    
+    // Re-setup forward arrow event listener
+    setupForwardArrowEventListeners();
   } catch (error) {
     console.error('Failed to load gyms from API:', error);
   }
@@ -473,6 +247,7 @@ function createGymItem(gym) {
   gymItem.className = 'gym-item';
   gymItem.setAttribute('data-gym-id', `gym-${gym.id}`);
   
+  
   const address = gym.address;
   const addressString = `${address.street}, ${address.postalCode} ${address.city}`;
   
@@ -481,7 +256,6 @@ function createGymItem(gym) {
       <div class="gym-name">${gym.name}</div>
       <div class="gym-details">
         <div class="gym-address">${addressString}</div>
-        <div class="gym-distance" style="display: none;">-- km</div>
       </div>
     </div>
     <div class="check-circle"></div>
@@ -520,8 +294,6 @@ const state = {
   membershipPlanId: null,
   valueCardQuantities: new Map(),
   addonIds: new Set(),
-  userLocation: null,
-  locationPermission: 'prompt', // 'granted', 'denied', 'prompt'
   totals: {
     cartTotal: 0,
     membershipMonthly: 0,
@@ -819,8 +591,6 @@ function init() {
   // Load gyms from API
   loadGymsFromAPI();
   
-  // Request user location for distance calculation
-  getUserLocation();
   updateMainSubtitle();
 }
 
@@ -905,6 +675,7 @@ function setupEventListeners() {
   // Search functionality
   const gymSearch = document.getElementById('gymSearch');
   gymSearch?.addEventListener('input', handleGymSearch);
+
 
   // Back arrow event listener
   const backToGymBtn = document.getElementById('backToGymBtn');

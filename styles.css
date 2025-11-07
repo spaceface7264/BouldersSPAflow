@@ -444,13 +444,13 @@ body {
     background-position: center center;
     background-repeat: no-repeat;
     background-attachment: fixed;
-    min-height: 100vh;
+    min-height: 100vh; /* Ensures body is at least viewport height */
     display: flex;
     flex-direction: column;
     color: white;
     font-family: 'Inter', system-ui, sans-serif;
     overflow-x: hidden;
-    height: 100%;
+    /* Remove height: 100% to allow natural growth beyond viewport */
     /* Ensure fixed background works across all browsers */
     -webkit-background-attachment: fixed;
     -moz-background-attachment: fixed;
@@ -479,13 +479,26 @@ body {
 
 .header-content {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 20px 0;
     min-height: 80px;
+    gap: 12px;
 }
 
-/* Logo Section (Left) */
+/* Header Text Above Logo */
+.header-text {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin: 0;
+    text-align: center;
+}
+
+/* Logo Section */
 .logo-section {
     display: flex;
     align-items: center;
@@ -513,22 +526,6 @@ body {
     min-width: 120px;
 }
 
-/* Title Section (Right) */
-.title-section {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-}
-
-.main-title {
-    font-size: var(--font-size-2xl);
-    font-weight: 700;
-    color: white;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin: 0;
-    text-align: right;
-}
 
 /* Mobile Header Styles */
 @media (max-width: 768px) {
@@ -552,9 +549,9 @@ body {
         min-width: 100px;
     }
     
-    .main-title {
-        font-size: var(--font-size-xl);
-        letter-spacing: 0.5px;
+    .header-text {
+        font-size: var(--font-size-m);
+        letter-spacing: 1px;
     }
 }
 
@@ -576,9 +573,9 @@ body {
         min-width: 80px;
     }
     
-    .main-title {
-        font-size: var(--font-size-sm);
-        letter-spacing: 0.3px;
+    .header-text {
+        font-size: var(--font-size-lg);
+        letter-spacing: 1px;
     }
 }
 
@@ -881,7 +878,7 @@ body {
 
 .search-input {
     width: 100%;
-    padding: 16px 16px 16px 48px;
+    padding: 16px 48px 16px 48px;
     background: var(--color-item-bg);
     border: 2px solid var(--color-item-border);
     border-radius: 12px;
@@ -900,10 +897,12 @@ body {
     color: var(--color-text-subtle);
 }
 
+
 .gym-list {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    padding-bottom: 20px; /* Prevent last item from being cut off */
 }
 
 .gym-item {
@@ -928,6 +927,7 @@ body {
     border-color: #f0f;
 }
 
+
 .gym-info {
     flex: 1;
     min-width: 0;
@@ -946,6 +946,8 @@ body {
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
+    justify-content: space-between;
+    width: 100%;
 }
 
 .gym-address {
@@ -953,11 +955,6 @@ body {
     color: var(--color-text-muted);
 }
 
-.gym-distance {
-    font-size: var(--font-size-sm);
-    color: #f0f;
-    font-weight: 500;
-}
 
 .check-circle {
     width: 24px;
@@ -1197,9 +1194,7 @@ body {
 
 /* Mobile responsive */
 @media (max-width: 640px) {
-    body {
-        min-height: 150vh;
-    }
+    
     .gym-heads-up {
         top: 10px;
         right: 10px;
@@ -2368,6 +2363,42 @@ body {
 
     .step-content {
         margin: 0 -22px;
+        margin-top: 20px;
+        max-height: calc(100vh - 200px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 40px; /* Prevent items from being cut off */
+    }
+    
+    /* Shrink step panel content for mobile viewport */
+    .step-panel-content {
+        max-width: 100%;
+        padding: 0 16px 20px 16px; /* Add bottom padding to prevent cut-off */
+        margin-top: 0;
+    }
+    
+    .main-subtitle {
+        font-size: var(--font-size-md);
+        padding-bottom: 12px;
+        margin-bottom: 8px;
+    }
+    
+    .secondary-subtitle {
+        font-size: var(--font-size-sm);
+        padding-bottom: 12px;
+        margin-bottom: 8px;
+        line-height: 1.3;
+    }
+    
+    /* Reduce spacing in step panels */
+    .step-panel-title {
+        font-size: var(--font-size-xl);
+        margin-bottom: 12px;
+    }
+    
+    .step-panel-description {
+        font-size: var(--font-size-base);
+        margin-bottom: 24px;
     }
     
     .plan-options {
@@ -3424,16 +3455,17 @@ body {
 
 /* Main content area - grows to fill available space */
 main {
-    flex: 1;
+    flex: 1 0 auto; /* Grow to fill space, but allow shrinking if needed */
     display: flex;
     flex-direction: column;
     /* Ensure main doesn't interfere with fixed background */
     background: transparent;
     position: relative;
     z-index: 1;
+    min-height: 0; /* Allow flex children to shrink below content size */
 }
 
-/* Global Footer - now direct child of body */
+/* Global Footer - scrolls naturally into view */
 .global-footer {
     background: var(--color-surface-dark);
     border-top: 1px solid var(--color-item-border);
@@ -3442,11 +3474,12 @@ main {
     transform: translateY(20px);
     animation: footerFadeIn 0.6s ease-out 0.3s forwards;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
-    position: relative;
+    position: relative; /* Not fixed - allows natural scrolling */
     z-index: 1;
     flex-shrink: 0; /* Prevent footer from shrinking */
     width: 100%; /* Ensure full width */
     margin: 0; /* Reset any inherited margins */
+    margin-top: auto; /* Push footer to bottom when content is short */
 }
 
 @keyframes footerFadeIn {
@@ -3544,7 +3577,7 @@ main {
         grid-template-columns: 1fr;
         gap: 20px;
         padding: 0 16px;
-        margin-bottom: auto;
+        margin-bottom: 0; /* Remove auto margin that creates gap */
     }
     
     .footer-section h4 {
@@ -3648,6 +3681,10 @@ main {
 
 .toast.success {
     background-color: #10B981;
+}
+
+.toast.error {
+    background-color: #EF4444;
 }
 
 @keyframes slideInRight {
@@ -3979,6 +4016,10 @@ main {
         flex-direction: column;
         align-items: flex-start;
         gap: 4px;
+    }
+
+    .search-input {
+        padding: 14px 44px 14px 44px;
     }
 }
 
@@ -4312,6 +4353,30 @@ main {
 
     .step-content {
         margin: 0 -22px;
+        margin-top: 20px;
+        max-height: calc(100vh - 220px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 40px; /* Prevent items from being cut off */
+    }
+    
+    /* Shrink step panel content for mobile viewport */
+    .step-panel-content {
+        max-width: 90%;
+        padding: 0 16px 20px 16px; /* Add bottom padding to prevent cut-off */
+    }
+    
+    .main-subtitle {
+        font-size: var(--font-size-md);
+        padding-bottom: 12px;
+        margin-bottom: 8px;
+    }
+    
+    .secondary-subtitle {
+        font-size: var(--font-size-sm);
+        padding-bottom: 12px;
+        margin-bottom: 8px;
+        line-height: 1.3;
     }
 
     /* Mobile Plan Cards Carousel */
