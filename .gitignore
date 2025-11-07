@@ -52,6 +52,10 @@ coverage/
 tmp/
 temp/
 
+# SSL certificates for local development
+key.pem
+cert.pem
+
 # Optional npm cache directory
 .npm
 

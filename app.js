@@ -256,10 +256,297 @@ class BusinessUnitsAPI {
       throw error;
     }
   }
+
+  // Step 5: Get subscriptions (memberships) for a business unit
+  async getSubscriptions(businessUnitId) {
+    try {
+      // Build URL with business unit as query parameter
+      let url;
+      const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}` : '';
+      if (this.useProxy) {
+        // For proxy, include query params in the path
+        url = `${this.baseUrl}?path=/api/products/subscriptions${queryParam}`;
+      } else {
+        url = `${this.baseUrl}/api/products/subscriptions${queryParam}`;
+      }
+      console.log('Fetching subscriptions from:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`API Error (${response.status}):`, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Subscriptions API response:', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching subscriptions:', error);
+      throw error;
+    }
+  }
+
+  // Step 5: Get value cards (punch cards)
+  async getValueCards() {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/products/valuecards`;
+      } else {
+        url = `${this.baseUrl}/api/products/valuecards`;
+      }
+      console.log('Fetching value cards from:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`API Error (${response.status}):`, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Value cards API response:', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching value cards:', error);
+      throw error;
+    }
+  }
+
+  // Step 5: Get subscription additions (add-ons) for a specific membership product
+  // Note: The /additions endpoint may not exist yet - this is a placeholder for when it's available
+  async getSubscriptionAdditions(productId) {
+    try {
+      // Try the additions endpoint first (as per guide)
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/products/subscriptions/${productId}/additions`;
+      } else {
+        url = `${this.baseUrl}/api/products/subscriptions/${productId}/additions`;
+      }
+      console.log('Fetching subscription additions from:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        // If 404, the endpoint doesn't exist yet - return empty array for now
+        if (response.status === 404) {
+          console.warn(`Additions endpoint not found for product ${productId}. Endpoint may not be implemented yet.`);
+          return [];
+        }
+        const errorText = await response.text();
+        console.error(`API Error (${response.status}):`, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Subscription additions API response:', data);
+      
+      // Handle different response formats
+      return Array.isArray(data) ? data : (data.data || data.items || []);
+    } catch (error) {
+      console.error('Error fetching subscription additions:', error);
+      // Return empty array if endpoint doesn't exist - don't break the flow
+      console.warn('Returning empty array for add-ons - endpoint may not be available yet');
+      return [];
+    }
+  }
 }
 
 // Initialize API instance
 const businessUnitsAPI = new BusinessUnitsAPI();
+
+// Step 5: Load products (subscriptions and value cards) from API
+async function loadProductsFromAPI() {
+  if (!state.selectedBusinessUnit) {
+    console.warn('Cannot load products: No business unit selected');
+    return;
+  }
+
+  try {
+    // Fetch subscriptions and value cards in parallel
+    const [subscriptionsResponse, valueCardsResponse] = await Promise.all([
+      businessUnitsAPI.getSubscriptions(state.selectedBusinessUnit),
+      businessUnitsAPI.getValueCards(),
+    ]);
+
+    // Handle different response formats - could be array or object with data property
+    const subscriptions = Array.isArray(subscriptionsResponse) 
+      ? subscriptionsResponse 
+      : (subscriptionsResponse.data || subscriptionsResponse.items || []);
+    
+    const valueCards = Array.isArray(valueCardsResponse)
+      ? valueCardsResponse
+      : (valueCardsResponse.data || valueCardsResponse.items || []);
+
+    // Store in state
+    state.subscriptions = subscriptions;
+    state.valueCards = valueCards;
+
+    console.log(`Loaded ${subscriptions.length} subscriptions and ${valueCards.length} value cards`);
+
+    // Re-render the membership plans with API data
+    renderProductsFromAPI();
+  } catch (error) {
+    console.error('Failed to load products from API:', error);
+    // Show error message to user
+    showToast('Failed to load membership options. Please try again later.', 'error');
+  }
+}
+
+// Step 5: Render products from API data into the UI
+function renderProductsFromAPI() {
+  // Render subscriptions (memberships) into the membership category
+  const membershipPlansList = document.querySelector('[data-category="membership"] .plans-list');
+  if (membershipPlansList && state.subscriptions.length > 0) {
+    membershipPlansList.innerHTML = '';
+    
+    state.subscriptions.forEach((product) => {
+      const planCard = document.createElement('div');
+      planCard.className = 'plan-card';
+      // Use numeric ID from API (e.g., 56)
+      const productId = product.id;
+      planCard.dataset.plan = `membership-${productId}`; // For backward compatibility
+      planCard.dataset.productId = productId; // Store API product ID (numeric)
+      
+      // Extract price from API structure: price.amount is in cents/øre (e.g., 46900 = 469.00 DKK)
+      const priceInCents = product.price?.amount || product.amount || 0;
+      const price = priceInCents / 100; // Convert from cents to main currency unit
+      const currency = product.price?.currency || product.currency || 'DKK';
+      
+      // Determine price unit from interval (e.g., "MONTH" = "kr/mo")
+      const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
+      const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
+                       intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
+      
+      const description = product.description || product.productNumber || '';
+      
+      planCard.innerHTML = `
+        <div class="plan-info">
+          <div class="plan-type">${product.name || 'Membership'}</div>
+          <div class="plan-details">
+            <div class="plan-price">
+              <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
+              <span class="price-unit">${priceUnit}</span>
+            </div>
+            ${description ? `<span class="plan-description">${description}</span>` : ''}
+          </div>
+        </div>
+        <div class="check-circle"></div>
+      `;
+      
+      // Event listeners will be set up by setupNewAccessStep()
+      membershipPlansList.appendChild(planCard);
+    });
+  }
+
+  // Render value cards (punch cards) into the punchcard category
+  const punchCardPlansList = document.querySelector('[data-category="punchcard"] .plans-list');
+  if (punchCardPlansList && state.valueCards.length > 0) {
+    punchCardPlansList.innerHTML = '';
+    
+    state.valueCards.forEach((product) => {
+      const planCard = document.createElement('div');
+      planCard.className = 'plan-card';
+      // Use numeric ID from API
+      const productId = product.id;
+      planCard.dataset.plan = `punch-${productId}`; // For backward compatibility
+      planCard.dataset.productId = productId; // Store API product ID (numeric)
+      
+      // Extract price from API structure: price.amount is in cents/øre (e.g., 77500 = 775.00 DKK)
+      const priceInCents = product.price?.amount || product.amount || 0;
+      const price = priceInCents / 100; // Convert from cents to main currency unit
+      planCard.dataset.price = price;
+      
+      // Value cards are one-time purchases, so no interval unit needed
+      const description = product.description || product.productNumber || '';
+      
+      planCard.innerHTML = `
+        <div class="plan-info">
+          <div class="plan-type">${product.name || 'Punch Card'}</div>
+          <div class="plan-details">
+            <div class="plan-price">
+              <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
+              <span class="price-unit">kr</span>
+            </div>
+            ${description ? `<span class="plan-description">${description}</span>` : ''}
+          </div>
+        </div>
+        <div class="check-circle"></div>
+        <div class="quantity-panel">
+          <div class="quantity-selector">
+            <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
+            <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
+            <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+          </div>
+          <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+        </div>
+      `;
+      
+      // Event listeners will be set up by setupNewAccessStep()
+      punchCardPlansList.appendChild(planCard);
+    });
+  }
+  
+  // Re-setup event listeners for the new cards
+  // Use setTimeout to ensure DOM is ready
+  setTimeout(() => {
+    setupNewAccessStep();
+  }, 100);
+}
+
+// Step 5: Load add-ons when a membership is selected
+async function loadSubscriptionAdditions(productId) {
+  if (!productId) {
+    console.warn('Cannot load additions: No product ID provided');
+    return;
+  }
+
+  try {
+    const response = await businessUnitsAPI.getSubscriptionAdditions(productId);
+    
+    // Handle different response formats
+    const additions = Array.isArray(response)
+      ? response
+      : (response.data || response.items || []);
+
+    state.subscriptionAdditions = additions;
+    console.log(`Loaded ${additions.length} subscription additions for product ${productId}`);
+
+    // TODO: Update add-ons UI with fetched data (Step 3 - Add-ons step)
+    // This will be used in the add-ons step
+  } catch (error) {
+    console.error('Failed to load subscription additions:', error);
+    state.subscriptionAdditions = [];
+  }
+}
 
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
@@ -394,6 +681,13 @@ const state = {
   forms: {},
   order: null,
   paymentMethod: null,
+  // Step 5: Store fetched products from API
+  subscriptions: [], // Fetched membership products
+  valueCards: [], // Fetched punch card products
+  subscriptionAdditions: [], // Fetched add-ons for selected membership
+  selectedProductType: null, // 'membership' or 'punch-card'
+  selectedProductId: null, // The actual product ID from API
+  selectedAddonIds: [], // Array of selected add-on product IDs
 };
 
 const DOM = {};
@@ -805,8 +1099,12 @@ function setupEventListeners() {
 }
 
 function renderCatalog() {
-  renderMembershipPlans();
-  renderValueCards();
+  // Step 5: Only render mock data if API data is not available yet
+  // API data will be loaded when business unit is selected and will replace this
+  if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
+    renderMembershipPlans();
+    renderValueCards();
+  }
   renderAddons();
 }
 
@@ -864,6 +1162,11 @@ function handleGymSelection(item) {
   const numericId = gymIdString ? gymIdString.replace('gym-', '') : null;
   state.selectedGymId = numericId; // Store numeric ID for API requests
   state.selectedBusinessUnit = numericId; // Also store as businessUnit for clarity
+  
+  // Step 5: Pre-load products when business unit is selected (for faster step 2 loading)
+  if (numericId) {
+    loadProductsFromAPI();
+  }
   
   // Update heads-up display
   updateGymHeadsUp(item);
@@ -1216,11 +1519,25 @@ function handlePlanSelection(selectedCard) {
   // Add selected class to clicked card
   selectedCard.classList.add('selected');
   
-  // Store the selected plan
+  // Step 5: Store the selected plan and product details
   const planId = selectedCard.dataset.plan;
-  state.membershipPlanId = planId;
+  const productId = selectedCard.dataset.productId || planId; // Use API product ID if available
+  const isMembership = category === 'membership';
   
-  console.log('Selected plan:', planId);
+  state.membershipPlanId = planId; // Keep for backward compatibility
+  state.selectedProductId = productId; // Store API product ID
+  state.selectedProductType = isMembership ? 'membership' : 'punch-card';
+  
+  console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
+  
+  // Step 5: If membership is selected, fetch add-ons immediately
+  if (isMembership && productId) {
+    loadSubscriptionAdditions(productId);
+  } else {
+    // Clear add-ons if punch card is selected
+    state.subscriptionAdditions = [];
+    state.selectedAddonIds = [];
+  }
   
   // Update access heads-up display
   updateAccessHeadsUp(selectedCard);
@@ -1238,6 +1555,11 @@ function setupNewAccessStep() {
   const categoryItems = document.querySelectorAll('.category-item');
   const footerText = document.getElementById('footerText');
   
+  if (categoryItems.length === 0) {
+    console.warn('No category items found - setupNewAccessStep called too early or categories not in DOM');
+    return;
+  }
+  
   const footerTexts = {
     membership: 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. By signing up you accept <a href="#">terms and Conditions</a>.',
     punchcard: 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym. By purchasing a value card, you accept <a href="#">terms and Conditions</a>.'
@@ -1250,7 +1572,28 @@ function setupNewAccessStep() {
   categoryItems.forEach(category => {
     const header = category.querySelector('.category-header');
     
-    header.addEventListener('click', () => {
+    if (!header) {
+      console.warn('Category header not found for category:', category);
+      return;
+    }
+    
+    console.log('Setting up category header for:', category.dataset.category, header);
+    
+    // Remove existing listeners by cloning (simpler than tracking and removing)
+    const newHeader = header.cloneNode(true);
+    header.parentNode.replaceChild(newHeader, header);
+    const freshHeader = category.querySelector('.category-header');
+    
+    if (!freshHeader) {
+      console.error('Failed to get fresh header after clone');
+      return;
+    }
+    
+    freshHeader.style.cursor = 'pointer'; // Ensure it's clickable
+    freshHeader.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('Category header clicked:', category.dataset.category, e);
       const categoryType = category.dataset.category;
       const wasExpanded = category.classList.contains('expanded');
 
@@ -1263,12 +1606,16 @@ function setupNewAccessStep() {
       if (!wasExpanded) {
         category.classList.add('expanded', 'selected');
         currentCategory = categoryType;
-        footerText.innerHTML = footerTexts[categoryType];
+        if (footerText) {
+          footerText.innerHTML = footerTexts[categoryType];
+        }
         
         // Auto-scroll removed - will be revisited later
       } else {
         currentCategory = null;
-        footerText.innerHTML = 'Select a category above to view available plans.';
+        if (footerText) {
+          footerText.innerHTML = 'Select a category above to view available plans.';
+        }
       }
 
       // Clear selected plan when switching categories
@@ -1344,8 +1691,20 @@ function setupNewAccessStep() {
       card.classList.add('selected');
       selectedPlan = planId;
       
-      // Store the selected plan in state
-      state.membershipPlanId = planId;
+      // Step 5: Store the selected plan and product details
+      const productId = card.dataset.productId || planId; // Use API product ID if available
+      state.membershipPlanId = planId; // Keep for backward compatibility
+      state.selectedProductId = productId; // Store API product ID
+      state.selectedProductType = category === 'membership' ? 'membership' : 'punch-card';
+      
+      // Step 5: If membership is selected, fetch add-ons immediately
+      if (category === 'membership' && productId) {
+        loadSubscriptionAdditions(productId);
+      } else {
+        // Clear add-ons if punch card is selected
+        state.subscriptionAdditions = [];
+        state.selectedAddonIds = [];
+      }
       
         // Handle punch cards differently - show quantity selector
         if (category === 'punchcard') {
@@ -2280,6 +2639,14 @@ function nextStep() {
   updateStepIndicator();
   updateNavigationButtons();
   updateMainSubtitle();
+
+  // Step 5: Load products when step 2 (access type selection) is shown
+  if (state.currentStep === 2 && state.selectedBusinessUnit) {
+    // Only load if we don't already have products loaded
+    if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
+      loadProductsFromAPI();
+    }
+  }
 
   // Scroll to top on mobile only
   if (window.innerWidth <= 768) {

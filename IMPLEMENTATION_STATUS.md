@@ -1,6 +1,6 @@
 # Implementation Status Check
 
-## ✅ Completed Steps (Steps 1-3)
+## ✅ Completed Steps (Steps 1-3, Step 5)
 
 ### Step 1: Lock Production Backend URL ✅
 - **Status**: ✅ COMPLETE
@@ -56,13 +56,19 @@
 - **When to implement**: After Step 3 (current step)
 - **Requirements**: Fetch reference data after business unit selection
 
-### Step 5: Access Type Selection
-- **Status**: ⏳ PENDING
-- **Requirements**:
-  - Fetch memberships: `GET /api/products/subscriptions` (with business unit)
-  - Fetch punch cards: `GET /api/products/valuecards`
-  - Fetch add-ons: `GET /api/products/subscriptions/{productId}/additions`
-- **Note**: Will need to use `state.selectedBusinessUnit` in requests
+### Step 5: Access Type Selection ✅
+- **Status**: ✅ COMPLETE
+- **Implementation**:
+  - ✅ Fetches memberships: `GET /api/products/subscriptions?businessUnit={id}`
+  - ✅ Fetches punch cards: `GET /api/products/valuecards`
+  - ✅ Fetches add-ons: `GET /api/products/subscriptions/{productId}/additions` (gracefully handles 404 if not implemented)
+  - ✅ Products load when business unit is selected (pre-loads for faster step 2)
+  - ✅ Products render dynamically from API data (replaces mock data)
+  - ✅ Price parsing: Converts cents/øre to DKK (divides by 100)
+  - ✅ Product selection stores API product IDs correctly
+  - ✅ State management: `state.subscriptions`, `state.valueCards`, `state.selectedProductId`, `state.selectedProductType`
+- **Compliance**: ✅ Matches guide requirements
+- **Note**: Add-ons endpoint returns 404 (not implemented yet) but handled gracefully
 
 ### Step 6: Authentication
 - **Status**: ⏳ PENDING
@@ -100,9 +106,9 @@
 
 ## 🎯 Summary
 
-**Current Status**: Steps 1-3 are **fully implemented and production-ready**.
+**Current Status**: Steps 1-3 and Step 5 are **fully implemented and production-ready**.
 
 The setup is solid and follows the implementation guide correctly. The Netlify Function proxy is properly configured to support all future API calls (authentication, orders, payments, etc.) and will seamlessly handle Steps 4-12 when implemented.
 
-**Recommendation**: ✅ **Ready to proceed with Step 4** (Reference Data Loader) or Step 5 (Access Type Selection).
+**Recommendation**: ✅ **Ready to proceed with Step 4** (Reference Data Loader) or **Step 6** (Authentication).
 
