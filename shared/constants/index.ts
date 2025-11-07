@@ -1,4 +1,10 @@
-export const API_BASE_URL = (import.meta as any).env?.VITE_BRP_BASE_URL || 'https://api.boulders.dk';
+// Production backend URL - hard-coded as per implementation guide Step 1
+export const API_BASE_URL = 'https://api-join.boulders.dk';
+
+// API Authentication Token
+// Get this from the Postman documentation: https://documenter.getpostman.com/view/6552350/2sB3QNq9Fv
+// Set via environment variable or update directly here for development
+export const API_AUTH_TOKEN = (import.meta as any).env?.VITE_API_AUTH_TOKEN || '';
 
 export const STEPS = [
   { id: 'personal', title: 'Personal Info', description: 'Tell us about yourself' },

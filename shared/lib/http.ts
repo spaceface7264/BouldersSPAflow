@@ -28,6 +28,7 @@ export class HttpClient {
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
+        'Accept-Language': 'da-DK', // Step 2: Language default - API3 relies on header, not query params
         ...options.headers,
       },
       ...options,

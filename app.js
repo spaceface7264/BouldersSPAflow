@@ -142,20 +142,54 @@ const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 
 // API Integration Functions
 class BusinessUnitsAPI {
-  constructor(baseUrl = 'https://boulders.brpsystems.com/apiserver') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl = null) {
+    // In development, use proxy (relative URL). In production, use full URL
+    // Vite proxy will forward /api requests to https://api-join.boulders.dk
+    // Detect if we're in development by checking if we're on localhost
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    this.baseUrl = baseUrl || (isDevelopment ? '' : 'https://api-join.boulders.dk');
   }
 
   // Get all business units from API
+  // Step 3: Fetch from /api/reference/business-units endpoint
+  // Note: This endpoint uses "No Auth" according to Postman docs
   async getBusinessUnits() {
     try {
-      const response = await fetch(`${this.baseUrl}/api/ver3/businessunits`);
+      const url = `${this.baseUrl}/api/reference/business-units`;
+      console.log('Fetching business units from:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK', // Step 2: Language default
+        'Content-Type': 'application/json',
+        // No Authorization header needed - endpoint uses "No Auth"
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      console.log('API Response status:', response.status, response.statusText);
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`API Error (${response.status}):`, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
-      return await response.json();
+      
+      const data = await response.json();
+      console.log('Business units API response:', data);
+      console.log('Response type:', Array.isArray(data) ? 'Array' : typeof data);
+      console.log('Number of items:', Array.isArray(data) ? data.length : 'N/A');
+      
+      return data;
     } catch (error) {
       console.error('Error fetching business units:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       // Don't use fallback mock data - throw error so caller can handle it
       throw error;
     }
@@ -210,13 +244,35 @@ const businessUnitsAPI = new BusinessUnitsAPI();
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
   try {
-    const gyms = await businessUnitsAPI.getBusinessUnits();
+    const response = await businessUnitsAPI.getBusinessUnits();
+    
+    // Handle different response formats - could be array or object with data property
+    const gyms = Array.isArray(response) ? response : (response.data || response.items || []);
+    
     console.log('Loaded gyms from API:', gyms);
+    console.log(`Found ${gyms.length} business units`);
     
     // Clear existing gym list
     const gymList = document.querySelector('.gym-list');
     if (gymList) {
       gymList.innerHTML = '';
+    }
+    
+    // Show error message if no gyms found
+    if (gyms.length === 0) {
+      const noResults = document.getElementById('noResults');
+      if (noResults) {
+        noResults.classList.remove('hidden');
+        noResults.textContent = 'No business units found. Please check API authentication.';
+      }
+      console.warn('No business units returned from API');
+      return;
+    }
+    
+    // Hide no results message if gyms are found
+    const noResults = document.getElementById('noResults');
+    if (noResults) {
+      noResults.classList.add('hidden');
     }
     
     // Create gym items from API data
@@ -238,6 +294,15 @@ async function loadGymsFromAPI() {
     setupForwardArrowEventListeners();
   } catch (error) {
     console.error('Failed to load gyms from API:', error);
+    
+    // Show user-friendly error message
+    const gymList = document.querySelector('.gym-list');
+    const noResults = document.getElementById('noResults');
+    if (gymList && noResults) {
+      gymList.innerHTML = '';
+      noResults.classList.remove('hidden');
+      noResults.textContent = `Failed to load locations: ${error.message}. Check console for details.`;
+    }
   }
 }
 
@@ -282,6 +347,12 @@ function setupForwardArrowEventListeners() {
 
 // Handle forward navigation
 function handleForwardNavigation() {
+  // Step 3: Hold the app on step 1 (gym selection) until one option is selected
+  if (state.currentStep === 1 && !state.selectedGymId) {
+    // Show a message or prevent navigation if no gym is selected
+    return;
+  }
+  
   // Only allow forward navigation if we're not on the last step
   if (state.currentStep < TOTAL_STEPS) {
     nextStep();
@@ -291,6 +362,7 @@ function handleForwardNavigation() {
 const state = {
   currentStep: 1,
   selectedGymId: null,
+  selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   membershipPlanId: null,
   valueCardQuantities: new Map(),
   addonIds: new Set(),
@@ -766,8 +838,12 @@ function handleGymSelection(item) {
   // Add selected class to clicked item
   item.classList.add('selected');
   
-  // Store selected gym ID
-  state.selectedGymId = item.dataset.gymId;
+  // Step 3: Store the chosen unit in client state so every later request can reference it
+  // Extract numeric ID from data attribute (format: "gym-{id}")
+  const gymIdString = item.dataset.gymId;
+  const numericId = gymIdString ? gymIdString.replace('gym-', '') : null;
+  state.selectedGymId = numericId; // Store numeric ID for API requests
+  state.selectedBusinessUnit = numericId; // Also store as businessUnit for clarity
   
   // Update heads-up display
   updateGymHeadsUp(item);
@@ -928,7 +1004,9 @@ function handleBackToGym() {
   
   // Restore previously selected gym if any
   if (state.selectedGymId) {
-    const selectedGymItem = document.querySelector(`[data-gym-id="${state.selectedGymId}"]`);
+    // Convert numeric ID back to data attribute format (gym-{id})
+    const gymDataId = `gym-${state.selectedGymId}`;
+    const selectedGymItem = document.querySelector(`[data-gym-id="${gymDataId}"]`);
     if (selectedGymItem) {
       // Remove selected class from all items first
       document.querySelectorAll('.gym-item').forEach(item => {
