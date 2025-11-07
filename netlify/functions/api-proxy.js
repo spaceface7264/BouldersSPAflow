@@ -1,16 +1,19 @@
 // Netlify Function to proxy API requests and avoid CORS issues
 // This function forwards requests from the frontend to the Join Boulders API
+// Supports all HTTP methods (GET, POST, PUT, DELETE) for future implementation steps
 
 exports.handler = async (event, context) => {
-  // Only allow GET requests for now (can be extended for POST, etc.)
-  if (event.httpMethod !== 'GET') {
+  // Handle CORS preflight requests
+  if (event.httpMethod === 'OPTIONS') {
     return {
-      statusCode: 405,
-      body: JSON.stringify({ error: 'Method not allowed' }),
+      statusCode: 200,
       headers: {
-        'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept-Language',
+        'Access-Control-Max-Age': '86400',
       },
+      body: '',
     };
   }
 
@@ -33,16 +36,26 @@ exports.handler = async (event, context) => {
   const apiUrl = `https://api-join.boulders.dk${apiPath}`;
 
   try {
-    // Forward the request to the API
-    const response = await fetch(apiUrl, {
+    // Build request options - support all HTTP methods
+    const requestOptions = {
       method: event.httpMethod,
       headers: {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': 'da-DK', // Step 2: Language default
         'Content-Type': 'application/json',
-        // Forward any additional headers from the original request
-        ...(event.headers['authorization'] && { 'Authorization': event.headers['authorization'] }),
+        // Forward Authorization header if present (for future auth steps)
+        ...(event.headers['authorization'] || event.headers['Authorization'] 
+          ? { 'Authorization': event.headers['authorization'] || event.headers['Authorization'] }
+          : {}),
       },
-    });
+    };
+
+    // Include request body for POST, PUT, PATCH methods
+    if (['POST', 'PUT', 'PATCH'].includes(event.httpMethod) && event.body) {
+      requestOptions.body = event.body;
+    }
+
+    // Forward the request to the API
+    const response = await fetch(apiUrl, requestOptions);
 
     // Get the response data
     const data = await response.text();
