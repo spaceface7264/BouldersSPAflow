@@ -3721,6 +3721,18 @@ async function handleCheckout() {
         customerId = customer?.data?.id || customer?.id || customer?.customerId || customer?.data?.customerId;
         // Store customer ID in state for later use (e.g., in order summary)
         state.customerId = customerId;
+        // Store customer data in sessionStorage for payment return
+        try {
+          sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
+            id: customerId,
+            firstName: payload.customer?.firstName,
+            lastName: payload.customer?.lastName,
+            email: payload.customer?.email,
+            primaryGym: payload.customer?.primaryGym,
+          }));
+        } catch (e) {
+          console.warn('[checkout] Could not save customer to sessionStorage:', e);
+        }
         console.log('[checkout] Customer response:', customer);
         console.log('[checkout] Extracted customer ID:', customerId);
         
@@ -3755,6 +3767,17 @@ async function handleCheckout() {
       
       order = await orderAPI.createOrder(orderData);
       state.orderId = order.id || order.orderId;
+      // Store order and cart data in sessionStorage for payment return
+      try {
+        sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
+          orderId: state.orderId,
+          membershipPlanId: state.membershipPlanId,
+          cartItems: state.cartItems || [],
+          totals: state.totals,
+        }));
+      } catch (e) {
+        console.warn('[checkout] Could not save order to sessionStorage:', e);
+      }
       console.log('[checkout] Order created:', state.orderId);
     } catch (error) {
       console.error('[checkout] Order creation failed:', error);
@@ -3963,35 +3986,85 @@ async function loadOrderForConfirmation(orderId) {
   try {
     console.log('[Payment Return] Fetching order data for:', orderId);
     
+    // Restore checkout data from sessionStorage
+    let storedCustomer = null;
+    let storedOrder = null;
+    try {
+      const customerData = sessionStorage.getItem('boulders_checkout_customer');
+      const orderData = sessionStorage.getItem('boulders_checkout_order');
+      if (customerData) {
+        storedCustomer = JSON.parse(customerData);
+        state.customerId = storedCustomer.id;
+        console.log('[Payment Return] Restored customer from sessionStorage:', storedCustomer);
+      }
+      if (orderData) {
+        storedOrder = JSON.parse(orderData);
+        if (storedOrder.membershipPlanId) state.membershipPlanId = storedOrder.membershipPlanId;
+        if (storedOrder.cartItems) state.cartItems = storedOrder.cartItems;
+        if (storedOrder.totals) state.totals = storedOrder.totals;
+        console.log('[Payment Return] Restored order data from sessionStorage:', storedOrder);
+      }
+    } catch (e) {
+      console.warn('[Payment Return] Could not restore data from sessionStorage:', e);
+    }
+    
     // Fetch order from API
     const order = await orderAPI.getOrder(orderId);
     console.log('[Payment Return] Order fetched:', order);
     
-    // Extract customer data from order response
-    const customer = order?.customer || order?.data?.customer || null;
-    const customerId = customer?.id || order?.customerId || state.customerId;
+    // Extract customer data - try order response first, then stored data
+    let customer = order?.customer || order?.data?.customer || null;
+    let customerId = customer?.id || order?.customerId || state.customerId;
+    
+    // If no customer in order response, use stored customer data
+    if (!customer && storedCustomer) {
+      customer = storedCustomer;
+      customerId = storedCustomer.id;
+    }
+    
+    // If we have customer ID but no customer object, try to fetch customer data
+    if (customerId && !customer) {
+      try {
+        // Note: We don't have a getCustomer API method, so we'll use stored data
+        // If needed, we could add authAPI.getCustomer(customerId) later
+        console.log('[Payment Return] Customer ID available but no customer object, using stored data');
+      } catch (e) {
+        console.warn('[Payment Return] Could not fetch customer data:', e);
+      }
+    }
     
     // Store customer ID if available
     if (customerId) {
       state.customerId = customerId;
     }
     
-    // Build payload from current state (we may not have the original payload)
-    // Use form data if available, otherwise construct from order/customer data
+    // Build payload - use stored customer data if available
     const payload = buildCheckoutPayload();
     
-    // If we don't have customer data in payload, try to get it from order
-    if (!payload.customer && customer) {
-      payload.customer = {
-        firstName: customer.firstName || customer.first_name,
-        lastName: customer.lastName || customer.last_name,
-        email: customer.email,
-        primaryGym: customer.primaryGym || customer.primary_gym,
-      };
+    // If we don't have customer data in payload, use stored or order customer data
+    if (!payload.customer) {
+      if (customer) {
+        payload.customer = {
+          firstName: customer.firstName || customer.first_name || storedCustomer?.firstName,
+          lastName: customer.lastName || customer.last_name || storedCustomer?.lastName,
+          email: customer.email || storedCustomer?.email,
+          primaryGym: customer.primaryGym || customer.primary_gym || storedCustomer?.primaryGym,
+        };
+      } else if (storedCustomer) {
+        payload.customer = {
+          firstName: storedCustomer.firstName,
+          lastName: storedCustomer.lastName,
+          email: storedCustomer.email,
+          primaryGym: storedCustomer.primaryGym,
+        };
+      }
     }
     
+    // Use order total if available, otherwise use stored total
+    const orderTotal = order?.total || order?.totalAmount || order?.data?.total || storedOrder?.totals?.cartTotal || 0;
+    
     // Build order summary with fetched data
-    state.order = buildOrderSummary(payload, order, customer);
+    state.order = buildOrderSummary(payload, { ...order, total: orderTotal, totalAmount: orderTotal }, customer || storedCustomer);
     console.log('[Payment Return] Order summary built:', state.order);
     
     // Render confirmation view with real data
