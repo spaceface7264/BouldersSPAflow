@@ -3593,18 +3593,37 @@ async function handleCheckout() {
       // Create new customer
       try {
         console.log('[checkout] Creating customer...');
+        
+        // Split fullName into firstName and lastName
+        const fullName = payload.customer?.fullName || '';
+        const nameParts = fullName.trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        
+        // Build customer data matching API expectations
         const customerData = {
           email: payload.customer?.email,
-          fullName: payload.customer?.fullName,
-          phone: payload.customer?.phone,
+          firstName: firstName,
+          lastName: lastName,
+          phone: payload.customer?.phone?.number || payload.customer?.phone,
+          phoneCountryCode: payload.customer?.phone?.countryCode,
           dateOfBirth: payload.customer?.dateOfBirth,
-          address: payload.customer?.address,
-          city: payload.customer?.city,
-          postalCode: payload.customer?.postalCode,
+          address: payload.customer?.address?.street || payload.customer?.address,
+          city: payload.customer?.address?.city || payload.customer?.city,
+          postalCode: payload.customer?.address?.postalCode || payload.customer?.postalCode,
           country: payload.customer?.country,
           primaryGym: payload.customer?.primaryGym,
+          password: payload.customer?.password,
         };
         
+        // Remove undefined/null values
+        Object.keys(customerData).forEach(key => {
+          if (customerData[key] === undefined || customerData[key] === null || customerData[key] === '') {
+            delete customerData[key];
+          }
+        });
+        
+        console.log('[checkout] Customer data prepared:', customerData);
         customer = await authAPI.createCustomer(customerData);
         customerId = customer.id || customer.customerId;
         
@@ -3957,6 +3976,26 @@ function getErrorMessage(error, context = 'operation') {
   // Network errors
   if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
     return 'Network error. Please check your connection and try again.';
+  }
+
+  // Try to parse validation errors from API response (400 errors with details)
+  if (error.message.includes('400')) {
+    try {
+      // Extract JSON from error message
+      const jsonMatch = error.message.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const errorData = JSON.parse(jsonMatch[0]);
+        if (errorData.error?.details && Array.isArray(errorData.error.details)) {
+          // Build user-friendly message from validation details
+          const validationErrors = errorData.error.details
+            .map(detail => detail.message || `${detail.field}: ${detail.message}`)
+            .join(', ');
+          return `Please fix the following: ${validationErrors}`;
+        }
+      }
+    } catch (e) {
+      // If parsing fails, fall through to default 400 message
+    }
   }
 
   // Parse status code from error message
