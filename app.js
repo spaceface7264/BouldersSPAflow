@@ -4134,12 +4134,18 @@ async function loadOrderForConfirmation(orderId) {
           
           if (!refreshedOrder.preliminary && refreshedOrder.leftToPay?.amount === 0) {
             console.log('[Payment Return] ✅ Order finalized successfully! Membership should now be created in BRP');
-            // Update order reference for summary
-            order = refreshedOrder;
+            // Use refreshed order for summary
+            Object.assign(order, refreshedOrder);
           } else if (!refreshedOrder.preliminary) {
             console.log('[Payment Return] ✅ Order preliminary set to false, but leftToPay still > 0');
-            console.log('[Payment Return] This might indicate payment is still processing');
-            order = refreshedOrder;
+            console.log('[Payment Return] ⚠️ Payment has not been registered yet - membership will NOT be created until payment is confirmed');
+            console.log('[Payment Return] This might indicate:');
+            console.warn('[Payment Return]   1. Payment webhook from payment provider hasn\'t arrived yet');
+            console.warn('[Payment Return]   2. Payment provider needs to send webhook to backend');
+            console.warn('[Payment Return]   3. Backend needs to process payment webhook to register payment');
+            console.warn('[Payment Return]   4. Once payment is registered (leftToPay = 0), membership will be created');
+            // Use refreshed order for summary
+            Object.assign(order, refreshedOrder);
           } else {
             console.warn('[Payment Return] ⚠️ Order update didn\'t change preliminary status');
             console.warn('[Payment Return] This might indicate:');
