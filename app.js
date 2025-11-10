@@ -1759,6 +1759,7 @@ const state = {
   billingPeriod: '',
   forms: {},
   order: null,
+  orderId: null, // Step 7: Created order ID
   paymentMethod: null,
   // Step 9: Payment link state
   paymentLink: null, // Generated payment link for checkout
@@ -3557,7 +3558,8 @@ function renderCartTotal() {
   }
 }
 
-function handleCheckout() {
+async function handleCheckout() {
+  // Validation (existing)
   if (!validateForm()) {
     showToast('Please review the highlighted fields.', 'error');
     return;
@@ -3573,17 +3575,182 @@ function handleCheckout() {
     return;
   }
 
-  const payload = buildCheckoutPayload();
-  state.forms = payload;
-  state.order = buildOrderSummary(payload);
+  // Set loading state
+  setCheckoutLoadingState(true);
 
-  console.info('[checkout] payload ready for backend integration', payload);
-  showToast('Checkout payload prepared. Connect backend API to complete.', 'success');
+  try {
+    const payload = buildCheckoutPayload();
+    state.forms = payload;
 
-  if (state.currentStep < TOTAL_STEPS) {
-    nextStep();
-  } else {
-    renderConfirmationView();
+    // Step 1: Create or authenticate customer
+    let customer = null;
+    let customerId = null;
+    
+    // Check if user is already logged in
+    const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    
+    if (!accessToken) {
+      // Create new customer
+      try {
+        console.log('[checkout] Creating customer...');
+        const customerData = {
+          email: payload.customer?.email,
+          fullName: payload.customer?.fullName,
+          phone: payload.customer?.phone,
+          dateOfBirth: payload.customer?.dateOfBirth,
+          address: payload.customer?.address,
+          city: payload.customer?.city,
+          postalCode: payload.customer?.postalCode,
+          country: payload.customer?.country,
+          primaryGym: payload.customer?.primaryGym,
+        };
+        
+        customer = await authAPI.createCustomer(customerData);
+        customerId = customer.id || customer.customerId;
+        
+        // Save tokens if provided
+        if (customer.accessToken && customer.refreshToken) {
+          if (typeof window.saveTokens === 'function') {
+            window.saveTokens(customer.accessToken, customer.refreshToken);
+          }
+        }
+        
+        console.log('[checkout] Customer created:', customerId);
+      } catch (error) {
+        console.error('[checkout] Customer creation failed:', error);
+        showToast(getErrorMessage(error, 'Customer creation'), 'error');
+        setCheckoutLoadingState(false);
+        return;
+      }
+    } else {
+      // User is logged in, get customer ID from token or state
+      // For now, we'll proceed with order creation
+      console.log('[checkout] User is authenticated');
+    }
+
+    // Step 2: Create order
+    let order = null;
+    try {
+      console.log('[checkout] Creating order...');
+      const orderData = {
+        customerId: customerId,
+        businessUnit: state.selectedBusinessUnit,
+      };
+      
+      order = await orderAPI.createOrder(orderData);
+      state.orderId = order.id || order.orderId;
+      console.log('[checkout] Order created:', state.orderId);
+    } catch (error) {
+      console.error('[checkout] Order creation failed:', error);
+      showToast(getErrorMessage(error, 'Order creation'), 'error');
+      setCheckoutLoadingState(false);
+      return;
+    }
+
+    // Step 3: Add items to order
+    try {
+      console.log('[checkout] Adding items to order...');
+      
+      // Add membership/subscription
+      if (state.membershipPlanId) {
+        try {
+          await orderAPI.addSubscriptionItem(state.orderId, state.membershipPlanId);
+          console.log('[checkout] Membership added to order');
+        } catch (error) {
+          console.error('[checkout] Failed to add membership:', error);
+          throw new Error('Failed to add membership to order');
+        }
+      }
+      
+      // Add value cards (punch cards)
+      if (state.valueCardQuantities && state.valueCardQuantities.size > 0) {
+        for (const [planId, quantity] of state.valueCardQuantities.entries()) {
+          if (quantity > 0) {
+            try {
+              await orderAPI.addValueCardItem(state.orderId, planId, quantity);
+              console.log(`[checkout] Value card added: ${planId} x${quantity}`);
+            } catch (error) {
+              console.error(`[checkout] Failed to add value card ${planId}:`, error);
+              throw new Error(`Failed to add value card to order`);
+            }
+          }
+        }
+      }
+      
+      // Add add-ons/articles
+      if (state.addonIds && state.addonIds.size > 0) {
+        for (const addonId of state.addonIds) {
+          try {
+            await orderAPI.addArticleItem(state.orderId, addonId);
+            console.log(`[checkout] Add-on added: ${addonId}`);
+          } catch (error) {
+            console.error(`[checkout] Failed to add add-on ${addonId}:`, error);
+            throw new Error(`Failed to add add-on to order`);
+          }
+        }
+      }
+      
+      console.log('[checkout] All items added to order');
+    } catch (error) {
+      console.error('[checkout] Failed to add items:', error);
+      showToast(getErrorMessage(error, 'Adding items'), 'error');
+      setCheckoutLoadingState(false);
+      return;
+    }
+
+    // Step 4: Generate payment link
+    let paymentLink = null;
+    try {
+      console.log('[checkout] Generating payment link...');
+      const returnUrl = `${window.location.origin}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
+      
+      const paymentData = await paymentAPI.generatePaymentLink(
+        state.orderId,
+        state.paymentMethod,
+        returnUrl
+      );
+      
+      paymentLink = paymentData.paymentLink || paymentData.link || paymentData.url;
+      state.paymentLink = paymentLink;
+      state.paymentLinkGenerated = true;
+      
+      console.log('[checkout] Payment link generated:', paymentLink);
+    } catch (error) {
+      console.error('[checkout] Payment link generation failed:', error);
+      showToast(getErrorMessage(error, 'Payment link generation'), 'error');
+      setCheckoutLoadingState(false);
+      return;
+    }
+
+    // Step 5: Update order summary with real data
+    state.order = buildOrderSummary(payload, order, customer);
+    
+    // Step 6: Redirect to payment or show confirmation
+    if (paymentLink) {
+      // Redirect to payment provider
+      console.log('[checkout] Redirecting to payment provider...');
+      showToast('Redirecting to secure payment...', 'info');
+      setTimeout(() => {
+        window.location.href = paymentLink;
+      }, 500);
+    } else {
+      // No payment link, show confirmation
+      console.log('[checkout] Payment link not available, showing confirmation');
+      showToast('Order created successfully!', 'success');
+      
+      if (state.currentStep < TOTAL_STEPS) {
+        nextStep();
+      } else {
+        renderConfirmationView();
+      }
+      setCheckoutLoadingState(false);
+    }
+
+  } catch (error) {
+    // Catch-all for unexpected errors
+    console.error('[checkout] Unexpected error:', error);
+    showToast(getErrorMessage(error, 'Checkout'), 'error');
+    setCheckoutLoadingState(false);
   }
 }
 
@@ -3618,19 +3785,23 @@ function buildCheckoutPayload() {
   return payload;
 }
 
-function buildOrderSummary(payload) {
+function buildOrderSummary(payload, order = null, customer = null) {
   const now = new Date();
   const membership = findMembershipPlan(state.membershipPlanId ?? '');
 
+  // Use real data if available, otherwise use TBD placeholders
+  const orderId = order?.id || order?.orderId || state.orderId || 'TBD-ORDER-ID';
+  const membershipId = customer?.id || customer?.customerId || customer?.membershipId || 'TBD-MEMBERSHIP-ID';
+
   return {
-    number: 'TBD-ORDER-ID',
-    date: now,
+    number: orderId,
+    date: order?.createdAt ? new Date(order.createdAt) : now,
     items: [...state.cartItems],
-    total: state.totals.cartTotal,
-    memberName: payload.customer?.fullName ?? '',
-    membershipNumber: 'TBD-MEMBERSHIP-ID',
+    total: order?.total || order?.totalAmount || state.totals.cartTotal,
+    memberName: customer?.fullName || payload.customer?.fullName || '',
+    membershipNumber: membershipId,
     membershipType: membership?.name ?? '—',
-    primaryGym: resolveGymLabel(payload.customer?.primaryGym),
+    primaryGym: resolveGymLabel(customer?.primaryGym || payload.customer?.primaryGym),
     membershipPrice: state.totals.membershipMonthly,
   };
 }
@@ -3779,6 +3950,63 @@ function updateCheckoutButton() {
   const hasPayment = Boolean(state.paymentMethod);
 
   DOM.checkoutBtn.disabled = !(termsAccepted && hasMembership && hasPayment);
+}
+
+// Helper function to get user-friendly error messages
+function getErrorMessage(error, context = 'operation') {
+  // Network errors
+  if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+    return 'Network error. Please check your connection and try again.';
+  }
+
+  // Parse status code from error message
+  const statusMatch = error.message.match(/(\d{3})/);
+  if (statusMatch) {
+    const status = parseInt(statusMatch[1]);
+    
+    switch (status) {
+      case 400:
+        return 'Invalid information provided. Please check your details and try again.';
+      case 401:
+        return 'Your session has expired. Please try again.';
+      case 403:
+        return 'You do not have permission to perform this action.';
+      case 404:
+        return `${context} not found. Please try again.`;
+      case 409:
+        return 'This order already exists. Please check your orders or contact support.';
+      case 422:
+        return 'Invalid data provided. Please review your information.';
+      case 429:
+        return 'Too many requests. Please wait a moment and try again.';
+      case 500:
+      case 502:
+      case 503:
+        return 'Server error. Please try again in a few moments.';
+      default:
+        return `An error occurred (${status}). Please try again or contact support.`;
+    }
+  }
+
+  // Default message
+  return error.message || 'An unexpected error occurred. Please try again.';
+}
+
+// Helper function to manage loading state during checkout
+function setCheckoutLoadingState(isLoading) {
+  if (!DOM.checkoutBtn) return;
+  
+  DOM.checkoutBtn.disabled = isLoading;
+  
+  if (isLoading) {
+    DOM.checkoutBtn.textContent = 'Processing...';
+    DOM.checkoutBtn.classList.add('loading');
+  } else {
+    DOM.checkoutBtn.textContent = 'Checkout';
+    DOM.checkoutBtn.classList.remove('loading');
+    // Re-validate button state based on form
+    updateCheckoutButton();
+  }
 }
 
 function nextStep() {
