@@ -762,6 +762,7 @@ class AuthAPI {
       }
       
       console.log('[Step 6] Creating customer:', url);
+      console.log('[Step 6] Customer data being sent:', JSON.stringify(customerData, null, 2));
       
       const headers = {
         'Accept-Language': 'da-DK',
@@ -3594,8 +3595,11 @@ async function handleCheckout() {
       // Create new customer
       try {
         console.log('[checkout] Creating customer...');
+        console.log('[checkout] Full payload:', JSON.stringify(payload, null, 2));
+        console.log('[checkout] Customer payload:', JSON.stringify(payload.customer, null, 2));
         
         // Build customer data matching API expectations
+        // The API expects fields at the top level, not nested under "customer"
         const customerData = {
           email: payload.customer?.email,
           firstName: payload.customer?.firstName,
@@ -3611,14 +3615,16 @@ async function handleCheckout() {
           password: payload.customer?.password,
         };
         
-        // Remove undefined/null values
+        console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
+        
+        // Remove undefined/null values (but keep empty strings for now to debug)
         Object.keys(customerData).forEach(key => {
-          if (customerData[key] === undefined || customerData[key] === null || customerData[key] === '') {
+          if (customerData[key] === undefined || customerData[key] === null) {
             delete customerData[key];
           }
         });
         
-        console.log('[checkout] Customer data prepared:', customerData);
+        console.log('[checkout] Customer data prepared:', JSON.stringify(customerData, null, 2));
         customer = await authAPI.createCustomer(customerData);
         customerId = customer.id || customer.customerId;
         
