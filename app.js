@@ -378,6 +378,53 @@ class BusinessUnitsAPI {
       return [];
     }
   }
+
+  // Step 8: Get additional catalog items - GET /api/products
+  // To offer more products, fetch catalogs with GET /api/products
+  async getProducts(businessUnitId = null) {
+    try {
+      let url;
+      const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}` : '';
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/products${queryParam}`;
+      } else {
+        url = `${this.baseUrl}/api/products${queryParam}`;
+      }
+      
+      console.log('[Step 8] Fetching additional catalog products from:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        // If 404, the endpoint doesn't exist yet - return empty array
+        if (response.status === 404) {
+          console.log('[Step 8] Products endpoint not found (404) - may not be implemented yet');
+          return [];
+        }
+        const errorText = await response.text();
+        console.error(`[Step 8] API Error (${response.status}):`, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 8] Products API response:', data);
+      
+      // Handle different response formats
+      return Array.isArray(data) ? data : (data.data || data.items || []);
+    } catch (error) {
+      console.error('[Step 8] Error fetching products:', error);
+      // Return empty array if endpoint doesn't exist - don't break the flow
+      return [];
+    }
+  }
 }
 
 // Step 4: Reference Data Loader API

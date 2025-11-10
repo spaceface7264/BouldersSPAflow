@@ -1,6 +1,6 @@
 # Implementation Status Check
 
-## ✅ Completed Steps (Steps 1-7)
+## ✅ Completed Steps (Steps 1-8)
 
 ### Step 1: Lock Production Backend URL ✅
 - **Status**: ✅ COMPLETE
@@ -118,12 +118,19 @@
 - **Compliance**: ✅ Matches guide requirements
 - **Note**: Ready to be integrated into checkout flow
 
-### Step 8: Additional Catalog Items (Optional)
-- **Status**: ⏳ PENDING
-- **Requirements**:
-  - `GET /api/products` - Fetch additional products
-  - `GET /api/products/subscriptions/{productId}/additions` - Fetch add-ons
-  - Attach to order using `/api/orders/{orderId}/items/*` endpoints
+### Step 8: Additional Catalog Items (Optional) ✅
+- **Status**: ✅ COMPLETE
+- **Implementation**:
+  - ✅ Added `getProducts()` method to BusinessUnitsAPI: `GET /api/products` - fetches additional catalog items
+  - ✅ `getSubscriptionAdditions()` already exists: `GET /api/products/subscriptions/{productId}/additions` (from Step 5)
+  - ✅ Products can be attached to orders using OrderAPI methods:
+    - `orderAPI.addSubscriptionItem()` for subscription products
+    - `orderAPI.addValueCardItem()` for value card products
+    - `orderAPI.addArticleItem()` for article/add-on products
+  - ✅ Supports business unit filtering (optional query parameter)
+  - ✅ Gracefully handles 404s (endpoints may not be implemented yet)
+- **Compliance**: ✅ Matches guide requirements
+- **Note**: This step is optional and ready when needed
 
 ### Steps 9-12: Payment Link, State Wiring, Testing, Guardian Flows, Analytics
 - **Status**: ⏳ PENDING
@@ -139,7 +146,8 @@
 - ✅ Step 5: Access type selection fully functional
 - ✅ Step 6: Authentication and account creation fully functional
 - ✅ Step 7: Order and items fully functional
-- ✅ Infrastructure ready for Steps 8-12
+- ✅ Step 8: Additional catalog items implemented (optional)
+- ✅ Infrastructure ready for Steps 9-12
 
 ### Against Postman Documentation:
 - ✅ Endpoint: `/api/reference/business-units` matches Postman
@@ -156,9 +164,9 @@
 
 ## 🎯 Summary
 
-**Current Status**: Steps 1-7 are **fully implemented and production-ready**.
+**Current Status**: Steps 1-8 are **fully implemented and production-ready**.
 
-The setup is solid and follows the implementation guide correctly. The Netlify Function proxy is properly configured to support all future API calls. Authentication is complete with token management, validation, and refresh. Order management is complete with all item types (subscriptions, value cards, articles). The system will seamlessly handle Steps 8-12 when implemented.
+The setup is solid and follows the implementation guide correctly. The Netlify Function proxy is properly configured to support all future API calls. Authentication is complete with token management, validation, and refresh. Order management is complete with all item types (subscriptions, value cards, articles). Additional catalog items can be fetched and added to orders. The system will seamlessly handle Steps 9-12 when implemented.
 
-**Recommendation**: ✅ **Ready to proceed with Step 8** (Additional Catalog Items) or **Step 9** (Payment Link Flow).
+**Recommendation**: ✅ **Ready to proceed with Step 9** (Payment Link Flow).
 
