@@ -1272,11 +1272,104 @@ class OrderAPI {
   }
 }
 
+// Step 9: Payment API
+// Handles payment link generation for checkout
+class PaymentAPI {
+  constructor(baseUrl = null) {
+    // Use same proxy logic as BusinessUnitsAPI
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      // Development: use Vite proxy (relative URL)
+      this.baseUrl = '';
+      this.useProxy = false;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else {
+      // Fallback to direct API (may have CORS issues)
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
+    }
+  }
+
+  // Step 9: Generate payment link - POST /api/payment/generate-link
+  // Create checkout URLs after an order is ready
+  async generatePaymentLink(orderId, paymentMethod, returnUrl = null) {
+    try {
+      // Build return URL if not provided
+      // Use the same return URL structure documented for the Join Boulders API service
+      if (!returnUrl) {
+        const currentUrl = window.location.origin + window.location.pathname;
+        returnUrl = `${currentUrl}?payment=return&orderId=${orderId}`;
+      }
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/payment/generate-link`;
+      } else {
+        url = `${this.baseUrl}/api/payment/generate-link`;
+      }
+      
+      console.log('[Step 9] Generating payment link:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      // Step 9: Pass order ID, payment method, selected business unit, and return URL
+      const payload = {
+        orderId,
+        paymentMethod,
+        businessUnit: state.selectedBusinessUnit, // Always include active business unit
+        returnUrl, // Return URL structure for backend to complete the flow
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 9] Generate payment link error (${response.status}):`, errorText);
+        throw new Error(`Generate payment link failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 9] Payment link generated:', data);
+      
+      // Step 9: Store the generated link in client state so the UI can display it or redirect the user
+      if (data.paymentLink || data.link || data.url) {
+        const paymentLink = data.paymentLink || data.link || data.url;
+        // Store in state for UI to use
+        if (state) {
+          state.paymentLink = paymentLink;
+          state.paymentLinkGenerated = true;
+        }
+        console.log('[Step 9] Payment link stored in state:', paymentLink);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('[Step 9] Generate payment link error:', error);
+      throw error;
+    }
+  }
+}
+
 // Initialize API instances
 const businessUnitsAPI = new BusinessUnitsAPI();
 const referenceDataAPI = new ReferenceDataAPI();
 const authAPI = new AuthAPI();
 const orderAPI = new OrderAPI();
+const paymentAPI = new PaymentAPI();
 
 // Step 6: Token validation on app reload
 // Keep tokens fresh by calling POST /api/auth/validate when app reloads with saved credentials
@@ -1667,6 +1760,9 @@ const state = {
   forms: {},
   order: null,
   paymentMethod: null,
+  // Step 9: Payment link state
+  paymentLink: null, // Generated payment link for checkout
+  paymentLinkGenerated: false, // Flag indicating if payment link has been generated
   // Step 5: Store fetched products from API
   subscriptions: [], // Fetched membership products
   valueCards: [], // Fetched punch card products
