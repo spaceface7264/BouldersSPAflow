@@ -437,7 +437,7 @@ class ReferenceDataAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
+    } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
@@ -539,7 +539,7 @@ class AuthAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
+    } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
@@ -977,7 +977,7 @@ class OrderAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
+    } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
@@ -1281,7 +1281,7 @@ class PaymentAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
+    } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
