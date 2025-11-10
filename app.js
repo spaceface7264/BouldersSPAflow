@@ -4112,10 +4112,14 @@ async function loadOrderForConfirmation(orderId) {
     // Get primaryGym from business unit if not in customer data
     let primaryGym = storedCustomer?.primaryGym || customer?.primaryGym || customer?.primary_gym;
     if (!primaryGym && state.selectedBusinessUnit) {
-      // Try to get gym name from business unit
-      const businessUnit = state.businessUnits?.find(bu => bu.id === state.selectedBusinessUnit || String(bu.id) === String(state.selectedBusinessUnit));
-      if (businessUnit) {
-        primaryGym = businessUnit.name || businessUnit.label || state.selectedBusinessUnit;
+      // Try to get gym name from business unit - check if businessUnits are loaded
+      // Business units are stored in DOM or we need to fetch them
+      // For now, use the business unit ID as fallback, or try to get from order
+      if (order?.businessUnit) {
+        primaryGym = order.businessUnit.name || order.businessUnit.label || order.businessUnit.id;
+      } else {
+        // Use business unit ID as fallback
+        primaryGym = state.selectedBusinessUnit;
       }
     }
     
