@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../constants';
 import type { ApiResponse } from '../types';
+import { getAccessToken } from './tokens';
 
 export class HttpError extends Error {
   constructor(
@@ -25,12 +26,21 @@ export class HttpClient {
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
     
+    // Step 6: Automatically add Authorization header if token exists
+    const accessToken = getAccessToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept-Language': 'da-DK', // Step 2: Language default - API3 relies on header, not query params
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    // Add Authorization header if token is available and not already provided
+    if (accessToken && !headers['Authorization'] && !headers['authorization']) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+    
     const config: RequestInit = {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept-Language': 'da-DK', // Step 2: Language default - API3 relies on header, not query params
-        ...options.headers,
-      },
+      headers,
       ...options,
     };
 

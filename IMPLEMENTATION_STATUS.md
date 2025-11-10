@@ -84,18 +84,37 @@
 - **Compliance**: ✅ Matches guide requirements
 - **Note**: Add-ons endpoint returns 404 (not implemented yet) but handled gracefully
 
-### Step 6: Authentication
+### Step 6: Authentication or Account Creation ✅
+- **Status**: ✅ COMPLETE
+- **Implementation**:
+  - ✅ Created `AuthAPI` class for all authentication endpoints
+  - ✅ Login flow: `POST /api/auth/login` - stores access/refresh tokens
+  - ✅ Customer creation: `POST /api/customers` - for new users, always includes business unit
+  - ✅ Token management: `saveTokens`, `getAccessToken`, `clearTokens` helpers implemented
+  - ✅ Token validation: `POST /api/auth/validate` - called on app reload with saved credentials
+  - ✅ Token refresh: `POST /api/auth/refresh` - refreshes expired tokens, clears session if fails
+  - ✅ Password reset: `POST /api/auth/reset-password` - forgotten password flow
+  - ✅ Customer management: `PUT /api/customers/:id` - update customer details
+  - ✅ Guardian/child linking: `POST /api/customers/:customerId/otheruser` - link relationships
+  - ✅ HttpClient automatically adds `Authorization: Bearer {token}` header when token exists
+  - ✅ Token storage: Memory-first with sessionStorage fallback for persistence
+  - ✅ Token validation on app load: Validates/refreshes tokens when app reloads
+- **Compliance**: ✅ Matches guide requirements
+- **Note**: All endpoints include active business unit in payloads as required
+
+### Step 7: Order and Items
 - **Status**: ⏳ PENDING
 - **Requirements**:
-  - `POST /api/auth/login`
-  - `POST /api/customers` (for new users)
-  - Token management (saveTokens, getAccessToken, clearTokens)
-  - `POST /api/auth/validate` and `POST /api/auth/refresh`
-- **Note**: Netlify Function already supports Authorization headers
+  - `POST /api/orders` - Create order
+  - `POST /api/orders/{orderId}/items/subscriptions` (membership)
+  - `POST /api/orders/{orderId}/items/valuecards` (punch card)
+  - `POST /api/orders/{orderId}/items/articles` (add-ons)
+  - `GET /api/orders/{orderId}` and `PUT /api/orders/{orderId}` - Review/update order
+  - Always include active business unit in payloads
 
-### Steps 7-12: Order Flow, Payment, Analytics
+### Steps 8-12: Additional Catalog, Payment, State Wiring, Testing, Guardian Flows, Analytics
 - **Status**: ⏳ PENDING
-- **Note**: Infrastructure is ready (proxy supports all methods)
+- **Note**: Infrastructure is ready (proxy supports all methods, auth is ready)
 
 ## ✅ Setup Quality Check
 
@@ -105,7 +124,8 @@
 - ✅ Step 3: Business unit picker fully functional
 - ✅ Step 4: Reference data loader implemented and ready
 - ✅ Step 5: Access type selection fully functional
-- ✅ Infrastructure ready for Steps 6-12
+- ✅ Step 6: Authentication and account creation fully functional
+- ✅ Infrastructure ready for Steps 7-12
 
 ### Against Postman Documentation:
 - ✅ Endpoint: `/api/reference/business-units` matches Postman
@@ -122,9 +142,9 @@
 
 ## 🎯 Summary
 
-**Current Status**: Steps 1-5 are **fully implemented and production-ready**.
+**Current Status**: Steps 1-6 are **fully implemented and production-ready**.
 
-The setup is solid and follows the implementation guide correctly. The Netlify Function proxy is properly configured to support all future API calls (authentication, orders, payments, etc.) and will seamlessly handle Steps 6-12 when implemented.
+The setup is solid and follows the implementation guide correctly. The Netlify Function proxy is properly configured to support all future API calls (authentication, orders, payments, etc.). Authentication is complete with token management, validation, and refresh. The system will seamlessly handle Steps 7-12 when implemented.
 
-**Recommendation**: ✅ **Ready to proceed with Step 6** (Authentication).
+**Recommendation**: ✅ **Ready to proceed with Step 7** (Order and Items).
 

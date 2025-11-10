@@ -483,9 +483,501 @@ class ReferenceDataAPI {
   }
 }
 
+// Step 6: Authentication API
+// Handles login, token management, customer creation, and password reset
+class AuthAPI {
+  constructor(baseUrl = null) {
+    // Use same proxy logic as BusinessUnitsAPI
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      // Development: use Vite proxy (relative URL)
+      this.baseUrl = '';
+      this.useProxy = false;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else {
+      // Fallback to direct API (may have CORS issues)
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
+    }
+  }
+
+  // Step 6: Login - Submit login credentials and store tokens
+  async login(email, password) {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/auth/login`;
+      } else {
+        url = `${this.baseUrl}/api/auth/login`;
+      }
+      
+      console.log('[Step 6] Logging in:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ email, password }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 6] Login error (${response.status}):`, errorText);
+        throw new Error(`Login failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 6] Login response:', data);
+      
+      // Store tokens if provided in response
+      if (data.accessToken && data.refreshToken) {
+        // Import token utilities (using dynamic import for app.js compatibility)
+        // Note: In a real implementation, you'd import at the top, but app.js may not support ES6 imports
+        // For now, we'll use a global function that we'll define
+        if (typeof window.saveTokens === 'function') {
+          window.saveTokens(data.accessToken, data.refreshToken, data.expiresAt);
+        } else {
+          console.warn('[Step 6] saveTokens function not available - tokens not saved');
+        }
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('[Step 6] Login error:', error);
+      throw error;
+    }
+  }
+
+  // Step 6: Validate token - Keep tokens fresh when app reloads
+  async validateToken() {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/auth/validate`;
+      } else {
+        url = `${this.baseUrl}/api/auth/validate`;
+      }
+      
+      console.log('[Step 6] Validating token:', url);
+      
+      // Note: Authorization header will be added automatically by HttpClient
+      // But since we're using fetch directly, we need to add it manually
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 6] Token validation error (${response.status}):`, errorText);
+        throw new Error(`Token validation failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 6] Token validation response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 6] Token validation error:', error);
+      throw error;
+    }
+  }
+
+  // Step 6: Refresh token - Refresh expired tokens
+  async refreshToken() {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/auth/refresh`;
+      } else {
+        url = `${this.baseUrl}/api/auth/refresh`;
+      }
+      
+      console.log('[Step 6] Refreshing token:', url);
+      
+      const refreshToken = typeof window.getRefreshToken === 'function' 
+        ? window.getRefreshToken() 
+        : null;
+      
+      if (!refreshToken) {
+        throw new Error('No refresh token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ refreshToken }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 6] Token refresh error (${response.status}):`, errorText);
+        // If refresh fails, clear tokens and return to auth step
+        if (typeof window.clearTokens === 'function') {
+          window.clearTokens();
+        }
+        throw new Error(`Token refresh failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 6] Token refresh response:', data);
+      
+      // Store new tokens
+      if (data.accessToken && data.refreshToken) {
+        if (typeof window.saveTokens === 'function') {
+          window.saveTokens(data.accessToken, data.refreshToken, data.expiresAt);
+        }
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('[Step 6] Token refresh error:', error);
+      throw error;
+    }
+  }
+
+  // Step 6: Password reset - Offer forgotten-password flow
+  async resetPassword(email) {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/auth/reset-password`;
+      } else {
+        url = `${this.baseUrl}/api/auth/reset-password`;
+      }
+      
+      console.log('[Step 6] Requesting password reset:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ email }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 6] Password reset error (${response.status}):`, errorText);
+        throw new Error(`Password reset failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 6] Password reset response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 6] Password reset error:', error);
+      throw error;
+    }
+  }
+
+  // Step 6: Create customer - For new users
+  async createCustomer(customerData) {
+    try {
+      // Always include the active business unit
+      if (!customerData.businessUnit && state.selectedBusinessUnit) {
+        customerData.businessUnit = state.selectedBusinessUnit;
+      }
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/customers`;
+      } else {
+        url = `${this.baseUrl}/api/customers`;
+      }
+      
+      console.log('[Step 6] Creating customer:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(customerData),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 6] Create customer error (${response.status}):`, errorText);
+        throw new Error(`Create customer failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 6] Create customer response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 6] Create customer error:', error);
+      throw error;
+    }
+  }
+
+  // Step 6: Update customer
+  async updateCustomer(customerId, customerData) {
+    try {
+      // Always include the active business unit
+      if (!customerData.businessUnit && state.selectedBusinessUnit) {
+        customerData.businessUnit = state.selectedBusinessUnit;
+      }
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/customers/${customerId}`;
+      } else {
+        url = `${this.baseUrl}/api/customers/${customerId}`;
+      }
+      
+      console.log('[Step 6] Updating customer:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(customerData),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 6] Update customer error (${response.status}):`, errorText);
+        throw new Error(`Update customer failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 6] Update customer response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 6] Update customer error:', error);
+      throw error;
+    }
+  }
+
+  // Step 6: Link guardian/child relationship
+  async linkOtherUser(customerId, otherUserId, role = 'PAYER') {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/customers/${customerId}/otheruser`;
+      } else {
+        url = `${this.baseUrl}/api/customers/${customerId}/otheruser`;
+      }
+      
+      console.log('[Step 6] Linking other user:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ otherUserId, role }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 6] Link other user error (${response.status}):`, errorText);
+        throw new Error(`Link other user failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 6] Link other user response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 6] Link other user error:', error);
+      throw error;
+    }
+  }
+}
+
+// Step 6: Token Management Functions
+// Expose token utilities globally for AuthAPI to use
+// These implement saveTokens, getAccessToken, clearTokens as per guide requirements
+(function() {
+  const TOKEN_STORAGE_KEY = 'boulders_auth_tokens';
+  let tokenStore = null; // Memory-first storage
+
+  // Load tokens from sessionStorage on init
+  try {
+    const stored = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (stored) {
+      tokenStore = JSON.parse(stored);
+    }
+  } catch (error) {
+    console.warn('[Step 6] Could not load tokens from sessionStorage:', error);
+  }
+
+  // Step 6: saveTokens - Persist tokens in session store
+  window.saveTokens = function(accessToken, refreshToken, expiresAt) {
+    const tokenData = { accessToken, refreshToken, expiresAt };
+    tokenStore = tokenData;
+    
+    try {
+      sessionStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokenData));
+    } catch (error) {
+      console.warn('[Step 6] Could not save tokens to sessionStorage:', error);
+    }
+  };
+
+  // Step 6: getAccessToken - Get access token from session store
+  window.getAccessToken = function() {
+    if (tokenStore?.accessToken) {
+      return tokenStore.accessToken;
+    }
+    
+    try {
+      const stored = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+      if (stored) {
+        tokenStore = JSON.parse(stored);
+        return tokenStore?.accessToken || null;
+      }
+    } catch (error) {
+      console.warn('[Step 6] Could not read tokens from sessionStorage:', error);
+    }
+    
+    return null;
+  };
+
+  // getRefreshToken - Get refresh token from session store
+  window.getRefreshToken = function() {
+    if (tokenStore?.refreshToken) {
+      return tokenStore.refreshToken;
+    }
+    
+    try {
+      const stored = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+      if (stored) {
+        tokenStore = JSON.parse(stored);
+        return tokenStore?.refreshToken || null;
+      }
+    } catch (error) {
+      console.warn('[Step 6] Could not read tokens from sessionStorage:', error);
+    }
+    
+    return null;
+  };
+
+  // Step 6: clearTokens - Clear session and return to auth step
+  window.clearTokens = function() {
+    tokenStore = null;
+    
+    try {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    } catch (error) {
+      console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
+    }
+  };
+
+  // Check if token is expired
+  window.isTokenExpired = function() {
+    if (!tokenStore?.expiresAt) {
+      return false;
+    }
+    const buffer = 5 * 60 * 1000; // 5 minute buffer
+    return Date.now() >= (tokenStore.expiresAt - buffer);
+  };
+})();
+
 // Initialize API instances
 const businessUnitsAPI = new BusinessUnitsAPI();
 const referenceDataAPI = new ReferenceDataAPI();
+const authAPI = new AuthAPI();
+
+// Step 6: Token validation on app reload
+// Keep tokens fresh by calling POST /api/auth/validate when app reloads with saved credentials
+async function validateTokensOnLoad() {
+  const accessToken = window.getAccessToken();
+  const refreshToken = window.getRefreshToken();
+  
+  if (!accessToken) {
+    return; // No tokens to validate
+  }
+  
+  // Check if token is expired
+  if (window.isTokenExpired && window.isTokenExpired()) {
+    console.log('[Step 6] Access token expired, attempting refresh...');
+    
+    // If refresh token exists, try to refresh
+    if (refreshToken) {
+      try {
+        await authAPI.refreshToken();
+        console.log('[Step 6] Token refreshed successfully');
+      } catch (error) {
+        console.error('[Step 6] Token refresh failed, clearing session:', error);
+        window.clearTokens();
+        // Return to auth step would be handled by UI logic
+      }
+    } else {
+      // No refresh token, clear session
+      console.log('[Step 6] No refresh token available, clearing session');
+      window.clearTokens();
+    }
+    return;
+  }
+  
+  // Token not expired, validate it
+  try {
+    await authAPI.validateToken();
+    console.log('[Step 6] Token validated successfully');
+  } catch (error) {
+    console.error('[Step 6] Token validation failed:', error);
+    // If validation fails, try refresh if refresh token exists
+    if (refreshToken) {
+      try {
+        await authAPI.refreshToken();
+        console.log('[Step 6] Token refreshed after validation failure');
+      } catch (refreshError) {
+        console.error('[Step 6] Token refresh failed, clearing session:', refreshError);
+        window.clearTokens();
+      }
+    } else {
+      window.clearTokens();
+    }
+  }
+}
 
 // Step 4: Load reference data after business unit selection
 // Caches responses in client state and refreshes when business unit changes
@@ -1124,7 +1616,11 @@ function init() {
   updateMainSubtitle();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+  // Step 6: Validate tokens on app load
+  validateTokensOnLoad();
+});
 
 
 // Re-initialize form scrolling on window resize

@@ -79,3 +79,4 @@ If something doesn't work, please share:
 2. Network tab - check the API requests and responses
 3. What you see vs. what you expect
 
+
