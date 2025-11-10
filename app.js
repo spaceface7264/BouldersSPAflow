@@ -3619,7 +3619,7 @@ async function handleCheckout() {
           country: payload.customer?.country,
           primaryGym: payload.customer?.primaryGym,
           password: payload.customer?.password,
-          customerType: 'MEMBER', // Required by API - defaulting to MEMBER for membership signups
+          customerType: 1, // Required by API - numeric ID (typically 1 = Individual customer type)
         };
         
         console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
