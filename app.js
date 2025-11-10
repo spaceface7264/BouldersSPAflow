@@ -3959,15 +3959,28 @@ function buildOrderSummary(payload, order = null, customer = null) {
                        state.customerId || // Use customer ID from checkout if available
                        'TBD-MEMBERSHIP-ID';
 
+  // Build member name from customer data - check multiple sources
+  let memberName = '';
+  if (customer?.fullName) {
+    memberName = customer.fullName;
+  } else if (customer?.firstName && customer?.lastName) {
+    memberName = `${customer.firstName} ${customer.lastName}`;
+  } else if (payload.customer?.firstName && payload.customer?.lastName) {
+    memberName = `${payload.customer.firstName} ${payload.customer.lastName}`;
+  }
+  
+  // Build primary gym label - check multiple sources
+  const primaryGymValue = customer?.primaryGym || customer?.primary_gym || payload.customer?.primaryGym;
+  
   return {
     number: orderId,
-    date: order?.createdAt ? new Date(order.createdAt) : now,
+    date: order?.createdAt ? new Date(order.createdAt) : (order?.created ? new Date(order.created) : now),
     items: [...state.cartItems],
     total: order?.total || order?.totalAmount || state.totals.cartTotal,
-    memberName: customer?.fullName || (payload.customer?.firstName && payload.customer?.lastName ? `${payload.customer.firstName} ${payload.customer.lastName}` : '') || '',
+    memberName: memberName || '—',
     membershipNumber: membershipId,
     membershipType: membership?.name ?? '—',
-    primaryGym: resolveGymLabel(customer?.primaryGym || payload.customer?.primaryGym),
+    primaryGym: resolveGymLabel(primaryGymValue),
     membershipPrice: state.totals.membershipMonthly,
   };
 }
@@ -4041,23 +4054,32 @@ async function loadOrderForConfirmation(orderId) {
     // Build payload - use stored customer data if available
     const payload = buildCheckoutPayload();
     
-    // If we don't have customer data in payload, use stored or order customer data
-    if (!payload.customer) {
-      if (customer) {
-        payload.customer = {
-          firstName: customer.firstName || customer.first_name || storedCustomer?.firstName,
-          lastName: customer.lastName || customer.last_name || storedCustomer?.lastName,
-          email: customer.email || storedCustomer?.email,
-          primaryGym: customer.primaryGym || customer.primary_gym || storedCustomer?.primaryGym,
-        };
-      } else if (storedCustomer) {
-        payload.customer = {
-          firstName: storedCustomer.firstName,
-          lastName: storedCustomer.lastName,
-          email: storedCustomer.email,
-          primaryGym: storedCustomer.primaryGym,
-        };
-      }
+    // Ensure customer data is in payload - prioritize stored customer data
+    if (storedCustomer) {
+      payload.customer = {
+        firstName: storedCustomer.firstName,
+        lastName: storedCustomer.lastName,
+        email: storedCustomer.email,
+        primaryGym: storedCustomer.primaryGym,
+      };
+    } else if (customer) {
+      payload.customer = {
+        firstName: customer.firstName || customer.first_name,
+        lastName: customer.lastName || customer.last_name,
+        email: customer.email,
+        primaryGym: customer.primaryGym || customer.primary_gym,
+      };
+    }
+    
+    // Also ensure customer object has firstName/lastName for buildOrderSummary
+    if (!customer && storedCustomer) {
+      customer = storedCustomer;
+    } else if (customer && storedCustomer) {
+      // Merge stored customer data into customer object if missing
+      customer.firstName = customer.firstName || customer.first_name || storedCustomer.firstName;
+      customer.lastName = customer.lastName || customer.last_name || storedCustomer.lastName;
+      customer.email = customer.email || storedCustomer.email;
+      customer.primaryGym = customer.primaryGym || customer.primary_gym || storedCustomer.primaryGym;
     }
     
     // Use order total if available, otherwise use stored total
