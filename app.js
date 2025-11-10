@@ -3774,6 +3774,7 @@ async function handleCheckout() {
           membershipPlanId: state.membershipPlanId,
           cartItems: state.cartItems || [],
           totals: state.totals,
+          selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
         }));
       } catch (e) {
         console.warn('[checkout] Could not save order to sessionStorage:', e);
