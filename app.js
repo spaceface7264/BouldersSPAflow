@@ -380,8 +380,144 @@ class BusinessUnitsAPI {
   }
 }
 
-// Initialize API instance
+// Step 4: Reference Data Loader API
+// Fetches reference/lookup data after business unit selection
+// Caches responses in client state and refreshes when business unit changes
+class ReferenceDataAPI {
+  constructor(baseUrl = null) {
+    // Use same proxy logic as BusinessUnitsAPI
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      // Development: use Vite proxy (relative URL)
+      this.baseUrl = '';
+      this.useProxy = false;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else {
+      // Fallback to direct API (may have CORS issues)
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
+    }
+  }
+
+  // Fetch reference data (extensible for different types of reference data)
+  // This is a flexible method that can be extended as needed
+  async getReferenceData(type, businessUnitId = null) {
+    try {
+      // Build endpoint path based on type
+      // Examples: 'countries', 'regions', 'currencies', 'payment-methods', etc.
+      let endpoint = `/api/reference/${type}`;
+      
+      // Add business unit query param if provided and needed
+      const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}` : '';
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=${endpoint}${queryParam}`;
+      } else {
+        url = `${this.baseUrl}${endpoint}${queryParam}`;
+      }
+      
+      console.log(`[Step 4] Fetching reference data (${type}) from:`, url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK', // Step 2: Language default
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        // If 404, the endpoint doesn't exist - return null (not an error, just not available)
+        if (response.status === 404) {
+          console.log(`[Step 4] Reference data endpoint ${type} not found (404) - may not be implemented yet`);
+          return null;
+        }
+        
+        const errorText = await response.text();
+        console.error(`[Step 4] API Error (${response.status}):`, errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log(`[Step 4] Reference data (${type}) API response:`, data);
+      return data;
+    } catch (error) {
+      console.error(`[Step 4] Error fetching reference data (${type}):`, error);
+      // Don't throw - reference data is optional, return null instead
+      return null;
+    }
+  }
+
+  // Fetch all reference data types that might be needed
+  // This can be extended as new reference data types are identified
+  async getAllReferenceData(businessUnitId = null) {
+    const referenceData = {};
+    
+    // List of reference data types to fetch
+    // Add more types here as they become available/needed
+    const referenceTypes = [
+      // 'countries',      // If available
+      // 'regions',         // If available
+      // 'currencies',      // If available
+      // 'payment-methods', // If available
+      // Add more as needed
+    ];
+    
+    // Fetch all reference data types in parallel
+    const promises = referenceTypes.map(async (type) => {
+      const data = await this.getReferenceData(type, businessUnitId);
+      if (data !== null) {
+        referenceData[type] = data;
+      }
+    });
+    
+    await Promise.all(promises);
+    
+    console.log('[Step 4] All reference data loaded:', referenceData);
+    return referenceData;
+  }
+}
+
+// Initialize API instances
 const businessUnitsAPI = new BusinessUnitsAPI();
+const referenceDataAPI = new ReferenceDataAPI();
+
+// Step 4: Load reference data after business unit selection
+// Caches responses in client state and refreshes when business unit changes
+async function loadReferenceData() {
+  if (!state.selectedBusinessUnit) {
+    console.warn('[Step 4] Cannot load reference data: No business unit selected');
+    return;
+  }
+
+  try {
+    console.log('[Step 4] Loading reference data for business unit:', state.selectedBusinessUnit);
+    
+    // Fetch all reference data types
+    const referenceData = await referenceDataAPI.getAllReferenceData(state.selectedBusinessUnit);
+    
+    // Cache in state
+    state.referenceData = referenceData;
+    state.referenceDataLoaded = true;
+    
+    console.log('[Step 4] Reference data loaded and cached:', referenceData);
+    
+    // If reference data is available, it can be used throughout the app
+    // For example, if countries/regions are available, they can populate dropdowns
+    // This is extensible - add UI updates here as new reference data types are added
+    
+  } catch (error) {
+    console.error('[Step 4] Failed to load reference data:', error);
+    // Don't block the flow - reference data is optional
+    state.referenceData = {};
+    state.referenceDataLoaded = false;
+  }
+}
 
 // Step 5: Load products (subscriptions and value cards) from API
 async function loadProductsFromAPI() {
@@ -694,6 +830,9 @@ const state = {
   selectedProductType: null, // 'membership' or 'punch-card'
   selectedProductId: null, // The actual product ID from API
   selectedAddonIds: [], // Array of selected add-on product IDs
+  // Step 4: Reference data cache
+  referenceData: {}, // Cached reference/lookup data (countries, regions, currencies, etc.)
+  referenceDataLoaded: false, // Flag to track if reference data has been loaded
 };
 
 const DOM = {};
@@ -1165,8 +1304,22 @@ function handleGymSelection(item) {
   // Extract numeric ID from data attribute (format: "gym-{id}")
   const gymIdString = item.dataset.gymId;
   const numericId = gymIdString ? gymIdString.replace('gym-', '') : null;
+  
+  // Step 4: If business unit changed, clear cached reference data to force refresh
+  const previousBusinessUnit = state.selectedBusinessUnit;
+  if (previousBusinessUnit !== numericId) {
+    state.referenceData = {};
+    state.referenceDataLoaded = false;
+  }
+  
   state.selectedGymId = numericId; // Store numeric ID for API requests
   state.selectedBusinessUnit = numericId; // Also store as businessUnit for clarity
+  
+  // Step 4: Load reference data after business unit selection
+  // Cache responses in client state and refresh when business unit changes
+  if (numericId) {
+    loadReferenceData();
+  }
   
   // Step 5: Pre-load products when business unit is selected (for faster step 2 loading)
   if (numericId) {
