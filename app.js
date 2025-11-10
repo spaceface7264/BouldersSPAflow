@@ -1814,6 +1814,7 @@ const state = {
   order: null,
   orderId: null, // Step 7: Created order ID
   customerId: null, // Step 6: Created customer ID (for membership ID display)
+  checkoutInProgress: false, // Flag to prevent duplicate checkout attempts
   paymentMethod: null,
   // Step 9: Payment link state
   paymentLink: null, // Generated payment link for checkout
@@ -2120,7 +2121,32 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Check if we're returning from payment before initializing
+  const urlParams = new URLSearchParams(window.location.search);
+  const paymentReturn = urlParams.get('payment');
+  const orderId = urlParams.get('orderId');
+  
+  if (paymentReturn === 'return' && orderId) {
+    // We're returning from payment - show confirmation instead of resetting
+    console.log('[Payment Return] Detected payment return for order:', orderId);
+    // Set order ID in state if available
+    state.orderId = parseInt(orderId, 10);
+    // Skip normal init and go straight to confirmation
+    // We'll still call init but then immediately show confirmation
+  }
+  
   init();
+  
+  // If returning from payment, show confirmation view
+  if (paymentReturn === 'return' && orderId) {
+    // Move to final step to show confirmation
+    state.currentStep = TOTAL_STEPS;
+    showStep(state.currentStep);
+    updateStepIndicator();
+    updateNavigationButtons();
+    renderConfirmationView();
+  }
+  
   // Step 6: Validate tokens on app load
   validateTokensOnLoad();
 });
@@ -3613,6 +3639,12 @@ function renderCartTotal() {
 }
 
 async function handleCheckout() {
+  // Prevent multiple simultaneous checkout attempts
+  if (state.checkoutInProgress) {
+    console.log('[checkout] Checkout already in progress, ignoring duplicate request');
+    return;
+  }
+  
   // Validation (existing)
   if (!validateForm()) {
     showToast('Please review the highlighted fields.', 'error');
@@ -3623,6 +3655,9 @@ async function handleCheckout() {
     showToast('Select a membership to continue.', 'error');
     return;
   }
+  
+  // Mark checkout as in progress to prevent state resets
+  state.checkoutInProgress = true;
 
   if (!state.paymentMethod) {
     showToast('Choose a payment method to continue.', 'error');
@@ -3814,9 +3849,19 @@ async function handleCheckout() {
     if (paymentLink) {
       // Redirect to payment provider
       console.log('[checkout] Redirecting to payment provider...');
+      console.log('[checkout] Payment link URL:', paymentLink);
       showToast('Redirecting to secure payment...', 'info');
+      
+      // Use replace instead of href to avoid adding to browser history
+      // This prevents the back button from going back to the checkout page
       setTimeout(() => {
-        window.location.href = paymentLink;
+        try {
+          window.location.replace(paymentLink);
+        } catch (error) {
+          console.error('[checkout] Redirect failed:', error);
+          // Fallback to href if replace fails
+          window.location.href = paymentLink;
+        }
       }, 500);
     } else {
       // No payment link, show confirmation
