@@ -114,7 +114,8 @@ const ADDONS = [
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
 const REQUIRED_FIELDS = [
-  'fullName',
+  'firstName',
+  'lastName',
   'dateOfBirth',
   'streetAddress',
   'postalCode',
@@ -3594,17 +3595,11 @@ async function handleCheckout() {
       try {
         console.log('[checkout] Creating customer...');
         
-        // Split fullName into firstName and lastName
-        const fullName = payload.customer?.fullName || '';
-        const nameParts = fullName.trim().split(/\s+/);
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
-        
         // Build customer data matching API expectations
         const customerData = {
           email: payload.customer?.email,
-          firstName: firstName,
-          lastName: lastName,
+          firstName: payload.customer?.firstName,
+          lastName: payload.customer?.lastName,
           phone: payload.customer?.phone?.number || payload.customer?.phone,
           phoneCountryCode: payload.customer?.phone?.countryCode,
           dateOfBirth: payload.customer?.dateOfBirth,
@@ -3817,7 +3812,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
     date: order?.createdAt ? new Date(order.createdAt) : now,
     items: [...state.cartItems],
     total: order?.total || order?.totalAmount || state.totals.cartTotal,
-    memberName: customer?.fullName || payload.customer?.fullName || '',
+    memberName: customer?.fullName || (payload.customer?.firstName && payload.customer?.lastName ? `${payload.customer.firstName} ${payload.customer.lastName}` : '') || '',
     membershipNumber: membershipId,
     membershipType: membership?.name ?? '—',
     primaryGym: resolveGymLabel(customer?.primaryGym || payload.customer?.primaryGym),
