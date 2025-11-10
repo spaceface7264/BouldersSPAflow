@@ -3868,6 +3868,7 @@ async function handleCheckout() {
       // No payment link, show confirmation
       console.log('[checkout] Payment link not available, showing confirmation');
       showToast('Order created successfully!', 'success');
+      state.checkoutInProgress = false; // Reset since we're showing confirmation
       
       if (state.currentStep < TOTAL_STEPS) {
         nextStep();
@@ -3881,6 +3882,7 @@ async function handleCheckout() {
     // Catch-all for unexpected errors
     console.error('[checkout] Unexpected error:', error);
     showToast(getErrorMessage(error, 'Checkout'), 'error');
+    state.checkoutInProgress = false; // Reset on error
     setCheckoutLoadingState(false);
   }
 }
