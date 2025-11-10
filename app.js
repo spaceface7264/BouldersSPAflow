@@ -4062,6 +4062,37 @@ async function loadOrderForConfirmation(orderId) {
     const order = await orderAPI.getOrder(orderId);
     console.log('[Payment Return] Order fetched:', order);
     
+    // DETAILED LOGGING: Check order status and structure to diagnose membership creation issue
+    console.log('[Payment Return] ===== ORDER DIAGNOSTICS =====');
+    console.log('[Payment Return] Full order object:', JSON.stringify(order, null, 2));
+    console.log('[Payment Return] Order status:', order.status);
+    console.log('[Payment Return] Order paymentStatus:', order.paymentStatus || order.payment?.status);
+    console.log('[Payment Return] Order items:', order.items);
+    console.log('[Payment Return] Order customer:', order.customer);
+    
+    // Check if subscription item exists in order
+    const hasSubscription = order.items?.some(item => 
+      item.type === 'subscription' || 
+      item.productType === 'subscription' ||
+      item.subscriptionProduct ||
+      item.subscription
+    );
+    console.log('[Payment Return] Has subscription item in order:', hasSubscription);
+    
+    // Check customer memberships/subscriptions
+    if (order.customer) {
+      console.log('[Payment Return] Customer memberships:', order.customer.memberships);
+      console.log('[Payment Return] Customer subscriptions:', order.customer.subscriptions);
+      console.log('[Payment Return] Customer activeMemberships:', order.customer.activeMemberships);
+    }
+    
+    // Warn if order is still pending
+    if (order.status === 'pending' || order.status === 'awaiting_payment' || order.status === 'unpaid') {
+      console.warn('[Payment Return] ⚠️ Order still pending - membership may not be created yet');
+      console.warn('[Payment Return] This might indicate a backend webhook delay or payment processing issue');
+    }
+    console.log('[Payment Return] =============================');
+    
     // Extract customer data - try order response first, then stored data
     let customer = order?.customer || order?.data?.customer || null;
     let customerId = customer?.id || order?.customerId || state.customerId;
