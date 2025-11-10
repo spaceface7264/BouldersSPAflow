@@ -2137,14 +2137,16 @@ document.addEventListener('DOMContentLoaded', () => {
   
   init();
   
-  // If returning from payment, show confirmation view
+  // If returning from payment, fetch order data and show confirmation view
   if (paymentReturn === 'return' && orderId) {
     // Move to final step to show confirmation
     state.currentStep = TOTAL_STEPS;
     showStep(state.currentStep);
     updateStepIndicator();
     updateNavigationButtons();
-    renderConfirmationView();
+    
+    // Fetch order data from API to populate confirmation view
+    loadOrderForConfirmation(parseInt(orderId, 10));
   }
   
   // Step 6: Validate tokens on app load
