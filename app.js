@@ -754,6 +754,12 @@ class AuthAPI {
         customerData.businessUnit = state.selectedBusinessUnit;
       }
       
+      // The API expects the customer data nested under a "customer" key
+      // Based on error field paths like "customer.email", "customer.firstName"
+      const requestPayload = {
+        customer: customerData
+      };
+      
       let url;
       if (this.useProxy) {
         url = `${this.baseUrl}?path=/api/customers`;
@@ -762,7 +768,7 @@ class AuthAPI {
       }
       
       console.log('[Step 6] Creating customer:', url);
-      console.log('[Step 6] Customer data being sent:', JSON.stringify(customerData, null, 2));
+      console.log('[Step 6] Customer data being sent:', JSON.stringify(requestPayload, null, 2));
       
       const headers = {
         'Accept-Language': 'da-DK',
@@ -772,7 +778,7 @@ class AuthAPI {
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(customerData),
+        body: JSON.stringify(requestPayload),
       });
       
       if (!response.ok) {
