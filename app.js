@@ -1813,6 +1813,7 @@ const state = {
   forms: {},
   order: null,
   orderId: null, // Step 7: Created order ID
+  customerId: null, // Step 6: Created customer ID (for membership ID display)
   paymentMethod: null,
   // Step 9: Payment link state
   paymentLink: null, // Generated payment link for checkout
@@ -3680,6 +3681,8 @@ async function handleCheckout() {
         customer = await authAPI.createCustomer(customerData);
         // Extract customer ID from response - API returns {success: true, data: {id: ...}}
         customerId = customer?.data?.id || customer?.id || customer?.customerId || customer?.data?.customerId;
+        // Store customer ID in state for later use (e.g., in order summary)
+        state.customerId = customerId;
         console.log('[checkout] Customer response:', customer);
         console.log('[checkout] Extracted customer ID:', customerId);
         
@@ -3785,11 +3788,18 @@ async function handleCheckout() {
         returnUrl
       );
       
-      paymentLink = paymentData.paymentLink || paymentData.link || paymentData.url;
+      // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
+      paymentLink = paymentData?.data?.paymentLink || 
+                    paymentData?.data?.link || 
+                    paymentData?.data?.url ||
+                    paymentData?.paymentLink || 
+                    paymentData?.link || 
+                    paymentData?.url;
       state.paymentLink = paymentLink;
       state.paymentLinkGenerated = true;
       
-      console.log('[checkout] Payment link generated:', paymentLink);
+      console.log('[checkout] Payment link response:', paymentData);
+      console.log('[checkout] Payment link extracted:', paymentLink);
     } catch (error) {
       console.error('[checkout] Payment link generation failed:', error);
       showToast(getErrorMessage(error, 'Payment link generation'), 'error');
@@ -3866,7 +3876,15 @@ function buildOrderSummary(payload, order = null, customer = null) {
 
   // Use real data if available, otherwise use TBD placeholders
   const orderId = order?.id || order?.orderId || state.orderId || 'TBD-ORDER-ID';
-  const membershipId = customer?.id || customer?.customerId || customer?.membershipId || 'TBD-MEMBERSHIP-ID';
+  // Extract membership ID from customer response - check both direct and nested data structure
+  const membershipId = customer?.data?.id || 
+                       customer?.data?.customerId || 
+                       customer?.data?.membershipId ||
+                       customer?.id || 
+                       customer?.customerId || 
+                       customer?.membershipId || 
+                       state.customerId || // Use customer ID from checkout if available
+                       'TBD-MEMBERSHIP-ID';
 
   return {
     number: orderId,
