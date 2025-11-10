@@ -3619,6 +3619,7 @@ async function handleCheckout() {
           country: payload.customer?.country,
           primaryGym: payload.customer?.primaryGym,
           password: payload.customer?.password,
+          customerType: 'MEMBER', // Required by API - defaulting to MEMBER for membership signups
         };
         
         console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
@@ -3985,23 +3986,32 @@ function getErrorMessage(error, context = 'operation') {
     return 'Network error. Please check your connection and try again.';
   }
 
-  // Try to parse validation errors from API response (400 errors with details)
-  if (error.message.includes('400')) {
+  // Try to parse validation errors from API response (400/403 errors with details)
+  if (error.message.includes('400') || error.message.includes('403')) {
     try {
       // Extract JSON from error message
       const jsonMatch = error.message.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const errorData = JSON.parse(jsonMatch[0]);
+        
+        // Handle validation errors with details array
         if (errorData.error?.details && Array.isArray(errorData.error.details)) {
-          // Build user-friendly message from validation details
           const validationErrors = errorData.error.details
             .map(detail => detail.message || `${detail.field}: ${detail.message}`)
             .join(', ');
           return `Please fix the following: ${validationErrors}`;
         }
+        
+        // Handle field errors (like customerType)
+        if (errorData.error?.details?.fieldErrors && Array.isArray(errorData.error.details.fieldErrors)) {
+          const fieldErrors = errorData.error.details.fieldErrors
+            .map(fieldError => `${fieldError.field}: ${fieldError.errorCode || 'required'}`)
+            .join(', ');
+          return `Missing required fields: ${fieldErrors}`;
+        }
       }
     } catch (e) {
-      // If parsing fails, fall through to default 400 message
+      // If parsing fails, fall through to default error message
     }
   }
 
