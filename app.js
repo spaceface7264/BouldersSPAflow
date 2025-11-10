@@ -1066,10 +1066,24 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
+      // API expects subscriptionProduct field, not productId
+      // Extract numeric ID if productId is in format "membership-134" -> 134
+      let subscriptionProductId = productId;
+      if (typeof productId === 'string' && productId.includes('-')) {
+        // Extract numeric part from "membership-134" -> 134
+        const numericPart = productId.split('-').pop();
+        subscriptionProductId = parseInt(numericPart) || numericPart;
+      } else if (typeof productId === 'string') {
+        // Try to parse if it's a string number
+        subscriptionProductId = parseInt(productId) || productId;
+      }
+      
       const payload = {
-        productId,
+        subscriptionProduct: subscriptionProductId,
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
       };
+      
+      console.log('[Step 7] Subscription item payload:', payload);
       
       const response = await fetch(url, {
         method: 'POST',
@@ -3633,7 +3647,10 @@ async function handleCheckout() {
         
         console.log('[checkout] Customer data prepared:', JSON.stringify(customerData, null, 2));
         customer = await authAPI.createCustomer(customerData);
-        customerId = customer.id || customer.customerId;
+        // Extract customer ID from response - API returns {success: true, data: {id: ...}}
+        customerId = customer?.data?.id || customer?.id || customer?.customerId || customer?.data?.customerId;
+        console.log('[checkout] Customer response:', customer);
+        console.log('[checkout] Extracted customer ID:', customerId);
         
         // Save tokens if provided
         if (customer.accessToken && customer.refreshToken) {
