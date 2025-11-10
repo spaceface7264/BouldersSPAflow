@@ -3787,22 +3787,49 @@ async function handleCheckout() {
       return;
     }
 
-    // Step 3: Add items to order
+    // Step 3: Add items to order and generate payment link
+    // Backend requirement: Generate Payment Link Card immediately after subscription is added to cart
+    let paymentLink = null;
+    
     try {
       console.log('[checkout] Adding items to order...');
       
-      // Add membership/subscription
+      // Add membership/subscription FIRST
       if (state.membershipPlanId) {
         try {
           await orderAPI.addSubscriptionItem(state.orderId, state.membershipPlanId);
           console.log('[checkout] Membership added to order');
+          
+          // CRITICAL: Generate payment link immediately after subscription is added
+          // This is what triggers the payment flow according to backend team
+          console.log('[checkout] Generating payment link after subscription added...');
+          const returnUrl = `${window.location.origin}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
+          
+          const paymentData = await paymentAPI.generatePaymentLink(
+            state.orderId,
+            state.paymentMethod,
+            returnUrl
+          );
+          
+          // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
+          paymentLink = paymentData?.data?.paymentLink || 
+                        paymentData?.data?.link || 
+                        paymentData?.data?.url ||
+                        paymentData?.paymentLink || 
+                        paymentData?.link || 
+                        paymentData?.url;
+          state.paymentLink = paymentLink;
+          state.paymentLinkGenerated = true;
+          
+          console.log('[checkout] Payment link generated (Generate Payment Link Card):', paymentLink);
+          console.log('[checkout] Payment link response:', paymentData);
         } catch (error) {
-          console.error('[checkout] Failed to add membership:', error);
-          throw new Error('Failed to add membership to order');
+          console.error('[checkout] Failed to add membership or generate payment link:', error);
+          throw new Error('Failed to add membership to order or generate payment link');
         }
       }
       
-      // Add value cards (punch cards)
+      // Add value cards (punch cards) - can be added after payment link is generated
       if (state.valueCardQuantities && state.valueCardQuantities.size > 0) {
         for (const [planId, quantity] of state.valueCardQuantities.entries()) {
           if (quantity > 0) {
@@ -3811,13 +3838,14 @@ async function handleCheckout() {
               console.log(`[checkout] Value card added: ${planId} x${quantity}`);
             } catch (error) {
               console.error(`[checkout] Failed to add value card ${planId}:`, error);
-              throw new Error(`Failed to add value card to order`);
+              // Don't throw - payment link is already generated, just log the error
+              console.warn(`[checkout] Continuing despite value card error - payment link already generated`);
             }
           }
         }
       }
       
-      // Add add-ons/articles
+      // Add add-ons/articles - can be added after payment link is generated
       if (state.addonIds && state.addonIds.size > 0) {
         for (const addonId of state.addonIds) {
           try {
@@ -3825,46 +3853,21 @@ async function handleCheckout() {
             console.log(`[checkout] Add-on added: ${addonId}`);
           } catch (error) {
             console.error(`[checkout] Failed to add add-on ${addonId}:`, error);
-            throw new Error(`Failed to add add-on to order`);
+            // Don't throw - payment link is already generated, just log the error
+            console.warn(`[checkout] Continuing despite add-on error - payment link already generated`);
           }
         }
       }
       
       console.log('[checkout] All items added to order');
+      
+      // Verify payment link was generated
+      if (!paymentLink && state.membershipPlanId) {
+        throw new Error('Payment link was not generated after adding subscription');
+      }
     } catch (error) {
-      console.error('[checkout] Failed to add items:', error);
+      console.error('[checkout] Failed to add items or generate payment link:', error);
       showToast(getErrorMessage(error, 'Adding items'), 'error');
-      setCheckoutLoadingState(false);
-      return;
-    }
-
-    // Step 4: Generate payment link
-    let paymentLink = null;
-    try {
-      console.log('[checkout] Generating payment link...');
-      const returnUrl = `${window.location.origin}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
-      
-      const paymentData = await paymentAPI.generatePaymentLink(
-        state.orderId,
-        state.paymentMethod,
-        returnUrl
-      );
-      
-      // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
-      paymentLink = paymentData?.data?.paymentLink || 
-                    paymentData?.data?.link || 
-                    paymentData?.data?.url ||
-                    paymentData?.paymentLink || 
-                    paymentData?.link || 
-                    paymentData?.url;
-      state.paymentLink = paymentLink;
-      state.paymentLinkGenerated = true;
-      
-      console.log('[checkout] Payment link response:', paymentData);
-      console.log('[checkout] Payment link extracted:', paymentLink);
-    } catch (error) {
-      console.error('[checkout] Payment link generation failed:', error);
-      showToast(getErrorMessage(error, 'Payment link generation'), 'error');
       setCheckoutLoadingState(false);
       return;
     }
