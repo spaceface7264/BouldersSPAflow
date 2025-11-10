@@ -1356,13 +1356,32 @@ class PaymentAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      // Step 9: Pass order ID, payment method, selected business unit, and return URL
+      // Step 9: Pass order ID, payment method ID, selected business unit, and return URL
+      // API expects paymentMethodId (numeric ID), not paymentMethod (string like "card")
+      // Map payment method string to ID: "card" -> typically 1, but may need to fetch from API
+      // For now, defaulting to 1 for card payments
+      let paymentMethodId = paymentMethod;
+      if (typeof paymentMethod === 'string') {
+        // Map common payment method strings to IDs
+        const paymentMethodMap = {
+          'card': 1,
+          'creditcard': 1,
+          'credit_card': 1,
+          'debit': 2,
+          'mobilepay': 3,
+          'mobile_pay': 3,
+        };
+        paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 1; // Default to 1 if unknown
+      }
+      
       const payload = {
         orderId,
-        paymentMethod,
+        paymentMethodId: paymentMethodId,
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
         returnUrl, // Return URL structure for backend to complete the flow
       };
+      
+      console.log('[Step 9] Payment link payload:', JSON.stringify(payload, null, 2));
       
       const response = await fetch(url, {
         method: 'POST',
