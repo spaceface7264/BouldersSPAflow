@@ -3661,6 +3661,7 @@ async function handleCheckout() {
 
   if (!state.paymentMethod) {
     showToast('Choose a payment method to continue.', 'error');
+    state.checkoutInProgress = false; // Reset on validation error
     return;
   }
 
