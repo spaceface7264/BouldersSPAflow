@@ -4144,6 +4144,32 @@ async function loadOrderForConfirmation(orderId) {
             console.warn('[Payment Return]   2. Payment provider needs to send webhook to backend');
             console.warn('[Payment Return]   3. Backend needs to process payment webhook to register payment');
             console.warn('[Payment Return]   4. Once payment is registered (leftToPay = 0), membership will be created');
+            
+            // Try polling for payment registration (wait up to 10 seconds)
+            console.log('[Payment Return] Polling for payment registration...');
+            let paymentRegistered = false;
+            for (let attempt = 0; attempt < 5; attempt++) {
+              await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between attempts
+              
+              const polledOrder = await orderAPI.getOrder(orderId);
+              const newLeftToPay = polledOrder.leftToPay?.amount || 0;
+              
+              console.log(`[Payment Return] Poll attempt ${attempt + 1}/5: leftToPay = ${newLeftToPay}`);
+              
+              if (newLeftToPay === 0) {
+                console.log('[Payment Return] ✅ Payment registered! Membership should now be created in BRP');
+                Object.assign(order, polledOrder);
+                paymentRegistered = true;
+                break;
+              }
+            }
+            
+            if (!paymentRegistered) {
+              console.warn('[Payment Return] ⚠️ Payment still not registered after polling');
+              console.warn('[Payment Return] The payment webhook may be delayed or failed');
+              console.warn('[Payment Return] Membership will be created automatically once payment is registered');
+            }
+            
             // Use refreshed order for summary
             Object.assign(order, refreshedOrder);
           } else {
