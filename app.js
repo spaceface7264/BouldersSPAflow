@@ -921,10 +921,315 @@ class AuthAPI {
   };
 })();
 
+// Step 7: Order and Items API
+// Handles order creation, adding items (subscriptions, value cards, articles), and order management
+class OrderAPI {
+  constructor(baseUrl = null) {
+    // Use same proxy logic as BusinessUnitsAPI
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      // Development: use Vite proxy (relative URL)
+      this.baseUrl = '';
+      this.useProxy = false;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else {
+      // Fallback to direct API (may have CORS issues)
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
+    }
+  }
+
+  // Step 7: Create order - POST /api/orders
+  async createOrder(orderData) {
+    try {
+      // Always include the active business unit
+      if (!orderData.businessUnit && state.selectedBusinessUnit) {
+        orderData.businessUnit = state.selectedBusinessUnit;
+      }
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/orders`;
+      } else {
+        url = `${this.baseUrl}/api/orders`;
+      }
+      
+      console.log('[Step 7] Creating order:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(orderData),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 7] Create order error (${response.status}):`, errorText);
+        throw new Error(`Create order failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 7] Create order response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 7] Create order error:', error);
+      throw error;
+    }
+  }
+
+  // Step 7: Add subscription item (membership) - POST /api/orders/{orderId}/items/subscriptions
+  async addSubscriptionItem(orderId, productId) {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/orders/${orderId}/items/subscriptions`;
+      } else {
+        url = `${this.baseUrl}/api/orders/${orderId}/items/subscriptions`;
+      }
+      
+      console.log('[Step 7] Adding subscription item:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      const payload = {
+        productId,
+        businessUnit: state.selectedBusinessUnit, // Always include active business unit
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 7] Add subscription item error (${response.status}):`, errorText);
+        throw new Error(`Add subscription item failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 7] Add subscription item response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 7] Add subscription item error:', error);
+      throw error;
+    }
+  }
+
+  // Step 7: Add value card item (punch card) - POST /api/orders/{orderId}/items/valuecards
+  async addValueCardItem(orderId, productId, quantity = 1) {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/orders/${orderId}/items/valuecards`;
+      } else {
+        url = `${this.baseUrl}/api/orders/${orderId}/items/valuecards`;
+      }
+      
+      console.log('[Step 7] Adding value card item:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      const payload = {
+        productId,
+        quantity,
+        businessUnit: state.selectedBusinessUnit, // Always include active business unit
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 7] Add value card item error (${response.status}):`, errorText);
+        throw new Error(`Add value card item failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 7] Add value card item response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 7] Add value card item error:', error);
+      throw error;
+    }
+  }
+
+  // Step 7: Add article item (add-ons/extras) - POST /api/orders/{orderId}/items/articles
+  async addArticleItem(orderId, productId) {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/orders/${orderId}/items/articles`;
+      } else {
+        url = `${this.baseUrl}/api/orders/${orderId}/items/articles`;
+      }
+      
+      console.log('[Step 7] Adding article item:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      const payload = {
+        productId,
+        businessUnit: state.selectedBusinessUnit, // Always include active business unit
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 7] Add article item error (${response.status}):`, errorText);
+        throw new Error(`Add article item failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 7] Add article item response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 7] Add article item error:', error);
+      throw error;
+    }
+  }
+
+  // Step 7: Get order - GET /api/orders/{orderId}
+  async getOrder(orderId) {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/orders/${orderId}`;
+      } else {
+        url = `${this.baseUrl}/api/orders/${orderId}`;
+      }
+      
+      console.log('[Step 7] Getting order:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 7] Get order error (${response.status}):`, errorText);
+        throw new Error(`Get order failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 7] Get order response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 7] Get order error:', error);
+      throw error;
+    }
+  }
+
+  // Step 7: Update order - PUT /api/orders/{orderId}
+  async updateOrder(orderId, orderData) {
+    try {
+      // Always include the active business unit
+      if (!orderData.businessUnit && state.selectedBusinessUnit) {
+        orderData.businessUnit = state.selectedBusinessUnit;
+      }
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/orders/${orderId}`;
+      } else {
+        url = `${this.baseUrl}/api/orders/${orderId}`;
+      }
+      
+      console.log('[Step 7] Updating order:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(orderData),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 7] Update order error (${response.status}):`, errorText);
+        throw new Error(`Update order failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 7] Update order response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 7] Update order error:', error);
+      throw error;
+    }
+  }
+}
+
 // Initialize API instances
 const businessUnitsAPI = new BusinessUnitsAPI();
 const referenceDataAPI = new ReferenceDataAPI();
 const authAPI = new AuthAPI();
+const orderAPI = new OrderAPI();
 
 // Step 6: Token validation on app reload
 // Keep tokens fresh by calling POST /api/auth/validate when app reloads with saved credentials
