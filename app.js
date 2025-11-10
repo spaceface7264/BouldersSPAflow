@@ -3958,8 +3958,61 @@ function resolveGymLabel(value) {
   return value ? mapping[value] ?? value : '—';
 }
 
+// Load order data when returning from payment
+async function loadOrderForConfirmation(orderId) {
+  try {
+    console.log('[Payment Return] Fetching order data for:', orderId);
+    
+    // Fetch order from API
+    const order = await orderAPI.getOrder(orderId);
+    console.log('[Payment Return] Order fetched:', order);
+    
+    // Extract customer data from order response
+    const customer = order?.customer || order?.data?.customer || null;
+    const customerId = customer?.id || order?.customerId || state.customerId;
+    
+    // Store customer ID if available
+    if (customerId) {
+      state.customerId = customerId;
+    }
+    
+    // Build payload from current state (we may not have the original payload)
+    // Use form data if available, otherwise construct from order/customer data
+    const payload = buildCheckoutPayload();
+    
+    // If we don't have customer data in payload, try to get it from order
+    if (!payload.customer && customer) {
+      payload.customer = {
+        firstName: customer.firstName || customer.first_name,
+        lastName: customer.lastName || customer.last_name,
+        email: customer.email,
+        primaryGym: customer.primaryGym || customer.primary_gym,
+      };
+    }
+    
+    // Build order summary with fetched data
+    state.order = buildOrderSummary(payload, order, customer);
+    console.log('[Payment Return] Order summary built:', state.order);
+    
+    // Render confirmation view with real data
+    renderConfirmationView();
+  } catch (error) {
+    console.error('[Payment Return] Failed to load order data:', error);
+    // Still try to render with whatever data we have
+    if (!state.order) {
+      // Build a minimal order summary with just the order ID
+      const payload = buildCheckoutPayload();
+      state.order = buildOrderSummary(payload, { id: orderId }, null);
+    }
+    renderConfirmationView();
+  }
+}
+
 function renderConfirmationView() {
-  if (!state.order) return;
+  if (!state.order) {
+    console.warn('[Confirmation] No order data available to render');
+    return;
+  }
 
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
