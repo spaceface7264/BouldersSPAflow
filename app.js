@@ -3945,7 +3945,36 @@ function buildCheckoutPayload() {
 
 function buildOrderSummary(payload, order = null, customer = null) {
   const now = new Date();
-  const membership = findMembershipPlan(state.membershipPlanId ?? '');
+  
+  // Try to find membership from API subscriptions first, then fall back to static plans
+  let membership = null;
+  const membershipPlanId = state.membershipPlanId ?? '';
+  if (membershipPlanId && state.subscriptions && state.subscriptions.length > 0) {
+    // Extract numeric ID from 'membership-134' format
+    const numericId = membershipPlanId.replace('membership-', '');
+    const productId = parseInt(numericId, 10);
+    
+    // Find membership in API subscriptions
+    membership = state.subscriptions.find(sub => 
+      sub.id === productId || 
+      String(sub.id) === numericId ||
+      sub.id === membershipPlanId
+    );
+    
+    // If found, convert to format expected by the rest of the code
+    if (membership) {
+      membership = {
+        id: membershipPlanId,
+        name: membership.name || membership.productNumber || 'Membership',
+        price: (membership.priceWithInterval?.price?.amount || membership.price?.amount || 0) / 100,
+      };
+    }
+  }
+  
+  // Fall back to static plans if not found in API data
+  if (!membership) {
+    membership = findMembershipPlan(membershipPlanId);
+  }
 
   // Use real data if available, otherwise use TBD placeholders
   const orderId = order?.id || order?.orderId || state.orderId || 'TBD-ORDER-ID';
@@ -4015,7 +4044,14 @@ async function loadOrderForConfirmation(orderId) {
         if (storedOrder.membershipPlanId) state.membershipPlanId = storedOrder.membershipPlanId;
         if (storedOrder.cartItems) state.cartItems = storedOrder.cartItems;
         if (storedOrder.totals) state.totals = storedOrder.totals;
+        if (storedOrder.selectedBusinessUnit) state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
         console.log('[Payment Return] Restored order data from sessionStorage:', storedOrder);
+      }
+      
+      // Load subscriptions from API if we have a business unit, so membership lookup works
+      if (state.selectedBusinessUnit && (state.subscriptions.length === 0 || state.valueCards.length === 0)) {
+        console.log('[Payment Return] Loading products from API for membership lookup...');
+        await loadProductsFromAPI();
       }
     } catch (e) {
       console.warn('[Payment Return] Could not restore data from sessionStorage:', e);
@@ -4072,14 +4108,26 @@ async function loadOrderForConfirmation(orderId) {
     }
     
     // Also ensure customer object has firstName/lastName for buildOrderSummary
+    // Get primaryGym from business unit if not in customer data
+    let primaryGym = storedCustomer?.primaryGym || customer?.primaryGym || customer?.primary_gym;
+    if (!primaryGym && state.selectedBusinessUnit) {
+      // Try to get gym name from business unit
+      const businessUnit = state.businessUnits?.find(bu => bu.id === state.selectedBusinessUnit || String(bu.id) === String(state.selectedBusinessUnit));
+      if (businessUnit) {
+        primaryGym = businessUnit.name || businessUnit.label || state.selectedBusinessUnit;
+      }
+    }
+    
     if (!customer && storedCustomer) {
-      customer = storedCustomer;
+      customer = { ...storedCustomer, primaryGym: primaryGym || storedCustomer.primaryGym };
     } else if (customer && storedCustomer) {
       // Merge stored customer data into customer object if missing
       customer.firstName = customer.firstName || customer.first_name || storedCustomer.firstName;
       customer.lastName = customer.lastName || customer.last_name || storedCustomer.lastName;
       customer.email = customer.email || storedCustomer.email;
-      customer.primaryGym = customer.primaryGym || customer.primary_gym || storedCustomer.primaryGym;
+      customer.primaryGym = primaryGym || customer.primaryGym || customer.primary_gym || storedCustomer.primaryGym;
+    } else if (customer) {
+      customer.primaryGym = primaryGym || customer.primaryGym || customer.primary_gym;
     }
     
     // Use order total if available, otherwise use stored total
