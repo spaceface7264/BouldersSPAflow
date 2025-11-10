@@ -4086,10 +4086,79 @@ async function loadOrderForConfirmation(orderId) {
       console.log('[Payment Return] Customer activeMemberships:', order.customer.activeMemberships);
     }
     
-    // Warn if order is still pending
-    if (order.status === 'pending' || order.status === 'awaiting_payment' || order.status === 'unpaid') {
-      console.warn('[Payment Return] ⚠️ Order still pending - membership may not be created yet');
-      console.warn('[Payment Return] This might indicate a backend webhook delay or payment processing issue');
+    // Check order status - API uses orderStatus object, not status field
+    const orderStatusName = order.orderStatus?.name || order.status;
+    const orderStatusId = order.orderStatus?.id;
+    const isPreliminary = order.preliminary === true;
+    const leftToPay = order.leftToPay?.amount || 0;
+    
+    console.log('[Payment Return] Order status name:', orderStatusName);
+    console.log('[Payment Return] Order status ID:', orderStatusId);
+    console.log('[Payment Return] Order is preliminary:', isPreliminary);
+    console.log('[Payment Return] Left to pay:', leftToPay);
+    
+    // Warn if order is still pending or preliminary
+    if (orderStatusName === 'Oprettet' || orderStatusName === 'Created' || isPreliminary || leftToPay > 0) {
+      console.warn('[Payment Return] ⚠️ Order still in "Created" status or preliminary - membership may not be created yet');
+      console.warn('[Payment Return] Order needs to be finalized/completed for membership to be created in BRP');
+      console.warn('[Payment Return] This might indicate:');
+      console.warn('[Payment Return]   1. Payment webhook hasn\'t arrived yet (wait a few seconds)');
+      console.warn('[Payment Return]   2. Payment webhook failed');
+      console.warn('[Payment Return]   3. Order needs to be manually finalized');
+      
+      // Try to finalize the order if it's preliminary and payment was successful
+      // Note: We're returning from payment, so payment should be successful
+      // The order needs to be finalized (preliminary: false) for membership to be created in BRP
+      if (isPreliminary) {
+        console.log('[Payment Return] ⚠️ Order is preliminary - attempting to finalize...');
+        console.log('[Payment Return] This is required for membership to be created in BRP');
+        
+        try {
+          // Option 1: Try to set preliminary to false
+          // The API might require additional fields or a specific endpoint
+          const updateData = {
+            preliminary: false, // Finalize the order
+            businessUnit: state.selectedBusinessUnit || order.businessUnit?.id,
+          };
+          
+          console.log('[Payment Return] Updating order with:', JSON.stringify(updateData, null, 2));
+          const updatedOrder = await orderAPI.updateOrder(orderId, updateData);
+          console.log('[Payment Return] Order update response:', updatedOrder);
+          
+          // Re-fetch order to verify status changed
+          await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for backend processing
+          const refreshedOrder = await orderAPI.getOrder(orderId);
+          console.log('[Payment Return] Refreshed order status:', refreshedOrder.orderStatus);
+          console.log('[Payment Return] Refreshed order preliminary:', refreshedOrder.preliminary);
+          console.log('[Payment Return] Refreshed order leftToPay:', refreshedOrder.leftToPay);
+          
+          if (!refreshedOrder.preliminary && refreshedOrder.leftToPay?.amount === 0) {
+            console.log('[Payment Return] ✅ Order finalized successfully! Membership should now be created in BRP');
+            // Update order reference for summary
+            order = refreshedOrder;
+          } else if (!refreshedOrder.preliminary) {
+            console.log('[Payment Return] ✅ Order preliminary set to false, but leftToPay still > 0');
+            console.log('[Payment Return] This might indicate payment is still processing');
+            order = refreshedOrder;
+          } else {
+            console.warn('[Payment Return] ⚠️ Order update didn\'t change preliminary status');
+            console.warn('[Payment Return] This might indicate:');
+            console.warn('[Payment Return]   1. API doesn\'t allow client to finalize orders');
+            console.warn('[Payment Return]   2. Backend webhook needs to finalize the order');
+            console.warn('[Payment Return]   3. Additional fields required in update payload');
+          }
+        } catch (error) {
+          console.error('[Payment Return] Failed to finalize order:', error);
+          console.warn('[Payment Return] This might be expected if:');
+          console.warn('[Payment Return]   1. Backend handles finalization via payment webhook');
+          console.warn('[Payment Return]   2. Client is not authorized to finalize orders');
+          console.warn('[Payment Return]   3. Order finalization requires different endpoint/fields');
+          // Don't throw - continue with showing confirmation even if finalization fails
+        }
+      } else if (leftToPay > 0) {
+        console.warn('[Payment Return] ⚠️ Order is not preliminary but still has leftToPay > 0');
+        console.warn('[Payment Return] Payment may not have been registered yet');
+      }
     }
     console.log('[Payment Return] =============================');
     
