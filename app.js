@@ -1072,10 +1072,20 @@ class OrderAPI {
       if (typeof productId === 'string' && productId.includes('-')) {
         // Extract numeric part from "membership-134" -> 134
         const numericPart = productId.split('-').pop();
-        subscriptionProductId = parseInt(numericPart) || numericPart;
+        subscriptionProductId = parseInt(numericPart, 10);
+        if (isNaN(subscriptionProductId)) {
+          throw new Error(`Invalid product ID format: ${productId}. Expected format: "membership-{number}" or numeric ID.`);
+        }
       } else if (typeof productId === 'string') {
         // Try to parse if it's a string number
-        subscriptionProductId = parseInt(productId) || productId;
+        subscriptionProductId = parseInt(productId, 10);
+        if (isNaN(subscriptionProductId)) {
+          subscriptionProductId = productId; // Fallback to original if not numeric
+        }
+      }
+      
+      if (!subscriptionProductId) {
+        throw new Error(`Missing or invalid subscription product ID: ${productId}`);
       }
       
       const payload = {
@@ -1083,7 +1093,9 @@ class OrderAPI {
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
       };
       
-      console.log('[Step 7] Subscription item payload:', payload);
+      console.log('[Step 7] Adding subscription item - productId:', productId);
+      console.log('[Step 7] Extracted subscriptionProductId:', subscriptionProductId);
+      console.log('[Step 7] Subscription item payload:', JSON.stringify(payload, null, 2));
       
       const response = await fetch(url, {
         method: 'POST',
