@@ -653,6 +653,7 @@ class AuthAPI {
       const response = await fetch(url, {
         method: 'POST',
         headers,
+        body: JSON.stringify({ accessToken }), // Some endpoints require explicit payload
       });
       
       if (!response.ok) {
@@ -714,14 +715,21 @@ class AuthAPI {
       const data = await response.json();
       console.log('[Step 6] Token refresh response:', data);
       
-      // Store new tokens
-      if (data.accessToken && data.refreshToken) {
-        if (typeof window.saveTokens === 'function') {
-          window.saveTokens(data.accessToken, data.refreshToken, data.expiresAt);
-        }
+      const tokenPayload = data?.data ?? data;
+      const newAccessToken = tokenPayload.accessToken || tokenPayload.access_token;
+      const newRefreshToken = tokenPayload.refreshToken || tokenPayload.refresh_token || refreshToken;
+      let newExpiresAt = tokenPayload.expiresAt || tokenPayload.expires_at;
+      const expiresIn = tokenPayload.expiresIn || tokenPayload.expires_in;
+      if (!newExpiresAt && expiresIn) {
+        const expiresInMs = Number(expiresIn) * 1000;
+        newExpiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
       }
       
-      return data;
+      if (newAccessToken && newRefreshToken && typeof window.saveTokens === 'function') {
+        window.saveTokens(newAccessToken, newRefreshToken, newExpiresAt);
+      }
+      
+      return tokenPayload;
     } catch (error) {
       console.error('[Step 6] Token refresh error:', error);
       throw error;
@@ -1345,13 +1353,16 @@ class PaymentAPI {
       this.useProxy = false;
     }
     
-    this.paymentEndpoint = '/api/payment/generate-link';
+    // Correct endpoint from backend team: /api/ver3/services/generatelink/payment
+    // Base URL: https://boulders.brpsystems.com/apiserver
+    this.paymentEndpoint = '/api/ver3/services/generatelink/payment';
   }
 
-  // Step 9: Generate payment link - POST /api/payment/generate-link
-  // API Documentation: Use POST /api/payment/generate-link to create checkout URLs after an order is ready
-  // Pass the order ID, payment method, selected business unit, and return URL
-  // Create checkout URLs after an order is ready
+  // Step 9: Generate payment link - POST /api/ver3/services/generatelink/payment
+  // Backend team confirmed: https://boulders.brpsystems.com/apiserver/api/ver3/services/generatelink/payment
+  // Payload: { order: <id>, paymentMethod: <id>, returnUrl: <url>, payerAlias?: {...} }
+  // IMPORTANT: Order MUST be preliminary (preliminary: true)
+  // Note: This endpoint is for single payments. For subscriptions, may need different handling.
   async generatePaymentLink(orderId, paymentMethod, businessUnit, returnUrl = null) {
     try {
       // Build return URL if not provided
@@ -1375,13 +1386,12 @@ class PaymentAPI {
       
       let url;
       if (this.useProxy) {
+        // For ver3 endpoints, use the apiserver base URL
+        // Path should be: /api/ver3/services/generatelink/payment
         url = `${this.baseUrl}?path=${this.paymentEndpoint}`;
-      } else if (!this.baseUrl) {
-        url = this.paymentEndpoint;
-      } else if (this.baseUrl.endsWith('/')) {
-        url = `${this.baseUrl.replace(/\/$/, '')}${this.paymentEndpoint}`;
       } else {
-        url = `${this.baseUrl}${this.paymentEndpoint}`;
+        // Direct API call to apiserver
+        url = `https://boulders.brpsystems.com/apiserver${this.paymentEndpoint}`;
       }
       
       console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
@@ -1409,37 +1419,40 @@ class PaymentAPI {
       console.log('[Step 9] Headers:', headers);
       console.log('[Step 9] Has Authorization header:', !!headers.Authorization);
       
-      // Step 9: Pass order ID, payment method ID, selected business unit, and return URL
-      // API Documentation: POST /api/payment/generate-link
-      // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
-      // API expects paymentMethodId (numeric ID), not paymentMethod (string)
-      // Map payment method string to ID: "card" -> 1, etc.
+      // Step 9: Payload structure from backend team example
+      // Payload: { order: <id>, paymentMethod: <id>, returnUrl: <url>, payerAlias?: {...} }
+      // Note: Uses "order" (not "orderId") and "paymentMethod" (not "paymentMethodId")
+      // IMPORTANT: Order MUST be preliminary (preliminary: true) - backend requirement
+      
+      // Map payment method string to numeric ID
       let paymentMethodId = paymentMethod;
       if (typeof paymentMethod === 'string') {
         // Map common payment method strings to IDs
+        // Card payment is typically 1, but check with backend for exact IDs
         const paymentMethodMap = {
           'card': 1,
           'creditcard': 1,
           'credit_card': 1,
           'debit': 2,
-          'mobilepay': 3,
-          'mobile_pay': 3,
+          'mobilepay': 33, // Backend example shows 33 for MobilePay
+          'mobile_pay': 33,
         };
         paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 1; // Default to 1 if unknown
         console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
       }
       
-      const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) || businessUnit : businessUnit;
-      
+      // Payload structure from backend team example
       const payload = {
-        orderId: orderId, // Required: ID of the order
-        paymentMethodId: paymentMethodId, // Required: Payment method ID (numeric)
-        businessUnit: businessUnitId, // Required: Selected business unit
+        order: orderId, // Required: ID of the order (MUST be preliminary)
+        paymentMethod: paymentMethodId, // Required: Payment method ID (numeric)
         returnUrl: returnUrl, // Required: Absolute URL to return to after payment
+        // payerAlias is optional - only needed for MobilePay
+        // payerAlias: { number: "...", countryCode: 45 }
       };
       
       console.log('[Step 9] Payment method (raw):', paymentMethod);
       console.log('[Step 9] Payment method ID (mapped):', paymentMethodId);
+      console.log('[Step 9] ⚠️ IMPORTANT: Order must be preliminary (preliminary: true)');
       
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
       console.log('[Step 9] Sending Generate Payment Link Card request...');
@@ -1461,12 +1474,12 @@ class PaymentAPI {
       const data = await response.json();
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
-      // API Response structure: { success: true, data: { url: "..." } }
-      // Extract payment link from nested data structure
-      const paymentLink = data.data?.url || 
+      // API Response structure from backend example: { "url": "..." }
+      // Response is direct, not nested in data object
+      const paymentLink = data.url || 
+                         data.data?.url || 
                          data.data?.paymentLink || 
                          data.data?.link ||
-                         data.url || 
                          data.paymentLink || 
                          data.link;
       
@@ -3896,6 +3909,7 @@ async function handleCheckout() {
       const orderData = {
         customerId: customerId,
         businessUnit: state.selectedBusinessUnit,
+        preliminary: true, // REQUIRED: Order MUST be preliminary for payment link generation
       };
       
       order = await orderAPI.createOrder(orderData);
