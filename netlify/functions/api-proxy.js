@@ -34,26 +34,24 @@ exports.handler = async (event, context) => {
 
   // Build the full API URL
   // Check if path starts with /api/ver3 or /services - these use different base URL
-  // According to README: ver3 endpoints use https://boulders.brpsystems.com/apiserver
+  // According to backend team: ver3 endpoints use https://boulders.brpsystems.com/apiserver
   // Standard endpoints use: https://api-join.boulders.dk
   // 
-  // IMPORTANT: /apiserver base likely auto-prefixes /api/ver3, so we should NOT include it in path
-  // Use: /services/generatelink/payforcustomeraccount (NOT /api/ver3/services/...)
+  // IMPORTANT: Backend team confirmed full path is needed: /api/ver3/services/generatelink/payment
+  // Do NOT remove /api/ver3 prefix - it's required
   let apiUrl;
-  if (apiPath.startsWith('/services/')) {
-    // Payment link endpoint: /apiserver auto-adds /api/ver3, so use path without version prefix
-    // Final URL: https://boulders.brpsystems.com/apiserver/services/generatelink/payforcustomeraccount
+  if (apiPath.startsWith('/api/ver3/')) {
+    // ver3 endpoints - use full path with /api/ver3 prefix
+    // Backend confirmed: https://boulders.brpsystems.com/apiserver/api/ver3/services/generatelink/payment
     apiUrl = `https://boulders.brpsystems.com/apiserver${apiPath}`;
-  } else if (apiPath.startsWith('/api/ver3/')) {
-    // Other ver3 endpoints - check if /apiserver auto-adds version
-    // If it does, we need to remove /api/ver3 from path
-    // For now, try with full path but log warning
-    const pathWithoutPrefix = apiPath.replace('/api/ver3/', '/');
-    apiUrl = `https://boulders.brpsystems.com/apiserver${pathWithoutPrefix}`;
-    console.log('[API Proxy] WARNING: Removed /api/ver3 prefix, using:', apiUrl);
+    console.log('[API Proxy] Using ver3 endpoint with full path:', apiUrl);
+  } else if (apiPath.startsWith('/services/')) {
+    // Services endpoints without /api/ver3 prefix - add it
+    // Final URL: https://boulders.brpsystems.com/apiserver/api/ver3/services/...
+    apiUrl = `https://boulders.brpsystems.com/apiserver/api/ver3${apiPath}`;
   } else if (apiPath.startsWith('/ver3/')) {
-    // Path starts with /ver3/ but not /api/ver3/
-    apiUrl = `https://boulders.brpsystems.com/apiserver${apiPath}`;
+    // Path starts with /ver3/ but not /api/ver3/ - add /api prefix
+    apiUrl = `https://boulders.brpsystems.com/apiserver/api${apiPath}`;
   } else {
     // Standard API endpoints use api-join.boulders.dk
     apiUrl = `https://api-join.boulders.dk${apiPath}`;
