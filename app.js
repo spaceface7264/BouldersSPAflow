@@ -1349,11 +1349,9 @@ class PaymentAPI {
       let url;
       if (this.useProxy) {
         // Netlify proxy adds path to: https://api-join.boulders.dk${apiPath}
-        // Error shows "/apiserver/api/ver3/ver3/..." suggesting backend adds /api/ver3 automatically
-        // Try sending just the service path without /api/ver3 prefix
-        // Documentation shows: /api/ver3/services/generatelink/payforcustomeraccount
-        // But if backend adds /api/ver3, we should send: /services/generatelink/payforcustomeraccount
-        url = `${this.baseUrl}?path=/services/generatelink/payforcustomeraccount`;
+        // Documentation shows full path: /api/ver3/services/generatelink/payforcustomeraccount
+        // Use the full path as documented - backend should handle it correctly
+        url = `${this.baseUrl}?path=/api/ver3/services/generatelink/payforcustomeraccount`;
       } else {
         // Direct API call - use full path as documented
         url = `${this.baseUrl}/api/ver3/services/generatelink/payforcustomeraccount`;
