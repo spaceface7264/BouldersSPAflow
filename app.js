@@ -4577,11 +4577,25 @@ async function loadOrderForConfirmation(orderId) {
     };
     console.log('[Payment Return] Diagnostic data stored in window.lastPaymentDiagnostics');
     
+    // Check if payment is actually confirmed before showing success page
+    const isPaymentConfirmed = order.leftToPay?.amount === 0 || order.leftToPay === 0;
+    const isOrderPaid = order.orderStatus?.name === 'Betalet' || order.orderStatus?.id === 2; // Assuming 2 is "Paid" status
+    
+    if (!isPaymentConfirmed && !isOrderPaid) {
+      console.warn('[Payment Return] ⚠️ Payment not confirmed - showing pending message instead of success page');
+      console.warn('[Payment Return] leftToPay:', order.leftToPay?.amount || order.leftToPay);
+      console.warn('[Payment Return] orderStatus:', order.orderStatus?.name);
+      
+      // Show payment pending message instead of success page
+      showPaymentPendingMessage(order, orderId);
+      return; // Don't show success page yet
+    }
+    
     // Build order summary with fetched data
     state.order = buildOrderSummary(payload, { ...order, total: orderTotal, totalAmount: orderTotal }, customer || storedCustomer);
     console.log('[Payment Return] Order summary built:', state.order);
     
-    // Render confirmation view with real data
+    // Only render confirmation view if payment is confirmed
     renderConfirmationView();
   } catch (error) {
     console.error('[Payment Return] Failed to load order data:', error);
@@ -4593,6 +4607,70 @@ async function loadOrderForConfirmation(orderId) {
     }
     renderConfirmationView();
   }
+}
+
+function showPaymentPendingMessage(order, orderId) {
+  // Update the confirmation page to show payment pending instead of success
+  const successTitle = document.querySelector('.success-title');
+  const successMessage = document.querySelector('.success-message');
+  const successBadge = document.querySelector('.success-badge');
+  
+  if (successTitle) {
+    successTitle.textContent = 'Payment Pending';
+    successTitle.style.color = '#f59e0b'; // Orange/amber color
+  }
+  
+  if (successMessage) {
+    successMessage.textContent = `Your payment is being processed. We're waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #${orderId || order?.number || order?.id || 'N/A'}`;
+    successMessage.style.color = '#6b7280'; // Gray color
+  }
+  
+  if (successBadge) {
+    // Change checkmark to a clock/spinner icon
+    successBadge.innerHTML = `
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+    `;
+  }
+  
+  // Show a message that the page will auto-refresh
+  console.log('[Payment Pending] Showing payment pending message. Page will check payment status automatically.');
+  
+  // Poll for payment confirmation every 5 seconds (up to 2 minutes)
+  let pollCount = 0;
+  const maxPolls = 24; // 24 * 5 seconds = 2 minutes
+  
+  const pollInterval = setInterval(async () => {
+    pollCount++;
+    console.log(`[Payment Pending] Checking payment status (attempt ${pollCount}/${maxPolls})...`);
+    
+    try {
+      const updatedOrder = await orderAPI.getOrder(orderId);
+      const isPaymentConfirmed = updatedOrder.leftToPay?.amount === 0 || updatedOrder.leftToPay === 0;
+      const isOrderPaid = updatedOrder.orderStatus?.name === 'Betalet' || updatedOrder.orderStatus?.id === 2;
+      
+      if (isPaymentConfirmed || isOrderPaid) {
+        console.log('[Payment Pending] ✅ Payment confirmed! Reloading page to show success...');
+        clearInterval(pollInterval);
+        // Reload the page to show the success message
+        window.location.reload();
+      } else if (pollCount >= maxPolls) {
+        console.warn('[Payment Pending] ⚠️ Payment still not confirmed after 2 minutes. Stopping auto-poll.');
+        clearInterval(pollInterval);
+        // Update message to tell user to check back later
+        if (successMessage) {
+          successMessage.textContent = `Payment is still being processed. Please check back in a few minutes or contact support if you've completed payment. Order #${orderId || order?.number || order?.id || 'N/A'}`;
+        }
+      }
+    } catch (error) {
+      console.error('[Payment Pending] Error checking payment status:', error);
+      if (pollCount >= maxPolls) {
+        clearInterval(pollInterval);
+      }
+    }
+  }, 5000); // Check every 5 seconds
 }
 
 function renderConfirmationView() {
