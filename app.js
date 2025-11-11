@@ -1326,22 +1326,31 @@ class PaymentAPI {
     }
   }
 
-  // Step 9: Generate payment link - POST /api/payment/generate-link
+  // Step 9: Generate payment link - POST /api/ver3/services/generatelink/payforcustomeraccount
+  // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3?key=f43e5df0b0f74d2b82e93a4f4226ff96#post-/api/ver3/services/generatelink/payforcustomeraccount
   // Create checkout URLs after an order is ready
-  async generatePaymentLink(orderId, paymentMethod, returnUrl = null) {
+  async generatePaymentLink(customerId, paymentMethod, returnUrl = null, orderId = null) {
     try {
       // Build return URL if not provided
       // Use the same return URL structure documented for the Join Boulders API service
-      if (!returnUrl) {
+      if (!returnUrl && orderId) {
         const currentUrl = window.location.origin + window.location.pathname;
         returnUrl = `${currentUrl}?payment=return&orderId=${orderId}`;
       }
       
+      if (!returnUrl) {
+        throw new Error('Return URL is required for payment link generation');
+      }
+      
+      if (!customerId) {
+        throw new Error('Customer ID is required for payment link generation');
+      }
+      
       let url;
       if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/payment/generate-link`;
+        url = `${this.baseUrl}?path=/api/ver3/services/generatelink/payforcustomeraccount`;
       } else {
-        url = `${this.baseUrl}/api/payment/generate-link`;
+        url = `${this.baseUrl}/api/ver3/services/generatelink/payforcustomeraccount`;
       }
       
       console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
@@ -1379,11 +1388,16 @@ class PaymentAPI {
         console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
       }
       
+      // API Documentation payload structure:
+      // - customer* (integer): ID of customer to pay off customer account
+      // - paymentMethod* (integer): ID of payment method to use
+      // - returnUrl* (string): Absolute url to return to after successful, failed or aborted payment
+      // - payerAlias (object, optional): Phone number to use for SWISH payment method
       const payload = {
-        orderId,
-        paymentMethodId: paymentMethodId,
-        businessUnit: state.selectedBusinessUnit, // Always include active business unit
-        returnUrl, // Return URL structure for backend to complete the flow
+        customer: customerId, // Required: ID of customer to pay off customer account
+        paymentMethod: paymentMethodId, // Required: ID of payment method to use
+        returnUrl: returnUrl, // Required: Absolute url to return to after payment
+        // payerAlias is optional - only needed for SWISH payment method
       };
       
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
@@ -1406,18 +1420,25 @@ class PaymentAPI {
       const data = await response.json();
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
-      // Step 9: Store the generated link in client state so the UI can display it or redirect the user
-      if (data.paymentLink || data.link || data.url) {
-        const paymentLink = data.paymentLink || data.link || data.url;
-        // Store in state for UI to use
-        if (state) {
-          state.paymentLink = paymentLink;
-          state.paymentLinkGenerated = true;
-        }
-        console.log('[Step 9] Payment link stored in state:', paymentLink);
+      // API Documentation: Response contains `url` (string) field
+      // Response status: 201 CREATED
+      // Response structure: { "url": "Generated payment link. It includes the required hash value." }
+      const paymentLink = data.url || data.paymentLink || data.link;
+      
+      if (!paymentLink) {
+        console.error('[Step 9] ❌ No payment link in response!');
+        console.error('[Step 9] Response structure:', Object.keys(data));
+        throw new Error('Payment link not found in API response');
       }
       
-      return data;
+      // Store in state for UI to use
+      if (state) {
+        state.paymentLink = paymentLink;
+        state.paymentLinkGenerated = true;
+      }
+      console.log('[Step 9] Payment link extracted from response.url:', paymentLink);
+      
+      return { ...data, paymentLink: paymentLink, url: paymentLink };
     } catch (error) {
       console.error('[Step 9] Generate payment link error:', error);
       throw error;
@@ -3822,10 +3843,18 @@ async function handleCheckout() {
           const returnUrl = `${window.location.origin}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
           console.log('[checkout] Return URL:', returnUrl);
           
+          // API Documentation requires customer ID, not order ID
+          // Endpoint: POST /api/ver3/services/generatelink/payforcustomeraccount
+          // Payload: { customer: <customerId>, paymentMethod: <paymentMethodId>, returnUrl: <returnUrl> }
+          if (!state.customerId) {
+            throw new Error('Customer ID is required to generate payment link');
+          }
+          
           const paymentData = await paymentAPI.generatePaymentLink(
-            state.orderId,
+            state.customerId, // API requires customer ID, not order ID
             state.paymentMethod,
-            returnUrl
+            returnUrl,
+            state.orderId // Pass orderId for return URL construction if needed
           );
           
           // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
