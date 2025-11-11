@@ -4027,10 +4027,85 @@ function resolveGymLabel(value) {
   return value ? mapping[value] ?? value : '—';
 }
 
+// Diagnostic helper: Export diagnostic data
+window.exportPaymentDiagnostics = function() {
+  const diagnostics = {
+    timestamp: new Date().toISOString(),
+    orderId: state.orderId,
+    customerId: state.customerId,
+    sessionStorage: {
+      customer: sessionStorage.getItem('boulders_checkout_customer'),
+      order: sessionStorage.getItem('boulders_checkout_order'),
+    },
+    state: {
+      selectedBusinessUnit: state.selectedBusinessUnit,
+      membershipPlanId: state.membershipPlanId,
+      order: state.order,
+    },
+    url: window.location.href,
+  };
+  
+  const blob = new Blob([JSON.stringify(diagnostics, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `payment-diagnostics-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  console.log('[Diagnostics] Exported diagnostic data:', diagnostics);
+  return diagnostics;
+};
+
+// Diagnostic helper: Get current order status
+window.getOrderDiagnostics = async function(orderId) {
+  if (!orderId) {
+    orderId = state.orderId;
+  }
+  if (!orderId) {
+    console.error('[Diagnostics] No order ID available');
+    return null;
+  }
+  
+  try {
+    const order = await orderAPI.getOrder(orderId);
+    const diagnostics = {
+      timestamp: new Date().toISOString(),
+      orderId: orderId,
+      order: {
+        id: order.id,
+        number: order.number,
+        status: order.orderStatus?.name || order.status,
+        statusId: order.orderStatus?.id,
+        preliminary: order.preliminary,
+        leftToPay: order.leftToPay,
+        totalCost: order.totalCost,
+        customer: order.customer,
+        subscriptionItems: order.subscriptionItems,
+        created: order.created,
+        lastModified: order.lastModified,
+      },
+      subscriptionStatus: order.subscriptionItems?.map(item => ({
+        id: item.subscription?.id,
+        name: item.subscription?.name,
+        users: item.subscription?.users,
+        payer: item.subscription?.payer,
+      })),
+    };
+    
+    console.log('[Diagnostics] Order diagnostics:', diagnostics);
+    return diagnostics;
+  } catch (error) {
+    console.error('[Diagnostics] Failed to get order diagnostics:', error);
+    return { error: error.message };
+  }
+};
+
 // Load order data when returning from payment
 async function loadOrderForConfirmation(orderId) {
   try {
-    console.log('[Payment Return] Fetching order data for:', orderId);
+    const startTime = Date.now();
+    console.log(`[Payment Return] [${new Date().toISOString()}] Fetching order data for:`, orderId);
     
     // Restore checkout data from sessionStorage
     let storedCustomer = null;
@@ -4066,7 +4141,10 @@ async function loadOrderForConfirmation(orderId) {
     console.log('[Payment Return] Order fetched:', order);
     
     // DETAILED LOGGING: Check order status and structure to diagnose membership creation issue
+    const diagnosticTime = Date.now();
     console.log('[Payment Return] ===== ORDER DIAGNOSTICS =====');
+    console.log(`[Payment Return] Diagnostic timestamp: ${new Date().toISOString()}`);
+    console.log(`[Payment Return] Time since payment return: ${((diagnosticTime - startTime) / 1000).toFixed(2)}s`);
     console.log('[Payment Return] Full order object:', JSON.stringify(order, null, 2));
     console.log('[Payment Return] Order status:', order.status);
     console.log('[Payment Return] Order paymentStatus:', order.paymentStatus || order.payment?.status);
@@ -4150,14 +4228,18 @@ async function loadOrderForConfirmation(orderId) {
             
             // Try polling for payment registration (wait up to 10 seconds)
             console.log('[Payment Return] Polling for payment registration...');
+            const pollStartTime = Date.now();
             let paymentRegistered = false;
             for (let attempt = 0; attempt < 5; attempt++) {
               await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between attempts
               
+              const pollTime = Date.now();
               const polledOrder = await orderAPI.getOrder(orderId);
               const newLeftToPay = polledOrder.leftToPay?.amount || 0;
+              const timeSinceStart = ((pollTime - pollStartTime) / 1000).toFixed(1);
               
-              console.log(`[Payment Return] Poll attempt ${attempt + 1}/5: leftToPay = ${newLeftToPay}`);
+              console.log(`[Payment Return] [${new Date().toISOString()}] Poll attempt ${attempt + 1}/5 (${timeSinceStart}s): leftToPay = ${newLeftToPay}`);
+              console.log(`[Payment Return] Poll ${attempt + 1} order status:`, polledOrder.orderStatus?.name, '| preliminary:', polledOrder.preliminary);
               
               if (newLeftToPay === 0) {
                 console.log('[Payment Return] ✅ Payment registered! Membership should now be created in BRP');
