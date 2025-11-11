@@ -350,21 +350,33 @@
                             <!-- Login Section (initially hidden) -->
                             <div class="info-section" data-auth-section="login" style="display: none;">
                                 <div class="form-container">
-                                    <h3 class="info-section-title">LOG IN</h3>
+                                    <div class="login-status" data-login-status style="display: none;">
+                                        <div class="login-status-content">
+                                            <div class="login-status-text">
+                                                <p class="login-status-label">Logged in as</p>
+                                                <p class="login-status-email" data-auth-email>-</p>
+                                            </div>
+                                            <button type="button" class="login-btn" data-action="logout">Log out</button>
+                                        </div>
+                                    </div>
 
-                                    <form class="login-form">
-                                        <div class="form-group">
-                                            <label for="loginEmail">E-mail*</label>
-                                            <input type="email" id="loginEmail" name="loginEmail" placeholder="E-mail">
+                                    <div data-login-form-container>
+                                        <h3 class="info-section-title">LOG IN</h3>
+
+                                        <form class="login-form">
+                                            <div class="form-group">
+                                                <label for="loginEmail">E-mail*</label>
+                                                <input type="email" id="loginEmail" name="loginEmail" placeholder="E-mail">
+                                        </div>
+                                                
+                                            <div class="form-group">
+                                                <label for="loginPassword">Password*</label>
+                                                <input type="password" id="loginPassword" name="loginPassword" placeholder="Enter your password">
+                                        </div>
+                                                
+                                            <button type="submit" class="login-btn">LOG IN</button>
+                                        </form>
                                     </div>
-                                            
-                                        <div class="form-group">
-                                            <label for="loginPassword">Password*</label>
-                                            <input type="password" id="loginPassword" name="loginPassword" placeholder="Enter your password">
-                                    </div>
-                                            
-                                        <button type="submit" class="login-btn">LOG IN</button>
-                                    </form>
                                 </div>
                             </div>
                             

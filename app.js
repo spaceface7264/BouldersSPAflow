@@ -602,7 +602,14 @@ class AuthAPI {
       
       if (accessToken && refreshToken) {
         if (typeof window.saveTokens === 'function') {
-          window.saveTokens(accessToken, refreshToken, expiresAt);
+          const metadata = {
+            username: tokenPayload.username || tokenPayload.userName,
+            email: tokenPayload.email || email,
+            roles: tokenPayload.roles || [],
+            tokenType: tokenPayload.tokenType || tokenPayload.token_type,
+            expiresIn: tokenPayload.expiresIn || tokenPayload.expires_in,
+          };
+          window.saveTokens(accessToken, refreshToken, expiresAt, metadata);
           console.log('[Step 6] ✅ Tokens saved successfully');
         } else {
           console.warn('[Step 6] saveTokens function not available - tokens not saved');
@@ -717,7 +724,14 @@ class AuthAPI {
       // Store new tokens
       if (data.accessToken && data.refreshToken) {
         if (typeof window.saveTokens === 'function') {
-          window.saveTokens(data.accessToken, data.refreshToken, data.expiresAt);
+          const metadata = {
+            username: data.username,
+            email: data.email || state.authenticatedEmail,
+            roles: data.roles,
+            tokenType: data.tokenType || data.token_type,
+            expiresIn: data.expiresIn || data.expires_in,
+          };
+          window.saveTokens(data.accessToken, data.refreshToken, data.expiresAt, metadata);
         }
       }
       
@@ -913,7 +927,75 @@ class AuthAPI {
 // These implement saveTokens, getAccessToken, clearTokens as per guide requirements
 (function() {
   const TOKEN_STORAGE_KEY = 'boulders_auth_tokens';
+  const LOGIN_SESSION_COOKIE = 'boulders_login_session';
   let tokenStore = null; // Memory-first storage
+
+  const encodeTokenData = (tokenData) => {
+    const payload = JSON.stringify(tokenData);
+    try {
+      if (typeof btoa === 'function') {
+        return btoa(payload);
+      }
+    } catch (error) {
+      console.warn('[Step 6] Could not base64 encode token data:', error);
+    }
+    try {
+      return encodeURIComponent(payload);
+    } catch (error) {
+      console.warn('[Step 6] Could not URI encode token data:', error);
+    }
+    return payload;
+  };
+
+  const decodeTokenData = (value) => {
+    if (!value) return null;
+    try {
+      if (typeof atob === 'function') {
+        return JSON.parse(atob(value));
+      }
+    } catch (error) {
+      // Fallback to URI decoding below
+    }
+    try {
+      return JSON.parse(decodeURIComponent(value));
+    } catch (error) {
+      console.warn('[Step 6] Could not decode login session cookie:', error);
+      return null;
+    }
+  };
+
+  const writeLoginSessionCookie = (tokenData) => {
+    if (typeof document === 'undefined') return;
+    try {
+      const encoded = encodeTokenData(tokenData);
+      const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `${LOGIN_SESSION_COOKIE}=${encoded}; path=/; SameSite=Lax${secureFlag}`;
+    } catch (error) {
+      console.warn('[Step 6] Could not write login session cookie:', error);
+    }
+  };
+
+  const readLoginSessionCookie = () => {
+    if (typeof document === 'undefined' || !document.cookie) return null;
+    const cookies = document.cookie.split(';');
+    const match = cookies.find((cookie) => cookie.trim().startsWith(`${LOGIN_SESSION_COOKIE}=`));
+    if (!match) return null;
+    const value = match.substring(match.indexOf('=') + 1).trim();
+    return decodeTokenData(value);
+  };
+
+  const clearLoginSessionCookie = () => {
+    if (typeof document === 'undefined') return;
+    document.cookie = `${LOGIN_SESSION_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+  };
+
+  const hydrateFromCookie = () => {
+    const cookieData = readLoginSessionCookie();
+    if (cookieData) {
+      tokenStore = cookieData;
+    }
+    return cookieData;
+  };
 
   // Load tokens from sessionStorage on init
   try {
@@ -925,9 +1007,13 @@ class AuthAPI {
     console.warn('[Step 6] Could not load tokens from sessionStorage:', error);
   }
 
-  // Step 6: saveTokens - Persist tokens in session store
-  window.saveTokens = function(accessToken, refreshToken, expiresAt) {
-    const tokenData = { accessToken, refreshToken, expiresAt };
+  if (!tokenStore) {
+    hydrateFromCookie();
+  }
+
+  // Step 6: saveTokens - Persist tokens in session store and cookie
+  window.saveTokens = function(accessToken, refreshToken, expiresAt, metadata = {}) {
+    const tokenData = { accessToken, refreshToken, expiresAt, metadata };
     tokenStore = tokenData;
     
     try {
@@ -935,9 +1021,11 @@ class AuthAPI {
     } catch (error) {
       console.warn('[Step 6] Could not save tokens to sessionStorage:', error);
     }
+
+    writeLoginSessionCookie(tokenData);
   };
 
-  // Step 6: getAccessToken - Get access token from session store
+  // Step 6: getAccessToken - Get access token from session store/cookie
   window.getAccessToken = function() {
     if (tokenStore?.accessToken) {
       return tokenStore.accessToken;
@@ -947,16 +1035,19 @@ class AuthAPI {
       const stored = sessionStorage.getItem(TOKEN_STORAGE_KEY);
       if (stored) {
         tokenStore = JSON.parse(stored);
-        return tokenStore?.accessToken || null;
+        if (tokenStore?.accessToken) {
+          return tokenStore.accessToken;
+        }
       }
     } catch (error) {
       console.warn('[Step 6] Could not read tokens from sessionStorage:', error);
     }
-    
-    return null;
+
+    const cookieTokens = hydrateFromCookie();
+    return cookieTokens?.accessToken || null;
   };
 
-  // getRefreshToken - Get refresh token from session store
+  // getRefreshToken - Get refresh token from session store/cookie
   window.getRefreshToken = function() {
     if (tokenStore?.refreshToken) {
       return tokenStore.refreshToken;
@@ -966,13 +1057,37 @@ class AuthAPI {
       const stored = sessionStorage.getItem(TOKEN_STORAGE_KEY);
       if (stored) {
         tokenStore = JSON.parse(stored);
-        return tokenStore?.refreshToken || null;
+        if (tokenStore?.refreshToken) {
+          return tokenStore.refreshToken;
+        }
       }
     } catch (error) {
       console.warn('[Step 6] Could not read tokens from sessionStorage:', error);
     }
     
-    return null;
+    const cookieTokens = hydrateFromCookie();
+    return cookieTokens?.refreshToken || null;
+  };
+
+  window.getTokenMetadata = function() {
+    if (tokenStore?.metadata) {
+      return tokenStore.metadata;
+    }
+
+    try {
+      const stored = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+      if (stored) {
+        tokenStore = JSON.parse(stored);
+        if (tokenStore?.metadata) {
+          return tokenStore.metadata;
+        }
+      }
+    } catch (error) {
+      console.warn('[Step 6] Could not read token metadata from sessionStorage:', error);
+    }
+
+    const cookieTokens = hydrateFromCookie();
+    return cookieTokens?.metadata || null;
   };
 
   // Step 6: clearTokens - Clear session and return to auth step
@@ -984,15 +1099,18 @@ class AuthAPI {
     } catch (error) {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
+
+    clearLoginSessionCookie();
   };
 
   // Check if token is expired
   window.isTokenExpired = function() {
-    if (!tokenStore?.expiresAt) {
+    const activeStore = tokenStore ?? readLoginSessionCookie();
+    if (!activeStore?.expiresAt) {
       return false;
     }
     const buffer = 5 * 60 * 1000; // 5 minute buffer
-    return Date.now() >= (tokenStore.expiresAt - buffer);
+    return Date.now() >= (activeStore.expiresAt - buffer);
   };
 })();
 
@@ -1352,13 +1470,17 @@ class PaymentAPI {
   // API Documentation: Use POST /api/payment/generate-link to create checkout URLs after an order is ready
   // Pass the order ID, payment method, selected business unit, and return URL
   // Create checkout URLs after an order is ready
-  async generatePaymentLink(orderId, paymentMethod, businessUnit, returnUrl = null) {
+  async generatePaymentLink({ orderId, paymentMethod, businessUnit, returnUrl = null, receiptEmail = null }) {
     try {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
       // Build return URL if not provided
-      // Use the same return URL structure documented for the Join Boulders API service
       if (!returnUrl && orderId) {
-        const currentUrl = window.location.origin + window.location.pathname;
-        returnUrl = `${currentUrl}?payment=return&orderId=${orderId}`;
+        const path = window.location.pathname || '/';
+        const baseUrl = isLocal
+          ? 'https://join.boulders.dk'
+          : window.location.origin.replace('http://', 'https://');
+        returnUrl = `${baseUrl}${path}?payment=return&orderId=${orderId}`;
       }
       
       if (!returnUrl) {
@@ -1367,10 +1489,6 @@ class PaymentAPI {
       
       if (!orderId) {
         throw new Error('Order ID is required for payment link generation');
-      }
-      
-      if (!businessUnit) {
-        throw new Error('Business unit is required for payment link generation');
       }
       
       let url;
@@ -1409,33 +1527,36 @@ class PaymentAPI {
       console.log('[Step 9] Headers:', headers);
       console.log('[Step 9] Has Authorization header:', !!headers.Authorization);
       
-      // Step 9: Pass order ID, payment method ID, selected business unit, and return URL
-      // API Documentation: POST /api/payment/generate-link
-      // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
+      // Step 9: Pass order ID, payment method ID, return URL, and receipt email
       // API expects paymentMethodId (numeric ID), not paymentMethod (string)
-      // Map payment method string to ID: "card" -> 1, etc.
       let paymentMethodId = paymentMethod;
       if (typeof paymentMethod === 'string') {
-        // Map common payment method strings to IDs
         const paymentMethodMap = {
-          'card': 1,
-          'creditcard': 1,
-          'credit_card': 1,
+          'card': 32,
+          'creditcard': 32,
+          'credit_card': 32,
           'debit': 2,
           'mobilepay': 3,
           'mobile_pay': 3,
         };
-        paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 1; // Default to 1 if unknown
+        paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 32;
         console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
       }
       
       const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) || businessUnit : businessUnit;
-      
+
+      const resolvedReceiptEmail = receiptEmail
+        || state?.authenticatedEmail
+        || state?.forms?.customer?.email
+        || getTokenMetadata()?.email
+        || null;
+
       const payload = {
-        orderId: orderId, // Required: ID of the order
-        paymentMethodId: paymentMethodId, // Required: Payment method ID (numeric)
-        businessUnit: businessUnitId, // Required: Selected business unit
-        returnUrl: returnUrl, // Required: Absolute URL to return to after payment
+        orderId,
+        paymentMethodId,
+        returnUrl,
+        ...(resolvedReceiptEmail ? { receiptEmail: resolvedReceiptEmail } : {}),
+        ...(businessUnitId ? { businessUnit: businessUnitId } : {}),
       };
       
       console.log('[Step 9] Payment method (raw):', paymentMethod);
@@ -1891,7 +2012,9 @@ const state = {
   order: null,
   orderId: null, // Step 7: Created order ID
   customerId: null, // Step 6: Created customer ID (for membership ID display)
+  authenticatedEmail: null,
   checkoutInProgress: false, // Flag to prevent duplicate checkout attempts
+  loginInProgress: false, // Prevent duplicate login submissions
   paymentMethod: null,
   // Step 9: Payment link state
   paymentLink: null, // Generated payment link for checkout
@@ -1907,6 +2030,33 @@ const state = {
   referenceData: {}, // Cached reference/lookup data (countries, regions, currencies, etc.)
   referenceDataLoaded: false, // Flag to track if reference data has been loaded
 };
+
+function isUserAuthenticated() {
+  return typeof window.getAccessToken === 'function' && Boolean(window.getAccessToken());
+}
+
+function getTokenMetadata() {
+  if (typeof window.getTokenMetadata === 'function') {
+    return window.getTokenMetadata();
+  }
+  return null;
+}
+
+function syncAuthenticatedCustomerState(username = null, email = null) {
+  const metadata = getTokenMetadata();
+  const resolvedUsername = username || state.customerId || metadata?.username || metadata?.userName;
+  const resolvedEmail = email || state.authenticatedEmail || metadata?.email;
+
+  if (resolvedUsername) {
+    state.customerId = String(resolvedUsername);
+  }
+
+  if (resolvedEmail) {
+    state.authenticatedEmail = resolvedEmail;
+  }
+
+  refreshLoginUI();
+}
 
 const DOM = {};
 const templates = {};
@@ -2243,6 +2393,9 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Step 6: Validate tokens on app load
   validateTokensOnLoad();
+
+  // Restore authenticated state from stored tokens (if available)
+  syncAuthenticatedCustomerState();
 });
 
 
@@ -2290,6 +2443,14 @@ function cacheDom() {
   DOM.parentGuardianForm = document.getElementById('parentGuardianForm');
   DOM.parentGuardianReminder = document.querySelector('[data-role="parent-guardian-reminder"]');
   DOM.sameAddressToggle = document.getElementById('sameAddressToggle');
+  DOM.loginForm = document.querySelector('.login-form');
+  DOM.loginEmail = document.getElementById('loginEmail');
+  DOM.loginPassword = document.getElementById('loginPassword');
+  DOM.loginButton = DOM.loginForm?.querySelector('.login-btn');
+  DOM.loginButtonDefaultText = DOM.loginButton?.textContent?.trim() || 'Log in';
+  DOM.loginStatus = document.querySelector('[data-login-status]');
+  DOM.loginStatusEmail = document.querySelector('[data-auth-email]');
+  DOM.loginFormContainer = document.querySelector('[data-login-form-container]');
   DOM.confirmationItems = document.querySelector('[data-component="confirmation-items"]');
   DOM.confirmationFields = {
     orderNumber: document.querySelector('[data-summary-field="order-number"]'),
@@ -2301,6 +2462,8 @@ function cacheDom() {
     primaryGym: document.querySelector('[data-summary-field="primary-gym"]'),
     membershipPrice: document.querySelector('[data-summary-field="membership-price"]'),
   };
+
+  refreshLoginUI();
 }
 
 function cacheTemplates() {
@@ -2359,6 +2522,88 @@ function setupEventListeners() {
   
   // Setup form field scrolling for mobile
   setupFormFieldScrolling();
+
+  if (DOM.loginForm) {
+    DOM.loginForm.addEventListener('submit', handleLoginSubmit);
+  }
+}
+
+function setLoginLoadingState(isLoading) {
+  if (!DOM.loginButton) return;
+  const defaultText = DOM.loginButtonDefaultText || DOM.loginButton.textContent || 'Log in';
+  DOM.loginButton.disabled = isLoading;
+  DOM.loginButton.classList.toggle('is-loading', isLoading);
+  DOM.loginButton.textContent = isLoading ? 'Logging in...' : defaultText;
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  if (state.loginInProgress) {
+    return;
+  }
+
+  const email = DOM.loginEmail?.value?.trim() || '';
+  const password = DOM.loginPassword?.value || '';
+
+  if (!email || !password) {
+    showToast('Please enter both email and password.', 'error');
+    if (!email) {
+      DOM.loginEmail?.closest('.form-group')?.classList.add('error');
+    }
+    if (!password) {
+      DOM.loginPassword?.closest('.form-group')?.classList.add('error');
+    }
+    return;
+  }
+
+  state.loginInProgress = true;
+  setLoginLoadingState(true);
+
+  try {
+    const response = await authAPI.login(email, password);
+    const payload = response?.data ?? response;
+    const username = payload?.username || email;
+    showToast(`Logged in as ${username}.`, 'success');
+    state.authenticatedEmail = email;
+    syncAuthenticatedCustomerState(username, email);
+    DOM.loginForm?.reset();
+  } catch (error) {
+    console.error('[login] Login failed:', error);
+    showToast(getErrorMessage(error, 'Login'), 'error');
+  } finally {
+    state.loginInProgress = false;
+    setLoginLoadingState(false);
+  }
+}
+
+function refreshLoginUI() {
+  if (!DOM.loginStatus && !DOM.loginFormContainer) {
+    return;
+  }
+
+  const authenticated = isUserAuthenticated();
+  const metadata = getTokenMetadata();
+  const emailDisplay = state.authenticatedEmail || metadata?.email || metadata?.username || 'Account';
+
+  if (DOM.loginStatus) {
+    DOM.loginStatus.style.display = authenticated ? 'block' : 'none';
+  }
+  if (DOM.loginStatusEmail) {
+    DOM.loginStatusEmail.textContent = emailDisplay;
+  }
+  if (DOM.loginFormContainer) {
+    DOM.loginFormContainer.style.display = authenticated ? 'none' : '';
+  }
+}
+
+function handleLogout() {
+  if (typeof window.clearTokens === 'function') {
+    window.clearTokens();
+  }
+  state.customerId = null;
+  state.authenticatedEmail = null;
+  refreshLoginUI();
+  showToast('You have been logged out.', 'info');
 }
 
 function renderCatalog() {
@@ -3194,6 +3439,11 @@ function handleGlobalClick(event) {
       showToast('Login flow handled by backend integration.', 'info');
       break;
     }
+    case 'logout': {
+      event.preventDefault();
+      handleLogout();
+      break;
+    }
     case 'toggle-addons-step': {
       event.preventDefault();
       handleAddonContinue();
@@ -3767,13 +4017,22 @@ async function handleCheckout() {
   try {
     const payload = buildCheckoutPayload();
     state.forms = payload;
+    const customerEmail = payload.customer?.email || state.authenticatedEmail || null;
 
     // Step 1: Create or authenticate customer
     let customer = null;
-    let customerId = null;
+    let customerId = state.customerId ?? null;
     
     // Check if user is already logged in
     const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (accessToken && !customerId) {
+      const metadata = getTokenMetadata();
+      const metadataId = metadata?.username || metadata?.userName;
+      if (metadataId) {
+        customerId = String(metadataId);
+        state.customerId = customerId;
+      }
+    }
     
     if (!accessToken) {
       // Create new customer
@@ -3834,42 +4093,62 @@ async function handleCheckout() {
         let hasTokens = false;
         if (customer?.accessToken && customer?.refreshToken) {
           if (typeof window.saveTokens === 'function') {
-            window.saveTokens(customer.accessToken, customer.refreshToken);
+            const metadata = {
+              username: customer?.username || customerEmail,
+              email: customerEmail,
+              roles: customer?.roles,
+            };
+            window.saveTokens(customer.accessToken, customer.refreshToken, undefined, metadata);
+            syncAuthenticatedCustomerState(metadata.username, metadata.email);
             hasTokens = true;
             console.log('[checkout] ✅ Tokens saved from customer creation response');
           }
         } else if (customer?.data?.accessToken && customer?.data?.refreshToken) {
           // Check if tokens are nested in data object
           if (typeof window.saveTokens === 'function') {
-            window.saveTokens(customer.data.accessToken, customer.data.refreshToken);
+            const metadata = {
+              username: customer?.data?.username || customerEmail,
+              email: customerEmail,
+              roles: customer?.data?.roles,
+            };
+            window.saveTokens(customer.data.accessToken, customer.data.refreshToken, undefined, metadata);
+            syncAuthenticatedCustomerState(metadata.username, metadata.email);
             hasTokens = true;
             console.log('[checkout] ✅ Tokens saved from customer creation response (nested in data)');
           }
         }
         
         // If no tokens from customer creation, login with email/password to get tokens
-        if (!hasTokens && payload.customer?.email && payload.customer?.password) {
-          console.log('[checkout] No tokens from customer creation, logging in to get tokens...');
-          try {
-            const loginResponse = await authAPI.login(payload.customer.email, payload.customer.password);
-            
-            // Save tokens from login response (handle nested data structure)
-            const loginPayload = loginResponse?.data ?? loginResponse;
-            const loginAccessToken = loginPayload?.accessToken || loginPayload?.access_token;
-            const loginRefreshToken = loginPayload?.refreshToken || loginPayload?.refresh_token;
-            let loginExpiresAt = loginPayload?.expiresAt || loginPayload?.expires_at;
-            const loginExpiresIn = loginPayload?.expiresIn || loginPayload?.expires_in;
-            if (!loginExpiresAt && loginExpiresIn) {
-              const expiresInMs = Number(loginExpiresIn) * 1000;
-              loginExpiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
-            }
-            
-            if (loginAccessToken && loginRefreshToken && typeof window.saveTokens === 'function') {
-              window.saveTokens(loginAccessToken, loginRefreshToken, loginExpiresAt);
-              console.log('[checkout] ✅ Login successful, tokens saved from login response');
-            } else {
-              console.warn('[checkout] ⚠️ Login succeeded but no tokens found in response');
-            }
+      if (!hasTokens && payload.customer?.email && payload.customer?.password) {
+        console.log('[checkout] No tokens from customer creation, logging in to get tokens...');
+        try {
+          const loginResponse = await authAPI.login(payload.customer.email, payload.customer.password);
+          
+          // Save tokens from login response (handle nested data structure)
+          const loginPayload = loginResponse?.data ?? loginResponse;
+          const loginAccessToken = loginPayload?.accessToken || loginPayload?.access_token;
+          const loginRefreshToken = loginPayload?.refreshToken || loginPayload?.refresh_token;
+          let loginExpiresAt = loginPayload?.expiresAt || loginPayload?.expires_at;
+          const loginExpiresIn = loginPayload?.expiresIn || loginPayload?.expires_in;
+          if (!loginExpiresAt && loginExpiresIn) {
+            const expiresInMs = Number(loginExpiresIn) * 1000;
+            loginExpiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
+          }
+          
+          if (loginAccessToken && loginRefreshToken && typeof window.saveTokens === 'function') {
+            const loginMetadata = {
+              username: loginPayload?.username || payload.customer?.email,
+              email: loginPayload?.email || payload.customer?.email,
+              roles: loginPayload?.roles,
+              tokenType: loginPayload?.tokenType || loginPayload?.token_type,
+              expiresIn: loginPayload?.expiresIn || loginPayload?.expires_in,
+            };
+            window.saveTokens(loginAccessToken, loginRefreshToken, loginExpiresAt, loginMetadata);
+            syncAuthenticatedCustomerState(loginMetadata.username, loginMetadata.email);
+            console.log('[checkout] ✅ Login successful, tokens saved from login response');
+          } else {
+            console.warn('[checkout] ⚠️ Login succeeded but no tokens found in response');
+          }
           } catch (loginError) {
             console.warn('[checkout] ⚠️ Login after customer creation failed:', loginError);
             console.warn('[checkout] Payment link generation might fail without authentication token');
@@ -3942,7 +4221,11 @@ async function handleCheckout() {
           console.log('[checkout] Payment Method:', state.paymentMethod);
           console.log('[checkout] Business Unit:', state.selectedBusinessUnit);
           
-          const returnUrl = `${window.location.origin}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const baseUrl = isLocal
+            ? 'https://join.boulders.dk'
+            : window.location.origin.replace('http://', 'https://');
+          const returnUrl = `${baseUrl}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
           console.log('[checkout] Return URL:', returnUrl);
           
           // API Documentation: POST /api/payment/generate-link
@@ -3951,16 +4234,13 @@ async function handleCheckout() {
             throw new Error('Order ID is required to generate payment link');
           }
           
-          if (!state.selectedBusinessUnit) {
-            throw new Error('Business unit is required to generate payment link');
-          }
-          
-          const paymentData = await paymentAPI.generatePaymentLink(
-            state.orderId, // Required: Order ID
-            state.paymentMethod, // Required: Payment method
-            state.selectedBusinessUnit, // Required: Business unit
-            returnUrl // Required: Return URL
-          );
+          const paymentData = await paymentAPI.generatePaymentLink({
+            orderId: state.orderId,
+            paymentMethod: state.paymentMethod,
+            businessUnit: state.selectedBusinessUnit,
+            returnUrl,
+            receiptEmail: customerEmail,
+          });
           
           // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
           // Log full response for debugging
@@ -4743,16 +5023,19 @@ function handleReferralCopy() {
 function validateForm() {
   let isValid = true;
   clearErrorStates();
+  const skipPersonalValidation = isUserAuthenticated();
 
-  REQUIRED_FIELDS.forEach((fieldId) => {
-    const field = document.getElementById(fieldId);
-    if (field && !field.value.trim()) {
-      isValid = false;
-      highlightFieldError(fieldId);
-    }
-  });
+  if (!skipPersonalValidation) {
+    REQUIRED_FIELDS.forEach((fieldId) => {
+      const field = document.getElementById(fieldId);
+      if (field && !field.value.trim()) {
+        isValid = false;
+        highlightFieldError(fieldId);
+      }
+    });
+  }
 
-  if (DOM.parentGuardianForm && DOM.parentGuardianForm.style.display !== 'none') {
+  if (!skipPersonalValidation && DOM.parentGuardianForm && DOM.parentGuardianForm.style.display !== 'none') {
     PARENT_REQUIRED_FIELDS.forEach((fieldId) => {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
