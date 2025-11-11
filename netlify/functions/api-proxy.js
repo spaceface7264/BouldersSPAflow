@@ -33,28 +33,23 @@ exports.handler = async (event, context) => {
   }
 
   // Build the full API URL
-  // Check if path starts with /ver3 or /services - these might need special handling
-  // For ver3 endpoints, check if they need different base URL or path structure
+  // Check if path starts with /api/ver3 - these use different base URL
+  // According to README: ver3 endpoints use https://boulders.brpsystems.com/apiserver
+  // Standard endpoints use: https://api-join.boulders.dk
   let apiUrl;
-  if (apiPath.startsWith('/ver3/') || apiPath.startsWith('/services/')) {
-    // ver3 endpoints - try different approaches
-    // Option 1: Use full path as documented: /api/ver3/services/...
-    // Option 2: Use different base URL: https://boulders.brpsystems.com/apiserver
-    // Option 3: Add /apiserver prefix to api-join.boulders.dk
-    
-    // First, try with /apiserver prefix and full /api/ver3 path
+  if (apiPath.startsWith('/api/ver3/')) {
+    // ver3 endpoints use different base URL: https://boulders.brpsystems.com/apiserver
+    // Path already includes /api/ver3, so just append to base URL
+    apiUrl = `https://boulders.brpsystems.com/apiserver${apiPath}`;
+  } else if (apiPath.startsWith('/ver3/') || apiPath.startsWith('/services/')) {
+    // Path doesn't include /api prefix - add it
     if (apiPath.startsWith('/services/')) {
-      // Path is /services/... - construct full path: /api/ver3/services/...
-      apiUrl = `https://api-join.boulders.dk/apiserver/api/ver3${apiPath}`;
-    } else if (apiPath.startsWith('/ver3/')) {
-      // Path is /ver3/... - add /apiserver prefix
-      apiUrl = `https://api-join.boulders.dk/apiserver${apiPath}`;
+      apiUrl = `https://boulders.brpsystems.com/apiserver/api/ver3${apiPath}`;
     } else {
-      // Fallback
-      apiUrl = `https://api-join.boulders.dk/apiserver/api/ver3${apiPath}`;
+      apiUrl = `https://boulders.brpsystems.com/apiserver/api${apiPath}`;
     }
   } else {
-    // Standard API endpoints
+    // Standard API endpoints use api-join.boulders.dk
     apiUrl = `https://api-join.boulders.dk${apiPath}`;
   }
   
