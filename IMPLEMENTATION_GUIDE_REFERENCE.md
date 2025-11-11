@@ -141,4 +141,3 @@ After pasting, we'll verify:
 - [ ] All endpoints are listed
 - [ ] All requirements are captured
 - [ ] No details are missing from our implementation status
-

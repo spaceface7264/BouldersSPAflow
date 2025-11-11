@@ -156,4 +156,3 @@ If you see `[checkout] ⚠️ Payment link is null/undefined!`:
 ---
 
 **Last Updated:** 2025-11-11
-

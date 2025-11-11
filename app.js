@@ -1345,16 +1345,14 @@ class PaymentAPI {
       this.useProxy = false;
     }
     
-    // Payment links are handled by BRP services, not the Join API base
-    this.paymentServicePath = '/services/generatelink/payment';
-    this.paymentServiceBase = 'https://boulders.brpsystems.com/apiserver';
+    this.paymentEndpoint = '/api/payment/generate-link';
   }
 
-  // Step 9: Generate payment link - POST /api/ver3/services/generatelink/payment
-  // API Documentation: Use POST /api/ver3/services/generatelink/payment to create checkout URLs after an order is ready
+  // Step 9: Generate payment link - POST /api/payment/generate-link
+  // API Documentation: Use POST /api/payment/generate-link to create checkout URLs after an order is ready
   // Pass the order ID, payment method, selected business unit, and return URL
   // Create checkout URLs after an order is ready
-  async generatePaymentLink(orderId, paymentMethod, businessUnit, returnUrl = null, customerEmail = null) {
+  async generatePaymentLink(orderId, paymentMethod, businessUnit, returnUrl = null) {
     try {
       // Build return URL if not provided
       // Use the same return URL structure documented for the Join Boulders API service
@@ -1377,17 +1375,18 @@ class PaymentAPI {
       
       let url;
       if (this.useProxy) {
-        // Route through Netlify proxy to BRP services endpoint
-        url = `${this.baseUrl}?path=${this.paymentServicePath}`;
+        url = `${this.baseUrl}?path=${this.paymentEndpoint}`;
+      } else if (!this.baseUrl) {
+        url = this.paymentEndpoint;
+      } else if (this.baseUrl.endsWith('/')) {
+        url = `${this.baseUrl.replace(/\/$/, '')}${this.paymentEndpoint}`;
       } else {
-        // Direct API call to BRP apiserver
-        url = `${this.paymentServiceBase}${this.paymentServicePath}`;
+        url = `${this.baseUrl}${this.paymentEndpoint}`;
       }
       
       console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
       console.log('[Step 9] Endpoint:', url);
       console.log('[Step 9] Method: POST');
-      console.log('[Step 9] Service Path:', this.paymentServicePath);
       
       const accessToken = typeof window.getAccessToken === 'function' 
         ? window.getAccessToken() 
@@ -1411,9 +1410,9 @@ class PaymentAPI {
       console.log('[Step 9] Has Authorization header:', !!headers.Authorization);
       
       // Step 9: Pass order ID, payment method ID, selected business unit, and return URL
-      // API Documentation: POST /api/ver3/services/generatelink/payment
-      // Payload: { returnUrl, order, paymentMethod }
-      // API expects paymentMethod (numeric ID), not paymentMethod (string)
+      // API Documentation: POST /api/payment/generate-link
+      // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
+      // API expects paymentMethodId (numeric ID), not paymentMethod (string)
       // Map payment method string to ID: "card" -> 1, etc.
       let paymentMethodId = paymentMethod;
       if (typeof paymentMethod === 'string') {
@@ -1430,15 +1429,14 @@ class PaymentAPI {
         console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
       }
       
-      const payload = {
-        returnUrl: returnUrl, // Required: Absolute URL to return to after payment
-        order: orderId, // Required when paying for an order
-        paymentMethod: paymentMethodId, // Required: Payment method ID (numeric)
-      };
+      const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) || businessUnit : businessUnit;
       
-      if (customerEmail) {
-        payload.receiptEmail = [customerEmail];
-      }
+      const payload = {
+        orderId: orderId, // Required: ID of the order
+        paymentMethodId: paymentMethodId, // Required: Payment method ID (numeric)
+        businessUnit: businessUnitId, // Required: Selected business unit
+        returnUrl: returnUrl, // Required: Absolute URL to return to after payment
+      };
       
       console.log('[Step 9] Payment method (raw):', paymentMethod);
       console.log('[Step 9] Payment method ID (mapped):', paymentMethodId);
@@ -1463,12 +1461,12 @@ class PaymentAPI {
       const data = await response.json();
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
-      // API Response structure: { url: "..." }
+      // API Response structure: { success: true, data: { url: "..." } }
       // Extract payment link from nested data structure
-      const paymentLink = data.url || 
-                         data.data?.url || 
+      const paymentLink = data.data?.url || 
                          data.data?.paymentLink || 
                          data.data?.link ||
+                         data.url || 
                          data.paymentLink || 
                          data.link;
       
@@ -3947,8 +3945,8 @@ async function handleCheckout() {
           const returnUrl = `${window.location.origin}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
           console.log('[checkout] Return URL:', returnUrl);
           
-          // API Documentation: POST /api/ver3/services/generatelink/payment
-          // Payload: { returnUrl, order, paymentMethod }
+          // API Documentation: POST /api/payment/generate-link
+          // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
           if (!state.orderId) {
             throw new Error('Order ID is required to generate payment link');
           }
@@ -3961,8 +3959,7 @@ async function handleCheckout() {
             state.orderId, // Required: Order ID
             state.paymentMethod, // Required: Payment method
             state.selectedBusinessUnit, // Required: Business unit
-            returnUrl, // Required: Return URL
-            payload?.customer?.email // Optional: Receipt email for anonymous checkouts
+            returnUrl // Required: Return URL
           );
           
           // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}

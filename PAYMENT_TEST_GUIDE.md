@@ -293,4 +293,3 @@ If payment is not registering:
 ---
 
 **Last Updated:** 2025-11-10
-
