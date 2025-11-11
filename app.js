@@ -586,9 +586,16 @@ class AuthAPI {
       
       // Store tokens if provided in response
       // Handle both direct tokens and nested in data object
+      // Response structure: { success: true, data: { accessToken, refreshToken, ... }, requestId: "..." }
       const accessToken = data.accessToken || data.data?.accessToken;
       const refreshToken = data.refreshToken || data.data?.refreshToken;
       const expiresAt = data.expiresAt || data.data?.expiresAt;
+      
+      // Debug: Log the actual structure
+      if (data.data) {
+        console.log('[Step 6] Data object keys:', Object.keys(data.data));
+        console.log('[Step 6] Data object:', JSON.stringify(data.data, null, 2));
+      }
       
       if (accessToken && refreshToken) {
         if (typeof window.saveTokens === 'function') {
@@ -600,6 +607,9 @@ class AuthAPI {
       } else {
         console.warn('[Step 6] ⚠️ No tokens found in login response');
         console.warn('[Step 6] Response structure:', Object.keys(data));
+        if (data.data) {
+          console.warn('[Step 6] Data object structure:', Object.keys(data.data));
+        }
       }
       
       return data;
@@ -1442,14 +1452,21 @@ class PaymentAPI {
       const data = await response.json();
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
-      // API Documentation: Response contains `url` (string) field
-      // Response status: 201 CREATED
-      // Response structure: { "url": "Generated payment link. It includes the required hash value." }
-      const paymentLink = data.url || data.paymentLink || data.link;
+      // API Response structure: { success: true, data: { url: "..." }, requestId: "..." }
+      // Extract payment link from nested data structure
+      const paymentLink = data.data?.url || 
+                         data.data?.paymentLink || 
+                         data.data?.link ||
+                         data.url || 
+                         data.paymentLink || 
+                         data.link;
       
       if (!paymentLink) {
         console.error('[Step 9] ❌ No payment link in response!');
         console.error('[Step 9] Response structure:', Object.keys(data));
+        if (data.data) {
+          console.error('[Step 9] Data object keys:', Object.keys(data.data));
+        }
         throw new Error('Payment link not found in API response');
       }
       
