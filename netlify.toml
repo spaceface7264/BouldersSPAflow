@@ -8,10 +8,8 @@
   VITE_BASE_PATH = "/"
 
 # Don't redirect Netlify Functions - they need to be accessible
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+# Note: Netlify Functions are automatically accessible at /.netlify/functions/
+# No redirect needed for functions
 
 # Redirect all other requests to index.html for client-side routing
 [[redirects]]

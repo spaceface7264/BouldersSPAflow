@@ -584,12 +584,15 @@ class AuthAPI {
       const data = await response.json();
       console.log('[Step 6] Login response:', data);
       
-      // Store tokens if provided in response
-      // Handle both direct tokens and nested in data object
-      // Response structure: { success: true, data: { accessToken, refreshToken, ... }, requestId: "..." }
-      const accessToken = data.accessToken || data.data?.accessToken;
-      const refreshToken = data.refreshToken || data.data?.refreshToken;
-      const expiresAt = data.expiresAt || data.data?.expiresAt;
+      const tokenPayload = data?.data ?? data;
+      const accessToken = tokenPayload.accessToken || tokenPayload.access_token;
+      const refreshToken = tokenPayload.refreshToken || tokenPayload.refresh_token;
+      let expiresAt = tokenPayload.expiresAt || tokenPayload.expires_at;
+      const expiresIn = tokenPayload.expiresIn || tokenPayload.expires_in;
+      if (!expiresAt && expiresIn) {
+        const expiresInMs = Number(expiresIn) * 1000;
+        expiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
+      }
       
       // Debug: Log the actual structure
       if (data.data) {
@@ -3853,9 +3856,15 @@ async function handleCheckout() {
             const loginResponse = await authAPI.login(payload.customer.email, payload.customer.password);
             
             // Save tokens from login response (handle nested data structure)
-            const loginAccessToken = loginResponse?.accessToken || loginResponse?.data?.accessToken;
-            const loginRefreshToken = loginResponse?.refreshToken || loginResponse?.data?.refreshToken;
-            const loginExpiresAt = loginResponse?.expiresAt || loginResponse?.data?.expiresAt;
+            const loginPayload = loginResponse?.data ?? loginResponse;
+            const loginAccessToken = loginPayload?.accessToken || loginPayload?.access_token;
+            const loginRefreshToken = loginPayload?.refreshToken || loginPayload?.refresh_token;
+            let loginExpiresAt = loginPayload?.expiresAt || loginPayload?.expires_at;
+            const loginExpiresIn = loginPayload?.expiresIn || loginPayload?.expires_in;
+            if (!loginExpiresAt && loginExpiresIn) {
+              const expiresInMs = Number(loginExpiresIn) * 1000;
+              loginExpiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
+            }
             
             if (loginAccessToken && loginRefreshToken && typeof window.saveTokens === 'function') {
               window.saveTokens(loginAccessToken, loginRefreshToken, loginExpiresAt);
