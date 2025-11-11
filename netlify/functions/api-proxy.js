@@ -33,7 +33,22 @@ exports.handler = async (event, context) => {
   }
 
   // Build the full API URL
-  const apiUrl = `https://api-join.boulders.dk${apiPath}`;
+  // Check if path starts with /ver3 or /services - these might need special handling
+  // For ver3 endpoints, backend might expect /apiserver prefix
+  let apiUrl;
+  if (apiPath.startsWith('/ver3/') || apiPath.startsWith('/services/')) {
+    // ver3 endpoints might need /apiserver prefix
+    // Try: https://api-join.boulders.dk/apiserver/api/ver3${apiPath}
+    // But if apiPath already includes /services, we need to add /api/ver3 before it
+    if (apiPath.startsWith('/services/')) {
+      apiUrl = `https://api-join.boulders.dk/apiserver/api/ver3${apiPath}`;
+    } else {
+      apiUrl = `https://api-join.boulders.dk/apiserver${apiPath}`;
+    }
+  } else {
+    // Standard API endpoints
+    apiUrl = `https://api-join.boulders.dk${apiPath}`;
+  }
 
   try {
     // Build request options - support all HTTP methods
