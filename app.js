@@ -1348,7 +1348,10 @@ class PaymentAPI {
       
       let url;
       if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/ver3/services/generatelink/payforcustomeraccount`;
+        // Netlify proxy expects the full path including /api
+        // But check if backend adds /api/ver3 automatically - if so, we might need just /ver3/services/...
+        // Based on error showing "api/ver3/ver3", it seems backend might add /api/ver3, so try without /api
+        url = `${this.baseUrl}?path=/ver3/services/generatelink/payforcustomeraccount`;
       } else {
         url = `${this.baseUrl}/api/ver3/services/generatelink/payforcustomeraccount`;
       }
