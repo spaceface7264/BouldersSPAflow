@@ -660,42 +660,10 @@
                                     </div>
                                 </div>
                                 
-                                <!-- Card Payment Form -->
-                                <div class="card-payment-form" id="cardPaymentForm" style="display: none;">
-                                    <h4 class="payment-form-title">Card Details</h4>
-                                    
-                                    <div class="form-group">
-                                        <label for="cardNumber">Card Number*</label>
-                                        <input type="text" id="cardNumber" name="cardNumber" placeholder="1234 5678 9012 3456" maxlength="19" data-api-field="payment.card.number">
-                                        <div class="error-message">Please enter a valid card number</div>
-                                    </div>
-                                    
-                                    <div class="form-row">
-                                        <div class="form-group">
-                                            <label for="expiryDate">Expiry Date*</label>
-                                            <input type="text" id="expiryDate" name="expiryDate" placeholder="MM/YY" maxlength="5" data-api-field="payment.card.expiry">
-                                            <div class="error-message">Please enter expiry date</div>
-                                        </div>
-                                        
-                                        <div class="form-group">
-                                            <label for="cvv">CVV*</label>
-                                            <input type="text" id="cvv" name="cvv" placeholder="123" maxlength="4" data-api-field="payment.card.cvv">
-                                            <div class="error-message">Please enter CVV</div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label for="cardholderName">Cardholder Name*</label>
-                                        <input type="text" id="cardholderName" name="cardholderName" placeholder="John Doe" data-api-field="payment.card.cardholderName">
-                                        <div class="error-message">Please enter cardholder name</div>
-                                    </div>
-                                    
-                                    <div class="security-features">
-                                        <div class="security-item">
-                                            <span class="security-icon">🔒</span>
-                                            <span>Secure payment</span>
-                                        </div>
-                                    </div>
+                                <!-- Card Payment Form - REMOVED: Users are redirected to payment provider -->
+                                <!-- This form is not used - payment is handled by external payment provider -->
+                                <div class="card-payment-form" id="cardPaymentForm" style="display: none !important;">
+                                    <!-- Form removed - users are redirected to payment provider for card entry -->
                                 </div>
                                 
                                 <!-- Checkout Button -->

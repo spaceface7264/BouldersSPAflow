@@ -3428,8 +3428,10 @@ function handlePaymentChange(event) {
     if (parent) parent.classList.toggle('selected', option.checked);
   });
 
+  // Card payment form should NEVER be shown - users are redirected to payment provider
+  // Hide the form if it exists (it shouldn't be used)
   if (DOM.cardPaymentForm) {
-    DOM.cardPaymentForm.style.display = state.paymentMethod === 'card' ? 'block' : 'none';
+    DOM.cardPaymentForm.style.display = 'none';
   }
 }
 
@@ -4547,27 +4549,9 @@ function validateForm() {
     isValid = false;
   }
 
-  if (state.paymentMethod === 'card') {
-    CARD_FIELDS.forEach((fieldId) => {
-      const field = document.getElementById(fieldId);
-      if (field && !field.value.trim()) {
-        isValid = false;
-        highlightFieldError(fieldId);
-      }
-    });
-
-    const cardNumber = document.getElementById('cardNumber');
-    if (cardNumber && cardNumber.value.trim() && !isValidCardNumber(cardNumber.value)) {
-      isValid = false;
-      highlightFieldError('cardNumber');
-    }
-
-    const expiryDate = document.getElementById('expiryDate');
-    if (expiryDate && expiryDate.value.trim() && !isValidExpiryDate(expiryDate.value)) {
-      isValid = false;
-      highlightFieldError('expiryDate');
-    }
-  }
+  // Card fields validation REMOVED - users are redirected to payment provider
+  // Payment details are entered on the payment provider's secure page, not on our site
+  // No need to validate card fields here since they won't be filled on this page
 
   return isValid;
 }
