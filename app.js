@@ -3812,17 +3812,46 @@ async function handleCheckout() {
           );
           
           // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
+          // Log full response for debugging
+          console.log('[checkout] Full payment link API response:', JSON.stringify(paymentData, null, 2));
+          
           paymentLink = paymentData?.data?.paymentLink || 
                         paymentData?.data?.link || 
                         paymentData?.data?.url ||
                         paymentData?.paymentLink || 
                         paymentData?.link || 
                         paymentData?.url;
+          
+          // Additional checks for nested structures
+          if (!paymentLink && paymentData?.data) {
+            // Try to find any URL-like field in the data object
+            const dataKeys = Object.keys(paymentData.data);
+            console.log('[checkout] Available keys in paymentData.data:', dataKeys);
+            for (const key of dataKeys) {
+              const value = paymentData.data[key];
+              if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                paymentLink = value;
+                console.log('[checkout] Found URL in paymentData.data.' + key + ':', paymentLink);
+                break;
+              }
+            }
+          }
+          
           state.paymentLink = paymentLink;
           state.paymentLinkGenerated = true;
           
-          console.log('[checkout] Payment link generated (Generate Payment Link Card):', paymentLink);
-          console.log('[checkout] Payment link response:', paymentData);
+          console.log('[checkout] Payment link extracted:', paymentLink);
+          console.log('[checkout] Payment link type:', typeof paymentLink);
+          console.log('[checkout] Payment link is valid URL:', paymentLink ? (paymentLink.startsWith('http://') || paymentLink.startsWith('https://')) : 'null/undefined');
+          
+          if (!paymentLink) {
+            console.error('[checkout] ⚠️ Payment link is null/undefined!');
+            console.error('[checkout] Payment API response structure:', {
+              hasData: !!paymentData?.data,
+              dataKeys: paymentData?.data ? Object.keys(paymentData.data) : [],
+              topLevelKeys: Object.keys(paymentData || {}),
+            });
+          }
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
           throw new Error('Failed to add membership to order or generate payment link');
@@ -3876,9 +3905,15 @@ async function handleCheckout() {
     state.order = buildOrderSummary(payload, order, customer);
     
     // Step 6: Redirect to payment or show confirmation
-    if (paymentLink) {
+    console.log('[checkout] ===== PAYMENT REDIRECT CHECK =====');
+    console.log('[checkout] paymentLink value:', paymentLink);
+    console.log('[checkout] paymentLink type:', typeof paymentLink);
+    console.log('[checkout] paymentLink truthy?', !!paymentLink);
+    console.log('[checkout] state.paymentLink:', state.paymentLink);
+    
+    if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
       // Redirect to payment provider
-      console.log('[checkout] Redirecting to payment provider...');
+      console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
       console.log('[checkout] Payment link URL:', paymentLink);
       showToast('Redirecting to secure payment...', 'info');
       
@@ -3886,25 +3921,52 @@ async function handleCheckout() {
       // This prevents the back button from going back to the checkout page
       setTimeout(() => {
         try {
+          console.log('[checkout] Executing window.location.replace with:', paymentLink);
           window.location.replace(paymentLink);
         } catch (error) {
-          console.error('[checkout] Redirect failed:', error);
+          console.error('[checkout] ❌ Redirect failed with replace:', error);
           // Fallback to href if replace fails
-          window.location.href = paymentLink;
+          try {
+            console.log('[checkout] Falling back to window.location.href');
+            window.location.href = paymentLink;
+          } catch (hrefError) {
+            console.error('[checkout] ❌ Redirect failed with href:', hrefError);
+            showToast('Failed to redirect to payment. Please contact support.', 'error');
+            state.checkoutInProgress = false;
+            setCheckoutLoadingState(false);
+          }
         }
       }, 500);
     } else {
-      // No payment link, show confirmation
-      console.log('[checkout] Payment link not available, showing confirmation');
-      showToast('Order created successfully!', 'success');
-      state.checkoutInProgress = false; // Reset since we're showing confirmation
+      // No payment link or invalid URL
+      console.error('[checkout] ❌ Payment link not available or invalid!');
+      console.error('[checkout] paymentLink:', paymentLink);
+      console.error('[checkout] This means the API did not return a valid payment URL');
+      console.error('[checkout] The payment provider might be embedded or the API response structure changed');
       
-      if (state.currentStep < TOTAL_STEPS) {
-        nextStep();
+      // Check if payment link is in state (maybe it was set elsewhere)
+      if (state.paymentLink && (state.paymentLink.startsWith('http://') || state.paymentLink.startsWith('https://'))) {
+        console.log('[checkout] Found payment link in state, using that instead');
+        paymentLink = state.paymentLink;
+        showToast('Redirecting to secure payment...', 'info');
+        setTimeout(() => {
+          window.location.replace(paymentLink);
+        }, 500);
       } else {
-        renderConfirmationView();
+        // No valid payment link - this is an error
+        console.error('[checkout] ❌ CRITICAL: No valid payment link available!');
+        console.error('[checkout] Order was created but payment cannot be processed');
+        showToast('Payment link not available. Please contact support with order ID: ' + state.orderId, 'error');
+        state.checkoutInProgress = false;
+        setCheckoutLoadingState(false);
+        
+        // Still show confirmation but warn user
+        if (state.currentStep < TOTAL_STEPS) {
+          nextStep();
+        } else {
+          renderConfirmationView();
+        }
       }
-      setCheckoutLoadingState(false);
     }
 
   } catch (error) {
