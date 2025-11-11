@@ -4302,6 +4302,16 @@ window.getOrderDiagnostics = async function(orderId) {
 // Load order data when returning from payment
 async function loadOrderForConfirmation(orderId) {
   try {
+    // Fix: Ensure orderId is numeric (handle cases where it might have path segments)
+    if (typeof orderId === 'string') {
+      // Remove any path segments (e.g., "817247/confirmation" -> "817247")
+      orderId = orderId.split('/')[0].trim();
+      orderId = parseInt(orderId, 10);
+      if (isNaN(orderId)) {
+        throw new Error(`Invalid order ID: ${orderId}`);
+      }
+    }
+    
     const startTime = Date.now();
     console.log(`[Payment Return] [${new Date().toISOString()}] Fetching order data for:`, orderId);
     
