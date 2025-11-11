@@ -2192,7 +2192,22 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check if we're returning from payment before initializing
   const urlParams = new URLSearchParams(window.location.search);
   const paymentReturn = urlParams.get('payment');
-  const orderId = urlParams.get('orderId');
+  let orderId = urlParams.get('orderId');
+  
+  // Fix: Payment provider may append /confirmation to orderId
+  // Extract just the numeric part (e.g., "817247/confirmation" -> "817247")
+  if (orderId) {
+    // Remove any path segments after the order ID
+    orderId = orderId.split('/')[0].trim();
+    // Ensure it's a valid number
+    const numericOrderId = parseInt(orderId, 10);
+    if (isNaN(numericOrderId)) {
+      console.warn('[Payment Return] Invalid order ID:', orderId);
+      orderId = null;
+    } else {
+      orderId = numericOrderId.toString();
+    }
+  }
   
   if (paymentReturn === 'return' && orderId) {
     // We're returning from payment - show confirmation instead of resetting
