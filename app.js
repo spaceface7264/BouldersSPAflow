@@ -1348,16 +1348,15 @@ class PaymentAPI {
       
       let url;
       if (this.useProxy) {
-        // Documentation shows: POST /api/ver3/services/generatelink/payforcustomeraccount
-        // API Server: https://boulders.brpsystems.com/apiserver
-        // But we use: https://api-join.boulders.dk
-        // Try sending the full path as documented - Netlify proxy will handle /apiserver prefix
-        // If backend adds /api/ver3 automatically, we'll see duplication error again
-        // If not, this should work
-        url = `${this.baseUrl}?path=/api/ver3/services/generatelink/payforcustomeraccount`;
+        // FIXED: /apiserver base auto-prefixes /api/ver3, so we should NOT include it in path
+        // Use: /services/generatelink/payforcustomeraccount
+        // Final URL will be: https://boulders.brpsystems.com/apiserver/services/generatelink/payforcustomeraccount
+        // Backend will auto-add /api/ver3, making it: /apiserver/api/ver3/services/generatelink/payforcustomeraccount
+        url = `${this.baseUrl}?path=/services/generatelink/payforcustomeraccount`;
       } else {
-        // Direct API call - use full path as documented
-        url = `${this.baseUrl}/api/ver3/services/generatelink/payforcustomeraccount`;
+        // Direct API call - try without /api/ver3 since /apiserver auto-adds it
+        // If that doesn't work, fallback to full path
+        url = `https://boulders.brpsystems.com/apiserver/services/generatelink/payforcustomeraccount`;
       }
       
       console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
@@ -1400,12 +1399,20 @@ class PaymentAPI {
       // - paymentMethod* (integer): ID of payment method to use
       // - returnUrl* (string): Absolute url to return to after successful, failed or aborted payment
       // - payerAlias (object, optional): Phone number to use for SWISH payment method
+      // 
+      // NOTE: Backend said "call when subscription is added to cart" - might need orderId too
+      // Try with customer first, if that fails, try adding orderId
       const payload = {
         customer: customerId, // Required: ID of customer to pay off customer account
         paymentMethod: paymentMethodId, // Required: ID of payment method to use
         returnUrl: returnUrl, // Required: Absolute url to return to after payment
         // payerAlias is optional - only needed for SWISH payment method
       };
+      
+      // If we have orderId, try adding it (backend might need it for cart context)
+      if (orderId) {
+        payload.orderId = orderId;
+      }
       
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
       console.log('[Step 9] Sending Generate Payment Link Card request...');
