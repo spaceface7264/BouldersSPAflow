@@ -4355,6 +4355,20 @@ async function loadOrderForConfirmation(orderId) {
     // Use order total if available, otherwise use stored total
     const orderTotal = order?.total || order?.totalAmount || order?.data?.total || storedOrder?.totals?.cartTotal || 0;
     
+    // Store diagnostic data for easy access (after customer is extracted)
+    window.lastPaymentDiagnostics = {
+      timestamp: new Date().toISOString(),
+      orderId: orderId,
+      order: order,
+      customer: customer || storedCustomer,
+      state: {
+        customerId: state.customerId,
+        membershipPlanId: state.membershipPlanId,
+        selectedBusinessUnit: state.selectedBusinessUnit,
+      },
+    };
+    console.log('[Payment Return] Diagnostic data stored in window.lastPaymentDiagnostics');
+    
     // Build order summary with fetched data
     state.order = buildOrderSummary(payload, { ...order, total: orderTotal, totalAmount: orderTotal }, customer || storedCustomer);
     console.log('[Payment Return] Order summary built:', state.order);
