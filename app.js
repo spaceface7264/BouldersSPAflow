@@ -1367,6 +1367,14 @@ class PaymentAPI {
         ? window.getAccessToken() 
         : null;
       
+      console.log('[Step 9] Access token available:', !!accessToken);
+      console.log('[Step 9] Access token value:', accessToken ? `${accessToken.substring(0, 20)}...` : 'null');
+      
+      if (!accessToken) {
+        console.error('[Step 9] ⚠️ No access token available! Payment link endpoint requires authentication.');
+        console.error('[Step 9] Make sure user is logged in or token is stored in session.');
+      }
+      
       const headers = {
         'Accept-Language': 'da-DK',
         'Content-Type': 'application/json',
@@ -1374,6 +1382,7 @@ class PaymentAPI {
       };
       
       console.log('[Step 9] Headers:', headers);
+      console.log('[Step 9] Has Authorization header:', !!headers.Authorization);
       
       // Step 9: Pass order ID, payment method ID, selected business unit, and return URL
       // API expects paymentMethodId (numeric ID), not paymentMethod (string like "card")
@@ -3781,10 +3790,32 @@ async function handleCheckout() {
         console.log('[checkout] Customer response:', customer);
         console.log('[checkout] Extracted customer ID:', customerId);
         
-        // Save tokens if provided
-        if (customer.accessToken && customer.refreshToken) {
+        // Save tokens if provided in customer creation response
+        let hasTokens = false;
+        if (customer?.accessToken && customer?.refreshToken) {
           if (typeof window.saveTokens === 'function') {
             window.saveTokens(customer.accessToken, customer.refreshToken);
+            hasTokens = true;
+            console.log('[checkout] ✅ Tokens saved from customer creation response');
+          }
+        } else if (customer?.data?.accessToken && customer?.data?.refreshToken) {
+          // Check if tokens are nested in data object
+          if (typeof window.saveTokens === 'function') {
+            window.saveTokens(customer.data.accessToken, customer.data.refreshToken);
+            hasTokens = true;
+            console.log('[checkout] ✅ Tokens saved from customer creation response (nested in data)');
+          }
+        }
+        
+        // If no tokens from customer creation, login with email/password to get tokens
+        if (!hasTokens && payload.customer?.email && payload.customer?.password) {
+          console.log('[checkout] No tokens from customer creation, logging in to get tokens...');
+          try {
+            const loginResponse = await authAPI.login(payload.customer.email, payload.customer.password);
+            console.log('[checkout] ✅ Login successful, tokens saved');
+          } catch (loginError) {
+            console.warn('[checkout] ⚠️ Login after customer creation failed:', loginError);
+            console.warn('[checkout] Payment link generation might fail without authentication token');
           }
         }
         
