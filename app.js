@@ -1344,7 +1344,9 @@ class PaymentAPI {
         url = `${this.baseUrl}/api/payment/generate-link`;
       }
       
-      console.log('[Step 9] Generating payment link:', url);
+      console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
+      console.log('[Step 9] Endpoint:', url);
+      console.log('[Step 9] Method: POST');
       
       const accessToken = typeof window.getAccessToken === 'function' 
         ? window.getAccessToken() 
@@ -1355,6 +1357,8 @@ class PaymentAPI {
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
+      
+      console.log('[Step 9] Headers:', headers);
       
       // Step 9: Pass order ID, payment method ID, selected business unit, and return URL
       // API expects paymentMethodId (numeric ID), not paymentMethod (string like "card")
@@ -1372,6 +1376,7 @@ class PaymentAPI {
           'mobile_pay': 3,
         };
         paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 1; // Default to 1 if unknown
+        console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
       }
       
       const payload = {
@@ -1381,7 +1386,8 @@ class PaymentAPI {
         returnUrl, // Return URL structure for backend to complete the flow
       };
       
-      console.log('[Step 9] Payment link payload:', JSON.stringify(payload, null, 2));
+      console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
+      console.log('[Step 9] Sending Generate Payment Link Card request...');
       
       const response = await fetch(url, {
         method: 'POST',
@@ -1389,14 +1395,16 @@ class PaymentAPI {
         body: JSON.stringify(payload),
       });
       
+      console.log('[Step 9] Response status:', response.status, response.statusText);
+      
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[Step 9] Generate payment link error (${response.status}):`, errorText);
-        throw new Error(`Generate payment link failed: ${response.status} - ${errorText}`);
+        console.error(`[Step 9] ❌ Generate Payment Link Card failed (${response.status}):`, errorText);
+        throw new Error(`Generate Payment Link Card failed: ${response.status} - ${errorText}`);
       }
       
       const data = await response.json();
-      console.log('[Step 9] Payment link generated:', data);
+      console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
       // Step 9: Store the generated link in client state so the UI can display it or redirect the user
       if (data.paymentLink || data.link || data.url) {
@@ -3800,10 +3808,17 @@ async function handleCheckout() {
           await orderAPI.addSubscriptionItem(state.orderId, state.membershipPlanId);
           console.log('[checkout] Membership added to order');
           
-          // CRITICAL: Generate payment link immediately after subscription is added
+          // CRITICAL: Generate Payment Link Card immediately after subscription is added
+          // Backend requirement: "Generate Payment Link Card" request must be made when subscription is added to cart
           // This is what triggers the payment flow according to backend team
-          console.log('[checkout] Generating payment link after subscription added...');
+          console.log('[checkout] ===== GENERATE PAYMENT LINK CARD =====');
+          console.log('[checkout] Generating Payment Link Card (backend requirement)');
+          console.log('[checkout] Order ID:', state.orderId);
+          console.log('[checkout] Payment Method:', state.paymentMethod);
+          console.log('[checkout] Business Unit:', state.selectedBusinessUnit);
+          
           const returnUrl = `${window.location.origin}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
+          console.log('[checkout] Return URL:', returnUrl);
           
           const paymentData = await paymentAPI.generatePaymentLink(
             state.orderId,
