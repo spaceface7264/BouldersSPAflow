@@ -568,10 +568,11 @@ class AuthAPI {
         'Content-Type': 'application/json',
       };
       
+      // API expects username field (which is the email)
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username: email, password }),
       });
       
       if (!response.ok) {
@@ -1326,10 +1327,11 @@ class PaymentAPI {
     }
   }
 
-  // Step 9: Generate payment link - POST /api/ver3/services/generatelink/payforcustomeraccount
-  // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3?key=f43e5df0b0f74d2b82e93a4f4226ff96#post-/api/ver3/services/generatelink/payforcustomeraccount
+  // Step 9: Generate payment link - POST /api/payment/generate-link
+  // API Documentation: Use POST /api/payment/generate-link to create checkout URLs after an order is ready
+  // Pass the order ID, payment method, selected business unit, and return URL
   // Create checkout URLs after an order is ready
-  async generatePaymentLink(customerId, paymentMethod, returnUrl = null, orderId = null) {
+  async generatePaymentLink(orderId, paymentMethod, businessUnit, returnUrl = null) {
     try {
       // Build return URL if not provided
       // Use the same return URL structure documented for the Join Boulders API service
@@ -1342,21 +1344,21 @@ class PaymentAPI {
         throw new Error('Return URL is required for payment link generation');
       }
       
-      if (!customerId) {
-        throw new Error('Customer ID is required for payment link generation');
+      if (!orderId) {
+        throw new Error('Order ID is required for payment link generation');
+      }
+      
+      if (!businessUnit) {
+        throw new Error('Business unit is required for payment link generation');
       }
       
       let url;
       if (this.useProxy) {
-        // FIXED: /apiserver base auto-prefixes /api/ver3, so we should NOT include it in path
-        // Use: /services/generatelink/payforcustomeraccount
-        // Final URL will be: https://boulders.brpsystems.com/apiserver/services/generatelink/payforcustomeraccount
-        // Backend will auto-add /api/ver3, making it: /apiserver/api/ver3/services/generatelink/payforcustomeraccount
-        url = `${this.baseUrl}?path=/services/generatelink/payforcustomeraccount`;
+        // Use standard API endpoint: /api/payment/generate-link
+        url = `${this.baseUrl}?path=/api/payment/generate-link`;
       } else {
-        // Direct API call - try without /api/ver3 since /apiserver auto-adds it
-        // If that doesn't work, fallback to full path
-        url = `https://boulders.brpsystems.com/apiserver/services/generatelink/payforcustomeraccount`;
+        // Direct API call
+        url = `https://api-join.boulders.dk/api/payment/generate-link`;
       }
       
       console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
@@ -1384,44 +1386,18 @@ class PaymentAPI {
       console.log('[Step 9] Headers:', headers);
       console.log('[Step 9] Has Authorization header:', !!headers.Authorization);
       
-      // Step 9: Pass order ID, payment method ID, selected business unit, and return URL
-      // API expects paymentMethodId (numeric ID), not paymentMethod (string like "card")
-      // Map payment method string to ID: "card" -> typically 1, but may need to fetch from API
-      // For now, defaulting to 1 for card payments
-      let paymentMethodId = paymentMethod;
-      if (typeof paymentMethod === 'string') {
-        // Map common payment method strings to IDs
-        const paymentMethodMap = {
-          'card': 1,
-          'creditcard': 1,
-          'credit_card': 1,
-          'debit': 2,
-          'mobilepay': 3,
-          'mobile_pay': 3,
-        };
-        paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 1; // Default to 1 if unknown
-        console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
-      }
-      
-      // API Documentation payload structure:
-      // - customer* (integer): ID of customer to pay off customer account
-      // - paymentMethod* (integer): ID of payment method to use
-      // - returnUrl* (string): Absolute url to return to after successful, failed or aborted payment
-      // - payerAlias (object, optional): Phone number to use for SWISH payment method
-      // 
-      // NOTE: Backend said "call when subscription is added to cart" - might need orderId too
-      // Try with customer first, if that fails, try adding orderId
+      // Step 9: Pass order ID, payment method, selected business unit, and return URL
+      // API Documentation: POST /api/payment/generate-link
+      // Payload: { orderId, paymentMethod, businessUnit, returnUrl }
+      // Payment method can be string (e.g., "card") or numeric ID
       const payload = {
-        customer: customerId, // Required: ID of customer to pay off customer account
-        paymentMethod: paymentMethodId, // Required: ID of payment method to use
-        returnUrl: returnUrl, // Required: Absolute url to return to after payment
-        // payerAlias is optional - only needed for SWISH payment method
+        orderId: orderId, // Required: ID of the order
+        paymentMethod: paymentMethod, // Required: Payment method (string like "card" or numeric ID)
+        businessUnit: businessUnit, // Required: Selected business unit
+        returnUrl: returnUrl, // Required: Absolute URL to return to after payment
       };
       
-      // If we have orderId, try adding it (backend might need it for cart context)
-      if (orderId) {
-        payload.orderId = orderId;
-      }
+      console.log('[Step 9] Payment method (raw):', paymentMethod);
       
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
       console.log('[Step 9] Sending Generate Payment Link Card request...');
@@ -3888,18 +3864,21 @@ async function handleCheckout() {
           const returnUrl = `${window.location.origin}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
           console.log('[checkout] Return URL:', returnUrl);
           
-          // API Documentation requires customer ID, not order ID
-          // Endpoint: POST /api/ver3/services/generatelink/payforcustomeraccount
-          // Payload: { customer: <customerId>, paymentMethod: <paymentMethodId>, returnUrl: <returnUrl> }
-          if (!state.customerId) {
-            throw new Error('Customer ID is required to generate payment link');
+          // API Documentation: POST /api/payment/generate-link
+          // Payload: { orderId, paymentMethod, businessUnit, returnUrl }
+          if (!state.orderId) {
+            throw new Error('Order ID is required to generate payment link');
+          }
+          
+          if (!state.selectedBusinessUnit) {
+            throw new Error('Business unit is required to generate payment link');
           }
           
           const paymentData = await paymentAPI.generatePaymentLink(
-            state.customerId, // API requires customer ID, not order ID
-            state.paymentMethod,
-            returnUrl,
-            state.orderId // Pass orderId for return URL construction if needed
+            state.orderId, // Required: Order ID
+            state.paymentMethod, // Required: Payment method
+            state.selectedBusinessUnit, // Required: Business unit
+            returnUrl // Required: Return URL
           );
           
           // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
