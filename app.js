@@ -585,15 +585,21 @@ class AuthAPI {
       console.log('[Step 6] Login response:', data);
       
       // Store tokens if provided in response
-      if (data.accessToken && data.refreshToken) {
-        // Import token utilities (using dynamic import for app.js compatibility)
-        // Note: In a real implementation, you'd import at the top, but app.js may not support ES6 imports
-        // For now, we'll use a global function that we'll define
+      // Handle both direct tokens and nested in data object
+      const accessToken = data.accessToken || data.data?.accessToken;
+      const refreshToken = data.refreshToken || data.data?.refreshToken;
+      const expiresAt = data.expiresAt || data.data?.expiresAt;
+      
+      if (accessToken && refreshToken) {
         if (typeof window.saveTokens === 'function') {
-          window.saveTokens(data.accessToken, data.refreshToken, data.expiresAt);
+          window.saveTokens(accessToken, refreshToken, expiresAt);
+          console.log('[Step 6] ✅ Tokens saved successfully');
         } else {
           console.warn('[Step 6] saveTokens function not available - tokens not saved');
         }
+      } else {
+        console.warn('[Step 6] ⚠️ No tokens found in login response');
+        console.warn('[Step 6] Response structure:', Object.keys(data));
       }
       
       return data;
@@ -1386,18 +1392,35 @@ class PaymentAPI {
       console.log('[Step 9] Headers:', headers);
       console.log('[Step 9] Has Authorization header:', !!headers.Authorization);
       
-      // Step 9: Pass order ID, payment method, selected business unit, and return URL
+      // Step 9: Pass order ID, payment method ID, selected business unit, and return URL
       // API Documentation: POST /api/payment/generate-link
-      // Payload: { orderId, paymentMethod, businessUnit, returnUrl }
-      // Payment method can be string (e.g., "card") or numeric ID
+      // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
+      // API expects paymentMethodId (numeric ID), not paymentMethod (string)
+      // Map payment method string to ID: "card" -> 1, etc.
+      let paymentMethodId = paymentMethod;
+      if (typeof paymentMethod === 'string') {
+        // Map common payment method strings to IDs
+        const paymentMethodMap = {
+          'card': 1,
+          'creditcard': 1,
+          'credit_card': 1,
+          'debit': 2,
+          'mobilepay': 3,
+          'mobile_pay': 3,
+        };
+        paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 1; // Default to 1 if unknown
+        console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
+      }
+      
       const payload = {
         orderId: orderId, // Required: ID of the order
-        paymentMethod: paymentMethod, // Required: Payment method (string like "card" or numeric ID)
+        paymentMethodId: paymentMethodId, // Required: Payment method ID (numeric)
         businessUnit: businessUnit, // Required: Selected business unit
         returnUrl: returnUrl, // Required: Absolute URL to return to after payment
       };
       
       console.log('[Step 9] Payment method (raw):', paymentMethod);
+      console.log('[Step 9] Payment method ID (mapped):', paymentMethodId);
       
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
       console.log('[Step 9] Sending Generate Payment Link Card request...');
@@ -3788,7 +3811,18 @@ async function handleCheckout() {
           console.log('[checkout] No tokens from customer creation, logging in to get tokens...');
           try {
             const loginResponse = await authAPI.login(payload.customer.email, payload.customer.password);
-            console.log('[checkout] ✅ Login successful, tokens saved');
+            
+            // Save tokens from login response (handle nested data structure)
+            const loginAccessToken = loginResponse?.accessToken || loginResponse?.data?.accessToken;
+            const loginRefreshToken = loginResponse?.refreshToken || loginResponse?.data?.refreshToken;
+            const loginExpiresAt = loginResponse?.expiresAt || loginResponse?.data?.expiresAt;
+            
+            if (loginAccessToken && loginRefreshToken && typeof window.saveTokens === 'function') {
+              window.saveTokens(loginAccessToken, loginRefreshToken, loginExpiresAt);
+              console.log('[checkout] ✅ Login successful, tokens saved from login response');
+            } else {
+              console.warn('[checkout] ⚠️ Login succeeded but no tokens found in response');
+            }
           } catch (loginError) {
             console.warn('[checkout] ⚠️ Login after customer creation failed:', loginError);
             console.warn('[checkout] Payment link generation might fail without authentication token');
