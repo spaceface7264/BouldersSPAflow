@@ -4715,70 +4715,12 @@ function updatePaymentPageElements(paymentLink) {
     successMessage.textContent = 'Click the button below to proceed to secure payment. You will be redirected to our payment provider to complete your purchase.';
     successMessage.style.color = '#666';
     console.log('[Payment Page] ✅ Updated message');
-    console.log('[Payment Page] successMessage parent:', successMessage.parentElement);
     
-    // Also show the payment link URL as a clickable link below the message
-    // Remove existing payment link display if it exists
+    // Remove existing payment link display if it exists (user doesn't want to see it)
     const existingLinkDisplay = document.getElementById('payment-link-display');
     if (existingLinkDisplay) {
       existingLinkDisplay.remove();
-      console.log('[Payment Page] Removed existing payment link display');
-    }
-    
-    if (paymentLink) {
-      const paymentLinkDisplay = document.createElement('div');
-      paymentLinkDisplay.id = 'payment-link-display';
-      paymentLinkDisplay.style.cssText = 'margin-top: 1.5rem; padding: 1rem; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 0.875rem; max-width: 100%;';
-      
-      // Create label
-      const labelDiv = document.createElement('div');
-      labelDiv.style.cssText = 'margin-bottom: 0.75rem; color: #6b7280; font-weight: 500;';
-      labelDiv.textContent = 'Payment Link:';
-      paymentLinkDisplay.appendChild(labelDiv);
-      
-      // Create link element with click handler (same behavior as button)
-      const linkElement = document.createElement('a');
-      linkElement.href = '#';
-      linkElement.style.cssText = 'color: #3b82f6; word-break: break-all; text-decoration: underline; cursor: pointer; display: block; line-height: 1.5;';
-      linkElement.textContent = paymentLink;
-      linkElement.onclick = (e) => {
-        e.preventDefault();
-        console.log('[Payment Page] ===== USER CLICKED PAYMENT LINK =====');
-        console.log('[Payment Page] Redirecting to:', paymentLink);
-        
-        // Mark that user is proceeding to payment (but not completed yet)
-        state.paymentCompleted = false;
-        
-        showToast('Redirecting to secure payment...', 'info');
-        
-        // Redirect to payment provider (same as button)
-        setTimeout(() => {
-          try {
-            window.location.replace(paymentLink);
-          } catch (error) {
-            console.error('[Payment Page] Redirect failed:', error);
-            window.location.href = paymentLink;
-          }
-        }, 300);
-        return false;
-      };
-      
-      paymentLinkDisplay.appendChild(linkElement);
-      
-      // Insert after successMessage (in confirmation-header)
-      const confirmationHeader = successMessage.closest('.confirmation-header');
-      if (confirmationHeader) {
-        confirmationHeader.appendChild(paymentLinkDisplay);
-        console.log('[Payment Page] ✅ Added payment link display to confirmation-header');
-      } else if (successMessage.parentElement) {
-        // Fallback: insert after successMessage
-        successMessage.parentElement.insertBefore(paymentLinkDisplay, successMessage.nextSibling);
-        console.log('[Payment Page] ✅ Added payment link display after successMessage');
-      } else {
-        console.error('[Payment Page] ❌ Cannot find parent element to add payment link display');
-      }
-    } else {
-      console.warn('[Payment Page] ⚠️ No payment link provided to display');
+      console.log('[Payment Page] Removed payment link display');
     }
   } else {
     console.warn('[Payment Page] ⚠️ success-message element not found');
