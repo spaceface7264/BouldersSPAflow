@@ -1353,16 +1353,15 @@ class PaymentAPI {
       this.useProxy = false;
     }
     
-    // Correct endpoint from backend team: /api/ver3/services/generatelink/payment
-    // Base URL: https://boulders.brpsystems.com/apiserver
-    this.paymentEndpoint = '/api/ver3/services/generatelink/payment';
+    // Correct endpoint: /api/payment/generate-link
+    // Base URL: https://api-join.boulders.dk
+    // Documentation: https://documenter.getpostman.com/view/6552350/2sB3Wtsz3V#75d4fd2c-d336-43a3-a48f-5808f04290ad
+    this.paymentEndpoint = '/api/payment/generate-link';
   }
 
-  // Step 9: Generate payment link - POST /api/ver3/services/generatelink/payment
-  // Backend team confirmed: https://boulders.brpsystems.com/apiserver/api/ver3/services/generatelink/payment
-  // Payload: { order: <id>, paymentMethod: <id>, returnUrl: <url>, payerAlias?: {...} }
-  // IMPORTANT: Order MUST be preliminary (preliminary: true)
-  // Note: This endpoint is for single payments. For subscriptions, may need different handling.
+  // Step 9: Generate payment link - POST /api/payment/generate-link
+  // Endpoint: https://api-join.boulders.dk/api/payment/generate-link
+  // Documentation: https://documenter.getpostman.com/view/6552350/2sB3Wtsz3V#75d4fd2c-d336-43a3-a48f-5808f04290ad
   async generatePaymentLink(orderId, paymentMethod, businessUnit, returnUrl = null) {
     try {
       // Build return URL if not provided
@@ -1386,12 +1385,11 @@ class PaymentAPI {
       
       let url;
       if (this.useProxy) {
-        // For ver3 endpoints, use the apiserver base URL
-        // Path should be: /api/ver3/services/generatelink/payment
+        // Use standard API endpoint: /api/payment/generate-link
         url = `${this.baseUrl}?path=${this.paymentEndpoint}`;
       } else {
-        // Direct API call to apiserver
-        url = `https://boulders.brpsystems.com/apiserver${this.paymentEndpoint}`;
+        // Direct API call to api-join.boulders.dk
+        url = `https://api-join.boulders.dk${this.paymentEndpoint}`;
       }
       
       console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
@@ -1419,40 +1417,18 @@ class PaymentAPI {
       console.log('[Step 9] Headers:', headers);
       console.log('[Step 9] Has Authorization header:', !!headers.Authorization);
       
-      // Step 9: Payload structure from backend team example
-      // Payload: { order: <id>, paymentMethod: <id>, returnUrl: <url>, payerAlias?: {...} }
-      // Note: Uses "order" (not "orderId") and "paymentMethod" (not "paymentMethodId")
-      // IMPORTANT: Order MUST be preliminary (preliminary: true) - backend requirement
-      
-      // Map payment method string to numeric ID
-      let paymentMethodId = paymentMethod;
-      if (typeof paymentMethod === 'string') {
-        // Map common payment method strings to IDs
-        // Card payment is typically 1, but check with backend for exact IDs
-        const paymentMethodMap = {
-          'card': 1,
-          'creditcard': 1,
-          'credit_card': 1,
-          'debit': 2,
-          'mobilepay': 33, // Backend example shows 33 for MobilePay
-          'mobile_pay': 33,
-        };
-        paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 1; // Default to 1 if unknown
-        console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
-      }
-      
-      // Payload structure from backend team example
+      // Step 9: Payload structure according to Postman documentation
+      // Endpoint: POST /api/payment/generate-link
+      // Payload: { orderId, paymentMethod, businessUnit, returnUrl }
+      // Payment method can be string (e.g., "card") or numeric ID
       const payload = {
-        order: orderId, // Required: ID of the order (MUST be preliminary)
-        paymentMethod: paymentMethodId, // Required: Payment method ID (numeric)
+        orderId: orderId, // Required: ID of the order
+        paymentMethod: paymentMethod, // Required: Payment method (string like "card" or numeric ID)
+        businessUnit: businessUnit, // Required: Selected business unit
         returnUrl: returnUrl, // Required: Absolute URL to return to after payment
-        // payerAlias is optional - only needed for MobilePay
-        // payerAlias: { number: "...", countryCode: 45 }
       };
       
       console.log('[Step 9] Payment method (raw):', paymentMethod);
-      console.log('[Step 9] Payment method ID (mapped):', paymentMethodId);
-      console.log('[Step 9] ⚠️ IMPORTANT: Order must be preliminary (preliminary: true)');
       
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
       console.log('[Step 9] Sending Generate Payment Link Card request...');
