@@ -2214,10 +2214,16 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Log current URL to understand what's happening
+  console.log('[App Init] Current URL:', window.location.href);
+  console.log('[App Init] Current search params:', window.location.search);
+  
   // Check if we're returning from payment before initializing
   const urlParams = new URLSearchParams(window.location.search);
   const paymentReturn = urlParams.get('payment');
   let orderId = urlParams.get('orderId');
+  
+  console.log('[App Init] URL params - payment:', paymentReturn, 'orderId:', orderId);
   
   // Fix: Payment provider may append /confirmation to orderId
   // Extract just the numeric part (e.g., "817247/confirmation" -> "817247")
@@ -2236,11 +2242,16 @@ document.addEventListener('DOMContentLoaded', () => {
   
   if (paymentReturn === 'return' && orderId) {
     // We're returning from payment - show confirmation instead of resetting
+    console.log('[Payment Return] ⚠️ DETECTED PAYMENT RETURN ON PAGE LOAD');
+    console.log('[Payment Return] This means URL already has ?payment=return&orderId=' + orderId);
+    console.log('[Payment Return] User either: 1) Returned from payment provider, OR 2) Page loaded with return URL');
     console.log('[Payment Return] Detected payment return for order:', orderId);
     // Set order ID in state if available
     state.orderId = parseInt(orderId, 10);
     // Skip normal init and go straight to confirmation
     // We'll still call init but then immediately show confirmation
+  } else {
+    console.log('[App Init] Not a payment return - normal flow');
   }
   
   init();
