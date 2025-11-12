@@ -4684,12 +4684,38 @@ function updatePaymentPageElements(paymentLink) {
       paymentLinkDisplay = document.createElement('div');
       paymentLinkDisplay.id = 'payment-link-display';
       paymentLinkDisplay.style.cssText = 'margin-top: 1rem; padding: 1rem; background: #f3f4f6; border-radius: 8px; font-size: 0.875rem;';
-      paymentLinkDisplay.innerHTML = `
-        <div style="margin-bottom: 0.5rem; color: #6b7280;">Payment Link:</div>
-        <a href="${paymentLink}" target="_blank" style="color: #3b82f6; word-break: break-all; text-decoration: underline;">${paymentLink}</a>
-      `;
+      
+      // Create link element with click handler (same behavior as button)
+      const linkElement = document.createElement('a');
+      linkElement.href = '#';
+      linkElement.style.cssText = 'color: #3b82f6; word-break: break-all; text-decoration: underline; cursor: pointer;';
+      linkElement.textContent = paymentLink;
+      linkElement.onclick = (e) => {
+        e.preventDefault();
+        console.log('[Payment Page] ===== USER CLICKED PAYMENT LINK =====');
+        console.log('[Payment Page] Redirecting to:', paymentLink);
+        
+        // Mark that user is proceeding to payment (but not completed yet)
+        state.paymentCompleted = false;
+        
+        showToast('Redirecting to secure payment...', 'info');
+        
+        // Redirect to payment provider (same as button)
+        setTimeout(() => {
+          try {
+            window.location.replace(paymentLink);
+          } catch (error) {
+            console.error('[Payment Page] Redirect failed:', error);
+            window.location.href = paymentLink;
+          }
+        }, 300);
+        return false;
+      };
+      
+      paymentLinkDisplay.innerHTML = '<div style="margin-bottom: 0.5rem; color: #6b7280;">Payment Link:</div>';
+      paymentLinkDisplay.appendChild(linkElement);
       successMessage.parentElement.appendChild(paymentLinkDisplay);
-      console.log('[Payment Page] ✅ Added payment link display');
+      console.log('[Payment Page] ✅ Added payment link display with click handler');
     }
   } else {
     console.warn('[Payment Page] ⚠️ success-message element not found');
