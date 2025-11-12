@@ -1421,10 +1421,13 @@ class PaymentAPI {
       // Endpoint: POST /api/payment/generate-link
       // Payload: { orderId, paymentMethod, businessUnit, returnUrl }
       // Payment method can be string (e.g., "card") or numeric ID
+      // IMPORTANT: businessUnit must be a number (integer), not a string
+      const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) : businessUnit;
+      
       const payload = {
         orderId: orderId, // Required: ID of the order
         paymentMethod: paymentMethod, // Required: Payment method (string like "card" or numeric ID)
-        businessUnit: businessUnit, // Required: Selected business unit
+        businessUnit: businessUnitId, // Required: Selected business unit (must be number, not string)
         returnUrl: returnUrl, // Required: Absolute URL to return to after payment
       };
       
