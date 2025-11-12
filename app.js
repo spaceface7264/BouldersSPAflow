@@ -4091,20 +4091,36 @@ async function handleCheckout() {
     console.log('[checkout] state.paymentLink:', state.paymentLink);
     
     if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
-      // Show payment page with payment link button (don't auto-redirect)
-      console.log('[checkout] ✅ Valid payment link found, showing payment page...');
+      // Redirect directly to payment provider
+      console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
       console.log('[checkout] Payment link URL:', paymentLink);
       
-      // Store payment link in state for payment page
+      // Store payment link in state
       state.paymentLink = paymentLink;
       state.paymentLinkGenerated = true;
       
-      // Show payment page instead of auto-redirecting
-      showPaymentPage(paymentLink);
+      // Redirect immediately to payment provider
+      showToast('Redirecting to secure payment...', 'info');
       
-      // Reset loading state
-      state.checkoutInProgress = false;
-      setCheckoutLoadingState(false);
+      // Use replace instead of href to avoid adding to browser history
+      setTimeout(() => {
+        try {
+          console.log('[checkout] Executing window.location.replace with:', paymentLink);
+          window.location.replace(paymentLink);
+        } catch (error) {
+          console.error('[checkout] ❌ Redirect failed with replace:', error);
+          // Fallback to href if replace fails
+          try {
+            console.log('[checkout] Falling back to window.location.href');
+            window.location.href = paymentLink;
+          } catch (hrefError) {
+            console.error('[checkout] ❌ Redirect failed with href:', hrefError);
+            showToast('Failed to redirect to payment. Please contact support.', 'error');
+            state.checkoutInProgress = false;
+            setCheckoutLoadingState(false);
+          }
+        }
+      }, 500);
     } else {
       // No payment link or invalid URL
       console.error('[checkout] ❌ Payment link not available or invalid!');
