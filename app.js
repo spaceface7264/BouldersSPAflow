@@ -4620,6 +4620,131 @@ async function loadOrderForConfirmation(orderId) {
   }
 }
 
+function showPaymentPage(paymentLink) {
+  // Show a payment page with the payment link button
+  // User must click to proceed to payment
+  console.log('[Payment Page] ===== SHOWING PAYMENT PAGE =====');
+  console.log('[Payment Page] Payment link:', paymentLink);
+  console.log('[Payment Page] Current step:', state.currentStep);
+  console.log('[Payment Page] Total steps:', TOTAL_STEPS);
+  
+  // First, ensure we're on the confirmation step so elements exist
+  if (state.currentStep < TOTAL_STEPS) {
+    console.log('[Payment Page] Moving to final step to show payment page...');
+    state.currentStep = TOTAL_STEPS;
+    showStep(state.currentStep);
+    updateStepIndicator();
+    updateNavigationButtons();
+    // Wait a bit for DOM to update
+    setTimeout(() => {
+      updatePaymentPageElements(paymentLink);
+    }, 100);
+  } else {
+    showStep(TOTAL_STEPS);
+    updatePaymentPageElements(paymentLink);
+  }
+}
+
+function updatePaymentPageElements(paymentLink) {
+  console.log('[Payment Page] Updating payment page elements...');
+  
+  // Update confirmation page to show payment button instead of success
+  const successTitle = document.querySelector('.success-title');
+  const successMessage = document.querySelector('.success-message');
+  const successBadge = document.querySelector('.success-badge');
+  const confirmationLayout = document.querySelector('.confirmation-layout');
+  
+  console.log('[Payment Page] Elements found:', {
+    successTitle: !!successTitle,
+    successMessage: !!successMessage,
+    successBadge: !!successBadge,
+    confirmationLayout: !!confirmationLayout
+  });
+  
+  if (successTitle) {
+    successTitle.textContent = 'Ready to Pay';
+    successTitle.style.color = '#000';
+    console.log('[Payment Page] ✅ Updated title to "Ready to Pay"');
+  } else {
+    console.warn('[Payment Page] ⚠️ success-title element not found');
+  }
+  
+  if (successMessage) {
+    successMessage.textContent = 'Click the button below to proceed to secure payment. You will be redirected to our payment provider to complete your purchase.';
+    successMessage.style.color = '#666';
+    console.log('[Payment Page] ✅ Updated message');
+  } else {
+    console.warn('[Payment Page] ⚠️ success-message element not found');
+  }
+  
+  if (successBadge) {
+    // Show lock icon for secure payment
+    successBadge.innerHTML = `
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981;">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+    `;
+    console.log('[Payment Page] ✅ Updated badge to lock icon');
+  } else {
+    console.warn('[Payment Page] ⚠️ success-badge element not found');
+  }
+  
+  // Hide confirmation layout and show payment button
+  if (confirmationLayout) {
+    confirmationLayout.style.display = 'none';
+    console.log('[Payment Page] ✅ Hid confirmation layout');
+  } else {
+    console.warn('[Payment Page] ⚠️ confirmation-layout element not found');
+  }
+  
+  // Create or update payment button
+  let paymentButton = document.getElementById('proceed-to-payment-btn');
+  if (!paymentButton) {
+    paymentButton = document.createElement('button');
+    paymentButton.id = 'proceed-to-payment-btn';
+    paymentButton.className = 'checkout-btn';
+    paymentButton.style.cssText = 'max-width: 400px; margin: 2rem auto; display: block; padding: 1rem 2rem; font-size: 1.125rem;';
+    paymentButton.textContent = 'Proceed to Secure Payment';
+    
+    // Insert after success message or in confirmation header
+    const confirmationHeader = document.querySelector('.confirmation-header');
+    if (confirmationHeader) {
+      confirmationHeader.appendChild(paymentButton);
+      console.log('[Payment Page] ✅ Created and added payment button');
+    } else {
+      console.error('[Payment Page] ❌ confirmation-header not found, cannot add button');
+      // Fallback: try to add to step panel
+      const stepPanel = document.getElementById('step-5');
+      if (stepPanel) {
+        stepPanel.appendChild(paymentButton);
+        console.log('[Payment Page] ✅ Added payment button to step-5 as fallback');
+      }
+    }
+  } else {
+    console.log('[Payment Page] Payment button already exists, updating handler');
+  }
+  
+  // Update button click handler
+  paymentButton.onclick = () => {
+    console.log('[Payment Page] ===== USER CLICKED PROCEED TO PAYMENT =====');
+    console.log('[Payment Page] Redirecting to:', paymentLink);
+    showToast('Redirecting to secure payment...', 'info');
+    
+    // Redirect to payment provider
+    setTimeout(() => {
+      try {
+        window.location.replace(paymentLink);
+      } catch (error) {
+        console.error('[Payment Page] Redirect failed:', error);
+        window.location.href = paymentLink;
+      }
+    }, 300);
+  };
+  
+  console.log('[Payment Page] ✅ Payment page setup complete');
+}
+
 function showPaymentPendingMessage(order, orderId) {
   // Update the confirmation page to show payment pending instead of success
   const successTitle = document.querySelector('.success-title');
