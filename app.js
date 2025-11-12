@@ -4588,6 +4588,9 @@ async function loadOrderForConfirmation(orderId) {
     };
     console.log('[Payment Return] Diagnostic data stored in window.lastPaymentDiagnostics');
     
+    // Mark that we're returning from payment (user has completed payment flow)
+    state.paymentCompleted = true;
+    
     // Check if payment is actually confirmed before showing success page
     const isPaymentConfirmed = order.leftToPay?.amount === 0 || order.leftToPay === 0;
     const isOrderPaid = order.orderStatus?.name === 'Betalet' || order.orderStatus?.id === 2; // Assuming 2 is "Paid" status
@@ -4647,6 +4650,7 @@ function showPaymentPage(paymentLink) {
 
 function updatePaymentPageElements(paymentLink) {
   console.log('[Payment Page] Updating payment page elements...');
+  console.log('[Payment Page] Payment link to display:', paymentLink);
   
   // Update confirmation page to show payment button instead of success
   const successTitle = document.querySelector('.success-title');
@@ -4673,6 +4677,20 @@ function updatePaymentPageElements(paymentLink) {
     successMessage.textContent = 'Click the button below to proceed to secure payment. You will be redirected to our payment provider to complete your purchase.';
     successMessage.style.color = '#666';
     console.log('[Payment Page] ✅ Updated message');
+    
+    // Also show the payment link URL as a clickable link below the message
+    let paymentLinkDisplay = document.getElementById('payment-link-display');
+    if (!paymentLinkDisplay && paymentLink) {
+      paymentLinkDisplay = document.createElement('div');
+      paymentLinkDisplay.id = 'payment-link-display';
+      paymentLinkDisplay.style.cssText = 'margin-top: 1rem; padding: 1rem; background: #f3f4f6; border-radius: 8px; font-size: 0.875rem;';
+      paymentLinkDisplay.innerHTML = `
+        <div style="margin-bottom: 0.5rem; color: #6b7280;">Payment Link:</div>
+        <a href="${paymentLink}" target="_blank" style="color: #3b82f6; word-break: break-all; text-decoration: underline;">${paymentLink}</a>
+      `;
+      successMessage.parentElement.appendChild(paymentLinkDisplay);
+      console.log('[Payment Page] ✅ Added payment link display');
+    }
   } else {
     console.warn('[Payment Page] ⚠️ success-message element not found');
   }
@@ -4729,6 +4747,10 @@ function updatePaymentPageElements(paymentLink) {
   paymentButton.onclick = () => {
     console.log('[Payment Page] ===== USER CLICKED PROCEED TO PAYMENT =====');
     console.log('[Payment Page] Redirecting to:', paymentLink);
+    
+    // Mark that user is proceeding to payment (but not completed yet)
+    state.paymentCompleted = false;
+    
     showToast('Redirecting to secure payment...', 'info');
     
     // Redirect to payment provider
@@ -4741,6 +4763,11 @@ function updatePaymentPageElements(paymentLink) {
       }
     }, 300);
   };
+  
+  // Also make the button visible and ensure it's clickable
+  paymentButton.style.display = 'block';
+  paymentButton.style.visibility = 'visible';
+  paymentButton.disabled = false;
   
   console.log('[Payment Page] ✅ Payment page setup complete');
 }
@@ -5067,7 +5094,13 @@ function nextStep() {
   }
 
   if (state.currentStep === TOTAL_STEPS) {
-    renderConfirmationView();
+    // Only render confirmation view if we're not showing payment page
+    // Payment page is shown when paymentLinkGenerated is true but user hasn't clicked yet
+    if (!state.paymentLinkGenerated || state.paymentCompleted) {
+      renderConfirmationView();
+    }
+    // If paymentLinkGenerated is true and paymentCompleted is false, we're on payment page
+    // Don't render confirmation view - payment page is already shown
   }
 }
 
