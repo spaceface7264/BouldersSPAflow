@@ -4649,8 +4649,25 @@ function showPaymentPage(paymentLink) {
   // User must click to proceed to payment
   console.log('[Payment Page] ===== SHOWING PAYMENT PAGE =====');
   console.log('[Payment Page] Payment link:', paymentLink);
+  console.log('[Payment Page] Payment link type:', typeof paymentLink);
+  console.log('[Payment Page] Payment link valid?', paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://')));
   console.log('[Payment Page] Current step:', state.currentStep);
   console.log('[Payment Page] Total steps:', TOTAL_STEPS);
+  console.log('[Payment Page] State paymentLink:', state.paymentLink);
+  
+  // CRITICAL: If no payment link provided, try to get from state
+  if (!paymentLink && state.paymentLink) {
+    console.warn('[Payment Page] ⚠️ No payment link provided, using state.paymentLink');
+    paymentLink = state.paymentLink;
+  }
+  
+  // CRITICAL: If still no payment link, this is an error
+  if (!paymentLink) {
+    console.error('[Payment Page] ❌ CRITICAL ERROR: No payment link available!');
+    console.error('[Payment Page] Cannot show payment page without payment link');
+    showToast('Payment link not available. Please contact support.', 'error');
+    return;
+  }
   
   // First, ensure we're on the confirmation step so elements exist
   if (state.currentStep < TOTAL_STEPS) {
