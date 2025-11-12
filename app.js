@@ -4100,13 +4100,32 @@ async function handleCheckout() {
       state.paymentLinkGenerated = true;
       
       // Redirect immediately to payment provider
+      console.log('[checkout] ===== REDIRECTING TO PAYMENT PROVIDER =====');
+      console.log('[checkout] Payment link URL:', paymentLink);
+      console.log('[checkout] Current URL:', window.location.href);
+      console.log('[checkout] About to redirect in 100ms...');
+      
       showToast('Redirecting to secure payment...', 'info');
       
+      // Redirect immediately (reduced timeout for faster redirect)
       // Use replace instead of href to avoid adding to browser history
       setTimeout(() => {
+        console.log('[checkout] Executing redirect NOW...');
+        console.log('[checkout] Target URL:', paymentLink);
+        
+        // Verify payment link is still valid before redirecting
+        if (!paymentLink || (!paymentLink.startsWith('http://') && !paymentLink.startsWith('https://'))) {
+          console.error('[checkout] ❌ Payment link is invalid before redirect:', paymentLink);
+          showToast('Invalid payment link. Please contact support.', 'error');
+          state.checkoutInProgress = false;
+          setCheckoutLoadingState(false);
+          return;
+        }
+        
         try {
-          console.log('[checkout] Executing window.location.replace with:', paymentLink);
+          console.log('[checkout] Calling window.location.replace...');
           window.location.replace(paymentLink);
+          console.log('[checkout] ✅ window.location.replace called successfully');
         } catch (error) {
           console.error('[checkout] ❌ Redirect failed with replace:', error);
           // Fallback to href if replace fails
@@ -4120,7 +4139,7 @@ async function handleCheckout() {
             setCheckoutLoadingState(false);
           }
         }
-      }, 500);
+      }, 100); // Reduced from 500ms to 100ms for faster redirect
     } else {
       // No payment link or invalid URL
       console.error('[checkout] ❌ Payment link not available or invalid!');
