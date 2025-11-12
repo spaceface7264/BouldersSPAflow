@@ -1419,19 +1419,33 @@ class PaymentAPI {
       
       // Step 9: Payload structure according to Postman documentation
       // Endpoint: POST /api/payment/generate-link
-      // Payload: { orderId, paymentMethod, businessUnit, returnUrl }
-      // Payment method can be string (e.g., "card") or numeric ID
-      // IMPORTANT: businessUnit must be a number (integer), not a string
-      const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) : businessUnit;
+      // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
+      // API expects paymentMethodId (numeric ID), not paymentMethod (string)
+      // Map payment method string to numeric ID
+      let paymentMethodId = paymentMethod;
+      if (typeof paymentMethod === 'string') {
+        // Map common payment method strings to IDs
+        const paymentMethodMap = {
+          'card': 1,
+          'creditcard': 1,
+          'credit_card': 1,
+          'debit': 2,
+          'mobilepay': 3,
+          'mobile_pay': 3,
+        };
+        paymentMethodId = paymentMethodMap[paymentMethod.toLowerCase()] || 1; // Default to 1 if unknown
+        console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
+      }
       
       const payload = {
         orderId: orderId, // Required: ID of the order
-        paymentMethod: paymentMethod, // Required: Payment method (string like "card" or numeric ID)
-        businessUnit: businessUnitId, // Required: Selected business unit (must be number, not string)
+        paymentMethodId: paymentMethodId, // Required: Payment method ID (numeric)
+        businessUnit: businessUnit, // Required: Selected business unit
         returnUrl: returnUrl, // Required: Absolute URL to return to after payment
       };
       
       console.log('[Step 9] Payment method (raw):', paymentMethod);
+      console.log('[Step 9] Payment method ID (mapped):', paymentMethodId);
       
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
       console.log('[Step 9] Sending Generate Payment Link Card request...');
