@@ -4677,18 +4677,31 @@ function updatePaymentPageElements(paymentLink) {
     successMessage.textContent = 'Click the button below to proceed to secure payment. You will be redirected to our payment provider to complete your purchase.';
     successMessage.style.color = '#666';
     console.log('[Payment Page] ✅ Updated message');
+    console.log('[Payment Page] successMessage parent:', successMessage.parentElement);
     
     // Also show the payment link URL as a clickable link below the message
-    let paymentLinkDisplay = document.getElementById('payment-link-display');
-    if (!paymentLinkDisplay && paymentLink) {
-      paymentLinkDisplay = document.createElement('div');
+    // Remove existing payment link display if it exists
+    const existingLinkDisplay = document.getElementById('payment-link-display');
+    if (existingLinkDisplay) {
+      existingLinkDisplay.remove();
+      console.log('[Payment Page] Removed existing payment link display');
+    }
+    
+    if (paymentLink) {
+      const paymentLinkDisplay = document.createElement('div');
       paymentLinkDisplay.id = 'payment-link-display';
-      paymentLinkDisplay.style.cssText = 'margin-top: 1rem; padding: 1rem; background: #f3f4f6; border-radius: 8px; font-size: 0.875rem;';
+      paymentLinkDisplay.style.cssText = 'margin-top: 1.5rem; padding: 1rem; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 0.875rem; max-width: 100%;';
+      
+      // Create label
+      const labelDiv = document.createElement('div');
+      labelDiv.style.cssText = 'margin-bottom: 0.75rem; color: #6b7280; font-weight: 500;';
+      labelDiv.textContent = 'Payment Link:';
+      paymentLinkDisplay.appendChild(labelDiv);
       
       // Create link element with click handler (same behavior as button)
       const linkElement = document.createElement('a');
       linkElement.href = '#';
-      linkElement.style.cssText = 'color: #3b82f6; word-break: break-all; text-decoration: underline; cursor: pointer;';
+      linkElement.style.cssText = 'color: #3b82f6; word-break: break-all; text-decoration: underline; cursor: pointer; display: block; line-height: 1.5;';
       linkElement.textContent = paymentLink;
       linkElement.onclick = (e) => {
         e.preventDefault();
@@ -4712,10 +4725,22 @@ function updatePaymentPageElements(paymentLink) {
         return false;
       };
       
-      paymentLinkDisplay.innerHTML = '<div style="margin-bottom: 0.5rem; color: #6b7280;">Payment Link:</div>';
       paymentLinkDisplay.appendChild(linkElement);
-      successMessage.parentElement.appendChild(paymentLinkDisplay);
-      console.log('[Payment Page] ✅ Added payment link display with click handler');
+      
+      // Insert after successMessage (in confirmation-header)
+      const confirmationHeader = successMessage.closest('.confirmation-header');
+      if (confirmationHeader) {
+        confirmationHeader.appendChild(paymentLinkDisplay);
+        console.log('[Payment Page] ✅ Added payment link display to confirmation-header');
+      } else if (successMessage.parentElement) {
+        // Fallback: insert after successMessage
+        successMessage.parentElement.insertBefore(paymentLinkDisplay, successMessage.nextSibling);
+        console.log('[Payment Page] ✅ Added payment link display after successMessage');
+      } else {
+        console.error('[Payment Page] ❌ Cannot find parent element to add payment link display');
+      }
+    } else {
+      console.warn('[Payment Page] ⚠️ No payment link provided to display');
     }
   } else {
     console.warn('[Payment Page] ⚠️ success-message element not found');
@@ -4863,6 +4888,12 @@ function showPaymentPendingMessage(order, orderId) {
 }
 
 function renderConfirmationView() {
+  // Don't render if we're showing payment page (payment link generated but not completed)
+  if (state.paymentLinkGenerated && !state.paymentCompleted) {
+    console.log('[Confirmation] Skipping renderConfirmationView - payment page is active');
+    return;
+  }
+  
   if (!state.order) {
     console.warn('[Confirmation] No order data available to render');
     return;
