@@ -1437,12 +1437,22 @@ class PaymentAPI {
         console.log('[Step 9] Mapped payment method:', paymentMethod, '->', paymentMethodId);
       }
       
+      // Ensure businessUnit is a number (API might require numeric type)
+      const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) : businessUnit;
+      
       const payload = {
-        orderId: orderId, // Required: ID of the order
-        paymentMethodId: paymentMethodId, // Required: Payment method ID (numeric)
-        businessUnit: businessUnit, // Required: Selected business unit
-        returnUrl: returnUrl, // Required: Absolute URL to return to after payment
+        orderId: orderId, // Required: ID of the order (numeric)
+        paymentMethodId: paymentMethodId, // Required: Payment method ID (numeric: 1=card, 2=debit, 3=mobilepay)
+        businessUnit: businessUnitId, // Required: Selected business unit (numeric)
+        returnUrl: returnUrl, // Required: Absolute URL to return to after payment (string)
       };
+      
+      console.log('[Step 9] Payload field types:', {
+        orderId: typeof payload.orderId,
+        paymentMethodId: typeof payload.paymentMethodId,
+        businessUnit: typeof payload.businessUnit,
+        returnUrl: typeof payload.returnUrl
+      });
       
       console.log('[Step 9] Payment method (raw):', paymentMethod);
       console.log('[Step 9] Payment method ID (mapped):', paymentMethodId);
