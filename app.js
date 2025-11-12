@@ -3979,47 +3979,58 @@ async function handleCheckout() {
             returnUrl // Required: Return URL
           );
           
-          // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
+          // generatePaymentLink already extracts and returns paymentLink as paymentLink and url properties
+          // Use those directly - they're guaranteed to be set if the function succeeded
+          paymentLink = paymentData.paymentLink || paymentData.url;
+          
           // Log full response for debugging
           console.log('[checkout] Full payment link API response:', JSON.stringify(paymentData, null, 2));
+          console.log('[checkout] Payment link from response:', paymentLink);
           
-          paymentLink = paymentData?.data?.paymentLink || 
-                        paymentData?.data?.link || 
-                        paymentData?.data?.url ||
-                        paymentData?.paymentLink || 
-                        paymentData?.link || 
-                        paymentData?.url;
-          
-          // Additional checks for nested structures
-          if (!paymentLink && paymentData?.data) {
-            // Try to find any URL-like field in the data object
-            const dataKeys = Object.keys(paymentData.data);
-            console.log('[checkout] Available keys in paymentData.data:', dataKeys);
-            for (const key of dataKeys) {
-              const value = paymentData.data[key];
-              if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
-                paymentLink = value;
-                console.log('[checkout] Found URL in paymentData.data.' + key + ':', paymentLink);
-                break;
+          if (!paymentLink) {
+            // Fallback: try to extract from response structure
+            console.warn('[checkout] ⚠️ Payment link not in expected format, trying fallback extraction...');
+            paymentLink = paymentData?.data?.paymentLink || 
+                          paymentData?.data?.link || 
+                          paymentData?.data?.url ||
+                          paymentData?.paymentLink || 
+                          paymentData?.link || 
+                          paymentData?.url;
+            
+            // Additional checks for nested structures
+            if (!paymentLink && paymentData?.data) {
+              // Try to find any URL-like field in the data object
+              const dataKeys = Object.keys(paymentData.data);
+              console.log('[checkout] Available keys in paymentData.data:', dataKeys);
+              for (const key of dataKeys) {
+                const value = paymentData.data[key];
+                if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                  paymentLink = value;
+                  console.log('[checkout] Found URL in paymentData.data.' + key + ':', paymentLink);
+                  break;
+                }
               }
             }
+          }
+          
+          if (!paymentLink) {
+            console.error('[checkout] ❌ CRITICAL: Payment link is null/undefined after all extraction attempts!');
+            console.error('[checkout] Payment API response structure:', {
+              hasData: !!paymentData?.data,
+              dataKeys: paymentData?.data ? Object.keys(paymentData.data) : [],
+              topLevelKeys: Object.keys(paymentData || {}),
+              paymentLink: paymentData?.paymentLink,
+              url: paymentData?.url,
+            });
+            throw new Error('Payment link not found in API response');
           }
           
           state.paymentLink = paymentLink;
           state.paymentLinkGenerated = true;
           
-          console.log('[checkout] Payment link extracted:', paymentLink);
+          console.log('[checkout] ✅ Payment link extracted successfully:', paymentLink);
           console.log('[checkout] Payment link type:', typeof paymentLink);
           console.log('[checkout] Payment link is valid URL:', paymentLink ? (paymentLink.startsWith('http://') || paymentLink.startsWith('https://')) : 'null/undefined');
-          
-          if (!paymentLink) {
-            console.error('[checkout] ⚠️ Payment link is null/undefined!');
-            console.error('[checkout] Payment API response structure:', {
-              hasData: !!paymentData?.data,
-              dataKeys: paymentData?.data ? Object.keys(paymentData.data) : [],
-              topLevelKeys: Object.keys(paymentData || {}),
-            });
-          }
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
           throw new Error('Failed to add membership to order or generate payment link');
