@@ -711,8 +711,9 @@ class AuthAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Step 6] Token refresh error (${response.status}):`, errorText);
-        // If refresh fails, clear tokens and return to auth step
-        if (typeof window.clearTokens === 'function') {
+        const isRateLimit = response.status === 429;
+        // If refresh fails for other reasons, clear tokens and return to auth step
+        if (!isRateLimit && typeof window.clearTokens === 'function') {
           window.clearTokens();
         }
         throw new Error(`Token refresh failed: ${response.status} - ${errorText}`);
@@ -1175,6 +1176,13 @@ class OrderAPI {
       
       const data = await response.json();
       console.log('[Step 7] Create order response:', data);
+
+      const createdOrderId = data?.id ?? data?.orderId ?? data?.data?.id ?? data?.data?.orderId;
+      if (createdOrderId) {
+        console.log('[Step 7] Created order ID:', createdOrderId);
+      } else {
+        console.warn('[Step 7] Create order response did not include an order ID field');
+      }
       return data;
     } catch (error) {
       console.error('[Step 7] Create order error:', error);
@@ -1226,9 +1234,14 @@ class OrderAPI {
         throw new Error(`Missing or invalid subscription product ID: ${productId}`);
       }
       
+      const subscriberId = state.customerId ? Number(state.customerId) : null;
+      const birthDate = getSubscriberBirthDate();
+      
       const payload = {
         subscriptionProduct: subscriptionProductId,
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
+        ...(subscriberId ? { subscriber: subscriberId } : {}),
+        ...(birthDate ? { birthDate } : {}),
       };
       
       console.log('[Step 7] Adding subscription item - productId:', productId);
@@ -1545,11 +1558,14 @@ class PaymentAPI {
       
       const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) || businessUnit : businessUnit;
 
-      const resolvedReceiptEmail = receiptEmail
+      const resolvedReceiptEmailRaw = receiptEmail
         || state?.authenticatedEmail
         || state?.forms?.customer?.email
         || getTokenMetadata()?.email
         || null;
+      const resolvedReceiptEmail = resolvedReceiptEmailRaw
+        ? stripEmailPlusTag(resolvedReceiptEmailRaw)
+        : null;
 
       const payload = {
         orderId,
@@ -1615,6 +1631,52 @@ class PaymentAPI {
   }
 }
 
+function stripEmailPlusTag(email) {
+  if (typeof email !== 'string') {
+    return email;
+  }
+  
+  const trimmed = email.trim();
+  const [localPart, domain] = trimmed.split('@');
+  if (!localPart || !domain) {
+    return trimmed;
+  }
+  
+  const plusIndex = localPart.indexOf('+');
+  if (plusIndex === -1) {
+    return trimmed;
+  }
+  
+  const cleanedLocal = localPart.substring(0, plusIndex);
+  const sanitized = `${cleanedLocal}@${domain}`;
+  if (sanitized !== trimmed) {
+    console.log('[Step 9] Receipt email sanitized (plus tag removed):', sanitized);
+  }
+  return sanitized;
+}
+
+function getSubscriberBirthDate() {
+  try {
+    const dateField = document.getElementById('dateOfBirth');
+    if (!dateField || !dateField.value) {
+      return null;
+    }
+    const value = dateField.value.trim();
+    if (!value) {
+      return null;
+    }
+    // Ensure format YYYY-MM-DD
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    return value;
+  } catch (error) {
+    console.warn('[checkout] Could not read birth date field:', error);
+    return null;
+  }
+}
+
 // Initialize API instances
 const businessUnitsAPI = new BusinessUnitsAPI();
 const referenceDataAPI = new ReferenceDataAPI();
@@ -1630,6 +1692,13 @@ async function validateTokensOnLoad() {
   
   if (!accessToken) {
     return; // No tokens to validate
+  }
+  
+  const now = Date.now();
+  if (now < tokenValidationCooldownUntil) {
+    const secondsLeft = Math.ceil((tokenValidationCooldownUntil - now) / 1000);
+    console.log(`[Step 6] Skipping token validation (cooldown ${secondsLeft}s remaining)`);
+    return;
   }
   
   // Check if token is expired
@@ -1659,6 +1728,13 @@ async function validateTokensOnLoad() {
     await authAPI.validateToken();
     console.log('[Step 6] Token validated successfully');
   } catch (error) {
+    const isRateLimit = isRateLimitError(error);
+    if (isRateLimit) {
+      const retryMs = getRetryDelayFromError(error);
+      tokenValidationCooldownUntil = Date.now() + retryMs;
+      console.warn(`[Step 6] Token validation rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
+      return;
+    }
     console.error('[Step 6] Token validation failed:', error);
     // If validation fails, try refresh if refresh token exists
     if (refreshToken) {
@@ -1666,6 +1742,13 @@ async function validateTokensOnLoad() {
         await authAPI.refreshToken();
         console.log('[Step 6] Token refreshed after validation failure');
       } catch (refreshError) {
+        const refreshRateLimited = isRateLimitError(refreshError);
+        if (refreshRateLimited) {
+          const retryMs = getRetryDelayFromError(refreshError);
+          tokenValidationCooldownUntil = Date.now() + retryMs;
+          console.warn(`[Step 6] Token refresh rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
+          return;
+        }
         console.error('[Step 6] Token refresh failed, clearing session:', refreshError);
         window.clearTokens();
       }
@@ -2007,6 +2090,7 @@ const state = {
     cartTotal: 0,
     membershipMonthly: 0,
   },
+  cartItems: [],
   billingPeriod: '',
   forms: {},
   order: null,
@@ -2029,7 +2113,12 @@ const state = {
   // Step 4: Reference data cache
   referenceData: {}, // Cached reference/lookup data (countries, regions, currencies, etc.)
   referenceDataLoaded: false, // Flag to track if reference data has been loaded
+  subscriptionAttachedOrderId: null, // Tracks which order already has the membership attached
 };
+
+let orderCreationPromise = null;
+let subscriptionAttachPromise = null;
+let tokenValidationCooldownUntil = 0;
 
 function isUserAuthenticated() {
   return typeof window.getAccessToken === 'function' && Boolean(window.getAccessToken());
@@ -2056,6 +2145,7 @@ function syncAuthenticatedCustomerState(username = null, email = null) {
   }
 
   refreshLoginUI();
+  autoEnsureOrderIfReady('auth-state-sync');
 }
 
 const DOM = {};
@@ -2352,6 +2442,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const paymentReturn = urlParams.get('payment');
   let orderId = urlParams.get('orderId');
+  let isPaymentReturnFlow = false;
   
   // Fix: Payment provider may append /confirmation to orderId
   // Extract just the numeric part (e.g., "817247/confirmation" -> "817247")
@@ -2365,7 +2456,12 @@ document.addEventListener('DOMContentLoaded', () => {
       orderId = null;
     } else {
       orderId = numericOrderId.toString();
+      isPaymentReturnFlow = paymentReturn === 'return' && !!orderId;
     }
+  }
+  
+  if (!isPaymentReturnFlow) {
+    clearStoredOrderData('page-refresh');
   }
   
   if (paymentReturn === 'return' && orderId) {
@@ -2566,6 +2662,12 @@ async function handleLoginSubmit(event) {
     showToast(`Logged in as ${username}.`, 'success');
     state.authenticatedEmail = email;
     syncAuthenticatedCustomerState(username, email);
+    try {
+      await ensureOrderCreated('login');
+      await ensureSubscriptionAttached('login');
+    } catch (orderError) {
+      console.warn('[login] Auto order creation after login failed:', orderError);
+    }
     DOM.loginForm?.reset();
   } catch (error) {
     console.error('[login] Login failed:', error);
@@ -3475,6 +3577,7 @@ function handleGlobalInput(event) {
 
 function selectMembershipPlan(planId) {
   state.membershipPlanId = planId;
+  state.subscriptionAttachedOrderId = null;
   const selectedPlan = findMembershipPlan(planId);
 
   if (DOM.membershipPlans) {
@@ -3506,6 +3609,7 @@ function selectMembershipPlan(planId) {
     setTimeout(() => nextStep(), 300);
   }
   showToast(`${selectedPlan?.name ?? 'Membership'} selected.`, 'success');
+  autoEnsureOrderIfReady('membership-select');
 }
 
 function toggleAddon(addonId, checkCircle) {
@@ -3984,6 +4088,164 @@ function renderCartTotal() {
   }
 }
 
+function persistOrderSnapshot(orderId) {
+  if (!orderId) return;
+  try {
+    sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
+      orderId,
+      membershipPlanId: state.membershipPlanId,
+      cartItems: state.cartItems || [],
+      totals: state.totals,
+      selectedBusinessUnit: state.selectedBusinessUnit,
+    }));
+  } catch (e) {
+    console.warn('[checkout] Could not save order to sessionStorage:', e);
+  }
+}
+
+function clearStoredOrderData(reason = 'manual') {
+  console.log(`[checkout] Clearing stored order data (${reason})`);
+  state.order = null;
+  state.orderId = null;
+  state.subscriptionAttachedOrderId = null;
+  state.paymentLink = null;
+  state.paymentLinkGenerated = false;
+  state.checkoutInProgress = false;
+  state.cartItems = [];
+  state.totals = {
+    cartTotal: 0,
+    membershipMonthly: 0,
+  };
+
+  try {
+    sessionStorage.removeItem('boulders_checkout_order');
+  } catch (error) {
+    console.warn('[checkout] Could not clear order session data:', error);
+  }
+}
+
+async function ensureOrderCreated(context = 'auto') {
+  if (state.orderId) {
+    console.log(`[checkout] Reusing existing order ${state.orderId} (${context})`);
+    persistOrderSnapshot(state.orderId);
+    return state.orderId;
+  }
+
+  if (orderCreationPromise) {
+    console.log(`[checkout] Awaiting existing order creation (${context})`);
+    return orderCreationPromise;
+  }
+
+  if (!state.customerId) {
+    console.warn(`[checkout] Cannot create order (${context}) - customerId missing`);
+    return null;
+  }
+
+  if (!state.selectedBusinessUnit) {
+    console.warn(`[checkout] Cannot create order (${context}) - business unit missing`);
+    return null;
+  }
+
+  const orderData = {
+    customer: Number(state.customerId),
+    businessUnit: state.selectedBusinessUnit,
+  };
+
+  orderCreationPromise = (async () => {
+    console.log(`[checkout] Creating order (context: ${context})...`);
+    const order = await orderAPI.createOrder(orderData);
+    state.orderId = order.id || order.orderId;
+    state.subscriptionAttachedOrderId = null;
+    persistOrderSnapshot(state.orderId);
+    console.log(`[checkout] Order ready: ${state.orderId} (${context})`);
+    return state.orderId;
+  })();
+
+  try {
+    return await orderCreationPromise;
+  } finally {
+    orderCreationPromise = null;
+  }
+}
+
+async function ensureSubscriptionAttached(context = 'auto') {
+  if (!state.membershipPlanId) {
+    console.warn(`[checkout] Cannot attach subscription (${context}) - no membership selected`);
+    return null;
+  }
+
+  const orderId = await ensureOrderCreated(`${context}-subscription`);
+  if (!orderId) {
+    console.warn(`[checkout] Cannot attach subscription (${context}) - order missing`);
+    return null;
+  }
+
+  if (state.subscriptionAttachedOrderId === orderId) {
+    console.log(`[checkout] Subscription already attached to order ${orderId} (${context})`);
+    return orderId;
+  }
+
+  if (subscriptionAttachPromise) {
+    console.log(`[checkout] Awaiting existing subscription attach (${context})`);
+    return subscriptionAttachPromise;
+  }
+
+  subscriptionAttachPromise = (async () => {
+    console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
+    await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+    state.subscriptionAttachedOrderId = orderId;
+    persistOrderSnapshot(orderId);
+    console.log(`[checkout] Membership attached to order ${orderId} (${context})`);
+    return orderId;
+  })();
+
+  try {
+    return await subscriptionAttachPromise;
+  } catch (error) {
+    console.error(`[checkout] Failed to attach subscription (${context}):`, error);
+    throw error;
+  } finally {
+    subscriptionAttachPromise = null;
+  }
+}
+
+async function autoEnsureOrderIfReady(context = 'auto') {
+  if (!isUserAuthenticated()) {
+    return;
+  }
+  if (!state.membershipPlanId) {
+    return;
+  }
+  if (!state.selectedBusinessUnit) {
+    return;
+  }
+  try {
+    await ensureOrderCreated(`${context}-order`);
+    await ensureSubscriptionAttached(`${context}-subscription`);
+  } catch (error) {
+    console.warn(`[checkout] Auto ensure order failed (${context}):`, error);
+  }
+}
+
+function isRateLimitError(error) {
+  if (!error) return false;
+  if (error.status === 429) return true;
+  const message = typeof error.message === 'string' ? error.message : '';
+  return message.includes('429') || message.toLowerCase().includes('too many requests');
+}
+
+function getRetryDelayFromError(error, defaultMs = 900000) {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  const match = message.match(/"retryAfter":\s*(\d+)/i);
+  if (match) {
+    const seconds = parseInt(match[1], 10);
+    if (!isNaN(seconds)) {
+      return Math.max(seconds * 1000, 1000);
+    }
+  }
+  return defaultMs;
+}
+
 async function handleCheckout() {
   // Prevent multiple simultaneous checkout attempts
   if (state.checkoutInProgress) {
@@ -4156,6 +4418,12 @@ async function handleCheckout() {
         }
         
         console.log('[checkout] Customer created:', customerId);
+        try {
+          await ensureOrderCreated('profile-create');
+          await ensureSubscriptionAttached('profile-create');
+        } catch (orderError) {
+          console.warn('[checkout] Could not auto-attach membership after profile creation:', orderError);
+        }
       } catch (error) {
         console.error('[checkout] Customer creation failed:', error);
         showToast(getErrorMessage(error, 'Customer creation'), 'error');
@@ -4168,34 +4436,18 @@ async function handleCheckout() {
       console.log('[checkout] User is authenticated');
     }
 
-    // Step 2: Create order
-    let order = null;
+    // Step 2: Ensure order exists (create if needed)
     try {
-      console.log('[checkout] Creating order...');
-      const orderData = {
-        customerId: customerId,
-        businessUnit: state.selectedBusinessUnit,
-      };
-      
-      order = await orderAPI.createOrder(orderData);
-      state.orderId = order.id || order.orderId;
-      // Store order and cart data in sessionStorage for payment return
-      try {
-        sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
-          orderId: state.orderId,
-          membershipPlanId: state.membershipPlanId,
-          cartItems: state.cartItems || [],
-          totals: state.totals,
-          selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
-        }));
-      } catch (e) {
-        console.warn('[checkout] Could not save order to sessionStorage:', e);
+      console.log('[checkout] Ensuring order exists before adding items...');
+      const ensuredOrderId = await ensureOrderCreated('checkout-flow');
+      if (!ensuredOrderId) {
+        throw new Error('Order ID missing after ensureOrderCreated');
       }
-      console.log('[checkout] Order created:', state.orderId);
     } catch (error) {
       console.error('[checkout] Order creation failed:', error);
       showToast(getErrorMessage(error, 'Order creation'), 'error');
       setCheckoutLoadingState(false);
+      state.checkoutInProgress = false;
       return;
     }
 
@@ -4207,10 +4459,10 @@ async function handleCheckout() {
       console.log('[checkout] Adding items to order...');
       
       // Add membership/subscription FIRST
-      if (state.membershipPlanId) {
-        try {
-          await orderAPI.addSubscriptionItem(state.orderId, state.membershipPlanId);
-          console.log('[checkout] Membership added to order');
+	      if (state.membershipPlanId) {
+	        try {
+	          await ensureSubscriptionAttached('checkout-flow');
+	          console.log('[checkout] Membership ensured on order');
           
           // CRITICAL: Generate Payment Link Card immediately after subscription is added
           // Backend requirement: "Generate Payment Link Card" request must be made when subscription is added to cart
@@ -4333,7 +4585,8 @@ async function handleCheckout() {
     }
 
     // Step 5: Update order summary with real data
-    state.order = buildOrderSummary(payload, order, customer);
+    const summaryOrder = state.orderId ? { id: state.orderId, orderId: state.orderId } : null;
+    state.order = buildOrderSummary(payload, summaryOrder, customer);
     
     // Step 6: Redirect to payment or show confirmation
     console.log('[checkout] ===== PAYMENT REDIRECT CHECK =====');
