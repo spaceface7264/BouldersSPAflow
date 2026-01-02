@@ -767,7 +767,7 @@ class AuthAPI {
   }
 
   // Step 6: Password reset - Offer forgotten-password flow
-  async resetPassword(email) {
+  async resetPassword(email, appId = 'boulders-web') {
     try {
       let url;
       if (this.useProxy) {
@@ -783,10 +783,18 @@ class AuthAPI {
         'Content-Type': 'application/json',
       };
       
+      // API requires appId field - using default 'boulders-web' if not provided
+      const payload = {
+        email,
+        appId: appId || 'boulders-web'
+      };
+      
+      console.log('[Step 6] Password reset payload:', payload);
+      
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ email }),
+        body: JSON.stringify(payload),
       });
       
       if (!response.ok) {
