@@ -372,10 +372,36 @@
                                             <div class="form-group">
                                                 <label for="loginPassword">Password*</label>
                                                 <input type="password" id="loginPassword" name="loginPassword" placeholder="Enter your password">
+                                                <a href="#" class="forgot-password-link" data-action="forgot-password">Forgot password?</a>
                                         </div>
                                                 
                                             <button type="submit" class="login-btn">LOG IN</button>
                                         </form>
+                                        
+                                        <!-- Forgot Password Modal -->
+                                        <div class="forgot-password-modal" id="forgotPasswordModal" style="display: none;">
+                                            <div class="forgot-password-modal-content">
+                                                <h3 class="info-section-title">RESET PASSWORD</h3>
+                                                <p class="forgot-password-description">Enter your email address and we'll send you instructions to reset your password.</p>
+                                                
+                                                <form class="forgot-password-form" id="forgotPasswordForm">
+                                                    <div class="form-group">
+                                                        <label for="forgotPasswordEmail">E-mail*</label>
+                                                        <input type="email" id="forgotPasswordEmail" name="forgotPasswordEmail" placeholder="Enter your email" required>
+                                                    </div>
+                                                    
+                                                    <div class="forgot-password-actions">
+                                                        <button type="button" class="forgot-password-cancel-btn" data-action="close-forgot-password">Cancel</button>
+                                                        <button type="submit" class="login-btn">SEND RESET LINK</button>
+                                                    </div>
+                                                </form>
+                                                
+                                                <div class="forgot-password-success" id="forgotPasswordSuccess" style="display: none;">
+                                                    <p class="forgot-password-success-message">Password reset instructions have been sent to your email.</p>
+                                                    <button type="button" class="login-btn" data-action="close-forgot-password">Close</button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

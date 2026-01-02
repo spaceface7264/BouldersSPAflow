@@ -2583,6 +2583,11 @@ function cacheDom() {
   DOM.loginStatus = document.querySelector('[data-login-status]');
   DOM.loginStatusEmail = document.querySelector('[data-auth-email]');
   DOM.loginFormContainer = document.querySelector('[data-login-form-container]');
+  DOM.forgotPasswordLink = document.querySelector('[data-action="forgot-password"]');
+  DOM.forgotPasswordModal = document.getElementById('forgotPasswordModal');
+  DOM.forgotPasswordForm = document.getElementById('forgotPasswordForm');
+  DOM.forgotPasswordEmail = document.getElementById('forgotPasswordEmail');
+  DOM.forgotPasswordSuccess = document.getElementById('forgotPasswordSuccess');
   DOM.confirmationItems = document.querySelector('[data-component="confirmation-items"]');
   DOM.confirmationFields = {
     orderNumber: document.querySelector('[data-summary-field="order-number"]'),
@@ -2658,6 +2663,42 @@ function setupEventListeners() {
   if (DOM.loginForm) {
     DOM.loginForm.addEventListener('submit', handleLoginSubmit);
   }
+  
+  // Forgot password handlers
+  if (DOM.forgotPasswordLink) {
+    DOM.forgotPasswordLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      openForgotPasswordModal();
+    });
+  }
+  
+  // Close forgot password modal handlers
+  document.addEventListener('click', (e) => {
+    if (e.target.dataset.action === 'close-forgot-password') {
+      closeForgotPasswordModal();
+    }
+  });
+  
+  // Close modal when clicking outside
+  if (DOM.forgotPasswordModal) {
+    DOM.forgotPasswordModal.addEventListener('click', (e) => {
+      if (e.target === DOM.forgotPasswordModal) {
+        closeForgotPasswordModal();
+      }
+    });
+  }
+  
+  // Close modal on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
+      closeForgotPasswordModal();
+    }
+  });
+  
+  // Forgot password form submission
+  if (DOM.forgotPasswordForm) {
+    DOM.forgotPasswordForm.addEventListener('submit', handleForgotPasswordSubmit);
+  }
 }
 
 function setLoginLoadingState(isLoading) {
@@ -2711,6 +2752,92 @@ async function handleLoginSubmit(event) {
   } finally {
     state.loginInProgress = false;
     setLoginLoadingState(false);
+  }
+}
+
+function openForgotPasswordModal() {
+  if (!DOM.forgotPasswordModal) return;
+  
+  // Pre-fill email if user has entered it in login form
+  if (DOM.loginEmail?.value) {
+    DOM.forgotPasswordEmail.value = DOM.loginEmail.value;
+  }
+  
+  DOM.forgotPasswordModal.style.display = 'flex';
+  DOM.forgotPasswordForm.style.display = 'block';
+  DOM.forgotPasswordSuccess.style.display = 'none';
+  document.body.classList.add('modal-open');
+  
+  // Focus on email input
+  setTimeout(() => {
+    DOM.forgotPasswordEmail?.focus();
+  }, 100);
+}
+
+function closeForgotPasswordModal() {
+  if (!DOM.forgotPasswordModal) return;
+  
+  DOM.forgotPasswordModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
+  
+  // Reset form
+  if (DOM.forgotPasswordForm) {
+    DOM.forgotPasswordForm.reset();
+  }
+}
+
+async function handleForgotPasswordSubmit(event) {
+  event.preventDefault();
+  
+  if (!DOM.forgotPasswordEmail) return;
+  
+  const email = DOM.forgotPasswordEmail.value.trim();
+  
+  if (!email) {
+    showToast('Please enter your email address.', 'error');
+    DOM.forgotPasswordEmail.closest('.form-group')?.classList.add('error');
+    return;
+  }
+  
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    showToast('Please enter a valid email address.', 'error');
+    DOM.forgotPasswordEmail.closest('.form-group')?.classList.add('error');
+    return;
+  }
+  
+  // Remove error state
+  DOM.forgotPasswordEmail.closest('.form-group')?.classList.remove('error');
+  
+  // Disable form during submission
+  const submitButton = DOM.forgotPasswordForm.querySelector('button[type="submit"]');
+  const originalButtonText = submitButton?.textContent || 'SEND RESET LINK';
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = 'Sending...';
+  }
+  
+  try {
+    console.log('[Forgot Password] Requesting password reset for:', email);
+    await authAPI.resetPassword(email);
+    
+    // Show success message
+    DOM.forgotPasswordForm.style.display = 'none';
+    DOM.forgotPasswordSuccess.style.display = 'block';
+    
+    showToast('Password reset instructions have been sent to your email.', 'success');
+    
+    console.log('[Forgot Password] Password reset request successful');
+  } catch (error) {
+    console.error('[Forgot Password] Password reset failed:', error);
+    showToast(getErrorMessage(error, 'Password reset'), 'error');
+    
+    // Re-enable form
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = originalButtonText;
+    }
   }
 }
 
