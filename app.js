@@ -4512,6 +4512,8 @@ async function handleCheckout() {
           primaryGym: payload.customer?.primaryGym,
           password: payload.customer?.password,
           customerType: 1, // Required by API - numeric ID (typically 1 = Individual customer type)
+          // Include marketing consent if provided
+          ...(payload.consent?.marketing !== undefined && { marketingConsent: payload.consent.marketing }),
         };
         
         console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
