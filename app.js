@@ -146,9 +146,11 @@ class BusinessUnitsAPI {
   constructor(baseUrl = null) {
     // In development, use Vite proxy (relative URL)
     // In production on Netlify, use Netlify Function proxy to avoid CORS
+    // In production on Cloudflare, use Cloudflare Pages Function proxy to avoid CORS
     // Detect if we're in development by checking if we're on localhost
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const isNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('boulders.dk');
+    const isCloudflare = window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev');
     
     if (baseUrl) {
       this.baseUrl = baseUrl;
@@ -158,6 +160,10 @@ class BusinessUnitsAPI {
     } else if (isNetlify) {
       // Use Netlify Function proxy in production
       this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else if (isCloudflare) {
+      // Use Cloudflare Pages Function proxy in production
+      this.baseUrl = '/api-proxy';
       this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
@@ -442,6 +448,10 @@ class ReferenceDataAPI {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev')) {
+      // Production: use Cloudflare Pages Function proxy
+      this.baseUrl = '/api-proxy';
+      this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
       this.baseUrl = 'https://api-join.boulders.dk';
@@ -543,6 +553,10 @@ class AuthAPI {
     } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev')) {
+      // Production: use Cloudflare Pages Function proxy
+      this.baseUrl = '/api-proxy';
       this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
@@ -1137,6 +1151,10 @@ class OrderAPI {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev')) {
+      // Production: use Cloudflare Pages Function proxy
+      this.baseUrl = '/api-proxy';
+      this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
       this.baseUrl = 'https://api-join.boulders.dk';
@@ -1478,6 +1496,10 @@ class PaymentAPI {
     } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev')) {
+      // Production: use Cloudflare Pages Function proxy
+      this.baseUrl = '/api-proxy';
       this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
