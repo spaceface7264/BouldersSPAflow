@@ -4638,28 +4638,39 @@ async function handleCheckout() {
     const summaryOrder = state.orderId ? { id: state.orderId, orderId: state.orderId } : null;
     state.order = buildOrderSummary(payload, summaryOrder, customer);
     
-    // Step 6: Show payment page with payment link (don't auto-redirect)
-    console.log('[checkout] ===== PAYMENT LINK CHECK =====');
+    // Step 6: Redirect to payment or show confirmation
+    console.log('[checkout] ===== PAYMENT REDIRECT CHECK =====');
     console.log('[checkout] paymentLink value:', paymentLink);
     console.log('[checkout] paymentLink type:', typeof paymentLink);
     console.log('[checkout] paymentLink truthy?', !!paymentLink);
     console.log('[checkout] state.paymentLink:', state.paymentLink);
     
     if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
-      // Show payment page with payment link button (don't auto-redirect)
-      console.log('[checkout] ✅ Valid payment link found, showing payment page...');
+      // Redirect to payment provider
+      console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
       console.log('[checkout] Payment link URL:', paymentLink);
+      showToast('Redirecting to secure payment...', 'info');
       
-      // Store payment link in state for payment page
-      state.paymentLink = paymentLink;
-      state.paymentLinkGenerated = true;
-      
-      // Show payment page instead of auto-redirecting
-      showPaymentPage(paymentLink);
-      
-      // Reset loading state
-      state.checkoutInProgress = false;
-      setCheckoutLoadingState(false);
+      // Use replace instead of href to avoid adding to browser history
+      // This prevents the back button from going back to the checkout page
+      setTimeout(() => {
+        try {
+          console.log('[checkout] Executing window.location.replace with:', paymentLink);
+          window.location.replace(paymentLink);
+        } catch (error) {
+          console.error('[checkout] ❌ Redirect failed with replace:', error);
+          // Fallback to href if replace fails
+          try {
+            console.log('[checkout] Falling back to window.location.href');
+            window.location.href = paymentLink;
+          } catch (hrefError) {
+            console.error('[checkout] ❌ Redirect failed with href:', hrefError);
+            showToast('Failed to redirect to payment. Please contact support.', 'error');
+            state.checkoutInProgress = false;
+            setCheckoutLoadingState(false);
+          }
+        }
+      }, 500);
     } else {
       // No payment link or invalid URL
       console.error('[checkout] ❌ Payment link not available or invalid!');
