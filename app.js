@@ -769,7 +769,8 @@ class AuthAPI {
   // Step 6: Password reset - Offer forgotten-password flow
   // Endpoint: POST /api/ver3/auth/resetpassword
   // Base URL: https://boulders.brpsystems.com/apiserver (handled by proxy for ver3 endpoints)
-  async resetPassword(email, appId = 1) {
+  // appId is optional - if not provided, BRP will use default setting for reset link
+  async resetPassword(email, appId = null) {
     try {
       let url;
       if (this.useProxy) {
@@ -787,14 +788,15 @@ class AuthAPI {
         'Content-Type': 'application/json',
       };
       
-      // API requires appId field as a number - using default 1 if not provided
-      // Convert to number if string is passed
-      const numericAppId = typeof appId === 'string' ? parseInt(appId, 10) : (appId || 1);
-      
-      const payload = {
-        email,
-        appId: numericAppId
-      };
+      // Build payload - appId is optional
+      // If appId is provided, convert to number; otherwise omit it
+      const payload = { email };
+      if (appId !== null && appId !== undefined) {
+        const numericAppId = typeof appId === 'string' ? parseInt(appId, 10) : appId;
+        if (!isNaN(numericAppId)) {
+          payload.appId = numericAppId;
+        }
+      }
       
       console.log('[Step 6] Password reset payload:', payload);
       
