@@ -1,0 +1,7 @@
+name = "boulders-membership-flow"
+compatibility_date = "2026-01-02"
+
+# For static site deployment on Cloudflare Pages
+# Update your Cloudflare Pages deploy command in the dashboard to:
+# npx wrangler pages deploy ./dist
+
