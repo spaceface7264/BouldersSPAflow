@@ -857,7 +857,6 @@ class AuthAPI {
       
       console.log('[Step 6] Creating customer:', url);
       console.log('[Step 6] Customer data being sent:', JSON.stringify(requestPayload, null, 2));
-      console.log('[Step 6] Marketing consent (allowMassSendEmail) in request:', requestPayload.customer?.allowMassSendEmail);
       
       const headers = {
         'Accept-Language': 'da-DK',
@@ -4497,13 +4496,6 @@ async function handleCheckout() {
         console.log('[checkout] Full payload:', JSON.stringify(payload, null, 2));
         console.log('[checkout] Customer payload:', JSON.stringify(payload.customer, null, 2));
         
-        // Log marketing consent status
-        const marketingConsent = payload.consent?.marketing;
-        console.log('[checkout] ===== MARKETING CONSENT CHECK =====');
-        console.log('[checkout] Marketing consent checkbox value:', marketingConsent);
-        console.log('[checkout] Marketing consent checkbox checked:', document.getElementById('marketingConsent')?.checked);
-        console.log('[checkout] Marketing consent in payload:', payload.consent);
-        
         // Build customer data matching API expectations
         // The API expects fields at the top level, not nested under "customer"
         const customerData = {
@@ -4525,8 +4517,9 @@ async function handleCheckout() {
         };
         
         console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
-        console.log('[checkout] Marketing consent in customerData (allowMassSendEmail):', customerData.allowMassSendEmail);
-        console.log('[checkout] ===== END MARKETING CONSENT CHECK =====');
+        if (customerData.allowMassSendEmail !== undefined) {
+          console.log('[checkout] Marketing consent (allowMassSendEmail):', customerData.allowMassSendEmail);
+        }
         
         // Remove undefined/null values (but keep empty strings for now to debug)
         Object.keys(customerData).forEach(key => {
