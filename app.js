@@ -592,6 +592,31 @@ class AuthAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Step 6] Login error (${response.status}):`, errorText);
+        
+        // Handle rate limit errors with better messaging
+        if (response.status === 429) {
+          let retryAfterSeconds = 900; // Default 15 minutes (900 seconds)
+          try {
+            const errorData = JSON.parse(errorText);
+            if (errorData.retryAfter) {
+              // retryAfter is already in seconds (e.g., 900 = 15 minutes)
+              retryAfterSeconds = parseInt(errorData.retryAfter, 10);
+            }
+          } catch (e) {
+            // If JSON parse fails, try to extract from error text
+            const retryMatch = errorText.match(/retryAfter["\s:]*(\d+)/i);
+            if (retryMatch) {
+              retryAfterSeconds = parseInt(retryMatch[1], 10);
+            }
+          }
+          const retryMinutes = Math.ceil(retryAfterSeconds / 60);
+          const retrySeconds = retryAfterSeconds % 60;
+          const retryMessage = retryMinutes > 0 
+            ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
+            : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
+          throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${response.status} - ${errorText})`);
+        }
+        
         throw new Error(`Login failed: ${response.status} - ${errorText}`);
       }
       
@@ -1512,6 +1537,145 @@ class OrderAPI {
       throw error;
     }
   }
+
+  // Apply coupon to order - POST /api/ver3/orders/{order}/coupons
+  // Note: API returns 405 for PUT, using POST instead
+  // Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
+  async applyDiscountCode(orderId, discountCode) {
+    try {
+      // ver3 endpoints use different base URL (boulders.brpsystems.com/apiserver)
+      let url;
+      if (this.useProxy) {
+        // Proxy will handle the ver3 endpoint routing
+        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/coupons`;
+      } else {
+        // Direct API call - ver3 endpoints use different base URL
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
+      }
+      
+      console.log('[Discount] Applying coupon:', discountCode, 'to order:', orderId);
+      console.log('[Discount] Endpoint:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+      };
+      
+      // API expects couponName field (not code)
+      const payload = {
+        couponName: discountCode,
+      };
+      
+      console.log('[Discount] Request payload:', JSON.stringify(payload, null, 2));
+      
+      // Try POST first (API returns 405 for PUT)
+      let response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      
+      // If POST returns 405, the endpoint might not exist or need different path
+      // Try alternative endpoint structure if POST fails
+      if (response.status === 405 || response.status === 404) {
+        console.log('[Discount] POST returned', response.status, '- trying alternative endpoint...');
+        // Try with different path structure: /api/orders/{orderId}/coupon (singular)
+        const altUrl = this.useProxy 
+          ? `${this.baseUrl}?path=/api/orders/${orderId}/coupon`
+          : `${this.baseUrl}/api/orders/${orderId}/coupon`;
+        
+        console.log('[Discount] Trying alternative endpoint:', altUrl);
+        response = await fetch(altUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Discount] Apply coupon error (${response.status}):`, errorText);
+        throw new Error(`Apply coupon failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Discount] Apply coupon response:', data);
+      
+      // Extract couponDiscount from response
+      // Response is an Order object with couponDiscount field
+      const couponDiscount = data?.couponDiscount || data?.price?.couponDiscount || null;
+      let discountAmount = 0;
+      
+      console.log('[Discount] Full API response structure:', {
+        hasCouponDiscount: !!data?.couponDiscount,
+        hasPriceCouponDiscount: !!data?.price?.couponDiscount,
+        couponDiscountType: typeof couponDiscount,
+        couponDiscountValue: couponDiscount,
+        priceObject: data?.price ? Object.keys(data.price) : null,
+        orderTotal: data?.price?.total,
+        orderLeftToPay: data?.price?.leftToPay,
+      });
+      
+      if (couponDiscount) {
+        console.log('[Discount] Raw coupon discount:', couponDiscount);
+        
+        if (typeof couponDiscount === 'object') {
+          // Try different possible fields - avoid 'total' as it might be order total, not discount
+          discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
+          
+          // If amount is in cents (common in APIs), convert to DKK
+          if (discountAmount > 10000) {
+            console.log('[Discount] Large amount detected, might be in cents:', discountAmount);
+            discountAmount = discountAmount / 100;
+            console.log('[Discount] Converted from cents:', discountAmount);
+          }
+        } else if (typeof couponDiscount === 'number') {
+          discountAmount = couponDiscount;
+          
+          // If amount is in cents, convert to DKK
+          if (discountAmount > 10000) {
+            console.log('[Discount] Large number detected, might be in cents:', discountAmount);
+            discountAmount = discountAmount / 100;
+            console.log('[Discount] Converted from cents:', discountAmount);
+          }
+        }
+      }
+      
+      // Fallback: Calculate discount from price difference if couponDiscount extraction failed
+      if (!discountAmount || discountAmount === 0) {
+        console.log('[Discount] Attempting to calculate discount from price difference...');
+        const orderPrice = data?.price;
+        if (orderPrice) {
+          // Get subtotal from current state
+          const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+          const newTotal = orderPrice.total || orderPrice.leftToPay || 0;
+          
+          // Convert to DKK if in cents
+          const newTotalDKK = newTotal > 10000 ? newTotal / 100 : newTotal;
+          
+          if (newTotalDKK < subtotal && subtotal > 0) {
+            discountAmount = subtotal - newTotalDKK;
+            console.log('[Discount] Calculated from price difference:', discountAmount, '(subtotal:', subtotal, 'new total:', newTotalDKK, ')');
+          }
+        }
+      }
+      
+      console.log('[Discount] Final extracted discountAmount:', discountAmount);
+      
+      return {
+        ...data,
+        discountAmount: discountAmount,
+      };
+    } catch (error) {
+      console.error('[Discount] Apply coupon error:', error);
+      throw error;
+    }
+  }
 }
 
 // Step 9: Payment API
@@ -2155,6 +2319,8 @@ const state = {
   totals: {
     cartTotal: 0,
     membershipMonthly: 0,
+    discountAmount: 0, // Discount amount applied
+    subtotal: 0, // Subtotal before discount
   },
   cartItems: [],
   billingPeriod: '',
@@ -2169,6 +2335,9 @@ const state = {
   // Step 9: Payment link state
   paymentLink: null, // Generated payment link for checkout
   paymentLinkGenerated: false, // Flag indicating if payment link has been generated
+  // Discount code state
+  discountCode: null, // Applied discount code
+  discountApplied: false, // Whether discount is currently applied
   // Step 5: Store fetched products from API
   subscriptions: [], // Fetched membership products
   valueCards: [], // Fetched punch card products
@@ -2597,6 +2766,8 @@ function cacheDom() {
   DOM.termsConsent = document.getElementById('termsConsent');
   DOM.discountToggle = document.querySelector('.discount-toggle');
   DOM.discountForm = document.querySelector('.discount-form');
+  DOM.discountInput = document.querySelector('.discount-input');
+  DOM.applyDiscountBtn = document.querySelector('.apply-discount-btn');
   DOM.skipAddonsBtn = document.getElementById('skipAddons');
   DOM.backFromAddonsBtn = document.getElementById('backFromAddons');
   DOM.paymentOptions = Array.from(document.querySelectorAll('input[name="paymentMethod"]'));
@@ -2645,6 +2816,12 @@ function setupEventListeners() {
   DOM.nextBtn?.addEventListener('click', nextStep);
   DOM.prevBtn?.addEventListener('click', prevStep);
   DOM.discountToggle?.addEventListener('click', toggleDiscountForm);
+  DOM.applyDiscountBtn?.addEventListener('click', handleApplyDiscount);
+  DOM.discountInput?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      handleApplyDiscount();
+    }
+  });
   DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
   DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
   DOM.termsConsent?.addEventListener('change', updateCheckoutButton);
@@ -4073,6 +4250,344 @@ function toggleDiscountForm() {
   DOM.discountToggle?.classList.toggle('active', !isVisible);
 }
 
+async function handleApplyDiscount() {
+  if (!DOM.discountInput) return;
+  
+  const discountCode = DOM.discountInput.value.trim().toUpperCase();
+  
+  if (!discountCode) {
+    showDiscountMessage('Please enter a coupon code', 'error');
+    return;
+  }
+  
+  // Prevent duplicate requests
+  if (DOM.applyDiscountBtn.disabled) return;
+  
+  // If order doesn't exist yet, try to create one so we can apply the coupon immediately
+  // This allows the price to update right away when Apply is clicked
+  if (!state.orderId) {
+    // Check if user has items selected (membership or value cards)
+    const hasItems = state.membershipPlanId || (state.valueCardQuantities && Array.from(state.valueCardQuantities.values()).some(qty => qty > 0));
+    
+    if (hasItems) {
+      // User has items - create order first, then apply coupon
+      console.log('[Discount] No order exists, creating order to apply coupon...');
+      DOM.applyDiscountBtn.disabled = true;
+      DOM.applyDiscountBtn.textContent = 'Creating order...';
+      clearDiscountMessage();
+      
+      try {
+        // Create order first
+        const ensuredOrderId = await ensureOrderCreated('discount-application');
+        if (!ensuredOrderId) {
+          throw new Error('Failed to create order for coupon application');
+        }
+        state.orderId = ensuredOrderId;
+        console.log('[Discount] Order created:', state.orderId);
+        
+        // Now add membership/subscription to order if needed
+        if (state.membershipPlanId) {
+          try {
+            await ensureSubscriptionAttached('discount-application');
+            console.log('[Discount] Membership ensured on order');
+          } catch (subError) {
+            console.warn('[Discount] Could not attach membership to order:', subError);
+            // Continue anyway - coupon might still work
+          }
+        }
+        
+        // Continue to apply coupon below (don't return)
+        DOM.applyDiscountBtn.textContent = 'Applying...';
+      } catch (orderError) {
+        console.error('[Discount] Failed to create order for coupon:', orderError);
+        // Store coupon code for later application during checkout
+        state.discountCode = discountCode;
+        state.discountApplied = false;
+        showDiscountMessage(`Coupon "${discountCode}" will be applied at checkout`, 'info');
+        DOM.discountInput.style.borderColor = '#10B981';
+        DOM.applyDiscountBtn.disabled = false;
+        DOM.applyDiscountBtn.textContent = 'Apply';
+        return;
+      }
+    } else {
+      // No items selected - just store coupon code for later
+      state.discountCode = discountCode;
+      state.discountApplied = false;
+      showDiscountMessage(`Coupon "${discountCode}" will be applied at checkout. Please select items first.`, 'info');
+      DOM.discountInput.style.borderColor = '#10B981';
+      return;
+    }
+  }
+  
+  // Order exists - apply coupon immediately
+  // Set loading state
+  DOM.applyDiscountBtn.disabled = true;
+  DOM.applyDiscountBtn.textContent = 'Applying...';
+  clearDiscountMessage();
+  
+  try {
+    const orderAPI = new OrderAPI();
+    const response = await orderAPI.applyDiscountCode(state.orderId, discountCode);
+    
+    // Extract discount information from response
+    // API returns Order object with couponDiscount field
+    // couponDiscount can be an object { amount, currency } or a number
+    const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
+    let discountAmount = 0;
+    
+    console.log('[Discount] Extracting discount from response:', {
+      couponDiscount,
+      couponDiscountType: typeof couponDiscount,
+      responseKeys: Object.keys(response || {}),
+    });
+    
+    if (couponDiscount) {
+      if (typeof couponDiscount === 'object') {
+        // Avoid 'total' field as it might be order total, not discount
+        discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
+        
+        // If amount is in cents, convert to DKK
+        if (discountAmount > 10000) {
+          console.log('[Discount] Large discountAmount detected, converting from cents:', discountAmount);
+          discountAmount = discountAmount / 100;
+        }
+      } else if (typeof couponDiscount === 'number') {
+        discountAmount = couponDiscount;
+        
+        // If amount is in cents, convert to DKK
+        if (discountAmount > 10000) {
+          console.log('[Discount] Large discountAmount detected, converting from cents:', discountAmount);
+          discountAmount = discountAmount / 100;
+        }
+      }
+    }
+    
+    // Also check if discountAmount was already extracted by the API method
+    if (!discountAmount && response?.discountAmount) {
+      discountAmount = response.discountAmount;
+      
+      // If amount is in cents, convert to DKK
+      if (discountAmount > 10000) {
+        console.log('[Discount] Large discountAmount from response, converting from cents:', discountAmount);
+        discountAmount = discountAmount / 100;
+      }
+    }
+    
+    // Calculate discount from price difference if needed
+    if (!discountAmount && response?.price) {
+      const originalTotal = state.totals.subtotal || state.totals.cartTotal || 0;
+      let newTotal = response.price.total || response.price.leftToPay || 0;
+      
+      // Convert to DKK if in cents
+      if (newTotal > 10000) {
+        newTotal = newTotal / 100;
+      }
+      
+      if (newTotal < originalTotal && originalTotal > 0) {
+        discountAmount = originalTotal - newTotal;
+        console.log('[Discount] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
+      }
+    }
+    
+    // Ensure subtotal is calculated before validating discount
+    if (!state.totals.subtotal || state.totals.subtotal === 0) {
+      updateCartTotals(); // This will calculate subtotal
+    }
+    
+    // Validate discount amount - ensure it doesn't exceed subtotal
+    const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+    if (discountAmount > subtotal && subtotal > 0) {
+      console.warn('[Discount] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
+      discountAmount = subtotal;
+    }
+    
+    if (discountAmount > 0) {
+      // Success - apply discount
+      state.discountCode = discountCode;
+      state.discountApplied = true;
+      state.totals.discountAmount = discountAmount;
+      
+      console.log('[Discount] Applying discount:', {
+        discountCode,
+        discountAmount,
+        subtotal,
+        finalTotal: subtotal - discountAmount,
+      });
+      
+      // Ensure subtotal is calculated before updating cart
+      if (!state.totals.subtotal || state.totals.subtotal === 0) {
+        // Recalculate items to get subtotal
+        const items = [];
+        if (state.membershipPlanId) {
+          const plan = findMembershipPlan(state.membershipPlanId);
+          if (plan) items.push({ amount: plan.price });
+        }
+        state.valueCardQuantities.forEach((quantity, planId) => {
+          if (quantity > 0) {
+            const plan = findValueCard(planId);
+            if (plan) items.push({ amount: plan.price * quantity });
+          }
+        });
+        state.addonIds.forEach((addonId) => {
+          const addon = findAddon(addonId);
+          if (addon) items.push({ amount: addon.price.discounted });
+        });
+        state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+        console.log('[Discount] Calculated subtotal:', state.totals.subtotal);
+      }
+      
+      // CRITICAL: Update cart totals FIRST - this recalculates everything
+      updateCartTotals();
+      
+      // Force immediate UI update - ensure DOM element exists
+      if (!DOM.cartTotal) {
+        DOM.cartTotal = document.querySelector('[data-summary-field="cart-total"]');
+      }
+      
+      // Render cart total immediately
+      renderCartTotal();
+      
+      // Force update discount display
+      updateDiscountDisplay();
+      
+      // Also update any other cart total elements that might exist
+      const allCartTotals = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"]');
+      allCartTotals.forEach(el => {
+        const expectedTotal = currencyFormatter.format(state.totals.cartTotal);
+        el.textContent = expectedTotal;
+      });
+      
+      // Double-check the display was updated
+      if (DOM.cartTotal) {
+        const displayedTotal = DOM.cartTotal.textContent;
+        const expectedTotal = currencyFormatter.format(state.totals.cartTotal);
+        console.log('[Discount] Cart total display check:', {
+          displayed: displayedTotal,
+          expected: expectedTotal,
+          match: displayedTotal === expectedTotal,
+          subtotal: state.totals.subtotal,
+          discountAmount: state.totals.discountAmount,
+          cartTotal: state.totals.cartTotal,
+        });
+        if (displayedTotal !== expectedTotal) {
+          console.warn('[Discount] Cart total mismatch, forcing update');
+          DOM.cartTotal.textContent = expectedTotal;
+        }
+      } else {
+        console.error('[Discount] DOM.cartTotal element not found after applying discount!');
+      }
+      
+      // Show success message with discount amount
+      showDiscountMessage(`Coupon "${discountCode}" applied! Discount: ${currencyFormatter.format(discountAmount)}`, 'success');
+      
+      // Force a visual update by triggering a reflow
+      if (DOM.cartTotal) {
+        DOM.cartTotal.offsetHeight; // Trigger reflow
+      }
+      
+      // Disable input and button after successful application
+      DOM.discountInput.disabled = true;
+      DOM.discountInput.style.opacity = '0.6';
+      DOM.discountInput.style.borderColor = '#10B981';
+    } else {
+      // Check if coupon was actually applied to the order (even if discountAmount is 0)
+      // The API might return success but with 0 discount (e.g., for future use coupons)
+      const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
+      if (couponDiscount !== undefined && couponDiscount !== null) {
+        // Coupon was applied, even if discount is 0
+        state.discountCode = discountCode;
+        state.discountApplied = true;
+        state.totals.discountAmount = 0; // Set to 0 if that's what the API returned
+        updateCartTotals();
+        renderCartTotal();
+        showDiscountMessage(`Coupon "${discountCode}" applied successfully`, 'success');
+        DOM.discountInput.disabled = true;
+        DOM.discountInput.style.opacity = '0.6';
+        DOM.discountInput.style.borderColor = '#10B981';
+      } else {
+        throw new Error('Invalid coupon code or no discount applied');
+      }
+    }
+  } catch (error) {
+    console.error('[Discount] Error applying coupon:', error);
+    
+    // Check if this is a stack overflow or recursion error - don't reset state in that case
+    const errorMessage = error.message || String(error);
+    if (errorMessage.includes('Maximum call stack') || errorMessage.includes('stack size exceeded')) {
+      console.error('[Discount] Stack overflow detected - this is a code bug, not a coupon error');
+      // Don't reset discount state - coupon might have been applied
+      // Just show a generic error
+      showDiscountMessage('An error occurred while applying the coupon. Please refresh the page.', 'error');
+      DOM.applyDiscountBtn.disabled = false;
+      DOM.applyDiscountBtn.textContent = 'Apply';
+      return; // Exit early to avoid resetting state
+    }
+    
+    // Reset discount state on actual error
+    state.discountCode = null;
+    state.discountApplied = false;
+    state.totals.discountAmount = 0;
+    updateCartTotals();
+    
+    // Parse error message to extract error code
+    let errorMessageText = 'Failed to apply coupon. Please try again.';
+    const errorText = errorMessage;
+    
+    // Check for specific error codes in the response
+    if (errorText.includes('COUPON_NOT_APPLICABLE')) {
+      errorMessageText = 'This coupon is not applicable to your current order. It may have restrictions on products, minimum order amount, or other conditions.';
+    } else if (errorText.includes('COUPON_NOT_FOUND') || errorText.includes('404')) {
+      errorMessageText = 'Coupon code not found. Please check the code and try again.';
+    } else if (errorText.includes('COUPON_EXPIRED') || errorText.includes('expired')) {
+      errorMessageText = 'This coupon has expired and is no longer valid.';
+    } else if (errorText.includes('COUPON_ALREADY_USED')) {
+      errorMessageText = 'This coupon has already been used and cannot be applied again.';
+    } else if (errorText.includes('403') || errorText.includes('Forbidden')) {
+      errorMessageText = 'This coupon cannot be applied. It may have restrictions or is not valid for your order.';
+    } else if (errorText.includes('400') || errorText.includes('invalid')) {
+      errorMessageText = 'Invalid coupon code. Please check the code and try again.';
+    } else if (errorText.includes('405')) {
+      errorMessageText = 'Coupon application method not supported. Please contact support.';
+    }
+    
+    showDiscountMessage(errorMessageText, 'error');
+    DOM.discountInput.style.borderColor = '#EF4444'; // Red border on error
+  } finally {
+    // Reset button state
+    DOM.applyDiscountBtn.disabled = false;
+    DOM.applyDiscountBtn.textContent = 'Apply';
+  }
+}
+
+function showDiscountMessage(message, type = 'info') {
+  // Remove existing message if any
+  clearDiscountMessage();
+  
+  // Create message element
+  const messageEl = document.createElement('div');
+  messageEl.className = `discount-message discount-message-${type}`;
+  messageEl.textContent = message;
+  
+  // Insert after discount form
+  if (DOM.discountForm) {
+    DOM.discountForm.insertAdjacentElement('afterend', messageEl);
+  }
+  
+  // Auto-remove success messages after 5 seconds
+  if (type === 'success') {
+    setTimeout(() => {
+      messageEl.remove();
+    }, 5000);
+  }
+}
+
+function clearDiscountMessage() {
+  const existingMessage = document.querySelector('.discount-message');
+  if (existingMessage) {
+    existingMessage.remove();
+  }
+}
+
 function handleSameAddressToggle(event) {
   if (event.target.checked) {
     copyAddressAndContactInfo();
@@ -4241,7 +4756,69 @@ function updateCartSummary() {
   });
 
   state.cartItems = items;
-  state.totals.cartTotal = items.reduce((total, item) => total + item.amount, 0);
+  
+  // Calculate subtotal (before discount)
+  state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+  
+  // Calculate cart total (subtotal - discount)
+  state.totals.cartTotal = Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0));
+
+  renderCartItems();
+  renderCartTotal();
+}
+
+function updateCartTotals() {
+  // Recalculate totals including discount
+  const items = [];
+  
+  // Add membership
+  if (state.membershipPlanId) {
+    const plan = findMembershipPlan(state.membershipPlanId);
+    if (plan) {
+      items.push({
+        id: plan.id,
+        name: plan.name,
+        amount: plan.price,
+        type: 'membership',
+      });
+    }
+  }
+  
+  // Add value cards
+  state.valueCardQuantities.forEach((quantity, planId) => {
+    if (quantity > 0) {
+      const plan = findValueCard(planId);
+      if (plan) {
+        items.push({
+          id: plan.id,
+          name: plan.name,
+          amount: plan.price * quantity,
+          type: 'value-card',
+          quantity,
+        });
+      }
+    }
+  });
+  
+  // Add add-ons
+  state.addonIds.forEach((addonId) => {
+    const addon = findAddon(addonId);
+    if (!addon) return;
+    items.push({
+      id: addon.id,
+      name: addon.name,
+      amount: addon.price.discounted,
+      type: 'addon',
+    });
+  });
+
+  state.cartItems = items;
+  
+  // Calculate subtotal (before discount)
+  state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+  
+  // Calculate cart total (subtotal - discount)
+  state.totals.cartTotal = Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0));
 
   renderCartItems();
   renderCartTotal();
@@ -4272,12 +4849,91 @@ function renderCartItems() {
 }
 
 function renderCartTotal() {
+  // Update the cart total element
   if (DOM.cartTotal) {
-    DOM.cartTotal.textContent = currencyFormatter.format(state.totals.cartTotal);
+    const formattedTotal = currencyFormatter.format(state.totals.cartTotal);
+    DOM.cartTotal.textContent = formattedTotal;
+    console.log('[Cart] Updated cart total display:', formattedTotal, '(subtotal:', state.totals.subtotal, 'discount:', state.totals.discountAmount, ')');
+  } else {
+    console.warn('[Cart] DOM.cartTotal element not found!');
+    // Try to find it again
+    DOM.cartTotal = document.querySelector('[data-summary-field="cart-total"]');
+    if (DOM.cartTotal) {
+      DOM.cartTotal.textContent = currencyFormatter.format(state.totals.cartTotal);
+      console.log('[Cart] Found and updated cart total element');
+    }
   }
 
   if (DOM.billingPeriod) {
     DOM.billingPeriod.textContent = state.billingPeriod || 'Billing period confirmed after checkout.';
+  }
+  
+  // Update discount display if discount is applied
+  updateDiscountDisplay();
+}
+
+function updateDiscountDisplay() {
+  // Find or create discount display element
+  let discountDisplay = document.querySelector('.discount-display');
+  
+  if (state.discountApplied && state.totals.discountAmount > 0) {
+    // Ensure subtotal is calculated - but don't call updateCartTotals() to avoid recursion
+    // Instead, just recalculate subtotal if needed
+    if (!state.totals.subtotal || state.totals.subtotal === 0) {
+      const items = [];
+      if (state.membershipPlanId) {
+        const plan = findMembershipPlan(state.membershipPlanId);
+        if (plan) items.push({ amount: plan.price });
+      }
+      state.valueCardQuantities.forEach((quantity, planId) => {
+        if (quantity > 0) {
+          const plan = findValueCard(planId);
+          if (plan) items.push({ amount: plan.price * quantity });
+        }
+      });
+      state.addonIds.forEach((addonId) => {
+        const addon = findAddon(addonId);
+        if (addon) items.push({ amount: addon.price.discounted });
+      });
+      state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+    }
+    
+    if (!discountDisplay) {
+      // Create discount display element
+      discountDisplay = document.createElement('div');
+      discountDisplay.className = 'discount-display';
+      
+      // Insert before cart total
+      const cartTotalEl = document.querySelector('.cart-total');
+      if (cartTotalEl) {
+        cartTotalEl.insertAdjacentElement('beforebegin', discountDisplay);
+      } else {
+        // Fallback: try to find cart total by data attribute
+        const cartTotalByAttr = document.querySelector('[data-summary-field="cart-total"]');
+        if (cartTotalByAttr && cartTotalByAttr.parentElement) {
+          cartTotalByAttr.parentElement.insertBefore(discountDisplay, cartTotalByAttr);
+        }
+      }
+    }
+    
+    // Build discount display HTML - show subtotal, discount, and final total
+    discountDisplay.innerHTML = `
+      <div class="discount-row">
+        <span class="discount-label">Subtotal:</span>
+        <span class="discount-value">${currencyFormatter.format(state.totals.subtotal)}</span>
+      </div>
+      <div class="discount-row discount-applied">
+        <span class="discount-label">Discount (${state.discountCode}):</span>
+        <span class="discount-value">-${currencyFormatter.format(state.totals.discountAmount)}</span>
+      </div>
+      <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <span class="discount-label" style="font-weight: bold;">Total:</span>
+        <span class="discount-value" style="font-weight: bold;">${currencyFormatter.format(state.totals.cartTotal)}</span>
+      </div>
+    `;
+    discountDisplay.style.display = 'block';
+  } else if (discountDisplay) {
+    discountDisplay.style.display = 'none';
   }
 }
 
@@ -4578,40 +5234,98 @@ async function handleCheckout() {
           }
         }
         
-        // If no tokens from customer creation, login with email/password to get tokens
-      if (!hasTokens && payload.customer?.email && payload.customer?.password) {
-        console.log('[checkout] No tokens from customer creation, logging in to get tokens...');
-        try {
-          const loginResponse = await authAPI.login(payload.customer.email, payload.customer.password);
-          
-          // Save tokens from login response (handle nested data structure)
-          const loginPayload = loginResponse?.data ?? loginResponse;
-          const loginAccessToken = loginPayload?.accessToken || loginPayload?.access_token;
-          const loginRefreshToken = loginPayload?.refreshToken || loginPayload?.refresh_token;
-          let loginExpiresAt = loginPayload?.expiresAt || loginPayload?.expires_at;
-          const loginExpiresIn = loginPayload?.expiresIn || loginPayload?.expires_in;
-          if (!loginExpiresAt && loginExpiresIn) {
-            const expiresInMs = Number(loginExpiresIn) * 1000;
-            loginExpiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
+        // Check if we already have valid tokens before attempting login
+        const existingAccessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+        const existingRefreshToken = typeof window.getRefreshToken === 'function' ? window.getRefreshToken() : null;
+        const isTokenExpired = typeof window.isTokenExpired === 'function' ? window.isTokenExpired() : false;
+        const hasValidTokens = existingAccessToken && existingRefreshToken && !isTokenExpired;
+        
+        // If no tokens from customer creation, try to use existing tokens or login
+        if (!hasTokens && payload.customer?.email && payload.customer?.password) {
+          if (hasValidTokens) {
+            console.log('[checkout] Using existing valid authentication tokens (skipping login to avoid rate limits)');
+            // Tokens already exist and are valid, no need to login again
+          } else if (existingAccessToken && existingRefreshToken && isTokenExpired) {
+            console.log('[checkout] Existing tokens expired, attempting to refresh...');
+            try {
+              await authAPI.refreshToken();
+              console.log('[checkout] ✅ Token refreshed successfully');
+            } catch (refreshError) {
+              console.warn('[checkout] ⚠️ Token refresh failed, will attempt login:', refreshError);
+              // Fall through to login attempt
+            }
           }
           
-          if (loginAccessToken && loginRefreshToken && typeof window.saveTokens === 'function') {
-            const loginMetadata = {
-              username: loginPayload?.username || payload.customer?.email,
-              email: loginPayload?.email || payload.customer?.email,
-              roles: loginPayload?.roles,
-              tokenType: loginPayload?.tokenType || loginPayload?.token_type,
-              expiresIn: loginPayload?.expiresIn || loginPayload?.expires_in,
-            };
-            window.saveTokens(loginAccessToken, loginRefreshToken, loginExpiresAt, loginMetadata);
-            syncAuthenticatedCustomerState(loginMetadata.username, loginMetadata.email);
-            console.log('[checkout] ✅ Login successful, tokens saved from login response');
-          } else {
-            console.warn('[checkout] ⚠️ Login succeeded but no tokens found in response');
-          }
-          } catch (loginError) {
-            console.warn('[checkout] ⚠️ Login after customer creation failed:', loginError);
-            console.warn('[checkout] Payment link generation might fail without authentication token');
+          // Only attempt login if we don't have valid tokens
+          if (!hasValidTokens && (!existingAccessToken || !existingRefreshToken || isTokenExpired)) {
+            console.log('[checkout] No tokens available, attempting login...');
+            try {
+              const loginResponse = await authAPI.login(payload.customer.email, payload.customer.password);
+              
+              // Save tokens from login response (handle nested data structure)
+              const loginPayload = loginResponse?.data ?? loginResponse;
+              const loginAccessToken = loginPayload?.accessToken || loginPayload?.access_token;
+              const loginRefreshToken = loginPayload?.refreshToken || loginPayload?.refresh_token;
+              let loginExpiresAt = loginPayload?.expiresAt || loginPayload?.expires_at;
+              const loginExpiresIn = loginPayload?.expiresIn || loginPayload?.expires_in;
+              if (!loginExpiresAt && loginExpiresIn) {
+                const expiresInMs = Number(loginExpiresIn) * 1000;
+                loginExpiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
+              }
+              
+              if (loginAccessToken && loginRefreshToken && typeof window.saveTokens === 'function') {
+                const loginMetadata = {
+                  username: loginPayload?.username || payload.customer?.email,
+                  email: loginPayload?.email || payload.customer?.email,
+                  roles: loginPayload?.roles,
+                  tokenType: loginPayload?.tokenType || loginPayload?.token_type,
+                  expiresIn: loginPayload?.expiresIn || loginPayload?.expires_in,
+                };
+                window.saveTokens(loginAccessToken, loginRefreshToken, loginExpiresAt, loginMetadata);
+                syncAuthenticatedCustomerState(loginMetadata.username, loginMetadata.email);
+                console.log('[checkout] ✅ Login successful, tokens saved from login response');
+              } else {
+                console.warn('[checkout] ⚠️ Login succeeded but no tokens found in response');
+              }
+            } catch (loginError) {
+              // Handle rate limit errors specifically
+              const errorMessage = loginError.message || String(loginError);
+              if (errorMessage.includes('429') || errorMessage.includes('Rate limit') || errorMessage.includes('Too many requests')) {
+                // Extract retryAfter from error message (it's in seconds)
+                let retryAfterSeconds = 900; // Default 15 minutes (900 seconds)
+                const retryAfterMatch = errorMessage.match(/retryAfter["\s:]*(\d+)/i);
+                if (retryAfterMatch) {
+                  retryAfterSeconds = parseInt(retryAfterMatch[1], 10);
+                }
+                
+                const retryMinutes = Math.ceil(retryAfterSeconds / 60);
+                const retrySeconds = retryAfterSeconds % 60;
+                const retryMessage = retryMinutes > 0 
+                  ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
+                  : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
+                
+                console.error(`[checkout] ⚠️ Rate limit exceeded. Please wait ${retryMessage} before trying again.`);
+                showToast(`Rate limit exceeded. Please wait ${retryMessage} before trying again.`, 'error');
+                
+                // If we have existing tokens, try to use them
+                if (existingAccessToken && existingRefreshToken) {
+                  console.log('[checkout] Attempting to use existing tokens despite rate limit...');
+                  // Tokens might still be valid, continue with checkout
+                } else {
+                  setCheckoutLoadingState(false);
+                  state.checkoutInProgress = false;
+                  throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again.`);
+                }
+              } else {
+                console.warn('[checkout] ⚠️ Login after customer creation failed:', loginError);
+                // If we have existing tokens, try to use them
+                if (existingAccessToken && existingRefreshToken) {
+                  console.log('[checkout] Login failed but existing tokens available, continuing with checkout...');
+                } else {
+                  console.warn('[checkout] Payment link generation might fail without authentication token');
+                }
+              }
+            }
           }
         }
         
@@ -4676,7 +5390,155 @@ async function handleCheckout() {
 	          await ensureSubscriptionAttached('checkout-flow');
 	          console.log('[checkout] Membership ensured on order');
           
-          // CRITICAL: Generate Payment Link Card immediately after subscription is added
+          // CRITICAL: Apply coupon BEFORE generating payment link
+          // This ensures the payment portal shows the discounted price
+          const discountCodeToApply = (DOM.discountInput && DOM.discountInput.value.trim()) 
+            ? DOM.discountInput.value.trim().toUpperCase()
+            : state.discountCode;
+          
+          if (discountCodeToApply && !state.discountApplied && state.orderId) {
+            try {
+              console.log('[checkout] ===== APPLYING COUPON BEFORE PAYMENT LINK =====');
+              console.log('[checkout] Coupon code:', discountCodeToApply);
+              console.log('[checkout] Order ID:', state.orderId);
+              
+              const discountResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
+              console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
+              
+              // Extract discount from couponDiscount field
+              const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
+              let discountAmount = 0;
+              
+              if (couponDiscount) {
+                if (typeof couponDiscount === 'object') {
+                  discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
+                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
+                } else if (typeof couponDiscount === 'number') {
+                  discountAmount = couponDiscount;
+                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
+                }
+              }
+              
+              if (!discountAmount && discountResponse?.discountAmount) {
+                discountAmount = discountResponse.discountAmount;
+                if (discountAmount > 10000) discountAmount = discountAmount / 100;
+              }
+              
+              // Calculate from price difference if needed
+              if (!discountAmount && discountResponse?.price) {
+                const originalTotal = state.totals.subtotal || state.totals.cartTotal || 0;
+                let newTotal = discountResponse.price.total || discountResponse.price.leftToPay || 0;
+                if (newTotal > 10000) newTotal = newTotal / 100;
+                if (newTotal < originalTotal && originalTotal > 0) {
+                  discountAmount = originalTotal - newTotal;
+                }
+              }
+              
+              // Cap discount at subtotal
+              const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+              if (discountAmount > subtotal && subtotal > 0) {
+                discountAmount = subtotal;
+              }
+              
+              if (discountAmount > 0) {
+                state.discountCode = discountCodeToApply;
+                state.discountApplied = true;
+                state.totals.discountAmount = discountAmount;
+                updateCartTotals();
+                console.log('[checkout] ✅ Coupon applied before payment link:', discountCodeToApply, 'Amount:', discountAmount);
+                
+                // CRITICAL: Fetch updated order multiple times to ensure backend has processed the coupon
+                // Payment link generation reads order total from the order, so we need to ensure it's updated
+                let orderUpdated = false;
+                let attempts = 0;
+                const maxAttempts = 5;
+                
+                  // Ensure subtotal is calculated before checking order
+                  if (!state.totals.subtotal || state.totals.subtotal === 0) {
+                    updateCartTotals();
+                  }
+                  
+                  while (!orderUpdated && attempts < maxAttempts) {
+                  attempts++;
+                  try {
+                    console.log(`[checkout] Fetching updated order (attempt ${attempts}/${maxAttempts}) to verify discount...`);
+                    const updatedOrder = await orderAPI.getOrder(state.orderId);
+                    
+                    console.log('[checkout] Full order response:', JSON.stringify(updatedOrder, null, 2));
+                    
+                    // Check if order has the discount applied
+                    const orderCouponDiscount = updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount;
+                    
+                    // Try multiple ways to get order total
+                    let orderTotal = updatedOrder?.price?.total?.amount || updatedOrder?.price?.total;
+                    if (!orderTotal) orderTotal = updatedOrder?.price?.leftToPay?.amount || updatedOrder?.price?.leftToPay;
+                    if (!orderTotal) orderTotal = updatedOrder?.total?.amount || updatedOrder?.total;
+                    if (!orderTotal) orderTotal = updatedOrder?.price?.amount;
+                    
+                    // Convert to DKK if in cents (or if it's an object with amount property)
+                    let orderTotalDKK = 0;
+                    if (orderTotal) {
+                      if (typeof orderTotal === 'object' && orderTotal.amount) {
+                        orderTotalDKK = orderTotal.amount;
+                      } else if (typeof orderTotal === 'number') {
+                        orderTotalDKK = orderTotal;
+                      }
+                      // Convert from cents if needed
+                      if (orderTotalDKK > 10000) {
+                        orderTotalDKK = orderTotalDKK / 100;
+                      }
+                    }
+                    
+                    const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+                    const expectedTotal = Math.max(0, subtotal - discountAmount);
+                    
+                    console.log('[checkout] Order state:', {
+                      orderCouponDiscount,
+                      orderTotalRaw: orderTotal,
+                      orderTotalDKK,
+                      expectedTotal,
+                      subtotal,
+                      discountAmount,
+                      hasCouponDiscount: !!orderCouponDiscount,
+                    });
+                    
+                    // Verify discount is reflected - check if couponDiscount exists OR order total matches expected
+                    if (orderCouponDiscount) {
+                      // Coupon discount exists in order
+                      orderUpdated = true;
+                      console.log('[checkout] ✅ Order has couponDiscount, proceeding to payment link generation');
+                    } else if (orderTotalDKK > 0 && Math.abs(orderTotalDKK - expectedTotal) < 1) {
+                      // Order total matches expected discounted total
+                      orderUpdated = true;
+                      console.log('[checkout] ✅ Order total matches expected discounted total, proceeding to payment link generation');
+                    } else if (orderTotalDKK === 0 && expectedTotal === 0) {
+                      // Both are zero (100% discount)
+                      orderUpdated = true;
+                      console.log('[checkout] ✅ Order total is zero (100% discount), proceeding to payment link generation');
+                    } else {
+                      console.log('[checkout] Order not yet updated, waiting... (orderTotal:', orderTotalDKK, 'expected:', expectedTotal, ')');
+                      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between attempts
+                    }
+                  } catch (fetchError) {
+                    console.warn(`[checkout] Could not fetch updated order (attempt ${attempts}):`, fetchError);
+                    if (attempts < maxAttempts) {
+                      await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                  }
+                }
+                
+                if (!orderUpdated) {
+                  console.warn('[checkout] ⚠️ Order may not be fully updated with discount, but proceeding with payment link generation');
+                }
+              }
+            } catch (couponError) {
+              console.warn('[checkout] Failed to apply coupon before payment link:', couponError);
+              // Don't block checkout if coupon fails
+            }
+          }
+          
+          // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied
+          // The order should now have the discount applied, so payment link will show discounted price
           // Backend requirement: "Generate Payment Link Card" request must be made when subscription is added to cart
           // This is what triggers the payment flow according to backend team
           console.log('[checkout] ===== GENERATE PAYMENT LINK CARD =====');
@@ -4696,6 +5558,37 @@ async function handleCheckout() {
           // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
           if (!state.orderId) {
             throw new Error('Order ID is required to generate payment link');
+          }
+          
+          // CRITICAL: Final order fetch to ensure backend has processed coupon before payment link generation
+          // The payment link API reads the order total from the backend, so we need to ensure it's updated
+          try {
+            console.log('[checkout] Final order fetch before payment link generation...');
+            // Wait a bit more to ensure backend has fully processed the coupon
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const orderBeforePayment = await orderAPI.getOrder(state.orderId);
+            console.log('[checkout] Final order response:', JSON.stringify(orderBeforePayment, null, 2));
+            
+            // Verify coupon discount is present
+            const orderCouponDiscount = orderBeforePayment?.couponDiscount || orderBeforePayment?.price?.couponDiscount;
+            if (orderCouponDiscount) {
+              console.log('[checkout] ✅ Order has couponDiscount, payment link should reflect discount');
+            } else {
+              console.warn('[checkout] ⚠️ Order does not have couponDiscount - payment link may not reflect discount');
+            }
+            
+            // Log all available price-related fields for debugging
+            console.log('[checkout] Order price fields:', {
+              hasPrice: !!orderBeforePayment?.price,
+              priceKeys: orderBeforePayment?.price ? Object.keys(orderBeforePayment.price) : [],
+              couponDiscount: orderCouponDiscount,
+              discountAmount: orderBeforePayment?.discountAmount,
+              totalCost: orderBeforePayment?.totalCost,
+            });
+          } catch (orderCheckError) {
+            console.warn('[checkout] Could not verify order state before payment link:', orderCheckError);
+            // Continue anyway - coupon was applied earlier
           }
           
           const paymentData = await paymentAPI.generatePaymentLink({
@@ -4784,6 +5677,194 @@ async function handleCheckout() {
       }
       
       console.log('[checkout] All items added to order');
+      
+      // Note: Coupon should already be applied BEFORE payment link generation (see above)
+      // This is a fallback in case the first attempt failed
+      // Skip if coupon was already successfully applied
+      if (state.discountApplied) {
+        console.log('[checkout] Coupon already applied, skipping duplicate application');
+      } else {
+        // Fallback: Apply coupon if it wasn't applied before payment link generation
+        const discountCodeToApply = (DOM.discountInput && DOM.discountInput.value.trim()) 
+          ? DOM.discountInput.value.trim().toUpperCase()
+          : state.discountCode;
+        
+        if (discountCodeToApply && state.orderId) {
+          try {
+            console.log('[checkout] ===== APPLYING COUPON DURING CHECKOUT =====');
+            console.log('[checkout] Coupon code:', discountCodeToApply);
+            console.log('[checkout] Order ID:', state.orderId);
+            
+            const discountResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
+            
+            console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
+            
+            // Extract discount from couponDiscount field
+            // API returns Order object with couponDiscount field
+            const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
+            let discountAmount = 0;
+            
+            console.log('[checkout] Raw couponDiscount:', couponDiscount);
+            console.log('[checkout] couponDiscount type:', typeof couponDiscount);
+            
+            if (couponDiscount) {
+              if (typeof couponDiscount === 'object') {
+                // Avoid 'total' field as it might be order total, not discount
+                discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
+                
+                // If amount is in cents, convert to DKK
+                if (discountAmount > 10000) {
+                  console.log('[checkout] Large discountAmount detected, converting from cents:', discountAmount);
+                  discountAmount = discountAmount / 100;
+                }
+                
+                console.log('[checkout] Extracted discountAmount from object:', discountAmount);
+              } else if (typeof couponDiscount === 'number') {
+                discountAmount = couponDiscount;
+                
+                // If amount is in cents, convert to DKK
+                if (discountAmount > 10000) {
+                  console.log('[checkout] Large discountAmount detected, converting from cents:', discountAmount);
+                  discountAmount = discountAmount / 100;
+                }
+                
+                console.log('[checkout] Extracted discountAmount from number:', discountAmount);
+              }
+            }
+            
+            // Also check if discountAmount was already extracted by the API method
+            if (!discountAmount && discountResponse?.discountAmount) {
+              discountAmount = discountResponse.discountAmount;
+              
+              // If amount is in cents, convert to DKK
+              if (discountAmount > 10000) {
+                console.log('[checkout] Large discountAmount from response, converting from cents:', discountAmount);
+                discountAmount = discountAmount / 100;
+              }
+              
+              console.log('[checkout] Using discountAmount from response:', discountAmount);
+            }
+            
+            // Check price.leftToPay or price.total as fallback
+            if (!discountAmount && discountResponse?.price) {
+              const originalTotal = state.totals.subtotal || state.totals.cartTotal;
+              let newTotal = discountResponse.price.total || discountResponse.price.leftToPay || 0;
+              
+              // Convert to DKK if in cents
+              if (newTotal > 10000) {
+                newTotal = newTotal / 100;
+              }
+              
+              if (newTotal < originalTotal && originalTotal > 0) {
+                discountAmount = originalTotal - newTotal;
+                console.log('[checkout] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
+              }
+            }
+            
+            // Validate discount amount - ensure it doesn't exceed subtotal
+            const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+            if (discountAmount > subtotal && subtotal > 0) {
+              console.warn('[checkout] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
+              discountAmount = subtotal;
+            }
+            
+            console.log('[checkout] Final discountAmount:', discountAmount, '(subtotal:', subtotal, ')');
+            
+            // If we couldn't extract discount amount, try fetching the order to get updated totals
+            if (!discountAmount || discountAmount === 0) {
+              console.log('[checkout] Attempting to fetch updated order to calculate discount...');
+              try {
+                const updatedOrder = await orderAPI.getOrder(state.orderId);
+                console.log('[checkout] Updated order:', JSON.stringify(updatedOrder, null, 2));
+                
+                // Try to extract discount from updated order
+                const updatedCouponDiscount = updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount;
+                if (updatedCouponDiscount) {
+                  if (typeof updatedCouponDiscount === 'object') {
+                    discountAmount = updatedCouponDiscount.amount || updatedCouponDiscount.value || updatedCouponDiscount.total || 0;
+                  } else if (typeof updatedCouponDiscount === 'number') {
+                    discountAmount = updatedCouponDiscount;
+                  }
+                  console.log('[checkout] Extracted discount from updated order:', discountAmount);
+                }
+                
+                // Calculate discount from price difference if still not found
+                if (!discountAmount || discountAmount === 0) {
+                  const originalTotal = state.totals.subtotal || state.totals.cartTotal;
+                  const newTotal = updatedOrder?.price?.total || updatedOrder?.price?.leftToPay || updatedOrder?.total || 0;
+                  if (newTotal < originalTotal && newTotal > 0) {
+                    discountAmount = originalTotal - newTotal;
+                    console.log('[checkout] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
+                  }
+                }
+              } catch (fetchError) {
+                console.warn('[checkout] Could not fetch updated order:', fetchError);
+              }
+            }
+            
+            if (discountAmount > 0) {
+              // Success - apply discount
+              state.discountCode = discountCodeToApply;
+              state.discountApplied = true;
+              state.totals.discountAmount = discountAmount;
+              
+              console.log('[checkout] Updating cart totals with discount:', discountAmount);
+              console.log('[checkout] Subtotal:', state.totals.subtotal, 'Discount:', discountAmount, 'Final Total:', state.totals.subtotal - discountAmount);
+              updateCartTotals();
+              
+              // Update UI to show coupon is applied
+              if (DOM.discountInput) {
+                DOM.discountInput.value = discountCodeToApply;
+                DOM.discountInput.disabled = true;
+                DOM.discountInput.style.opacity = '0.6';
+                DOM.discountInput.style.borderColor = '#10B981';
+              }
+              
+              // Show success message
+              showDiscountMessage(`Coupon "${discountCodeToApply}" applied! Discount: ${currencyFormatter.format(discountAmount)}`, 'success');
+              
+              console.log('[checkout] ✅ Coupon applied successfully:', discountCodeToApply, 'Amount:', discountAmount);
+            } else {
+              console.warn('[checkout] ⚠️ Coupon applied but no discount amount found');
+              console.warn('[checkout] Response structure:', Object.keys(discountResponse || {}));
+              console.warn('[checkout] Full response:', JSON.stringify(discountResponse, null, 2));
+              showDiscountMessage('Coupon applied but discount amount could not be determined. Please check the order total.', 'error');
+            }
+          } catch (error) {
+            console.error('[checkout] ❌ Failed to apply coupon during checkout:', error);
+            console.error('[checkout] Error details:', {
+              message: error.message,
+              stack: error.stack,
+            });
+            
+            // Parse error message to extract error code
+            let errorMessage = 'Coupon could not be applied. Checkout will continue.';
+            const errorText = error.message || '';
+            
+            if (errorText.includes('COUPON_NOT_APPLICABLE')) {
+              errorMessage = 'This coupon is not applicable to your order. Checkout will continue without discount.';
+            } else if (errorText.includes('COUPON_NOT_FOUND') || errorText.includes('404')) {
+              errorMessage = 'Coupon code not found. Checkout will continue without discount.';
+            } else if (errorText.includes('COUPON_EXPIRED')) {
+              errorMessage = 'This coupon has expired. Checkout will continue without discount.';
+            } else if (errorText.includes('403') || errorText.includes('Forbidden')) {
+              errorMessage = 'This coupon cannot be applied. Checkout will continue without discount.';
+            }
+            
+            // Don't block checkout if coupon fails - just log the warning
+            // Show a warning message but don't prevent checkout
+            if (DOM.discountInput) {
+              showDiscountMessage(errorMessage, 'error');
+            }
+          }
+        } else {
+          console.log('[checkout] Coupon application skipped:', {
+            discountCodeToApply,
+            discountApplied: state.discountApplied,
+            orderId: state.orderId,
+          });
+        }
+      }
       
       // Verify payment link was generated
       if (!paymentLink && state.membershipPlanId) {
@@ -4895,6 +5976,7 @@ function buildCheckoutPayload() {
     valueCards,
     addons: Array.from(state.addonIds),
     totalAmount: state.totals.cartTotal,
+    ...(state.discountCode ? { discountCode: state.discountCode } : {}),
   };
 
   payload.payment = {

@@ -3496,6 +3496,71 @@ body {
     background-color: #D401D5;
 }
 
+.apply-discount-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Discount Display */
+.discount-display {
+    margin: 12px 0;
+    padding: 12px 0;
+    border-top: 1px solid #374151;
+}
+
+.discount-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: var(--font-size-sm);
+}
+
+.discount-label {
+    color: var(--color-text-secondary);
+}
+
+.discount-value {
+    color: white;
+    font-weight: 500;
+}
+
+.discount-row.discount-applied .discount-label {
+    color: #10B981;
+}
+
+.discount-row.discount-applied .discount-value {
+    color: #10B981;
+    font-weight: 600;
+}
+
+/* Discount Messages */
+.discount-message {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+.discount-message-success {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: #10B981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.discount-message-error {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.discount-message-info {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: #3B82F6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
 /* Consents */
 .consents-section {
     margin-bottom: 32px;
