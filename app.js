@@ -767,13 +767,17 @@ class AuthAPI {
   }
 
   // Step 6: Password reset - Offer forgotten-password flow
+  // Endpoint: POST /api/ver3/auth/resetpassword
+  // Base URL: https://boulders.brpsystems.com/apiserver (handled by proxy for ver3 endpoints)
   async resetPassword(email, appId = 1) {
     try {
       let url;
       if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/auth/reset-password`;
+        // Use ver3 endpoint path - proxy will route to correct base URL
+        url = `${this.baseUrl}?path=/api/ver3/auth/resetpassword`;
       } else {
-        url = `${this.baseUrl}/api/auth/reset-password`;
+        // Direct call to ver3 API
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/auth/resetpassword`;
       }
       
       console.log('[Step 6] Requesting password reset:', url);
@@ -800,15 +804,28 @@ class AuthAPI {
         body: JSON.stringify(payload),
       });
       
-      if (!response.ok) {
+      // API returns 201 (CREATED) on success, even if email doesn't match (security measure)
+      if (response.status !== 201 && !response.ok) {
         const errorText = await response.text();
         console.error(`[Step 6] Password reset error (${response.status}):`, errorText);
         throw new Error(`Password reset failed: ${response.status} - ${errorText}`);
       }
       
-      const data = await response.json();
-      console.log('[Step 6] Password reset response:', data);
-      return data;
+      // API may return empty body on 201, or JSON response
+      let data = null;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch (e) {
+          // Empty response is OK for 201 status
+          console.log('[Step 6] Password reset returned 201 with no JSON body (expected)');
+        }
+      }
+      
+      console.log('[Step 6] Password reset response:', response.status, data);
+      // Return success indication
+      return { success: true, status: response.status, data };
     } catch (error) {
       console.error('[Step 6] Password reset error:', error);
       throw error;
