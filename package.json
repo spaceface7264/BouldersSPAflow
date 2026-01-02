@@ -8,7 +8,8 @@
     "build": "npx tsc && npx vite build",
     "prod": "npx tsc && npx vite build",
     "lint": "npx eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "npx vite preview"
+    "preview": "npx vite preview",
+    "deploy": "npx wrangler pages deploy ./dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",

@@ -2790,6 +2790,38 @@ body {
     color: white;
 }
 
+.login-status {
+    margin-bottom: 24px;
+    padding: 16px 20px;
+    background-color: #111827;
+    border: 1px solid #374151;
+    border-radius: 12px;
+}
+
+.login-status-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.login-status-label {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: #9CA3AF;
+}
+
+.login-status-email {
+    margin: 4px 0 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: #FFFFFF;
+}
+
+.login-status .login-btn {
+    min-width: 120px;
+}
+
 .buyer-section {
     margin-bottom: 24px;
 }
