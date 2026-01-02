@@ -1,7 +1,8 @@
 name = "boulders-membership-flow"
 compatibility_date = "2026-01-02"
 
-# Note: For Cloudflare Pages, use: npx wrangler pages deploy ./dist
-# For Workers with static assets, use: npx wrangler deploy --assets=./dist
-# This config file is for reference - the deploy command should specify assets via CLI flag
+# Deploy static assets from the dist directory
+# This allows 'wrangler deploy' to work with static assets
+[assets]
+directory = "./dist"
 
