@@ -3396,6 +3396,49 @@ body {
     font-size: var(--font-size-base);
 }
 
+/* Payment Overview */
+.payment-overview {
+    margin: 16px 0;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid #374151;
+    border-radius: 8px;
+}
+
+.payment-overview-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.payment-overview-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.payment-label {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-md);
+    font-weight: 500;
+}
+
+.payment-amount {
+    color: #F401F5;
+    font-size: var(--font-size-md);
+    font-weight: 600;
+}
+
+.payment-overview-billing-period {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-style: italic;
+    text-align: center;
+}
+
 .cart-total {
     display: flex;
     justify-content: space-between;

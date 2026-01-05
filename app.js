@@ -694,18 +694,22 @@ class AuthAPI {
         
         // Handle rate limit errors with better messaging
         if (response.status === 429) {
-          let retryAfterSeconds = 900; // Default 15 minutes (900 seconds)
+          let retryAfterSeconds = 60; // Default 1 minute (60 seconds) - more reasonable than 15 minutes
           try {
             const errorData = JSON.parse(errorText);
             if (errorData.retryAfter) {
               // retryAfter is already in seconds (e.g., 900 = 15 minutes)
               retryAfterSeconds = parseInt(errorData.retryAfter, 10);
+              // Cap at 2 minutes (120 seconds) for better UX - API might say 15 minutes but that's too long
+              retryAfterSeconds = Math.min(retryAfterSeconds, 120);
             }
           } catch (e) {
             // If JSON parse fails, try to extract from error text
             const retryMatch = errorText.match(/retryAfter["\s:]*(\d+)/i);
             if (retryMatch) {
               retryAfterSeconds = parseInt(retryMatch[1], 10);
+              // Cap at 2 minutes for better UX
+              retryAfterSeconds = Math.min(retryAfterSeconds, 120);
             }
           }
           const retryMinutes = Math.ceil(retryAfterSeconds / 60);
@@ -1418,16 +1422,58 @@ class OrderAPI {
       const subscriberId = state.customerId ? Number(state.customerId) : null;
       const birthDate = getSubscriberBirthDate();
       
+      // Set start date to today so membership starts immediately
+      // Format: YYYY-MM-DD (ISO date format)
+      const today = new Date();
+      const startDate = today.toISOString().split('T')[0]; // e.g., "2026-01-05"
+      
+      // CRITICAL BACKEND BUG: Backend ignores startDate parameter for productId 134 ("Medlemskab")
+      // but accepts it for productId 56 ("Junior") and productId 135 ("Student").
+      // This causes backend to set initialPaymentPeriod.start to future date (next month)
+      // for productId 134, preventing partial-month pricing calculation.
+      // This is a backend issue that needs to be fixed on backend side.
+      // Workaround: Frontend calculates partial-month pricing client-side for display,
+      // but payment window will still show full monthly price because backend uses its own calculation.
+      
       const payload = {
         subscriptionProduct: subscriptionProductId,
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
         ...(subscriberId ? { subscriber: subscriberId } : {}),
         ...(birthDate ? { birthDate } : {}),
+        startDate: startDate, // Set membership to start today (ISO format: YYYY-MM-DD)
+        // Also try 'start' parameter in case backend expects different field name
+        start: startDate,
       };
+      
+      // Log warning if this is productId 134 (known backend bug)
+      if (subscriptionProductId === 134) {
+        console.warn('[Step 7] ⚠️ BACKEND BUG: Adding subscription for productId 134 ("Medlemskab")');
+        console.warn('[Step 7] ⚠️ Backend will ignore startDate parameter and set start date to future');
+        console.warn('[Step 7] ⚠️ This prevents partial-month pricing calculation on backend');
+        console.warn('[Step 7] ⚠️ Frontend will calculate partial-month pricing client-side for display');
+        console.warn('[Step 7] ⚠️ But payment window will show full monthly price (backend bug)');
+        console.warn('[Step 7] ⚠️ This is a backend issue - backend should accept startDate for all products');
+      }
       
       console.log('[Step 7] Adding subscription item - productId:', productId);
       console.log('[Step 7] Extracted subscriptionProductId:', subscriptionProductId);
       console.log('[Step 7] Subscription item payload:', JSON.stringify(payload, null, 2));
+      
+      // CRITICAL: Log payload details for debugging why backend ignores startDate for productId 134
+      console.log('[Step 7] 🔍 Payload analysis:', {
+        subscriptionProductId,
+        productId,
+        startDate,
+        hasSubscriber: !!subscriberId,
+        subscriberId,
+        hasBirthDate: !!birthDate,
+        birthDate,
+        businessUnit: state.selectedBusinessUnit,
+        payloadKeys: Object.keys(payload),
+        payloadStartDate: payload.startDate,
+        payloadStart: payload.start
+      });
+      
       
       const response = await fetch(url, {
         method: 'POST',
@@ -1443,6 +1489,34 @@ class OrderAPI {
       
       const data = await response.json();
       console.log('[Step 7] Add subscription item response:', data);
+      
+      // CRITICAL: Log response to see if backend accepted startDate
+      const subscriptionItem = data?.subscriptionItems?.[0];
+      const responseStartDate = subscriptionItem?.initialPaymentPeriod?.start;
+      const responseOrderPrice = data?.price?.amount;
+      const startDateAccepted = responseStartDate === startDate;
+      
+      console.log('[Step 7] 🔍 Response analysis:', {
+        productId,
+        subscriptionProductId,
+        sentStartDate: startDate,
+        responseStartDate,
+        startDateAccepted,
+        orderPrice: responseOrderPrice,
+        orderPriceDKK: responseOrderPrice ? responseOrderPrice / 100 : null,
+        hasInitialPaymentPeriod: !!subscriptionItem?.initialPaymentPeriod,
+        initialPaymentPeriod: subscriptionItem?.initialPaymentPeriod
+      });
+      
+      // CRITICAL BACKEND BUG: Log error if backend ignored startDate for productId 134
+      if (subscriptionProductId === 134 && !startDateAccepted) {
+        console.error('[Step 7] ❌ BACKEND BUG CONFIRMED: Backend ignored startDate for productId 134!');
+        console.error('[Step 7] ❌ Sent startDate:', startDate, 'but backend returned:', responseStartDate);
+        console.error('[Step 7] ❌ This is a backend bug - backend should accept startDate for all products');
+        console.error('[Step 7] ❌ Payment window will show incorrect price (469 DKK instead of 408.48 DKK)');
+        console.error('[Step 7] ❌ This needs to be fixed on backend side');
+      }
+      
       return data;
     } catch (error) {
       console.error('[Step 7] Add subscription item error:', error);
@@ -2424,7 +2498,8 @@ const state = {
   cartItems: [],
   billingPeriod: '',
   forms: {},
-  order: null,
+  order: null, // Order summary object for confirmation view (created by buildOrderSummary)
+  fullOrder: null, // Full order object from API (includes subscriptionItems, price, etc.) - used for payment overview
   orderId: null, // Step 7: Created order ID
   customerId: null, // Step 6: Created customer ID (for membership ID display)
   authenticatedEmail: null,
@@ -2479,7 +2554,17 @@ function syncAuthenticatedCustomerState(username = null, email = null) {
   }
 
   refreshLoginUI();
-  autoEnsureOrderIfReady('auth-state-sync');
+  autoEnsureOrderIfReady('auth-state-sync')
+    .then(() => {
+      // Order should now be created and subscription attached
+      // Update payment overview if we're on step 4
+      if (state.currentStep === 4) {
+        updatePaymentOverview();
+      }
+    })
+    .catch(error => {
+      console.warn('[Auth] Could not ensure order after auth sync:', error);
+    });
 }
 
 const DOM = {};
@@ -2861,6 +2946,10 @@ function cacheDom() {
   DOM.cartItems = document.querySelector('[data-component="cart-items"]');
   DOM.cartTotal = document.querySelector('[data-summary-field="cart-total"]');
   DOM.billingPeriod = document.querySelector('[data-summary-field="billing-period"]');
+  DOM.paymentOverview = document.querySelector('.payment-overview');
+  DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
+  DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
+  DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
   DOM.termsConsent = document.getElementById('termsConsent');
   DOM.discountToggle = document.querySelector('.discount-toggle');
@@ -3056,6 +3145,11 @@ async function handleLoginSubmit(event) {
     try {
       await ensureOrderCreated('login');
       await ensureSubscriptionAttached('login');
+      // Payment overview should be updated by ensureSubscriptionAttached
+      // But let's make sure it's updated if we're on step 4
+      if (state.currentStep === 4) {
+        updatePaymentOverview();
+      }
     } catch (orderError) {
       console.warn('[login] Auto order creation after login failed:', orderError);
     }
@@ -3813,8 +3907,8 @@ function setupNewAccessStep() {
         state.selectedAddonIds = [];
       }
       
-        // Handle punch cards differently - show quantity selector
-        if (category === 'punchcard') {
+      // Handle punch cards differently - show quantity selector
+      if (category === 'punchcard') {
           // Initialize quantity to 1 for this specific punch card type
           if (!state.valueCardQuantities.has(planId)) {
             state.valueCardQuantities.set(planId, 1);
@@ -3895,9 +3989,20 @@ function initAuthModeToggle() {
   const loginSection = document.querySelector('[data-auth-section="login"]');
   const createSection = document.querySelector('[data-auth-section="create"]');
   
-  // Set initial state (create account active)
-  const createBtn = document.querySelector('[data-mode="create"]');
-  if (createBtn) createBtn.classList.add('active');
+  // Set initial state - if user is logged in, select login tab, otherwise create account
+  const isAuthenticated = isUserAuthenticated();
+  const initialMode = isAuthenticated ? 'login' : 'create';
+  
+  const initialBtn = document.querySelector(`[data-mode="${initialMode}"]`);
+  if (initialBtn) {
+    initialBtn.classList.add('active');
+    // Also switch the mode to show correct section
+    switchAuthMode(initialMode);
+  } else {
+    // Fallback to create account if button not found
+    const createBtn = document.querySelector('[data-mode="create"]');
+    if (createBtn) createBtn.classList.add('active');
+  }
   
   toggleBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -5108,6 +5213,23 @@ function updateCartSummary() {
 
   renderCartItems();
   renderCartTotal();
+  
+  // If we're on step 4 and have order data, ensure payment overview is updated
+  if (state.currentStep === 4 && state.orderId && !state.fullOrder) {
+    // Order exists but fullOrder not loaded - fetch it
+    orderAPI.getOrder(state.orderId)
+      .then(order => {
+        state.fullOrder = order;
+        updatePaymentOverview();
+        console.log('[Cart Summary] Order data fetched and payment overview updated');
+      })
+      .catch(error => {
+        console.warn('[Cart Summary] Could not fetch order data:', error);
+      });
+  } else if (state.currentStep === 4 && state.fullOrder) {
+    // Full order data available - ensure payment overview is updated
+    updatePaymentOverview();
+  }
 }
 
 function updateCartTotals() {
@@ -5211,8 +5333,317 @@ function renderCartTotal() {
     DOM.billingPeriod.textContent = state.billingPeriod || 'Billing period confirmed after checkout.';
   }
   
+  // Update payment overview
+  updatePaymentOverview();
+  
   // Update discount display if discount is applied
   updateDiscountDisplay();
+}
+
+function updatePaymentOverview() {
+  // Only show payment overview if there's a membership (subscription) in the cart
+  const hasMembership = state.selectedProductType === 'membership' && state.selectedProductId;
+  
+  if (!DOM.paymentOverview) {
+    DOM.paymentOverview = document.querySelector('.payment-overview');
+  }
+  if (!DOM.payNow) {
+    DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
+  }
+  if (!DOM.monthlyPayment) {
+    DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
+  }
+  if (!DOM.paymentBillingPeriod) {
+    DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
+  }
+  
+  if (!DOM.paymentOverview || !DOM.payNow || !DOM.monthlyPayment) {
+    return;
+  }
+  
+  if (!hasMembership) {
+    // Hide payment overview if no membership
+    DOM.paymentOverview.style.display = 'none';
+    return;
+  }
+  
+  // Don't update DOM if fullOrder doesn't exist yet, or if it exists but doesn't have subscriptionItems yet
+  // This prevents showing incorrect values before subscription is attached to the order
+  // Apply this guard whenever we have a membership selected (payment overview should be shown)
+  const hasSubscriptionItems = state.fullOrder?.subscriptionItems && state.fullOrder.subscriptionItems.length > 0;
+  if (hasMembership && (!state.fullOrder || !hasSubscriptionItems)) {
+    console.log('[Payment Overview] ⏳ Waiting for order data with subscriptionItems before updating payment overview');
+    return;
+  }
+  
+  // Show payment overview
+  DOM.paymentOverview.style.display = 'block';
+  
+  console.log('[Payment Overview] ===== UPDATING PAYMENT OVERVIEW =====');
+  console.log('[Payment Overview] Order data:', {
+    hasFullOrder: !!state.fullOrder,
+    hasOrder: !!state.order,
+    orderId: state.fullOrder?.id || state.order?.id,
+    orderNumber: state.fullOrder?.number || state.order?.number,
+    orderPrice: state.fullOrder?.price || state.order?.price,
+    hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems || state.order?.subscriptionItems),
+    subscriptionItemsCount: (state.fullOrder?.subscriptionItems || state.order?.subscriptionItems)?.length || 0
+  });
+  
+  // Calculate "Betales nu" (Pay now)
+  // CRITICAL: Use the EXACT same price that backend sends to payment window
+  // Payment link API reads order.price.amount from backend, so we must use the same value
+  // This ensures "Betales nu" matches the price shown in payment window
+  let payNowAmount = 0;
+  
+  // Check if backend calculated partial-month pricing correctly
+  // If initialPaymentPeriod starts in the future (>1 day), backend may not have calculated partial-month pricing
+  // In that case, we need to calculate it client-side to show the correct price
+  if (state.fullOrder && state.fullOrder.price && state.fullOrder.price.amount !== undefined) {
+    const orderTotalPrice = state.fullOrder.price.amount;
+    const orderTotalPriceDKK = typeof orderTotalPrice === 'object' 
+      ? orderTotalPrice.amount / 100 
+      : orderTotalPrice / 100;
+    
+    // Check if we need to calculate partial-month pricing client-side
+    const subscriptionItem = state.fullOrder.subscriptionItems?.[0];
+    const recurringPrice = subscriptionItem?.payRecurring?.price?.amount || 0;
+    const initialPaymentPeriod = subscriptionItem?.initialPaymentPeriod;
+    
+    // If initialPaymentPeriod starts more than 1 day in the future, backend likely didn't calculate partial-month pricing
+    let needsClientSideCalculation = false;
+    if (initialPaymentPeriod && initialPaymentPeriod.start) {
+      const backendStartDate = new Date(initialPaymentPeriod.start);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysUntilStart = Math.ceil((backendStartDate - today) / (1000 * 60 * 60 * 24));
+      
+      // If backend start date is more than 1 day in the future AND order price equals recurring price,
+      // backend didn't calculate partial-month pricing - we need to calculate it client-side
+      if (daysUntilStart > 1 && recurringPrice > 0 && orderTotalPrice === recurringPrice) {
+        needsClientSideCalculation = true;
+        console.log('[Payment Overview] ⚠️ Backend start date is', daysUntilStart, 'days in future and order price equals recurring price');
+        console.log('[Payment Overview] Calculating partial-month pricing client-side...');
+        
+        // Calculate period from today to end of current month
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0); // Last day of current month
+        const daysInCurrentMonth = lastDayOfMonth.getDate();
+        const dayOfMonth = today.getDate();
+        const daysRemainingInMonth = daysInCurrentMonth - dayOfMonth + 1; // Days from today to end of month
+        
+        // Calculate prorated price for remaining days in current month
+        const proratedPrice = Math.round((recurringPrice * daysRemainingInMonth) / daysInCurrentMonth);
+        payNowAmount = proratedPrice / 100;
+        
+        console.log('[Payment Overview] ✅ Client-side partial-month calculation:', payNowAmount, 'DKK (', daysRemainingInMonth, 'days of', daysInCurrentMonth, 'days)');
+      }
+    }
+    
+    // If backend calculated the price correctly (or we don't need client-side calculation), use backend's price
+    if (!needsClientSideCalculation) {
+      payNowAmount = orderTotalPriceDKK;
+      console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount (matches payment window):', payNowAmount, 'DKK');
+      console.log('[Payment Overview] This is the same price backend sends to payment link API');
+    }
+  } else {
+    // Fallback: Use cart total if fullOrder not available yet
+    payNowAmount = state.totals.cartTotal || 0;
+    console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - fullOrder data not available');
+    console.log('[Payment Overview] Full state check:', {
+      hasFullOrder: !!state.fullOrder,
+      fullOrderId: state.fullOrder?.id,
+      fullOrderNumber: state.fullOrder?.number,
+      hasOrder: !!state.order,
+      orderId: state.orderId,
+      cartTotal: state.totals.cartTotal
+    });
+  }
+  
+  // Calculate "Månedlig betaling herefter" (Monthly payment thereafter)
+  // This is the recurring monthly price AFTER any promotional period
+  let monthlyPaymentAmount = 0;
+  
+  // Try to get from fullOrder subscriptionItems first (fullOrder has the API structure)
+  if (state.fullOrder && state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
+    const subscriptionItem = state.fullOrder.subscriptionItems[0];
+    
+    console.log('[Payment Overview] DEBUG - SubscriptionItem:', {
+      hasPayRecurring: !!subscriptionItem.payRecurring,
+      payRecurringPrice: subscriptionItem.payRecurring?.price,
+      initialPaymentPeriod: subscriptionItem.initialPaymentPeriod
+    });
+    
+    // payRecurring.price.amount is ALWAYS the regular monthly price after any promotional period
+    // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
+    if (subscriptionItem.payRecurring && subscriptionItem.payRecurring.price) {
+      monthlyPaymentAmount = subscriptionItem.payRecurring.price.amount / 100;
+      console.log('[Payment Overview] ✅ Monthly payment from payRecurring:', monthlyPaymentAmount, 'DKK (payRecurring.price.amount:', subscriptionItem.payRecurring.price.amount, ')');
+    } else {
+      console.warn('[Payment Overview] ⚠️ SubscriptionItem found but no payRecurring.price:', subscriptionItem);
+    }
+  } else {
+    // No order data yet - use membership monthly price from state
+    monthlyPaymentAmount = state.totals.membershipMonthly || 0;
+    console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK - fullOrder data not available');
+    console.log('[Payment Overview] Full state check:', {
+      hasFullOrder: !!state.fullOrder,
+      fullOrderSubscriptionItems: state.fullOrder?.subscriptionItems?.length || 0,
+      hasOrder: !!state.order,
+      membershipMonthly: state.totals.membershipMonthly
+    });
+    
+    // If we have product data, try to get the regular price
+    if (monthlyPaymentAmount === 0 && state.selectedProductId && state.subscriptions) {
+      const productIdNum = typeof state.selectedProductId === 'string' 
+        ? parseInt(state.selectedProductId) 
+        : state.selectedProductId;
+      
+      const membership = state.subscriptions.find(p => 
+        p.id === state.selectedProductId || 
+        p.id === productIdNum ||
+        String(p.id) === String(state.selectedProductId)
+      );
+      
+      if (membership && membership.priceWithInterval && membership.priceWithInterval.price) {
+        monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
+        console.log('[Payment Overview] Monthly payment from product data:', monthlyPaymentAmount, 'DKK');
+      }
+    }
+  }
+  
+  // Update display
+  if (DOM.payNow) {
+    DOM.payNow.textContent = currencyFormatter.format(payNowAmount);
+    
+    // CRITICAL: Log to verify this matches payment window price
+    const orderPriceForPayment = state.fullOrder?.price?.amount || 0;
+    const orderPriceDKK = orderPriceForPayment / 100;
+    const pricesMatch = Math.abs(payNowAmount - orderPriceDKK) < 0.01; // Allow small rounding differences
+    
+    console.log('[Payment Overview] 🔍 "Betales nu" price:', payNowAmount, 'DKK');
+    console.log('[Payment Overview] 🔍 Order price (sent to payment window):', orderPriceDKK, 'DKK');
+    console.log('[Payment Overview] 🔍 Prices match:', pricesMatch ? '✅ YES' : '❌ NO - MISMATCH!');
+    
+    // WARNING: If prices don't match, this is a backend issue
+    // Backend ignores startDate parameter for "Medlemskab" (productId 134) and sets start date to future,
+    // which prevents partial-month pricing calculation. This causes payment window to show full monthly price
+    // instead of partial-month price. This is a known backend limitation that needs to be fixed on backend side.
+    if (!pricesMatch) {
+      const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
+      const productId = subscriptionItem?.product?.id || state.selectedProductId;
+      console.warn('[Payment Overview] ⚠️ PRICE MISMATCH DETECTED!');
+      console.warn('[Payment Overview] ⚠️ UI shows:', payNowAmount, 'DKK (client-side calculated partial-month price)');
+      console.warn('[Payment Overview] ⚠️ Payment window will show:', orderPriceDKK, 'DKK (backend full monthly price)');
+      console.warn('[Payment Overview] ⚠️ Product ID:', productId);
+      console.warn('[Payment Overview] ⚠️ This is a backend issue - backend ignores startDate parameter for this product');
+      console.warn('[Payment Overview] ⚠️ Backend sets initialPaymentPeriod.start to future date, preventing partial-month pricing');
+    }
+  }
+  
+  if (DOM.monthlyPayment) {
+    if (monthlyPaymentAmount > 0) {
+      DOM.monthlyPayment.textContent = `${currencyFormatter.format(monthlyPaymentAmount)}/md`;
+    } else {
+      DOM.monthlyPayment.textContent = '—';
+    }
+  }
+  
+  // Update billing period display
+  if (DOM.paymentBillingPeriod) {
+    let billingPeriodText = '';
+    
+    // Try to get billing period from fullOrder subscriptionItems
+    const orderToUseForBilling = state.fullOrder || state.order;
+    if (orderToUseForBilling && orderToUseForBilling.subscriptionItems && orderToUseForBilling.subscriptionItems.length > 0) {
+      const subscriptionItem = orderToUseForBilling.subscriptionItems[0];
+      
+      // Check for initialPaymentPeriod (promotional period)
+      if (subscriptionItem.initialPaymentPeriod) {
+        const backendStartDate = new Date(subscriptionItem.initialPaymentPeriod.start);
+        const backendEndDate = new Date(subscriptionItem.initialPaymentPeriod.end);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Today at midnight
+        
+        // Format dates in Danish format (DD.MM.YYYY)
+        const formatDate = (date) => {
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}.${month}.${year}`;
+        };
+        
+        // If backend start date is in the future (more than 1 day), show period as if it starts today
+        const daysUntilBackendStart = Math.ceil((backendStartDate - today) / (1000 * 60 * 60 * 24));
+        
+        if (daysUntilBackendStart > 1) {
+          // Backend set start to future - show period from today to end of current month
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0); // Last day of current month
+          
+          billingPeriodText = `For perioden ${formatDate(today)} - ${formatDate(lastDayOfMonth)}`;
+        } else {
+          // Backend start date is today or very soon - use backend's period
+          // Validate dates - if start date is more than 2 months in the future, it might be incorrect
+          const monthsDiff = (backendStartDate.getFullYear() - now.getFullYear()) * 12 + (backendStartDate.getMonth() - now.getMonth());
+          const isValidPeriod = monthsDiff >= 0 && monthsDiff <= 2 && backendStartDate < backendEndDate;
+          
+          if (isValidPeriod) {
+            billingPeriodText = `For perioden ${formatDate(backendStartDate)} - ${formatDate(backendEndDate)}`;
+            
+            // If there's a boundUntil date (end of promotional period), show that too
+            if (subscriptionItem.boundUntil) {
+              const boundUntilDate = new Date(subscriptionItem.boundUntil);
+              billingPeriodText += ` (bundet til ${formatDate(boundUntilDate)})`;
+            }
+          } else {
+            // Date period seems invalid (too far in future or invalid range)
+            console.warn('[Payment Overview] Invalid initialPaymentPeriod detected:', {
+              start: subscriptionItem.initialPaymentPeriod.start,
+              end: subscriptionItem.initialPaymentPeriod.end,
+              monthsDiff,
+              now: now.toISOString()
+            });
+            
+            // Don't show invalid dates - fall back to default message
+            billingPeriodText = '';
+          }
+        }
+      } else if (subscriptionItem.boundUntil) {
+        // No initialPaymentPeriod, but there's a boundUntil date
+        const boundUntilDate = new Date(subscriptionItem.boundUntil);
+        const formatDate = (date) => {
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}.${month}.${year}`;
+        };
+        billingPeriodText = `Bundet til ${formatDate(boundUntilDate)}`;
+      }
+    }
+    
+    // Fallback to state.billingPeriod if available
+    if (!billingPeriodText && state.billingPeriod) {
+      billingPeriodText = state.billingPeriod;
+    }
+    
+    // If still no billing period, show default message
+    if (!billingPeriodText) {
+      billingPeriodText = 'Faktureringsperiode bekræftes efter checkout.';
+    }
+    
+    DOM.paymentBillingPeriod.textContent = billingPeriodText;
+    DOM.paymentBillingPeriod.style.display = 'block';
+  }
+  
+  console.log('[Payment Overview] Updated:', {
+    payNow: payNowAmount,
+    monthlyPayment: monthlyPaymentAmount,
+    hasOrder: !!state.order,
+    billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A'
+  });
 }
 
 function updateDiscountDisplay() {
@@ -5368,6 +5799,16 @@ async function ensureOrderCreated(context = 'auto') {
     const order = await orderAPI.createOrder(orderData);
     state.orderId = order.id || order.orderId;
     state.subscriptionAttachedOrderId = null;
+    
+    // Store full order object for payment overview
+    // Note: This order might not have subscriptionItems yet, but we'll update it later
+    state.fullOrder = order;
+    
+    // Update payment overview if we're on step 4
+    if (state.currentStep === 4) {
+      updatePaymentOverview();
+    }
+    
     persistOrderSnapshot(state.orderId);
     console.log(`[checkout] Order ready: ${state.orderId} (${context})`);
     return state.orderId;
@@ -5404,8 +5845,20 @@ async function ensureSubscriptionAttached(context = 'auto') {
 
   subscriptionAttachPromise = (async () => {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
+    
     await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
     state.subscriptionAttachedOrderId = orderId;
+    
+    // Fetch updated order with subscriptionItems for payment overview
+    try {
+      const updatedOrder = await orderAPI.getOrder(orderId);
+      state.fullOrder = updatedOrder;
+      updatePaymentOverview();
+      console.log(`[checkout] Order updated with subscriptionItems for payment overview`);
+    } catch (error) {
+      console.warn(`[checkout] Could not fetch order for payment overview:`, error);
+    }
+    
     persistOrderSnapshot(orderId);
     console.log(`[checkout] Membership attached to order ${orderId} (${context})`);
     return orderId;
@@ -5655,10 +6108,12 @@ async function handleCheckout() {
               const errorMessage = loginError.message || String(loginError);
               if (errorMessage.includes('429') || errorMessage.includes('Rate limit') || errorMessage.includes('Too many requests')) {
                 // Extract retryAfter from error message (it's in seconds)
-                let retryAfterSeconds = 900; // Default 15 minutes (900 seconds)
+                let retryAfterSeconds = 60; // Default 1 minute (60 seconds) - more reasonable
                 const retryAfterMatch = errorMessage.match(/retryAfter["\s:]*(\d+)/i);
                 if (retryAfterMatch) {
                   retryAfterSeconds = parseInt(retryAfterMatch[1], 10);
+                  // Cap at 2 minutes (120 seconds) for better UX - API might say 15 minutes but that's too long
+                  retryAfterSeconds = Math.min(retryAfterSeconds, 120);
                 }
                 
                 const retryMinutes = Math.ceil(retryAfterSeconds / 60);
@@ -5752,6 +6207,13 @@ async function handleCheckout() {
 	        try {
 	          await ensureSubscriptionAttached('checkout-flow');
 	          console.log('[checkout] Membership ensured on order');
+	          
+	          // Ensure payment overview is updated after subscription is attached
+	          // ensureSubscriptionAttached already fetches order and calls updatePaymentOverview(),
+	          // but let's make sure it's called here too
+	          if (state.order) {
+	            updatePaymentOverview();
+	          }
           
           // CRITICAL: Apply coupon BEFORE generating payment link
           // This ensures the payment portal shows the discounted price
@@ -5773,6 +6235,11 @@ async function handleCheckout() {
               let orderCheck = null;
               try {
                 orderCheck = await orderAPI.getOrder(state.orderId);
+                
+                // Store full order object for payment overview
+                state.fullOrder = orderCheck;
+                updatePaymentOverview();
+                
                 const existingCouponDiscount = orderCheck?.couponDiscount || orderCheck?.price?.couponDiscount;
                 if (existingCouponDiscount) {
                   console.log('[checkout] ✅ Discount already exists on order, verifying amount...');
@@ -5882,6 +6349,10 @@ async function handleCheckout() {
                     const updatedOrder = await orderAPI.getOrder(state.orderId);
                     
                     console.log('[checkout] Full order response:', JSON.stringify(updatedOrder, null, 2));
+                    
+                    // Store full order object for payment overview
+                    state.fullOrder = updatedOrder;
+                    updatePaymentOverview();
                     
                     // Check if order has the discount applied
                     const orderCouponDiscount = updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount;
@@ -6007,6 +6478,44 @@ async function handleCheckout() {
             const orderBeforePayment = await orderAPI.getOrder(state.orderId);
             console.log('[checkout] Final order response:', JSON.stringify(orderBeforePayment, null, 2));
             
+            // Store full order object for payment overview
+            state.fullOrder = orderBeforePayment;
+            
+            // CRITICAL: Log the exact price that will be sent to payment window
+            // Note: For "Medlemskab" (productId 134), backend may not calculate partial-month pricing correctly
+            // if initialPaymentPeriod starts in the future. In that case, payment window will show the full
+            // monthly price (469 DKK) instead of the partial-month price (408.48 DKK).
+            // The UI shows the correct client-side calculated price, but payment window uses backend's price.
+            const finalOrderPrice = orderBeforePayment?.price?.amount || 0;
+            
+            // Check if backend calculated partial-month pricing correctly (for logging only)
+            const subscriptionItem = orderBeforePayment?.subscriptionItems?.[0];
+            const recurringPrice = subscriptionItem?.payRecurring?.price?.amount || 0;
+            const initialPaymentPeriod = subscriptionItem?.initialPaymentPeriod;
+            let needsPriceFix = false;
+            if (subscriptionItem && initialPaymentPeriod && initialPaymentPeriod.start && recurringPrice > 0) {
+              const backendStartDate = new Date(initialPaymentPeriod.start);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const daysUntilStart = Math.ceil((backendStartDate - today) / (1000 * 60 * 60 * 24));
+              
+              // If backend start date is more than 1 day in the future AND order price equals recurring price,
+              // backend didn't calculate partial-month pricing
+              if (daysUntilStart > 1 && finalOrderPrice === recurringPrice) {
+                needsPriceFix = true;
+                console.warn('[checkout] ⚠️ Backend did not calculate partial-month pricing!');
+                console.warn('[checkout] Order price:', finalOrderPrice, 'equals recurring price:', recurringPrice);
+                console.warn('[checkout] Backend start date:', initialPaymentPeriod.start, '(', daysUntilStart, 'days in future)');
+                console.warn('[checkout] Payment window will show full monthly price instead of partial-month price');
+                console.warn('[checkout] UI shows client-side calculated price, but payment uses backend price');
+              }
+            }
+            console.log('[checkout] 🔍 PRICE THAT WILL BE SENT TO PAYMENT WINDOW:', finalOrderPrice, '(in cents) =', finalOrderPrice / 100, 'DKK');
+            console.log('[checkout] This is order.price.amount from backend - payment link API will use this exact value');
+            
+            // Update payment overview with order data
+            updatePaymentOverview();
+            
             // Verify coupon discount is present
             const orderCouponDiscount = orderBeforePayment?.couponDiscount || orderBeforePayment?.price?.couponDiscount;
             if (orderCouponDiscount) {
@@ -6022,6 +6531,7 @@ async function handleCheckout() {
               couponDiscount: orderCouponDiscount,
               discountAmount: orderBeforePayment?.discountAmount,
               totalCost: orderBeforePayment?.totalCost,
+              priceAmount: orderBeforePayment?.price?.amount,
             });
           } catch (orderCheckError) {
             console.warn('[checkout] Could not verify order state before payment link:', orderCheckError);
@@ -6039,6 +6549,15 @@ async function handleCheckout() {
           // Extract payment link from response - API returns {success: true, data: {paymentLink: ...}}
           // Log full response for debugging
           console.log('[checkout] Full payment link API response:', JSON.stringify(paymentData, null, 2));
+          
+          // CRITICAL: Log the price that was sent to payment window
+          // Check if payment response contains price information
+          const paymentPrice = paymentData?.data?.amount || paymentData?.data?.price || paymentData?.amount || paymentData?.price;
+          const currentPayNowDisplay = DOM.payNow?.textContent || 'N/A';
+          console.log('[checkout] 🔍 Payment link generated');
+          console.log('[checkout] 🔍 Price in payment response:', paymentPrice);
+          console.log('[checkout] 🔍 "Betales nu" display:', currentPayNowDisplay);
+          console.log('[checkout] 🔍 Order price (state.fullOrder.price.amount):', state.fullOrder?.price?.amount || 'N/A');
           
           paymentLink = paymentData?.data?.paymentLink || 
                         paymentData?.data?.link || 
@@ -6315,8 +6834,25 @@ async function handleCheckout() {
     }
 
     // Step 5: Update order summary with real data
+    // IMPORTANT: Preserve full order object (state.fullOrder) for payment overview
+    // buildOrderSummary creates a summary object for confirmation view, not the full API order
     const summaryOrder = state.orderId ? { id: state.orderId, orderId: state.orderId } : null;
     state.order = buildOrderSummary(payload, summaryOrder, customer);
+    
+    // If we don't have full order data yet, try to fetch it before redirecting
+    // This ensures payment overview shows correct prices
+    if (!state.fullOrder || !state.fullOrder.subscriptionItems) {
+      if (state.orderId) {
+        try {
+          const fullOrder = await orderAPI.getOrder(state.orderId);
+          state.fullOrder = fullOrder;
+          updatePaymentOverview();
+          console.log('[checkout] Full order data fetched and stored for payment overview');
+        } catch (error) {
+          console.warn('[checkout] Could not fetch full order data:', error);
+        }
+      }
+    }
     
     // Step 6: Redirect to payment or show confirmation
     console.log('[checkout] ===== PAYMENT REDIRECT CHECK =====');
@@ -6532,6 +7068,49 @@ window.exportPaymentDiagnostics = function() {
   
   console.log('[Diagnostics] Exported diagnostic data:', diagnostics);
   return diagnostics;
+};
+
+// Debug helper: Check payment overview state
+window.checkPaymentOverview = function() {
+  console.log('=== PAYMENT OVERVIEW DEBUG ===');
+  console.log('State:', {
+    orderId: state.orderId,
+    hasFullOrder: !!state.fullOrder,
+    fullOrderPrice: state.fullOrder?.price,
+    fullOrderSubscriptionItems: state.fullOrder?.subscriptionItems?.length || 0,
+    hasOrder: !!state.order,
+    cartTotal: state.totals.cartTotal,
+    membershipMonthly: state.totals.membershipMonthly,
+    selectedProductType: state.selectedProductType,
+    selectedProductId: state.selectedProductId
+  });
+  
+  if (state.fullOrder) {
+    console.log('Full Order:', JSON.stringify(state.fullOrder, null, 2));
+  }
+  
+  if (state.orderId && !state.fullOrder) {
+    console.log('⚠️ Order ID exists but fullOrder is missing - fetching...');
+    orderAPI.getOrder(state.orderId)
+      .then(order => {
+        state.fullOrder = order;
+        updatePaymentOverview();
+        console.log('✅ Order fetched and payment overview updated');
+      })
+      .catch(error => {
+        console.error('❌ Could not fetch order:', error);
+      });
+  } else if (state.fullOrder) {
+    console.log('✅ Full order exists, updating payment overview...');
+    updatePaymentOverview();
+  }
+  
+  return {
+    orderId: state.orderId,
+    hasFullOrder: !!state.fullOrder,
+    payNow: state.fullOrder?.price?.amount ? (typeof state.fullOrder.price.amount === 'object' ? state.fullOrder.price.amount.amount / 100 : state.fullOrder.price.amount / 100) : state.totals.cartTotal,
+    monthlyPayment: state.fullOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount ? state.fullOrder.subscriptionItems[0].payRecurring.price.amount / 100 : state.totals.membershipMonthly
+  };
 };
 
 // Diagnostic helper: Get current order status
@@ -6870,9 +7449,15 @@ async function loadOrderForConfirmation(orderId) {
       return; // Don't show success page yet
     }
     
-    // Build order summary with fetched data
+    // Store full order object for payment overview (before building summary)
+    state.fullOrder = order;
+    
+    // Build order summary with fetched data (for confirmation view)
     state.order = buildOrderSummary(payload, { ...order, total: orderTotal, totalAmount: orderTotal }, customer || storedCustomer);
     console.log('[Payment Return] Order summary built:', state.order);
+    
+    // Update payment overview with order data
+    updatePaymentOverview();
     
     // Only render confirmation view if payment is confirmed
     renderConfirmationView();
@@ -6883,6 +7468,16 @@ async function loadOrderForConfirmation(orderId) {
       // Build a minimal order summary with just the order ID
       const payload = buildCheckoutPayload();
       state.order = buildOrderSummary(payload, { id: orderId }, null);
+    }
+    // Try to fetch full order data even if payment is not confirmed
+    if (orderId && !state.fullOrder) {
+      try {
+        const fullOrder = await orderAPI.getOrder(orderId);
+        state.fullOrder = fullOrder;
+        updatePaymentOverview();
+      } catch (error) {
+        console.warn('[Payment Return] Could not fetch full order data:', error);
+      }
     }
     renderConfirmationView();
   }
@@ -7164,7 +7759,9 @@ function setCheckoutLoadingState(isLoading) {
 }
 
 function nextStep() {
-  if (state.currentStep >= TOTAL_STEPS) return;
+  if (state.currentStep >= TOTAL_STEPS) {
+    return;
+  }
   // advance to next visible panel (skip any hidden ones)
   let target = state.currentStep + 1;
   // Add-ons step (step 3) is disabled - always skip it
@@ -7175,14 +7772,29 @@ function nextStep() {
   // if (state.currentStep === 2 && isMembershipSelected()) {
   //   target = 3;
   // }
-  while (target <= TOTAL_STEPS) {
-    const panel = DOM.stepPanels[target - 1];
-    const hidden = panel && panel.style && panel.style.display === 'none';
-    if (!hidden) break;
-    target += 1;
-    // Skip step 3 if we land on it
-    if (target === 3) {
-      target = 4;
+  
+  // If we're going from step 2 to step 4 (skipping step 3), don't check for hidden panels
+  // Step 4 should always be shown when coming from step 2
+  if (state.currentStep === 2 && target === 4) {
+    // Don't enter the while loop - step 4 should be shown
+  } else {
+    while (target <= TOTAL_STEPS) {
+      const panel = DOM.stepPanels[target - 1];
+      if (!panel) break; // Panel doesn't exist
+      // Skip step 3 check since step 3 is always hidden
+      if (target === 3) {
+        target = 4;
+        continue;
+      }
+      // Check if panel is explicitly hidden via inline style
+      // Don't check computed style to avoid skipping step 4 when it has CSS display:none
+      const hidden = panel.style && panel.style.display === 'none';
+      if (!hidden) break;
+      target += 1;
+      // Skip step 3 if we land on it
+      if (target === 3) {
+        target = 4;
+      }
     }
   }
   state.currentStep = Math.min(target, TOTAL_STEPS);
@@ -7202,6 +7814,43 @@ function nextStep() {
   // Update cart when step 4 (Send/Info) is shown
   if (state.currentStep === 4) {
     updateCartSummary();
+    // If user is logged in, ensure login tab is selected
+    if (isUserAuthenticated()) {
+      switchAuthMode('login');
+      
+      // If user is authenticated and has selected membership, ensure order is created
+      // This allows payment overview to show correct prices
+      if (state.membershipPlanId && state.selectedBusinessUnit && state.customerId) {
+        console.log('[Payment Overview] Step 4 shown - ensuring order is created for payment overview');
+        autoEnsureOrderIfReady('step-4-display')
+          .then(() => {
+            // Order should now be created and subscription attached
+            // ensureSubscriptionAttached already fetches order and calls updatePaymentOverview()
+            console.log('[Payment Overview] ✅ Order ensured on step 4');
+          })
+          .catch(error => {
+            console.warn('[Payment Overview] Could not ensure order on step 4:', error);
+          });
+      }
+    }
+    
+    // If order exists, fetch full order data for payment overview
+    if (state.orderId && !state.fullOrder) {
+      console.log('[Payment Overview] Step 4 shown - fetching order data for payment overview (orderId:', state.orderId, ')');
+      orderAPI.getOrder(state.orderId)
+        .then(order => {
+          state.fullOrder = order;
+          updatePaymentOverview();
+          console.log('[Payment Overview] ✅ Order data fetched on step 4, payment overview updated');
+          console.log('[Payment Overview] Order price:', order.price?.amount, 'SubscriptionItems:', order.subscriptionItems?.length);
+        })
+        .catch(error => {
+          console.warn('[Payment Overview] Could not fetch order data on step 4:', error);
+        });
+    } else if (state.fullOrder) {
+      // Full order data already available - just update payment overview
+      updatePaymentOverview();
+    }
   }
 
   // Scroll to top on mobile only
@@ -7291,8 +7940,42 @@ function prevStep() {
 
 function showStep(stepNumber) {
   DOM.stepPanels.forEach((panel, index) => {
-    panel.classList.toggle('active', index + 1 === stepNumber);
+    const isActive = index + 1 === stepNumber;
+    panel.classList.toggle('active', isActive);
+    // Ensure display style is set correctly
+    if (isActive) {
+      panel.style.display = 'block';
+      panel.style.visibility = 'visible';
+      panel.style.opacity = '1';
+    } else {
+      // Only hide if not already hidden by other logic (like step 3)
+      if (panel.id !== 'step-3') {
+        panel.style.display = 'none';
+      }
+    }
   });
+  
+  // If showing step 4 and user is logged in, ensure login tab is selected
+  if (stepNumber === 4 && isUserAuthenticated()) {
+    switchAuthMode('login');
+  }
+  
+  // If showing step 4 and order data is available, update payment overview
+  if (stepNumber === 4 && state.orderId && !state.fullOrder) {
+    // Order ID exists but full order data not loaded - fetch it
+    orderAPI.getOrder(state.orderId)
+      .then(order => {
+        state.fullOrder = order;
+        updatePaymentOverview();
+        console.log('[Payment Overview] Order data fetched and payment overview updated on step 4');
+      })
+      .catch(error => {
+        console.warn('[Payment Overview] Could not fetch order data on step 4:', error);
+      });
+  } else if (stepNumber === 4 && state.fullOrder) {
+    // Full order data already available - just update payment overview
+    updatePaymentOverview();
+  }
 }
 
 function updateStepIndicator() {
