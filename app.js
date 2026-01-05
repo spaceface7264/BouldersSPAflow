@@ -1524,14 +1524,15 @@ class OrderAPI {
     }
   }
 
-  // Step 7: Add value card item (punch card) - POST /api/orders/{orderId}/items/valuecards
+  // Step 7: Add value card item (punch card) - POST /api/ver3/orders/{orderId}/items/valuecards
+  // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
   async addValueCardItem(orderId, productId, quantity = 1) {
     try {
       let url;
       if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders/${orderId}/items/valuecards`;
+        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/valuecards`;
       } else {
-        url = `${this.baseUrl}/api/orders/${orderId}/items/valuecards`;
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/valuecards`;
       }
       
       console.log('[Step 7] Adding value card item:', url);
@@ -1546,11 +1547,16 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
+      // API Documentation requires 'valueCardProduct' field (integer, required)
+      // Optional fields: receiverDetails, senderDetails, amount, externalMessage, additionTo
+      // Note: quantity is handled by repeating the request or backend logic, not in payload
       const payload = {
-        productId,
-        quantity,
-        businessUnit: state.selectedBusinessUnit, // Always include active business unit
+        valueCardProduct: productId, // Required: Value card product ID (integer)
+        // quantity is not in API spec - backend may handle it differently
+        // businessUnit is not in API spec - may be inferred from order context
       };
+      
+      console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
       
       const response = await fetch(url, {
         method: 'POST',
@@ -1995,6 +2001,11 @@ class PaymentAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Step 9] ❌ Generate Payment Link Card failed (${response.status}):`, errorText);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:1995',message:'Payment link generation FAILED',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,paymentMethod,paymentMethodId,businessUnit,responseStatus:response.status,errorText:errorText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         throw new Error(`Generate Payment Link Card failed: ${response.status} - ${errorText}`);
       }
       
@@ -2016,6 +2027,11 @@ class PaymentAPI {
         if (data.data) {
           console.error('[Step 9] Data object keys:', Object.keys(data.data));
         }
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:2013',message:'Payment link MISSING from response',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,responseKeys:Object.keys(data),dataKeys:data.data?Object.keys(data.data):[],responseSample:JSON.stringify(data).substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        
         throw new Error('Payment link not found in API response');
       }
       
@@ -2026,9 +2042,18 @@ class PaymentAPI {
       }
       console.log('[Step 9] Payment link extracted from response.url:', paymentLink);
       
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:2022',message:'Payment link generation SUCCESS',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,paymentMethod,paymentMethodId,businessUnit,hasPaymentLink:!!paymentLink,paymentLinkPrefix:paymentLink?paymentLink.substring(0,30):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      
       return { ...data, paymentLink: paymentLink, url: paymentLink };
     } catch (error) {
       console.error('[Step 9] Generate payment link error:', error);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:2030',message:'Payment link generation ERROR',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,paymentMethod,errorMessage:error.message,errorStack:error.stack?.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      
       throw error;
     }
   }
@@ -4753,8 +4778,13 @@ async function handleApplyDiscount() {
         state.orderId = ensuredOrderId;
         console.log('[Discount] Order created:', state.orderId);
         
-        // Now add membership/subscription to order if needed
-        if (state.membershipPlanId) {
+        // Now add membership/subscription to order if needed (only if it's actually a membership)
+        // Check if this is a membership (not a punch card)
+        const isMembership = state.membershipPlanId && 
+          (state.selectedProductType === 'membership' || 
+           (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+        
+        if (isMembership) {
           try {
             await ensureSubscriptionAttached('discount-application');
             console.log('[Discount] Membership ensured on order');
@@ -5822,8 +5852,19 @@ async function ensureOrderCreated(context = 'auto') {
 }
 
 async function ensureSubscriptionAttached(context = 'auto') {
-  if (!state.membershipPlanId) {
-    console.warn(`[checkout] Cannot attach subscription (${context}) - no membership selected`);
+  // Check if this is actually a membership (not a punch card)
+  // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
+  const isMembership = state.membershipPlanId && 
+    (state.selectedProductType === 'membership' || 
+     (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+  
+  if (!state.membershipPlanId || !isMembership) {
+    if (state.membershipPlanId && !isMembership) {
+      console.log(`[checkout] Skipping subscription attach (${context}) - this is a punch card, not a membership`);
+      console.log(`[checkout] membershipPlanId: ${state.membershipPlanId}, selectedProductType: ${state.selectedProductType}`);
+    } else {
+      console.warn(`[checkout] Cannot attach subscription (${context}) - no membership selected`);
+    }
     return null;
   }
 
@@ -5878,7 +5919,17 @@ async function autoEnsureOrderIfReady(context = 'auto') {
   if (!isUserAuthenticated()) {
     return;
   }
-  if (!state.membershipPlanId) {
+  
+  // Check if this is actually a membership (not a punch card)
+  // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
+  const isMembership = state.membershipPlanId && 
+    (state.selectedProductType === 'membership' || 
+     (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+  
+  if (!state.membershipPlanId || !isMembership) {
+    if (state.membershipPlanId && !isMembership) {
+      console.log(`[checkout] Skipping auto ensure order (${context}) - this is a punch card, not a membership`);
+    }
     return;
   }
   if (!state.selectedBusinessUnit) {
@@ -5924,8 +5975,14 @@ async function handleCheckout() {
     return;
   }
 
-  if (!state.membershipPlanId) {
-    showToast('Select a membership to continue.', 'error');
+  // Allow checkout if either membership OR punch cards are selected
+  const hasMembership = !!state.membershipPlanId;
+  const hasPunchCards = state.valueCardQuantities && 
+    Array.from(state.valueCardQuantities.values()).some(qty => qty > 0);
+  const hasAddons = state.addonIds && state.addonIds.size > 0;
+
+  if (!hasMembership && !hasPunchCards && !hasAddons) {
+    showToast('Select a membership, punch card, or add-on to continue.', 'error');
     return;
   }
   
@@ -6199,11 +6256,21 @@ async function handleCheckout() {
     // Backend requirement: Generate Payment Link Card immediately after subscription is added to cart
     let paymentLink = null;
     
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:6200',message:'Checkout started - tracking product',data:{selectedProductType:state.selectedProductType,selectedProductId:state.selectedProductId,membershipPlanId:state.membershipPlanId,hasValueCards:state.valueCardQuantities?.size>0,valueCardCount:state.valueCardQuantities?.size||0,hasAddons:state.addonIds?.size>0,addonCount:state.addonIds?.size||0,orderId:state.orderId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     try {
       console.log('[checkout] Adding items to order...');
       
-      // Add membership/subscription FIRST
-	      if (state.membershipPlanId) {
+      // Check if this is a membership (not a punch card)
+      // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
+      const isMembership = state.membershipPlanId && 
+        (state.selectedProductType === 'membership' || 
+         (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+      
+      // Add membership/subscription FIRST (only if it's actually a membership)
+      if (isMembership) {
 	        try {
 	          await ensureSubscriptionAttached('checkout-flow');
 	          console.log('[checkout] Membership ensured on order');
@@ -6602,17 +6669,49 @@ async function handleCheckout() {
         }
       }
       
-      // Add value cards (punch cards) - can be added after payment link is generated
+      // Add value cards (punch cards) - add FIRST if no membership, or AFTER payment link if membership exists
+      let valueCardAddFailed = false;
+      let valueCardError = null;
+      
       if (state.valueCardQuantities && state.valueCardQuantities.size > 0) {
         for (const [planId, quantity] of state.valueCardQuantities.entries()) {
           if (quantity > 0) {
             try {
-              await orderAPI.addValueCardItem(state.orderId, planId, quantity);
-              console.log(`[checkout] Value card added: ${planId} x${quantity}`);
+              // Extract numeric product ID from "punch-43" format
+              const numericProductId = typeof planId === 'string' && planId.startsWith('punch-')
+                ? parseInt(planId.replace('punch-', ''), 10)
+                : planId;
+              
+              // API doesn't accept quantity in payload - call API once per quantity
+              for (let i = 0; i < quantity; i++) {
+                await orderAPI.addValueCardItem(state.orderId, numericProductId, 1);
+                console.log(`[checkout] ✅ Value card added: ${planId} (productId: ${numericProductId}) [${i + 1}/${quantity}]`);
+              }
             } catch (error) {
-              console.error(`[checkout] Failed to add value card ${planId}:`, error);
-              // Don't throw - payment link is already generated, just log the error
-              console.warn(`[checkout] Continuing despite value card error - payment link already generated`);
+              valueCardAddFailed = true;
+              valueCardError = error;
+              console.error(`[checkout] ❌ Failed to add value card ${planId}:`, error);
+              console.error(`[checkout] Error details:`, {
+                message: error.message,
+                is403: error.message.includes('403') || error.message.includes('Forbidden'),
+                is401: error.message.includes('401') || error.message.includes('Unauthorized'),
+                orderId: state.orderId,
+                productId: numericProductId,
+                quantity,
+                isMembership
+              });
+              
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:6688',message:'Value card add error in checkout',data:{planId,numericProductId,quantity,orderId:state.orderId,errorMessage:error.message,is403:error.message.includes('403'),is401:error.message.includes('401'),isMembership,willContinue:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
+              // #endregion
+              
+              // Don't throw immediately - continue to payment link generation
+              // We'll handle the error after payment link is generated
+              if (isMembership) {
+                console.warn(`[checkout] Continuing despite value card error - payment link already generated`);
+              } else {
+                console.warn(`[checkout] ⚠️ Value card add failed, but continuing to generate payment link`);
+              }
             }
           }
         }
@@ -6632,7 +6731,95 @@ async function handleCheckout() {
         }
       }
       
+      // CRITICAL: Generate payment link if it hasn't been generated yet
+      // This handles cases where user only selected punch cards or addons (no membership)
+      if (!paymentLink && state.orderId) {
+        console.log('[checkout] ===== GENERATE PAYMENT LINK (no membership) =====');
+        console.log('[checkout] No membership selected, generating payment link for punch cards/addons only');
+        console.log('[checkout] Order ID:', state.orderId);
+        console.log('[checkout] Payment Method:', state.paymentMethod);
+        console.log('[checkout] Business Unit:', state.selectedBusinessUnit);
+        console.log('[checkout] Product Type:', state.selectedProductType);
+        console.log('[checkout] Membership Plan ID:', state.membershipPlanId);
+        console.log('[checkout] Is Membership:', isMembership);
+        console.log('[checkout] Has Value Cards:', state.valueCardQuantities?.size > 0);
+        console.log('[checkout] Has Addons:', state.addonIds?.size > 0);
+        
+        try {
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const baseUrl = isLocal
+            ? 'https://join.boulders.dk'
+            : window.location.origin.replace('http://', 'https://');
+          const returnUrl = `${baseUrl}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
+          
+          if (!state.orderId) {
+            throw new Error('Order ID is required to generate payment link');
+          }
+          
+          const paymentData = await paymentAPI.generatePaymentLink({
+            orderId: state.orderId,
+            paymentMethod: state.paymentMethod,
+            businessUnit: state.selectedBusinessUnit,
+            returnUrl,
+            receiptEmail: customerEmail,
+          });
+          
+          console.log('[checkout] Full payment link API response:', JSON.stringify(paymentData, null, 2));
+          
+          paymentLink = paymentData?.data?.paymentLink || 
+                        paymentData?.data?.link || 
+                        paymentData?.data?.url ||
+                        paymentData?.paymentLink || 
+                        paymentData?.link || 
+                        paymentData?.url;
+          
+          // Additional checks for nested structures
+          if (!paymentLink && paymentData?.data) {
+            const dataKeys = Object.keys(paymentData.data);
+            console.log('[checkout] Available keys in paymentData.data:', dataKeys);
+            for (const key of dataKeys) {
+              const value = paymentData.data[key];
+              if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                paymentLink = value;
+                console.log('[checkout] Found URL in paymentData.data.' + key + ':', paymentLink);
+                break;
+              }
+            }
+          }
+          
+          state.paymentLink = paymentLink;
+          state.paymentLinkGenerated = true;
+          
+          console.log('[checkout] Payment link extracted:', paymentLink);
+          console.log('[checkout] Payment link type:', typeof paymentLink);
+          console.log('[checkout] Payment link is valid URL:', paymentLink ? (paymentLink.startsWith('http://') || paymentLink.startsWith('https://')) : 'null/undefined');
+          
+          if (!paymentLink) {
+            console.error('[checkout] ⚠️ Payment link is null/undefined!');
+            console.error('[checkout] Payment API response structure:', {
+              hasData: !!paymentData?.data,
+              dataKeys: paymentData?.data ? Object.keys(paymentData.data) : [],
+              topLevelKeys: Object.keys(paymentData || {}),
+            });
+          }
+        } catch (error) {
+          console.error('[checkout] Failed to generate payment link for non-membership order:', error);
+          throw new Error('Failed to generate payment link');
+        }
+      }
+      
       console.log('[checkout] All items added to order');
+      
+      // If value card add failed for punch-card-only order, show error but don't block checkout
+      if (valueCardAddFailed && !isMembership && valueCardError) {
+        console.error(`[checkout] ⚠️ Value card add failed, but payment link was generated`);
+        console.error(`[checkout] Error:`, valueCardError.message);
+        // Show error toast but don't block checkout
+        const errorMsg = valueCardError.message.includes('403') || valueCardError.message.includes('Forbidden')
+          ? 'Could not add punch card to order (permission error). Payment link generated anyway.'
+          : `Warning: Could not add punch card to order. Payment link generated anyway.`;
+        showToast(errorMsg, 'warning');
+      }
       
       // Note: Coupon should already be applied BEFORE payment link generation (see above)
       // This is a fallback in case the first attempt failed

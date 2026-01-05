@@ -77,6 +77,8 @@ A modern, responsive membership signup flow for Boulders climbing gyms with API 
 ├── app.js                  # Main JavaScript functionality
 ├── gym-data-api.js         # API-ready gym data
 ├── api-utils.js            # API utility functions
+├── docs/
+│   └── brp-api3-openapi.yaml  # BRP API3 OpenAPI specification
 ├── shared/
 │   ├── styles/
 │   │   └── tokens.css      # Design tokens
@@ -105,6 +107,14 @@ Access via local network IP:
 - **Mobile**: `http://[YOUR_IP]:8080`
 
 ## 🔌 API Integration
+
+### BRP API3 Documentation
+Complete OpenAPI 3.0 specification for BRP API3 is available in the project:
+- **Location**: `docs/brp-api3-openapi.yaml`
+- **Version**: 3.0.0
+- **Format**: OpenAPI 3.0.1 YAML specification
+
+This specification documents all available endpoints, request/response schemas, error codes, and authentication requirements. Use it as a reference when implementing new API integrations or troubleshooting endpoint issues.
 
 ### BUSINESSUNITS API
 The application integrates with the BUSINESSUNITS API for gym data:
