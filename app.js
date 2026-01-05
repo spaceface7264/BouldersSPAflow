@@ -4303,6 +4303,9 @@ async function handleApplyDiscount() {
         // Store coupon code for later application during checkout
         state.discountCode = discountCode;
         state.discountApplied = false;
+        // Update cart display even though we can't apply discount yet
+        // This ensures the cart is refreshed and shows current state
+        updateCartSummary();
         showDiscountMessage(`Coupon "${discountCode}" will be applied at checkout`, 'info');
         DOM.discountInput.style.borderColor = '#10B981';
         DOM.applyDiscountBtn.disabled = false;
@@ -4313,6 +4316,8 @@ async function handleApplyDiscount() {
       // No items selected - just store coupon code for later
       state.discountCode = discountCode;
       state.discountApplied = false;
+      // Update cart display
+      updateCartSummary();
       showDiscountMessage(`Coupon "${discountCode}" will be applied at checkout. Please select items first.`, 'info');
       DOM.discountInput.style.borderColor = '#10B981';
       return;
@@ -4391,7 +4396,7 @@ async function handleApplyDiscount() {
     
     // Ensure subtotal is calculated before validating discount
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
-      updateCartTotals(); // This will calculate subtotal
+      updateCartSummary(); // This will calculate subtotal using API data
     }
     
     // Validate discount amount - ensure it doesn't exceed subtotal
@@ -4414,38 +4419,14 @@ async function handleApplyDiscount() {
         finalTotal: subtotal - discountAmount,
       });
       
-      // Ensure subtotal is calculated before updating cart
-      if (!state.totals.subtotal || state.totals.subtotal === 0) {
-        // Recalculate items to get subtotal
-        const items = [];
-        if (state.membershipPlanId) {
-          const plan = findMembershipPlan(state.membershipPlanId);
-          if (plan) items.push({ amount: plan.price });
-        }
-        state.valueCardQuantities.forEach((quantity, planId) => {
-          if (quantity > 0) {
-            const plan = findValueCard(planId);
-            if (plan) items.push({ amount: plan.price * quantity });
-          }
-        });
-        state.addonIds.forEach((addonId) => {
-          const addon = findAddon(addonId);
-          if (addon) items.push({ amount: addon.price.discounted });
-        });
-        state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
-        console.log('[Discount] Calculated subtotal:', state.totals.subtotal);
-      }
-      
-      // CRITICAL: Update cart totals FIRST - this recalculates everything
-      updateCartTotals();
+      // CRITICAL: Update cart totals using API-based function - this recalculates everything
+      // updateCartSummary() will calculate subtotal and cart total, and render the UI
+      updateCartSummary();
       
       // Force immediate UI update - ensure DOM element exists
       if (!DOM.cartTotal) {
         DOM.cartTotal = document.querySelector('[data-summary-field="cart-total"]');
       }
-      
-      // Render cart total immediately
-      renderCartTotal();
       
       // Force update discount display
       updateDiscountDisplay();
@@ -4498,8 +4479,7 @@ async function handleApplyDiscount() {
         state.discountCode = discountCode;
         state.discountApplied = true;
         state.totals.discountAmount = 0; // Set to 0 if that's what the API returned
-        updateCartTotals();
-        renderCartTotal();
+        updateCartSummary(); // updateCartSummary() already calls renderCartTotal()
         showDiscountMessage(`Coupon "${discountCode}" applied successfully`, 'success');
         DOM.discountInput.disabled = true;
         DOM.discountInput.style.opacity = '0.6';
@@ -4527,7 +4507,7 @@ async function handleApplyDiscount() {
     state.discountCode = null;
     state.discountApplied = false;
     state.totals.discountAmount = 0;
-    updateCartTotals();
+    updateCartSummary(); // Update cart using API-based function
     
     // Parse error message to extract error code
     let errorMessageText = 'Failed to apply coupon. Please try again.';
@@ -4876,7 +4856,8 @@ function updateDiscountDisplay() {
   // Find or create discount display element
   let discountDisplay = document.querySelector('.discount-display');
   
-  if (state.discountApplied && state.totals.discountAmount > 0) {
+  // Show discount display if discount is applied OR if discount code is stored (pending application)
+  if ((state.discountApplied && state.totals.discountAmount > 0) || (state.discountCode && !state.discountApplied)) {
     // Ensure subtotal is calculated - but don't call updateCartTotals() to avoid recursion
     // Instead, just recalculate subtotal if needed
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
@@ -4917,20 +4898,39 @@ function updateDiscountDisplay() {
     }
     
     // Build discount display HTML - show subtotal, discount, and final total
-    discountDisplay.innerHTML = `
-      <div class="discount-row">
-        <span class="discount-label">Subtotal:</span>
-        <span class="discount-value">${currencyFormatter.format(state.totals.subtotal)}</span>
-      </div>
-      <div class="discount-row discount-applied">
-        <span class="discount-label">Discount (${state.discountCode}):</span>
-        <span class="discount-value">-${currencyFormatter.format(state.totals.discountAmount)}</span>
-      </div>
-      <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
-        <span class="discount-label" style="font-weight: bold;">Total:</span>
-        <span class="discount-value" style="font-weight: bold;">${currencyFormatter.format(state.totals.cartTotal)}</span>
-      </div>
-    `;
+    if (state.discountApplied && state.totals.discountAmount > 0) {
+      // Discount is applied - show actual discount amount
+      discountDisplay.innerHTML = `
+        <div class="discount-row">
+          <span class="discount-label">Subtotal:</span>
+          <span class="discount-value">${currencyFormatter.format(state.totals.subtotal)}</span>
+        </div>
+        <div class="discount-row discount-applied">
+          <span class="discount-label">Discount (${state.discountCode}):</span>
+          <span class="discount-value">-${currencyFormatter.format(state.totals.discountAmount)}</span>
+        </div>
+        <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+          <span class="discount-label" style="font-weight: bold;">Total:</span>
+          <span class="discount-value" style="font-weight: bold;">${currencyFormatter.format(state.totals.cartTotal)}</span>
+        </div>
+      `;
+    } else if (state.discountCode && !state.discountApplied) {
+      // Discount code entered but not yet applied (pending) - show subtotal only
+      discountDisplay.innerHTML = `
+        <div class="discount-row">
+          <span class="discount-label">Subtotal:</span>
+          <span class="discount-value">${currencyFormatter.format(state.totals.subtotal)}</span>
+        </div>
+        <div class="discount-row discount-pending" style="opacity: 0.7; font-style: italic;">
+          <span class="discount-label">Discount code (${state.discountCode}):</span>
+          <span class="discount-value">Will be applied at checkout</span>
+        </div>
+        <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+          <span class="discount-label" style="font-weight: bold;">Total:</span>
+          <span class="discount-value" style="font-weight: bold;">${currencyFormatter.format(state.totals.cartTotal)}</span>
+        </div>
+      `;
+    }
     discountDisplay.style.display = 'block';
   } else if (discountDisplay) {
     discountDisplay.style.display = 'none';
@@ -5396,18 +5396,72 @@ async function handleCheckout() {
             ? DOM.discountInput.value.trim().toUpperCase()
             : state.discountCode;
           
-          if (discountCodeToApply && !state.discountApplied && state.orderId) {
+          // Apply discount if we have a code and an order, even if already marked as applied
+          // We need to ensure it's actually on the order before generating payment link
+          if (discountCodeToApply && state.orderId) {
             try {
-              console.log('[checkout] ===== APPLYING COUPON BEFORE PAYMENT LINK =====');
+              // First, check if discount is already on the order
+              console.log('[checkout] ===== CHECKING/APPLYING COUPON BEFORE PAYMENT LINK =====');
               console.log('[checkout] Coupon code:', discountCodeToApply);
               console.log('[checkout] Order ID:', state.orderId);
+              console.log('[checkout] Current state - discountApplied:', state.discountApplied, 'discountAmount:', state.totals.discountAmount);
               
-              const discountResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
-              console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
+              // Check current order state first
+              let orderCheck = null;
+              try {
+                orderCheck = await orderAPI.getOrder(state.orderId);
+                const existingCouponDiscount = orderCheck?.couponDiscount || orderCheck?.price?.couponDiscount;
+                if (existingCouponDiscount) {
+                  console.log('[checkout] ✅ Discount already exists on order, verifying amount...');
+                  // Discount already exists, verify it matches our expected amount
+                  let existingDiscountAmount = 0;
+                  if (typeof existingCouponDiscount === 'object') {
+                    existingDiscountAmount = existingCouponDiscount.amount || existingCouponDiscount.value || existingCouponDiscount.discount || 0;
+                    if (existingDiscountAmount > 10000) existingDiscountAmount = existingDiscountAmount / 100;
+                  } else if (typeof existingCouponDiscount === 'number') {
+                    existingDiscountAmount = existingCouponDiscount;
+                    if (existingDiscountAmount > 10000) existingDiscountAmount = existingDiscountAmount / 100;
+                  }
+                  
+                  // Use the discount amount from the order if it exists
+                  // Also get the actual order total to ensure we have the correct price
+                  let orderTotalFromAPI = 0;
+                  const orderPrice = orderCheck?.price;
+                  if (orderPrice) {
+                    orderTotalFromAPI = orderPrice.total?.amount || orderPrice.total || orderPrice.leftToPay?.amount || orderPrice.leftToPay || 0;
+                    if (orderTotalFromAPI > 10000) orderTotalFromAPI = orderTotalFromAPI / 100;
+                  }
+                  
+                  if (existingDiscountAmount > 0 || orderTotalFromAPI > 0) {
+                    console.log('[checkout] Using existing discount amount from order:', existingDiscountAmount);
+                    console.log('[checkout] Order total from API:', orderTotalFromAPI);
+                    state.discountCode = discountCodeToApply;
+                    state.discountApplied = true;
+                    state.totals.discountAmount = existingDiscountAmount;
+                    // Update cart total to match order total from API if available
+                    if (orderTotalFromAPI > 0) {
+                      state.totals.cartTotal = orderTotalFromAPI;
+                      console.log('[checkout] Updated cart total to match order total from API:', orderTotalFromAPI);
+                    }
+                    updateCartSummary();
+                    // Skip applying discount again - it's already on the order
+                    // Continue to payment link generation
+                    console.log('[checkout] ✅ Discount verified on order, proceeding to payment link');
+                  }
+                }
+              } catch (checkError) {
+                console.warn('[checkout] Could not check order before applying discount:', checkError);
+              }
               
-              // Extract discount from couponDiscount field
-              const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
-              let discountAmount = 0;
+              // Only apply discount if it's not already on the order
+              if (!orderCheck || !(orderCheck?.couponDiscount || orderCheck?.price?.couponDiscount)) {
+                console.log('[checkout] Discount not found on order, applying now...');
+                const discountResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
+                console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
+              
+                // Extract discount from couponDiscount field
+                const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
+                let discountAmount = 0;
               
               if (couponDiscount) {
                 if (typeof couponDiscount === 'object') {
@@ -5444,7 +5498,7 @@ async function handleCheckout() {
                 state.discountCode = discountCodeToApply;
                 state.discountApplied = true;
                 state.totals.discountAmount = discountAmount;
-                updateCartTotals();
+                updateCartSummary(); // Use API-based cart update function
                 console.log('[checkout] ✅ Coupon applied before payment link:', discountCodeToApply, 'Amount:', discountAmount);
                 
                 // CRITICAL: Fetch updated order multiple times to ensure backend has processed the coupon
@@ -5455,7 +5509,7 @@ async function handleCheckout() {
                 
                   // Ensure subtotal is calculated before checking order
                   if (!state.totals.subtotal || state.totals.subtotal === 0) {
-                    updateCartTotals();
+                    updateCartSummary(); // Use API-based cart update function
                   }
                   
                   while (!orderUpdated && attempts < maxAttempts) {
@@ -5530,10 +5584,30 @@ async function handleCheckout() {
                 if (!orderUpdated) {
                   console.warn('[checkout] ⚠️ Order may not be fully updated with discount, but proceeding with payment link generation');
                 }
-              }
+              } // End of if (discountAmount > 0)
+            } // End of if (!orderCheck || !(orderCheck?.couponDiscount || orderCheck?.price?.couponDiscount))
             } catch (couponError) {
               console.warn('[checkout] Failed to apply coupon before payment link:', couponError);
-              // Don't block checkout if coupon fails
+              // Don't block checkout if coupon fails, but log warning
+              console.warn('[checkout] Payment link may not reflect discount if coupon application failed');
+            }
+          } else if (discountCodeToApply && state.discountApplied) {
+            // Discount code is stored and marked as applied, but verify it's actually on the order
+            try {
+              console.log('[checkout] Verifying discount is on order before payment link generation...');
+              const orderCheck = await orderAPI.getOrder(state.orderId);
+              const orderCouponDiscount = orderCheck?.couponDiscount || orderCheck?.price?.couponDiscount;
+              
+              if (!orderCouponDiscount) {
+                console.warn('[checkout] Discount code marked as applied but not found on order, re-applying...');
+                // Re-apply the discount
+                const discountResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
+                console.log('[checkout] Re-applied discount, response:', JSON.stringify(discountResponse, null, 2));
+              } else {
+                console.log('[checkout] ✅ Discount confirmed on order before payment link generation');
+              }
+            } catch (verifyError) {
+              console.warn('[checkout] Could not verify discount on order:', verifyError);
             }
           }
           
@@ -5810,7 +5884,7 @@ async function handleCheckout() {
               
               console.log('[checkout] Updating cart totals with discount:', discountAmount);
               console.log('[checkout] Subtotal:', state.totals.subtotal, 'Discount:', discountAmount, 'Final Total:', state.totals.subtotal - discountAmount);
-              updateCartTotals();
+              updateCartSummary(); // Use API-based cart update function
               
               // Update UI to show coupon is applied
               if (DOM.discountInput) {
