@@ -539,6 +539,105 @@ class ReferenceDataAPI {
     console.log('[Step 4] All reference data loaded:', referenceData);
     return referenceData;
   }
+
+  // Lookup city by postal code
+  // Endpoint: GET /api/addresses/{postalCode}
+  async lookupCityByPostalCode(postalCode) {
+    if (!postalCode || postalCode.trim().length === 0) {
+      return null;
+    }
+
+    try {
+      // Clean postal code (remove spaces, ensure it's a valid format)
+      const cleanPostalCode = postalCode.trim().replace(/\s+/g, '');
+      
+      // Danish postal codes are 4 digits
+      if (!/^\d{4}$/.test(cleanPostalCode)) {
+        console.log('[PostalCode] Invalid postal code format:', cleanPostalCode);
+        return null;
+      }
+
+      const endpoint = `/api/addresses/${cleanPostalCode}`;
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=${endpoint}`;
+      } else {
+        // In development, use full API URL if baseUrl is empty
+        const apiBase = this.baseUrl || 'https://api-join.boulders.dk';
+        url = `${apiBase}${endpoint}`;
+      }
+      
+      console.log('[PostalCode] Looking up city for postal code:', cleanPostalCode, 'from:', url);
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        // If 404, endpoint doesn't exist yet - try local lookup as fallback
+        if (response.status === 404) {
+          console.log('[PostalCode] Address lookup endpoint not available (404) - trying local lookup...');
+          
+          // Try local lookup if available
+          if (typeof lookupCityByPostalCode === 'function') {
+            const localCity = lookupCityByPostalCode(cleanPostalCode);
+            if (localCity) {
+              console.log('[PostalCode] Found city in local lookup:', localCity);
+              return localCity;
+            }
+          }
+          
+          // If local lookup also fails, return unavailable flag
+          return { unavailable: true };
+        }
+        
+        const errorText = await response.text();
+        console.error(`[PostalCode] API Error (${response.status}):`, errorText);
+        return null; // Don't throw - just return null if lookup fails
+      }
+      
+      const data = await response.json();
+      console.log('[PostalCode] Address lookup response:', data);
+      
+      // Extract city name from response
+      // API might return: { city: "Copenhagen" } or { address: { city: "Copenhagen" } }
+      const city = data?.city || data?.address?.city || data?.name || null;
+      
+      if (city) {
+        console.log('[PostalCode] Found city:', city, 'for postal code:', cleanPostalCode);
+        return city;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('[PostalCode] Error looking up city by postal code:', error);
+      // Network errors or CORS issues - try local lookup as fallback
+      const errorMessage = error.message || String(error);
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('CORS') || errorMessage.includes('NetworkError')) {
+        console.log('[PostalCode] Network/CORS error - trying local lookup...');
+        
+        // Try local lookup if available
+        if (typeof lookupCityByPostalCode === 'function') {
+          const cleanPostalCode = postalCode.trim().replace(/\s+/g, '');
+          const localCity = lookupCityByPostalCode(cleanPostalCode);
+          if (localCity) {
+            console.log('[PostalCode] Found city in local lookup:', localCity);
+            return localCity;
+          }
+        }
+        
+        return { unavailable: true };
+      }
+      return null; // Don't throw - just return null if lookup fails
+    }
+  }
 }
 
 // Step 6: Authentication API
@@ -2790,6 +2889,11 @@ function cacheDom() {
   DOM.forgotPasswordEmail = document.getElementById('forgotPasswordEmail');
   DOM.forgotPasswordSuccess = document.getElementById('forgotPasswordSuccess');
   DOM.confirmationItems = document.querySelector('[data-component="confirmation-items"]');
+  // Postal code and city fields for auto-fill
+  DOM.postalCode = document.getElementById('postalCode');
+  DOM.city = document.getElementById('city');
+  DOM.parentPostalCode = document.getElementById('parentPostalCode');
+  DOM.parentCity = document.getElementById('parentCity');
   DOM.confirmationFields = {
     orderNumber: document.querySelector('[data-summary-field="order-number"]'),
     orderDate: document.querySelector('[data-summary-field="order-date"]'),
@@ -2825,6 +2929,9 @@ function setupEventListeners() {
   DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
   DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
   DOM.termsConsent?.addEventListener('change', updateCheckoutButton);
+
+  // Postal code auto-fill event listeners
+  setupPostalCodeAutoFill();
 
   // Gym selection event listeners will be set up dynamically when gyms are loaded
 
@@ -4248,6 +4355,262 @@ function toggleDiscountForm() {
   const isVisible = DOM.discountForm.style.display !== 'none';
   DOM.discountForm.style.display = isVisible ? 'none' : 'flex';
   DOM.discountToggle?.classList.toggle('active', !isVisible);
+}
+
+// Postal code auto-fill functionality
+let postalCodeLookupTimers = {
+  customer: null,
+  parent: null,
+};
+
+function setupPostalCodeAutoFill() {
+  const referenceAPI = new ReferenceDataAPI();
+  
+  // Setup for customer postal code field
+  if (DOM.postalCode && DOM.city) {
+    DOM.postalCode.addEventListener('input', (e) => {
+      const postalCode = e.target.value.trim();
+      
+      // Clear existing timer
+      if (postalCodeLookupTimers.customer) {
+        clearTimeout(postalCodeLookupTimers.customer);
+      }
+      
+      // Clear city field if postal code is empty
+      if (!postalCode || postalCode.length === 0) {
+        if (DOM.city) {
+          DOM.city.value = '';
+        }
+        return;
+      }
+      
+      // Debounce: wait 500ms after user stops typing
+      postalCodeLookupTimers.customer = setTimeout(async () => {
+        // Check if postal code is valid format (4 digits for Danish postal codes)
+        if (/^\d{4}$/.test(postalCode)) {
+          try {
+            // Show loading state
+            if (DOM.city) {
+              DOM.city.value = 'Loading...';
+              DOM.city.style.opacity = '0.6';
+            }
+            
+            const result = await referenceAPI.lookupCityByPostalCode(postalCode);
+            
+            if (result && typeof result === 'object' && result.unavailable) {
+              // API endpoint not available - make city field editable
+              if (DOM.city) {
+                DOM.city.removeAttribute('readonly');
+                DOM.city.placeholder = 'Enter city name';
+                DOM.city.value = '';
+                DOM.city.style.opacity = '1';
+                DOM.city.style.cursor = 'text';
+                console.log('[PostalCode] API unavailable - city field is now editable');
+              }
+            } else if (result && typeof result === 'string') {
+              // City found - auto-fill
+              if (DOM.city) {
+                DOM.city.value = result;
+                DOM.city.style.opacity = '1';
+                console.log('[PostalCode] Auto-filled city:', result, 'for postal code:', postalCode);
+              }
+            } else {
+              // City not found - clear field but keep readonly
+              if (DOM.city) {
+                DOM.city.value = '';
+                DOM.city.style.opacity = '1';
+              }
+              console.log('[PostalCode] No city found for postal code:', postalCode);
+            }
+          } catch (error) {
+            console.error('[PostalCode] Error looking up city:', error);
+            if (DOM.city) {
+              DOM.city.value = '';
+              DOM.city.style.opacity = '1';
+            }
+          }
+        } else {
+          // Invalid format - clear city field
+          if (DOM.city) {
+            DOM.city.value = '';
+            DOM.city.style.opacity = '1';
+          }
+        }
+      }, 500);
+    });
+    
+    // Also handle blur event for immediate lookup when user leaves field
+    DOM.postalCode.addEventListener('blur', async (e) => {
+      const postalCode = e.target.value.trim();
+      
+      // Clear any pending timer
+      if (postalCodeLookupTimers.customer) {
+        clearTimeout(postalCodeLookupTimers.customer);
+        postalCodeLookupTimers.customer = null;
+      }
+      
+      // Only lookup if postal code is valid and city is empty
+      if (postalCode && /^\d{4}$/.test(postalCode) && (!DOM.city || !DOM.city.value || DOM.city.value === 'Loading...')) {
+        try {
+          if (DOM.city) {
+            DOM.city.value = 'Loading...';
+            DOM.city.style.opacity = '0.6';
+          }
+          
+          const result = await referenceAPI.lookupCityByPostalCode(postalCode);
+          
+          if (result && typeof result === 'object' && result.unavailable) {
+            // API endpoint not available - make city field editable
+            if (DOM.city) {
+              DOM.city.removeAttribute('readonly');
+              DOM.city.placeholder = 'Enter city name';
+              DOM.city.value = '';
+              DOM.city.style.opacity = '1';
+              DOM.city.style.cursor = 'text';
+            }
+          } else if (result && typeof result === 'string') {
+            // City found - auto-fill
+            if (DOM.city) {
+              DOM.city.value = result;
+              DOM.city.style.opacity = '1';
+            }
+          } else if (DOM.city) {
+            DOM.city.value = '';
+            DOM.city.style.opacity = '1';
+          }
+        } catch (error) {
+          console.error('[PostalCode] Error looking up city on blur:', error);
+          if (DOM.city) {
+            DOM.city.value = '';
+            DOM.city.style.opacity = '1';
+          }
+        }
+      }
+    });
+  }
+  
+  // Setup for parent/guardian postal code field
+  if (DOM.parentPostalCode && DOM.parentCity) {
+    DOM.parentPostalCode.addEventListener('input', (e) => {
+      const postalCode = e.target.value.trim();
+      
+      // Clear existing timer
+      if (postalCodeLookupTimers.parent) {
+        clearTimeout(postalCodeLookupTimers.parent);
+      }
+      
+      // Clear city field if postal code is empty
+      if (!postalCode || postalCode.length === 0) {
+        if (DOM.parentCity) {
+          DOM.parentCity.value = '';
+        }
+        return;
+      }
+      
+      // Debounce: wait 500ms after user stops typing
+      postalCodeLookupTimers.parent = setTimeout(async () => {
+        // Check if postal code is valid format (4 digits for Danish postal codes)
+        if (/^\d{4}$/.test(postalCode)) {
+          try {
+            // Show loading state
+            if (DOM.parentCity) {
+              DOM.parentCity.value = 'Loading...';
+              DOM.parentCity.style.opacity = '0.6';
+            }
+            
+            const result = await referenceAPI.lookupCityByPostalCode(postalCode);
+            
+            if (result && typeof result === 'object' && result.unavailable) {
+              // API endpoint not available - make city field editable
+              if (DOM.parentCity) {
+                DOM.parentCity.removeAttribute('readonly');
+                DOM.parentCity.placeholder = 'Enter city name';
+                DOM.parentCity.value = '';
+                DOM.parentCity.style.opacity = '1';
+                DOM.parentCity.style.cursor = 'text';
+                console.log('[PostalCode] API unavailable - parent city field is now editable');
+              }
+            } else if (result && typeof result === 'string') {
+              // City found - auto-fill
+              if (DOM.parentCity) {
+                DOM.parentCity.value = result;
+                DOM.parentCity.style.opacity = '1';
+                console.log('[PostalCode] Auto-filled parent city:', result, 'for postal code:', postalCode);
+              }
+            } else {
+              // City not found - clear field but keep readonly
+              if (DOM.parentCity) {
+                DOM.parentCity.value = '';
+                DOM.parentCity.style.opacity = '1';
+              }
+              console.log('[PostalCode] No city found for parent postal code:', postalCode);
+            }
+          } catch (error) {
+            console.error('[PostalCode] Error looking up parent city:', error);
+            if (DOM.parentCity) {
+              DOM.parentCity.value = '';
+              DOM.parentCity.style.opacity = '1';
+            }
+          }
+        } else {
+          // Invalid format - clear city field
+          if (DOM.parentCity) {
+            DOM.parentCity.value = '';
+            DOM.parentCity.style.opacity = '1';
+          }
+        }
+      }, 500);
+    });
+    
+    // Also handle blur event for immediate lookup when user leaves field
+    DOM.parentPostalCode.addEventListener('blur', async (e) => {
+      const postalCode = e.target.value.trim();
+      
+      // Clear any pending timer
+      if (postalCodeLookupTimers.parent) {
+        clearTimeout(postalCodeLookupTimers.parent);
+        postalCodeLookupTimers.parent = null;
+      }
+      
+      // Only lookup if postal code is valid and city is empty
+      if (postalCode && /^\d{4}$/.test(postalCode) && (!DOM.parentCity || !DOM.parentCity.value || DOM.parentCity.value === 'Loading...')) {
+        try {
+          if (DOM.parentCity) {
+            DOM.parentCity.value = 'Loading...';
+            DOM.parentCity.style.opacity = '0.6';
+          }
+          
+          const result = await referenceAPI.lookupCityByPostalCode(postalCode);
+          
+          if (result && typeof result === 'object' && result.unavailable) {
+            // API endpoint not available - make city field editable
+            if (DOM.parentCity) {
+              DOM.parentCity.removeAttribute('readonly');
+              DOM.parentCity.placeholder = 'Enter city name';
+              DOM.parentCity.value = '';
+              DOM.parentCity.style.opacity = '1';
+              DOM.parentCity.style.cursor = 'text';
+            }
+          } else if (result && typeof result === 'string') {
+            // City found - auto-fill
+            if (DOM.parentCity) {
+              DOM.parentCity.value = result;
+              DOM.parentCity.style.opacity = '1';
+            }
+          } else if (DOM.parentCity) {
+            DOM.parentCity.value = '';
+            DOM.parentCity.style.opacity = '1';
+          }
+        } catch (error) {
+          console.error('[PostalCode] Error looking up parent city on blur:', error);
+          if (DOM.parentCity) {
+            DOM.parentCity.value = '';
+            DOM.parentCity.style.opacity = '1';
+          }
+        }
+      }
+    });
+  }
 }
 
 async function handleApplyDiscount() {
