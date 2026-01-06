@@ -1375,14 +1375,15 @@ class OrderAPI {
     }
   }
 
-  // Step 7: Add subscription item (membership) - POST /api/orders/{orderId}/items/subscriptions
+  // Step 7: Add subscription item (membership) - POST /api/ver3/orders/{orderId}/items/subscriptions
+  // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
   async addSubscriptionItem(orderId, productId) {
     try {
       let url;
       if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders/${orderId}/items/subscriptions`;
+        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/subscriptions`;
       } else {
-        url = `${this.baseUrl}/api/orders/${orderId}/items/subscriptions`;
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions`;
       }
       
       console.log('[Step 7] Adding subscription item:', url);
@@ -1424,8 +1425,8 @@ class OrderAPI {
       
       // Set start date to today so membership starts immediately
       // Format: YYYY-MM-DD (ISO date format)
-      const today = new Date();
-      const startDate = today.toISOString().split('T')[0]; // e.g., "2026-01-05"
+      const todayDate = new Date();
+      const startDate = todayDate.toISOString().split('T')[0]; // e.g., "2026-01-05"
       
       // CRITICAL BACKEND BUG: Backend ignores startDate parameter for productId 134 ("Medlemskab")
       // but accepts it for productId 56 ("Junior") and productId 135 ("Student").
@@ -1435,14 +1436,17 @@ class OrderAPI {
       // Workaround: Frontend calculates partial-month pricing client-side for display,
       // but payment window will still show full monthly price because backend uses its own calculation.
       
+      // Build payload according to OpenAPI spec:
+      // Required: subscriptionProduct, birthDate
+      // Optional: startDate, subscriber, externalMessage, additionTo, recruitedBy, paymentOption
+      // Note: businessUnit is not in spec - may be inferred from order context
       const payload = {
         subscriptionProduct: subscriptionProductId,
-        businessUnit: state.selectedBusinessUnit, // Always include active business unit
+        startDate: startDate, // Set membership to start today (ISO format: YYYY-MM-DD)
         ...(subscriberId ? { subscriber: subscriberId } : {}),
         ...(birthDate ? { birthDate } : {}),
-        startDate: startDate, // Set membership to start today (ISO format: YYYY-MM-DD)
-        // Also try 'start' parameter in case backend expects different field name
-        start: startDate,
+        // businessUnit is not in OpenAPI spec - backend may infer from order
+        // ...(state.selectedBusinessUnit ? { businessUnit: state.selectedBusinessUnit } : {}),
       };
       
       // Log warning if this is productId 134 (known backend bug)
@@ -1490,31 +1494,109 @@ class OrderAPI {
       const data = await response.json();
       console.log('[Step 7] Add subscription item response:', data);
       
-      // CRITICAL: Log response to see if backend accepted startDate
+      // CRITICAL: Check if backend accepted startDate
       const subscriptionItem = data?.subscriptionItems?.[0];
       const responseStartDate = subscriptionItem?.initialPaymentPeriod?.start;
       const responseOrderPrice = data?.price?.amount;
-      const startDateAccepted = responseStartDate === startDate;
+      
+      // Check if backend start date is more than 1 day in the future (backend ignored our startDate)
+      const backendStartDateObj = responseStartDate ? new Date(responseStartDate) : null;
+      const checkToday = new Date();
+      checkToday.setHours(0, 0, 0, 0);
+      const daysUntilStart = backendStartDateObj ? Math.ceil((backendStartDateObj - checkToday) / (1000 * 60 * 60 * 24)) : 0;
+      const startDateIgnored = daysUntilStart > 1;
       
       console.log('[Step 7] 🔍 Response analysis:', {
         productId,
         subscriptionProductId,
         sentStartDate: startDate,
         responseStartDate,
-        startDateAccepted,
+        daysUntilStart,
+        startDateIgnored,
         orderPrice: responseOrderPrice,
         orderPriceDKK: responseOrderPrice ? responseOrderPrice / 100 : null,
         hasInitialPaymentPeriod: !!subscriptionItem?.initialPaymentPeriod,
         initialPaymentPeriod: subscriptionItem?.initialPaymentPeriod
       });
       
-      // CRITICAL BACKEND BUG: Log error if backend ignored startDate for productId 134
-      if (subscriptionProductId === 134 && !startDateAccepted) {
+      // CRITICAL: If backend ignored startDate (set it to future), try to fix by deleting and re-adding
+      // This works for Student/Junior but may not work for productId 134 (known backend bug)
+      if (startDateIgnored && subscriptionItem?.id) {
+        console.warn('[Step 7] ⚠️ Backend ignored startDate - start date is', daysUntilStart, 'days in future');
+        console.warn('[Step 7] ⚠️ Attempting to fix by deleting and re-adding subscription...');
+        
+        try {
+          // Delete the subscription item using DELETE /api/ver3/orders/{order}/items/subscriptions/{id}
+          const deleteUrl = this.useProxy
+            ? `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItem.id}`
+            : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItem.id}`;
+          
+          const deleteResponse = await fetch(deleteUrl, {
+            method: 'DELETE',
+            headers: {
+              'Accept-Language': 'da-DK',
+              'Content-Type': 'application/json',
+              ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+            },
+          });
+          
+          if (!deleteResponse.ok) {
+            const deleteErrorText = await deleteResponse.text();
+            console.warn('[Step 7] ⚠️ Failed to delete subscription item:', deleteErrorText);
+            console.warn('[Step 7] ⚠️ Continuing with original subscription (may have incorrect start date)');
+          } else {
+            console.log('[Step 7] ✅ Subscription item deleted, re-adding with correct startDate...');
+            
+            // Wait a moment for backend to process deletion
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Re-add subscription with same payload
+            const retryResponse = await fetch(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(payload),
+            });
+            
+            if (!retryResponse.ok) {
+              const retryErrorText = await retryResponse.text();
+              console.error('[Step 7] ❌ Failed to re-add subscription item:', retryErrorText);
+              throw new Error(`Re-add subscription item failed: ${retryResponse.status} - ${retryErrorText}`);
+            }
+            
+            const retryData = await retryResponse.json();
+            const retrySubscriptionItem = retryData?.subscriptionItems?.[0];
+            const retryStartDate = retrySubscriptionItem?.initialPaymentPeriod?.start;
+            const retryStartDateObj = retryStartDate ? new Date(retryStartDate) : null;
+            const retryDaysUntilStart = retryStartDateObj ? Math.ceil((retryStartDateObj - checkToday) / (1000 * 60 * 60 * 24)) : 0;
+            
+            console.log('[Step 7] 🔍 Retry response analysis:', {
+              retryStartDate,
+              retryDaysUntilStart,
+              retryOrderPrice: retryData?.price?.amount,
+              retryOrderPriceDKK: retryData?.price?.amount ? retryData.price.amount / 100 : null,
+            });
+            
+            if (retryDaysUntilStart <= 1) {
+              console.log('[Step 7] ✅ Successfully fixed startDate by re-adding subscription!');
+              return retryData;
+            } else {
+              console.warn('[Step 7] ⚠️ Re-add still has future start date - backend bug persists for this product');
+              console.warn('[Step 7] ⚠️ Payment window will show incorrect price');
+              return retryData; // Return retry data anyway
+            }
+          }
+        } catch (retryError) {
+          console.error('[Step 7] ❌ Error during retry:', retryError);
+          console.warn('[Step 7] ⚠️ Continuing with original subscription (may have incorrect start date)');
+        }
+      }
+      
+      // Log warning if backend ignored startDate for productId 134
+      if (subscriptionProductId === 134 && startDateIgnored) {
         console.error('[Step 7] ❌ BACKEND BUG CONFIRMED: Backend ignored startDate for productId 134!');
         console.error('[Step 7] ❌ Sent startDate:', startDate, 'but backend returned:', responseStartDate);
-        console.error('[Step 7] ❌ This is a backend bug - backend should accept startDate for all products');
-        console.error('[Step 7] ❌ Payment window will show incorrect price (469 DKK instead of 408.48 DKK)');
-        console.error('[Step 7] ❌ This needs to be fixed on backend side');
+        console.error('[Step 7] ❌ Payment window will show incorrect price (full monthly price instead of partial-month)');
+        console.error('[Step 7] ❌ This is a backend issue that needs to be fixed on backend side');
       }
       
       return data;
@@ -5887,18 +5969,40 @@ async function ensureSubscriptionAttached(context = 'auto') {
   subscriptionAttachPromise = (async () => {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
-    await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+    // Add subscription item - this may return updated order if startDate was fixed by re-adding
+    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
     state.subscriptionAttachedOrderId = orderId;
     
-    // Fetch updated order with subscriptionItems for payment overview
-    try {
-      const updatedOrder = await orderAPI.getOrder(orderId);
-      state.fullOrder = updatedOrder;
-      updatePaymentOverview();
-      console.log(`[checkout] Order updated with subscriptionItems for payment overview`);
-    } catch (error) {
-      console.warn(`[checkout] Could not fetch order for payment overview:`, error);
+    // CRITICAL: Use the order from addSubscriptionItem response if available (has correct price after re-add)
+    // Otherwise fetch updated order with subscriptionItems for payment overview
+    let updatedOrder = subscriptionResponse;
+    if (!updatedOrder || !updatedOrder.subscriptionItems) {
+      try {
+        updatedOrder = await orderAPI.getOrder(orderId);
+      } catch (error) {
+        console.warn(`[checkout] Could not fetch order for payment overview:`, error);
+        return orderId;
+      }
     }
+    
+    // Store full order for payment overview - this now has the correct price
+    state.fullOrder = updatedOrder;
+    state.order = updatedOrder; // Also update state.order for backward compatibility
+    
+    // Log the order price to verify it matches what will be sent to payment window
+    const orderPriceDKK = updatedOrder?.price?.amount ? updatedOrder.price.amount / 100 : 0;
+    const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
+    const initialPeriodStart = subscriptionItem?.initialPaymentPeriod?.start;
+    console.log('[ensureSubscriptionAttached] ✅ Order data after subscription add:', {
+      orderId,
+      orderPrice: orderPriceDKK,
+      initialPeriodStart,
+      hasSubscriptionItems: !!subscriptionItem,
+      productId: subscriptionItem?.product?.id,
+    });
+    
+    updatePaymentOverview();
+    console.log(`[checkout] Order updated with subscriptionItems for payment overview`);
     
     persistOrderSnapshot(orderId);
     console.log(`[checkout] Membership attached to order ${orderId} (${context})`);
