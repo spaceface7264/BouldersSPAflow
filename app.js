@@ -6213,6 +6213,14 @@ function toggleDiscountForm() {
   const isVisible = DOM.discountForm.style.display !== 'none';
   DOM.discountForm.style.display = isVisible ? 'none' : 'flex';
   DOM.discountToggle?.classList.toggle('active', !isVisible);
+  
+  // Focus on input field when form is shown
+  if (!isVisible && DOM.discountInput) {
+    // Use setTimeout to ensure the form is visible before focusing
+    setTimeout(() => {
+      DOM.discountInput.focus();
+    }, 0);
+  }
 }
 
 // Postal code auto-fill functionality
@@ -7059,8 +7067,10 @@ function renderCartItems() {
   state.cartItems.forEach((item) => {
     const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
     const nameEl = cartItem.querySelector('[data-element="name"]');
+    const priceEl = cartItem.querySelector('[data-element="price"]');
 
     if (nameEl) nameEl.textContent = item.name;
+    if (priceEl) priceEl.textContent = item.amount ? numberFormatter.format(item.amount) + ' kr' : '';
 
     DOM.cartItems.appendChild(cartItem);
   });
@@ -7121,15 +7131,7 @@ function updatePaymentOverview() {
     return;
   }
   
-  // Wait for order data with subscriptionItems before updating
-  // This prevents showing incorrect values before subscription is attached to the order
-  const hasSubscriptionItems = state.fullOrder?.subscriptionItems && state.fullOrder.subscriptionItems.length > 0;
-  if (hasMembership && (!state.fullOrder || !hasSubscriptionItems)) {
-    console.log('[Payment Overview] ⏳ Waiting for order data with subscriptionItems before updating payment overview');
-    return;
-  }
-  
-  // Show payment overview
+  // Show payment overview - don't wait for order data, show prices from product data immediately
   DOM.paymentOverview.style.display = 'block';
   
   console.log('[Payment Overview] ===== UPDATING PAYMENT OVERVIEW =====');
@@ -7138,16 +7140,14 @@ function updatePaymentOverview() {
     orderId: state.fullOrder?.id,
     orderNumber: state.fullOrder?.number,
     orderPrice: state.fullOrder?.price,
-    hasSubscriptionItems: !!hasSubscriptionItems,
+    hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems && state.fullOrder.subscriptionItems.length > 0),
     subscriptionItemsCount: state.fullOrder?.subscriptionItems?.length || 0
   });
   
-  // Get subscription item from order (per OpenAPI: OrderOut.subscriptionItems[0])
+  // Get subscription item from order if available (per OpenAPI: OrderOut.subscriptionItems[0])
+  // If not available, we'll use product data instead
   const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
-  if (!subscriptionItem) {
-    console.warn('[Payment Overview] ⚠️ No subscription item found in order');
-    return;
-  }
+  const hasOrderData = !!subscriptionItem;
   
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
@@ -7157,10 +7157,11 @@ function updatePaymentOverview() {
   // This ensures "Betales nu" matches the price shown in payment window
   // 
   // Per OpenAPI: OrderOut.price (CurrencyOut) - The total price of the order
+  // If order data is not available, calculate from product data
   let payNowAmount = 0;
   let billingPeriod = null;
   
-  if (state.fullOrder?.price?.amount !== undefined) {
+  if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
     // Extract price amount (CurrencyOut can be object with .amount or direct number)
     const orderPriceAmount = state.fullOrder.price.amount;
     const orderPriceDKK = typeof orderPriceAmount === 'object' 
@@ -7236,9 +7237,78 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
     }
   } else {
-    // Fallback: Use cart total if fullOrder not available yet
-    payNowAmount = state.totals.cartTotal || 0;
-    console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - fullOrder data not available');
+    // No order data yet - calculate price from product data
+    // This allows prices to be shown before login/account creation
+    if (state.selectedProductId && state.subscriptions) {
+      const productIdNum = typeof state.selectedProductId === 'string' 
+        ? parseInt(state.selectedProductId) 
+        : state.selectedProductId;
+      
+      const membership = state.subscriptions.find(p => 
+        p.id === state.selectedProductId || 
+        p.id === productIdNum ||
+        String(p.id) === String(state.selectedProductId)
+      );
+      
+      if (membership) {
+        // Calculate partial month price client-side
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const startDateStr = today.toISOString().split('T')[0];
+        
+        // Try to use the helper function if available
+        if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
+          const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
+          if (expectedPrice) {
+            payNowAmount = expectedPrice.amountInDKK;
+            
+            // Set billing period to today - end of month
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            billingPeriod = {
+              start: today,
+              end: lastDayOfMonth
+            };
+            console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month):', payNowAmount, 'DKK');
+          } else {
+            // Fallback to full month price
+            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+            payNowAmount = priceInCents / 100;
+            console.log('[Payment Overview] ⚠️ Pay now from product data (full month - fallback):', payNowAmount, 'DKK');
+          }
+        } else {
+          // Calculate partial month price manually
+          const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+          const monthlyPrice = priceInCents / 100;
+          
+          // Calculate days until end of month
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+          const daysInMonth = lastDayOfMonth.getDate();
+          const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
+          
+          // Calculate partial month price
+          payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+          
+          billingPeriod = {
+            start: today,
+            end: lastDayOfMonth
+          };
+          
+          console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month, manual calc):', payNowAmount, 'DKK');
+        }
+      } else {
+        // Fallback: Use cart total
+        payNowAmount = state.totals.cartTotal || 0;
+        console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - product not found');
+      }
+    } else {
+      // Fallback: Use cart total if product data not available
+      payNowAmount = state.totals.cartTotal || 0;
+      console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - product data not available');
+    }
   }
   
   // ============================================================================
@@ -7249,7 +7319,7 @@ function updatePaymentOverview() {
   // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
   let monthlyPaymentAmount = 0;
   
-  if (subscriptionItem.payRecurring?.price?.amount !== undefined) {
+  if (hasOrderData && subscriptionItem.payRecurring?.price?.amount !== undefined) {
     monthlyPaymentAmount = subscriptionItem.payRecurring.price.amount / 100;
     console.log('[Payment Overview] ✅ Monthly payment from payRecurring:', monthlyPaymentAmount, 'DKK');
   } else {
@@ -7286,23 +7356,28 @@ function updatePaymentOverview() {
   if (DOM.payNow) {
     DOM.payNow.textContent = currencyFormatter.format(payNowAmount);
     
-    // Verify this matches payment window price
-    const orderPriceForPayment = state.fullOrder?.price?.amount || 0;
-    const orderPriceDKK = typeof orderPriceForPayment === 'object' 
-      ? orderPriceForPayment.amount / 100 
-      : orderPriceForPayment / 100;
-    const pricesMatch = Math.abs(payNowAmount - orderPriceDKK) < 0.01; // Allow small rounding differences
-    
-    console.log('[Payment Overview] 🔍 "Betales nu" price:', payNowAmount, 'DKK');
-    console.log('[Payment Overview] 🔍 Order price (sent to payment window):', orderPriceDKK, 'DKK');
-    console.log('[Payment Overview] 🔍 Prices match:', pricesMatch ? '✅ YES' : '❌ NO - MISMATCH!');
-    
-    if (!pricesMatch) {
-      const productId = subscriptionItem?.product?.id || state.selectedProductId;
-      console.warn('[Payment Overview] ⚠️ PRICE MISMATCH DETECTED!');
-      console.warn('[Payment Overview] ⚠️ UI shows:', payNowAmount, 'DKK');
-      console.warn('[Payment Overview] ⚠️ Payment window will show:', orderPriceDKK, 'DKK');
-      console.warn('[Payment Overview] ⚠️ Product ID:', productId);
+    // Verify this matches payment window price (only if order data is available)
+    if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
+      const orderPriceForPayment = state.fullOrder.price.amount;
+      const orderPriceDKK = typeof orderPriceForPayment === 'object' 
+        ? orderPriceForPayment.amount / 100 
+        : orderPriceForPayment / 100;
+      const pricesMatch = Math.abs(payNowAmount - orderPriceDKK) < 0.01; // Allow small rounding differences
+      
+      console.log('[Payment Overview] 🔍 "Betales nu" price:', payNowAmount, 'DKK');
+      console.log('[Payment Overview] 🔍 Order price (sent to payment window):', orderPriceDKK, 'DKK');
+      console.log('[Payment Overview] 🔍 Prices match:', pricesMatch ? '✅ YES' : '❌ NO - MISMATCH!');
+      
+      if (!pricesMatch) {
+        const productId = subscriptionItem?.product?.id || state.selectedProductId;
+        console.warn('[Payment Overview] ⚠️ PRICE MISMATCH DETECTED!');
+        console.warn('[Payment Overview] ⚠️ UI shows:', payNowAmount, 'DKK');
+        console.warn('[Payment Overview] ⚠️ Payment window will show:', orderPriceDKK, 'DKK');
+        console.warn('[Payment Overview] ⚠️ Product ID:', productId);
+      }
+    } else {
+      console.log('[Payment Overview] 🔍 "Betales nu" price (from product data):', payNowAmount, 'DKK');
+      console.log('[Payment Overview] ℹ️ Order data not available yet - price will be verified when order is created');
     }
   }
   
@@ -7331,11 +7406,11 @@ function updatePaymentOverview() {
       billingPeriodText = `Period ${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
       
       // If there's a boundUntil date (end of promotional period), show that too
-      if (subscriptionItem.boundUntil) {
+      if (hasOrderData && subscriptionItem?.boundUntil) {
         const boundUntilDate = new Date(subscriptionItem.boundUntil);
         billingPeriodText += ` (bound until ${formatDate(boundUntilDate)})`;
       }
-    } else if (subscriptionItem.boundUntil) {
+    } else if (hasOrderData && subscriptionItem?.boundUntil) {
       // No initialPaymentPeriod, but there's a boundUntil date
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
       const formatDate = (date) => {
