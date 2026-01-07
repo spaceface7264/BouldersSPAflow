@@ -775,6 +775,7 @@ body {
 
 .plan-section.expanded {
     max-height: none;
+    height: auto;
     margin-top: var(--plan-section-gap);
     opacity: 1;
     transform: translateY(0);
@@ -1580,10 +1581,35 @@ body {
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    padding-bottom: 0;
 }
 
 .category-item.expanded .category-content {
-    max-height: 1000px;
+    max-height: calc(100vh - 400px); /* Dynamic max-height based on viewport */
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    padding-bottom: 20px; /* Ensure last plan card is fully visible */
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: rgba(244, 1, 245, 0.3) transparent; /* Firefox */
+}
+
+/* Custom scrollbar for webkit browsers */
+.category-item.expanded .category-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.category-item.expanded .category-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.category-item.expanded .category-content::-webkit-scrollbar-thumb {
+    background: rgba(244, 1, 245, 0.3);
+    border-radius: 3px;
+}
+
+.category-item.expanded .category-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(244, 1, 245, 0.5);
 }
 
 .category-description {
@@ -1604,6 +1630,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0px;
+    padding-bottom: 0; /* Padding handled by category-content */
 }
 
 .plan-card {
@@ -1616,7 +1643,12 @@ body {
     align-items: left;
     justify-content: space-between;
     padding-top: 12px;
+    padding-bottom: 12px;
     gap: 12px;
+}
+
+.plan-card:last-child {
+    padding-bottom: 20px; /* Extra padding for last item to prevent cut-off */
 }
 
 .plan-card:active {
