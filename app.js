@@ -1038,6 +1038,54 @@ class AuthAPI {
     }
   }
 
+  // Step 6: Get customer profile
+  async getCustomer(customerId) {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}`;
+      } else {
+        // In development, use direct API endpoint (same as fallback)
+        // This avoids Vite proxy issues with /api/ver3 paths
+        url = `https://api-join.boulders.dk/api/ver3/customers/${customerId}`;
+      }
+      
+      console.log('[Step 6] Fetching customer profile:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Step 6] Get customer error (${response.status}):`, errorText);
+        throw new Error(`Get customer failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Step 6] Get customer response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Step 6] Get customer error:', error);
+      throw error;
+    }
+  }
+
   // Step 6: Update customer
   async updateCustomer(customerId, customerData) {
     try {
@@ -3609,6 +3657,7 @@ const state = {
   orderId: null, // Step 7: Created order ID
   customerId: null, // Step 6: Created customer ID (for membership ID display)
   authenticatedEmail: null,
+  authenticatedCustomer: null, // Full customer profile data from API
   checkoutInProgress: false, // Flag to prevent duplicate checkout attempts
   loginInProgress: false, // Prevent duplicate login submissions
   paymentMethod: null,
@@ -3646,7 +3695,7 @@ function getTokenMetadata() {
   return null;
 }
 
-function syncAuthenticatedCustomerState(username = null, email = null) {
+async function syncAuthenticatedCustomerState(username = null, email = null) {
   const metadata = getTokenMetadata();
   const resolvedUsername = username || state.customerId || metadata?.username || metadata?.userName;
   const resolvedEmail = email || state.authenticatedEmail || metadata?.email;
@@ -3657,6 +3706,18 @@ function syncAuthenticatedCustomerState(username = null, email = null) {
 
   if (resolvedEmail) {
     state.authenticatedEmail = resolvedEmail;
+  }
+
+  // Fetch customer profile if we have customer ID and access token
+  if (state.customerId && isUserAuthenticated() && !state.authenticatedCustomer) {
+    try {
+      const customerData = await authAPI.getCustomer(state.customerId);
+      state.authenticatedCustomer = customerData;
+      console.log('[Auth] Customer profile loaded:', customerData);
+    } catch (profileError) {
+      console.warn('[Auth] Could not fetch customer profile:', profileError);
+      // Continue even if profile fetch fails
+    }
   }
 
   refreshLoginUI();
@@ -4205,7 +4266,10 @@ function cacheDom() {
   DOM.loginButtonDefaultText = DOM.loginButton?.textContent?.trim() || 'Log in';
   DOM.loginStatus = document.querySelector('[data-login-status]');
   DOM.loginStatusEmail = document.querySelector('[data-auth-email]');
+  DOM.loginStatusName = document.querySelector('[data-auth-name]');
+  DOM.loginStatusDetails = document.querySelector('[data-auth-details]');
   DOM.loginFormContainer = document.querySelector('[data-login-form-container]');
+  DOM.authModeToggle = document.querySelector('.auth-mode-toggle');
   DOM.forgotPasswordLink = document.querySelector('[data-action="forgot-password"]');
   DOM.forgotPasswordModal = document.getElementById('forgotPasswordModal');
   DOM.forgotPasswordForm = document.getElementById('forgotPasswordForm');
@@ -4414,7 +4478,27 @@ async function handleLoginSubmit(event) {
     const username = payload?.username || email;
     showToast(`Logged in as ${username}.`, 'success');
     state.authenticatedEmail = email;
-    syncAuthenticatedCustomerState(username, email);
+    
+    // Sync customer state and fetch profile
+    await syncAuthenticatedCustomerState(username, email);
+    
+    // Fetch full customer profile if not already fetched
+    if (!state.authenticatedCustomer) {
+      try {
+        const customerId = state.customerId || username;
+        if (customerId) {
+          const customerData = await authAPI.getCustomer(customerId);
+          state.authenticatedCustomer = customerData;
+          console.log('[login] Customer profile loaded:', customerData);
+          // Refresh UI again to show profile data
+          refreshLoginUI();
+        }
+      } catch (profileError) {
+        console.warn('[login] Could not fetch customer profile:', profileError);
+        // Continue even if profile fetch fails
+      }
+    }
+    
     try {
       await ensureOrderCreated('login');
       await ensureSubscriptionAttached('login');
@@ -4794,25 +4878,132 @@ function refreshLoginUI() {
 
   const authenticated = isUserAuthenticated();
   const metadata = getTokenMetadata();
-  const emailDisplay = state.authenticatedEmail || metadata?.email || metadata?.username || 'Account';
+  const customer = state.authenticatedCustomer;
+  
+  // Determine display values
+  const emailDisplay = state.authenticatedEmail || customer?.email || metadata?.email || metadata?.username || 'Account';
+  const nameDisplay = customer?.firstName && customer?.lastName 
+    ? `${customer.firstName} ${customer.lastName}` 
+    : customer?.firstName || customer?.lastName || null;
 
   if (DOM.loginStatus) {
     DOM.loginStatus.style.display = authenticated ? 'block' : 'none';
   }
+  
+  // Update name display
+  if (DOM.loginStatusName) {
+    if (nameDisplay) {
+      DOM.loginStatusName.textContent = nameDisplay;
+      DOM.loginStatusName.style.display = 'block';
+    } else {
+      DOM.loginStatusName.style.display = 'none';
+    }
+  }
+  
+  // Update email display
   if (DOM.loginStatusEmail) {
     DOM.loginStatusEmail.textContent = emailDisplay;
   }
+  
+  // Update profile details
+  if (DOM.loginStatusDetails && customer) {
+    console.log('[refreshLoginUI] Customer data:', customer);
+    let hasDetails = false;
+    
+    // Phone number
+    const phoneItem = document.querySelector('[data-profile-item="phone"]');
+    const phoneValue = document.querySelector('[data-profile-phone]');
+    if (customer.mobilePhone && phoneItem && phoneValue) {
+      const phoneNumber = typeof customer.mobilePhone === 'string' 
+        ? customer.mobilePhone 
+        : customer.mobilePhone.number || customer.mobilePhone.value || '';
+      if (phoneNumber) {
+        phoneValue.textContent = phoneNumber;
+        phoneItem.style.display = 'flex';
+        hasDetails = true;
+        console.log('[refreshLoginUI] Phone displayed:', phoneNumber);
+      }
+    }
+    
+    // Member number
+    const memberNumberItem = document.querySelector('[data-profile-item="memberNumber"]');
+    const memberNumberValue = document.querySelector('[data-profile-member-number]');
+    if (customer.customerNumber && memberNumberItem && memberNumberValue) {
+      memberNumberValue.textContent = customer.customerNumber;
+      memberNumberItem.style.display = 'flex';
+      hasDetails = true;
+    }
+    
+    // Member since
+    const memberSinceItem = document.querySelector('[data-profile-item="memberSince"]');
+    const memberSinceValue = document.querySelector('[data-profile-member-since]');
+    if (customer.memberJoinDate && memberSinceItem && memberSinceValue) {
+      const joinDate = typeof customer.memberJoinDate === 'string' 
+        ? customer.memberJoinDate 
+        : customer.memberJoinDate.year && customer.memberJoinDate.month && customer.memberJoinDate.day
+          ? `${customer.memberJoinDate.year}-${String(customer.memberJoinDate.month).padStart(2, '0')}-${String(customer.memberJoinDate.day).padStart(2, '0')}`
+          : null;
+      if (joinDate) {
+        memberSinceValue.textContent = joinDate;
+        memberSinceItem.style.display = 'flex';
+        hasDetails = true;
+      }
+    }
+    
+    // Customer type
+    const customerTypeItem = document.querySelector('[data-profile-item="customerType"]');
+    const customerTypeValue = document.querySelector('[data-profile-customer-type]');
+    if (customer.customerType && customerTypeItem && customerTypeValue) {
+      const customerTypeName = typeof customer.customerType === 'string' 
+        ? customer.customerType 
+        : customer.customerType.name || customer.customerType.label || '';
+      if (customerTypeName) {
+        customerTypeValue.textContent = customerTypeName;
+        customerTypeItem.style.display = 'flex';
+        hasDetails = true;
+      }
+    }
+    
+    // Card number
+    const cardNumberItem = document.querySelector('[data-profile-item="cardNumber"]');
+    const cardNumberValue = document.querySelector('[data-profile-card-number]');
+    if (customer.cardNumber && cardNumberItem && cardNumberValue) {
+      cardNumberValue.textContent = customer.cardNumber;
+      cardNumberItem.style.display = 'flex';
+      hasDetails = true;
+    }
+    
+    // Show details container if we have any details
+    if (hasDetails) {
+      DOM.loginStatusDetails.style.display = 'block';
+    } else {
+      DOM.loginStatusDetails.style.display = 'none';
+    }
+  }
+  
   if (DOM.loginFormContainer) {
     DOM.loginFormContainer.style.display = authenticated ? 'none' : '';
+  }
+  // Hide auth mode toggle when user is logged in
+  if (DOM.authModeToggle) {
+    DOM.authModeToggle.style.display = authenticated ? 'none' : '';
   }
 }
 
 function handleLogout() {
+  // Clear customer profile data
+  state.authenticatedCustomer = null;
+  state.authenticatedEmail = null;
+  state.customerId = null;
+  
+  // Clear customer profile data
+  state.authenticatedCustomer = null;
+  state.authenticatedEmail = null;
+  state.customerId = null;
+  
   if (typeof window.clearTokens === 'function') {
     window.clearTokens();
   }
-  state.customerId = null;
-  state.authenticatedEmail = null;
   refreshLoginUI();
   showToast('You have been logged out.', 'info');
 }
@@ -5529,6 +5720,12 @@ function initAuthModeToggle() {
   
   // Set initial state - if user is logged in, select login tab, otherwise create account
   const isAuthenticated = isUserAuthenticated();
+  
+  // Hide toggle if user is already authenticated
+  if (DOM.authModeToggle) {
+    DOM.authModeToggle.style.display = isAuthenticated ? 'none' : '';
+  }
+  
   const initialMode = isAuthenticated ? 'login' : 'create';
   
   const initialBtn = document.querySelector(`[data-mode="${initialMode}"]`);
