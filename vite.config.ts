@@ -15,13 +15,14 @@ const readIfExists = (file: string) => {
 const key = readIfExists('key.pem');
 const cert = readIfExists('cert.pem');
 
-// Plugin to copy functions directory to dist for Cloudflare Pages deployment
+// Plugin to copy functions directory and postal-codes-dk.js to dist for Cloudflare Pages deployment
 const copyFunctionsPlugin = () => ({
   name: 'copy-functions',
   closeBundle() {
     const functionsDir = path.resolve(__dirname, 'functions');
     const distFunctionsDir = path.resolve(__dirname, 'dist', 'functions');
     
+    // Copy functions directory
     if (fs.existsSync(functionsDir)) {
       // Create dist/functions directory if it doesn't exist
       if (!fs.existsSync(distFunctionsDir)) {
@@ -36,6 +37,14 @@ const copyFunctionsPlugin = () => ({
         fs.copyFileSync(srcFile, destFile);
         console.log(`[Vite] Copied ${file} to dist/functions/`);
       });
+    }
+    
+    // Copy postal-codes-dk.js to dist root
+    const postalCodesFile = path.resolve(__dirname, 'postal-codes-dk.js');
+    if (fs.existsSync(postalCodesFile)) {
+      const distPostalCodesFile = path.resolve(__dirname, 'dist', 'postal-codes-dk.js');
+      fs.copyFileSync(postalCodesFile, distPostalCodesFile);
+      console.log(`[Vite] Copied postal-codes-dk.js to dist/`);
     }
   }
 });
