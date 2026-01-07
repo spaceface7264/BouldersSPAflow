@@ -1548,84 +1548,37 @@ class OrderAPI {
         initialPaymentPeriod: subscriptionItem?.initialPaymentPeriod
       });
       
-      // CRITICAL: If backend ignored startDate (set it to future), try to fix by deleting and re-adding
-      // This works for Student/Junior but may not work for productId 134 (known backend bug)
+      // CRITICAL: If backend ignored startDate, attempt to fix with multiple strategies
+      // This ensures correct pricing for ALL products, not just specific ones
       if (startDateIgnored && subscriptionItem?.id) {
         console.warn('[Step 7] ⚠️ Backend ignored startDate - start date is', daysUntilStart, 'days in future');
-        console.warn('[Step 7] ⚠️ Attempting to fix by deleting and re-adding subscription...');
+        console.warn('[Step 7] ⚠️ Product ID:', subscriptionProductId);
+        console.warn('[Step 7] ⚠️ Attempting to fix with multiple strategies...');
         
-        try {
-          // Delete the subscription item using DELETE /api/ver3/orders/{order}/items/subscriptions/{id}
-          const deleteUrl = this.useProxy
-            ? `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItem.id}`
-            : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItem.id}`;
-          
-          const deleteResponse = await fetch(deleteUrl, {
-            method: 'DELETE',
-            headers: {
-              'Accept-Language': 'da-DK',
-              'Content-Type': 'application/json',
-              ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-            },
-          });
-          
-          if (!deleteResponse.ok) {
-            const deleteErrorText = await deleteResponse.text();
-            console.warn('[Step 7] ⚠️ Failed to delete subscription item:', deleteErrorText);
-            console.warn('[Step 7] ⚠️ Continuing with original subscription (may have incorrect start date)');
-          } else {
-            console.log('[Step 7] ✅ Subscription item deleted, re-adding with correct startDate...');
-            
-            // Wait a moment for backend to process deletion
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Re-add subscription with same payload
-            const retryResponse = await fetch(url, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify(payload),
-            });
-            
-            if (!retryResponse.ok) {
-              const retryErrorText = await retryResponse.text();
-              console.error('[Step 7] ❌ Failed to re-add subscription item:', retryErrorText);
-              throw new Error(`Re-add subscription item failed: ${retryResponse.status} - ${retryErrorText}`);
-            }
-            
-            const retryData = await retryResponse.json();
-            const retrySubscriptionItem = retryData?.subscriptionItems?.[0];
-            const retryStartDate = retrySubscriptionItem?.initialPaymentPeriod?.start;
-            const retryStartDateObj = retryStartDate ? new Date(retryStartDate) : null;
-            const retryDaysUntilStart = retryStartDateObj ? Math.ceil((retryStartDateObj - checkToday) / (1000 * 60 * 60 * 24)) : 0;
-            
-            console.log('[Step 7] 🔍 Retry response analysis:', {
-              retryStartDate,
-              retryDaysUntilStart,
-              retryOrderPrice: retryData?.price?.amount,
-              retryOrderPriceDKK: retryData?.price?.amount ? retryData.price.amount / 100 : null,
-            });
-            
-            if (retryDaysUntilStart <= 1) {
-              console.log('[Step 7] ✅ Successfully fixed startDate by re-adding subscription!');
-              return retryData;
-            } else {
-              console.warn('[Step 7] ⚠️ Re-add still has future start date - backend bug persists for this product');
-              console.warn('[Step 7] ⚠️ Payment window will show incorrect price');
-              return retryData; // Return retry data anyway
-            }
-          }
-        } catch (retryError) {
-          console.error('[Step 7] ❌ Error during retry:', retryError);
-          console.warn('[Step 7] ⚠️ Continuing with original subscription (may have incorrect start date)');
+        // Calculate expected price for verification
+        const expectedPrice = this._calculateExpectedPartialMonthPrice(subscriptionProductId, startDate);
+        
+        // Try multiple strategies to fix backend pricing
+        const fixedData = await this._fixBackendPricingBug(
+          orderId,
+          url,
+          headers,
+          subscriptionItem.id,
+          payload,
+          subscriptionProductId,
+          expectedPrice,
+          accessToken,
+          checkToday
+        );
+        
+        if (fixedData) {
+          return fixedData;
         }
-      }
-      
-      // Log warning if backend ignored startDate for productId 134
-      if (subscriptionProductId === 134 && startDateIgnored) {
-        console.error('[Step 7] ❌ BACKEND BUG CONFIRMED: Backend ignored startDate for productId 134!');
-        console.error('[Step 7] ❌ Sent startDate:', startDate, 'but backend returned:', responseStartDate);
-        console.error('[Step 7] ❌ Payment window will show incorrect price (full monthly price instead of partial-month)');
-        console.error('[Step 7] ❌ This is a backend issue that needs to be fixed on backend side');
+        
+        // If all strategies failed, log detailed error
+        console.error('[Step 7] ❌ All strategies failed to fix backend pricing bug for productId:', subscriptionProductId);
+        console.error('[Step 7] ❌ Payment window will show incorrect price');
+        console.error('[Step 7] ❌ Cart summary will calculate and show correct price');
       }
       
       return data;
@@ -1633,6 +1586,232 @@ class OrderAPI {
       console.error('[Step 7] Add subscription item error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Calculates the expected partial-month price for a subscription starting today.
+   * Used to verify backend pricing is correct.
+   * 
+   * @param {number} productId - The subscription product ID
+   * @param {string} startDate - Start date in YYYY-MM-DD format
+   * @returns {Object|null} Expected price info { amountInCents, amountInDKK, daysRemaining, daysInMonth } or null
+   */
+  _calculateExpectedPartialMonthPrice(productId, startDate) {
+    const membership = state.subscriptions?.find(p => 
+      p.id === productId || 
+      p.id === Number(productId) ||
+      String(p.id) === String(productId)
+    );
+    
+    if (!membership?.priceWithInterval?.price?.amount) {
+      console.warn('[Step 7] Cannot calculate expected price - product not found:', productId);
+      return null;
+    }
+    
+    const monthlyPriceInCents = membership.priceWithInterval.price.amount;
+    const startDateObj = new Date(startDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Calculate days remaining in current month
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+    const daysInCurrentMonth = lastDayOfMonth.getDate();
+    const dayOfMonth = today.getDate();
+    const daysRemainingInMonth = daysInCurrentMonth - dayOfMonth + 1;
+    
+    // Calculate prorated price
+    const proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+    
+    return {
+      amountInCents: proratedPriceInCents,
+      amountInDKK: proratedPriceInCents / 100,
+      daysRemaining: daysRemainingInMonth,
+      daysInMonth: daysInCurrentMonth,
+      monthlyPriceInCents,
+      monthlyPriceInDKK: monthlyPriceInCents / 100
+    };
+  }
+
+  /**
+   * Attempts multiple strategies to fix backend pricing bug when startDate is ignored.
+   * 
+   * @param {string|number} orderId - Order ID
+   * @param {string} url - API endpoint URL
+   * @param {Object} headers - Request headers
+   * @param {number} subscriptionItemId - Subscription item ID to delete
+   * @param {Object} basePayload - Base payload object
+   * @param {number} productId - Subscription product ID
+   * @param {Object|null} expectedPrice - Expected price info
+   * @param {string|null} accessToken - Access token
+   * @param {Date} today - Today's date (normalized)
+   * @returns {Promise<Object|null>} Fixed order data or null if all strategies failed
+   */
+  async _fixBackendPricingBug(orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today) {
+    // Strategy 1: Delete and re-add with same payload (sometimes backend needs fresh start)
+    console.log('[Step 7] Strategy 1: Delete and re-add with same payload');
+    const strategy1Result = await this._tryStrategyDeleteAndReadd(
+      orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today
+    );
+    if (strategy1Result) return strategy1Result;
+    
+    // Strategy 2: Try with explicit date format
+    console.log('[Step 7] Strategy 2: Try with explicit date format');
+    const todayExplicit = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (todayExplicit !== basePayload.startDate) {
+      const payloadVariant = { ...basePayload, startDate: todayExplicit };
+      const strategy2Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, payloadVariant, productId, expectedPrice, accessToken, today
+      );
+      if (strategy2Result) return strategy2Result;
+    }
+    
+    // Strategy 3: Try minimal payload (only required fields)
+    console.log('[Step 7] Strategy 3: Try minimal payload');
+    const minimalPayload = {
+      subscriptionProduct: basePayload.subscriptionProduct,
+      startDate: basePayload.startDate,
+      ...(basePayload.birthDate ? { birthDate: basePayload.birthDate } : {}),
+    };
+    const strategy3Result = await this._tryStrategyDeleteAndReadd(
+      orderId, url, headers, subscriptionItemId, minimalPayload, productId, expectedPrice, accessToken, today
+    );
+    if (strategy3Result) return strategy3Result;
+    
+    // Strategy 4: Try with longer wait time (backend might need more time to process)
+    console.log('[Step 7] Strategy 4: Try with longer wait time');
+    const strategy4Result = await this._tryStrategyDeleteAndReadd(
+      orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today, 2000
+    );
+    if (strategy4Result) return strategy4Result;
+    
+    return null; // All strategies failed
+  }
+
+  /**
+   * Tries a strategy: delete subscription item and re-add with given payload.
+   * 
+   * @param {string|number} orderId - Order ID
+   * @param {string} url - API endpoint URL
+   * @param {Object} headers - Request headers
+   * @param {number} subscriptionItemId - Subscription item ID to delete
+   * @param {Object} payload - Payload to use when re-adding
+   * @param {number} productId - Subscription product ID
+   * @param {Object|null} expectedPrice - Expected price info
+   * @param {string|null} accessToken - Access token
+   * @param {Date} today - Today's date (normalized)
+   * @param {number} waitTime - Wait time in ms before re-adding (default 1000)
+   * @returns {Promise<Object|null>} Fixed order data or null if strategy failed
+   */
+  async _tryStrategyDeleteAndReadd(orderId, url, headers, subscriptionItemId, payload, productId, expectedPrice, accessToken, today, waitTime = 1000) {
+    try {
+      // Delete subscription item
+      const deleteUrl = this.useProxy
+        ? `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`;
+      
+      const deleteResponse = await fetch(deleteUrl, {
+        method: 'DELETE',
+        headers: {
+          ...headers,
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        },
+      });
+      
+      if (!deleteResponse.ok) {
+        // 403 Forbidden means we don't have permission - this is expected for certain order states
+        // Don't log as error, just skip this strategy
+        if (deleteResponse.status === 403) {
+          console.log('[Step 7] Cannot delete subscription item (403 Forbidden) - order may be in a state that prevents modification');
+          return null; // Skip this strategy - we don't have permission
+        }
+        // Other errors - log and skip
+        const errorText = await deleteResponse.text().catch(() => 'Unknown error');
+        console.warn('[Step 7] Failed to delete subscription item:', deleteResponse.status, errorText);
+        return null; // Can't delete, skip this strategy
+      }
+      
+      // Wait for backend to process deletion
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      
+      // Re-add subscription
+      const retryResponse = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      
+      if (!retryResponse.ok) {
+        return null; // Re-add failed, skip this strategy
+      }
+      
+      const retryData = await retryResponse.json();
+      
+      // Verify pricing is correct
+      const verification = this._verifySubscriptionPricing(retryData, productId, expectedPrice, today);
+      
+      if (verification.isCorrect) {
+        console.log('[Step 7] ✅ Strategy succeeded - pricing is correct');
+        return retryData;
+      }
+      
+      return null; // Pricing still incorrect
+    } catch (error) {
+      console.error('[Step 7] Strategy error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Verifies that subscription pricing is correct.
+   * 
+   * @param {Object} orderData - Order data from API response
+   * @param {number} productId - Subscription product ID
+   * @param {Object|null} expectedPrice - Expected price info
+   * @param {Date} today - Today's date (normalized to midnight)
+   * @returns {Object} Verification result { isCorrect, startDateCorrect, priceCorrect, details }
+   */
+  _verifySubscriptionPricing(orderData, productId, expectedPrice, today) {
+    const subscriptionItem = orderData?.subscriptionItems?.[0];
+    const initialPaymentPeriod = subscriptionItem?.initialPaymentPeriod;
+    const orderPriceAmount = orderData?.price?.amount || 0;
+    const orderPriceInCents = typeof orderPriceAmount === 'object' ? orderPriceAmount.amount : orderPriceAmount;
+    
+    // Check if start date is correct (should be today or tomorrow at most)
+    let daysUntilStart = 0;
+    if (initialPaymentPeriod?.start) {
+      const backendStartDate = new Date(initialPaymentPeriod.start);
+      daysUntilStart = Math.ceil((backendStartDate - today) / (1000 * 60 * 60 * 24));
+    }
+    
+    const startDateCorrect = daysUntilStart <= 1;
+    
+    // Check if price is correct
+    let priceCorrect = false;
+    if (expectedPrice && startDateCorrect) {
+      // If start date is correct, price should match expected partial-month price
+      const priceDifference = Math.abs(orderPriceInCents - expectedPrice.amountInCents);
+      priceCorrect = priceDifference <= 10; // Allow 10 cents difference for rounding
+    }
+    
+    const isCorrect = startDateCorrect && priceCorrect;
+    
+    return {
+      isCorrect,
+      startDateCorrect,
+      priceCorrect,
+      daysUntilStart,
+      orderPriceInCents,
+      orderPriceDKK: orderPriceInCents / 100,
+      expectedPriceInCents: expectedPrice?.amountInCents || null,
+      expectedPriceDKK: expectedPrice?.amountInDKK || null,
+      details: {
+        initialPaymentPeriod,
+        recurringPrice: subscriptionItem?.payRecurring?.price?.amount || 0,
+        productId
+      }
+    };
   }
 
   // Step 7: Add value card item (punch card) - POST /api/ver3/orders/{orderId}/items/valuecards
@@ -2115,6 +2294,43 @@ class PaymentAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Step 9] ❌ Generate Payment Link Card failed (${response.status}):`, errorText);
+        
+        // If 403 Forbidden, log detailed information about why it might have failed
+        if (response.status === 403) {
+          console.error('[Step 9] ⚠️ 403 Forbidden - Possible reasons:');
+          console.error('[Step 9] ⚠️ 1. Order may have incorrect pricing (backend bug - startDate ignored)');
+          console.error('[Step 9] ⚠️ 2. Order may be in a state that prevents payment link generation');
+          console.error('[Step 9] ⚠️ 3. Payment method may not be valid for this order');
+          console.error('[Step 9] ⚠️ 4. Business unit may not match order');
+          console.error('[Step 9] ⚠️ Order details:', {
+            orderId,
+            orderPrice: state.fullOrder?.price?.amount,
+            orderPriceDKK: state.fullOrder?.price?.amount ? (typeof state.fullOrder.price.amount === 'object' ? state.fullOrder.price.amount.amount / 100 : state.fullOrder.price.amount / 100) : null,
+            hasSubscriptionItems: !!state.fullOrder?.subscriptionItems?.length,
+            subscriptionItem: state.fullOrder?.subscriptionItems?.[0],
+            paymentMethodId,
+            businessUnit: businessUnitId
+          });
+          
+          // Check if order price is incorrect (backend bug)
+          const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
+          if (subscriptionItem) {
+            const productId = subscriptionItem?.product?.id;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const startDateStr = today.toISOString().split('T')[0];
+            const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+            const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
+            
+            if (!verification.isCorrect) {
+              console.error('[Step 9] ❌ CONFIRMED: Order has incorrect pricing due to backend bug!');
+              console.error('[Step 9] ❌ Backend shows:', verification.orderPriceDKK, 'DKK');
+              console.error('[Step 9] ❌ Should be:', verification.expectedPriceDKK || 'N/A', 'DKK');
+              console.error('[Step 9] ❌ This is why payment link generation is failing with 403');
+              console.error('[Step 9] ❌ Backend needs to fix startDate handling for productId:', productId);
+            }
+          }
+        }
         
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:1995',message:'Payment link generation FAILED',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,paymentMethod,paymentMethodId,businessUnit,responseStatus:response.status,errorText:errorText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
@@ -6669,10 +6885,25 @@ function renderCartTotal() {
   updateDiscountDisplay();
 }
 
+/**
+ * Updates the payment overview section in the cart summary.
+ * 
+ * Displays:
+ * - "Betales nu:" (Pay now) - The initial payment amount with billing period
+ * - "Månedlig betaling herefter:" (Monthly payment thereafter) - The recurring monthly fee
+ * 
+ * Based on OpenAPI 3.0.1 documentation:
+ * - Order.price.amount: Total price of the order (CurrencyOut)
+ * - SubscriptionItem.initialPaymentPeriod: First payment period (DayRange with start/end)
+ * - SubscriptionItem.payRecurring.price.amount: Recurring monthly price after promotional period (CurrencyOut)
+ * 
+ * @see docs/brp-api3-openapi.yaml - OrderOut, SubscriptionItemOut schemas
+ */
 function updatePaymentOverview() {
   // Only show payment overview if there's a membership (subscription) in the cart
   const hasMembership = state.selectedProductType === 'membership' && state.selectedProductId;
   
+  // Initialize DOM references
   if (!DOM.paymentOverview) {
     DOM.paymentOverview = document.querySelector('.payment-overview');
   }
@@ -6696,9 +6927,8 @@ function updatePaymentOverview() {
     return;
   }
   
-  // Don't update DOM if fullOrder doesn't exist yet, or if it exists but doesn't have subscriptionItems yet
+  // Wait for order data with subscriptionItems before updating
   // This prevents showing incorrect values before subscription is attached to the order
-  // Apply this guard whenever we have a membership selected (payment overview should be shown)
   const hasSubscriptionItems = state.fullOrder?.subscriptionItems && state.fullOrder.subscriptionItems.length > 0;
   if (hasMembership && (!state.fullOrder || !hasSubscriptionItems)) {
     console.log('[Payment Overview] ⏳ Waiting for order data with subscriptionItems before updating payment overview');
@@ -6711,120 +6941,126 @@ function updatePaymentOverview() {
   console.log('[Payment Overview] ===== UPDATING PAYMENT OVERVIEW =====');
   console.log('[Payment Overview] Order data:', {
     hasFullOrder: !!state.fullOrder,
-    hasOrder: !!state.order,
-    orderId: state.fullOrder?.id || state.order?.id,
-    orderNumber: state.fullOrder?.number || state.order?.number,
-    orderPrice: state.fullOrder?.price || state.order?.price,
-    hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems || state.order?.subscriptionItems),
-    subscriptionItemsCount: (state.fullOrder?.subscriptionItems || state.order?.subscriptionItems)?.length || 0
+    orderId: state.fullOrder?.id,
+    orderNumber: state.fullOrder?.number,
+    orderPrice: state.fullOrder?.price,
+    hasSubscriptionItems: !!hasSubscriptionItems,
+    subscriptionItemsCount: state.fullOrder?.subscriptionItems?.length || 0
   });
   
-  // Calculate "Betales nu" (Pay now)
+  // Get subscription item from order (per OpenAPI: OrderOut.subscriptionItems[0])
+  const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
+  if (!subscriptionItem) {
+    console.warn('[Payment Overview] ⚠️ No subscription item found in order');
+    return;
+  }
+  
+  // ============================================================================
+  // CALCULATE "BETALES NU" (PAY NOW)
+  // ============================================================================
   // CRITICAL: Use the EXACT same price that backend sends to payment window
   // Payment link API reads order.price.amount from backend, so we must use the same value
   // This ensures "Betales nu" matches the price shown in payment window
+  // 
+  // Per OpenAPI: OrderOut.price (CurrencyOut) - The total price of the order
   let payNowAmount = 0;
+  let billingPeriod = null;
   
-  // Check if backend calculated partial-month pricing correctly
-  // If initialPaymentPeriod starts in the future (>1 day), backend may not have calculated partial-month pricing
-  // In that case, we need to calculate it client-side to show the correct price
-  if (state.fullOrder && state.fullOrder.price && state.fullOrder.price.amount !== undefined) {
-    const orderTotalPrice = state.fullOrder.price.amount;
-    const orderTotalPriceDKK = typeof orderTotalPrice === 'object' 
-      ? orderTotalPrice.amount / 100 
-      : orderTotalPrice / 100;
+  if (state.fullOrder?.price?.amount !== undefined) {
+    // Extract price amount (CurrencyOut can be object with .amount or direct number)
+    const orderPriceAmount = state.fullOrder.price.amount;
+    const orderPriceDKK = typeof orderPriceAmount === 'object' 
+      ? orderPriceAmount.amount / 100 
+      : orderPriceAmount / 100;
     
-    // Check if we need to calculate partial-month pricing client-side
-    const subscriptionItem = state.fullOrder.subscriptionItems?.[0];
-    const recurringPrice = subscriptionItem?.payRecurring?.price?.amount || 0;
-    const initialPaymentPeriod = subscriptionItem?.initialPaymentPeriod;
+    // Get initialPaymentPeriod (per OpenAPI: SubscriptionItemOut.initialPaymentPeriod - DayRange)
+    const initialPaymentPeriod = subscriptionItem.initialPaymentPeriod;
+    const payRecurring = subscriptionItem.payRecurring;
+    const recurringPriceAmount = payRecurring?.price?.amount || 0;
     
-    // If initialPaymentPeriod starts more than 1 day in the future, backend likely didn't calculate partial-month pricing
-    let needsClientSideCalculation = false;
-    if (initialPaymentPeriod && initialPaymentPeriod.start) {
+    // Verify backend pricing is correct using robust verification method
+    const productId = subscriptionItem?.product?.id || state.selectedProductId;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDateStr = today.toISOString().split('T')[0];
+    const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+    
+    if (initialPaymentPeriod?.start) {
       const backendStartDate = new Date(initialPaymentPeriod.start);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const daysUntilStart = Math.ceil((backendStartDate - today) / (1000 * 60 * 60 * 24));
+      const backendEndDate = new Date(initialPaymentPeriod.end);
       
-      // If backend start date is more than 1 day in the future AND order price equals recurring price,
-      // backend didn't calculate partial-month pricing - we need to calculate it client-side
-      if (daysUntilStart > 1 && recurringPrice > 0 && orderTotalPrice === recurringPrice) {
-        needsClientSideCalculation = true;
-        console.log('[Payment Overview] ⚠️ Backend start date is', daysUntilStart, 'days in future and order price equals recurring price');
-        console.log('[Payment Overview] Calculating partial-month pricing client-side...');
+      // Use verification method to check if pricing is correct
+      const verification = orderAPI._verifySubscriptionPricing(
+        state.fullOrder,
+        productId,
+        expectedPrice,
+        today
+      );
+      
+      if (verification.isCorrect) {
+        // Backend calculated correctly - use backend's price
+        payNowAmount = orderPriceDKK;
+        billingPeriod = {
+          start: backendStartDate,
+          end: backendEndDate
+        };
+        console.log('[Payment Overview] ✅ Backend pricing is correct:', payNowAmount, 'DKK');
+      } else {
+        // Backend pricing is incorrect - calculate correct price client-side
+        console.warn('[Payment Overview] ⚠️ Backend pricing is incorrect!');
+        console.warn('[Payment Overview] ⚠️ Backend shows:', orderPriceDKK, 'DKK');
+        console.warn('[Payment Overview] ⚠️ Expected:', expectedPrice?.amountInDKK || 'N/A', 'DKK');
+        console.warn('[Payment Overview] ⚠️ Verification:', verification);
         
-        // Calculate period from today to end of current month
-        const currentMonth = today.getMonth();
-        const currentYear = today.getFullYear();
-        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0); // Last day of current month
-        const daysInCurrentMonth = lastDayOfMonth.getDate();
-        const dayOfMonth = today.getDate();
-        const daysRemainingInMonth = daysInCurrentMonth - dayOfMonth + 1; // Days from today to end of month
-        
-        // Calculate prorated price for remaining days in current month
-        const proratedPrice = Math.round((recurringPrice * daysRemainingInMonth) / daysInCurrentMonth);
-        payNowAmount = proratedPrice / 100;
-        
-        console.log('[Payment Overview] ✅ Client-side partial-month calculation:', payNowAmount, 'DKK (', daysRemainingInMonth, 'days of', daysInCurrentMonth, 'days)');
+        if (expectedPrice) {
+          // Use calculated correct price
+          payNowAmount = expectedPrice.amountInDKK;
+          
+          // Set billing period to today - end of month
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+          billingPeriod = {
+            start: today,
+            end: lastDayOfMonth
+          };
+          console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
+          console.warn('[Payment Overview] ⚠️ NOTE: Payment window may show different price if backend bug persists');
+        } else {
+          // Can't calculate expected price - use backend price as fallback
+          payNowAmount = orderPriceDKK;
+          billingPeriod = {
+            start: backendStartDate,
+            end: backendEndDate
+          };
+          console.warn('[Payment Overview] ⚠️ Cannot calculate expected price - using backend price as fallback');
+        }
       }
-    }
-    
-    // If backend calculated the price correctly (or we don't need client-side calculation), use backend's price
-    if (!needsClientSideCalculation) {
-      payNowAmount = orderTotalPriceDKK;
-      console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount (matches payment window):', payNowAmount, 'DKK');
-      console.log('[Payment Overview] This is the same price backend sends to payment link API');
+    } else {
+      // No initialPaymentPeriod - use order price as-is
+      payNowAmount = orderPriceDKK;
+      console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
     }
   } else {
     // Fallback: Use cart total if fullOrder not available yet
     payNowAmount = state.totals.cartTotal || 0;
     console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - fullOrder data not available');
-    console.log('[Payment Overview] Full state check:', {
-      hasFullOrder: !!state.fullOrder,
-      fullOrderId: state.fullOrder?.id,
-      fullOrderNumber: state.fullOrder?.number,
-      hasOrder: !!state.order,
-      orderId: state.orderId,
-      cartTotal: state.totals.cartTotal
-    });
   }
   
-  // Calculate "Månedlig betaling herefter" (Monthly payment thereafter)
-  // This is the recurring monthly price AFTER any promotional period
+  // ============================================================================
+  // CALCULATE "MÅNEDLIG BETALING HEREFTER" (MONTHLY PAYMENT THEREAFTER)
+  // ============================================================================
+  // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount
+  // This is ALWAYS the regular monthly price after any promotional period
+  // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
   let monthlyPaymentAmount = 0;
   
-  // Try to get from fullOrder subscriptionItems first (fullOrder has the API structure)
-  if (state.fullOrder && state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
-    const subscriptionItem = state.fullOrder.subscriptionItems[0];
-    
-    console.log('[Payment Overview] DEBUG - SubscriptionItem:', {
-      hasPayRecurring: !!subscriptionItem.payRecurring,
-      payRecurringPrice: subscriptionItem.payRecurring?.price,
-      initialPaymentPeriod: subscriptionItem.initialPaymentPeriod
-    });
-    
-    // payRecurring.price.amount is ALWAYS the regular monthly price after any promotional period
-    // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
-    if (subscriptionItem.payRecurring && subscriptionItem.payRecurring.price) {
-      monthlyPaymentAmount = subscriptionItem.payRecurring.price.amount / 100;
-      console.log('[Payment Overview] ✅ Monthly payment from payRecurring:', monthlyPaymentAmount, 'DKK (payRecurring.price.amount:', subscriptionItem.payRecurring.price.amount, ')');
-    } else {
-      console.warn('[Payment Overview] ⚠️ SubscriptionItem found but no payRecurring.price:', subscriptionItem);
-    }
+  if (subscriptionItem.payRecurring?.price?.amount !== undefined) {
+    monthlyPaymentAmount = subscriptionItem.payRecurring.price.amount / 100;
+    console.log('[Payment Overview] ✅ Monthly payment from payRecurring:', monthlyPaymentAmount, 'DKK');
   } else {
-    // No order data yet - use membership monthly price from state
-    monthlyPaymentAmount = state.totals.membershipMonthly || 0;
-    console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK - fullOrder data not available');
-    console.log('[Payment Overview] Full state check:', {
-      hasFullOrder: !!state.fullOrder,
-      fullOrderSubscriptionItems: state.fullOrder?.subscriptionItems?.length || 0,
-      hasOrder: !!state.order,
-      membershipMonthly: state.totals.membershipMonthly
-    });
-    
-    // If we have product data, try to get the regular price
-    if (monthlyPaymentAmount === 0 && state.selectedProductId && state.subscriptions) {
+    // Fallback: Try to get from product data
+    if (state.selectedProductId && state.subscriptions) {
       const productIdNum = typeof state.selectedProductId === 'string' 
         ? parseInt(state.selectedProductId) 
         : state.selectedProductId;
@@ -6835,42 +7071,48 @@ function updatePaymentOverview() {
         String(p.id) === String(state.selectedProductId)
       );
       
-      if (membership && membership.priceWithInterval && membership.priceWithInterval.price) {
+      if (membership?.priceWithInterval?.price?.amount !== undefined) {
         monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
         console.log('[Payment Overview] Monthly payment from product data:', monthlyPaymentAmount, 'DKK');
+      } else {
+        monthlyPaymentAmount = state.totals.membershipMonthly || 0;
+        console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
       }
+    } else {
+      monthlyPaymentAmount = state.totals.membershipMonthly || 0;
+      console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
     }
   }
   
-  // Update display
+  // ============================================================================
+  // UPDATE DOM ELEMENTS
+  // ============================================================================
+  
+  // Update "Betales nu" (Pay now)
   if (DOM.payNow) {
     DOM.payNow.textContent = currencyFormatter.format(payNowAmount);
     
-    // CRITICAL: Log to verify this matches payment window price
+    // Verify this matches payment window price
     const orderPriceForPayment = state.fullOrder?.price?.amount || 0;
-    const orderPriceDKK = orderPriceForPayment / 100;
+    const orderPriceDKK = typeof orderPriceForPayment === 'object' 
+      ? orderPriceForPayment.amount / 100 
+      : orderPriceForPayment / 100;
     const pricesMatch = Math.abs(payNowAmount - orderPriceDKK) < 0.01; // Allow small rounding differences
     
     console.log('[Payment Overview] 🔍 "Betales nu" price:', payNowAmount, 'DKK');
     console.log('[Payment Overview] 🔍 Order price (sent to payment window):', orderPriceDKK, 'DKK');
     console.log('[Payment Overview] 🔍 Prices match:', pricesMatch ? '✅ YES' : '❌ NO - MISMATCH!');
     
-    // WARNING: If prices don't match, this is a backend issue
-    // Backend ignores startDate parameter for "Medlemskab" (productId 134) and sets start date to future,
-    // which prevents partial-month pricing calculation. This causes payment window to show full monthly price
-    // instead of partial-month price. This is a known backend limitation that needs to be fixed on backend side.
     if (!pricesMatch) {
-      const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
       const productId = subscriptionItem?.product?.id || state.selectedProductId;
       console.warn('[Payment Overview] ⚠️ PRICE MISMATCH DETECTED!');
-      console.warn('[Payment Overview] ⚠️ UI shows:', payNowAmount, 'DKK (client-side calculated partial-month price)');
-      console.warn('[Payment Overview] ⚠️ Payment window will show:', orderPriceDKK, 'DKK (backend full monthly price)');
+      console.warn('[Payment Overview] ⚠️ UI shows:', payNowAmount, 'DKK');
+      console.warn('[Payment Overview] ⚠️ Payment window will show:', orderPriceDKK, 'DKK');
       console.warn('[Payment Overview] ⚠️ Product ID:', productId);
-      console.warn('[Payment Overview] ⚠️ This is a backend issue - backend ignores startDate parameter for this product');
-      console.warn('[Payment Overview] ⚠️ Backend sets initialPaymentPeriod.start to future date, preventing partial-month pricing');
     }
   }
   
+  // Update "Månedlig betaling herefter" (Monthly payment thereafter)
   if (DOM.monthlyPayment) {
     if (monthlyPaymentAmount > 0) {
       DOM.monthlyPayment.textContent = `${currencyFormatter.format(monthlyPaymentAmount)}/md`;
@@ -6879,78 +7121,36 @@ function updatePaymentOverview() {
     }
   }
   
-  // Update billing period display
+  // Update billing period display (shown below "Betales nu")
   if (DOM.paymentBillingPeriod) {
     let billingPeriodText = '';
     
-    // Try to get billing period from fullOrder subscriptionItems
-    const orderToUseForBilling = state.fullOrder || state.order;
-    if (orderToUseForBilling && orderToUseForBilling.subscriptionItems && orderToUseForBilling.subscriptionItems.length > 0) {
-      const subscriptionItem = orderToUseForBilling.subscriptionItems[0];
+    if (billingPeriod) {
+      // Format dates in Danish format (DD.MM.YYYY)
+      const formatDate = (date) => {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}.${month}.${year}`;
+      };
       
-      // Check for initialPaymentPeriod (promotional period)
-      if (subscriptionItem.initialPaymentPeriod) {
-        const backendStartDate = new Date(subscriptionItem.initialPaymentPeriod.start);
-        const backendEndDate = new Date(subscriptionItem.initialPaymentPeriod.end);
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Today at midnight
-        
-        // Format dates in Danish format (DD.MM.YYYY)
-        const formatDate = (date) => {
-          const day = String(date.getDate()).padStart(2, '0');
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const year = date.getFullYear();
-          return `${day}.${month}.${year}`;
-        };
-        
-        // If backend start date is in the future (more than 1 day), show period as if it starts today
-        const daysUntilBackendStart = Math.ceil((backendStartDate - today) / (1000 * 60 * 60 * 24));
-        
-        if (daysUntilBackendStart > 1) {
-          // Backend set start to future - show period from today to end of current month
-          const currentMonth = today.getMonth();
-          const currentYear = today.getFullYear();
-          const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0); // Last day of current month
-          
-          billingPeriodText = `For perioden ${formatDate(today)} - ${formatDate(lastDayOfMonth)}`;
-        } else {
-          // Backend start date is today or very soon - use backend's period
-          // Validate dates - if start date is more than 2 months in the future, it might be incorrect
-          const monthsDiff = (backendStartDate.getFullYear() - now.getFullYear()) * 12 + (backendStartDate.getMonth() - now.getMonth());
-          const isValidPeriod = monthsDiff >= 0 && monthsDiff <= 2 && backendStartDate < backendEndDate;
-          
-          if (isValidPeriod) {
-            billingPeriodText = `For perioden ${formatDate(backendStartDate)} - ${formatDate(backendEndDate)}`;
-            
-            // If there's a boundUntil date (end of promotional period), show that too
-            if (subscriptionItem.boundUntil) {
-              const boundUntilDate = new Date(subscriptionItem.boundUntil);
-              billingPeriodText += ` (bundet til ${formatDate(boundUntilDate)})`;
-            }
-          } else {
-            // Date period seems invalid (too far in future or invalid range)
-            console.warn('[Payment Overview] Invalid initialPaymentPeriod detected:', {
-              start: subscriptionItem.initialPaymentPeriod.start,
-              end: subscriptionItem.initialPaymentPeriod.end,
-              monthsDiff,
-              now: now.toISOString()
-            });
-            
-            // Don't show invalid dates - fall back to default message
-            billingPeriodText = '';
-          }
-        }
-      } else if (subscriptionItem.boundUntil) {
-        // No initialPaymentPeriod, but there's a boundUntil date
+      billingPeriodText = `For perioden ${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
+      
+      // If there's a boundUntil date (end of promotional period), show that too
+      if (subscriptionItem.boundUntil) {
         const boundUntilDate = new Date(subscriptionItem.boundUntil);
-        const formatDate = (date) => {
-          const day = String(date.getDate()).padStart(2, '0');
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const year = date.getFullYear();
-          return `${day}.${month}.${year}`;
-        };
-        billingPeriodText = `Bundet til ${formatDate(boundUntilDate)}`;
+        billingPeriodText += ` (bundet til ${formatDate(boundUntilDate)})`;
       }
+    } else if (subscriptionItem.boundUntil) {
+      // No initialPaymentPeriod, but there's a boundUntil date
+      const boundUntilDate = new Date(subscriptionItem.boundUntil);
+      const formatDate = (date) => {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}.${month}.${year}`;
+      };
+      billingPeriodText = `Bundet til ${formatDate(boundUntilDate)}`;
     }
     
     // Fallback to state.billingPeriod if available
@@ -6967,10 +7167,9 @@ function updatePaymentOverview() {
     DOM.paymentBillingPeriod.style.display = 'block';
   }
   
-  console.log('[Payment Overview] Updated:', {
+  console.log('[Payment Overview] ✅ Updated:', {
     payNow: payNowAmount,
     monthlyPayment: monthlyPaymentAmount,
-    hasOrder: !!state.order,
     billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A'
   });
 }
@@ -7856,52 +8055,132 @@ async function handleCheckout() {
             throw new Error('Order ID is required to generate payment link');
           }
           
-          // CRITICAL: Final order fetch to ensure backend has processed coupon before payment link generation
-          // The payment link API reads the order total from the backend, so we need to ensure it's updated
+          // CRITICAL: Final verification and fix of order price before payment link generation
+          // The payment link API reads order.price.amount from backend, so we MUST ensure it's correct
+          // This is our last chance to fix backend pricing bugs before payment window shows wrong price
           try {
-            console.log('[checkout] Final order fetch before payment link generation...');
-            // Wait a bit more to ensure backend has fully processed the coupon
+            console.log('[checkout] ===== FINAL ORDER PRICE VERIFICATION BEFORE PAYMENT LINK =====');
+            // Wait a bit to ensure backend has fully processed everything
             await new Promise(resolve => setTimeout(resolve, 1000));
             
-            const orderBeforePayment = await orderAPI.getOrder(state.orderId);
-            console.log('[checkout] Final order response:', JSON.stringify(orderBeforePayment, null, 2));
+            let orderBeforePayment = await orderAPI.getOrder(state.orderId);
+            console.log('[checkout] Initial order fetch:', {
+              orderId: orderBeforePayment?.id,
+              orderPrice: orderBeforePayment?.price?.amount,
+              orderPriceDKK: orderBeforePayment?.price?.amount ? orderBeforePayment.price.amount / 100 : null,
+              hasSubscriptionItems: !!orderBeforePayment?.subscriptionItems?.length
+            });
+            
+            // Verify pricing is correct for subscription items
+            const subscriptionItem = orderBeforePayment?.subscriptionItems?.[0];
+            if (subscriptionItem) {
+              const productId = subscriptionItem?.product?.id || state.selectedProductId;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const startDateStr = today.toISOString().split('T')[0];
+              const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+              
+              // Use robust verification method
+              const verification = orderAPI._verifySubscriptionPricing(
+                orderBeforePayment,
+                productId,
+                expectedPrice,
+                today
+              );
+              
+              console.log('[checkout] Price verification result:', {
+                isCorrect: verification.isCorrect,
+                startDateCorrect: verification.startDateCorrect,
+                priceCorrect: verification.priceCorrect,
+                daysUntilStart: verification.daysUntilStart,
+                orderPriceDKK: verification.orderPriceDKK,
+                expectedPriceDKK: verification.expectedPriceDKK,
+                productId: productId
+              });
+              
+              // If pricing is incorrect, try to fix it (only if we have permission)
+              if (!verification.isCorrect && subscriptionItem.id) {
+                console.warn('[checkout] ⚠️ ORDER PRICE IS INCORRECT BEFORE PAYMENT LINK GENERATION!');
+                console.warn('[checkout] ⚠️ Backend shows:', verification.orderPriceDKK, 'DKK');
+                console.warn('[checkout] ⚠️ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
+                console.warn('[checkout] ⚠️ Attempting to fix by deleting and re-adding subscription...');
+                console.warn('[checkout] ⚠️ NOTE: This may fail with 403 if order is in a state that prevents modification');
+                
+                // Try to fix with multiple strategies
+                // Build URL for subscription endpoint
+                let subscriptionUrl;
+                if (orderAPI.useProxy) {
+                  subscriptionUrl = `${orderAPI.baseUrl}?path=/api/ver3/orders/${state.orderId}/items/subscriptions`;
+                } else {
+                  subscriptionUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${state.orderId}/items/subscriptions`;
+                }
+                
+                const fixedOrder = await orderAPI._fixBackendPricingBug(
+                  state.orderId,
+                  subscriptionUrl,
+                  {
+                    'Accept-Language': 'da-DK',
+                    'Content-Type': 'application/json',
+                    ...(typeof window.getAccessToken === 'function' && window.getAccessToken() 
+                      ? { 'Authorization': `Bearer ${window.getAccessToken()}` } 
+                      : {}),
+                  },
+                  subscriptionItem.id,
+                  {
+                    subscriptionProduct: productId,
+                    startDate: startDateStr,
+                    ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
+                    ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
+                  },
+                  productId,
+                  expectedPrice,
+                  typeof window.getAccessToken === 'function' ? window.getAccessToken() : null,
+                  today
+                );
+                
+                if (fixedOrder) {
+                  // Verify the fix worked
+                  const fixedVerification = orderAPI._verifySubscriptionPricing(
+                    fixedOrder,
+                    productId,
+                    expectedPrice,
+                    today
+                  );
+                  
+                  if (fixedVerification.isCorrect) {
+                    console.log('[checkout] ✅ Successfully fixed order price before payment link generation!');
+                    orderBeforePayment = fixedOrder;
+                  } else {
+                    console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
+                    console.error('[checkout] ❌ This is a backend bug - payment window will show incorrect price');
+                    console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
+                    console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
+                  }
+                } else {
+                  console.error('[checkout] ❌ All fix strategies failed - cannot modify order (likely 403 Forbidden)');
+                  console.error('[checkout] ❌ This is a backend bug - backend ignored startDate parameter');
+                  console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
+                  console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
+                  console.error('[checkout] ❌ Backend needs to be fixed to respect startDate parameter for productId:', productId);
+                }
+              } else if (verification.isCorrect) {
+                console.log('[checkout] ✅ Order price is correct - no fix needed');
+              }
+            }
             
             // Store full order object for payment overview
             state.fullOrder = orderBeforePayment;
             
             // CRITICAL: Log the exact price that will be sent to payment window
-            // Note: For "Medlemskab" (productId 134), backend may not calculate partial-month pricing correctly
-            // if initialPaymentPeriod starts in the future. In that case, payment window will show the full
-            // monthly price (469 DKK) instead of the partial-month price (408.48 DKK).
-            // The UI shows the correct client-side calculated price, but payment window uses backend's price.
             const finalOrderPrice = orderBeforePayment?.price?.amount || 0;
+            const finalOrderPriceDKK = typeof finalOrderPrice === 'object' 
+              ? finalOrderPrice.amount / 100 
+              : finalOrderPrice / 100;
             
-            // Check if backend calculated partial-month pricing correctly (for logging only)
-            const subscriptionItem = orderBeforePayment?.subscriptionItems?.[0];
-            const recurringPrice = subscriptionItem?.payRecurring?.price?.amount || 0;
-            const initialPaymentPeriod = subscriptionItem?.initialPaymentPeriod;
-            let needsPriceFix = false;
-            if (subscriptionItem && initialPaymentPeriod && initialPaymentPeriod.start && recurringPrice > 0) {
-              const backendStartDate = new Date(initialPaymentPeriod.start);
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const daysUntilStart = Math.ceil((backendStartDate - today) / (1000 * 60 * 60 * 24));
-              
-              // If backend start date is more than 1 day in the future AND order price equals recurring price,
-              // backend didn't calculate partial-month pricing
-              if (daysUntilStart > 1 && finalOrderPrice === recurringPrice) {
-                needsPriceFix = true;
-                console.warn('[checkout] ⚠️ Backend did not calculate partial-month pricing!');
-                console.warn('[checkout] Order price:', finalOrderPrice, 'equals recurring price:', recurringPrice);
-                console.warn('[checkout] Backend start date:', initialPaymentPeriod.start, '(', daysUntilStart, 'days in future)');
-                console.warn('[checkout] Payment window will show full monthly price instead of partial-month price');
-                console.warn('[checkout] UI shows client-side calculated price, but payment uses backend price');
-              }
-            }
-            console.log('[checkout] 🔍 PRICE THAT WILL BE SENT TO PAYMENT WINDOW:', finalOrderPrice, '(in cents) =', finalOrderPrice / 100, 'DKK');
+            console.log('[checkout] 🔍 FINAL PRICE THAT WILL BE SENT TO PAYMENT WINDOW:', finalOrderPrice, '(in cents) =', finalOrderPriceDKK, 'DKK');
             console.log('[checkout] This is order.price.amount from backend - payment link API will use this exact value');
             
-            // Update payment overview with order data
+            // Update payment overview with final order data
             updatePaymentOverview();
             
             // Verify coupon discount is present
@@ -7912,18 +8191,29 @@ async function handleCheckout() {
               console.warn('[checkout] ⚠️ Order does not have couponDiscount - payment link may not reflect discount');
             }
             
-            // Log all available price-related fields for debugging
-            console.log('[checkout] Order price fields:', {
+            // Log comprehensive price information for debugging
+            console.log('[checkout] Final order price summary:', {
+              orderId: orderBeforePayment?.id,
+              orderPriceAmount: finalOrderPrice,
+              orderPriceDKK: finalOrderPriceDKK,
               hasPrice: !!orderBeforePayment?.price,
               priceKeys: orderBeforePayment?.price ? Object.keys(orderBeforePayment.price) : [],
               couponDiscount: orderCouponDiscount,
-              discountAmount: orderBeforePayment?.discountAmount,
-              totalCost: orderBeforePayment?.totalCost,
-              priceAmount: orderBeforePayment?.price?.amount,
+              subscriptionItemPrice: subscriptionItem?.price?.amount,
+              recurringPrice: subscriptionItem?.payRecurring?.price?.amount,
+              initialPaymentPeriod: subscriptionItem?.initialPaymentPeriod,
             });
           } catch (orderCheckError) {
-            console.warn('[checkout] Could not verify order state before payment link:', orderCheckError);
-            // Continue anyway - coupon was applied earlier
+            console.error('[checkout] ❌ Error during final order verification:', orderCheckError);
+            console.warn('[checkout] ⚠️ Continuing with payment link generation - price may be incorrect');
+            // Try to get order anyway for payment overview
+            try {
+              const fallbackOrder = await orderAPI.getOrder(state.orderId);
+              state.fullOrder = fallbackOrder;
+              updatePaymentOverview();
+            } catch (fallbackError) {
+              console.error('[checkout] Could not fetch order for payment overview:', fallbackError);
+            }
           }
           
           const paymentData = await paymentAPI.generatePaymentLink({
@@ -7986,6 +8276,41 @@ async function handleCheckout() {
           }
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
+          
+          // Check if this is a payment link generation error due to backend pricing bug
+          const isPaymentLinkError = error.message && error.message.includes('Generate Payment Link Card failed');
+          const is403Error = error.message && error.message.includes('403');
+          
+          if (isPaymentLinkError && is403Error) {
+            // Check if order has incorrect pricing
+            const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
+            if (subscriptionItem) {
+              const productId = subscriptionItem?.product?.id;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const startDateStr = today.toISOString().split('T')[0];
+              const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+              const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
+              
+              if (!verification.isCorrect) {
+                console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO BACKEND PRICING BUG');
+                console.error('[checkout] ❌ Order has incorrect pricing - backend ignored startDate parameter');
+                console.error('[checkout] ❌ This is a backend issue that needs to be fixed on backend side');
+                console.error('[checkout] ❌ Product ID:', productId);
+                console.error('[checkout] ❌ Backend price:', verification.orderPriceDKK, 'DKK');
+                console.error('[checkout] ❌ Expected price:', verification.expectedPriceDKK || 'N/A', 'DKK');
+                
+                // Show user-friendly error message
+                showToast(
+                  'Der opstod et problem med betalingslinket på grund af en backend-fejl. Kontakt support hvis problemet fortsætter.',
+                  'error'
+                );
+                
+                throw new Error(`Payment link generation failed due to backend pricing bug. Order price: ${verification.orderPriceDKK} DKK, Expected: ${verification.expectedPriceDKK || 'N/A'} DKK. Product ID: ${productId}. Backend ignored startDate parameter.`);
+              }
+            }
+          }
+          
           throw new Error('Failed to add membership to order or generate payment link');
         }
       }
@@ -8576,6 +8901,72 @@ window.exportPaymentDiagnostics = function() {
   
   console.log('[Diagnostics] Exported diagnostic data:', diagnostics);
   return diagnostics;
+};
+
+/**
+ * Comprehensive order price verification function for debugging.
+ * Call this from console to verify order pricing is correct.
+ * 
+ * Usage: verifyOrderPrice(orderId)
+ * 
+ * @param {number} orderId - Order ID to verify (optional, uses state.orderId if not provided)
+ * @returns {Promise<Object>} Verification result with detailed information
+ */
+window.verifyOrderPrice = async function(orderId = null) {
+  const orderIdToCheck = orderId || state.orderId;
+  if (!orderIdToCheck) {
+    console.error('No order ID provided and state.orderId is not set');
+    return null;
+  }
+  
+  console.log('===== COMPREHENSIVE ORDER PRICE VERIFICATION =====');
+  console.log('Order ID:', orderIdToCheck);
+  
+  try {
+    const order = await orderAPI.getOrder(orderIdToCheck);
+    const subscriptionItem = order?.subscriptionItems?.[0];
+    
+    if (!subscriptionItem) {
+      console.warn('No subscription item found in order');
+      return { order, hasSubscription: false };
+    }
+    
+    const productId = subscriptionItem?.product?.id;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDateStr = today.toISOString().split('T')[0];
+    const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+    const verification = orderAPI._verifySubscriptionPricing(order, productId, expectedPrice, today);
+    
+    const orderPriceAmount = order?.price?.amount || 0;
+    const orderPriceInCents = typeof orderPriceAmount === 'object' ? orderPriceAmount.amount : orderPriceAmount;
+    const orderPriceDKK = orderPriceInCents / 100;
+    
+    console.log('Order Price:', orderPriceDKK, 'DKK');
+    console.log('Expected Price:', expectedPrice?.amountInDKK || 'N/A', 'DKK');
+    console.log('Verification Result:', verification);
+    console.log('Is Correct:', verification.isCorrect ? '✅ YES' : '❌ NO');
+    
+    if (!verification.isCorrect) {
+      console.error('⚠️ ORDER PRICE IS INCORRECT!');
+      console.error('Backend shows:', orderPriceDKK, 'DKK');
+      console.error('Should be:', expectedPrice?.amountInDKK || 'N/A', 'DKK');
+      console.error('Difference:', expectedPrice ? (orderPriceDKK - expectedPrice.amountInDKK).toFixed(2) : 'N/A', 'DKK');
+    }
+    
+    return {
+      order,
+      subscriptionItem,
+      productId,
+      orderPriceDKK,
+      expectedPriceDKK: expectedPrice?.amountInDKK || null,
+      verification,
+      isCorrect: verification.isCorrect
+    };
+  } catch (error) {
+    console.error('Error verifying order price:', error);
+    return { error: error.message };
+  }
 };
 
 // Debug helper: Check payment overview state
