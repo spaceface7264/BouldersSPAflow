@@ -3545,6 +3545,36 @@ function init() {
   }
   
   updateMainSubtitle();
+  
+  // Hide loading overlay and show main content
+  hideLoadingOverlay();
+}
+
+// Hide loading overlay and show main content
+function hideLoadingOverlay() {
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const mainContent = document.getElementById('mainContent');
+  const headerContent = document.getElementById('headerContent');
+  
+  if (loadingOverlay) {
+    // Show header and main content
+    if (headerContent) {
+      headerContent.style.display = '';
+    }
+    if (mainContent) {
+      mainContent.style.display = '';
+    }
+    
+    // Hide loading overlay with fade out
+    loadingOverlay.classList.add('hidden');
+    
+    // Remove from DOM after animation completes
+    setTimeout(() => {
+      if (loadingOverlay.parentNode) {
+        loadingOverlay.remove();
+      }
+    }, 300);
+  }
 }
 
 

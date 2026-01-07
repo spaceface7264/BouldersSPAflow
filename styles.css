@@ -10,6 +10,62 @@
   .addons-overlay.is-open { display: flex; align-items: center; justify-content: center; }
   body.modal-open { overflow: hidden; }
   
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #1a1a1a;
+    background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 1;
+    transition: opacity 0.3s ease-out;
+}
+
+.loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+}
+
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(244, 1, 245, 0.15);
+    border-top: 3px solid #F401F5;
+    border-right: 3px solid rgba(244, 1, 245, 0.15);
+    border-bottom: 3px solid rgba(244, 1, 245, 0.15);
+    border-left: 3px solid rgba(244, 1, 245, 0.15);
+    border-radius: 50%;
+    animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    will-change: transform;
+    box-sizing: border-box;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+   
   .addons-sheet {
     position: absolute;
     left: 50%;
@@ -1586,36 +1642,16 @@ body {
 
 .category-item.expanded .category-content {
     max-height: calc(100vh - 400px); /* Dynamic max-height based on viewport */
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-    padding-bottom: 20px; /* Ensure last plan card is fully visible */
-    scrollbar-width: thin; /* Firefox */
-    scrollbar-color: rgba(244, 1, 245, 0.3) transparent; /* Firefox */
-}
-
-/* Custom scrollbar for webkit browsers */
-.category-item.expanded .category-content::-webkit-scrollbar {
-    width: 6px;
-}
-
-.category-item.expanded .category-content::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.category-item.expanded .category-content::-webkit-scrollbar-thumb {
-    background: rgba(244, 1, 245, 0.3);
-    border-radius: 3px;
-}
-
-.category-item.expanded .category-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(244, 1, 245, 0.5);
+    overflow: visible; /* Don't scroll category-content itself */
+    display: flex;
+    flex-direction: column;
 }
 
 .category-description {
     padding: 0px 20px 12px 18px;
     border-bottom: 1px solid var(--color-item-border);
     margin-bottom: 0;
+    flex-shrink: 0; /* Keep description fixed, don't shrink */
 }
 
 .category-description p {
@@ -1630,25 +1666,59 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0px;
-    padding-bottom: 0; /* Padding handled by category-content */
+    padding-bottom: 0;
+    flex: 1; /* Take remaining space */
+    overflow-y: auto; /* Make plans-list scrollable */
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    max-height: calc(100vh - 500px); /* Dynamic max-height, accounting for description */
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: rgba(244, 1, 245, 0.3) transparent; /* Firefox */
+}
+
+/* Custom scrollbar for webkit browsers */
+.plans-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.plans-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.plans-list::-webkit-scrollbar-thumb {
+    background: rgba(244, 1, 245, 0.3);
+    border-radius: 3px;
+}
+
+.plans-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(244, 1, 245, 0.5);
 }
 
 .plan-card {
     background: var(--color-buttons-secondary);
     border-radius: 0;
     border-top: 1px solid var(--color-item-border);
+    border-bottom: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: left;
     justify-content: space-between;
     padding-top: 12px;
     padding-bottom: 12px;
     gap: 12px;
+    transform: scale(1);
 }
 
 .plan-card:last-child {
     padding-bottom: 20px; /* Extra padding for last item to prevent cut-off */
+}
+
+.plan-card:hover:not(.disabled):not(.selected) {
+    transform: scale(1.02);
+    background: rgba(240, 0, 240, 0.05);
+    border-top-color: var(--color-item-border); /* Keep original border color */
+    border-bottom-color: transparent; /* Keep transparent bottom border */
 }
 
 .plan-card:active {
@@ -1876,19 +1946,9 @@ body {
     transform: scale(1);
 }
 
-/* Selection state indicators */
-.plan-card {
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.plan-card:hover:not(.disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
+/* Selection state indicators - hover effect is defined in main .plan-card rule above */
 .plan-card.selected {
-    transform: translateY(0px);
+    transform: scale(1);
     box-shadow: 0 6px 16px rgba(240, 0, 240, 0.2);
 }
 
@@ -3431,14 +3491,19 @@ body {
     color: #D1D5DB; /* Light gray with good contrast for loading text */
 }
 
-.loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid rgba(244, 1, 245, 0.2);
-    border-top-color: var(--color-brand-accent);
+.terms-modal-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(244, 1, 245, 0.15);
+    border-top: 3px solid #F401F5;
+    border-right: 3px solid rgba(244, 1, 245, 0.15);
+    border-bottom: 3px solid rgba(244, 1, 245, 0.15);
+    border-left: 3px solid rgba(244, 1, 245, 0.15);
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
     margin-bottom: 16px;
+    box-sizing: border-box;
+    will-change: transform;
 }
 
 @keyframes spin {

@@ -15,7 +15,14 @@
     <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-    <header class="header">
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+        </div>
+    </div>
+    
+    <header class="header" id="headerContent" style="display: none;">
         <div class="header-container">
             <div class="header-content">
                 <!-- Text Above Logo -->
@@ -73,7 +80,7 @@
         </div>
     </div>
 
-    <main class="main">
+    <main class="main" id="mainContent" style="display: none;">
         
         
         <!-- Step Content -->
@@ -895,7 +902,7 @@
             </div>
             <div class="terms-modal-body">
                 <div class="terms-modal-loading" id="termsModalLoading" style="display: none;">
-                    <div class="loading-spinner"></div>
+                    <div class="terms-modal-spinner"></div>
                     <p data-i18n-key="modal.loading">Loading...</p>
                 </div>
                 <div class="terms-modal-content-text" id="termsModalContent">
