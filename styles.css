@@ -981,6 +981,7 @@ body {
     flex-direction: column;
     gap: 12px;
     padding-bottom: 20px; /* Prevent last item from being cut off */
+    position: relative;
 }
 
 .gym-item {
@@ -990,10 +991,36 @@ body {
     border-radius: 12px;
     padding: 16px 20px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
     display: flex;
     align-items: center;
     gap: 16px;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.gym-item.reordering {
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+.gym-item.fade-out {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+
+.gym-item.fade-in {
+    animation: fadeInSlide 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes fadeInSlide {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .gym-item:hover {

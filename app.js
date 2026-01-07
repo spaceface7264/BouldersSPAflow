@@ -2916,7 +2916,25 @@ async function loadGymsFromAPI() {
       console.log('[Load Gyms] No user location available, displaying gyms in original order');
     }
     
+    // Store existing gym items and their positions for animation
+    const existingItems = Array.from(gymList.querySelectorAll('.gym-item'));
+    const existingPositions = new Map();
+    existingItems.forEach((item, index) => {
+      const gymId = item.getAttribute('data-gym-id');
+      if (gymId) {
+        existingPositions.set(gymId, {
+          element: item,
+          oldIndex: index,
+          rect: item.getBoundingClientRect()
+        });
+      }
+    });
+    
+    // Clear the list
+    gymList.innerHTML = '';
+    
     // Create gym items from API data
+    const newItems = [];
     for (let i = 0; i < gymsToDisplay.length; i++) {
       const gym = gymsToDisplay[i];
       if (gym.name && gym.address) {
@@ -2927,10 +2945,62 @@ async function loadGymsFromAPI() {
           console.log('[Load Gyms] Marking as nearest:', gym.name, `${gym.distance.toFixed(2)} km`);
         }
         const gymItem = createGymItem(gym, isNearest);
+        const gymId = `gym-${gym.id}`;
+        
+        // Check if this item existed before and get its old position
+        const existingData = existingPositions.get(gymId);
+        if (existingData && existingData.oldIndex !== i) {
+          // Item moved - add animation class
+          gymItem.classList.add('reordering');
+        } else if (!existingData) {
+          // New item - fade in with staggered delay
+          gymItem.classList.add('fade-in');
+          gymItem.style.animationDelay = `${i * 0.05}s`;
+        }
+        
+        newItems.push({ item: gymItem, index: i });
         if (gymList) {
           gymList.appendChild(gymItem);
         }
       }
+    }
+    
+    // Animate reordering using FLIP technique
+    if (existingItems.length > 0) {
+      requestAnimationFrame(() => {
+        newItems.forEach(({ item, index }) => {
+          const gymId = item.getAttribute('data-gym-id');
+          const existingData = existingPositions.get(gymId);
+          
+          if (existingData && existingData.oldIndex !== index) {
+            // Calculate new position
+            const newRect = item.getBoundingClientRect();
+            const oldRect = existingData.rect;
+            
+            // Calculate transform
+            const deltaX = oldRect.left - newRect.left;
+            const deltaY = oldRect.top - newRect.top;
+            
+            // Apply initial transform
+            item.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            item.style.transition = 'none';
+            
+            // Trigger reflow
+            item.offsetHeight;
+            
+            // Animate to final position with staggered delay
+            requestAnimationFrame(() => {
+              item.style.transform = '';
+              item.style.transition = `transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)`;
+              // Add slight delay based on distance moved
+              const delay = Math.min(Math.abs(index - existingData.oldIndex) * 0.03, 0.2);
+              if (delay > 0) {
+                item.style.transitionDelay = `${delay}s`;
+              }
+            });
+          }
+        });
+      });
     }
     
     // Re-setup event listeners for new gym items
@@ -2959,6 +3029,23 @@ async function findNearestGym() {
   const locationStatus = document.getElementById('locationStatus');
   
   if (!locationBtn || !locationStatus) return;
+  
+  // Check if location is already active - toggle it off
+  if (userLocation && locationBtn.classList.contains('active')) {
+    console.log('[Geolocation] Toggling location off, restoring default order');
+    
+    // Clear user location
+    userLocation = null;
+    gymsWithDistances = [];
+    
+    // Remove active state
+    locationBtn.classList.remove('active');
+    
+    // Reload gyms in default order (without distance sorting)
+    await loadGymsFromAPI();
+    
+    return;
+  }
   
   // Check if geolocation is supported
   if (!isGeolocationAvailable()) {
