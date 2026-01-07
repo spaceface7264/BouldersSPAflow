@@ -15,9 +15,34 @@ const readIfExists = (file: string) => {
 const key = readIfExists('key.pem');
 const cert = readIfExists('cert.pem');
 
+// Plugin to copy functions directory to dist for Cloudflare Pages deployment
+const copyFunctionsPlugin = () => ({
+  name: 'copy-functions',
+  closeBundle() {
+    const functionsDir = path.resolve(__dirname, 'functions');
+    const distFunctionsDir = path.resolve(__dirname, 'dist', 'functions');
+    
+    if (fs.existsSync(functionsDir)) {
+      // Create dist/functions directory if it doesn't exist
+      if (!fs.existsSync(distFunctionsDir)) {
+        fs.mkdirSync(distFunctionsDir, { recursive: true });
+      }
+      
+      // Copy all files from functions to dist/functions
+      const files = fs.readdirSync(functionsDir);
+      files.forEach((file: string) => {
+        const srcFile = path.join(functionsDir, file);
+        const destFile = path.join(distFunctionsDir, file);
+        fs.copyFileSync(srcFile, destFile);
+        console.log(`[Vite] Copied ${file} to dist/functions/`);
+      });
+    }
+  }
+});
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
-  plugins: [react()],
+  plugins: [react(), copyFunctionsPlugin()],
   base: process.env.VITE_BASE_PATH || '/',
   server: {
     host: true,
