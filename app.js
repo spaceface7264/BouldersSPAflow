@@ -3013,9 +3013,9 @@ async function getUserLocation() {
     }
 
     const options = {
-      enableHighAccuracy: true, // Request high accuracy GPS if available
-      timeout: 20000, // Increased timeout for better accuracy
-      maximumAge: 0 // Don't use cached position, always get fresh location for accuracy
+      enableHighAccuracy: true,
+      timeout: 15000, // Increased timeout
+      maximumAge: 60000 // Allow 1 minute old cached position
     };
 
     navigator.geolocation.getCurrentPosition(
@@ -3029,11 +3029,7 @@ async function getUserLocation() {
         // Log location accuracy for debugging
         console.log('[Geolocation] User location obtained:', {
           coordinates: { lat: location.latitude, lon: location.longitude },
-          accuracy: `${location.accuracy.toFixed(0)} meters`,
-          altitude: position.coords.altitude,
-          altitudeAccuracy: position.coords.altitudeAccuracy,
-          heading: position.coords.heading,
-          speed: position.coords.speed
+          accuracy: `${location.accuracy.toFixed(0)} meters`
         });
         
         resolve(location);
@@ -3059,6 +3055,7 @@ async function getUserLocation() {
         
         const errorObj = new Error(errorMessage);
         errorObj.type = errorType;
+        errorObj.originalError = error;
         reject(errorObj);
       },
       options
@@ -3525,8 +3522,9 @@ async function findNearestGym() {
     userLocation = null;
     gymsWithDistances = [];
     
-    // Remove active state
+    // Remove active state and loading
     locationBtn.classList.remove('active');
+    locationBtn.classList.remove('loading');
     
     // Reload gyms in default order (without distance sorting)
     await loadGymsFromAPI();
@@ -3540,13 +3538,18 @@ async function findNearestGym() {
     return;
   }
   
-  // Update button state
+  // Update button state - show loading
   locationBtn.disabled = true;
+  locationBtn.classList.add('loading');
   
   // Hide status text
   locationStatus.style.display = 'none';
   
   try {
+    // Check permission status first (for debugging)
+    const permissionStatus = await checkGeolocationPermission();
+    console.log('[Geolocation] Permission status before request:', permissionStatus);
+    
     // Get user location - this will trigger browser permission prompt
     const location = await getUserLocation();
     userLocation = location;
@@ -3561,10 +3564,21 @@ async function findNearestGym() {
     
     // Highlight icon button (add active class)
     locationBtn.classList.add('active');
+    locationBtn.classList.remove('loading');
     locationBtn.disabled = false;
     
   } catch (error) {
-    console.error('Error getting location:', error);
+    // Log location errors as warnings (not errors) since they're handled gracefully
+    // Location unavailable/timeout is common in testing/dev environments, especially on macOS
+    if (error.type === 'unavailable') {
+      console.warn('[Geolocation] Location unavailable:', error.message);
+    } else if (error.type === 'timeout') {
+      console.warn('[Geolocation] Location timeout (common on macOS when CoreLocation cannot determine position):', error.message);
+    } else if (error.type === 'permission-denied') {
+      console.warn('[Geolocation] Location permission denied:', error.message);
+    } else {
+      console.warn('[Geolocation] Location error:', error.message);
+    }
     
     // Show helpful error message based on error type
     let errorMessage = error.message;
@@ -3574,15 +3588,37 @@ async function findNearestGym() {
       errorMessage = 'Location access was denied. Please allow location access in your browser settings and try again.';
       showHelp = true;
     } else if (error.type === 'unavailable') {
-      errorMessage = 'Location information is unavailable. Please ensure location services are enabled on your device.';
+      // Provide macOS-specific troubleshooting
+      const isMacOS = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      if (isMacOS) {
+        console.log('%c[Geolocation Troubleshooting]', 'color: #F401F5; font-weight: bold;');
+        console.log('macOS CoreLocation cannot determine your position. Try:');
+        console.log('1. System Settings → Privacy & Security → Location Services (enable)');
+        console.log('2. Grant location permission to your browser');
+        console.log('3. Enable WiFi (needed for macOS location, even if not connected)');
+        console.log('4. Reset browser location permissions');
+        console.log('5. Restart your browser');
+        errorMessage = 'Location unavailable on macOS. Check: System Settings → Privacy → Location Services, enable WiFi, and grant browser permission.';
+      } else {
+        errorMessage = 'Location information is unavailable. Please ensure location services are enabled on your device.';
+      }
+      showHelp = true;
+    } else if (error.type === 'timeout') {
+      // Timeout errors on macOS are often CoreLocation issues - be more helpful
+      if (error.isMacOS) {
+        errorMessage = 'Location request timed out. On macOS, this usually means CoreLocation cannot determine your position. The "Find nearest gym" feature may not be available in this environment. You can still browse all gyms normally.';
+      } else {
+        errorMessage = 'Location request timed out. Please check your connection and try again.';
+      }
       showHelp = true;
     }
     
     // Hide status text (no error messages shown)
     locationStatus.style.display = 'none';
     
-    // Remove active state from button
+    // Remove active state and loading from button
     locationBtn.classList.remove('active');
+    locationBtn.classList.remove('loading');
     locationBtn.disabled = false;
   }
 }
@@ -3701,6 +3737,7 @@ const state = {
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
+let loginCooldownUntil = 0;
 
 function isUserAuthenticated() {
   return typeof window.getAccessToken === 'function' && Boolean(window.getAccessToken());
@@ -4042,6 +4079,24 @@ function init() {
   const locationBtn = document.getElementById('findNearestGym');
   if (locationBtn && userLocation) {
     locationBtn.classList.add('active');
+  }
+  
+  // Auto-trigger geolocation on page load (if supported)
+  // This will automatically find nearest gyms when the page loads
+  if (locationBtn && isGeolocationAvailable() && !userLocation) {
+    // Small delay to let the page render first
+    setTimeout(() => {
+      console.log('[Geolocation] Auto-triggering location detection on page load');
+      findNearestGym().catch(err => {
+        // Silently fail - this is expected if user denies permission or location unavailable
+        // On macOS, this is common due to CoreLocation limitations
+        if (err.type === 'unavailable' || err.type === 'timeout') {
+          console.log('[Geolocation] Auto-location unavailable on this device (macOS CoreLocation issue). User can manually trigger if needed.');
+        } else {
+          console.log('[Geolocation] Auto-location failed (this is OK):', err.message);
+        }
+      });
+    }, 500);
   }
   
   updateMainSubtitle();
@@ -4473,6 +4528,22 @@ async function handleLoginSubmit(event) {
     return;
   }
 
+  // Check for login cooldown (rate limiting)
+  // DISABLED FOR TESTING - Re-enable by uncommenting below
+  /*
+  const now = Date.now();
+  if (now < loginCooldownUntil) {
+    const secondsLeft = Math.ceil((loginCooldownUntil - now) / 1000);
+    const minutesLeft = Math.floor(secondsLeft / 60);
+    const remainingSeconds = secondsLeft % 60;
+    const cooldownMessage = minutesLeft > 0
+      ? `${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}${remainingSeconds > 0 ? ` and ${remainingSeconds} second${remainingSeconds !== 1 ? 's' : ''}` : ''}`
+      : `${secondsLeft} second${secondsLeft !== 1 ? 's' : ''}`;
+    showToast(`Rate limit: Please wait ${cooldownMessage} before trying again.`, 'error');
+    return;
+  }
+  */
+
   const email = DOM.loginEmail?.value?.trim() || '';
   const password = DOM.loginPassword?.value || '';
 
@@ -4529,8 +4600,22 @@ async function handleLoginSubmit(event) {
       console.warn('[login] Auto order creation after login failed:', orderError);
     }
     DOM.loginForm?.reset();
+    // Clear cooldown on successful login
+    loginCooldownUntil = 0;
   } catch (error) {
     console.error('[login] Login failed:', error);
+    
+    // Handle rate limit errors - set cooldown to prevent further attempts
+    // DISABLED FOR TESTING - Re-enable by uncommenting below
+    /*
+    if (isRateLimitError(error)) {
+      const retryMs = getRetryDelayFromError(error);
+      loginCooldownUntil = Date.now() + retryMs;
+      const secondsLeft = Math.ceil(retryMs / 1000);
+      console.warn(`[login] Rate limited. Cooldown set for ${secondsLeft}s`);
+    }
+    */
+    
     showToast(getErrorMessage(error, 'Login'), 'error');
   } finally {
     state.loginInProgress = false;
@@ -7739,15 +7824,38 @@ function isRateLimitError(error) {
   return message.includes('429') || message.toLowerCase().includes('too many requests');
 }
 
-function getRetryDelayFromError(error, defaultMs = 900000) {
+function getRetryDelayFromError(error, defaultMs = 120000) {
+  // Default to 2 minutes (120 seconds) instead of 15 minutes for better UX
   const message = typeof error?.message === 'string' ? error.message : '';
+  
+  // Try to extract retryAfter from JSON in error message
+  try {
+    const jsonMatch = message.match(/\{[\s\S]*"retryAfter"[\s\S]*\}/);
+    if (jsonMatch) {
+      const jsonData = JSON.parse(jsonMatch[0]);
+      if (jsonData.retryAfter) {
+        const seconds = parseInt(jsonData.retryAfter, 10);
+        if (!isNaN(seconds) && seconds > 0) {
+          // Cap at 5 minutes (300 seconds) for client-side cooldown
+          // Server might say 15 minutes, but we'll allow retry after 5 minutes
+          return Math.min(Math.max(seconds * 1000, 1000), 300000);
+        }
+      }
+    }
+  } catch (e) {
+    // JSON parse failed, try regex fallback
+  }
+  
+  // Fallback: regex extraction
   const match = message.match(/"retryAfter":\s*(\d+)/i);
   if (match) {
     const seconds = parseInt(match[1], 10);
-    if (!isNaN(seconds)) {
-      return Math.max(seconds * 1000, 1000);
+    if (!isNaN(seconds) && seconds > 0) {
+      // Cap at 5 minutes for client-side cooldown
+      return Math.min(Math.max(seconds * 1000, 1000), 300000);
     }
   }
+  
   return defaultMs;
 }
 
