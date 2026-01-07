@@ -2471,6 +2471,314 @@ async function loadSubscriptionAdditions(productId) {
   }
 }
 
+// Store user location and gym distances
+let userLocation = null;
+let gymsWithDistances = [];
+// Cache for geocoded addresses
+const geocodeCache = new Map();
+
+// Calculate distance between two coordinates using Haversine formula
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  // Validate inputs
+  if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || 
+      typeof lat2 !== 'number' || typeof lon2 !== 'number' ||
+      isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
+    console.error('[Distance Calculation] Invalid coordinates:', { lat1, lon1, lat2, lon2 });
+    return null;
+  }
+  
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c; // Distance in kilometers
+  
+  return distance;
+}
+
+// Check if geolocation is available
+function isGeolocationAvailable() {
+  return 'geolocation' in navigator;
+}
+
+// Check geolocation permission status
+async function checkGeolocationPermission() {
+  if (!isGeolocationAvailable()) {
+    return 'not-supported';
+  }
+  
+  // Note: Permission API is not widely supported, so we'll try to get location
+  // and handle the error if permission is denied
+  return 'unknown';
+}
+
+// Get user's current location with explicit permission request
+async function getUserLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by your browser'));
+      return;
+    }
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 15000, // Increased timeout
+      maximumAge: 60000 // Allow 1 minute old cached position
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+      },
+      (error) => {
+        let errorMessage = 'Unable to get your location';
+        let errorType = 'unknown';
+        
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied. Please allow location access in your browser settings and try again.';
+            errorType = 'permission-denied';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information is unavailable. Please check your device location settings and try again.';
+            errorType = 'unavailable';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out. Please check your connection and try again.';
+            errorType = 'timeout';
+            break;
+        }
+        
+        const errorObj = new Error(errorMessage);
+        errorObj.type = errorType;
+        reject(errorObj);
+      },
+      options
+    );
+  });
+}
+
+// Hardcoded coordinates for known Boulders gyms (faster than geocoding)
+// Format: "Street, PostalCode City" -> {latitude, longitude}
+const GYM_COORDINATES = {
+  'Skjernvej 4D, 9220 Aalborg': { latitude: 57.0488, longitude: 9.9217 },
+  'Søren Frichs Vej 54, 8230 Aarhus': { latitude: 56.1536, longitude: 10.1631 },
+  'Ankersgade 12, 8000 Aarhus': { latitude: 56.1567, longitude: 10.2036 },
+  'Graham Bells Vej 18A, 8200 Aarhus': { latitude: 56.1969, longitude: 10.2047 },
+  'Søren Nymarks Vej 6A, 8270 Aarhus': { latitude: 56.0903, longitude: 10.1453 },
+  'Amager Landevej 233, 2770 København': { latitude: 55.6500, longitude: 12.5833 },
+  'Strandmarksvej 20, 2650 København': { latitude: 55.6500, longitude: 12.4833 },
+  'Bådehavnsgade 38, 2450 København': { latitude: 55.6500, longitude: 12.5500 },
+  'Wichmandsgade 11, 5000 Odense': { latitude: 55.3958, longitude: 10.3883 },
+  'Vigerslev Allé 47, 2500 København': { latitude: 55.6667, longitude: 12.5167 },
+  'Vanløse Torv 1, Kronen Vanløse, 2720 København': { latitude: 55.6833, longitude: 12.4833 },
+  'Vesterbrogade 149, 1620 København V': { latitude: 55.6761, longitude: 12.5683 },
+};
+
+// Helper to create address key for lookup
+function createAddressKey(address) {
+  if (!address) return null;
+  // Normalize the address string
+  const street = (address.street || '').trim();
+  const postalCode = (address.postalCode || '').trim();
+  const city = (address.city || '').trim();
+  return `${street}, ${postalCode} ${city}`;
+}
+
+// Find coordinates for a gym address (tries multiple matching strategies)
+function findGymCoordinates(address) {
+  if (!address) return null;
+  
+  const addressKey = createAddressKey(address);
+  if (!addressKey) return null;
+  
+  // Try exact match first
+  if (GYM_COORDINATES[addressKey]) {
+    return GYM_COORDINATES[addressKey];
+  }
+  
+  // Try partial matches (street + postal code)
+  const street = address.street?.trim();
+  const postalCode = address.postalCode?.trim();
+  
+  if (street && postalCode) {
+    // Try matching by street and postal code
+    for (const [key, coords] of Object.entries(GYM_COORDINATES)) {
+      if (key.includes(street) && key.includes(postalCode)) {
+        return coords;
+      }
+    }
+  }
+  
+  return null;
+}
+
+// Geocode address to get coordinates using OpenStreetMap Nominatim (fallback)
+async function geocodeAddress(address) {
+  if (!address) return null;
+  
+  // Try hardcoded coordinates first (instant lookup, no API call needed)
+  const hardcodedCoords = findGymCoordinates(address);
+  if (hardcodedCoords) {
+    const addressKey = createAddressKey(address);
+    console.log(`[Geocoding] Using hardcoded coordinates for: ${addressKey}`);
+    return hardcodedCoords;
+  }
+  
+  // Create address key for cache lookup
+  const addressKey = createAddressKey(address);
+  if (!addressKey) return null;
+  
+  // Check cache
+  if (geocodeCache.has(addressKey)) {
+    return geocodeCache.get(addressKey);
+  }
+  
+  try {
+    // Use OpenStreetMap Nominatim geocoding service (free, no API key)
+    const query = encodeURIComponent(`${address.street}, ${address.postalCode} ${address.city}, Denmark`);
+    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=dk`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Boulders Membership Signup' // Required by Nominatim
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Geocoding failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data && data.length > 0) {
+      const result = data[0];
+      const coords = {
+        latitude: parseFloat(result.lat),
+        longitude: parseFloat(result.lon)
+      };
+      
+      // Cache the result
+      geocodeCache.set(addressKey, coords);
+      
+      // Rate limiting: Nominatim allows 1 request per second
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      
+      return coords;
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('[Geocoding] Failed to geocode address:', addressKey, error);
+    return null;
+  }
+}
+
+// Calculate distances for all gyms and sort by distance
+async function calculateGymDistances(gyms, userLat, userLon) {
+  console.log('[Distance Calculation] User location:', { latitude: userLat, longitude: userLon });
+  
+  // First, try to get coordinates from API response
+  const gymsWithCoords = await Promise.all(gyms.map(async (gym) => {
+    let gymLat = null;
+    let gymLon = null;
+    
+    if (gym.address) {
+      // Try address.latitude/longitude first
+      if (gym.address.latitude !== undefined && gym.address.longitude !== undefined) {
+        gymLat = parseFloat(gym.address.latitude);
+        gymLon = parseFloat(gym.address.longitude);
+      }
+      // Try address.coordinates (GeoJSON format: [longitude, latitude])
+      else if (gym.address.coordinates && Array.isArray(gym.address.coordinates)) {
+        gymLat = parseFloat(gym.address.coordinates[1]);
+        gymLon = parseFloat(gym.address.coordinates[0]);
+      }
+    }
+    
+    // Try top-level coordinates
+    if ((gymLat === null || isNaN(gymLat)) && gym.coordinates && Array.isArray(gym.coordinates)) {
+      gymLat = parseFloat(gym.coordinates[1]);
+      gymLon = parseFloat(gym.coordinates[0]);
+    }
+    
+    // Validate parsed coordinates
+    if (isNaN(gymLat) || isNaN(gymLon)) {
+      gymLat = null;
+      gymLon = null;
+    }
+    
+    // If no coordinates found, try geocoding
+    if ((gymLat === null || gymLon === null) && gym.address) {
+      console.log(`[Distance Calculation] Geocoding ${gym.name}...`);
+      const coords = await geocodeAddress(gym.address);
+      if (coords) {
+        gymLat = coords.latitude;
+        gymLon = coords.longitude;
+        console.log(`[Distance Calculation] Geocoded ${gym.name}:`, coords);
+      } else {
+        console.warn(`[Distance Calculation] Failed to geocode ${gym.name}`);
+      }
+    }
+    
+    return { ...gym, gymLat, gymLon };
+  }));
+  
+  // Calculate distances
+  const gymsWithDistances = gymsWithCoords.map(gym => {
+    if (gym.gymLat === null || gym.gymLon === null || isNaN(gym.gymLat) || isNaN(gym.gymLon)) {
+      return { ...gym, distance: null };
+    }
+    
+    const distance = calculateDistance(
+      userLat,
+      userLon,
+      gym.gymLat,
+      gym.gymLon
+    );
+    
+    console.log(`[Distance Calculation] ${gym.name}: ${distance.toFixed(2)} km`, {
+      gymLat: gym.gymLat,
+      gymLon: gym.gymLon,
+      distance
+    });
+    
+    return { ...gym, distance };
+  });
+  
+  // Sort by distance
+  const sorted = gymsWithDistances.sort((a, b) => {
+    // Sort by distance, null distances go to the end
+    if (a.distance === null && b.distance === null) return 0;
+    if (a.distance === null) return 1;
+    if (b.distance === null) return -1;
+    return a.distance - b.distance;
+  });
+  
+  console.log('[Distance Calculation] Sorted gyms:', sorted.map(g => ({
+    name: g.name,
+    distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A'
+  })));
+  
+  return sorted;
+}
+
+// Format distance for display
+function formatDistance(distance) {
+  if (distance === null || distance === undefined) return '';
+  if (distance < 1) {
+    return `${Math.round(distance * 1000)} m`;
+  }
+  return `${distance.toFixed(1)} km`;
+}
+
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
   try {
@@ -2481,6 +2789,9 @@ async function loadGymsFromAPI() {
     
     console.log('Loaded gyms from API:', gyms);
     console.log(`Found ${gyms.length} business units`);
+    
+    // Store gyms for distance calculation
+    gymsWithDistances = gyms;
     
     // Clear existing gym list
     const gymList = document.querySelector('.gym-list');
@@ -2505,12 +2816,57 @@ async function loadGymsFromAPI() {
       noResults.classList.add('hidden');
     }
     
+    // Log sample gym structure to debug coordinate location
+    if (gyms.length > 0) {
+      console.log('[Load Gyms] Sample gym structure:', {
+        name: gyms[0].name,
+        address: gyms[0].address,
+        hasLatLon: !!(gyms[0].address?.latitude && gyms[0].address?.longitude),
+        fullGym: gyms[0]
+      });
+    }
+    
+    // If user location is available, sort by distance
+    let gymsToDisplay = gyms;
+    if (userLocation) {
+      console.log('[Load Gyms] User location available, calculating distances...', userLocation);
+      // Show loading message
+      // Hide status text
+      const locationStatus = document.getElementById('locationStatus');
+      if (locationStatus) {
+        locationStatus.style.display = 'none';
+      }
+      
+      gymsToDisplay = await calculateGymDistances(gyms, userLocation.latitude, userLocation.longitude);
+      gymsWithDistances = gymsToDisplay;
+      
+      // Ensure location button is highlighted if location is active
+      const locationBtn = document.getElementById('findNearestGym');
+      if (locationBtn && userLocation) {
+        locationBtn.classList.add('active');
+      }
+      
+      // Log first few gyms to verify sorting
+      console.log('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
+        name: g.name,
+        distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A',
+        hasCoordinates: !!(g.address?.latitude && g.address?.longitude)
+      })));
+    } else {
+      console.log('[Load Gyms] No user location available, displaying gyms in original order');
+    }
+    
     // Create gym items from API data
-    for (let i = 0; i < gyms.length; i++) {
-      const gym = gyms[i];
+    for (let i = 0; i < gymsToDisplay.length; i++) {
+      const gym = gymsToDisplay[i];
       if (gym.name && gym.address) {
         // Create and display gym item
-        const gymItem = createGymItem(gym);
+        // Mark as nearest if it's the first gym AND has a valid distance
+        const isNearest = i === 0 && userLocation && gym.distance !== null && gym.distance !== undefined;
+        if (isNearest) {
+          console.log('[Load Gyms] Marking as nearest:', gym.name, `${gym.distance.toFixed(2)} km`);
+        }
+        const gymItem = createGymItem(gym, isNearest);
         if (gymList) {
           gymList.appendChild(gymItem);
         }
@@ -2536,21 +2892,96 @@ async function loadGymsFromAPI() {
   }
 }
 
+
+// Find nearest gym using geolocation
+async function findNearestGym() {
+  const locationBtn = document.getElementById('findNearestGym');
+  const locationStatus = document.getElementById('locationStatus');
+  
+  if (!locationBtn || !locationStatus) return;
+  
+  // Check if geolocation is supported
+  if (!isGeolocationAvailable()) {
+    locationStatus.style.display = 'none';
+    return;
+  }
+  
+  // Update button state
+  locationBtn.disabled = true;
+  
+  // Hide status text
+  locationStatus.style.display = 'none';
+  
+  try {
+    // Get user location - this will trigger browser permission prompt
+    const location = await getUserLocation();
+    userLocation = location;
+    
+    console.log('User location:', location);
+    
+    // Hide status text
+    locationStatus.style.display = 'none';
+    
+    // Reload gyms with distance sorting
+    await loadGymsFromAPI();
+    
+    // Highlight icon button (add active class)
+    locationBtn.classList.add('active');
+    locationBtn.disabled = false;
+    
+  } catch (error) {
+    console.error('Error getting location:', error);
+    
+    // Show helpful error message based on error type
+    let errorMessage = error.message;
+    let showHelp = false;
+    
+    if (error.type === 'permission-denied') {
+      errorMessage = 'Location access was denied. Please allow location access in your browser settings and try again.';
+      showHelp = true;
+    } else if (error.type === 'unavailable') {
+      errorMessage = 'Location information is unavailable. Please ensure location services are enabled on your device.';
+      showHelp = true;
+    }
+    
+    // Hide status text (no error messages shown)
+    locationStatus.style.display = 'none';
+    
+    // Remove active state from button
+    locationBtn.classList.remove('active');
+    locationBtn.disabled = false;
+  }
+}
+
 // Create gym item element from API data
-function createGymItem(gym) {
+function createGymItem(gym, isNearest = false) {
   const gymItem = document.createElement('div');
   gymItem.className = 'gym-item';
+  if (isNearest) {
+    gymItem.classList.add('nearest-gym');
+  }
   gymItem.setAttribute('data-gym-id', `gym-${gym.id}`);
-  
   
   const address = gym.address;
   const addressString = `${address.street}, ${address.postalCode} ${address.city}`;
   
+  // Add distance badge if available
+  const distanceBadge = gym.distance !== null && gym.distance !== undefined
+    ? `<div class="gym-distance-badge">${formatDistance(gym.distance)}</div>`
+    : '';
+  
+  // Add nearest badge if this is the nearest gym (positioned absolutely in top right)
+  const nearestBadge = isNearest
+    ? `<div class="nearest-badge">Nearest</div>`
+    : '';
+  
   gymItem.innerHTML = `
+    ${nearestBadge}
     <div class="gym-info">
       <div class="gym-name">${gym.name}</div>
       <div class="gym-details">
         <div class="gym-address">${addressString}</div>
+        ${distanceBadge}
       </div>
     </div>
     <div class="check-circle"></div>
@@ -2960,10 +3391,110 @@ function init() {
   // Load gyms from API
   loadGymsFromAPI();
   
+  // Restore location button active state if location exists
+  const locationBtn = document.getElementById('findNearestGym');
+  if (locationBtn && userLocation) {
+    locationBtn.classList.add('active');
+  }
+  
   updateMainSubtitle();
 }
 
+
+// Translation system
+const translations = {
+  da: {
+    'footer.terms.title': 'Vilkår og Betingelser',
+    'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab',
+    'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
+    'footer.policies.title': 'Politikker',
+    'footer.policies.privacy': 'Privatlivspolitik',
+    'footer.policies.cookie': 'Cookiepolitik',
+    'footer.language.danish': 'Dansk',
+    'footer.language.english': 'English',
+    'footer.rights': 'Alle rettigheder forbeholdes',
+    'modal.loading': 'Indlæser...',
+  },
+  en: {
+    'footer.terms.title': 'Terms and Conditions',
+    'footer.terms.membership': 'Terms and Conditions for Membership',
+    'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
+    'footer.policies.title': 'Policies',
+    'footer.policies.privacy': 'Privacy Policy',
+    'footer.policies.cookie': 'Cookie Policy',
+    'footer.language.danish': 'Dansk',
+    'footer.language.english': 'English',
+    'footer.rights': 'All rights reserved',
+    'modal.loading': 'Loading...',
+  },
+};
+
+// Get current language from localStorage or default to 'da'
+function getCurrentLanguage() {
+  return localStorage.getItem('boulders-language') || 'da';
+}
+
+// Set current language
+function setCurrentLanguage(lang) {
+  localStorage.setItem('boulders-language', lang);
+  document.documentElement.lang = lang;
+  updateTranslations();
+}
+
+// Update all translations on the page
+function updateTranslations() {
+  const lang = getCurrentLanguage();
+  const elements = document.querySelectorAll('[data-i18n-key]');
+  
+  elements.forEach(element => {
+    const key = element.getAttribute('data-i18n-key');
+    if (translations[lang] && translations[lang][key]) {
+      element.textContent = translations[lang][key];
+    }
+  });
+  
+  // Update language button active states
+  const danishBtn = document.getElementById('languageSwitcher');
+  const englishBtn = document.getElementById('languageSwitcherEng');
+  
+  if (danishBtn && englishBtn) {
+    if (lang === 'da') {
+      danishBtn.classList.add('active');
+      englishBtn.classList.remove('active');
+    } else {
+      danishBtn.classList.remove('active');
+      englishBtn.classList.add('active');
+    }
+  }
+}
+
+// Initialize language switcher
+function initLanguageSwitcher() {
+  const danishBtn = document.getElementById('languageSwitcher');
+  const englishBtn = document.getElementById('languageSwitcherEng');
+  
+  if (danishBtn) {
+    danishBtn.addEventListener('click', () => {
+      setCurrentLanguage('da');
+    });
+  }
+  
+  if (englishBtn) {
+    englishBtn.addEventListener('click', () => {
+      setCurrentLanguage('en');
+    });
+  }
+  
+  // Set initial language
+  const currentLang = getCurrentLanguage();
+  document.documentElement.lang = currentLang;
+  updateTranslations();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize language switcher
+  initLanguageSwitcher();
+  
   // Check if we're returning from payment before initializing
   const urlParams = new URLSearchParams(window.location.search);
   const paymentReturn = urlParams.get('payment');
@@ -3085,6 +3616,12 @@ function cacheDom() {
   DOM.forgotPasswordEmail = document.getElementById('forgotPasswordEmail');
   DOM.forgotPasswordSuccess = document.getElementById('forgotPasswordSuccess');
   DOM.confirmationItems = document.querySelector('[data-component="confirmation-items"]');
+  // Terms modal
+  DOM.termsModal = document.getElementById('termsModal');
+  DOM.termsModalTitle = document.getElementById('termsModalTitle');
+  DOM.termsModalContent = document.getElementById('termsModalContent');
+  DOM.termsModalLoading = document.getElementById('termsModalLoading');
+  DOM.termsModalClose = document.getElementById('termsModalClose');
   // Postal code and city fields for auto-fill
   DOM.postalCode = document.getElementById('postalCode');
   DOM.city = document.getElementById('city');
@@ -3134,6 +3671,10 @@ function setupEventListeners() {
   // Search functionality
   const gymSearch = document.getElementById('gymSearch');
   gymSearch?.addEventListener('input', handleGymSearch);
+  
+  // Location button
+  const findNearestGymBtn = document.getElementById('findNearestGym');
+  findNearestGymBtn?.addEventListener('click', findNearestGym);
 
 
   // Back arrow event listener
@@ -3209,6 +3750,35 @@ function setupEventListeners() {
   if (DOM.forgotPasswordForm) {
     DOM.forgotPasswordForm.addEventListener('submit', handleForgotPasswordSubmit);
   }
+  
+  // Terms modal handlers
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="open-terms"]')) {
+      e.preventDefault();
+      const termsType = e.target.closest('[data-action="open-terms"]').dataset.termsType;
+      openTermsModal(termsType);
+    }
+    
+    if (e.target === DOM.termsModalClose || e.target.closest('#termsModalClose')) {
+      closeTermsModal();
+    }
+  });
+  
+  // Close terms modal when clicking outside
+  if (DOM.termsModal) {
+    DOM.termsModal.addEventListener('click', (e) => {
+      if (e.target === DOM.termsModal) {
+        closeTermsModal();
+      }
+    });
+  }
+  
+  // Close terms modal on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && DOM.termsModal && DOM.termsModal.style.display !== 'none') {
+      closeTermsModal();
+    }
+  });
 }
 
 function setLoginLoadingState(isLoading) {
@@ -3299,6 +3869,271 @@ function closeForgotPasswordModal() {
   if (DOM.forgotPasswordForm) {
     DOM.forgotPasswordForm.reset();
   }
+}
+
+// Terms Content - Embedded directly to avoid CORS issues
+const termsContent = {
+  membership: {
+    da: `<h2>Vilkår og betingelser for medlemmer og 15 dages klatring i Boulders</h2>
+<p><strong>Gælder alle medlemskaber</strong></p>
+
+<h3>Accept</h3>
+<p>Ved gennemførsel af indmeldelsesprocessen har du accepteret nedenstående regelsæt. Din accept af aftalen er en bindende aftale mellem medlemmet og Boulders. Din accept heraf fungerer som en underskrift.</p>
+
+<h3>Highlights</h3>
+<p>Du skal læse hele regelsættet grundigt igennem, inden du skriver under. Nærlæs særligt nedenstående:</p>
+<p><strong>Fra §3:</strong> "Dit medlemskab i Boulders er et løbende abonnement med automatisk fornyelse. Abonnementet starter på købsdatoen og fortsætter indtil det opsiges efter §8."</p>
+<p><strong>Fra §8:</strong> "En opsigelse skal ske online på din medlemsprofil eller pr. e-mail til medlem@boulders.dk." … "Opsigelsesperioden for et medlemskab er løbende måned + næste hele afsluttede måned. Et medlemskab kan derfor kun ophøre med effekt sidste dag i en måned."</p>
+<p><strong>Fra §10:</strong> "Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld. Kunden er derfor indforstået med at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders. Kunden erklærer sig således indforstået med, at eventuelle skader på kunden selv eller tredjemand ikke vil blive erstattet af Boulders."</p>
+
+<h3>§1 Generelt</h3>
+<p>Følgende regelsæt er gældende for dit medlemskab i Boulders. Gældende regelsæt vil altid kunne findes på Boulders.dk. Vi gør opmærksom på at løbende ændringer af priser, betingelser, åbningstider og regelsæt kan forekomme.</p>
+
+<p>Dit medlemskab i Boulders er personligt og må ikke benyttes af andre. Ved misbrug af dit medlemskab eller medlemskort, opsiges dit medlemskab øjeblikkeligt uden refusion for den resterende periode af dit medlemskab.</p>
+
+<p>For at kunne identificere dig som medlem opbevares et billede af dig sammen med dine øvrige personoplysninger. Hvis der sker ændringer i de oplysninger, du har givet ved medlemskabets oprettelse, skal du straks meddele dette til Boulders. Du er som medlem selv ansvarlig for, at Boulders til enhver tid har dine korrekte personoplysninger herunder særligt e-mailadresse.</p>
+
+<h3>§3 Indmeldelse</h3>
+<p>Dit medlemskab i Boulders er et løbende abonnement med automatisk fornyelse, der starter på købsdagen og fortsætter indtil det opsiges efter §8.</p>
+
+<h3>§8 Opsigelse af medlemskab</h3>
+<p>En opsigelse skal ske online på din medlemsprofil eller pr. e-mail til medlem@boulders.dk. Opsigelsen skal indeholde dit navn og/eller medlemsnummer. Opsigelsen er gyldig fra den dag, Boulders modtager den, og du har modtaget en bekræftelse fra Boulders, der anerkender opsigelsen.</p>
+
+<p>Opsigelsesperioden for et medlemskab er resten af den løbende måned + næste hele afsluttede måned. Medlemskaber kan derfor kun ophøre med effekt sidste dag i en måned.</p>
+
+<h3>§10 Helbredstilstand og personskade</h3>
+<p>Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld. Kunden er derfor indforstået med at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders.</p>`,
+    en: `<h2>Terms and Conditions for Members and 15-Day Climbing Pass at Boulders</h2>
+<p><strong>Applies to all memberships</strong></p>
+
+<h3>Acceptance</h3>
+<p>By completing the registration process, you have accepted the following terms and conditions. Your acceptance of the agreement is a binding agreement between the member and Boulders. Your acceptance hereof functions as a signature.</p>
+
+<h3>Highlights</h3>
+<p>You must read the entire terms and conditions thoroughly before signing. Pay particular attention to the following:</p>
+<p><strong>From §3:</strong> "Your membership at Boulders is a continuous subscription with automatic renewal. The subscription starts on the purchase date and continues until terminated according to §8."</p>
+<p><strong>From §8:</strong> "Termination must be done online on your membership profile or by email to medlem@boulders.dk." … "The termination period for a membership is the remainder of the current month plus the following full calendar month. Memberships can therefore only end on the last day of a month."</p>
+<p><strong>From §10:</strong> "Climbing is a sports activity where injuries and accidents are foreseeable. Customers acknowledge that using Boulders' facilities, including climbing facilities, is at their own risk and that they cannot claim liability or compensation from Boulders in any way."</p>
+
+<h3>§1 General</h3>
+<p>The following terms and conditions apply to your membership at Boulders. Current terms and conditions can always be found on Boulders.dk. We note that ongoing changes to prices, conditions, opening hours, and terms may occur.</p>
+
+<p>Your membership at Boulders is personal and may not be used by others. In case of misuse of your membership or membership card, your membership will be terminated immediately without refund for the remaining period.</p>
+
+<h3>§3 Registration</h3>
+<p>Your membership at Boulders is a continuous subscription with automatic renewal that starts on the purchase date and continues until terminated according to §8.</p>
+
+<h3>§8 Termination of Membership</h3>
+<p>Termination must be done online on your membership profile or by email to medlem@boulders.dk. The termination must contain your name and/or membership number. The termination is valid from the day Boulders receives it, and you have received a confirmation from Boulders acknowledging the termination.</p>
+
+<p>The termination period for a membership is the remainder of the current month plus the following full calendar month. Memberships can therefore only end on the last day of a month.</p>
+
+<h3>§10 Health Conditions and Personal Injury</h3>
+<p>Climbing is a sports activity where injuries and accidents are foreseeable. Customers acknowledge that using Boulders' facilities, including climbing facilities, is at their own risk and that they cannot claim liability or compensation from Boulders in any way.</p>`
+  },
+  punchcard: {
+    da: `<h2>Vilkår og betingelser for klippekort</h2>
+<p>Klippekort giver adgang til Boulders' klatrecentre i henhold til nedenstående betingelser.</p>
+
+<h3>Gældende periode</h3>
+<p>Klippekortet er gyldigt i 5 år fra købsdatoen.</p>
+
+<h3>Brug</h3>
+<p>Hvert klip på kortet giver adgang til ét besøg. Kortet kan deles med andre, men hvert klip kan kun bruges én gang.</p>
+
+<h3>Refill</h3>
+<p>Hvis du refiller dit klippekort inden for 14 dage efter dit sidste klip, får du 100 kr. rabat ved køb af nyt klippekort i hallen.</p>
+
+<h3>Opgradere til medlemskab</h3>
+<p>Klippekort kan opgraderes til medlemskab. Kontakt Boulders for yderligere information.</p>
+
+<h3>Ansvarsfraskrivelse</h3>
+<p>Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld. Brug af Boulders' faciliteter foretages på eget ansvar.</p>`,
+    en: `<h2>Terms and Conditions for Punch Card</h2>
+<p>Punch cards provide access to Boulders' climbing centers according to the following conditions.</p>
+
+<h3>Validity Period</h3>
+<p>The punch card is valid for 5 years from the purchase date.</p>
+
+<h3>Usage</h3>
+<p>Each clip on the card provides access to one visit. The card can be shared with others, but each clip can only be used once.</p>
+
+<h3>Refill</h3>
+<p>If you refill your punch card within 14 days after your last clip, you will receive 100 kr. discount when purchasing a new punch card at the gym.</p>
+
+<h3>Upgrade to Membership</h3>
+<p>Punch cards can be upgraded to membership. Contact Boulders for further information.</p>
+
+<h3>Disclaimer</h3>
+<p>Climbing is a sports activity where injuries and accidents are foreseeable. Use of Boulders' facilities is at your own risk.</p>`
+  },
+  privacy: {
+    da: `<h2>Privatlivspolitik</h2>
+<p><em>Opdateret August 2024</em></p>
+
+<p>Hos Boulders er det afgørende for os, at du føler dig tryg ved, hvordan vi håndterer dine personoplysninger. Derfor har vi en politik, der sikrer, at de oplysninger, vi indsamler, behandles ansvarligt og med respekt for dit privatliv, i overensstemmelse med gældende lovgivning.</p>
+
+<h3>Generelt</h3>
+<p>Denne politik for behandling af personoplysninger ("Persondatapolitik") gælder, når du interagerer med Boulders ("vi", "os", "vores"). Den beskriver, hvordan vi indsamler og behandler dine oplysninger, når du bruger vores hjemmeside boulders.dk ("Hjemmesiden"), benytter vores app ("Appen"), eller i forbindelse med dit kundeforhold og din træning hos os.</p>
+
+<h3>Dataansvar</h3>
+<p>Boulders ApS er ansvarlig for behandlingen af de personoplysninger, vi indsamler om dig. Du kan kontakte os på følgende adresse:</p>
+<p>Boulders ApS<br>
+Graham Bells Vej, 8200 Aarhus N<br>
+CVR nr.: 32777651<br>
+boulders.dk</p>
+
+<p>Hvis du har spørgsmål om vores behandling af dine personoplysninger, kan du skrive til os på hej@boulders.dk.</p>
+
+<h3>Hvornår indsamler vi personlige oplysninger om dig?</h3>
+<p>Vi indsamler dine personoplysninger i forskellige situationer, herunder når du:</p>
+<ul>
+<li>Tilmelder dig som medlem af Boulders.</li>
+<li>Underskriver ansvarsfraskrivelse, ved køb af dagsbillet, indløser fribillet eller lign.</li>
+<li>Køber produkter på boulders.goactivebooking.com</li>
+<li>Besøger og bruger vores hjemmeside eller app</li>
+<li>Kontakter os via e-mail, telefon eller sociale medier</li>
+</ul>
+
+<h3>Cookies</h3>
+<p>Når du besøger vores hjemmeside, indsamler vi automatisk oplysninger om din brug af hjemmesiden gennem session cookies og lignende teknologier. Cookies er små tekstfiler, der gemmes i din browser og hjælper os med at gøre hjemmesiden mere relevant for dine behov og interesser.</p>
+
+<h3>Sletning af dine personlige oplysninger</h3>
+<p>Vi opbevarer dine personlige data så længe, det er nødvendigt for formålet med behandlingen. Når dit medlemskab ophører, gemmer vi dine data i en begrænset periode for at opfylde juridiske krav og vores legitime interesser.</p>`,
+    en: `<h2>Privacy Policy</h2>
+<p><em>Updated August 2024</em></p>
+
+<p>At Boulders, it is crucial for us that you feel secure about how we handle your personal information. Therefore, we have a policy that ensures the information we collect is processed responsibly and with respect for your privacy, in accordance with applicable legislation.</p>
+
+<h3>General</h3>
+<p>This policy for processing personal information ("Data Protection Policy") applies when you interact with Boulders ("we", "us", "our"). It describes how we collect and process your information when you use our website boulders.dk ("Website"), use our app ("App"), or in connection with your customer relationship and training with us.</p>
+
+<h3>Data Controller</h3>
+<p>Boulders ApS is responsible for processing the personal information we collect about you. You can contact us at the following address:</p>
+<p>Boulders ApS<br>
+Graham Bells Vej, 8200 Aarhus N<br>
+CVR no.: 32777651<br>
+boulders.dk</p>
+
+<p>If you have questions about our processing of your personal information, you can write to us at hej@boulders.dk.</p>
+
+<h3>When do we collect personal information about you?</h3>
+<p>We collect your personal information in various situations, including when you:</p>
+<ul>
+<li>Register as a member of Boulders.</li>
+<li>Sign a waiver, purchase a day ticket, redeem a free ticket, etc.</li>
+<li>Purchase products on boulders.goactivebooking.com</li>
+<li>Visit and use our website or app</li>
+<li>Contact us via email, phone, or social media</li>
+</ul>
+
+<h3>Cookies</h3>
+<p>When you visit our website, we automatically collect information about your use of the website through session cookies and similar technologies. Cookies are small text files stored in your browser that help us make the website more relevant to your needs and interests.</p>
+
+<h3>Deletion of your personal information</h3>
+<p>We store your personal data for as long as necessary for the purpose of processing. When your membership ends, we store your data for a limited period to fulfill legal requirements and our legitimate interests.</p>`
+  },
+  cookie: {
+    da: `<h2>Cookie Policy</h2>
+
+<h3>Hvad er en cookie?</h3>
+<p>En cookie er en lille datafil, der gemmes på din computer, tablet eller mobiltelefon. Cookies er ikke programmer og kan ikke indeholde skadelige koder eller virus.</p>
+
+<h3>Hjemmesidens brug af cookies</h3>
+<p>Cookies er essentielle for, at vores hjemmeside fungerer korrekt. De hjælper os også med at forstå, hvordan du bruger hjemmesiden, så vi kan tilpasse indholdet til dine behov og præferencer. Cookies husker blandt andet dine loginoplysninger, sprogvalg og indstillinger samt målretter annoncer på andre hjemmesider.</p>
+
+<h3>Opbevaringsperiode for cookies</h3>
+<p>Cookies opbevares i varierende perioder, afhængigt af deres funktion og formål. Når en cookie udløber, slettes den automatisk. Du kan finde detaljer om levetiden for hver cookie i vores cookiepolitik.</p>
+
+<h3>Afvisning og sletning af cookies</h3>
+<p>Du kan til enhver tid afvise eller slette cookies ved at ændre dine browserindstillinger. Bemærk, at dette kan påvirke funktionaliteten af visse tjenester på hjemmesiden. Vejledninger til sletning af cookies varierer afhængigt af den browser og enhed, du bruger.</p>
+
+<h3>Ændring af samtykke</h3>
+<p>Hvis du ønsker at ændre dit samtykke, kan du slette cookies fra din browser eller ændre dine indstillinger via knappen i venstre bund, her på hjemmesiden.</p>
+
+<h3>Spørgsmål?</h3>
+<p>Hvis du har spørgsmål eller kommentarer vedrørende vores cookiepolitik, er du velkommen til at kontakte os. Selve cookiedeklarationen opdateres regelmæssigt via Cookiebot.</p>`,
+    en: `<h2>Cookie Policy</h2>
+
+<h3>What is a cookie?</h3>
+<p>A cookie is a small data file stored on your computer, tablet, or mobile phone. Cookies are not programs and cannot contain harmful code or viruses.</p>
+
+<h3>Website's use of cookies</h3>
+<p>Cookies are essential for our website to function correctly. They also help us understand how you use the website so we can tailor content to your needs and preferences. Cookies remember, among other things, your login information, language preferences and settings, and target ads on other websites.</p>
+
+<h3>Storage period for cookies</h3>
+<p>Cookies are stored for varying periods depending on their function and purpose. When a cookie expires, it is automatically deleted. You can find details about the lifetime of each cookie in our cookie policy.</p>
+
+<h3>Rejection and deletion of cookies</h3>
+<p>You can reject or delete cookies at any time by changing your browser settings. Note that this may affect the functionality of certain services on the website. Instructions for deleting cookies vary depending on the browser and device you use.</p>
+
+<h3>Changing consent</h3>
+<p>If you wish to change your consent, you can delete cookies from your browser or change your settings via the button in the bottom left, here on the website.</p>
+
+<h3>Questions?</h3>
+<p>If you have questions or comments regarding our cookie policy, please feel free to contact us. The cookie declaration itself is regularly updated via Cookiebot.</p>`
+  }
+};
+
+// Terms Modal Functions
+function openTermsModal(termsType) {
+  if (!DOM.termsModal || !DOM.termsModalContent || !DOM.termsModalTitle) return;
+  
+  const termsTitles = {
+    membership: {
+      da: 'Vilkår og Betingelser for Medlemskab',
+      en: 'Terms and Conditions for Membership',
+    },
+    punchcard: {
+      da: 'Vilkår og Betingelser for Klippekort',
+      en: 'Terms and Conditions for Punch Card',
+    },
+    privacy: {
+      da: 'Privatlivspolitik',
+      en: 'Privacy Policy',
+    },
+    cookie: {
+      da: 'Cookiepolitik',
+      en: 'Cookie Policy',
+    },
+  };
+  
+  const currentLang = getCurrentLanguage();
+  const title = termsTitles[termsType]?.[currentLang] || termsTitles[termsType]?.da || 'Terms and Conditions';
+  const content = termsContent[termsType]?.[currentLang] || termsContent[termsType]?.da || '<p>Content not available.</p>';
+  
+  if (!termsContent[termsType]) {
+    console.error('Invalid terms type:', termsType);
+    return;
+  }
+  
+  // Set title
+  DOM.termsModalTitle.textContent = title;
+  
+  // Set content
+  DOM.termsModalContent.innerHTML = content;
+  
+  // Show modal
+  DOM.termsModal.style.display = 'flex';
+  DOM.termsModalContent.style.display = 'block';
+  DOM.termsModalLoading.style.display = 'none';
+  document.body.classList.add('modal-open');
+  
+  // Scroll to top of modal content
+  DOM.termsModalContent.scrollTop = 0;
+}
+
+function closeTermsModal() {
+  if (!DOM.termsModal) return;
+  
+  // Clear content
+  if (DOM.termsModalContent) {
+    DOM.termsModalContent.innerHTML = '';
+  }
+  
+  // Hide modal
+  DOM.termsModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
 }
 
 async function handleForgotPasswordSubmit(event) {
