@@ -3311,6 +3311,9 @@ function formatDistance(distance) {
 
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3313',message:'loadGymsFromAPI ENTRY',data:{currentStep:state.currentStep,hasUserLocation:!!userLocation},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   try {
     const response = await businessUnitsAPI.getBusinessUnits();
     
@@ -3483,6 +3486,9 @@ async function loadGymsFromAPI() {
     
     // Re-setup forward arrow event listener
     setupForwardArrowEventListeners();
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3486',message:'loadGymsFromAPI SUCCESS EXIT',data:{currentStep:state.currentStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
   } catch (error) {
     console.error('Failed to load gyms from API:', error);
     
@@ -3509,6 +3515,9 @@ async function loadGymsFromAPI() {
 
 // Find nearest gym using geolocation
 async function findNearestGym() {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3511',message:'findNearestGym ENTRY',data:{currentStep:state.currentStep,disabled:document.getElementById('findNearestGym')?.disabled,loading:document.getElementById('findNearestGym')?.classList.contains('loading'),hasUserLocation:!!userLocation},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const locationBtn = document.getElementById('findNearestGym');
   const locationStatus = document.getElementById('locationStatus');
   
@@ -3541,6 +3550,9 @@ async function findNearestGym() {
   // Update button state - show loading
   locationBtn.disabled = true;
   locationBtn.classList.add('loading');
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3542',message:'findNearestGym button disabled',data:{currentStep:state.currentStep,disabled:locationBtn.disabled,loading:locationBtn.classList.contains('loading')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
   
   // Hide status text
   locationStatus.style.display = 'none';
@@ -3560,12 +3572,21 @@ async function findNearestGym() {
     locationStatus.style.display = 'none';
     
     // Reload gyms with distance sorting
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3563',message:'findNearestGym BEFORE loadGymsFromAPI',data:{currentStep:state.currentStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     await loadGymsFromAPI();
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3563',message:'findNearestGym AFTER loadGymsFromAPI',data:{currentStep:state.currentStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     
     // Highlight icon button (add active class)
     locationBtn.classList.add('active');
     locationBtn.classList.remove('loading');
     locationBtn.disabled = false;
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3568',message:'findNearestGym SUCCESS EXIT',data:{currentStep:state.currentStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     
   } catch (error) {
     // Log location errors as warnings (not errors) since they're handled gracefully
@@ -3620,6 +3641,9 @@ async function findNearestGym() {
     locationBtn.classList.remove('active');
     locationBtn.classList.remove('loading');
     locationBtn.disabled = false;
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3622',message:'findNearestGym ERROR EXIT',data:{currentStep:state.currentStep,errorType:error.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
   }
 }
 
@@ -3664,7 +3688,12 @@ function createGymItem(gym, isNearest = false) {
 function setupGymEventListeners() {
   const gymItems = document.querySelectorAll('.gym-item');
   gymItems.forEach(item => {
-    item.addEventListener('click', () => handleGymSelection(item));
+    item.addEventListener('click', (e) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3667',message:'gym-item CLICK',data:{currentStep:state.currentStep,gymId:item.dataset.gymId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      handleGymSelection(item);
+    });
   });
 }
 
@@ -3689,6 +3718,14 @@ function handleForwardNavigation() {
     nextStep();
   }
 }
+
+// Track pending navigation timeouts to prevent double-clicks and stale state
+const pendingNavigationTimeouts = {
+  gym: null,
+  plan: null,
+  membership: null,
+  punchcard: null
+};
 
 const state = {
   currentStep: 1,
@@ -4407,7 +4444,12 @@ function setupEventListeners() {
   
   // Location button
   const findNearestGymBtn = document.getElementById('findNearestGym');
-  findNearestGymBtn?.addEventListener('click', findNearestGym);
+  findNearestGymBtn?.addEventListener('click', (e) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:4410',message:'findNearestGym CLICK',data:{currentStep:state.currentStep,disabled:findNearestGymBtn.disabled,loading:findNearestGymBtn.classList.contains('loading')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    findNearestGym();
+  });
 
 
   // Back arrow event listener
@@ -5161,6 +5203,9 @@ function renderMembershipPlans() {
 }
 
 function handleGymSelection(item) {
+  const gymIdString = item.dataset.gymId;
+  const numericId = gymIdString ? gymIdString.replace('gym-', '') : null;
+  
   // Remove selected class from all gym items
   document.querySelectorAll('.gym-item').forEach(gymItem => {
     gymItem.classList.remove('selected');
@@ -5171,8 +5216,7 @@ function handleGymSelection(item) {
   
   // Step 3: Store the chosen unit in client state so every later request can reference it
   // Extract numeric ID from data attribute (format: "gym-{id}")
-  const gymIdString = item.dataset.gymId;
-  const numericId = gymIdString ? gymIdString.replace('gym-', '') : null;
+  // Note: numericId was already extracted above for early return check
   
   // Step 4: If business unit changed, clear cached reference data to force refresh
   const previousBusinessUnit = state.selectedBusinessUnit;
@@ -5198,9 +5242,42 @@ function handleGymSelection(item) {
   // Update heads-up display
   updateGymHeadsUp(item);
   
+  // Clear any pending gym navigation timeout to prevent double-clicks
+  if (pendingNavigationTimeouts.gym) {
+    clearTimeout(pendingNavigationTimeouts.gym);
+    pendingNavigationTimeouts.gym = null;
+  }
+  
+  // Only auto-advance if we're on step 1 (gym selection step)
+  if (state.currentStep !== 1) {
+    return;
+  }
+  
   // Auto-advance to next step after a short delay
-  setTimeout(() => {
-    nextStep();
+  const timeoutGymId = numericId; // Capture gym ID at timeout creation to prevent stale navigation
+  pendingNavigationTimeouts.gym = setTimeout(() => {
+    // Read current state ONCE at timeout execution time (atomic read to prevent race conditions)
+    const currentStepNow = state.currentStep;
+    const selectedGymIdNow = state.selectedGymId;
+    // Check if timeout is still valid BEFORE clearing it
+    // If prevStep() cleared it, pendingNavigationTimeouts.gym will be null
+    const timeoutStillValid = pendingNavigationTimeouts.gym !== null;
+    
+    // Clear timeout reference immediately to prevent double execution
+    pendingNavigationTimeouts.gym = null;
+    
+    // Only navigate if ALL conditions are met:
+    // 1. We're still on step 1 (where gym selection happens)
+    // 2. The gym selection hasn't changed (same gym ID)
+    // 3. The timeout wasn't cleared (still valid)
+    if (timeoutStillValid && currentStepNow === 1 && state.currentStep === 1 && selectedGymIdNow === timeoutGymId) {
+      // Final verification: ensure we're still on step 1 and haven't navigated away
+      if (state.currentStep !== 1) {
+        return; // State changed between check and navigation - abort
+      }
+      // Navigate to step 2 (next step after gym selection)
+      nextStep(1);
+    }
   }, 500);
 }
 
@@ -5342,6 +5419,14 @@ function handleGymSearch(event) {
 }
 
 function handleBackToGym() {
+  // Clear any pending navigation timeouts when going back
+  Object.keys(pendingNavigationTimeouts).forEach(key => {
+    if (pendingNavigationTimeouts[key]) {
+      clearTimeout(pendingNavigationTimeouts[key]);
+      pendingNavigationTimeouts[key] = null;
+    }
+  });
+  
   // Go back to step 1 (gym selection)
   state.currentStep = 1;
   showStep(state.currentStep);
@@ -5538,6 +5623,9 @@ function handleCategoryToggle(category) {
 }
 
 function handlePlanSelection(selectedCard) {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5540',message:'handlePlanSelection ENTRY',data:{currentStep:state.currentStep,planId:selectedCard.dataset.plan},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   // Remove selected class from all plan cards in the same category
   const category = selectedCard.closest('.category-item').dataset.category;
   const allCardsInCategory = selectedCard.closest('.category-item').querySelectorAll('.plan-card');
@@ -5678,6 +5766,9 @@ function setupNewAccessStep() {
   // Plan selection
   document.querySelectorAll('.plan-card').forEach(card => {
     card.addEventListener('click', (e) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5712',message:'plan-card CLICK',data:{currentStep:state.currentStep,planId:card.dataset.plan,isSelected:card.classList.contains('selected')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       // Don't handle clicks on quantity controls - let them handle their own events
       if (e.target.closest('.quantity-selector')) {
         return;
@@ -5775,10 +5866,25 @@ function setupNewAccessStep() {
           // Update cart to reflect selection
           updateCartSummary();
           
+          // Clear any pending punchcard navigation timeout to prevent double-clicks
+          if (pendingNavigationTimeouts.punchcard) {
+            clearTimeout(pendingNavigationTimeouts.punchcard);
+            pendingNavigationTimeouts.punchcard = null;
+          }
+          
           // Auto-advance to next step after a short delay
-          setTimeout(() => {
-            nextStep();
+          // #region agent log
+          pendingNavigationTimeouts.punchcard = setTimeout(() => {
+            fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5811',message:'punchcard setTimeout CALLBACK',data:{currentStep:state.currentStep,planId:planId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // Clear timeout reference before navigation
+            pendingNavigationTimeouts.punchcard = null;
+            // Only navigate if we're still on step 2 (prevent stale state navigation)
+            if (state.currentStep === 2) {
+              nextStep();
+            }
           }, 500);
+          fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5811',message:'punchcard setTimeout SET',data:{currentStep:state.currentStep,planId:planId,timeoutId:pendingNavigationTimeouts.punchcard.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
         } else {
           // Membership - update access heads-up
           updateAccessHeadsUp(card);
@@ -5791,12 +5897,27 @@ function setupNewAccessStep() {
           // Update cart to reflect selection
           updateCartSummary();
           
+          // Clear any pending membership navigation timeout to prevent double-clicks
+          if (pendingNavigationTimeouts.membership) {
+            clearTimeout(pendingNavigationTimeouts.membership);
+            pendingNavigationTimeouts.membership = null;
+          }
+          
           // Reset card animation and auto-advance to next step
-          setTimeout(() => {
+          // #region agent log
+          pendingNavigationTimeouts.membership = setTimeout(() => {
+            fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5827',message:'membership setTimeout CALLBACK',data:{currentStep:state.currentStep,planId:planId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // Clear timeout reference before navigation
+            pendingNavigationTimeouts.membership = null;
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
-            nextStep();
+            // Only navigate if we're still on step 2 (prevent stale state navigation)
+            if (state.currentStep === 2) {
+              nextStep();
+            }
           }, 500);
+          fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5827',message:'membership setTimeout SET',data:{currentStep:state.currentStep,planId:planId,timeoutId:pendingNavigationTimeouts.membership.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
         }
     });
   });
@@ -10034,12 +10155,44 @@ function setCheckoutLoadingState(isLoading) {
   }
 }
 
-function nextStep() {
-  if (state.currentStep >= TOTAL_STEPS) {
+function nextStep(fromStep) {
+  // Use provided fromStep if available (prevents race conditions), otherwise use state.currentStep
+  const currentStep = fromStep !== undefined ? fromStep : state.currentStep;
+  
+  if (currentStep >= TOTAL_STEPS) {
     return;
   }
+  
+  // CRITICAL: When going from step 1 (gym selection), always go to step 2 (membership selection)
+  // Never skip to any other step - this prevents navigation bugs
+  if (currentStep === 1) {
+    state.currentStep = 2;
+    showStep(2);
+    updateStepIndicator();
+    updateNavigationButtons();
+    updateMainSubtitle();
+    
+    // Step 5: Load products when step 2 (access type selection) is shown
+    if (state.selectedBusinessUnit) {
+      // Only load if we don't already have products loaded
+      if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
+        loadProductsFromAPI();
+      }
+    }
+    
+    // Scroll to top on mobile only
+    if (window.innerWidth <= 768) {
+      scrollToTop();
+      setTimeout(() => {
+        scrollToTop();
+      }, 200);
+    }
+    
+    return; // Early return - don't continue with normal navigation logic
+  }
+  
   // advance to next visible panel (skip any hidden ones)
-  let target = state.currentStep + 1;
+  let target = currentStep + 1;
   // Add-ons step (step 3) is disabled - always skip it
   if (target === 3) {
     target = 4; // Skip directly to step 4
@@ -10051,7 +10204,7 @@ function nextStep() {
   
   // If we're going from step 2 to step 4 (skipping step 3), don't check for hidden panels
   // Step 4 should always be shown when coming from step 2
-  if (state.currentStep === 2 && target === 4) {
+  if (currentStep === 2 && target === 4) {
     // Don't enter the while loop - step 4 should be shown
   } else {
     while (target <= TOTAL_STEPS) {
@@ -10070,6 +10223,13 @@ function nextStep() {
       // Skip step 3 if we land on it
       if (target === 3) {
         target = 4;
+      }
+      // CRITICAL: Never skip to step 5 (success page) unless explicitly navigating from step 4
+      // This prevents accidental navigation to success page
+      if (target >= TOTAL_STEPS && currentStep !== 4) {
+        console.warn('[Navigation] Prevented navigation to success page from step', currentStep);
+        target = Math.min(currentStep + 1, 4); // Cap at step 4
+        break;
       }
     }
   }
@@ -10137,13 +10297,37 @@ function nextStep() {
     }, 200);
   }
 
+  // CRITICAL: Only show success page (step 5) if there's actually a completed order
+  // Never navigate to success page unless purchase is actually successful
   if (state.currentStep === TOTAL_STEPS) {
-    renderConfirmationView();
+    // Only render confirmation if we have order data
+    // This prevents showing success page when user hasn't completed purchase
+    if (state.order && state.orderId) {
+      renderConfirmationView();
+    } else {
+      // If we somehow ended up on step 5 without an order, go back to step 1
+      console.warn('[Navigation] Attempted to show success page without order data. Redirecting to step 1.');
+      state.currentStep = 1;
+      showStep(1);
+      updateStepIndicator();
+      updateNavigationButtons();
+      updateMainSubtitle();
+    }
   }
 }
 
 function prevStep() {
   if (state.currentStep <= 1) return;
+  
+  // Clear any pending navigation timeouts when going back
+  // This prevents stale timeouts from navigating after user changes selection
+  Object.keys(pendingNavigationTimeouts).forEach(key => {
+    if (pendingNavigationTimeouts[key]) {
+      clearTimeout(pendingNavigationTimeouts[key]);
+      pendingNavigationTimeouts[key] = null;
+    }
+  });
+  
   // go back to previous visible panel (skip any hidden ones)
   let target = state.currentStep - 1;
   // Add-ons step (step 3) is disabled - always skip it
