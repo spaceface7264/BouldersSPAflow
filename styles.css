@@ -1662,6 +1662,27 @@ body {
     text-align: left;
 }
 
+/* Global scrollbar styling - hide scrollbars when not used */
+* {
+    scrollbar-width: none; /* Firefox - hide scrollbar */
+    -ms-overflow-style: none; /* IE and Edge - hide scrollbar */
+}
+
+/* Custom scrollbar for webkit browsers (Chrome, Safari, Edge) - hide when not used */
+*::-webkit-scrollbar {
+    width: 0px;
+    height: 0px;
+    background: transparent;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+
 .plans-list {
     display: flex;
     flex-direction: column;
@@ -1672,26 +1693,6 @@ body {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
     max-height: calc(100vh - 500px); /* Dynamic max-height, accounting for description */
-    scrollbar-width: thin; /* Firefox */
-    scrollbar-color: rgba(244, 1, 245, 0.3) transparent; /* Firefox */
-}
-
-/* Custom scrollbar for webkit browsers */
-.plans-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.plans-list::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.plans-list::-webkit-scrollbar-thumb {
-    background: rgba(244, 1, 245, 0.3);
-    border-radius: 3px;
-}
-
-.plans-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(244, 1, 245, 0.5);
 }
 
 .plan-card {
@@ -3889,6 +3890,7 @@ body {
 .item-name {
     color: var(--color-text-secondary);
     font-size: var(--font-size-base);
+    font-weight: 700;
 }
 
 .item-price {
