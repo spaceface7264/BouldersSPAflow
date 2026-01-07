@@ -141,10 +141,3 @@ POST /api/ver3/orders/{orderId}/items/subscriptions
 2. Ensure partial-month pricing is calculated correctly
 3. Verify payment link generation works with corrected pricing
 
-## 📞 Next Steps
-
-1. **Contact backend team** with this verification report
-2. **Provide test case** showing the exact issue
-3. **Request fix** for `startDate` parameter handling
-4. **Verify fix** by testing payment link generation after backend fix
-

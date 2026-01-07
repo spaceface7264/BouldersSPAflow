@@ -84,15 +84,3 @@ if (product.hasOwnProperty('allowedToOrder') && product.allowedToOrder === false
 
 Once backend correctly sets `allowedToOrder: false`, frontend will automatically exclude these products.
 
-## Test Cases
-
-1. Product with "kan bookes via internet" unchecked → should return `allowedToOrder: false`
-2. Product with "kan bookes via internet" checked → should return `allowedToOrder: true`
-3. Both cases should work without `subscriber` parameter (anonymous users)
-
-## Related Files
-
-- Frontend filtering logic: `app.js` line ~2391-2403
-- API endpoint: `app.js` line ~267-299
-- OpenAPI spec: `docs/brp-api3-openapi.yaml` line ~8287-8338
-

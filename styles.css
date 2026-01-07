@@ -2154,7 +2154,8 @@ body {
     margin-left: 16px;
 }
 
-.total-amount {
+/* Total Display (Step Indicator) */
+.total-display .total-amount {
     font-size: var(--font-size-md);
     font-weight: 700;
     color: #f0f;
@@ -2234,7 +2235,8 @@ body {
         font-size: var(--font-size-2xl);
     }
 
-    .total-amount {
+    /* Total Display (Step Indicator) - Mobile */
+    .total-display .total-amount {
         font-size: var(--font-size-2xl);
     }
 
@@ -2778,14 +2780,15 @@ body {
         text-align: right;
     }
 
-    .total-label {
+    /* Total Display (Step Indicator) - Mobile */
+    .total-display .total-label {
         font-size: var(--font-size-base);
         color: #333;
         font-weight: 500;
         margin-bottom: 4px;
     }
 
-    .total-amount {
+    .total-display .total-amount {
         font-size: var(--font-size-2xl);
         font-weight: 800;
         color: #000;
@@ -2847,7 +2850,8 @@ body {
         border-radius: 12px;
     }
 
-    .total-amount {
+    /* Total Display (Step Indicator) - Mobile */
+    .total-display .total-amount {
         font-size: var(--font-size-2xl);
     }
 
@@ -2855,7 +2859,8 @@ body {
         font-size: var(--font-size-lg);
     }
 
-    .total-label {
+    /* Total Display (Step Indicator) - Mobile */
+    .total-display .total-label {
         font-size: var(--font-size-sm);
     }
 }
@@ -2903,7 +2908,8 @@ body {
         font-size: var(--font-size-lg);
     }
 
-    .total-amount {
+    /* Total Display (Step Indicator) - Mobile */
+    .total-display .total-amount {
         font-size: var(--font-size-2xl);
     }
 
@@ -3819,21 +3825,26 @@ body {
 
 /* Cart Items */
 .cart-items {
-    margin-bottom: 16px;
+    margin-bottom: 20px;
 }
 
 .cart-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid #374151;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cart-item:first-child {
+    padding-top: 0;
 }
 
 .cart-item:last-child {
     border-bottom: none;
+    padding-bottom: 0;
 }
 
+/* Cart and Purchase Items - Shared Styles */
 .item-name {
     color: var(--color-text-secondary);
     font-size: var(--font-size-base);
@@ -3841,20 +3852,13 @@ body {
 
 .item-price {
     color: white;
-    font-weight: 600;
+    font-weight: 500;
     font-size: var(--font-size-base);
 }
 
 /* Payment Overview */
 .payment-overview {
     margin: 16px 0;
-    padding: 16px;
-    background: rgba(15, 23, 42, 0.4);
-    border: 1px solid #374151;
-    border-radius: 8px;
-}
-
-.payment-overview-section {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -3864,58 +3868,40 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 0;
 }
 
-.payment-label {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-md);
-    font-weight: 500;
+.payment-overview-paynow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
 }
 
-.payment-amount {
-    color: #F401F5;
-    font-size: var(--font-size-md);
-    font-weight: 600;
-}
-
-.payment-overview-billing-period {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    font-style: italic;
-    text-align: center;
-}
-
-.cart-total {
+.payment-overview-paynow-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 0;
-    border-top: 1px solid #374151;
-    border-bottom: 1px solid #374151;
-    margin: 16px 0;
 }
 
-.total-label {
-    color: white;
-    font-size: var(--font-size-md);
-    font-weight: 600;
+/* Payment Overview Labels */
+.payment-overview .payment-label {
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 500;
 }
 
-.total-amount {
-    color: #F401F5;
-    font-size: var(--font-size-lg);
-    font-weight: bold;
+/* Payment Overview Amounts */
+.payment-overview .payment-amount {
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 300;
 }
 
-.period-note {
-    color: #9CA3AF;
+.payment-overview-billing-period {
+    color: var(--color-text-secondary);
     font-size: var(--font-size-sm);
-    text-align: center;
-    margin-bottom: 20px;
     font-style: italic;
+    text-align: left;
 }
 
 /* Discount Code */
@@ -4153,9 +4139,7 @@ body {
 .payment-label {
     display: flex;
     align-items: center;
-    padding: 12px 16px;
-    border: 2px solid #374151;
-    border-radius: 8px;
+    padding: 6px 0px;
     cursor: pointer;
     transition: all 0.3s ease;
     color: var(--color-text-secondary);
@@ -4592,15 +4576,6 @@ main {
     margin-bottom: 12px;
 }
 
-.item-name {
-    color: var(--color-text-secondary);
-}
-
-.item-price {
-    color: white;
-    font-weight: 500;
-}
-
 .order-total {
     display: flex;
     justify-content: space-between;
@@ -4610,11 +4585,12 @@ main {
     font-weight: bold;
 }
 
-.total-label {
+/* Order Total (Confirmation Page) */
+.order-total .total-label {
     color: var(--color-text-primary);
 }
 
-.total-amount {
+.order-total .total-amount {
     color: #F401F5;
 }
 

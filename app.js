@@ -4180,8 +4180,6 @@ function cacheDom() {
   DOM.valueCardContinueBtn = document.querySelector('[data-action="continue-value-cards"]');
   DOM.valueCardEntryLabel = document.querySelector('[data-entry-label]');
   DOM.cartItems = document.querySelector('[data-component="cart-items"]');
-  DOM.cartTotal = document.querySelector('[data-summary-field="cart-total"]');
-  DOM.billingPeriod = document.querySelector('[data-summary-field="billing-period"]');
   DOM.paymentOverview = document.querySelector('.payment-overview');
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
@@ -6436,10 +6434,7 @@ async function handleApplyDiscount() {
       // updateCartSummary() will calculate subtotal and cart total, and render the UI
       updateCartSummary();
       
-      // Force immediate UI update - ensure DOM element exists
-      if (!DOM.cartTotal) {
-        DOM.cartTotal = document.querySelector('[data-summary-field="cart-total"]');
-      }
+      // Cart total element removed - payment overview shows calculated prices instead
       
       // Force update discount display
       updateDiscountDisplay();
@@ -6849,40 +6844,24 @@ function renderCartItems() {
   state.cartItems.forEach((item) => {
     const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
     const nameEl = cartItem.querySelector('[data-element="name"]');
-    const priceEl = cartItem.querySelector('[data-element="price"]');
 
     if (nameEl) nameEl.textContent = item.name;
-    if (priceEl) priceEl.textContent = currencyFormatter.format(item.amount);
 
     DOM.cartItems.appendChild(cartItem);
   });
 }
 
 function renderCartTotal() {
-  // Update the cart total element
-  if (DOM.cartTotal) {
-    const formattedTotal = currencyFormatter.format(state.totals.cartTotal);
-    DOM.cartTotal.textContent = formattedTotal;
-    console.log('[Cart] Updated cart total display:', formattedTotal, '(subtotal:', state.totals.subtotal, 'discount:', state.totals.discountAmount, ')');
-  } else {
-    console.warn('[Cart] DOM.cartTotal element not found!');
-    // Try to find it again
-    DOM.cartTotal = document.querySelector('[data-summary-field="cart-total"]');
-    if (DOM.cartTotal) {
-      DOM.cartTotal.textContent = currencyFormatter.format(state.totals.cartTotal);
-      console.log('[Cart] Found and updated cart total element');
-    }
-  }
-
-  if (DOM.billingPeriod) {
-    DOM.billingPeriod.textContent = state.billingPeriod || 'Billing period confirmed after checkout.';
-  }
+  // Cart total is no longer displayed - payment overview shows calculated prices instead
+  // Just update payment overview which shows the correct calculated prices
   
-  // Update payment overview
+  // Update payment overview (shows "Betales nu" and "Månedlig betaling herefter")
   updatePaymentOverview();
   
   // Update discount display if discount is applied
   updateDiscountDisplay();
+  
+  console.log('[Cart] Updated cart display (subtotal:', state.totals.subtotal, 'discount:', state.totals.discountAmount, ')');
 }
 
 /**
@@ -7134,12 +7113,12 @@ function updatePaymentOverview() {
         return `${day}.${month}.${year}`;
       };
       
-      billingPeriodText = `For perioden ${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
+      billingPeriodText = `Period ${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
       
       // If there's a boundUntil date (end of promotional period), show that too
       if (subscriptionItem.boundUntil) {
         const boundUntilDate = new Date(subscriptionItem.boundUntil);
-        billingPeriodText += ` (bundet til ${formatDate(boundUntilDate)})`;
+        billingPeriodText += ` (bound until ${formatDate(boundUntilDate)})`;
       }
     } else if (subscriptionItem.boundUntil) {
       // No initialPaymentPeriod, but there's a boundUntil date
@@ -7150,7 +7129,7 @@ function updatePaymentOverview() {
         const year = date.getFullYear();
         return `${day}.${month}.${year}`;
       };
-      billingPeriodText = `Bundet til ${formatDate(boundUntilDate)}`;
+      billingPeriodText = `Bound until ${formatDate(boundUntilDate)}`;
     }
     
     // Fallback to state.billingPeriod if available
@@ -7160,7 +7139,7 @@ function updatePaymentOverview() {
     
     // If still no billing period, show default message
     if (!billingPeriodText) {
-      billingPeriodText = 'Faktureringsperiode bekræftes efter checkout.';
+      billingPeriodText = 'Billing period confirmed after checkout.';
     }
     
     DOM.paymentBillingPeriod.textContent = billingPeriodText;
