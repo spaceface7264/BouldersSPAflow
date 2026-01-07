@@ -265,9 +265,16 @@ class BusinessUnitsAPI {
   }
 
   // Step 5: Get subscriptions (memberships) for a business unit
+  // According to OpenAPI spec (line ~8287):
+  // - subscriber parameter: "This is to determine whether the product is bookable for the subscription user"
+  // - allowedToOrder field: "To determine whether the subscription product is bookable for the subscription user or not"
+  // Note: When no subscriber is provided (anonymous users), allowedToOrder should reflect whether
+  // the product can be booked via internet (based on backend checkbox settings)
   async getSubscriptions(businessUnitId) {
     try {
       // Build URL with business unit as query parameter
+      // Note: We don't send subscriber/customer parameters for anonymous users
+      // Backend should set allowedToOrder based on "kan bookes via internet" checkbox
       let url;
       const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}` : '';
       if (this.useProxy) {
@@ -2301,6 +2308,13 @@ async function loadReferenceData() {
 }
 
 // Step 5: Load products (subscriptions and value cards) from API
+// API Endpoints (per OpenAPI documentation):
+// - GET /api/ver3/products/subscriptions?businessUnit={id} (line ~8287)
+//   - Filters by businessUnit query param
+//   - Returns SubscriptionProductOut objects with allowedToOrder field
+// - GET /api/ver3/products/valuecards?businessUnit={id} (line ~8529)
+//   - Filters by businessUnit query param
+//   - Returns ValueCardProductOut objects (no allowedToOrder field)
 async function loadProductsFromAPI() {
   if (!state.selectedBusinessUnit) {
     console.warn('Cannot load products: No business unit selected');
@@ -2309,19 +2323,176 @@ async function loadProductsFromAPI() {
 
   try {
     // Fetch subscriptions and value cards in parallel
+    // Backend should already filter by businessUnit query param, but we do additional
+    // client-side filtering to ensure compliance with OpenAPI spec display rules
     const [subscriptionsResponse, valueCardsResponse] = await Promise.all([
       businessUnitsAPI.getSubscriptions(state.selectedBusinessUnit),
       businessUnitsAPI.getValueCards(),
     ]);
 
     // Handle different response formats - could be array or object with data property
-    const subscriptions = Array.isArray(subscriptionsResponse) 
+    let subscriptions = Array.isArray(subscriptionsResponse) 
       ? subscriptionsResponse 
       : (subscriptionsResponse.data || subscriptionsResponse.items || []);
     
-    const valueCards = Array.isArray(valueCardsResponse)
+    let valueCards = Array.isArray(valueCardsResponse)
       ? valueCardsResponse
       : (valueCardsResponse.data || valueCardsResponse.items || []);
+
+    // Debug: Log all products received from API to verify what backend sends
+    console.log('[Product Filter] Raw API response received:', {
+      subscriptionsCount: subscriptions.length,
+      valueCardsCount: valueCards.length,
+      subscriptionNames: subscriptions.map(p => p.name),
+      valueCardNames: valueCards.map(p => p.name)
+    });
+
+    // Filter out products that shouldn't be displayed according to OpenAPI documentation
+    // Reference: docs/brp-api3-openapi.yaml - SubscriptionProductOut schema (line ~14970)
+    // Reference: docs/brp-api3-openapi.yaml - ValueCardProductOut schema (line ~15461)
+    
+    // Filter subscription products
+    // According to OpenAPI spec (SubscriptionProductOut):
+    // - allowedToOrder (boolean): "To determine whether the subscription product is bookable for the subscription user or not"
+    // - businessUnits (array): "Business units where the product exists"
+    const originalSubscriptionCount = subscriptions.length;
+    subscriptions = subscriptions.filter((product) => {
+      // Debug: Log details for products with "[invalid]" in name to understand backend behavior
+      const productNameLower = product.name && typeof product.name === 'string' ? product.name.toLowerCase() : '';
+      if (productNameLower.includes('[invalid]') || productNameLower.includes('invalid')) {
+        console.log(`[Product Filter DEBUG] ⚠️ Found product with [invalid] in name:`, {
+          id: product.id,
+          name: product.name,
+          nameLower: productNameLower,
+          allowedToOrder: product.allowedToOrder,
+          hasAllowedToOrderProperty: product.hasOwnProperty('allowedToOrder'),
+          allowedToOrderType: typeof product.allowedToOrder,
+          businessUnits: product.businessUnits,
+          fullProduct: JSON.parse(JSON.stringify(product)) // Deep clone to avoid reference issues
+        });
+      }
+      
+      // Debug: Log details for specific product "Collaboration" to understand backend behavior
+      if (product.name && typeof product.name === 'string' && 
+          (product.name.includes('Collaboration') || product.name.includes('Studiepris'))) {
+        const fullProductCopy = JSON.parse(JSON.stringify(product)); // Deep clone to avoid reference issues
+        console.log(`[Product Filter DEBUG] 🔍 Found Collaboration/Studiepris product:`, {
+          id: product.id,
+          name: product.name,
+          allowedToOrder: product.allowedToOrder,
+          hasAllowedToOrderProperty: product.hasOwnProperty('allowedToOrder'),
+          allowedToOrderType: typeof product.allowedToOrder,
+          priceWithInterval: product.priceWithInterval,
+          hasPrice: !!(product.priceWithInterval?.price?.amount),
+          priceAmount: product.priceWithInterval?.price?.amount,
+          businessUnits: product.businessUnits,
+          businessUnitIds: product.businessUnits?.map(bu => bu.id),
+          selectedBusinessUnit: state.selectedBusinessUnit,
+          applicableCustomerTypes: product.applicableCustomerTypes,
+          applicableCustomerTypesCount: product.applicableCustomerTypes?.length || 0,
+          fullProduct: fullProductCopy
+        });
+        console.log(`[Product Filter DEBUG] 🔍 Full product object:`, fullProductCopy);
+      }
+      
+      // Check 1: allowedToOrder field (per OpenAPI spec line ~15032)
+      // If allowedToOrder field exists and is false, exclude the product
+      // Note: We check hasOwnProperty to distinguish between undefined and false
+      // IMPORTANT: Backend should set allowedToOrder=false for products that shouldn't be displayed,
+      // but if backend doesn't do this correctly, we need to handle it defensively
+      if (product.hasOwnProperty('allowedToOrder')) {
+        if (product.allowedToOrder === false) {
+          console.log(`[Product Filter] Excluding subscription product ${product.id} (${product.name}): allowedToOrder is false`);
+          return false;
+        }
+        // If allowedToOrder is explicitly true, continue to next checks
+      } else {
+        // If allowedToOrder property doesn't exist, we need to check if this is intentional
+        // According to OpenAPI spec, this field should exist, but if backend doesn't send it,
+        // we should log a warning but not exclude the product (backend should handle filtering)
+        // Debug logging will help identify if backend is sending products that shouldn't be displayed
+        console.warn(`[Product Filter] Subscription product ${product.id} (${product.name}) missing 'allowedToOrder' field - backend should filter this or set allowedToOrder=false`);
+      }
+      
+      // Check 1a: productLabels.availableFor (per OpenAPI spec line ~13397)
+      // Product labels can have 'availableFor' field: 'API', 'PUBLIC', or 'PUBLIC_EXCLUDE_FROM_CLASS_FILTER'
+      // If product has labels but none are 'PUBLIC', it might not be meant for public display
+      // However, this is not a definitive check - products without labels might still be public
+      // So we only log a warning, not exclude
+      if (product.productLabels && Array.isArray(product.productLabels) && product.productLabels.length > 0) {
+        const hasPublicLabel = product.productLabels.some(
+          label => label.availableFor === 'PUBLIC' || label.availableFor === 'PUBLIC_EXCLUDE_FROM_CLASS_FILTER'
+        );
+        if (!hasPublicLabel) {
+          console.warn(`[Product Filter] Subscription product ${product.id} (${product.name}) has productLabels but none are PUBLIC - might not be meant for public display`);
+        }
+      }
+      
+      // Check 1b: applicableCustomerTypes (per OpenAPI spec line ~15035)
+      // If product has no applicable customer types, it might not be displayable
+      // However, this could also be valid for products that don't use customer type pricing
+      // So we only log a warning, not exclude
+      if (product.applicableCustomerTypes && Array.isArray(product.applicableCustomerTypes) && product.applicableCustomerTypes.length === 0) {
+        console.warn(`[Product Filter] Subscription product ${product.id} (${product.name}) has empty applicableCustomerTypes array`);
+      }
+      
+      // Check 1c: priceWithInterval (per OpenAPI spec line ~15017)
+      // According to OpenAPI spec, subscription products should have priceWithInterval.price.amount
+      // Products without a valid price cannot be purchased and should not be displayed
+      // Note: Free products should still have price.amount = 0, not missing price
+      // This is a defensive check - backend should filter these, but we exclude them client-side too
+      if (!product.priceWithInterval || !product.priceWithInterval.price || 
+          product.priceWithInterval.price.amount === undefined || 
+          product.priceWithInterval.price.amount === null) {
+        console.log(`[Product Filter] Excluding subscription product ${product.id} (${product.name}): missing priceWithInterval.price.amount (cannot be purchased)`);
+        return false;
+      }
+      
+      // Check 2: businessUnits validation (per OpenAPI spec line ~14986)
+      // Defensive check: ensure product is available for the selected business unit
+      // Note: Backend should already filter by businessUnit query param, but this is a safety check
+      if (product.businessUnits && Array.isArray(product.businessUnits) && product.businessUnits.length > 0) {
+        const isAvailableForBusinessUnit = product.businessUnits.some(
+          (bu) => bu.id === state.selectedBusinessUnit || bu.id === parseInt(state.selectedBusinessUnit, 10)
+        );
+        if (!isAvailableForBusinessUnit) {
+          console.log(`[Product Filter] Excluding subscription product ${product.id} (${product.name}): not available for business unit ${state.selectedBusinessUnit}`);
+          return false;
+        }
+      }
+      
+      return true;
+    });
+    
+    if (subscriptions.length !== originalSubscriptionCount) {
+      console.log(`[Product Filter] Filtered ${originalSubscriptionCount - subscriptions.length} subscription product(s)`);
+    }
+
+    // Filter value card products
+    // According to OpenAPI spec (ValueCardProductOut):
+    // - businessUnits (array): "Business units where the product exists" (line ~15477)
+    // - Note: Value card products do NOT have an 'allowedToOrder' field in the schema
+    const originalValueCardCount = valueCards.length;
+    valueCards = valueCards.filter((product) => {
+      // Check: businessUnits validation (per OpenAPI spec line ~15477)
+      // Defensive check: ensure product is available for the selected business unit
+      // Note: Backend should already filter by businessUnit query param, but this is a safety check
+      if (product.businessUnits && Array.isArray(product.businessUnits) && product.businessUnits.length > 0) {
+        const isAvailableForBusinessUnit = product.businessUnits.some(
+          (bu) => bu.id === state.selectedBusinessUnit || bu.id === parseInt(state.selectedBusinessUnit, 10)
+        );
+        if (!isAvailableForBusinessUnit) {
+          console.log(`[Product Filter] Excluding value card product ${product.id} (${product.name}): not available for business unit ${state.selectedBusinessUnit}`);
+          return false;
+        }
+      }
+      
+      return true;
+    });
+    
+    if (valueCards.length !== originalValueCardCount) {
+      console.log(`[Product Filter] Filtered ${originalValueCardCount - valueCards.length} value card product(s)`);
+    }
 
     // Store in state
     state.subscriptions = subscriptions;
@@ -9291,10 +9462,28 @@ function updateStepIndicator() {
     stepIndicator.classList.remove('hidden');
   }
 
-  // Compute visible step panels to determine current visible index
-  const visiblePanels = DOM.stepPanels.filter((panel) => panel && panel.style.display !== 'none');
-  const currentPanel = DOM.stepPanels[state.currentStep - 1];
-  const visibleCurrentIndex = Math.max(0, visiblePanels.indexOf(currentPanel));
+  // Map state.currentStep to indicator step index
+  // Step 1 → indicator 0 (Home Gym)
+  // Step 2 → indicator 1 (Access)
+  // Step 3 → skipped (Boost is hidden)
+  // Step 4 → indicator 2 (Send)
+  // Step 5 → hide indicator (handled above)
+  let visibleCurrentIndex = -1;
+  if (state.currentStep === 1) {
+    visibleCurrentIndex = 0;
+  } else if (state.currentStep === 2) {
+    visibleCurrentIndex = 1;
+  } else if (state.currentStep === 4) {
+    visibleCurrentIndex = 2;
+  } else {
+    // For step 5 or any other step, hide indicator (already handled above)
+    return;
+  }
+
+  console.log('[Step Indicator] Updating:', {
+    currentStep: state.currentStep,
+    visibleCurrentIndex: visibleCurrentIndex
+  });
 
   // Work only with visible indicator steps (Boost is hidden by applyConditionalSteps)
   const indicatorSteps = Array.from(document.querySelectorAll('.step'))
