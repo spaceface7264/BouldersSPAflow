@@ -149,11 +149,12 @@ class BusinessUnitsAPI {
     // In production on Cloudflare, use Cloudflare Pages Function proxy to avoid CORS
     // Detect if we're in development by checking if we're on localhost
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    // Cloudflare Pages detection - check for Cloudflare domains OR boulders.dk domains (which are deployed on Cloudflare)
-    const isCloudflare = window.location.hostname.includes('workers.dev') || 
-                         window.location.hostname.includes('pages.dev') ||
-                         window.location.hostname.includes('join.boulders.dk') ||
-                         window.location.hostname === 'boulders.dk';
+    // Cloudflare Pages detection - check for Pages domains OR boulders.dk domains (which are deployed on Cloudflare Pages)
+    // Note: workers.dev is Cloudflare Workers (not Pages), so it doesn't have Pages Functions
+    const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
+                               window.location.hostname.includes('join.boulders.dk') ||
+                               window.location.hostname === 'boulders.dk';
+    const isCloudflareWorker = window.location.hostname.includes('workers.dev');
     const isNetlify = window.location.hostname.includes('netlify.app');
     
     if (baseUrl) {
@@ -165,10 +166,15 @@ class BusinessUnitsAPI {
       // Use Netlify Function proxy in production
       this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
-    } else if (isCloudflare) {
+    } else if (isCloudflarePages) {
       // Use Cloudflare Pages Function proxy in production
       this.baseUrl = '/api-proxy';
       this.useProxy = true;
+    } else if (isCloudflareWorker) {
+      // Cloudflare Workers don't have Pages Functions, use direct API
+      // Workers typically don't have CORS issues since they run server-side
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
     } else {
       // Fallback to direct API (may have CORS issues)
       this.baseUrl = 'https://api-join.boulders.dk';
@@ -464,13 +470,16 @@ class ReferenceDataAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('workers.dev') || 
-               window.location.hostname.includes('pages.dev') ||
+    } else if (window.location.hostname.includes('pages.dev') ||
                window.location.hostname.includes('join.boulders.dk') ||
                window.location.hostname === 'boulders.dk') {
       // Production: use Cloudflare Pages Function proxy
       this.baseUrl = '/api-proxy';
       this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev')) {
+      // Cloudflare Workers don't have Pages Functions, use direct API
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
     } else if (window.location.hostname.includes('netlify')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
@@ -672,13 +681,16 @@ class AuthAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('workers.dev') || 
-               window.location.hostname.includes('pages.dev') ||
+    } else if (window.location.hostname.includes('pages.dev') ||
                window.location.hostname.includes('join.boulders.dk') ||
                window.location.hostname === 'boulders.dk') {
       // Production: use Cloudflare Pages Function proxy
       this.baseUrl = '/api-proxy';
       this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev')) {
+      // Cloudflare Workers don't have Pages Functions, use direct API
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
     } else if (window.location.hostname.includes('netlify')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
@@ -1379,13 +1391,16 @@ class OrderAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('workers.dev') || 
-               window.location.hostname.includes('pages.dev') ||
+    } else if (window.location.hostname.includes('pages.dev') ||
                window.location.hostname.includes('join.boulders.dk') ||
                window.location.hostname === 'boulders.dk') {
       // Production: use Cloudflare Pages Function proxy
       this.baseUrl = '/api-proxy';
       this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev')) {
+      // Cloudflare Workers don't have Pages Functions, use direct API
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
     } else if (window.location.hostname.includes('netlify')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
@@ -2204,13 +2219,16 @@ class PaymentAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('workers.dev') || 
-               window.location.hostname.includes('pages.dev') ||
+    } else if (window.location.hostname.includes('pages.dev') ||
                window.location.hostname.includes('join.boulders.dk') ||
                window.location.hostname === 'boulders.dk') {
       // Production: use Cloudflare Pages Function proxy
       this.baseUrl = '/api-proxy';
       this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev')) {
+      // Cloudflare Workers don't have Pages Functions, use direct API
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
     } else if (window.location.hostname.includes('netlify')) {
       // Production: use Netlify Function proxy
       this.baseUrl = '/.netlify/functions/api-proxy';
