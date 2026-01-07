@@ -149,8 +149,12 @@ class BusinessUnitsAPI {
     // In production on Cloudflare, use Cloudflare Pages Function proxy to avoid CORS
     // Detect if we're in development by checking if we're on localhost
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const isNetlify = window.location.hostname.includes('netlify.app') || window.location.hostname.includes('boulders.dk');
-    const isCloudflare = window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev');
+    // Cloudflare Pages detection - check for Cloudflare domains OR boulders.dk domains (which are deployed on Cloudflare)
+    const isCloudflare = window.location.hostname.includes('workers.dev') || 
+                         window.location.hostname.includes('pages.dev') ||
+                         window.location.hostname.includes('join.boulders.dk') ||
+                         window.location.hostname === 'boulders.dk';
+    const isNetlify = window.location.hostname.includes('netlify.app');
     
     if (baseUrl) {
       this.baseUrl = baseUrl;
@@ -197,6 +201,15 @@ class BusinessUnitsAPI {
       });
       
       console.log('API Response status:', response.status, response.statusText);
+      console.log('API Response Content-Type:', response.headers.get('Content-Type'));
+      
+      // Check if response is actually JSON before parsing
+      const contentType = response.headers.get('Content-Type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('API returned non-JSON response:', text.substring(0, 200));
+        throw new Error(`API returned HTML instead of JSON. Status: ${response.status}. This usually means the API endpoint is not working correctly or the proxy is misconfigured.`);
+      }
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -444,13 +457,16 @@ class ReferenceDataAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev')) {
+    } else if (window.location.hostname.includes('workers.dev') || 
+               window.location.hostname.includes('pages.dev') ||
+               window.location.hostname.includes('join.boulders.dk') ||
+               window.location.hostname === 'boulders.dk') {
       // Production: use Cloudflare Pages Function proxy
       this.baseUrl = '/api-proxy';
+      this.useProxy = true;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
@@ -649,13 +665,16 @@ class AuthAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev')) {
+    } else if (window.location.hostname.includes('workers.dev') || 
+               window.location.hostname.includes('pages.dev') ||
+               window.location.hostname.includes('join.boulders.dk') ||
+               window.location.hostname === 'boulders.dk') {
       // Production: use Cloudflare Pages Function proxy
       this.baseUrl = '/api-proxy';
+      this.useProxy = true;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
@@ -1301,13 +1320,16 @@ class OrderAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev')) {
+    } else if (window.location.hostname.includes('workers.dev') || 
+               window.location.hostname.includes('pages.dev') ||
+               window.location.hostname.includes('join.boulders.dk') ||
+               window.location.hostname === 'boulders.dk') {
       // Production: use Cloudflare Pages Function proxy
       this.baseUrl = '/api-proxy';
+      this.useProxy = true;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
@@ -1786,13 +1808,16 @@ class PaymentAPI {
       // Development: use Vite proxy (relative URL)
       this.baseUrl = '';
       this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify') || window.location.hostname.includes('boulders.dk')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('pages.dev')) {
+    } else if (window.location.hostname.includes('workers.dev') || 
+               window.location.hostname.includes('pages.dev') ||
+               window.location.hostname.includes('join.boulders.dk') ||
+               window.location.hostname === 'boulders.dk') {
       // Production: use Cloudflare Pages Function proxy
       this.baseUrl = '/api-proxy';
+      this.useProxy = true;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
       this.useProxy = true;
     } else {
       // Fallback to direct API (may have CORS issues)
@@ -2350,7 +2375,16 @@ async function loadGymsFromAPI() {
     if (gymList && noResults) {
       gymList.innerHTML = '';
       noResults.classList.remove('hidden');
-      noResults.textContent = `Failed to load locations: ${error.message}. Check console for details.`;
+      
+      // Provide more helpful error message based on error type
+      let errorMessage = 'Failed to load locations. ';
+      if (error.message && error.message.includes('HTML instead of JSON')) {
+        errorMessage += 'API proxy may not be configured correctly. Please contact support.';
+      } else {
+        errorMessage += error.message || 'Please check console for details.';
+      }
+      
+      noResults.textContent = errorMessage;
     }
   }
 }
