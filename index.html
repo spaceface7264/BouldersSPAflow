@@ -15,7 +15,14 @@
     <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-    <header class="header">
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+        </div>
+    </div>
+    
+    <header class="header" id="headerContent" style="display: none;">
         <div class="header-container">
             <div class="header-content">
                 <!-- Text Above Logo -->
@@ -73,7 +80,7 @@
         </div>
     </div>
 
-    <main class="main">
+    <main class="main" id="mainContent" style="display: none;">
         
         
         <!-- Step Content -->
@@ -98,6 +105,13 @@
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
                         <input type="text" class="search-input" placeholder="Search gyms..." id="gymSearch">
+                        <button type="button" class="location-icon-btn" id="findNearestGym" title="Find nearest gym">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                        </button>
+                        <span class="location-status" id="locationStatus" style="display: none;"></span>
                     </div>
                     
                     <!-- Gym List -->
@@ -632,6 +646,21 @@
 
                                 <div class="cart-items" data-component="cart-items"></div>
                                 
+                                <!-- Payment Overview -->
+                                <div class="payment-overview" style="display: none;">
+                                    <div class="payment-overview-section">
+                                        <div class="payment-overview-item">
+                                            <span class="payment-label">Betales nu:</span>
+                                            <span class="payment-amount" data-summary-field="pay-now">0,00 kr.</span>
+                                        </div>
+                                        <div class="payment-overview-item">
+                                            <span class="payment-label">Månedlig betaling herefter:</span>
+                                            <span class="payment-amount" data-summary-field="monthly-payment">0,00 kr./md</span>
+                                        </div>
+                                        <div class="payment-overview-billing-period" data-summary-field="payment-billing-period"></div>
+                                    </div>
+                                </div>
+                                
                                 <div class="cart-total">
                                     <span class="total-label">Total:</span>
                                     <span class="total-amount" data-summary-field="cart-total">0,00 kr.</span>
@@ -860,12 +889,81 @@
         </div>
     </main>
     
+    <!-- Terms Modal -->
+    <div class="terms-modal" id="termsModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" id="termsModalTitle">Terms and Conditions</h3>
+                <button class="terms-modal-close" id="termsModalClose" aria-label="Close">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="terms-modal-body">
+                <div class="terms-modal-loading" id="termsModalLoading" style="display: none;">
+                    <div class="terms-modal-spinner"></div>
+                    <p data-i18n-key="modal.loading">Loading...</p>
+                </div>
+                <div class="terms-modal-content-text" id="termsModalContent">
+                    <!-- Content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Global Footer -->
     <footer class="global-footer">
         <div class="footer-content">
             <div class="footer-section">
-                     </div>
+                <h4 data-i18n-key="footer.terms.title">Terms and Conditions</h4>
+                <ul>
+                    <li>
+                        <a href="#" data-action="open-terms" data-terms-type="membership" data-i18n-key="footer.terms.membership">
+                            Terms and Conditions for Membership
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" data-action="open-terms" data-terms-type="punchcard" data-i18n-key="footer.terms.punchcard">
+                            Terms and Conditions for Punch Card
+                        </a>
+                    </li>
+                </ul>
+            </div>
             
+            <div class="footer-section">
+                <h4 data-i18n-key="footer.policies.title">Policies</h4>
+                <ul>
+                    <li>
+                        <a href="#" data-action="open-terms" data-terms-type="privacy" data-i18n-key="footer.policies.privacy">
+                            Privacy Policy
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" data-action="open-terms" data-terms-type="cookie" data-i18n-key="footer.policies.cookie">
+                            Cookie Policy
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="footer-section">
+                <div class="language-switcher">
+                    <button class="language-btn" id="languageSwitcher" data-lang="da">
+                        <span class="language-label" data-i18n-key="footer.language.danish">Dansk</span>
+                        <span class="language-code">DK</span>
+                    </button>
+                    <button class="language-btn" id="languageSwitcherEng" data-lang="en">
+                        <span class="language-label" data-i18n-key="footer.language.english">English</span>
+                        <span class="language-code">ENG</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <p>&copy; 2025 Boulders. <span data-i18n-key="footer.rights">All rights reserved</span>.</p>
+        </div>
     </footer>
 
     <!-- API Configuration -->
