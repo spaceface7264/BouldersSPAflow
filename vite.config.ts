@@ -22,21 +22,25 @@ const copyFunctionsPlugin = () => ({
     const functionsDir = path.resolve(__dirname, 'functions');
     const distFunctionsDir = path.resolve(__dirname, 'dist', 'functions');
     
-    // Copy functions directory
+    // Copy functions directory recursively (including subdirectories)
     if (fs.existsSync(functionsDir)) {
-      // Create dist/functions directory if it doesn't exist
-      if (!fs.existsSync(distFunctionsDir)) {
-        fs.mkdirSync(distFunctionsDir, { recursive: true });
-      }
-      
-      // Copy all files from functions to dist/functions
-      const files = fs.readdirSync(functionsDir);
-      files.forEach((file: string) => {
-        const srcFile = path.join(functionsDir, file);
-        const destFile = path.join(distFunctionsDir, file);
-        fs.copyFileSync(srcFile, destFile);
-        console.log(`[Vite] Copied ${file} to dist/functions/`);
-      });
+      const copyDir = (src: string, dest: string) => {
+        if (!fs.existsSync(dest)) {
+          fs.mkdirSync(dest, { recursive: true });
+        }
+        const entries = fs.readdirSync(src, { withFileTypes: true });
+        entries.forEach((entry: fs.Dirent) => {
+          const srcPath = path.join(src, entry.name);
+          const destPath = path.join(dest, entry.name);
+          if (entry.isDirectory()) {
+            copyDir(srcPath, destPath);
+          } else {
+            fs.copyFileSync(srcPath, destPath);
+            console.log(`[Vite] Copied ${entry.name} to dist/functions/${path.relative(functionsDir, srcPath)}`);
+          }
+        });
+      };
+      copyDir(functionsDir, distFunctionsDir);
     }
     
     // Copy postal-codes-dk.js to dist root
