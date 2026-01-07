@@ -2487,6 +2487,16 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return null;
   }
   
+  // Validate coordinate ranges (lat: -90 to 90, lon: -180 to 180)
+  if (lat1 < -90 || lat1 > 90 || lat2 < -90 || lat2 > 90) {
+    console.error('[Distance Calculation] Invalid latitude (must be -90 to 90):', { lat1, lat2 });
+    return null;
+  }
+  if (lon1 < -180 || lon1 > 180 || lon2 < -180 || lon2 > 180) {
+    console.error('[Distance Calculation] Invalid longitude (must be -180 to 180):', { lon1, lon2 });
+    return null;
+  }
+  
   const R = 6371; // Earth's radius in kilometers
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -2525,17 +2535,30 @@ async function getUserLocation() {
     }
 
     const options = {
-      enableHighAccuracy: true,
-      timeout: 15000, // Increased timeout
-      maximumAge: 60000 // Allow 1 minute old cached position
+      enableHighAccuracy: true, // Request high accuracy GPS if available
+      timeout: 20000, // Increased timeout for better accuracy
+      maximumAge: 0 // Don't use cached position, always get fresh location for accuracy
     };
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        resolve({
+        const location = {
           latitude: position.coords.latitude,
-          longitude: position.coords.longitude
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy // in meters
+        };
+        
+        // Log location accuracy for debugging
+        console.log('[Geolocation] User location obtained:', {
+          coordinates: { lat: location.latitude, lon: location.longitude },
+          accuracy: `${location.accuracy.toFixed(0)} meters`,
+          altitude: position.coords.altitude,
+          altitudeAccuracy: position.coords.altitudeAccuracy,
+          heading: position.coords.heading,
+          speed: position.coords.speed
         });
+        
+        resolve(location);
       },
       (error) => {
         let errorMessage = 'Unable to get your location';
@@ -2567,16 +2590,18 @@ async function getUserLocation() {
 
 // Hardcoded coordinates for known Boulders gyms (faster than geocoding)
 // Format: "Street, PostalCode City" -> {latitude, longitude}
+// Hardcoded coordinates for known Boulders gyms (verified and updated for accuracy)
+// Format: "Street, PostalCode City" -> {latitude, longitude}
 const GYM_COORDINATES = {
   'Skjernvej 4D, 9220 Aalborg': { latitude: 57.0488, longitude: 9.9217 },
-  'Søren Frichs Vej 54, 8230 Aarhus': { latitude: 56.1536, longitude: 10.1631 },
-  'Ankersgade 12, 8000 Aarhus': { latitude: 56.1567, longitude: 10.2036 },
-  'Graham Bells Vej 18A, 8200 Aarhus': { latitude: 56.1969, longitude: 10.2047 },
-  'Søren Nymarks Vej 6A, 8270 Aarhus': { latitude: 56.0903, longitude: 10.1453 },
+  'Søren Frichs Vej 54, 8230 Aarhus': { latitude: 56.15101, longitude: 10.16778 }, // Updated: Boulders Aarhus Aaby
+  'Ankersgade 12, 8000 Aarhus': { latitude: 56.14836, longitude: 10.19124 }, // Updated: Boulders Aarhus City
+  'Graham Bells Vej 18A, 8200 Aarhus': { latitude: 56.20514, longitude: 10.18169 }, // Updated: Boulders Aarhus Nord
+  'Søren Nymarks Vej 6A, 8270 Aarhus': { latitude: 56.1075, longitude: 10.2039 }, // Updated: Boulders Aarhus Syd
   'Amager Landevej 233, 2770 København': { latitude: 55.6500, longitude: 12.5833 },
   'Strandmarksvej 20, 2650 København': { latitude: 55.6500, longitude: 12.4833 },
   'Bådehavnsgade 38, 2450 København': { latitude: 55.6500, longitude: 12.5500 },
-  'Wichmandsgade 11, 5000 Odense': { latitude: 55.3958, longitude: 10.3883 },
+  'Wichmandsgade 11, 5000 Odense': { latitude: 55.40252, longitude: 10.37333 }, // Updated: Verified via Nominatim
   'Vigerslev Allé 47, 2500 København': { latitude: 55.6667, longitude: 12.5167 },
   'Vanløse Torv 1, Kronen Vanløse, 2720 København': { latitude: 55.6833, longitude: 12.4833 },
   'Vesterbrogade 149, 1620 København V': { latitude: 55.6761, longitude: 12.5683 },
@@ -2643,8 +2668,9 @@ async function geocodeAddress(address) {
   
   try {
     // Use OpenStreetMap Nominatim geocoding service (free, no API key)
-    const query = encodeURIComponent(`${address.street}, ${address.postalCode} ${address.city}, Denmark`);
-    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=dk`;
+    // Use more specific query format for better accuracy - postal code first for precision
+    const query = encodeURIComponent(`${address.postalCode} ${address.city}, ${address.street}, Denmark`);
+    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=dk&addressdetails=1&extratags=1&zoom=18`;
     
     const response = await fetch(url, {
       headers: {
@@ -2665,6 +2691,14 @@ async function geocodeAddress(address) {
         longitude: parseFloat(result.lon)
       };
       
+      // Log geocoding result for accuracy verification
+      console.log(`[Geocoding] Geocoded ${addressKey}:`, {
+        coordinates: coords,
+        displayName: result.display_name,
+        importance: result.importance,
+        type: result.type
+      });
+      
       // Cache the result
       geocodeCache.set(addressKey, coords);
       
@@ -2682,8 +2716,20 @@ async function geocodeAddress(address) {
 }
 
 // Calculate distances for all gyms and sort by distance
-async function calculateGymDistances(gyms, userLat, userLon) {
-  console.log('[Distance Calculation] User location:', { latitude: userLat, longitude: userLon });
+async function calculateGymDistances(gyms, userLat, userLon, userAccuracy = null) {
+  console.log('[Distance Calculation] User location:', { 
+    latitude: userLat, 
+    longitude: userLon,
+    accuracy: userAccuracy ? `${userAccuracy.toFixed(0)} meters` : 'unknown'
+  });
+  
+  // Warn if accuracy is poor (IP-based geolocation is typically > 1000m)
+  if (userAccuracy && userAccuracy > 1000) {
+    console.warn('[Distance Calculation] WARNING: Low location accuracy detected. Distance calculations may be inaccurate.', {
+      accuracy: `${userAccuracy.toFixed(0)} meters`,
+      note: 'This suggests IP-based geolocation rather than GPS. Distances may be off by hundreds of kilometers.'
+    });
+  }
   
   // First, try to get coordinates from API response
   const gymsWithCoords = await Promise.all(gyms.map(async (gym) => {
@@ -2744,10 +2790,19 @@ async function calculateGymDistances(gyms, userLat, userLon) {
       gym.gymLon
     );
     
-    console.log(`[Distance Calculation] ${gym.name}: ${distance.toFixed(2)} km`, {
-      gymLat: gym.gymLat,
-      gymLon: gym.gymLon,
-      distance
+    // Log detailed distance calculation for debugging
+    console.log(`[Distance Calculation] ${gym.name}:`, {
+      userLocation: { lat: userLat, lon: userLon },
+      gymLocation: { lat: gym.gymLat, lon: gym.gymLon },
+      distance: `${distance.toFixed(2)} km`,
+      address: gym.address ? `${gym.address.street}, ${gym.address.postalCode} ${gym.address.city}` : 'N/A',
+      // Verify coordinates are valid (lat should be -90 to 90, lon should be -180 to 180)
+      coordinateValidation: {
+        userLatValid: userLat >= -90 && userLat <= 90,
+        userLonValid: userLon >= -180 && userLon <= 180,
+        gymLatValid: gym.gymLat >= -90 && gym.gymLat <= 90,
+        gymLonValid: gym.gymLon >= -180 && gym.gymLon <= 180
+      }
     });
     
     return { ...gym, distance };
@@ -2837,7 +2892,12 @@ async function loadGymsFromAPI() {
         locationStatus.style.display = 'none';
       }
       
-      gymsToDisplay = await calculateGymDistances(gyms, userLocation.latitude, userLocation.longitude);
+      gymsToDisplay = await calculateGymDistances(
+        gyms, 
+        userLocation.latitude, 
+        userLocation.longitude,
+        userLocation.accuracy // Pass accuracy for validation
+      );
       gymsWithDistances = gymsToDisplay;
       
       // Ensure location button is highlighted if location is active
