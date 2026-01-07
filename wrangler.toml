@@ -1,4 +1,4 @@
-name = "boulders-membership-flow"
+name = "boulders-spa-flow"
 compatibility_date = "2026-01-02"
 
 # RECOMMENDED: Use Cloudflare Pages (not Workers)
