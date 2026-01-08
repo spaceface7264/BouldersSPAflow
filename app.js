@@ -3407,6 +3407,11 @@ async function loadGymsFromAPI() {
     // Store gyms for distance calculation
     gymsWithDistances = gyms;
     
+    // Update selected gym display if we're on step 2
+    if (state.currentStep === 2) {
+      updateSelectedGymDisplay();
+    }
+    
     // Clear existing gym list
     const gymList = document.querySelector('.gym-list');
     if (gymList) {
@@ -3458,6 +3463,11 @@ async function loadGymsFromAPI() {
         userLocation.accuracy // Pass accuracy for validation
       );
       gymsWithDistances = gymsToDisplay;
+      
+      // Update selected gym display if we're on step 2
+      if (state.currentStep === 2) {
+        updateSelectedGymDisplay();
+      }
       
       // Ensure location button is highlighted if location is active
       const locationBtn = document.getElementById('findNearestGym');
@@ -3765,6 +3775,7 @@ const state = {
   currentStep: 1,
   selectedGymId: null,
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
+  selectedGymName: null, // Store selected gym name for display
   membershipPlanId: null,
   valueCardQuantities: new Map(),
   addonIds: new Set(),
@@ -6554,6 +6565,39 @@ function handleGymSelection(item) {
   state.selectedGymId = numericId; // Store numeric ID for API requests
   state.selectedBusinessUnit = numericId; // Also store as businessUnit for clarity
   
+  // Store gym name for display - try multiple selectors
+  let gymNameText = null;
+  const gymNameElement = item.querySelector('.gym-name');
+  if (gymNameElement) {
+    gymNameText = gymNameElement.textContent.trim();
+  }
+  
+  // Fallback: try to get from gymsWithDistances if DOM doesn't have it
+  if (!gymNameText && gymsWithDistances && gymsWithDistances.length > 0) {
+    const selectedGym = gymsWithDistances.find(gym => 
+      String(gym.id) === String(numericId)
+    );
+    if (selectedGym && selectedGym.name) {
+      gymNameText = selectedGym.name;
+    }
+  }
+  
+  if (gymNameText && gymNameText.trim() !== '') {
+    state.selectedGymName = gymNameText.trim();
+    console.log('[Gym Selection] ✅ Stored gym name:', state.selectedGymName, 'for ID:', numericId);
+    // Immediately update display if we're already on step 2
+    if (state.currentStep === 2) {
+      setTimeout(() => updateSelectedGymDisplay(), 50);
+    }
+  } else {
+    console.warn('[Gym Selection] ❌ Could not find gym name. Item:', item);
+    console.warn('[Gym Selection] gymNameElement found:', !!gymNameElement);
+    console.warn('[Gym Selection] gymsWithDistances length:', gymsWithDistances?.length || 0);
+    if (gymsWithDistances && gymsWithDistances.length > 0) {
+      console.warn('[Gym Selection] First 3 gyms:', gymsWithDistances.slice(0, 3).map(g => ({ id: String(g.id), name: g.name })));
+    }
+  }
+  
   // Step 4: Load reference data after business unit selection
   // Cache responses in client state and refresh when business unit changes
   if (numericId) {
@@ -6567,6 +6611,11 @@ function handleGymSelection(item) {
   
   // Update heads-up display
   updateGymHeadsUp(item);
+  
+  // Update selected gym display if we're on step 2
+  if (state.currentStep === 2) {
+    updateSelectedGymDisplay();
+  }
   
   // Clear any pending gym navigation timeout to prevent double-clicks
   if (pendingNavigationTimeouts.gym) {
@@ -7494,9 +7543,9 @@ function handleGlobalClick(event) {
       handleSaveAccount();
       break;
     }
-    case 'save-account': {
+    case 'edit-gym': {
       event.preventDefault();
-      handleSaveAccount();
+      handleBackToGym();
       break;
     }
     case 'toggle-addons-step': {
@@ -11884,6 +11933,10 @@ function nextStep(fromStep) {
       if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
         loadProductsFromAPI();
       }
+      // Update selected gym display
+      setTimeout(() => {
+        updateSelectedGymDisplay();
+      }, 100);
     }
     
     // Scroll to top on mobile only
@@ -11951,6 +12004,8 @@ function nextStep(fromStep) {
     if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
       loadProductsFromAPI();
     }
+    // Update selected gym display when step 2 is shown
+    updateSelectedGymDisplay();
   }
 
   // Update cart when step 4 (Send/Info) is shown
@@ -12121,6 +12176,14 @@ function showStep(stepNumber) {
     }
   });
   
+  // Update selected gym display when showing step 2
+  if (stepNumber === 2) {
+    // Use setTimeout to ensure DOM is ready
+    setTimeout(() => {
+      updateSelectedGymDisplay();
+    }, 100);
+  }
+  
   // If showing step 4 and user is logged in, ensure login tab is selected
   if (stepNumber === 4 && isUserAuthenticated()) {
     switchAuthMode('login');
@@ -12231,6 +12294,109 @@ function updateStepIndicator() {
   indicatorConnectors.forEach((connector, index) => {
     connector.classList.toggle('completed', index < visibleCurrentIndex);
   });
+  
+  // Update selected gym display (show only on step 2)
+  updateSelectedGymDisplay();
+}
+
+function updateSelectedGymDisplay() {
+  const selectedGymDisplay = document.getElementById('selectedGymDisplay');
+  const selectedGymNameDisplay = document.getElementById('selectedGymNameDisplay');
+  
+  if (!selectedGymDisplay || !selectedGymNameDisplay) {
+    console.warn('[Selected Gym Display] Elements not found', {
+      display: !!selectedGymDisplay,
+      nameDisplay: !!selectedGymNameDisplay
+    });
+    return;
+  }
+  
+  // Always hide first, then show only if we have a valid name
+  selectedGymDisplay.style.display = 'none';
+  selectedGymNameDisplay.textContent = '-'; // Reset to default
+  
+  // Show only on step 2 if a gym is selected
+  if (state.currentStep === 2 && state.selectedBusinessUnit) {
+    let gymName = null;
+    
+    console.log('[Selected Gym Display] Looking for gym:', {
+      currentStep: state.currentStep,
+      selectedBusinessUnit: state.selectedBusinessUnit,
+      storedGymName: state.selectedGymName,
+      gymsWithDistancesLength: gymsWithDistances?.length || 0
+    });
+    
+    // Priority 1: Use stored gym name from state (most reliable)
+    if (state.selectedGymName && state.selectedGymName.trim() !== '') {
+      gymName = state.selectedGymName.trim();
+      console.log('[Selected Gym Display] Using stored name:', gymName);
+    }
+    // Priority 2: Try to get from DOM element (if step 1 is still visible)
+    else {
+      const gymDataId = `gym-${state.selectedBusinessUnit}`;
+      const selectedGymItem = document.querySelector(`[data-gym-id="${gymDataId}"]`);
+      console.log('[Selected Gym Display] Looking for DOM element:', gymDataId, 'Found:', !!selectedGymItem);
+      if (selectedGymItem) {
+        const gymNameElement = selectedGymItem.querySelector('.gym-name');
+        if (gymNameElement) {
+          gymName = gymNameElement.textContent.trim();
+          if (gymName) {
+            // Store it for future use
+            state.selectedGymName = gymName;
+            console.log('[Selected Gym Display] Found in DOM:', gymName);
+          }
+        }
+      }
+    }
+    
+    // Priority 3: Fallback to gymsWithDistances array
+    if (!gymName && gymsWithDistances && gymsWithDistances.length > 0) {
+      console.log('[Selected Gym Display] Searching in gymsWithDistances array...');
+      const selectedGym = gymsWithDistances.find(gym => 
+        String(gym.id) === String(state.selectedBusinessUnit)
+      );
+      console.log('[Selected Gym Display] Found gym in array:', selectedGym);
+      if (selectedGym && selectedGym.name && selectedGym.name.trim() !== '') {
+        gymName = selectedGym.name.trim();
+        // Store it for future use
+        state.selectedGymName = gymName;
+        console.log('[Selected Gym Display] Found in array:', gymName);
+      }
+    }
+    
+    // Only show if we have a valid gym name
+    if (gymName && gymName.trim() !== '' && gymName !== '-') {
+      selectedGymNameDisplay.textContent = gymName;
+      selectedGymDisplay.style.display = 'flex';
+      
+      // Adjust main content margin to account for selected gym display height
+      // Use setTimeout to ensure height is calculated after display is shown
+      setTimeout(() => {
+        const mainContent = document.getElementById('mainContent');
+        if (mainContent && selectedGymDisplay.offsetHeight > 0) {
+          const displayHeight = selectedGymDisplay.offsetHeight;
+          mainContent.style.marginTop = `-${displayHeight}px`;
+        }
+      }, 10);
+      
+      console.log('[Selected Gym Display] ✅ Display updated with:', gymName);
+    } else {
+      // Hide if we can't find the gym name
+      selectedGymDisplay.style.display = 'none';
+      
+      // Reset main content margin when display is hidden
+      const mainContent = document.getElementById('mainContent');
+      if (mainContent) {
+        mainContent.style.marginTop = '';
+      }
+      
+      console.warn('[Selected Gym Display] ❌ Could not find gym name for ID:', state.selectedBusinessUnit, {
+        storedName: state.selectedGymName,
+        gymsArrayLength: gymsWithDistances?.length || 0,
+        gymsArray: gymsWithDistances?.slice(0, 3).map(g => ({ id: String(g.id), name: g.name })) || []
+      });
+    }
+  }
 }
 
 function updateNavigationButtons() {
