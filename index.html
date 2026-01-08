@@ -677,13 +677,13 @@
                                     <label class="consent-checkbox">
                                         <input type="checkbox" id="termsConsent" data-api-field="consent.terms" required>
                                         <span class="checkmark"></span>
-                                        <span class="consent-text">I accept the <a href="#" target="_blank">Terms and Conditions</a></span>
+                                        <span class="consent-text">I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a></span>
                                     </label>
                                     
                                     <label class="consent-checkbox">
                                         <input type="checkbox" id="marketingConsent" data-api-field="consent.marketing" checked>
                                         <span class="checkmark"></span>
-                                        <span class="consent-text">I want to receive marketing emails. Read our <a href="#" target="_blank">Data policy</a>.</span>
+                                        <span class="consent-text">I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.</span>
                                     </label>
                                 </div>
                                 
@@ -837,7 +837,7 @@
                                     </svg>
                                     Refer a Friend
                                 </button>
-                                <a href="#" class="terms-link">Read all terms here</a>
+                                <a href="#" class="terms-link" data-action="open-terms" data-terms-type="terms">Read all terms here</a>
                             </div>
                             
                             <!-- Next Steps -->
@@ -882,12 +882,33 @@
     </main>
     
     <!-- Terms Modal -->
+    <!-- Terms and Conditions Modal -->
     <div class="terms-modal" id="termsModal" style="display: none;">
         <div class="terms-modal-content">
             <div class="terms-modal-header">
                 <h3 class="terms-modal-title" id="termsModalTitle">Terms and Conditions</h3>
-                <button class="terms-modal-close" id="termsModalClose" aria-label="Close">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <div class="terms-modal-header-actions">
+                    <div class="terms-modal-language-switcher">
+                        <button class="language-btn active" data-lang="da" id="termsModalLangDa">DA</button>
+                        <button class="language-btn" data-lang="en" id="termsModalLangEn">EN</button>
+                    </div>
+                    <button class="terms-modal-close" id="termsModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Tabs for Terms Modal (only shown when termsType is 'terms') -->
+            <div class="terms-modal-tabs" id="termsModalTabs" style="display: none;">
+                <button class="terms-tab active" data-tab="membership">Membership / 15 Day</button>
+                <button class="terms-tab" data-tab="punchcard">Punch Card</button>
+            </div>
+            <!-- Search Input -->
+            <div class="terms-modal-search" id="termsModalSearch" style="display: none;">
+                <input type="text" id="termsSearchInput" placeholder="Search terms..." class="terms-search-input" data-placeholder-da="Søg i vilkår..." data-placeholder-en="Search terms...">
+                <button class="terms-search-clear" id="termsSearchClear" style="display: none;" aria-label="Clear search">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 6L6 18M6 6l12 12"/>
                     </svg>
                 </button>
@@ -904,6 +925,35 @@
         </div>
     </div>
 
+    <!-- Data Policy Modal -->
+    <div class="terms-modal" id="dataPolicyModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title">Data Policy</h3>
+                <div class="terms-modal-header-actions">
+                    <div class="terms-modal-language-switcher">
+                        <button class="language-btn active" data-lang="da" id="dataPolicyModalLangDa">DA</button>
+                        <button class="language-btn" data-lang="en" id="dataPolicyModalLangEn">EN</button>
+                    </div>
+                    <button class="terms-modal-close" id="dataPolicyModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="terms-modal-loading" id="dataPolicyModalLoading" style="display: none;">
+                    <div class="terms-modal-spinner"></div>
+                    <p data-i18n-key="modal.loading">Loading...</p>
+                </div>
+                <div class="terms-modal-content-text" id="dataPolicyModalContent">
+                    <!-- Content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Global Footer -->
     <footer class="global-footer">
         <div class="footer-content">
@@ -911,13 +961,8 @@
                 <h4 data-i18n-key="footer.terms.title">Terms and Conditions</h4>
                 <ul>
                     <li>
-                        <a href="#" data-action="open-terms" data-terms-type="membership" data-i18n-key="footer.terms.membership">
-                            Terms and Conditions for Membership
-                        </a>
-                    </li>
-                    <li>
-                        <a href="#" data-action="open-terms" data-terms-type="punchcard" data-i18n-key="footer.terms.punchcard">
-                            Terms and Conditions for Punch Card
+                        <a href="#" data-action="open-terms" data-terms-type="terms" data-i18n-key="footer.terms.all">
+                            Terms and Conditions
                         </a>
                     </li>
                 </ul>

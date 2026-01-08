@@ -802,6 +802,7 @@ body {
 .step-panel-content {
     max-width: 600px;
     margin: 0 auto;
+    margin-bottom: 24px;
     text-align: center;
 }
 
@@ -1535,14 +1536,16 @@ body {
     padding: 16px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center; /* Center content instead of space-between */
     gap: 12px;
     min-height: 64px;
+    position: relative; /* Allow absolute positioning for icon */
 }
 
 .category-info {
     flex: 1;
     min-width: 0;
+    text-align: center; /* Ensure content is centered */
 }
 
 .category-title {
@@ -1566,6 +1569,8 @@ body {
     color: var(--color-text-subtle);
     transition: all 0.3s ease;
     flex-shrink: 0;
+    position: absolute; /* Position icon absolutely so it doesn't affect centering */
+    right: 16px; /* Position from right edge */
 }
 
 .category-item.expanded .category-icon {
@@ -1576,15 +1581,27 @@ body {
 .category-content {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s,
+                transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
     padding-bottom: 0;
 }
 
 .category-item.expanded .category-content {
-    max-height: calc(100vh - 400px); /* Dynamic max-height based on viewport */
+    max-height: calc(100vh - 200px); /* Use max-height instead of min-height for smooth animation */
+    opacity: 1;
+    transform: translateY(0);
     overflow: visible; /* Don't scroll category-content itself */
     display: flex;
     flex-direction: column;
+    padding-bottom: 0; /* Remove bottom padding to prevent purple area */
+    outline: none; /* Remove default focus outline */
+}
+
+.category-item.expanded .category-content:focus {
+    outline: none; /* Remove purple outline on focus */
 }
 
 .category-description {
@@ -1592,6 +1609,14 @@ body {
     border-bottom: 1px solid var(--color-item-border);
     margin-bottom: 0;
     flex-shrink: 0; /* Keep description fixed, don't shrink */
+    opacity: 0;
+    transform: translateY(-5px);
+    transition: opacity 0.3s ease-out 0.15s, transform 0.3s ease-out 0.15s;
+}
+
+.category-item.expanded .category-description {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .category-description p {
@@ -1599,7 +1624,7 @@ body {
     line-height: 1.5;
     color: #cbd5e1;
     margin: 0;
-    text-align: left;
+    text-align: center; /* Center the description text */
 }
 
 /* Global scrollbar styling - hide scrollbars when not used */
@@ -1632,11 +1657,19 @@ body {
     overflow-y: auto; /* Make plans-list scrollable */
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-    max-height: calc(100vh - 500px); /* Dynamic max-height, accounting for description */
+    max-height: calc(100vh - 250px); /* Increased max-height to match category-content min-height */
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.4s ease-out 0.2s, transform 0.4s ease-out 0.2s;
+}
+
+.category-item.expanded .plans-list {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .plan-card {
-    background: var(--color-buttons-secondary);
+    background: #13191f;
     border-radius: 0;
     border-top: 1px solid var(--color-item-border);
     border-bottom: 1px solid transparent;
@@ -1648,18 +1681,79 @@ body {
     padding-top: 12px;
     padding-bottom: 12px;
     gap: 12px;
-    transform: scale(1);
     height: auto; /* Allow cards to expand to fit content */
     min-height: auto; /* Remove fixed min-height */
+    opacity: 0;
+    transform: translateY(15px) scale(0.95);
+}
+
+/* Reset cards when category is not expanded */
+.category-item:not(.expanded) .plan-card {
+    opacity: 0;
+    transform: translateY(15px) scale(0.95);
+    animation: none;
+}
+
+/* Only animate cards when category is expanded */
+.category-item.expanded .plan-card {
+    animation: fadeInCard 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Staggered animation delays for each card */
+.category-item.expanded .plan-card:nth-child(1) {
+    animation-delay: 0.25s;
+}
+
+.category-item.expanded .plan-card:nth-child(2) {
+    animation-delay: 0.3s;
+}
+
+.category-item.expanded .plan-card:nth-child(3) {
+    animation-delay: 0.35s;
+}
+
+.category-item.expanded .plan-card:nth-child(4) {
+    animation-delay: 0.4s;
+}
+
+.category-item.expanded .plan-card:nth-child(5) {
+    animation-delay: 0.45s;
+}
+
+.category-item.expanded .plan-card:nth-child(6) {
+    animation-delay: 0.5s;
+}
+
+.category-item.expanded .plan-card:nth-child(7) {
+    animation-delay: 0.55s;
+}
+
+.category-item.expanded .plan-card:nth-child(8) {
+    animation-delay: 0.6s;
+}
+
+.category-item.expanded .plan-card:nth-child(n+9) {
+    animation-delay: 0.65s;
+}
+
+@keyframes fadeInCard {
+    from {
+        opacity: 0;
+        transform: translateY(15px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .plan-card:last-child {
-    padding-bottom: 20px; /* Extra padding for last item to prevent cut-off */
+    padding-bottom: 0; /* Remove padding to prevent purple area and allow scrolling to bottom */
 }
 
 .plan-card:hover:not(.disabled):not(.selected) {
     transform: scale(1.02);
-    background: rgba(240, 0, 240, 0.05);
+    background: #151a24;
     border-top-color: var(--color-item-border); /* Keep original border color */
     border-bottom-color: transparent; /* Keep transparent bottom border */
 }
@@ -3447,6 +3541,156 @@ body {
     border-bottom: 1px solid #374151;
 }
 
+.terms-modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.terms-modal-language-switcher {
+    display: flex;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.language-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    min-width: 36px;
+}
+
+.language-btn:hover {
+    color: var(--color-text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.language-btn.active {
+    background: #F401F5;
+    color: #FFFFFF;
+}
+
+.language-btn.active:hover {
+    background: #FF33FF;
+    color: #FFFFFF;
+}
+
+.terms-modal-tabs {
+    display: flex;
+    border-bottom: 1px solid #374151;
+    padding: 0 32px;
+    gap: 0;
+}
+
+.terms-modal-search {
+    padding: 8px 32px;
+    border-bottom: 1px solid #374151;
+    background: transparent;
+    position: relative;
+}
+
+.terms-search-input {
+    width: 100%;
+    padding: 6px 32px 6px 12px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.terms-search-input:focus {
+    outline: none;
+    border-bottom-color: #F401F5;
+    background: transparent;
+}
+
+.terms-search-input::placeholder {
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
+.terms-search-clear {
+    position: absolute;
+    right: 36px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+    width: 16px;
+    height: 16px;
+}
+
+.terms-search-clear:hover {
+    color: var(--color-text-secondary);
+    background: transparent;
+}
+
+.terms-search-clear svg {
+    width: 14px;
+    height: 14px;
+}
+
+.terms-modal-content-text .search-highlight {
+    background: rgba(244, 1, 245, 0.3);
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-weight: 600;
+}
+
+.terms-modal-content-text .search-no-results {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-base);
+}
+
+.terms-tab {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    padding: 16px 24px;
+    cursor: pointer;
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.terms-tab:hover {
+    color: var(--color-text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.terms-tab.active {
+    color: #F401F5;
+    border-bottom-color: #F401F5;
+    background: transparent;
+}
+
+.terms-tab.active:hover {
+    color: #F401F5;
+}
+
 .terms-modal-title {
     color: #FFFFFF; /* Pure white for maximum contrast on dark background */
     font-size: var(--font-size-lg);
@@ -3494,7 +3738,7 @@ body {
 .terms-modal-content-text h3,
 .terms-modal-content-text h4 {
     color: #FFFFFF; /* Pure white for headings for maximum contrast */
-    margin-top: 28px;
+    margin-top: 6px;
     margin-bottom: 16px;
     font-weight: 700;
     line-height: 1.4;

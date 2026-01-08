@@ -4444,6 +4444,27 @@ function cacheDom() {
   DOM.termsModalContent = document.getElementById('termsModalContent');
   DOM.termsModalLoading = document.getElementById('termsModalLoading');
   DOM.termsModalClose = document.getElementById('termsModalClose');
+  DOM.termsModalTabs = document.getElementById('termsModalTabs');
+  DOM.termsModalLangDa = document.getElementById('termsModalLangDa');
+  DOM.termsModalLangEn = document.getElementById('termsModalLangEn');
+  DOM.termsModalSearch = document.getElementById('termsModalSearch');
+  DOM.termsSearchInput = document.getElementById('termsSearchInput');
+  DOM.termsSearchClear = document.getElementById('termsSearchClear');
+  
+  // Store original content for search
+  state.termsOriginalContent = null;
+  
+  // Data Policy modal
+  DOM.dataPolicyModal = document.getElementById('dataPolicyModal');
+  DOM.dataPolicyModalContent = document.getElementById('dataPolicyModalContent');
+  DOM.dataPolicyModalLoading = document.getElementById('dataPolicyModalLoading');
+  DOM.dataPolicyModalClose = document.getElementById('dataPolicyModalClose');
+  DOM.dataPolicyModalLangDa = document.getElementById('dataPolicyModalLangDa');
+  DOM.dataPolicyModalLangEn = document.getElementById('dataPolicyModalLangEn');
+  
+  // Store current modal state
+  state.currentModalType = null;
+  state.currentModalTab = null;
   // Postal code and city fields for auto-fill
   DOM.postalCode = document.getElementById('postalCode');
   DOM.city = document.getElementById('city');
@@ -4583,13 +4604,70 @@ function setupEventListeners() {
     if (e.target.closest('[data-action="open-terms"]')) {
       e.preventDefault();
       const termsType = e.target.closest('[data-action="open-terms"]').dataset.termsType;
-      openTermsModal(termsType);
+      if (termsType === 'privacy') {
+        openDataPolicyModal();
+      } else if (termsType === 'terms') {
+        openTermsModal('terms');
+      } else if (termsType === 'membership' || termsType === 'punchcard') {
+        // Open terms modal with tabs and select the appropriate tab
+        openTermsModal('terms');
+        // Small delay to ensure modal is open before switching tab
+        setTimeout(() => {
+          switchTermsTab(termsType);
+        }, 100);
+      } else {
+        openTermsModal(termsType);
+      }
+    }
+    
+    // Tab switching in terms modal
+    if (e.target.closest('.terms-tab')) {
+      const tab = e.target.closest('.terms-tab');
+      const tabType = tab.dataset.tab;
+      switchTermsTab(tabType);
+    }
+    
+    // Language switching in terms modal
+    if (e.target.closest('#termsModalLangDa') || e.target.closest('#termsModalLangEn')) {
+      const langBtn = e.target.closest('.language-btn');
+      const lang = langBtn.dataset.lang;
+      switchModalLanguage('terms', lang);
+    }
+    
+    // Language switching in data policy modal
+    if (e.target.closest('#dataPolicyModalLangDa') || e.target.closest('#dataPolicyModalLangEn')) {
+      const langBtn = e.target.closest('.language-btn');
+      const lang = langBtn.dataset.lang;
+      switchModalLanguage('privacy', lang);
+    }
+    
+    // Search clear button
+    if (e.target.closest('#termsSearchClear')) {
+      clearTermsSearch();
     }
     
     if (e.target === DOM.termsModalClose || e.target.closest('#termsModalClose')) {
       closeTermsModal();
     }
+    
+    if (e.target === DOM.dataPolicyModalClose || e.target.closest('#dataPolicyModalClose')) {
+      closeDataPolicyModal();
+    }
   });
+  
+  // Search input live update
+  if (DOM.termsSearchInput) {
+    DOM.termsSearchInput.addEventListener('input', (e) => {
+      performTermsSearch(e.target.value);
+    });
+    
+    // Handle Enter key to prevent form submission
+    DOM.termsSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+      }
+    });
+  }
   
   // Close terms modal when clicking outside
   if (DOM.termsModal) {
@@ -4600,10 +4678,24 @@ function setupEventListeners() {
     });
   }
   
-  // Close terms modal on Escape key
+  // Close data policy modal when clicking outside
+  if (DOM.dataPolicyModal) {
+    DOM.dataPolicyModal.addEventListener('click', (e) => {
+      if (e.target === DOM.dataPolicyModal) {
+        closeDataPolicyModal();
+      }
+    });
+  }
+  
+  // Close modals on Escape key
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && DOM.termsModal && DOM.termsModal.style.display !== 'none') {
-      closeTermsModal();
+    if (e.key === 'Escape') {
+      if (DOM.termsModal && DOM.termsModal.style.display !== 'none') {
+        closeTermsModal();
+      }
+      if (DOM.dataPolicyModal && DOM.dataPolicyModal.style.display !== 'none') {
+        closeDataPolicyModal();
+      }
     }
   });
 }
@@ -4770,86 +4862,359 @@ const termsContent = {
 <p><strong>Fra §8:</strong> "En opsigelse skal ske online på din medlemsprofil eller pr. e-mail til medlem@boulders.dk." … "Opsigelsesperioden for et medlemskab er løbende måned + næste hele afsluttede måned. Et medlemskab kan derfor kun ophøre med effekt sidste dag i en måned."</p>
 <p><strong>Fra §10:</strong> "Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld. Kunden er derfor indforstået med at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders. Kunden erklærer sig således indforstået med, at eventuelle skader på kunden selv eller tredjemand ikke vil blive erstattet af Boulders."</p>
 
+<h3>Indholdsfortegnelse</h3>
+<ul>
+<li>§1. Generelt</li>
+<li>§2. Ændring af medlemsbetingelser og priser</li>
+<li>§3. Indmeldelse</li>
+<li>§4. Kampagne/tilbud/prisreduceret medlemskab</li>
+<li>§5. Medlemskaber og Medlemskort</li>
+<li>§6. Betaling</li>
+<li>§7. Bero</li>
+<li>§8. Opsigelse af medlemskab</li>
+<li>§9. Fortrydelsesret</li>
+<li>§10. Helbredstilstand og personskade</li>
+<li>§11. Force Majeure</li>
+<li>§12. Persondataforordningen (GDPR)</li>
+<li>§13. Lovvalg og værneting</li>
+<li>§14. 15 dages klatring</li>
+</ul>
+
 <h3>§1 Generelt</h3>
-<p>Følgende regelsæt er gældende for dit medlemskab i Boulders. Gældende regelsæt vil altid kunne findes på Boulders.dk. Vi gør opmærksom på at løbende ændringer af priser, betingelser, åbningstider og regelsæt kan forekomme.</p>
+<p>Følgende regelsæt er gældende for dit medlemskab i Boulders. Gældende regelsæt vil altid kunne findes på Boulders.dk. Vi gør opmærksom på at løbende ændringer af priser, betingelser, åbningstider og regelsæt kan forekomme. Du kan læse mere om ændringer under §2.</p>
 
 <p>Dit medlemskab i Boulders er personligt og må ikke benyttes af andre. Ved misbrug af dit medlemskab eller medlemskort, opsiges dit medlemskab øjeblikkeligt uden refusion for den resterende periode af dit medlemskab.</p>
 
-<p>For at kunne identificere dig som medlem opbevares et billede af dig sammen med dine øvrige personoplysninger. Hvis der sker ændringer i de oplysninger, du har givet ved medlemskabets oprettelse, skal du straks meddele dette til Boulders. Du er som medlem selv ansvarlig for, at Boulders til enhver tid har dine korrekte personoplysninger herunder særligt e-mailadresse.</p>
+<p>For at kunne identificere dig som medlem opbevares et billede af dig sammen med dine øvrige personoplysninger. Læs mere om GDPR (Persondataforordningen) i §12. Hvis der sker ændringer i de oplysninger, du har givet ved medlemskabets oprettelse, skal du straks meddele dette til Boulders. Du er som medlem selv ansvarlig for, at Boulders til enhver tid har dine korrekte personoplysninger herunder særligt e-mailadresse.</p>
+
+<p>Ved oprettelsen af et medlemskab accepterer du, ud over dette regelsæt, at modtage meddelelser om væsentlige prisændringer og ændringer i dette regelsæt pr. e-mail. Du accepterer også at modtage andre relevante informationer pr. e-mail.</p>
+
+<p>Henvendelser om medlemskab, herunder spørgsmål til medlemskaber og betingelser skal rettes til medlem@boulders.dk. Kun skriftlige svar herfra kan betragtes som værende fuldgyldige.</p>
+
+<h3>§2 Ændring af medlemsbetingelser og priser</h3>
+<p>Boulders forbeholder sig retten til løbende at ændre regelsættet, gebyrer, betingelser, åbningstider og priser, herunder prisen for dit medlemskab. De til enhver tid gældende priser og regelsæt vil altid kunne findes på Boulders.dk.</p>
+<p>Ændringer kan forekomme i følgende situationer: En rabataftale, som er tilknyttet dit medlemskab, bortfalder. Boulders foretager investeringer til forbedring af din brugeroplevelse, fx. ansættelse af mere personale eller renovation og modernisering af faciliteter samt udvidelse med flere klatrecentre.</p>
+<p>Priserne reguleres som følge af markedsforholdene og samfundsudviklingen, herunder forøgede omkostninger og inflation, indførelsen af nye lovgivningsmæssige krav og lignende situationer. Niveauet af prisstigningen vil blive fastsat forholdsmæssigt ud fra Boulders forøgede omkostninger.</p>
+<p>Væsentlige ændringer af priser og regelsæt vil blive varslet pr. e-mail minimum 60 dage inden disse træder i kraft. Såfremt du ikke ønsker at fortsætte dit medlemskab, skal du opsige dette jævnfør §8. Vær opmærksom på opsigelsesfristen!</p>
 
 <h3>§3 Indmeldelse</h3>
 <p>Dit medlemskab i Boulders er et løbende abonnement med automatisk fornyelse, der starter på købsdagen og fortsætter indtil det opsiges efter §8.</p>
+<p>Se også §4, hvis du har tegnet medlemskab på kampagne/tilbud/prisreduceret.</p>
+
+<h3>§3A Medlemskab når du er under 18 år eller umyndiggjort</h3>
+<p>For at tegne eget medlemskab i Boulders skal du være fyldt 18 år.</p>
+<p>Hvis du er under 18 år eller umyndig, skal du, for at tegne et medlemskab, enten gøre det online eller møde personligt op i et af Boulders' klatrecentre med din værge eller en af dine forældre. Det skal være en værge/forældre, som betaler medlemskabet. Ved afhentning af medlemskort skal den pågældende værge/forældre underskrive dette regelsæt på vegne af den umyndige.</p>
+<p>Du er selv ansvarlig for at oplyse Boulders om, at du er umyndig/U18 og dermed ikke kan indgå aftalen.</p>
+<p>Hvis du er værge eller forælder, der indmelder en person under 18 år, indestår og hæfter du for den umyndiges overholdelse af betaling, regelsættet og husets regler. Du kan kun tegne medlemskab i Boulders, hvis din værge/forælder står som betaler af dit medlemskab.</p>
+
+<h3>§4 Kampagne/tilbud/prisreduceret medlemskab</h3>
+<p>Medlemskaber købt som kampagne/tilbud/prisreduceret er underlagt en 3 måneders bindingsperiode, fra indgåelse af medlemskabet og tre hele afsluttede måneder fremad.</p>
+<p>Medlemskaber købt på kampagne/tilbud/prisreduceret overgår efter endt rabatperiode automatisk til løbende abonnement på normale priser og betingelser, som beskrevet her i regelsættet.</p>
+<p>Det er ikke muligt at berosætte medlemskaber i en kampagne/prisreduceret/tilbudsperiode.</p>
+<p>Efter udmeldelse, efter §8, er det ikke muligt at genindmelde sig på et kampagne/tilbud/prisreduceret-medlemskab indtil 6 hele måneder efter endt medlemskab. Genindmeldelse skal i den 6 måneders periode være på normale betingelser til gældende normalpriser.</p>
+
+<h3>§5 Medlemskaber og medlemskort</h3>
+<p>På Boulders.dk kan du til enhver tid se en oversigt over vores gældende medlemskaber.</p>
+<p>Studentermedlemskabet kan kun tegnes af personer med gyldig studieidentifikation. Boulders forbeholder sig retten til at afvise typer af studenteridentifikation eller tilbagekalde brugen af en allerede benyttet studenteridentifikation. Medlemmet er forpligtet til ved henvendelse at fremvise gyldig studenteridentifikation.</p>
+<p>I tilfælde af overtrædelse af medlemsbetingelserne, personalets anvisninger eller husets regler, kan Boulders til enhver tid lukke dit medlemskab med øjeblikkelig virkning. Boulders forbeholder sig også retten til at udelukke dig fra medlemskab i Boulders permanent eller på ubestemt tid.</p>
+<p>Medlemskortet skal altid medbringes og indlæses, inden du benytter det pågældende klatrecenter. Boulders forbeholder sig retten til at opkrævet et gebyr for glemt medlemskort og retten til at påkræve at du køber et nyt medlemskort efter gentagende at have glemt dit kort.</p>
+<p>Hvis du mister eller beskadiger dit medlemskort, skal du straks meddele dette til Boulders, som vil udstede et nyt medlemskort mod et gebyr.</p>
+
+<h3>§5A U16 medlemskaber</h3>
+<p>Det er et krav for oprettelse af U16 medlemskab, at personen der benytter medlemskabet er under 16 år.</p>
+<p>U16 medlemskaber skal oprettes af forældre/værge, læs mere om medlemskaber til umyndige i §3A.</p>
+<p>U16 medlemskaber vil automatisk overgå til almindelig voksenpris- og betingelser, når medlemmer fylder 16 år. Er medlemmer studerende, skal dette oplyses med studenteridentifikation til medlem@boulders.dk inden overgang fra U16 medlemskab.</p>
+<p>Gældende priser, medlemstyper og betingelser kan altid findes på boulders.dk</p>
+
+<h3>§6 Betaling</h3>
+<p>Du skal ved oprettelsen af dit medlemskab betale for medlemskabet fra købsdatoen tilmed slutningen af indeværende måned + evt. næste hele måned, afhængig af den specifikke indmeldelsesdato.</p>
+
+<h3>§6A Betalingsaftale</h3>
+<p>Det er et krav at medlemskabet er tilmeldt automatisk betaling med kreditkortabonnement. Kontingentbetalinger trækkes i starten af måneden, uafhængigt af indmeldelsesdatoen.</p>
+
+<h3>§6B Manglende eller for sen betaling</h3>
+<p>Hvis dit medlemskab ikke betales rettidigt, udsendes en rykkerskrivelse til dig eller din værge/forældre. Boulders opkræver rykkergebyr på 100kr efter gældende takster. Betales der ikke inden den angivne forfaldsdato, har Boulders ret til uden varsel at opsige dit medlemskab og opkræve andre udeståender til betaling omgående.</p>
+<p>Boulders forbeholder sig ret til selvstændigt eller via inkasso at indkassere det udestående beløb samt et gebyr for rykning og for for sen betaling. Boulders indberetter dårlige betalere til RKI i henhold til RKI's gældende regler. Gebyret fastsættes af Boulders.</p>
+
+<h3>§6C Refundering fra Boulders</h3>
+<p>I nogle tilfælde kan det hænde, at du som medlem har penge til gode hos Boulders. Boulders vil som hovedregel godskrive sådanne beløb i dit fremadrettede medlemskab, og du har derfor som udgangspunkt ikke mulighed for at få sådanne beløb udbetalt, før ophør af dit medlemskab.</p>
+<p>Hvis dit medlemskab er ophørt og du mener, at du har et beløb til gode, skal du rette henvendelse til medlem@boulders.dk.</p>
+<p>Vi gør opmærksom på, at en eventuel refusion kun kan ske til danske konti og indenfor 30 dage fra din henvendelse. Refusion i forbindelse med berosætning eller anden forudbetaling, herunder konvertering af klippekort, er ikke muligt. Medlemskabet vil i disse tilfælde fortsætte indtil alt tilgodehavende er benyttet.</p>
+
+<h3>§7 Bero</h3>
+<p>Medlemskaber kan berosættes mod et gebyr på 49kr. Medlemskaber kan berosættes 3 gange pr. kalenderår. Beroperioden skal som minimum være 30 på hinanden følgende kalenderdage og kan maksimalt være 3 måneder.</p>
+<p>Bero kan altid ophæves før tid, dog tidligst efter 30 på hinanden følgende kalenderdage. I beroperioden kan denne forlænges op til 3 måneder uden gebyr.</p>
+<p>Medlemskaber kan ikke opsiges i beroperioden. Ligeledes kan opsagte medlemskaber ikke berosættes i udmeldelsesperioden.</p>
+<p>Eventuelt tilgodehavende ved berosætning, vil blive fratrukket første periode af medlemskabsbetaling efter endt bero. Refusion er ikke muligt.</p>
+<p>Det er ikke muligt at berosætte medlemskaber i en kampagne/prisreduceret/tilbudsperiode.</p>
+<p>Du kan starte bero på din Boulders online medlemsprofil eller pr. e-mail til medlem@boulders.dk.</p>
+<p>Medlemmet beholder sine optjente medlemsfordele og anciennitet under berosætning.</p>
 
 <h3>§8 Opsigelse af medlemskab</h3>
-<p>En opsigelse skal ske online på din medlemsprofil eller pr. e-mail til medlem@boulders.dk. Opsigelsen skal indeholde dit navn og/eller medlemsnummer. Opsigelsen er gyldig fra den dag, Boulders modtager den, og du har modtaget en bekræftelse fra Boulders, der anerkender opsigelsen.</p>
+<p>Opsigelsesperioden for et medlemskab er løbende måned + næste hele afsluttede måned. Et medlemskab kan derfor kun ophøre med effekt sidste dag i en måned.</p>
+<p>En opsigelse skal ske online på din medlemsprofil eller pr. e-mail til medlem@boulders.dk. Ved opsigelse af dit medlemskab skal du oplyse dit fulde navn og/eller medlemsnummer. En opsigelse er gyldig fra den dag, Boulders modtager den, og du har modtaget en kvittering for gennemførelsen af din opsigelse fra Boulders.</p>
+<p>Det påhviler medlemmet at kunne fremvise en tidligere skriftlig bekræftelse fra Boulders på en udmeldelse, hvis der opstår tvivl derom.</p>
+<p>Boulders står ikke til ansvar for, om du har brugt dit medlemskab i perioden, du hæfter selv for dit medlemskab, indtil en rettidig opsigelse er gennemført.</p>
+<p>Boulders står ikke til ansvar for manglende adgang til medlemmets online profil. Medlemmet skal selv øjeblikkeligt kontakte medlem@boulders.dk, hvis de har problemer med login og udmeldelse online.</p>
+<p>Behandler man selv sit medlemskab på sin online medlemsprofil, efter man har kontaktet medlem@boulders.dk, vil din online aktivitet og ændringer være gældende for dit videre medlemskabsforløb og mailen vil ikke være gældende.</p>
+<p>Besvarer man ikke eventuelle spørgsmål til det videre forløb af medlemskab, vil sagen ikke blive færdigbehandlet og dit medlemskab fortsætter uden ændringer.</p>
+<p>Bemærk at medlemskaber købt som kampagne/tilbud/prisreduceret er underlagt en 3 måneders bindingsperiode, fra indgåelse af medlemskabet og tre hele afsluttede måneder fremad. Læs mere om kampagner i §4.</p>
+<p>Ved opsigelse mister medlemmet sine optjente medlemsfordele og anciennitet. Ønsker man at beholde sine fordele, bør berosætning overvejes.</p>
 
-<p>Opsigelsesperioden for et medlemskab er resten af den løbende måned + næste hele afsluttede måned. Medlemskaber kan derfor kun ophøre med effekt sidste dag i en måned.</p>
+<h3>§9 Fortrydelsesret</h3>
+<p>Ved oprettelsen af et medlemskab i Boulders har du 14 dages fortrydelsesret fra den dag, medlemskabet blev oprettet. For at gøre brug af fortrydelsesretten, skal du rette henvendelse til medlem@boulders.dk. Fortrydelsesretten kan ikke benyttes ved gentagne medlemskabsoprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af normal entré for samtlige antal besøg i den periode, du har benyttet dig af dit medlemskab.</p>
 
 <h3>§10 Helbredstilstand og personskade</h3>
-<p>Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld. Kunden er derfor indforstået med at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders.</p>`,
-    en: `<h2>Terms and Conditions for Members and 15-Day Climbing Pass at Boulders</h2>
-<p><strong>Applies to all memberships</strong></p>
+<p>Al færdsel i Boulders klatrecentre og al klatring sker på eget ansvar. Boulders tager ikke ansvar for din brug af Boulders' faciliteter eller udendørsområder. Du er som medlem selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter hos Boulders.</p>
+<p>Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld. Kunden er derfor indforstået med at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders.</p>
+<p>Kunden erklærer sig således indforstået med, at eventuelle skader på kunden selv eller tredjemand ikke vil blive erstattet af Boulders. Det er dit personlige ansvar at inspicere din landingszone inden klatring.</p>
+<p>I øvrigt følges dansk erstatningsret på området.</p>
+
+<h3>§10A Værdigenstande</h3>
+<p>Boulders bærer ikke noget ansvar for tab som følge af tyveri eller tingsskade.</p>
+
+<h3>§11 Force Majeure</h3>
+<p>Såfremt udnyttelse af den til medlemskabet knyttede adgang til Boulders' klatrecentre (og Boulders' faciliteter i øvrigt) umuliggøres eller vanskeliggøres helt eller delvist af forhold, som forårsages af - eller resulterer ud fra - handlinger eller omstændigheder, der er uden for Boulders' kontrol, herunder f.eks. - men ikke begrænset til - epidemier, pandemier, oversvømmelse, frihedsindskrænkninger, nationale nødstilstande, ind greb eller påbud fra myndighedernes side, brand, jordskælv, krig, terrortrusler eller terrorhandlinger, optøjer eller andre civile uroligheder, revolution, embargoer, handelskrige, strejker eller andre arbejdskonflikter, berettiger en sådan umuliggørelse eller vanskeliggørelse dig ikke til at annullere eller på anden måde ændre eller opsige medlemskabet med forkortet varsel. Boulders kan i så fald heller ikke anses for at have misligholdt eller på anden måde overtrådt abonnementsaftalen. Du vil således være forpligtet til at betale for dit medlemskab i overensstemmelse med abonnementsaftalens øvrige vilkår og bestemmelser, som videreføres på hidtidige vilkår.</p>
+<p>Såfremt medlemskabet ønskes opsagt, skal du derfor afgive en opsigelse i overensstemmelse med de almindelige vilkår for opsigelse, jf. abonnementsaftalens §8, samt iagttage den heri anførte opsigelsesvarsel, førend opsigelsen kan få virkning. Du vil derfor heller ikke have krav på tilbagebetaling af allerede betalte beløb, ligesom Boulders heller ikke på anden måde kan blive stillet til ansvar og/eller hæfte over for dig på baggrund af en sådan umuliggørelse eller vanskeliggørelse.</p>
+
+<h3>§12 Persondataforordningen (GDPR)</h3>
+<p>Når du opretter et medlemskab i Boulders accepterer du, at Boulders indsamler og behandler oplysninger om dig. Hos Boulders indsamler og behandler vi kun de oplysninger, der er nødvendige for at administrere dit medlemskab. Boulders anvender ikke oplysningerne til andre formål.</p>
+<p>Boulders opbevarer oplysningerne om dig i op til 1 år efter dit medlemskab er ophørt. Herefter vil alle oplysninger blive destrueret. Når Boulders registrerer oplysninger om dig, har du ret til at:</p>
+<ol>
+<li>Få indsigt i de oplysninger, som vi behandler om dig.</li>
+<li>Gøre indsigelse mod at indsamlingen og behandlingen af dine oplysninger finder sted.</li>
+<li>Få oplysninger, der er vildledende eller urigtige, rettet eller slettet.</li>
+</ol>
+<p>Du har også ret til at klage til Datatilsynet over Boulders' behandling af dine personoplysninger. Henvendelser vedr. vores behandling af dine oplysninger skal ske til medlem@boulders.dk. Boulders er data ansvarlig i forbindelse med vores behandling af de oplysninger du giver os. Vi bruger alene dine persondata i forbindelse med oprettelse af dit medlemskab med løbende betaling.</p>
+<p>Kontakt medlem@boulders.dk efter endt medlemskab for at få slettet dine oplysninger omgående. Oplysninger vil kun blive slettet efter udligning af alle eventuelle udeståender.</p>
+
+<h3>§13 Lovvalg og værneting</h3>
+<p>Alle køb omfattet af disse medlemsbetingelser er underlagt dansk ret, dog ikke CISG (Den Internationale Købelov), medmindre andet fremgår af ufravigelige regler. Eventuelle uenigheder, som ikke kan afgøres i mindelighed, afgøres af de danske domstole, medmindre andet fremgår af ufravigelige regler.</p>
+
+<h3>§14 15 dages klatring</h3>
+<p>15 dages klatring må kun benyttes af personer, der ikke tidligere har været medlem eller tidligere har benyttet et 15 dages kort. Opdages snyd med dette vil indehaveren blive pålagt at betale forholdsmæssig entré for sin brug af 15 dages klatring.</p>
+<p>15 dages klatring er personligt og må ikke deles med andre.</p>
+<p>Der henvises yderligere til §10 – helbredstilstand og personskade, §10A – Værdigenstande, §12- Persondataforordningen (GDPR) i dette regelsæt, der også er gældende for 15 dages klatring.</p>`,
+    en: `<h2>Rules for Members and 15 Days of Climbing at Boulders</h2>
+<p><strong>The following rules apply to all memberships</strong></p>
 
 <h3>Acceptance</h3>
-<p>By completing the registration process, you have accepted the following terms and conditions. Your acceptance of the agreement is a binding agreement between the member and Boulders. Your acceptance hereof functions as a signature.</p>
+<p>By completing the registration process, you accept the rules outlined below. Your acceptance of this agreement constitutes a binding agreement between you and Boulders. Your acceptance serves as a signature.</p>
 
 <h3>Highlights</h3>
-<p>You must read the entire terms and conditions thoroughly before signing. Pay particular attention to the following:</p>
-<p><strong>From §3:</strong> "Your membership at Boulders is a continuous subscription with automatic renewal. The subscription starts on the purchase date and continues until terminated according to §8."</p>
-<p><strong>From §8:</strong> "Termination must be done online on your membership profile or by email to medlem@boulders.dk." … "The termination period for a membership is the remainder of the current month plus the following full calendar month. Memberships can therefore only end on the last day of a month."</p>
-<p><strong>From §10:</strong> "Climbing is a sports activity where injuries and accidents are foreseeable. Customers acknowledge that using Boulders' facilities, including climbing facilities, is at their own risk and that they cannot claim liability or compensation from Boulders in any way."</p>
+<p>Please read the full set of rules carefully before signing. Pay special attention to the following:</p>
+<p><strong>From §3:</strong> "Your membership at Boulders is a recurring subscription with automatic renewal. The subscription starts on the date of purchase and continues until it is terminated in accordance with §8."</p>
+<p><strong>From §8:</strong> "Membership cancellations must be done online via your membership profile or by emailing medlem@boulders.dk." ... "The cancellation period for a membership is the current month + the next full calendar month. Therefore, a membership can only terminate effective on the last day of a month."</p>
+<p><strong>From §10:</strong> "Climbing is a sports activity where injuries and accidents can occur. The customer agrees that the use of Boulders' facilities, including climbing facilities, is done at their own risk and that no claims for compensation can be made against Boulders. The customer thus agrees that any injuries to themselves or third parties will not be compensated by Boulders."</p>
 
-<h3>§1 General</h3>
-<p>The following terms and conditions apply to your membership at Boulders. Current terms and conditions can always be found on Boulders.dk. We note that ongoing changes to prices, conditions, opening hours, and terms may occur.</p>
+<h3>Table of Contents</h3>
+<ul>
+<li>§1. General Provisions</li>
+<li>§2. Changes to Membership Terms and Prices</li>
+<li>§3. Membership Registration</li>
+<li>§4. Promotional/Discounted Memberships</li>
+<li>§5. Memberships and Membership Cards</li>
+<li>§6. Payment</li>
+<li>§7. Membership Freeze</li>
+<li>§8. Membership Cancellation</li>
+<li>§9. Right of Withdrawal</li>
+<li>§10. Health Condition and Personal Injury</li>
+<li>§11. Force Majeure</li>
+<li>§12. Data Protection (GDPR)</li>
+<li>§13. Governing Law and Jurisdiction</li>
+<li>§14. 15 Day-Climbing Pass</li>
+</ul>
 
-<p>Your membership at Boulders is personal and may not be used by others. In case of misuse of your membership or membership card, your membership will be terminated immediately without refund for the remaining period.</p>
+<h3>§1 General Provisions</h3>
+<p>The following rules apply to your membership at Boulders. The applicable rules will always be available on Boulders.dk. Please note that ongoing changes to prices, terms, opening hours, and rules may occur. You can read more about changes under §2.</p>
 
-<h3>§3 Registration</h3>
-<p>Your membership at Boulders is a continuous subscription with automatic renewal that starts on the purchase date and continues until terminated according to §8.</p>
+<p>Your membership at Boulders is personal and may not be used by others. Misuse of your membership or membership card will result in immediate termination of your membership without a refund for the remaining period. To identify you as a member, a photo of you is stored along with your other personal information. Learn more about GDPR (Data Protection Regulation) in §12.</p>
+
+<p>If there are changes to the information you provided when registering for membership, you must notify Boulders immediately. As a member, it is your responsibility to ensure that Boulders always has your correct personal information, especially your email address.</p>
+
+<p>By registering for a membership, you agree to receive notifications about significant price changes and changes to these rules via email. You also agree to receive other relevant information via email.</p>
+
+<p>Inquiries about memberships, including questions regarding memberships and terms, should be directed to medlem@boulders.dk. Only written responses from this email address can be considered valid.</p>
+
+<h3>§2 Changes to Membership Terms and Prices</h3>
+<p>Boulders reserves the right to make ongoing changes to the rules, fees, terms, opening hours, and prices, including the price of your membership. The current prices and rules will always be available on Boulders.dk. Changes may occur in the following situations:</p>
+<p>A discount agreement linked to your membership expires.</p>
+<p>Boulders invests in improving your user experience, e.g., hiring more staff, renovating or modernizing facilities, or expanding with more climbing centers.</p>
+<p>Prices are adjusted due to market conditions and societal developments, including increased costs, inflation, the introduction of new legislative requirements, and similar situations.</p>
+<p>The level of price increases will be set proportionally based on Boulders' increased costs.</p>
+<p>Significant changes to prices and rules will be notified via email at least 60 days before they take effect. If you do not wish to continue your membership, you must cancel it according to §8. Note the cancellation period!</p>
+
+<h3>§3 Membership Registration</h3>
+<p>Your membership at Boulders is a recurring subscription with automatic renewal, starting on the date of purchase and continuing until it is canceled in accordance with §8. See also §4 if you have signed up for a promotional/discounted membership.</p>
+
+<h3>§3A Membership for Individuals Under 18 or Those Under Legal Guardianship</h3>
+<p>To sign up for a membership at Boulders, you must be at least 18 years old. If you are under 18 or under legal guardianship, you must either register online or visit one of Boulders' climbing centers in person with your guardian or parent. The guardian/parent must be the one paying for the membership. When collecting the membership card, the guardian/parent must sign this rule set on behalf of the individual under guardianship.</p>
+<p>It is your responsibility to inform Boulders if you are under legal guardianship or under 18 and thus cannot enter into the agreement.</p>
+<p>If you are a guardian or parent registering someone under 18, you vouch for and are responsible for the minor's compliance with payment, the rules, and house policies. Membership at Boulders can only be signed up for if the guardian/parent is listed as the payer for the membership.</p>
+
+<h3>§4 Promotional/Discounted Memberships</h3>
+<p>Memberships purchased as part of a promotion/offer/discount are subject to a three-month binding period from the start date of the membership and for three full calendar months thereafter.</p>
+<p>It is not possible to freeze memberships during a campaign/discounted/promotional period.</p>
+<p>After the discount period ends, the membership automatically transitions into a recurring subscription at the normal rates and terms described in this rule set.</p>
+<p>After termination, as per §8, it is not possible to re-register for a promotional/discounted membership until six full months after the end of the membership. Re-registration during this six-month period must be under normal terms at the current normal prices.</p>
+
+<h3>§5 Memberships and Membership Cards</h3>
+<p>You can always find an overview of our current memberships on Boulders.dk. The student membership can only be purchased by individuals with valid student identification. Boulders reserves the right to reject certain types of student identification or revoke the use of previously accepted student identification. Members are required to present valid student identification upon request.</p>
+<p>In the event of a breach of membership terms, staff instructions, or house rules, Boulders may terminate your membership with immediate effect at any time. Boulders also reserves the right to permanently or indefinitely exclude you from membership at Boulders.</p>
+<p>The membership card must always be brought and scanned before using the respective climbing center. Boulders reserves the right to charge a fee for forgotten membership cards and may require you to purchase a new membership card if you repeatedly forget it. If you lose or damage your membership card, you must immediately inform Boulders, who will issue a new card for a fee.</p>
+
+<h3>§5A U16 Memberships</h3>
+<p>It is a requirement for obtaining a U16 membership that the individual using the membership is under 16 years of age. U16 memberships must be created by a parent or guardian; see §3A for more details regarding memberships for minors.</p>
+<p>U16 memberships will automatically transition to a regular adult membership, with applicable adult pricing and terms, upon the member's 16th birthday. If the member qualifies for a student membership, this must be documented with valid student identification by emailing medlem@boulders.dk prior to the transition from the U16 membership.</p>
+<p>Current prices, membership types, and terms can always be found at boulders.dk.</p>
+
+<h3>§6 Payment</h3>
+<p>When creating your membership, you will be required to pay for the membership starting from the purchase date until the end of the current month plus the following full month, depending on the specific enrollment date.</p>
+
+<h3>§6A Payment Agreement</h3>
+<p>It is a requirement that the membership is registered for automatic payment through a credit card subscription. Membership fees are charged at the beginning of each month, regardless of the enrollment date.</p>
+
+<h3>§6B Non-Payment or Late Payment</h3>
+<p>If your membership fee is not paid on time, a reminder notice will be sent to you or your parent/guardian. Boulders will charge a late fee of 100 DKK, in accordance with applicable rates.</p>
+<p>If payment is not made by the due date, Boulders reserves the right to terminate your membership without notice and demand immediate payment of any outstanding amounts. Boulders retains the right to collect outstanding amounts independently or through debt collection, including charging fees for reminders and late payments. Boulders may report delinquent payments to the RKI registry in accordance with RKI's applicable rules. The fee is determined by Boulders.</p>
+
+<h3>§6C Refunds from Boulders</h3>
+<p>In some cases, you may have a balance in your favor with Boulders. As a general rule, such amounts will be credited toward your ongoing membership, and you will not be able to receive a refund until your membership has ended.</p>
+<p>If your membership has ended and you believe you have a balance owed to you, please contact medlem@boulders.dk. Please note that any refund can only be issued to Danish bank accounts and within 30 days of your inquiry.</p>
+<p>Refunds related to freezing of memberships or other prepayments, including the conversion of punch cards, are not possible. In such cases, the membership will continue until the balance has been fully utilized.</p>
+
+<h3>§7 Freezing Memberships</h3>
+<p>Memberships can be frozen for a fee of 49 DKK. Memberships can be frozen up to 3 times per calendar year. The freezing period must be a minimum of 30 consecutive calendar days and a maximum of 3 months.</p>
+<p>A freeze can always be lifted early, but not before 30 consecutive calendar days have passed. During the freezing period, it can be extended up to 3 months without additional fees.</p>
+<p>Memberships cannot be canceled during the freezing period, and canceled memberships cannot be frozen during the termination period.</p>
+<p>Any credit resulting from the freezing period will be deducted from the first membership fee payment after the freeze ends. Refunds are not possible.</p>
+<p>It is not possible to freeze memberships during a campaign/discounted/promotional period.</p>
+<p>You can initiate a freeze via your Boulders online membership profile or by emailing medlem@boulders.dk.</p>
+<p>Members retain their accrued membership benefits and seniority during the freezing period.</p>
 
 <h3>§8 Termination of Membership</h3>
-<p>Termination must be done online on your membership profile or by email to medlem@boulders.dk. The termination must contain your name and/or membership number. The termination is valid from the day Boulders receives it, and you have received a confirmation from Boulders acknowledging the termination.</p>
-
+<p>Termination must be done online through your membership profile or by emailing medlem@boulders.dk. When terminating your membership, you must provide your full name and/or membership number. The termination is valid from the day Boulders receives it, and you have received a confirmation from Boulders acknowledging the termination.</p>
 <p>The termination period for a membership is the remainder of the current month plus the following full calendar month. Memberships can therefore only end on the last day of a month.</p>
+<p>It is the member's responsibility to retain a written confirmation from Boulders regarding the termination, should any dispute arise.</p>
+<p>Boulders is not responsible for whether you have used your membership during the membership period; you remain liable for the membership until a valid termination is completed.</p>
+<p>Boulders is not responsible for a lack of access to your online membership profile. You must contact medlem@boulders.dk immediately if you experience issues logging in or canceling online.</p>
+<p>If you make changes to your membership online after contacting medlem@boulders.dk, your online activity will take precedence, and the email correspondence will no longer be valid.</p>
+<p>Failure to respond to questions regarding the next steps for your membership will result in your case not being finalized, and your membership will continue unchanged.</p>
+<p>Memberships purchased as part of a campaign, promotion, or at a discounted rate are subject to a 3-month binding period, effective from the date of membership creation and lasting for three full calendar months. See §4 for more information on campaigns.</p>
+<p>Upon termination, members lose their accrued benefits and seniority. If you wish to retain these, freezing your membership may be considered.</p>
+
+<h3>§9 Right of Withdrawal</h3>
+<p>When creating a membership with Boulders, you have a 14-day right of withdrawal from the date the membership was created. To exercise your right of withdrawal, contact medlem@boulders.dk. The right of withdrawal cannot be used for repeated membership sign-ups.</p>
+<p>If you exercise your right of withdrawal, Boulders is entitled to require proportional payment in the form of normal entry fees for all visits made during the period in which your membership was active.</p>
 
 <h3>§10 Health Conditions and Personal Injury</h3>
-<p>Climbing is a sports activity where injuries and accidents are foreseeable. Customers acknowledge that using Boulders' facilities, including climbing facilities, is at their own risk and that they cannot claim liability or compensation from Boulders in any way.</p>`
+<p>All activity in Boulders climbing centers and climbing itself is conducted at your own risk. Boulders assumes no responsibility for your use of Boulders' facilities or outdoor areas. As a member, you are responsible for ensuring that your health condition allows participation in activities at Boulders.</p>
+<p>Climbing is a sports activity where injuries and accidents are foreseeable. Customers acknowledge that using Boulders' facilities, including climbing facilities, is at their own risk and that they cannot claim liability or compensation from Boulders in any way. Customers further accept that any injuries to themselves or third parties will not be compensated by Boulders. It is your personal responsibility to inspect your landing zone before climbing. Danish liability law applies to this area.</p>
+
+<h3>§10A Valuables</h3>
+<p>Boulders assumes no responsibility for losses due to theft or property damage.</p>
+
+<h3>§11 Force Majeure</h3>
+<p>If access to Boulders climbing centers (and Boulders' other facilities) associated with the membership is rendered impossible or significantly hindered, wholly or partially, due to circumstances caused by or resulting from actions or situations beyond Boulders' control—including, but not limited to, epidemics, pandemics, floods, restrictions on freedom, national emergencies, government interventions or orders, fires, earthquakes, wars, terrorist threats or actions, riots or other civil disturbances, revolutions, embargoes, trade wars, strikes or other labor disputes—such hindrance or impossibility does not entitle you to cancel, modify, or terminate your membership with shortened notice.</p>
+<p>In such cases, Boulders cannot be considered to have breached or otherwise violated the subscription agreement. You are therefore required to continue payment for your membership under the terms and conditions of the subscription agreement, which remains in effect as per its existing terms.</p>
+<p>If you wish to terminate the membership, you must do so in accordance with the standard terms of termination, as outlined in §8 of the subscription agreement, and observe the stipulated notice period before the termination takes effect. Consequently, you are not entitled to a refund of already paid amounts, nor can Boulders be held liable or accountable in any way for such hindrance or impossibility.</p>
+
+<h3>§12 General Data Protection Regulation (GDPR)</h3>
+<p>By creating a membership at Boulders, you accept that Boulders collects and processes information about you. Boulders only collects and processes the information necessary to manage your membership and does not use the data for other purposes.</p>
+<p>Boulders retains your information for up to 1 year after your membership has ended, after which all data will be destroyed.</p>
+<p>When Boulders processes your information, you have the right to:</p>
+<ol>
+<li>Access the information we process about you.</li>
+<li>Object to the collection and processing of your information.</li>
+<li>Have misleading or inaccurate information corrected or deleted.</li>
+</ol>
+<p>You also have the right to file a complaint with the Danish Data Protection Agency regarding Boulders' processing of your personal data. Inquiries about our processing of your information should be directed to medlem@boulders.dk.</p>
+<p>Boulders is the data controller responsible for processing the information you provide to us. We use your personal data exclusively for creating your membership with ongoing payment.</p>
+<p>Contact medlem@boulders.dk after your membership ends to have your information deleted immediately. Information will only be deleted after settling any outstanding payments.</p>
+
+<h3>§13 Governing Law and Jurisdiction</h3>
+<p>All purchases covered by these membership terms are subject to Danish law, excluding the CISG (United Nations Convention on Contracts for the International Sale of Goods), unless otherwise specified by mandatory rules.</p>
+<p>Any disputes that cannot be resolved amicably shall be settled by the Danish courts unless otherwise required by mandatory rules.</p>
+
+<h3>§14 15-Day Climbing Pass</h3>
+<p>The 15-day climbing pass may only be used by individuals who have not previously been members or used a 15-day pass. If misuse of this pass is discovered, the holder will be required to pay a proportional entrance fee for the usage of the 15-day climbing pass.</p>
+<p>The 15-day climbing pass is personal and may not be shared with others.</p>
+<p>Additionally, references are made to §10 – Health Condition and Personal Injury, §10A – Valuables, and §12 – General Data Protection Regulation (GDPR), which also apply to the 15-day climbing pass.</p>`
   },
   punchcard: {
     da: `<h2>Vilkår og betingelser for klippekort</h2>
-<p>Klippekort giver adgang til Boulders' klatrecentre i henhold til nedenstående betingelser.</p>
 
-<h3>Gældende periode</h3>
-<p>Klippekortet er gyldigt i 5 år fra købsdatoen.</p>
+<h3>§1 Generelt</h3>
+<p>Følgende regelsæt er gældende for klippekort hos Boulders.<br>
+Ved oprettelse af et klippekort accepterer du at modtage nyhedsmails og anden relevant information pr. e-mail.</p>
 
-<h3>Brug</h3>
-<p>Hvert klip på kortet giver adgang til ét besøg. Kortet kan deles med andre, men hvert klip kan kun bruges én gang.</p>
+<h3>§2 Husets regler og andre bestemmelser</h3>
+<p>I tilfælde af overtrædelse af regelsættet, personalets anvisninger eller husets regler, kan Boulders til enhver tid lukke dit klippekort med øjeblikkelig virkning. Boulders forbeholder sig også retten til at udelukke dig fra at klatre hos Boulders på ubestemt tid.<br>
+Udleverede plastikkort fungerer som adgangskort og skal altid medbringes og indlæses, inden du benytter det pågældende klatrecenter. Hvis du mister eller beskadiger dit adgangskort, skal du straks meddele dette til Boulders, som vil udstede et nyt adgangskort mod et gebyr.</p>
 
-<h3>Refill</h3>
-<p>Hvis du refiller dit klippekort inden for 14 dage efter dit sidste klip, får du 100 kr. rabat ved køb af nyt klippekort i hallen.</p>
+<h3>§3 Helbredstilstand og personskade</h3>
+<p>Al færdsel i Boulders klatrecentre og al klatring sker på eget ansvar. Boulders tager ikke ansvar for din brug af Boulders' faciliteter eller udendørsområder. Du er som klatrer selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter hos Boulders. Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld.<br>
+Kunden er derfor indforstået med, at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders. Kunden erklærer sig således indforstået med, at eventuelle skader på kunden selv eller tredjemand ikke vil blive erstattet af Boulders. Det er dit personlige ansvar at inspicere din landingszone inden klatring. I øvrigt følges dansk erstatningsret på området.</p>
 
-<h3>Opgradere til medlemskab</h3>
-<p>Klippekort kan opgraderes til medlemskab. Kontakt Boulders for yderligere information.</p>
+<h3>§4 Persondataforordningen (GDPR)</h3>
+<p>Når du opretter et klippekort i Boulders accepterer du, at Boulders indsamler og behandler oplysninger om dig. Hos Boulders indsamler og behandler vi kun de oplysninger, der er nødvendige for at administrere dit klippekort. Boulders anvender ikke oplysningerne til andre formål. Boulders opbevarer oplysningerne om dig i op til 1 år efter dit klippekort. Herefter vil alle oplysninger blive destrueret. Kontakt medlem@boulders.dk efter klippekortets udløb for at få slette dine oplysninger omgående.</p>
 
-<h3>Ansvarsfraskrivelse</h3>
-<p>Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld. Brug af Boulders' faciliteter foretages på eget ansvar.</p>`,
+<p>Når Boulders registrerer oplysninger om dig, har du ret til at:</p>
+<ul>
+<li>Få indsigt i de oplysninger, som vi behandler om dig.</li>
+<li>Gøre indsigelse mod at indsamlingen og behandlingen af dine oplysninger finder sted.</li>
+<li>Få oplysninger, der er vildledende eller urigtige, rettet eller slettet.</li>
+</ul>
+
+<p>Du har også ret til at klage til Datatilsynet over Boulders' behandling af dine personoplysninger.<br>
+Henvendelser vedrørende vores behandling af dine oplysninger skal ske til medlem@boulders.dk.<br>
+Boulders er dataansvarlig i forbindelse med vores behandling af de oplysninger du giver os.</p>
+
+<h3>§5 Ombytning til Medlemskab</h3>
+<p>Det er muligt at ombytte sit ubrugte eller delvist brugte klippekort til et medlemskab. Boulders tager derved højde for antal brugte klip og købsprisen og udregner derved restancen, som bliver fratrukket det ønskede medlemskab. Bemærk at der skal underskrives et regelsæt til medlemskab. Det er ikke muligt at få refunderet restancen ved endt medlemskab. Ønskes ombytning skal du skrive en mail til medlem@boulders.dk. Boulders ombytter ikke i receptionen.</p>
+
+<h3>§6 Handelsbetingelser</h3>
+<p>Dit klippekort er gyldigt i 5 år fra købsdatoen og betales forud. Du har ikke ret til at få refunderet resterende klip eller på anden måde modtage godtgørelse for ubrugte klip.<br>
+Ved køb af et klippekort i Boulders har du 14 dages fortrydelsesret fra den dag, klippekort blev oprettet. For at gøre brug af fortrydelsesretten, skal du rette henvendelse til medlem@boulders.dk. Fortrydelsesretten kan ikke benyttes ved gentagne oprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af gældende entrépriser for det antal gange klippekort er benyttet og priserne vil reflektere tidspunktet for check-in i relation til peakpriser og off-peakpriser.</p>
+
+<p>Klippekortet er ikke personligt og må gerne benyttes af andre. Enhver person, der benytter et klip fra en klippekortholders kort, skal dog underskrive Boulders' gældende ansvarsfraskrivelse.</p>`,
     en: `<h2>Terms and Conditions for Punch Card</h2>
-<p>Punch cards provide access to Boulders' climbing centers according to the following conditions.</p>
 
-<h3>Validity Period</h3>
-<p>The punch card is valid for 5 years from the purchase date.</p>
+<h3>§1 General</h3>
+<p>The following rules apply to punch cards at Boulders.<br>
+By purchasing a punch card, you agree to receive newsletters and other relevant information via email.</p>
 
-<h3>Usage</h3>
-<p>Each clip on the card provides access to one visit. The card can be shared with others, but each clip can only be used once.</p>
+<h3>§2 House Rules and Other Provisions</h3>
+<p>In case of a breach of the rules, staff instructions, or house rules, Boulders reserves the right to cancel your punch card with immediate effect. Boulders also reserves the right to ban you from climbing at Boulders indefinitely.<br>
+Issued plastic cards function as access cards and must always be brought and scanned before entering the climbing center. If you lose or damage your access card, you must immediately inform Boulders, which will issue a new access card for a fee.</p>
 
-<h3>Refill</h3>
-<p>If you refill your punch card within 14 days after your last clip, you will receive 100 kr. discount when purchasing a new punch card at the gym.</p>
+<h3>§3 Health Condition and Personal Injury</h3>
+<p>All activities at Boulders climbing centers and all climbing are undertaken at your own risk. Boulders assumes no responsibility for your use of its facilities or outdoor areas. You are responsible for being in a health condition that allows participation in activities at Boulders. Climbing is a sport where injuries and accidents are foreseeable.<br>
+The customer acknowledges that the use of Boulders' facilities, including climbing facilities, is entirely at their own risk and that no compensation claims can be made against Boulders in any way. The customer also acknowledges that any injuries to themselves or third parties will not be compensated by Boulders. It is your personal responsibility to inspect your landing zone before climbing. Danish liability law applies to the area.</p>
 
-<h3>Upgrade to Membership</h3>
-<p>Punch cards can be upgraded to membership. Contact Boulders for further information.</p>
+<h3>§4 General Data Protection Regulation (GDPR)</h3>
+<p>By purchasing a punch card at Boulders, you accept that Boulders collects and processes information about you. At Boulders, we only collect and process the information necessary to manage your punch card. Boulders does not use the information for other purposes. Boulders stores your information for up to 1 year after your punch card expires, after which all information will be destroyed. Contact medlem@boulders.dk to have your information deleted immediately after your punch card expires.</p>
 
-<h3>Disclaimer</h3>
-<p>Climbing is a sports activity where injuries and accidents are foreseeable. Use of Boulders' facilities is at your own risk.</p>`
+<p>When Boulders registers information about you, you have the right to:</p>
+<ul>
+<li>Access the information we process about you.</li>
+<li>Object to the collection and processing of your information.</li>
+<li>Have misleading or incorrect information corrected or deleted.</li>
+</ul>
+
+<p>You also have the right to file a complaint with the Danish Data Protection Agency regarding Boulders' processing of your personal data.<br>
+Inquiries regarding our processing of your information should be directed to medlem@boulders.dk.<br>
+Boulders is the data controller responsible for processing the information you provide to us.</p>
+
+<h3>§5 Conversion to Membership</h3>
+<p>It is possible to convert an unused or partially used punch card into a membership. Boulders will take into account the number of used punches and the purchase price to calculate the remaining balance, which will be deducted from the desired membership. Note that you will need to sign a membership agreement. Any remaining balance from the conversion cannot be refunded upon the termination of the membership.<br>
+To request a conversion, you must send an email to medlem@boulders.dk. Boulders does not process conversions at the reception.</p>
+
+<h3>§6 Terms of Sale</h3>
+<p>Your punch card is valid for 5 years from the date of purchase and must be paid upfront. You are not entitled to a refund for remaining punches or any other compensation for unused punches.<br>
+When purchasing a punch card at Boulders, you have a 14-day right of withdrawal from the date the punch card was created. To exercise your right of withdrawal, you must contact medlem@boulders.dk. The right of withdrawal cannot be exercised for repeated purchases. If you exercise your right of withdrawal, Boulders is entitled to demand proportional payment based on applicable entrance fees for the number of times the punch card has been used. Prices will reflect the check-in time in relation to peak and off-peak pricing.</p>
+
+<p>The punch card is not personal and may be used by others. However, any person using a punch from a cardholder's punch card must sign Boulders' applicable liability waiver.</p>`
   },
   privacy: {
     da: `<h2>Privatlivspolitik</h2>
@@ -4963,6 +5328,11 @@ boulders.dk</p>
 function openTermsModal(termsType) {
   if (!DOM.termsModal || !DOM.termsModalContent || !DOM.termsModalTitle) return;
   
+  state.currentModalType = termsType;
+  
+  const currentLang = getCurrentLanguage();
+  updateLanguageSwitcher('terms', currentLang);
+  
   const termsTitles = {
     membership: {
       da: 'Vilkår og Betingelser for Medlemskab',
@@ -4982,29 +5352,352 @@ function openTermsModal(termsType) {
     },
   };
   
-  const currentLang = getCurrentLanguage();
-  const title = termsTitles[termsType]?.[currentLang] || termsTitles[termsType]?.da || 'Terms and Conditions';
-  const content = termsContent[termsType]?.[currentLang] || termsContent[termsType]?.da || '<p>Content not available.</p>';
-  
-  if (!termsContent[termsType]) {
-    console.error('Invalid terms type:', termsType);
-    return;
+  // Handle 'terms' type with tabs
+  if (termsType === 'terms') {
+    // Show tabs
+    if (DOM.termsModalTabs) {
+      DOM.termsModalTabs.style.display = 'flex';
+    }
+    
+    // Show search
+    if (DOM.termsModalSearch) {
+      DOM.termsModalSearch.style.display = 'block';
+      // Update placeholder based on language
+      if (DOM.termsSearchInput) {
+        const placeholder = currentLang === 'da' 
+          ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
+          : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
+        DOM.termsSearchInput.placeholder = placeholder;
+      }
+    }
+    
+    // Set title based on language
+    const title = currentLang === 'da' ? 'Vilkår og Betingelser' : 'Terms and Conditions';
+    DOM.termsModalTitle.textContent = title;
+    
+    // Show membership tab by default
+    state.currentModalTab = 'membership';
+    switchTermsTab('membership');
+    
+    // Store original content for search
+    const currentTab = state.currentModalTab || 'membership';
+    const content = termsContent[currentTab]?.[currentLang] || termsContent[currentTab]?.da || '';
+    state.termsOriginalContent = content;
+  } else {
+    // Hide search for non-tabbed content
+    if (DOM.termsModalSearch) {
+      DOM.termsModalSearch.style.display = 'none';
+    }
+    // Hide tabs for other types
+    if (DOM.termsModalTabs) {
+      DOM.termsModalTabs.style.display = 'none';
+    }
+    
+    const title = termsTitles[termsType]?.[currentLang] || termsTitles[termsType]?.da || 'Terms and Conditions';
+    const content = termsContent[termsType]?.[currentLang] || termsContent[termsType]?.da || '<p>Content not available.</p>';
+    
+    if (!termsContent[termsType]) {
+      console.error('Invalid terms type:', termsType);
+      return;
+    }
+    
+    // Set title
+    DOM.termsModalTitle.textContent = title;
+    
+    // Set content
+    DOM.termsModalContent.innerHTML = content;
+    state.termsOriginalContent = content;
   }
   
-  // Set title
-  DOM.termsModalTitle.textContent = title;
-  
-  // Set content
-  DOM.termsModalContent.innerHTML = content;
+  // Clear search when opening modal
+  if (DOM.termsSearchInput) {
+    DOM.termsSearchInput.value = '';
+    if (DOM.termsSearchClear) {
+      DOM.termsSearchClear.style.display = 'none';
+    }
+  }
   
   // Show modal
   DOM.termsModal.style.display = 'flex';
   DOM.termsModalContent.style.display = 'block';
-  DOM.termsModalLoading.style.display = 'none';
+  if (DOM.termsModalLoading) {
+    DOM.termsModalLoading.style.display = 'none';
+  }
   document.body.classList.add('modal-open');
   
   // Scroll to top of modal content
   DOM.termsModalContent.scrollTop = 0;
+}
+
+function switchTermsTab(tabType) {
+  if (!DOM.termsModalTabs || !DOM.termsModalContent) return;
+  
+  state.currentModalTab = tabType;
+  
+  // Clear search when switching tabs
+  if (DOM.termsSearchInput) {
+    DOM.termsSearchInput.value = '';
+    clearTermsSearch();
+  }
+  
+  // Update active tab
+  const tabs = DOM.termsModalTabs.querySelectorAll('.terms-tab');
+  tabs.forEach(tab => {
+    tab.classList.remove('active');
+    if (tab.dataset.tab === tabType) {
+      tab.classList.add('active');
+    }
+  });
+  
+  // Update tab labels based on language
+  const currentLang = getCurrentLanguage();
+  tabs.forEach(tab => {
+    if (tab.dataset.tab === 'membership') {
+      tab.textContent = currentLang === 'da' ? 'Medlemskab / 15 dage' : 'Membership / 15 Day';
+    } else if (tab.dataset.tab === 'punchcard') {
+      tab.textContent = currentLang === 'da' ? 'Klippekort' : 'Punch Card';
+    }
+  });
+  
+  // Load content for selected tab
+  const content = termsContent[tabType]?.[currentLang] || termsContent[tabType]?.da || '<p>Content not available.</p>';
+  
+  if (termsContent[tabType]) {
+    DOM.termsModalContent.innerHTML = content;
+    state.termsOriginalContent = content;
+    DOM.termsModalContent.scrollTop = 0;
+  }
+}
+
+function performTermsSearch(searchQuery) {
+  if (!DOM.termsModalContent || !state.termsOriginalContent) return;
+  
+  const query = searchQuery.trim().toLowerCase();
+  
+  // Show/hide clear button
+  if (DOM.termsSearchClear) {
+    DOM.termsSearchClear.style.display = query ? 'flex' : 'none';
+  }
+  
+  if (!query) {
+    // Restore original content
+    DOM.termsModalContent.innerHTML = state.termsOriginalContent;
+    return;
+  }
+  
+  // Create a temporary div to parse HTML
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = state.termsOriginalContent;
+  
+  // Search and highlight function
+  function highlightText(node, searchText) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      const matches = text.match(regex);
+      
+      if (matches && matches.length > 0) {
+        const parts = text.split(regex);
+        const fragment = document.createDocumentFragment();
+        
+        parts.forEach((part, index) => {
+          if (part.toLowerCase() === searchText.toLowerCase()) {
+            const highlight = document.createElement('span');
+            highlight.className = 'search-highlight';
+            highlight.textContent = part;
+            fragment.appendChild(highlight);
+          } else if (part) {
+            fragment.appendChild(document.createTextNode(part));
+          }
+        });
+        
+        return fragment;
+      }
+      return null;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      // Skip script and style tags
+      if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') {
+        return null;
+      }
+      
+      const clone = node.cloneNode(false);
+      let hasMatch = false;
+      
+      Array.from(node.childNodes).forEach(child => {
+        const result = highlightText(child, searchText);
+        if (result) {
+          clone.appendChild(result);
+          hasMatch = true;
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          // Check if element contains the search text
+          if (child.textContent.toLowerCase().includes(searchText)) {
+            clone.appendChild(child.cloneNode(true));
+            hasMatch = true;
+          }
+        } else if (child.nodeType === Node.TEXT_NODE) {
+          clone.appendChild(child.cloneNode(true));
+        }
+      });
+      
+      return hasMatch ? clone : null;
+    }
+    return null;
+  }
+  
+  // Perform search
+  const highlightedContent = highlightText(tempDiv, query);
+  
+  if (highlightedContent) {
+    DOM.termsModalContent.innerHTML = '';
+    DOM.termsModalContent.appendChild(highlightedContent);
+  } else {
+    // No results found
+    DOM.termsModalContent.innerHTML = '<div class="search-no-results">No results found for "' + searchQuery + '"</div>';
+  }
+  
+  // Scroll to first match
+  const firstHighlight = DOM.termsModalContent.querySelector('.search-highlight');
+  if (firstHighlight) {
+    firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function clearTermsSearch() {
+  if (!DOM.termsSearchInput || !DOM.termsModalContent) return;
+  
+  DOM.termsSearchInput.value = '';
+  if (DOM.termsSearchClear) {
+    DOM.termsSearchClear.style.display = 'none';
+  }
+  
+  // Restore original content
+  if (state.termsOriginalContent) {
+    DOM.termsModalContent.innerHTML = state.termsOriginalContent;
+    DOM.termsModalContent.scrollTop = 0;
+  }
+}
+
+function updateLanguageSwitcher(modalType, lang) {
+  if (modalType === 'terms') {
+    if (DOM.termsModalLangDa && DOM.termsModalLangEn) {
+      DOM.termsModalLangDa.classList.toggle('active', lang === 'da');
+      DOM.termsModalLangEn.classList.toggle('active', lang === 'en');
+    }
+  } else if (modalType === 'privacy') {
+    if (DOM.dataPolicyModalLangDa && DOM.dataPolicyModalLangEn) {
+      DOM.dataPolicyModalLangDa.classList.toggle('active', lang === 'da');
+      DOM.dataPolicyModalLangEn.classList.toggle('active', lang === 'en');
+    }
+  }
+}
+
+function switchModalLanguage(modalType, lang) {
+  setCurrentLanguage(lang);
+  
+  if (modalType === 'terms') {
+    updateLanguageSwitcher('terms', lang);
+    
+    // Update title
+    const currentTab = state.currentModalTab || 'membership';
+    if (state.currentModalType === 'terms') {
+      const title = lang === 'da' ? 'Vilkår og Betingelser' : 'Terms and Conditions';
+      if (DOM.termsModalTitle) {
+        DOM.termsModalTitle.textContent = title;
+      }
+      
+      // Update tab labels
+      const tabs = DOM.termsModalTabs?.querySelectorAll('.terms-tab');
+      tabs?.forEach(tab => {
+        if (tab.dataset.tab === 'membership') {
+          tab.textContent = lang === 'da' ? 'Medlemskab / 15 dage' : 'Membership / 15 Day';
+        } else if (tab.dataset.tab === 'punchcard') {
+          tab.textContent = lang === 'da' ? 'Klippekort' : 'Punch Card';
+        }
+      });
+      
+      // Update search placeholder
+      if (DOM.termsSearchInput) {
+        const placeholder = lang === 'da' 
+          ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
+          : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
+        DOM.termsSearchInput.placeholder = placeholder;
+      }
+      
+      // Reload content for current tab (this will clear search)
+      switchTermsTab(currentTab);
+      
+      // Store original content for search after language switch
+      const content = termsContent[currentTab]?.[lang] || termsContent[currentTab]?.da || '';
+      state.termsOriginalContent = content;
+    } else {
+      // For non-tabbed content
+      const termsTitles = {
+        membership: {
+          da: 'Vilkår og Betingelser for Medlemskab',
+          en: 'Terms and Conditions for Membership',
+        },
+        punchcard: {
+          da: 'Vilkår og Betingelser for Klippekort',
+          en: 'Terms and Conditions for Punch Card',
+        },
+      };
+      
+      const title = termsTitles[state.currentModalType]?.[lang] || termsTitles[state.currentModalType]?.da || 'Terms and Conditions';
+      const content = termsContent[state.currentModalType]?.[lang] || termsContent[state.currentModalType]?.da || '<p>Content not available.</p>';
+      
+      if (DOM.termsModalTitle) {
+        DOM.termsModalTitle.textContent = title;
+      }
+      if (DOM.termsModalContent) {
+        DOM.termsModalContent.innerHTML = content;
+        state.termsOriginalContent = content;
+        DOM.termsModalContent.scrollTop = 0;
+      }
+      
+      // Clear search when switching language
+      if (DOM.termsSearchInput) {
+        DOM.termsSearchInput.value = '';
+        if (DOM.termsSearchClear) {
+          DOM.termsSearchClear.style.display = 'none';
+        }
+      }
+    }
+  } else if (modalType === 'privacy') {
+    updateLanguageSwitcher('privacy', lang);
+    
+    // Update data policy content
+    const content = termsContent.privacy?.[lang] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
+    
+    if (DOM.dataPolicyModalContent) {
+      DOM.dataPolicyModalContent.innerHTML = content;
+      DOM.dataPolicyModalContent.scrollTop = 0;
+    }
+  }
+}
+
+function openDataPolicyModal() {
+  if (!DOM.dataPolicyModal || !DOM.dataPolicyModalContent) return;
+  
+  state.currentModalType = 'privacy';
+  
+  const currentLang = getCurrentLanguage();
+  updateLanguageSwitcher('privacy', currentLang);
+  
+  const content = termsContent.privacy?.[currentLang] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
+  
+  // Set content
+  DOM.dataPolicyModalContent.innerHTML = content;
+  
+  // Show modal
+  DOM.dataPolicyModal.style.display = 'flex';
+  DOM.dataPolicyModalContent.style.display = 'block';
+  if (DOM.dataPolicyModalLoading) {
+    DOM.dataPolicyModalLoading.style.display = 'none';
+  }
+  document.body.classList.add('modal-open');
+  
+  // Scroll to top of modal content
+  DOM.dataPolicyModalContent.scrollTop = 0;
 }
 
 function closeTermsModal() {
@@ -5015,8 +5708,37 @@ function closeTermsModal() {
     DOM.termsModalContent.innerHTML = '';
   }
   
+  // Clear search
+  if (DOM.termsSearchInput) {
+    DOM.termsSearchInput.value = '';
+  }
+  if (DOM.termsSearchClear) {
+    DOM.termsSearchClear.style.display = 'none';
+  }
+  
+  // Reset state
+  state.currentModalType = null;
+  state.currentModalTab = null;
+  state.termsOriginalContent = null;
+  
   // Hide modal
   DOM.termsModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
+}
+
+function closeDataPolicyModal() {
+  if (!DOM.dataPolicyModal) return;
+  
+  // Clear content
+  if (DOM.dataPolicyModalContent) {
+    DOM.dataPolicyModalContent.innerHTML = '';
+  }
+  
+  // Reset state
+  state.currentModalType = null;
+  
+  // Hide modal
+  DOM.dataPolicyModal.style.display = 'none';
   document.body.classList.remove('modal-open');
 }
 
@@ -6193,7 +6915,20 @@ function handleCategoryToggle(category) {
     
     // Only toggle expanded if this is the selected category
     if (isSelected) {
+      const wasExpanded = item.classList.contains('expanded');
       item.classList.toggle('expanded');
+      
+      // Focus the expanded category content
+      if (!wasExpanded && item.classList.contains('expanded')) {
+        setTimeout(() => {
+          const categoryContent = item.querySelector('.category-content');
+          if (categoryContent) {
+            categoryContent.setAttribute('tabindex', '-1');
+            categoryContent.focus();
+            categoryContent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 100);
+      }
     } else {
       item.classList.remove('expanded');
     }
@@ -6325,7 +7060,16 @@ function setupNewAccessStep() {
           footerText.innerHTML = footerTexts[categoryType];
         }
         
-        // Auto-scroll removed - will be revisited later
+        // Focus the expanded category content for accessibility
+        setTimeout(() => {
+          const categoryContent = category.querySelector('.category-content');
+          if (categoryContent) {
+            categoryContent.setAttribute('tabindex', '-1');
+            categoryContent.focus();
+            // Scroll into view smoothly
+            categoryContent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 100); // Small delay to ensure expansion animation has started
       } else {
         currentCategory = null;
         if (footerText) {
