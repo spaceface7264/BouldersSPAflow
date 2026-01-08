@@ -3394,6 +3394,10 @@ body {
     cursor: not-allowed;
 }
 
+.save-account-btn.error-flash {
+    animation: redFlash 0.6s ease-in-out;
+}
+
 .save-account-message {
     margin-top: 12px;
     padding: 12px;
@@ -4733,6 +4737,10 @@ body {
     background-color: #D401D5;
 }
 
+.checkout-btn.error-flash {
+    animation: redFlashCheckout 0.6s ease-in-out;
+}
+
 /* Main content area - grows to fill available space */
 main {
     flex: 1 0 auto; /* Grow to fill space, but allow shrinking if needed */
@@ -5411,6 +5419,11 @@ main {
     animation: shake 0.5s ease-in-out;
 }
 
+.consents-section.error,
+.payment-methods.error {
+    animation: shake 0.5s ease-in-out;
+}
+
 .country-selector.error {
     border-color: #EF4444 !important;
     background-color: rgba(239, 68, 68, 0.1) !important;
@@ -5436,8 +5449,42 @@ main {
 
 @keyframes shake {
     0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-5px); }
-    75% { transform: translateX(5px); }
+    25% { transform: translateX(-8px); }
+    75% { transform: translateX(8px); }
+}
+
+@keyframes shakeButton {
+    0%, 100% { transform: translateX(0) scale(1); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-6px) scale(1.02); }
+    20%, 40%, 60%, 80% { transform: translateX(6px) scale(1.02); }
+}
+
+@keyframes redFlash {
+    0% { background-color: #6B7280; }
+    20% { background-color: #EF4444; }
+    100% { background-color: #6B7280; }
+}
+
+.save-account-btn.valid.error-flash {
+    animation: redFlashValid 0.6s ease-in-out;
+}
+
+@keyframes redFlash {
+    0% { background-color: #6B7280; }
+    15% { background-color: #EF4444; }
+    100% { background-color: #6B7280; }
+}
+
+@keyframes redFlashValid {
+    0% { background-color: #F401F5; }
+    15% { background-color: #EF4444; }
+    100% { background-color: #F401F5; }
+}
+
+@keyframes redFlashCheckout {
+    0% { background-color: #F401F5; }
+    15% { background-color: #EF4444; }
+    100% { background-color: #F401F5; }
 }
 
 /* Mobile Responsive */

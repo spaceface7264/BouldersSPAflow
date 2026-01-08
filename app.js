@@ -6076,11 +6076,43 @@ async function handleSaveAccount() {
   const confirmPassword = document.getElementById('confirmPassword')?.value;
   if (password && confirmPassword && password !== confirmPassword) {
     showSaveAccountMessage('Passwords do not match', 'error');
+    // Animate save account button with red flash
+    const saveBtn = document.querySelector('[data-action="save-account"]');
+    if (saveBtn) {
+      saveBtn.classList.remove('error-flash');
+      void saveBtn.offsetWidth;
+      saveBtn.classList.add('error-flash');
+      setTimeout(() => {
+        saveBtn.classList.remove('error-flash');
+      }, 600);
+    }
+    // Highlight password fields
+    highlightFieldError('password', true); // Animate when triggered from button click
+    highlightFieldError('confirmPassword', true); // Animate when triggered from button click
     return;
   }
   
   if (missingFields.length > 0) {
     showSaveAccountMessage(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
+    // Animate save account button with red flash and highlight missing fields
+    const saveBtn = document.querySelector('[data-action="save-account"]');
+    if (saveBtn) {
+      saveBtn.classList.remove('error-flash');
+      // Trigger reflow to restart animation
+      void saveBtn.offsetWidth;
+      saveBtn.classList.add('error-flash');
+      setTimeout(() => {
+        saveBtn.classList.remove('error-flash');
+      }, 600);
+    }
+    
+    // Highlight missing fields with shake animation
+    requiredFields.forEach(field => {
+      const input = document.getElementById(field.id);
+      if (!input || !input.value.trim()) {
+        highlightFieldError(field.id, true); // Animate when triggered from button click
+      }
+    });
     return;
   }
   
@@ -7340,6 +7372,8 @@ function switchAuthMode(mode, email = null) {
   } else {
     loginSection.style.display = 'none';
     createSection.style.display = 'block';
+    // Clear any error states when switching to create account mode
+    clearErrorStates();
     // Check button state when switching to create account mode
     setTimeout(() => checkSaveAccountButtonState(), 100);
   }
@@ -9467,8 +9501,18 @@ async function handleCheckout() {
   }
   
   // Validation (existing)
-  if (!validateForm()) {
+  if (!validateForm(true)) {
     showToast('Please review the highlighted fields.', 'error');
+    // Animate checkout button with red flash
+    if (DOM.checkoutBtn) {
+      DOM.checkoutBtn.classList.remove('error-flash');
+      // Trigger reflow to restart animation
+      void DOM.checkoutBtn.offsetWidth;
+      DOM.checkoutBtn.classList.add('error-flash');
+      setTimeout(() => {
+        DOM.checkoutBtn.classList.remove('error-flash');
+      }, 600);
+    }
     return;
   }
 
@@ -9480,6 +9524,15 @@ async function handleCheckout() {
 
   if (!hasMembership && !hasPunchCards && !hasAddons) {
     showToast('Select a membership, punch card, or add-on to continue.', 'error');
+    // Animate checkout button with red flash
+    if (DOM.checkoutBtn) {
+      DOM.checkoutBtn.classList.remove('error-flash');
+      void DOM.checkoutBtn.offsetWidth;
+      DOM.checkoutBtn.classList.add('error-flash');
+      setTimeout(() => {
+        DOM.checkoutBtn.classList.remove('error-flash');
+      }, 600);
+    }
     return;
   }
   
@@ -9488,6 +9541,15 @@ async function handleCheckout() {
 
   if (!state.paymentMethod) {
     showToast('Choose a payment method to continue.', 'error');
+    // Animate checkout button with red flash
+    if (DOM.checkoutBtn) {
+      DOM.checkoutBtn.classList.remove('error-flash');
+      void DOM.checkoutBtn.offsetWidth;
+      DOM.checkoutBtn.classList.add('error-flash');
+      setTimeout(() => {
+        DOM.checkoutBtn.classList.remove('error-flash');
+      }, 600);
+    }
     state.checkoutInProgress = false; // Reset on validation error
     return;
   }
@@ -11593,7 +11655,7 @@ function handleReferralCopy() {
   }
 }
 
-function validateForm() {
+function validateForm(animate = false) {
   let isValid = true;
   clearErrorStates();
   const skipPersonalValidation = isUserAuthenticated();
@@ -11603,7 +11665,7 @@ function validateForm() {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
         isValid = false;
-        highlightFieldError(fieldId);
+        highlightFieldError(fieldId, animate);
       }
     });
   }
@@ -11613,18 +11675,42 @@ function validateForm() {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
         isValid = false;
-        highlightFieldError(fieldId);
+        highlightFieldError(fieldId, animate);
       }
     });
   }
 
   if (!DOM.termsConsent?.checked) {
     isValid = false;
-    showToast('Please accept the terms and conditions.', 'error');
+    if (animate) {
+      showToast('Please accept the terms and conditions.', 'error');
+      // Animate terms consent checkbox
+      const termsConsent = DOM.termsConsent;
+      if (termsConsent) {
+        const formGroup = termsConsent.closest('.form-group') || termsConsent.closest('.consents-section');
+        if (formGroup) {
+          formGroup.classList.add('error');
+          formGroup.style.animation = 'shake 0.5s ease-in-out';
+          setTimeout(() => {
+            formGroup.style.animation = '';
+          }, 500);
+        }
+      }
+    }
   }
 
   if (!state.paymentMethod) {
     isValid = false;
+    if (animate) {
+      // Animate payment method section
+      const paymentMethods = document.querySelector('.payment-methods');
+      if (paymentMethods) {
+        paymentMethods.style.animation = 'shake 0.5s ease-in-out';
+        setTimeout(() => {
+          paymentMethods.style.animation = '';
+        }, 500);
+      }
+    }
   }
 
   // Card fields validation REMOVED - users are redirected to payment provider
@@ -11638,14 +11724,37 @@ function clearErrorStates() {
   [...REQUIRED_FIELDS, ...PARENT_REQUIRED_FIELDS, ...CARD_FIELDS].forEach((fieldId) => {
     const field = document.getElementById(fieldId);
     const formGroup = field?.closest('.form-group');
-    formGroup?.classList.remove('error');
+    if (formGroup) {
+      formGroup.classList.remove('error');
+      formGroup.style.animation = ''; // Clear any animations
+    }
   });
+  
+  // Also clear animations from consent and payment sections
+  const consentsSection = document.querySelector('.consents-section');
+  if (consentsSection) {
+    consentsSection.classList.remove('error');
+    consentsSection.style.animation = '';
+  }
+  
+  const paymentMethods = document.querySelector('.payment-methods');
+  if (paymentMethods) {
+    paymentMethods.style.animation = '';
+  }
 }
 
-function highlightFieldError(fieldId) {
+function highlightFieldError(fieldId, animate = false) {
   const field = document.getElementById(fieldId);
   const formGroup = field?.closest('.form-group');
-  formGroup?.classList.add('error');
+  if (formGroup) {
+    formGroup.classList.add('error');
+    // Only animate if explicitly requested (from button clicks)
+    if (animate) {
+      formGroup.style.animation = 'none';
+      void formGroup.offsetWidth; // Trigger reflow
+      formGroup.style.animation = 'shake 0.5s ease-in-out';
+    }
+  }
 }
 
 function isValidCardNumber(value) {
