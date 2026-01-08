@@ -7277,10 +7277,31 @@ function initAuthModeToggle() {
     DOM.authModeToggle.style.display = isAuthenticated ? 'none' : '';
   }
   
-  // Don't set any button as active initially - wait for user to click
-  // Hide both sections initially
-  if (loginSection) loginSection.style.display = 'none';
-  if (createSection) createSection.style.display = 'none';
+  // On desktop, default to login form; on mobile, wait for user to click
+  const isDesktop = window.innerWidth >= 768;
+  
+  if (isDesktop && !isAuthenticated) {
+    // Desktop: activate login form by default and expand it
+    const loginBtn = document.querySelector('[data-mode="login"]');
+    if (loginBtn) {
+      loginBtn.classList.add('active');
+      // Trigger switchAuthMode to ensure proper state
+      switchAuthMode('login');
+    }
+    if (loginSection) {
+      loginSection.style.display = 'block';
+      // Ensure it's visible
+      loginSection.style.visibility = 'visible';
+      loginSection.style.opacity = '1';
+    }
+    if (createSection) {
+      createSection.style.display = 'none';
+    }
+  } else {
+    // Mobile or authenticated: hide both sections initially
+    if (loginSection) loginSection.style.display = 'none';
+    if (createSection) createSection.style.display = 'none';
+  }
   
   toggleBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -11994,6 +12015,28 @@ function showStep(stepNumber) {
   // If showing step 4 and user is logged in, ensure login tab is selected
   if (stepNumber === 4 && isUserAuthenticated()) {
     switchAuthMode('login');
+  }
+  
+  // On desktop, default to login form when showing step 4 (if not authenticated)
+  if (stepNumber === 4 && !isUserAuthenticated()) {
+    const isDesktop = window.innerWidth >= 768; // Desktop breakpoint
+    if (isDesktop) {
+      // Ensure login form is expanded on desktop
+      setTimeout(() => {
+        const loginSection = document.querySelector('[data-auth-section="login"]');
+        const createSection = document.querySelector('[data-auth-section="create"]');
+        const loginBtn = document.querySelector('[data-mode="login"]');
+        
+        if (loginSection && createSection && loginBtn) {
+          // Activate login mode
+          switchAuthMode('login');
+          
+          // Ensure sections are properly displayed
+          loginSection.style.display = 'block';
+          createSection.style.display = 'none';
+        }
+      }, 100);
+    }
   }
   
   // If showing step 4 and order data is available, update payment overview

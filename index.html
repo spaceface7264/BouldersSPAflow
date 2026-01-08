@@ -327,8 +327,8 @@
                                 <div class="auth-mode-slider"></div>
                             </div>
                     
-                            <!-- Login Section (initially hidden) -->
-                            <div class="info-section" data-auth-section="login" style="display: none;">
+                            <!-- Login Section -->
+                            <div class="info-section" data-auth-section="login">
                                 <div class="form-container">
                                     <div class="login-status" data-login-status style="display: none;">
                                         <div class="login-status-content">
@@ -410,14 +410,14 @@
                             <form class="registration-form">
                         <div class="form-row">
                         <div class="form-group">
-                                     <label for="firstName">First name*</label>
-                                     <input type="text" id="firstName" name="firstName" placeholder="Enter your first name" data-api-field="customer.firstName" required>
+                                    <label for="firstName">First name*</label>
+                                    <input type="text" id="firstName" name="firstName" placeholder="First Name" data-api-field="customer.firstName" required>
                                      <div class="error-message">Please enter your first name</div>
                                  </div>
                                  
                                  <div class="form-group">
-                                     <label for="lastName">Last name*</label>
-                                     <input type="text" id="lastName" name="lastName" placeholder="Enter your last name" data-api-field="customer.lastName" required>
+                                    <label for="lastName">Last name*</label>
+                                    <input type="text" id="lastName" name="lastName" placeholder="Lst name" data-api-field="customer.lastName" required>
                                      <div class="error-message">Please enter your last name</div>
                                  </div>
                              </div>
@@ -432,32 +432,19 @@
                              
                             <div class="form-group">
                                 <label for="streetAddress">Street and house number*</label>
-                                <input type="text" id="streetAddress" name="streetAddress" placeholder="Enter street and house number" data-api-field="customer.address.street" required>
+                                <input type="text" id="streetAddress" name="streetAddress" placeholder="Street and house nr" data-api-field="customer.address.street" required>
                         </div>
                         
                         <div class="form-row">
                             <div class="form-group">
-                                     <label for="postalCode">Postal code*</label>
-                                     <input type="text" id="postalCode" name="postalCode" placeholder="1234" data-api-field="customer.address.postalCode" required>
+                                    <label for="postalCode">Postal code*</label>
+                                    <input type="text" id="postalCode" name="postalCode" placeholder="Zipcode" data-api-field="customer.address.postalCode" required>
                             </div>
                             
                             <div class="form-group">
                                      <label for="city">City</label>
                                      <input type="text" id="city" name="city" placeholder="Auto" data-api-field="customer.address.city" readonly>
                             </div>
-                        </div>
-                        
-                        <div class="form-group">
-                                <label for="country">Country*</label>
-                                <select id="country" name="country" data-api-field="customer.country" required>
-                                    <option value="DK" selected>Denmark</option>
-                                    <option value="SE">Sweden</option>
-                                    <option value="NO">Norway</option>
-                                    <option value="DE">Germany</option>
-                                    <option value="GB">United Kingdom</option>
-                                    <option value="US">United States</option>
-                                    <option value="OTHER">Other</option>
-                                </select>
                         </div>
                         
                         <div class="form-group">
