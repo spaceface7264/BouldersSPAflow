@@ -3776,6 +3776,7 @@ const state = {
   selectedGymId: null,
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
+  currentAuthMode: null, // Track current auth mode (login/create)
   membershipPlanId: null,
   valueCardQuantities: new Map(),
   addonIds: new Set(),
@@ -4442,7 +4443,7 @@ function cacheDom() {
   DOM.loginFormContainer = document.querySelector('[data-login-form-container]');
   // Find form-container that contains login-status (parent of login-status)
   DOM.loginFormContainerWrapper = DOM.loginStatus?.closest('.form-container');
-  DOM.authModeToggle = document.querySelector('.auth-mode-toggle');
+  DOM.authModeToggle = null; // Removed - using button in form instead
   DOM.forgotPasswordLink = document.querySelector('[data-action="forgot-password"]');
   DOM.forgotPasswordModal = document.getElementById('forgotPasswordModal');
   DOM.forgotPasswordForm = document.getElementById('forgotPasswordForm');
@@ -7346,29 +7347,24 @@ function setupNewAccessStep() {
 
 // Initialize auth mode toggle
 function initAuthModeToggle() {
-  const toggleBtns = document.querySelectorAll('.auth-mode-btn');
   const loginSection = document.querySelector('[data-auth-section="login"]');
   const createSection = document.querySelector('[data-auth-section="create"]');
   
   // Set initial state - if user is logged in, select login tab, otherwise create account
   const isAuthenticated = isUserAuthenticated();
   
-  // Hide toggle if user is already authenticated
-  if (DOM.authModeToggle) {
-    DOM.authModeToggle.style.display = isAuthenticated ? 'none' : '';
-  }
+  // Hide toggle buttons if user is already authenticated
+  const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
+  switchBtns.forEach(btn => {
+    btn.style.display = isAuthenticated ? 'none' : '';
+  });
   
-  // On desktop, default to login form; on mobile, wait for user to click
+  // On desktop, default to login form; on mobile, also show login form by default
   const isDesktop = window.innerWidth >= 768;
   
-  if (isDesktop && !isAuthenticated) {
-    // Desktop: activate login form by default and expand it
-    const loginBtn = document.querySelector('[data-mode="login"]');
-    if (loginBtn) {
-      loginBtn.classList.add('active');
-      // Trigger switchAuthMode to ensure proper state
-      switchAuthMode('login');
-    }
+  if (!isAuthenticated) {
+    // Always show login form by default (both desktop and mobile)
+    switchAuthMode('login');
     if (loginSection) {
       loginSection.style.display = 'block';
       // Ensure it's visible
@@ -7379,29 +7375,59 @@ function initAuthModeToggle() {
       createSection.style.display = 'none';
     }
   } else {
-    // Mobile or authenticated: hide both sections initially
-    if (loginSection) loginSection.style.display = 'none';
-    if (createSection) createSection.style.display = 'none';
+    // Authenticated: show login section with status
+    if (loginSection) {
+      loginSection.style.display = 'block';
+    }
+    if (createSection) {
+      createSection.style.display = 'none';
+    }
   }
-  
-  toggleBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const mode = btn.dataset.mode;
-      switchAuthMode(mode);
-    });
-  });
 }
 
 // Switch between auth modes
 function switchAuthMode(mode, email = null) {
-  const toggleBtns = document.querySelectorAll('.auth-mode-btn');
   const loginSection = document.querySelector('[data-auth-section="login"]');
   const createSection = document.querySelector('[data-auth-section="create"]');
+  const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
   
-  // Update button states
-  toggleBtns.forEach(b => b.classList.remove('active'));
-  const activeBtn = document.querySelector(`[data-mode="${mode}"]`);
-  if (activeBtn) activeBtn.classList.add('active');
+  // Store current mode
+  state.currentAuthMode = mode;
+  
+  // Update button text and mode based on current section
+  switchBtns.forEach(btn => {
+    if (mode === 'login') {
+      btn.dataset.mode = 'create';
+      const textSpan = btn.querySelector('.auth-mode-switch-text');
+      if (textSpan) textSpan.textContent = 'Create Account';
+      // Update icon to account icon
+      btn.innerHTML = `
+        <span class="auth-mode-switch-text">Create Account</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path>
+        </svg>
+      `;
+    } else {
+      btn.dataset.mode = 'login';
+      const textSpan = btn.querySelector('.auth-mode-switch-text');
+      if (textSpan) textSpan.textContent = 'Login';
+      // Update icon to login icon
+      btn.innerHTML = `
+        <span class="auth-mode-switch-text">Login</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+          <polyline points="10 17 15 12 10 7"></polyline>
+          <line x1="15" y1="12" x2="3" y2="12"></line>
+        </svg>
+      `;
+    }
+  });
+  
+  // Hide buttons if user is authenticated
+  const isAuthenticated = isUserAuthenticated();
+  switchBtns.forEach(btn => {
+    btn.style.display = isAuthenticated ? 'none' : '';
+  });
   
   // Show/hide sections with fade
   if (mode === 'login') {
@@ -7507,7 +7533,10 @@ function handleGlobalClick(event) {
     }
     case 'switch-auth-mode': {
       const mode = actionable.dataset.mode;
-      switchAuthMode(mode);
+      // Toggle mode: if currently on login, switch to create, and vice versa
+      const currentMode = state.currentAuthMode || (document.querySelector('[data-auth-section="login"]')?.style.display !== 'none' ? 'login' : 'create');
+      const newMode = mode || (currentMode === 'login' ? 'create' : 'login');
+      switchAuthMode(newMode);
       break;
     }
     case 'submit-checkout': {
@@ -12193,28 +12222,35 @@ function showStep(stepNumber) {
   // If showing step 4 and user is logged in, ensure login tab is selected
   if (stepNumber === 4 && isUserAuthenticated()) {
     switchAuthMode('login');
+  } else if (stepNumber === 4 && !isUserAuthenticated()) {
+    // Update switch button visibility when showing step 4
+    const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
+    switchBtns.forEach(btn => {
+      btn.style.display = '';
+    });
   }
   
   // On desktop, default to login form when showing step 4 (if not authenticated)
   if (stepNumber === 4 && !isUserAuthenticated()) {
-    const isDesktop = window.innerWidth >= 768; // Desktop breakpoint
-    if (isDesktop) {
-      // Ensure login form is expanded on desktop
-      setTimeout(() => {
-        const loginSection = document.querySelector('[data-auth-section="login"]');
-        const createSection = document.querySelector('[data-auth-section="create"]');
-        const loginBtn = document.querySelector('[data-mode="login"]');
+    // Initialize auth mode toggle immediately
+    initAuthModeToggle();
+    
+    // Ensure login form is visible
+    setTimeout(() => {
+      const loginSection = document.querySelector('[data-auth-section="login"]');
+      const createSection = document.querySelector('[data-auth-section="create"]');
+      
+      if (loginSection && createSection) {
+        // Activate login mode
+        switchAuthMode('login');
         
-        if (loginSection && createSection && loginBtn) {
-          // Activate login mode
-          switchAuthMode('login');
-          
-          // Ensure sections are properly displayed
-          loginSection.style.display = 'block';
-          createSection.style.display = 'none';
-        }
-      }, 100);
-    }
+        // Ensure sections are properly displayed
+        loginSection.style.display = 'block';
+        loginSection.style.visibility = 'visible';
+        loginSection.style.opacity = '1';
+        createSection.style.display = 'none';
+      }
+    }, 50);
   }
   
   // If showing step 4 and order data is available, update payment overview

@@ -326,20 +326,16 @@
 
                     <div class="info-layout">
                         <div class="info-form-section">
-                            <!-- Mode Toggle -->
-                            <div class="auth-mode-toggle">
-                                <button class="auth-mode-btn" data-mode="login" data-action="switch-auth-mode">
-                                    Login
-                                </button>
-                                <button class="auth-mode-btn" data-mode="create" data-action="switch-auth-mode">
-                                    Create Account
-                                </button>
-                                <div class="auth-mode-slider"></div>
-                            </div>
-                    
                             <!-- Login Section -->
                             <div class="info-section" data-auth-section="login">
                                 <div class="form-container">
+                                    <!-- Auth Mode Toggle Button - Top Right -->
+                                    <button class="auth-mode-switch-btn" id="authModeSwitchBtn" data-action="switch-auth-mode" data-mode="create">
+                                        <span class="auth-mode-switch-text">Create Account</span>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path>
+                                        </svg>
+                                    </button>
                                     <div class="login-status" data-login-status style="display: none;">
                                         <div class="login-status-content">
                                             <div class="login-status-profile">
@@ -411,6 +407,15 @@
                             <!-- Registration Section (initially hidden) -->
                             <div class="info-section" data-auth-section="create" style="display: none;">
                         <div class="form-container">
+                            <!-- Auth Mode Toggle Button - Top Right -->
+                            <button class="auth-mode-switch-btn" id="authModeSwitchBtn" data-action="switch-auth-mode" data-mode="login">
+                                <span class="auth-mode-switch-text">Login</span>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                                    <polyline points="10 17 15 12 10 7"></polyline>
+                                    <line x1="15" y1="12" x2="3" y2="12"></line>
+                                </svg>
+                            </button>
                             <h3 class="info-section-title">CREATE PROFILE</h3>
                         <div class="buyer-section">
                             <div class="buyer-header">
