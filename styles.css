@@ -1172,13 +1172,16 @@ body {
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
-    justify-content: space-between;
+    justify-content: flex-start; /* Changed from space-between to keep left-aligned */
     width: 100%;
 }
 
 .gym-address {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+    text-align: left; /* Ensure left alignment */
+    flex-shrink: 1;
+    min-width: 0; /* Allow text to wrap if needed */
 }
 
 
@@ -2564,7 +2567,7 @@ body {
     /* Shrink step panel content for mobile viewport */
     .step-panel-content {
         max-width: 100%;
-        padding: 0 16px 0 16px; /* Remove bottom padding so items reach edge */
+        padding: 0 6px 0 6px; /* Reduced padding for better screen use */
         margin-top: 0;
         overflow-x: hidden;
         box-sizing: border-box;
@@ -5099,11 +5102,17 @@ main {
         margin-right: 0;
     }
     
+    /* Ensure step 4 panel content matches other steps on mobile */
+    #step-4 .step-panel-content {
+        max-width: 100%;
+        padding: 0 6px 0 6px; /* Reduced padding for better screen use */
+    }
+    
     .info-form-section {
         max-width: 100%;
         margin-left: 0;
         margin-right: 0;
-        padding: 0 16px;
+        padding: 0; /* Remove padding - step-panel-content already provides it */
         order: 1; /* Show form section first on mobile */
         overflow-x: hidden;
     }
@@ -5111,10 +5120,19 @@ main {
     .order-summary-section {
         position: static;
         order: 2; /* Show order summary second on mobile */
+        width: 100%;
+        max-width: 100%;
+        margin-left: 0;
+        margin-right: 0;
+        padding: 0; /* Remove padding - step-panel-content already provides it */
     }
 
     .order-summary {
         position: static;
+        width: 100%;
+        max-width: 100%;
+        margin-left: 0;
+        margin-right: 0;
     }
 
     .plan-info-text {
@@ -5329,7 +5347,7 @@ main {
     /* Shrink step panel content for mobile viewport */
     .step-panel-content {
         max-width: 100%;
-        padding: 0 16px 0 16px; /* Remove bottom padding so items reach edge */
+        padding: 0 6px 0 6px; /* Reduced padding for better screen use */
         overflow-x: hidden;
         box-sizing: border-box;
     }

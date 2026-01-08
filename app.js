@@ -5217,72 +5217,40 @@ function refreshLoginUI() {
     }
   }
   
-  // Update profile details
+  // Update profile details - only show address if not already in header
   if (DOM.loginStatusDetails && customer) {
-    console.log('[refreshLoginUI] Customer data:', customer);
     let hasDetails = false;
     
-    // Phone number
-    const phoneItem = document.querySelector('[data-profile-item="phone"]');
-    const phoneValue = document.querySelector('[data-profile-phone]');
-    if (customer.mobilePhone && phoneItem && phoneValue) {
-      const phoneNumber = typeof customer.mobilePhone === 'string' 
-        ? customer.mobilePhone 
-        : customer.mobilePhone.number || customer.mobilePhone.value || '';
-      if (phoneNumber) {
-        phoneValue.textContent = phoneNumber;
-        phoneItem.style.display = 'flex';
-        hasDetails = true;
-        console.log('[refreshLoginUI] Phone displayed:', phoneNumber);
+    // Address in details section (if not shown in header)
+    const addressItem = document.querySelector('[data-profile-item="address"]');
+    const addressValue = document.querySelector('[data-profile-address]');
+    if (addressItem && addressValue) {
+      let addressParts = [];
+      const addressSource = customer?.address || formCustomer?.address;
+      const postalCodeSource = customer?.postalCode || formCustomer?.address?.postalCode;
+      const citySource = customer?.city || formCustomer?.address?.city;
+      
+      if (addressSource) {
+        if (typeof addressSource === 'string') {
+          addressParts.push(addressSource);
+        } else if (addressSource.street) {
+          addressParts.push(addressSource.street);
+        }
       }
-    }
-    
-    // Member number
-    const memberNumberItem = document.querySelector('[data-profile-item="memberNumber"]');
-    const memberNumberValue = document.querySelector('[data-profile-member-number]');
-    if (customer.customerNumber && memberNumberItem && memberNumberValue) {
-      memberNumberValue.textContent = customer.customerNumber;
-      memberNumberItem.style.display = 'flex';
-      hasDetails = true;
-    }
-    
-    // Member since
-    const memberSinceItem = document.querySelector('[data-profile-item="memberSince"]');
-    const memberSinceValue = document.querySelector('[data-profile-member-since]');
-    if (customer.memberJoinDate && memberSinceItem && memberSinceValue) {
-      const joinDate = typeof customer.memberJoinDate === 'string' 
-        ? customer.memberJoinDate 
-        : customer.memberJoinDate.year && customer.memberJoinDate.month && customer.memberJoinDate.day
-          ? `${customer.memberJoinDate.year}-${String(customer.memberJoinDate.month).padStart(2, '0')}-${String(customer.memberJoinDate.day).padStart(2, '0')}`
-          : null;
-      if (joinDate) {
-        memberSinceValue.textContent = joinDate;
-        memberSinceItem.style.display = 'flex';
-        hasDetails = true;
+      if (postalCodeSource) {
+        addressParts.push(postalCodeSource);
       }
-    }
-    
-    // Customer type
-    const customerTypeItem = document.querySelector('[data-profile-item="customerType"]');
-    const customerTypeValue = document.querySelector('[data-profile-customer-type]');
-    if (customer.customerType && customerTypeItem && customerTypeValue) {
-      const customerTypeName = typeof customer.customerType === 'string' 
-        ? customer.customerType 
-        : customer.customerType.name || customer.customerType.label || '';
-      if (customerTypeName) {
-        customerTypeValue.textContent = customerTypeName;
-        customerTypeItem.style.display = 'flex';
-        hasDetails = true;
+      if (citySource) {
+        addressParts.push(citySource);
       }
-    }
-    
-    // Card number
-    const cardNumberItem = document.querySelector('[data-profile-item="cardNumber"]');
-    const cardNumberValue = document.querySelector('[data-profile-card-number]');
-    if (customer.cardNumber && cardNumberItem && cardNumberValue) {
-      cardNumberValue.textContent = customer.cardNumber;
-      cardNumberItem.style.display = 'flex';
-      hasDetails = true;
+      const addressDisplay = addressParts.length > 0 ? addressParts.join(', ') : null;
+      if (addressDisplay) {
+        addressValue.textContent = addressDisplay;
+        addressItem.style.display = 'flex';
+        hasDetails = true;
+      } else {
+        addressItem.style.display = 'none';
+      }
     }
     
     // Show details container if we have any details
