@@ -732,25 +732,28 @@ class AuthAPI {
         
         // Handle rate limit errors with better messaging
         if (response.status === 429) {
-          let retryAfterSeconds = 60; // Default 1 minute (60 seconds) - more reasonable than 15 minutes
+          let retryAfterSeconds = 60; // Default 1 minute (60 seconds)
           try {
             const errorData = JSON.parse(errorText);
             if (errorData.retryAfter) {
               // retryAfter is already in seconds (e.g., 900 = 15 minutes)
               retryAfterSeconds = parseInt(errorData.retryAfter, 10);
-              // Cap at 2 minutes (120 seconds) for better UX - API might say 15 minutes but that's too long
-              retryAfterSeconds = Math.min(retryAfterSeconds, 120);
+              // Store the actual retry time for cooldown tracking
+              if (typeof window !== 'undefined') {
+                window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
+              }
             }
           } catch (e) {
             // If JSON parse fails, try to extract from error text
             const retryMatch = errorText.match(/retryAfter["\s:]*(\d+)/i);
             if (retryMatch) {
               retryAfterSeconds = parseInt(retryMatch[1], 10);
-              // Cap at 2 minutes for better UX
-              retryAfterSeconds = Math.min(retryAfterSeconds, 120);
+              if (typeof window !== 'undefined') {
+                window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
+              }
             }
           }
-          const retryMinutes = Math.ceil(retryAfterSeconds / 60);
+          const retryMinutes = Math.floor(retryAfterSeconds / 60);
           const retrySeconds = retryAfterSeconds % 60;
           const retryMessage = retryMinutes > 0 
             ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
@@ -1038,6 +1041,104 @@ class AuthAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Step 6] Create customer error (${response.status}):`, errorText);
+        
+        // Check for duplicate email error
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          // If not JSON, use the text as-is
+          errorData = { message: errorText };
+        }
+        
+        // Log the full error for debugging
+        console.error('[Step 6] Full error data:', JSON.stringify(errorData, null, 2));
+        console.error('[Step 6] Error code:', errorData?.errorCode);
+        console.error('[Step 6] Field errors:', errorData?.fieldErrors);
+        
+        // Check if this is a duplicate email error
+        const errorMessage = errorData?.message || errorText || '';
+        const errorLower = errorMessage.toLowerCase();
+        const errorCode = errorData?.errorCode || '';
+        const errorCodeLower = errorCode.toLowerCase();
+        
+        // Check for EMAIL_ALREADY_EXISTS error code (from API docs)
+        const hasEmailExistsErrorCode = 
+          errorCodeLower === 'email_already_exists' ||
+          errorCodeLower === 'email_already_exists_name' ||
+          errorCode === 'EMAIL_ALREADY_EXISTS' ||
+          errorCode === 'EMAIL_ALREADY_EXISTS_NAME';
+        
+        // Check fieldErrors array for email-related errors
+        const hasEmailFieldError = errorData?.fieldErrors && Array.isArray(errorData.fieldErrors) &&
+          errorData.fieldErrors.some(err => {
+            const field = err?.field || '';
+            const fieldLower = field.toLowerCase();
+            const errCode = err?.errorCode || '';
+            const errCodeLower = errCode.toLowerCase();
+            return (
+              fieldLower.includes('email') ||
+              fieldLower === 'customer.email' ||
+              errCodeLower === 'email_already_exists' ||
+              errCode === 'EMAIL_ALREADY_EXISTS'
+            );
+          });
+        
+        // Check for email-related error messages
+        const hasEmailErrorMessage = 
+          errorLower.includes('email') && (
+            errorLower.includes('already exists') ||
+            errorLower.includes('already registered') ||
+            errorLower.includes('duplicate') ||
+            errorLower.includes('taken') ||
+            errorLower.includes('in use') ||
+            errorLower.includes('is already') ||
+            errorLower.includes('already in use')
+          );
+        
+        // Check errors array (alternative format)
+        const hasEmailInErrorsArray = errorData?.errors && Array.isArray(errorData.errors) && 
+          errorData.errors.some(err => {
+            const errMsg = (err?.message || err?.msg || '').toLowerCase();
+            const errField = (err?.field || err?.path || '').toLowerCase();
+            return (
+              errField.includes('email') ||
+              errField === 'customer.email' ||
+              errMsg.includes('email') && (
+                errMsg.includes('already exists') ||
+                errMsg.includes('duplicate') ||
+                errMsg.includes('taken')
+              )
+            );
+          });
+        
+        const isDuplicateEmail = 
+          hasEmailExistsErrorCode ||
+          hasEmailFieldError ||
+          hasEmailErrorMessage ||
+          hasEmailInErrorsArray ||
+          (response.status === 409 && errorLower.includes('email')) || // Conflict with email mention
+          (response.status === 400 && hasEmailErrorMessage); // Bad Request with email error
+        
+        console.log('[Step 6] Duplicate email check:', {
+          isDuplicateEmail,
+          hasEmailExistsErrorCode,
+          hasEmailFieldError,
+          hasEmailErrorMessage,
+          hasEmailInErrorsArray,
+          status: response.status,
+          errorCode,
+          errorMessage: errorMessage.substring(0, 200)
+        });
+        
+        if (isDuplicateEmail) {
+          const duplicateError = new Error(`An account with this email address already exists. Please log in instead.`);
+          duplicateError.status = response.status;
+          duplicateError.isDuplicateEmail = true;
+          duplicateError.originalError = errorData;
+          throw duplicateError;
+        }
+        
         throw new Error(`Create customer failed: ${response.status} - ${errorText}`);
       }
       
@@ -3714,6 +3815,8 @@ const state = {
   // Discount code state
   discountCode: null, // Applied discount code
   discountApplied: false, // Whether discount is currently applied
+  // Email tracking to prevent duplicate account creation
+  createdEmails: new Set(), // Track emails that have been used to create accounts in this session
   // Step 5: Store fetched products from API
   subscriptions: [], // Fetched membership products
   valueCards: [], // Fetched punch card products
@@ -4051,6 +4154,18 @@ function applyConditionalSteps() {
 }
 
 function init() {
+  // Initialize email tracking from localStorage
+  try {
+    const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
+    storedEmails.forEach(email => {
+      if (email && typeof email === 'string') {
+        state.createdEmails.add(email.toLowerCase().trim());
+      }
+    });
+    console.log('[Init] Loaded', state.createdEmails.size, 'previously created emails from localStorage');
+  } catch (e) {
+    console.warn('[Init] Could not load created emails from localStorage:', e);
+  }
   cacheDom();
   cacheTemplates();
   renderCatalog();
@@ -4333,6 +4448,9 @@ function cacheDom() {
   DOM.loginStatus = document.querySelector('[data-login-status]');
   DOM.loginStatusEmail = document.querySelector('[data-auth-email]');
   DOM.loginStatusName = document.querySelector('[data-auth-name]');
+  DOM.loginStatusDob = document.querySelector('[data-auth-dob]');
+  DOM.loginStatusAddress = document.querySelector('[data-auth-address]');
+  DOM.loginStatusPhone = document.querySelector('[data-auth-phone]');
   DOM.loginStatusDetails = document.querySelector('[data-auth-details]');
   DOM.loginFormContainer = document.querySelector('[data-login-form-container]');
   // Find form-container that contains login-status (parent of login-status)
@@ -4440,6 +4558,9 @@ function setupEventListeners() {
   
   // Setup form field scrolling for mobile
   setupFormFieldScrolling();
+  
+  // Setup save account button validation
+  setupSaveAccountButtonValidation();
 
   if (DOM.loginForm) {
     DOM.loginForm.addEventListener('submit', handleLoginSubmit);
@@ -4526,11 +4647,10 @@ async function handleLoginSubmit(event) {
   }
 
   // Check for login cooldown (rate limiting)
-  // DISABLED FOR TESTING - Re-enable by uncommenting below
-  /*
   const now = Date.now();
-  if (now < loginCooldownUntil) {
-    const secondsLeft = Math.ceil((loginCooldownUntil - now) / 1000);
+  const cooldownUntil = loginCooldownUntil || (typeof window !== 'undefined' && window.loginCooldownUntil) || 0;
+  if (now < cooldownUntil) {
+    const secondsLeft = Math.ceil((cooldownUntil - now) / 1000);
     const minutesLeft = Math.floor(secondsLeft / 60);
     const remainingSeconds = secondsLeft % 60;
     const cooldownMessage = minutesLeft > 0
@@ -4539,7 +4659,6 @@ async function handleLoginSubmit(event) {
     showToast(`Rate limit: Please wait ${cooldownMessage} before trying again.`, 'error');
     return;
   }
-  */
 
   const email = DOM.loginEmail?.value?.trim() || '';
   const password = DOM.loginPassword?.value || '';
@@ -4599,21 +4718,30 @@ async function handleLoginSubmit(event) {
     DOM.loginForm?.reset();
     // Clear cooldown on successful login
     loginCooldownUntil = 0;
+    if (typeof window !== 'undefined') {
+      window.loginCooldownUntil = 0;
+    }
   } catch (error) {
     console.error('[login] Login failed:', error);
     
     // Handle rate limit errors - set cooldown to prevent further attempts
-    // DISABLED FOR TESTING - Re-enable by uncommenting below
-    /*
-    if (isRateLimitError(error)) {
+    if (error.message && error.message.includes('Rate limit exceeded')) {
       const retryMs = getRetryDelayFromError(error);
       loginCooldownUntil = Date.now() + retryMs;
+      if (typeof window !== 'undefined') {
+        window.loginCooldownUntil = loginCooldownUntil;
+      }
       const secondsLeft = Math.ceil(retryMs / 1000);
-      console.warn(`[login] Rate limited. Cooldown set for ${secondsLeft}s`);
+      const minutesLeft = Math.floor(secondsLeft / 60);
+      const remainingSeconds = secondsLeft % 60;
+      const cooldownMessage = minutesLeft > 0
+        ? `${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}${remainingSeconds > 0 ? ` and ${remainingSeconds} second${remainingSeconds !== 1 ? 's' : ''}` : ''}`
+        : `${secondsLeft} second${secondsLeft !== 1 ? 's' : ''}`;
+      showToast(`Rate limit exceeded. Please wait ${cooldownMessage} before trying again.`, 'error');
+      console.warn(`[login] Rate limited. Cooldown set for ${secondsLeft}s (${cooldownMessage})`);
+    } else {
+      showToast(getErrorMessage(error, 'Login'), 'error');
     }
-    */
-    
-    showToast(getErrorMessage(error, 'Login'), 'error');
   } finally {
     state.loginInProgress = false;
     setLoginLoadingState(false);
@@ -4980,11 +5108,40 @@ function refreshLoginUI() {
   const metadata = getTokenMetadata();
   const customer = state.authenticatedCustomer;
   
+  // Get form data if available (for recently saved accounts)
+  let formData = null;
+  try {
+    formData = buildCheckoutPayload();
+  } catch (e) {
+    // Ignore errors if form is not ready
+  }
+  const formCustomer = formData?.customer;
+  
   // Determine display values
   const emailDisplay = state.authenticatedEmail || customer?.email || metadata?.email || metadata?.username || 'Account';
-  const nameDisplay = customer?.firstName && customer?.lastName 
-    ? `${customer.firstName} ${customer.lastName}` 
-    : customer?.firstName || customer?.lastName || null;
+  
+  // Get full name from customer data or form data
+  let nameDisplay = null;
+  if (customer?.firstName && customer?.lastName) {
+    nameDisplay = `${customer.firstName} ${customer.lastName}`;
+  } else if (customer?.firstName) {
+    nameDisplay = customer.firstName;
+  } else if (customer?.lastName) {
+    nameDisplay = customer.lastName;
+  } else if (formCustomer?.firstName && formCustomer?.lastName) {
+    nameDisplay = `${formCustomer.firstName} ${formCustomer.lastName}`;
+  } else if (formCustomer?.firstName) {
+    nameDisplay = formCustomer.firstName;
+  } else if (formCustomer?.lastName) {
+    nameDisplay = formCustomer.lastName;
+  }
+  
+  // Debug logging
+  if (authenticated && !nameDisplay) {
+    console.log('[refreshLoginUI] No name found. Customer:', customer);
+    console.log('[refreshLoginUI] Form customer:', formCustomer);
+    console.log('[refreshLoginUI] Metadata:', metadata);
+  }
 
   if (DOM.loginStatus) {
     DOM.loginStatus.style.display = authenticated ? 'block' : 'none';
@@ -5003,6 +5160,85 @@ function refreshLoginUI() {
   // Update email display
   if (DOM.loginStatusEmail) {
     DOM.loginStatusEmail.textContent = emailDisplay;
+  }
+  
+  // Update date of birth display (use customer data or form data)
+  if (DOM.loginStatusDob) {
+    let dobDisplay = null;
+    const dobSource = customer?.dateOfBirth || formCustomer?.dateOfBirth;
+    if (dobSource) {
+      if (typeof dobSource === 'string') {
+        // Format date string if needed (YYYY-MM-DD to DD/MM/YYYY)
+        const dateMatch = dobSource.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if (dateMatch) {
+          dobDisplay = `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
+        } else {
+          dobDisplay = dobSource;
+        }
+      } else if (dobSource.year && dobSource.month && dobSource.day) {
+        dobDisplay = `${String(dobSource.day).padStart(2, '0')}/${String(dobSource.month).padStart(2, '0')}/${dobSource.year}`;
+      }
+    }
+    if (dobDisplay) {
+      DOM.loginStatusDob.textContent = `Date of birth: ${dobDisplay}`;
+      DOM.loginStatusDob.style.display = 'block';
+    } else {
+      DOM.loginStatusDob.style.display = 'none';
+    }
+  }
+  
+  // Update address display (use customer data or form data)
+  if (DOM.loginStatusAddress) {
+    let addressParts = [];
+    const addressSource = customer?.address || formCustomer?.address;
+    const postalCodeSource = customer?.postalCode || formCustomer?.address?.postalCode;
+    const citySource = customer?.city || formCustomer?.address?.city;
+    
+    if (addressSource) {
+      if (typeof addressSource === 'string') {
+        addressParts.push(addressSource);
+      } else if (addressSource.street) {
+        addressParts.push(addressSource.street);
+      }
+    }
+    if (postalCodeSource) {
+      addressParts.push(postalCodeSource);
+    }
+    if (citySource) {
+      addressParts.push(citySource);
+    }
+    const addressDisplay = addressParts.length > 0 ? addressParts.join(', ') : null;
+    if (addressDisplay) {
+      DOM.loginStatusAddress.textContent = `Address: ${addressDisplay}`;
+      DOM.loginStatusAddress.style.display = 'block';
+    } else {
+      DOM.loginStatusAddress.style.display = 'none';
+    }
+  }
+  
+  // Update phone number display (use customer data or form data)
+  if (DOM.loginStatusPhone) {
+    let phoneDisplay = null;
+    const phoneSource = customer?.mobilePhone || customer?.phone || formCustomer?.phone;
+    const phoneCountryCodeSource = customer?.phoneCountryCode || formCustomer?.phone?.countryCode;
+    
+    if (phoneSource) {
+      if (typeof phoneSource === 'string') {
+        phoneDisplay = phoneSource;
+      } else if (phoneSource.number) {
+        const countryCode = phoneSource.countryCode || phoneCountryCodeSource || '';
+        phoneDisplay = countryCode ? `${countryCode} ${phoneSource.number}` : phoneSource.number;
+      }
+    } else if (formCustomer?.phoneNumber && formCustomer?.countryCode) {
+      phoneDisplay = `${formCustomer.countryCode} ${formCustomer.phoneNumber}`;
+    }
+    
+    if (phoneDisplay) {
+      DOM.loginStatusPhone.textContent = `Phone: ${phoneDisplay}`;
+      DOM.loginStatusPhone.style.display = 'block';
+    } else {
+      DOM.loginStatusPhone.style.display = 'none';
+    }
   }
   
   // Update profile details
@@ -5116,6 +5352,414 @@ function refreshLoginUI() {
   if (DOM.authModeToggle) {
     DOM.authModeToggle.style.display = authenticated ? 'none' : '';
   }
+  
+  // Handle section visibility based on authentication state
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  const loginSection = document.querySelector('[data-auth-section="login"]');
+  
+  if (authenticated) {
+    // When logged in: hide create section, show login section (for login-status)
+    if (createSection) {
+      createSection.style.display = 'none';
+    }
+    if (loginSection) {
+      loginSection.style.display = 'block';
+    }
+  } else {
+    // When logged out: hide login section, create section visibility handled by switchAuthMode
+    if (loginSection) {
+      loginSection.style.display = 'none';
+    }
+    // Create section will be shown/hidden by switchAuthMode based on active tab
+  }
+}
+
+async function handleSaveAccount() {
+  const saveBtn = document.querySelector('[data-action="save-account"]');
+  const messageDiv = document.getElementById('saveAccountMessage');
+  
+  if (!saveBtn || !messageDiv) {
+    console.error('[Save Account] Save button or message div not found');
+    return;
+  }
+  
+  // Validate required fields
+  const requiredFields = [
+    { id: 'firstName', name: 'First name' },
+    { id: 'lastName', name: 'Last name' },
+    { id: 'dateOfBirth', name: 'Date of birth' },
+    { id: 'streetAddress', name: 'Street address' },
+    { id: 'postalCode', name: 'Postal code' },
+    { id: 'country', name: 'Country' },
+    { id: 'email', name: 'Email' },
+    { id: 'phoneNumber', name: 'Phone number' },
+    { id: 'password', name: 'Password' },
+    { id: 'confirmPassword', name: 'Confirm password' },
+  ];
+  
+  const missingFields = [];
+  requiredFields.forEach(field => {
+    const input = document.getElementById(field.id);
+    if (!input || !input.value.trim()) {
+      missingFields.push(field.name);
+    }
+  });
+  
+  // Validate password match
+  const password = document.getElementById('password')?.value;
+  const confirmPassword = document.getElementById('confirmPassword')?.value;
+  if (password && confirmPassword && password !== confirmPassword) {
+    showSaveAccountMessage('Passwords do not match', 'error');
+    return;
+  }
+  
+  if (missingFields.length > 0) {
+    showSaveAccountMessage(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
+    return;
+  }
+  
+  // Set loading state
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
+  messageDiv.style.display = 'none';
+  
+  try {
+    // Build customer data from form
+    const payload = buildCheckoutPayload();
+    
+    // Also read form fields directly as fallback to ensure we get all values
+    const phoneNumberField = document.getElementById('phoneNumber');
+    const countryCodeField = document.getElementById('countryCode');
+    const dateOfBirthField = document.getElementById('dateOfBirth');
+    
+    // Get phone number and country code
+    const phoneNumber = payload.customer?.phone?.number || phoneNumberField?.value?.trim() || payload.customer?.phone;
+    const phoneCountryCode = payload.customer?.phone?.countryCode || countryCodeField?.value?.trim() || '+45';
+    
+    // Build mobilePhone object if we have phone number
+    let mobilePhone = null;
+    if (phoneNumber) {
+      mobilePhone = {
+        countryCode: phoneCountryCode,
+        number: phoneNumber
+      };
+    }
+    
+    // Get date of birth and convert to birthDate format if needed
+    let birthDate = payload.customer?.dateOfBirth || dateOfBirthField?.value?.trim();
+    // If dateOfBirth is in YYYY-MM-DD format, keep it (API might accept this)
+    // Otherwise, ensure it's in the correct format
+    
+    // Get address fields
+    const streetAddress = payload.customer?.address?.street || document.getElementById('streetAddress')?.value?.trim() || payload.customer?.address;
+    const city = payload.customer?.address?.city || document.getElementById('city')?.value?.trim() || payload.customer?.city;
+    const postalCode = payload.customer?.address?.postalCode || document.getElementById('postalCode')?.value?.trim() || payload.customer?.postalCode;
+    const country = payload.customer?.country || document.getElementById('country')?.value?.trim() || 'DK';
+    
+    // Build shippingAddress object if we have address data (API expects shippingAddress)
+    let shippingAddress = null;
+    if (streetAddress || city || postalCode || country) {
+      shippingAddress = {};
+      if (streetAddress) shippingAddress.street = streetAddress;
+      if (city) shippingAddress.city = city;
+      if (postalCode) shippingAddress.postalCode = postalCode;
+      shippingAddress.country = country;
+    }
+    
+    const customerData = {
+      email: payload.customer?.email || document.getElementById('email')?.value?.trim(),
+      firstName: payload.customer?.firstName || document.getElementById('firstName')?.value?.trim(),
+      lastName: payload.customer?.lastName || document.getElementById('lastName')?.value?.trim(),
+      mobilePhone: mobilePhone, // API expects mobilePhone object with countryCode and number
+      birthDate: birthDate, // API expects birthDate (not dateOfBirth)
+      shippingAddress: shippingAddress, // API expects shippingAddress object
+      address: streetAddress, // Keep for backward compatibility
+      city: city, // Keep for backward compatibility
+      postalCode: postalCode, // Keep for backward compatibility - ensure it's always included
+      country: country, // Country from form or default to Denmark
+      primaryGym: payload.customer?.primaryGym || state.selectedBusinessUnit,
+      password: payload.customer?.password || document.getElementById('password')?.value,
+      customerType: 1, // Required by API
+      ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
+    };
+    
+    // Also include phone and phoneCountryCode for backward compatibility (remove if not needed)
+    if (phoneNumber) {
+      customerData.phone = phoneNumber;
+      customerData.phoneCountryCode = phoneCountryCode;
+    }
+    
+    // Also include dateOfBirth for backward compatibility
+    if (birthDate) {
+      customerData.dateOfBirth = birthDate;
+    }
+    
+    // Log the payload and customerData for debugging
+    console.log('[Save Account] Payload from buildCheckoutPayload:', JSON.stringify(payload, null, 2));
+    console.log('[Save Account] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
+    
+    // Remove undefined/null/empty string values (but keep 0 and false)
+    // IMPORTANT: Don't remove postalCode, mobilePhone, birthDate, or shippingAddress even if they seem empty
+    // as they might be objects or have nested values
+    Object.keys(customerData).forEach(key => {
+      const value = customerData[key];
+      // Skip removal for complex objects
+      if (key === 'mobilePhone' || key === 'shippingAddress') {
+        // Only remove if it's null/undefined, not if it's an empty object
+        if (value === null || value === undefined) {
+          delete customerData[key];
+        }
+      } else if (value === undefined || value === null || value === '') {
+        delete customerData[key];
+      }
+    });
+    
+    // Ensure postalCode is included in shippingAddress if it exists
+    if (customerData.shippingAddress && postalCode && !customerData.shippingAddress.postalCode) {
+      customerData.shippingAddress.postalCode = postalCode;
+    }
+    
+    // Also ensure postalCode is at top level if shippingAddress exists
+    if (customerData.shippingAddress && postalCode) {
+      customerData.postalCode = postalCode;
+    }
+    
+    console.log('[Save Account] Customer data after cleanup:', JSON.stringify(customerData, null, 2));
+    
+    // Pre-check: Verify email is not already in use
+    const email = customerData.email?.toLowerCase().trim();
+    if (email) {
+      // Check if user is already logged in with this email
+      const authenticatedEmail = state.authenticatedEmail || 
+        (typeof window.getTokenMetadata === 'function' && window.getTokenMetadata()?.email);
+      if (authenticatedEmail && authenticatedEmail.toLowerCase() === email) {
+        showSaveAccountMessage('You are already logged in with this email address.', 'error');
+        showToast('You are already logged in with this email.', 'error');
+        return;
+      }
+      
+      // Check if we've already created an account with this email in this session
+      if (state.createdEmails.has(email)) {
+        showSaveAccountMessage('An account with this email address has already been created in this session. Please log in instead.', 'error');
+        showToast('Account already created. Please log in.', 'error');
+        switchAuthMode('login', email);
+        return;
+      }
+      
+      // Check localStorage for previously created emails
+      try {
+        const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
+        if (storedEmails.includes(email)) {
+          showSaveAccountMessage('An account with this email address already exists. Please log in instead.', 'error');
+          showToast('Account already exists. Please log in.', 'error');
+          switchAuthMode('login', email);
+          return;
+        }
+      } catch (e) {
+        console.warn('[Save Account] Could not check localStorage:', e);
+      }
+      
+      // Note: We don't check via login because the API returns INVALID_CREDENTIALS 
+      // for both "account doesn't exist" and "wrong password" for security reasons.
+      // We rely on:
+      // 1. Session tracking (state.createdEmails)
+      // 2. localStorage tracking
+      // 3. API duplicate detection (which will catch it during account creation)
+      console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API.');
+    }
+    
+    console.log('[Save Account] Creating customer account...');
+    const customer = await authAPI.createCustomer(customerData);
+    
+    // Track this email as used for account creation
+    if (email) {
+      state.createdEmails.add(email);
+      // Also store in localStorage for persistence across sessions
+      try {
+        const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
+        if (!storedEmails.includes(email)) {
+          storedEmails.push(email);
+          localStorage.setItem('boulders_created_emails', JSON.stringify(storedEmails));
+        }
+      } catch (e) {
+        console.warn('[Save Account] Could not store email in localStorage:', e);
+      }
+    }
+    
+    // Extract customer ID from response
+    const customerId = customer?.data?.id || customer?.id || customer?.customerId || customer?.data?.customerId;
+    
+    if (customerId) {
+      // Store customer ID in state
+      state.customerId = customerId;
+      
+      let hasTokens = false;
+      
+      // Save tokens if provided in customer creation response
+      if (customer?.accessToken && customer?.refreshToken) {
+        if (typeof window.saveTokens === 'function') {
+          const metadata = {
+            username: customer?.username || customerData.email,
+            email: customerData.email,
+            roles: customer?.roles,
+          };
+          window.saveTokens(customer.accessToken, customer.refreshToken, undefined, metadata);
+          syncAuthenticatedCustomerState(metadata.username, metadata.email);
+          hasTokens = true;
+          console.log('[Save Account] ✅ Tokens saved from customer creation response');
+        }
+      } else if (customer?.data?.accessToken && customer?.data?.refreshToken) {
+        if (typeof window.saveTokens === 'function') {
+          const metadata = {
+            username: customer?.data?.username || customerData.email,
+            email: customerData.email,
+            roles: customer?.data?.roles,
+          };
+          window.saveTokens(customer.data.accessToken, customer.data.refreshToken, undefined, metadata);
+          syncAuthenticatedCustomerState(metadata.username, metadata.email);
+          hasTokens = true;
+          console.log('[Save Account] ✅ Tokens saved from customer creation response (nested in data)');
+        }
+      }
+      
+      // Note: If tokens are not provided in account creation response, user will need to log in manually
+      // We don't automatically log in to avoid rate limit issues
+      
+      // Store customer data from form temporarily until profile is fetched
+      if (!state.authenticatedCustomer && customerData) {
+        state.authenticatedCustomer = {
+          firstName: customerData.firstName,
+          lastName: customerData.lastName,
+          email: customerData.email,
+          dateOfBirth: customerData.dateOfBirth,
+          address: customerData.address,
+          city: customerData.city,
+          postalCode: customerData.postalCode,
+          phone: customerData.phone,
+          phoneCountryCode: customerData.phoneCountryCode,
+        };
+        console.log('[Save Account] Stored customer data from form:', state.authenticatedCustomer);
+      }
+      
+      // Fetch customer profile if tokens are available
+      if (hasTokens && customerId) {
+        try {
+          const customerProfile = await authAPI.getCustomer(customerId);
+          state.authenticatedCustomer = customerProfile;
+          console.log('[Save Account] Customer profile loaded:', customerProfile);
+        } catch (profileError) {
+          console.warn('[Save Account] Could not fetch customer profile:', profileError);
+          // Keep the form data we stored above
+        }
+      }
+      
+      // Refresh login UI
+      refreshLoginUI();
+      
+      // Show appropriate message based on whether user is logged in
+      if (hasTokens) {
+        showSaveAccountMessage('Account saved successfully! You are now logged in. You can proceed to checkout.', 'success');
+        showToast('Account saved and logged in successfully!', 'success');
+      } else {
+        showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
+        showToast('Account saved successfully!', 'success');
+      }
+    } else {
+      throw new Error('Customer ID not found in response');
+    }
+  } catch (error) {
+    console.error('[Save Account] Error saving account:', error);
+    
+    // Handle duplicate email error specifically
+    if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
+      const email = document.getElementById('email')?.value?.trim() || '';
+      const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
+      showSaveAccountMessage(duplicateMessage, 'error');
+      showToast('Account already exists. Please log in.', 'error');
+      
+      // Highlight the email field
+      const emailInput = document.getElementById('email');
+      if (emailInput) {
+        emailInput.closest('.form-group')?.classList.add('error');
+      }
+      
+      // Switch to login view and populate email field
+      if (email) {
+        switchAuthMode('login', email);
+      } else {
+        switchAuthMode('login');
+      }
+    } else {
+      const errorMessage = error.message || 'Failed to save account. Please try again.';
+      showSaveAccountMessage(errorMessage, 'error');
+      showToast('Failed to save account', 'error');
+    }
+  } finally {
+    // Reset button state
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Account';
+  }
+}
+
+function showSaveAccountMessage(message, type = 'success') {
+  const messageDiv = document.getElementById('saveAccountMessage');
+  if (!messageDiv) return;
+  
+  messageDiv.textContent = message;
+  messageDiv.className = `save-account-message ${type}`;
+  messageDiv.style.display = 'block';
+  
+  // Auto-hide success messages after 5 seconds
+  if (type === 'success') {
+    setTimeout(() => {
+      messageDiv.style.display = 'none';
+    }, 5000);
+  }
+}
+
+function checkSaveAccountButtonState() {
+  const saveBtn = document.querySelector('[data-action="save-account"]');
+  if (!saveBtn) return;
+  
+  // Check if we're on the create account section
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  if (!createSection || createSection.style.display === 'none') {
+    saveBtn.classList.remove('valid');
+    return;
+  }
+  
+  // Validate required fields
+  const requiredFields = [
+    'firstName',
+    'lastName',
+    'dateOfBirth',
+    'streetAddress',
+    'postalCode',
+    'email',
+    'phoneNumber',
+    'password',
+    'confirmPassword',
+  ];
+  
+  let allFieldsFilled = true;
+  requiredFields.forEach(fieldId => {
+    const input = document.getElementById(fieldId);
+    if (!input || !input.value.trim()) {
+      allFieldsFilled = false;
+    }
+  });
+  
+  // Check password match
+  const password = document.getElementById('password')?.value;
+  const confirmPassword = document.getElementById('confirmPassword')?.value;
+  const passwordsMatch = password && confirmPassword && password === confirmPassword;
+  
+  // Add 'valid' class if all fields are filled and passwords match
+  if (allFieldsFilled && passwordsMatch) {
+    saveBtn.classList.add('valid');
+  } else {
+    saveBtn.classList.remove('valid');
+  }
 }
 
 function handleLogout() {
@@ -5124,15 +5768,16 @@ function handleLogout() {
   state.authenticatedEmail = null;
   state.customerId = null;
   
-  // Clear customer profile data
-  state.authenticatedCustomer = null;
-  state.authenticatedEmail = null;
-  state.customerId = null;
-  
   if (typeof window.clearTokens === 'function') {
     window.clearTokens();
   }
+  
+  // Refresh UI to show logged out state
   refreshLoginUI();
+  
+  // Switch to create account mode when logging out
+  switchAuthMode('create');
+  
   showToast('You have been logged out.', 'info');
 }
 
@@ -5941,7 +6586,7 @@ function initAuthModeToggle() {
 }
 
 // Switch between auth modes
-function switchAuthMode(mode) {
+function switchAuthMode(mode, email = null) {
   const toggleBtns = document.querySelectorAll('.auth-mode-btn');
   const loginSection = document.querySelector('[data-auth-section="login"]');
   const createSection = document.querySelector('[data-auth-section="create"]');
@@ -5955,9 +6600,37 @@ function switchAuthMode(mode) {
   if (mode === 'login') {
     createSection.style.display = 'none';
     loginSection.style.display = 'block';
+    
+    // If email is provided, populate the login email field
+    if (email && DOM.loginEmail) {
+      DOM.loginEmail.value = email;
+      // Focus on password field after a short delay for better UX
+      setTimeout(() => {
+        if (DOM.loginPassword) {
+          DOM.loginPassword.focus();
+        }
+      }, 100);
+    }
   } else {
     loginSection.style.display = 'none';
     createSection.style.display = 'block';
+    // Check button state when switching to create account mode
+    setTimeout(() => checkSaveAccountButtonState(), 100);
+  }
+}
+
+function setupSaveAccountButtonValidation() {
+  // Check initial state
+  setTimeout(() => checkSaveAccountButtonState(), 100);
+  
+  // Add listeners to all registration form fields
+  const registrationForm = document.querySelector('.registration-form');
+  if (registrationForm) {
+    const fields = registrationForm.querySelectorAll('input, select');
+    fields.forEach(field => {
+      field.addEventListener('input', checkSaveAccountButtonState);
+      field.addEventListener('change', checkSaveAccountButtonState);
+    });
   }
 }
 
@@ -6056,6 +6729,16 @@ function handleGlobalClick(event) {
       handleLogout();
       break;
     }
+    case 'save-account': {
+      event.preventDefault();
+      handleSaveAccount();
+      break;
+    }
+    case 'save-account': {
+      event.preventDefault();
+      handleSaveAccount();
+      break;
+    }
     case 'toggle-addons-step': {
       event.preventDefault();
       handleAddonContinue();
@@ -6075,6 +6758,12 @@ function handleGlobalInput(event) {
   const field = event.target;
   if (!(field instanceof HTMLElement)) return;
   if (field.classList.contains('quantity-btn')) return;
+
+  // Check save account button state when registration form fields change
+  const registrationForm = field.closest('.registration-form');
+  if (registrationForm) {
+    checkSaveAccountButtonState();
+  }
 
   if (field.closest('.form-group')) {
     field.closest('.form-group').classList.remove('error');
@@ -7915,7 +8604,7 @@ function isRateLimitError(error) {
 }
 
 function getRetryDelayFromError(error, defaultMs = 120000) {
-  // Default to 2 minutes (120 seconds) instead of 15 minutes for better UX
+  // Default to 2 minutes (120 seconds) if we can't extract retryAfter
   const message = typeof error?.message === 'string' ? error.message : '';
   
   // Try to extract retryAfter from JSON in error message
@@ -7926,9 +8615,9 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
       if (jsonData.retryAfter) {
         const seconds = parseInt(jsonData.retryAfter, 10);
         if (!isNaN(seconds) && seconds > 0) {
-          // Cap at 5 minutes (300 seconds) for client-side cooldown
-          // Server might say 15 minutes, but we'll allow retry after 5 minutes
-          return Math.min(Math.max(seconds * 1000, 1000), 300000);
+          // Use the actual retryAfter time from API (no cap)
+          // Convert seconds to milliseconds
+          return Math.max(seconds * 1000, 1000);
         }
       }
     }
@@ -7941,8 +8630,8 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
   if (match) {
     const seconds = parseInt(match[1], 10);
     if (!isNaN(seconds) && seconds > 0) {
-      // Cap at 5 minutes for client-side cooldown
-      return Math.min(Math.max(seconds * 1000, 1000), 300000);
+      // Use the actual retryAfter time from API (no cap)
+      return Math.max(seconds * 1000, 1000);
     }
   }
   
@@ -8014,23 +8703,67 @@ async function handleCheckout() {
         
         // Build customer data matching API expectations
         // The API expects fields at the top level, not nested under "customer"
+        
+        // Get phone number and country code
+        const phoneNumber = payload.customer?.phone?.number || payload.customer?.phone;
+        const phoneCountryCode = payload.customer?.phone?.countryCode || '+45';
+        
+        // Build mobilePhone object if we have phone number (API expects mobilePhone)
+        let mobilePhone = null;
+        if (phoneNumber) {
+          mobilePhone = {
+            countryCode: phoneCountryCode,
+            number: phoneNumber
+          };
+        }
+        
+        // Get date of birth (API expects birthDate)
+        const birthDate = payload.customer?.dateOfBirth;
+        
+        // Get address fields
+        const streetAddress = payload.customer?.address?.street || payload.customer?.address;
+        const city = payload.customer?.address?.city || payload.customer?.city;
+        const postalCode = payload.customer?.address?.postalCode || payload.customer?.postalCode;
+        const country = payload.customer?.country || document.getElementById('country')?.value?.trim() || 'DK';
+        
+        // Build shippingAddress object if we have address data (API expects shippingAddress)
+        let shippingAddress = null;
+        if (streetAddress || city || postalCode || country) {
+          shippingAddress = {};
+          if (streetAddress) shippingAddress.street = streetAddress;
+          if (city) shippingAddress.city = city;
+          if (postalCode) shippingAddress.postalCode = postalCode;
+          shippingAddress.country = country;
+        }
+        
         const customerData = {
           email: payload.customer?.email,
           firstName: payload.customer?.firstName,
           lastName: payload.customer?.lastName,
-          phone: payload.customer?.phone?.number || payload.customer?.phone,
-          phoneCountryCode: payload.customer?.phone?.countryCode,
-          dateOfBirth: payload.customer?.dateOfBirth,
-          address: payload.customer?.address?.street || payload.customer?.address,
-          city: payload.customer?.address?.city || payload.customer?.city,
-          postalCode: payload.customer?.address?.postalCode || payload.customer?.postalCode,
-          country: payload.customer?.country,
+          mobilePhone: mobilePhone, // API expects mobilePhone object with countryCode and number
+          birthDate: birthDate, // API expects birthDate (not dateOfBirth)
+          shippingAddress: shippingAddress, // API expects shippingAddress object
+          address: streetAddress, // Keep for backward compatibility
+          city: city, // Keep for backward compatibility
+          postalCode: postalCode, // Keep for backward compatibility - ensure it's always included
+          country: country, // Country from form or default to Denmark
           primaryGym: payload.customer?.primaryGym,
           password: payload.customer?.password,
           customerType: 1, // Required by API - numeric ID (typically 1 = Individual customer type)
           // Include marketing email consent - API field: allowMassSendEmail
           ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
         };
+        
+        // Also include phone and phoneCountryCode for backward compatibility
+        if (phoneNumber) {
+          customerData.phone = phoneNumber;
+          customerData.phoneCountryCode = phoneCountryCode;
+        }
+        
+        // Also include dateOfBirth for backward compatibility
+        if (birthDate) {
+          customerData.dateOfBirth = birthDate;
+        }
         
         console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
         if (customerData.allowMassSendEmail !== undefined) {
@@ -8045,9 +8778,65 @@ async function handleCheckout() {
         });
         
         console.log('[checkout] Customer data prepared:', JSON.stringify(customerData, null, 2));
-        customer = await authAPI.createCustomer(customerData);
+        // Pre-check: Don't create account if user is already logged in with this email
+        const email = customerData.email?.toLowerCase().trim();
+        if (email) {
+          const authenticatedEmail = state.authenticatedEmail || 
+            (typeof window.getTokenMetadata === 'function' && window.getTokenMetadata()?.email);
+          if (authenticatedEmail && authenticatedEmail.toLowerCase() === email) {
+            console.log('[checkout] User already logged in with this email, skipping account creation');
+            const metadata = getTokenMetadata();
+            customerId = metadata?.username || metadata?.userName || state.customerId;
+            if (customerId) {
+              state.customerId = String(customerId);
+            }
+            // Skip account creation and proceed
+          } else {
+            // Check if email was already used to create an account
+            if (state.createdEmails.has(email)) {
+              throw new Error('An account with this email address has already been created. Please log in instead.');
+            }
+            
+            // Check localStorage
+            try {
+              const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
+              if (storedEmails.includes(email)) {
+                throw new Error('An account with this email address already exists. Please log in instead.');
+              }
+            } catch (e) {
+              console.warn('[checkout] Could not check localStorage:', e);
+            }
+            
+            // Note: We don't check via login because the API returns INVALID_CREDENTIALS 
+            // for both "account doesn't exist" and "wrong password" for security reasons.
+            // We rely on:
+            // 1. Session tracking (state.createdEmails)
+            // 2. localStorage tracking
+            // 3. API duplicate detection (which will catch it during account creation)
+            console.log('[checkout] Proceeding with account creation. Duplicate detection will be handled by API.');
+            
+            customer = await authAPI.createCustomer(customerData);
+            
+            // Track this email as used
+            state.createdEmails.add(email);
+            try {
+              const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
+              if (!storedEmails.includes(email)) {
+                storedEmails.push(email);
+                localStorage.setItem('boulders_created_emails', JSON.stringify(storedEmails));
+              }
+            } catch (e) {
+              console.warn('[checkout] Could not store email in localStorage:', e);
+            }
+          }
+        } else {
+          customer = await authAPI.createCustomer(customerData);
+        }
+        
         // Extract customer ID from response - API returns {success: true, data: {id: ...}}
-        customerId = customer?.data?.id || customer?.id || customer?.customerId || customer?.data?.customerId;
+        if (customer) {
+          customerId = customer?.data?.id || customer?.id || customer?.customerId || customer?.data?.customerId;
+        }
         // Store customer ID in state for later use (e.g., in order summary)
         state.customerId = customerId;
         // Store customer data in sessionStorage for payment return
@@ -8200,8 +8989,34 @@ async function handleCheckout() {
         }
       } catch (error) {
         console.error('[checkout] Customer creation failed:', error);
+        
+        // Handle duplicate email error specifically
+        if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
+          const email = payload.customer?.email?.trim() || '';
+          const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
+          showToast(duplicateMessage, 'error');
+          
+          // Highlight the email field
+          const emailInput = document.getElementById('email');
+          if (emailInput) {
+            emailInput.closest('.form-group')?.classList.add('error');
+          }
+          
+          // Switch to login view and populate email field
+          if (email) {
+            switchAuthMode('login', email);
+          } else {
+            switchAuthMode('login');
+          }
+          
+          setCheckoutLoadingState(false);
+          state.checkoutInProgress = false;
+          return;
+        }
+        
         showToast(getErrorMessage(error, 'Customer creation'), 'error');
         setCheckoutLoadingState(false);
+        state.checkoutInProgress = false;
         return;
       }
     } else {

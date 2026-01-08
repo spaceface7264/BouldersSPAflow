@@ -371,6 +371,9 @@
                                                     <p class="login-status-label">Logged in as</p>
                                                     <p class="login-status-name" data-auth-name>-</p>
                                                     <p class="login-status-email" data-auth-email>-</p>
+                                                    <p class="login-status-dob" data-auth-dob style="display: none;">-</p>
+                                                    <p class="login-status-address" data-auth-address style="display: none;">-</p>
+                                                    <p class="login-status-phone" data-auth-phone style="display: none;">-</p>
                                                 </div>
                                                 <div class="login-status-details" data-auth-details style="display: none;">
                                                     <div class="profile-detail-item" data-profile-item="phone" style="display: none;">
@@ -477,9 +480,9 @@
                                  </div>
                              </div>
                              
-                             <div class="form-group">
-                                 <label for="streetAddress">Street and house number*</label>
-                                 <input type="text" id="streetAddress" name="streetAddress" placeholder="Enter street and house number" data-api-field="customer.address.street" required>
+                            <div class="form-group">
+                                <label for="streetAddress">Street and house number*</label>
+                                <input type="text" id="streetAddress" name="streetAddress" placeholder="Enter street and house number" data-api-field="customer.address.street" required>
                         </div>
                         
                         <div class="form-row">
@@ -492,6 +495,19 @@
                                      <label for="city">City</label>
                                      <input type="text" id="city" name="city" placeholder="Auto" data-api-field="customer.address.city" readonly>
                             </div>
+                        </div>
+                        
+                        <div class="form-group">
+                                <label for="country">Country*</label>
+                                <select id="country" name="country" data-api-field="customer.country" required>
+                                    <option value="DK" selected>Denmark</option>
+                                    <option value="SE">Sweden</option>
+                                    <option value="NO">Norway</option>
+                                    <option value="DE">Germany</option>
+                                    <option value="GB">United Kingdom</option>
+                                    <option value="US">United States</option>
+                                    <option value="OTHER">Other</option>
+                                </select>
                         </div>
                         
                         <div class="form-group">
@@ -522,10 +538,18 @@
                                  <input type="password" id="password" name="password" placeholder="Create a password" data-api-field="customer.password" required>
                              </div>
                              
-                             <div class="form-group">
-                                 <label for="confirmPassword">Confirm password*</label>
-                                 <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" data-api-field="customer.passwordConfirmation" required>
-                             </div>
+                            <div class="form-group">
+                                <label for="confirmPassword">Confirm password*</label>
+                                <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" data-api-field="customer.passwordConfirmation" required>
+                            </div>
+                            
+                            <!-- Save Account Button -->
+                            <div class="form-group">
+                                <button type="button" class="save-account-btn" data-action="save-account">
+                                    Save Account
+                                </button>
+                                <div class="save-account-message" id="saveAccountMessage" style="display: none;"></div>
+                            </div>
                     </form>
                         
                         <!-- Parent/Guardian Registration Form -->

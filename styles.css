@@ -3094,8 +3094,16 @@ body {
 }
 
 .login-status-email {
-    margin: 0;
+    margin: 0 0 4px 0;
     font-size: var(--font-size-base);
+    color: #D1D5DB;
+}
+
+.login-status-dob,
+.login-status-address,
+.login-status-phone {
+    margin: 4px 0;
+    font-size: var(--font-size-sm);
     color: #D1D5DB;
 }
 
@@ -3316,6 +3324,56 @@ body {
 
 @keyframes spin {
     to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Save Account Button */
+.save-account-btn {
+    width: 100%;
+    padding: 12px 24px;
+    background-color: #6B7280;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    margin-top: 8px;
+}
+
+.save-account-btn:hover {
+    background-color: #4B5563;
+}
+
+.save-account-btn.valid {
+    background-color: #F401F5;
+}
+
+.save-account-btn.valid:hover {
+    background-color: #D401D5;
+}
+
+.save-account-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.save-account-message {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+.save-account-message.success {
+    background-color: #10B981;
+    color: white;
+}
+
+.save-account-message.error {
+    background-color: #EF4444;
+    color: white;
 }
 
 /* Forgot Password Link */
