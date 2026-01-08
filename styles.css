@@ -1643,12 +1643,14 @@ body {
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
-    align-items: left;
+    align-items: stretch; /* Changed from 'left' to 'stretch' for proper height */
     justify-content: space-between;
     padding-top: 12px;
     padding-bottom: 12px;
     gap: 12px;
     transform: scale(1);
+    height: auto; /* Allow cards to expand to fit content */
+    min-height: auto; /* Remove fixed min-height */
 }
 
 .plan-card:last-child {
@@ -1760,7 +1762,8 @@ body {
     }
     
     .plan-card {
-        min-height: 80px;
+        min-height: auto; /* Allow cards to expand to fit content */
+        height: auto;
         padding: 16px 18px;
     }
 
@@ -1797,6 +1800,8 @@ body {
 
     .plan-card {
         padding: 12px 14px;
+        height: auto; /* Allow cards to expand to fit content */
+        min-height: auto;
     }
 
     .plan-type {
@@ -5386,6 +5391,13 @@ main {
     
     .plan-section.expanded {
         margin-top: 32px;
+    }
+    
+    /* Ensure plan cards expand to fit content on mobile */
+    .plan-card {
+        height: auto !important;
+        min-height: auto !important;
+        align-items: stretch;
     }
 
     .plan-options {
