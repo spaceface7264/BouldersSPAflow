@@ -12182,6 +12182,12 @@ function showStep(stepNumber) {
     setTimeout(() => {
       updateSelectedGymDisplay();
     }, 100);
+  } else {
+    // When leaving step 2, reset main content margin
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent) {
+      mainContent.style.marginTop = '';
+    }
   }
   
   // If showing step 4 and user is logged in, ensure login tab is selected
@@ -12302,6 +12308,7 @@ function updateStepIndicator() {
 function updateSelectedGymDisplay() {
   const selectedGymDisplay = document.getElementById('selectedGymDisplay');
   const selectedGymNameDisplay = document.getElementById('selectedGymNameDisplay');
+  const mainContent = document.getElementById('mainContent');
   
   if (!selectedGymDisplay || !selectedGymNameDisplay) {
     console.warn('[Selected Gym Display] Elements not found', {
@@ -12314,6 +12321,11 @@ function updateSelectedGymDisplay() {
   // Always hide first, then show only if we have a valid name
   selectedGymDisplay.style.display = 'none';
   selectedGymNameDisplay.textContent = '-'; // Reset to default
+  
+  // Reset main content margin when hiding display (for all steps except step 2)
+  if (mainContent && state.currentStep !== 2) {
+    mainContent.style.marginTop = '';
+  }
   
   // Show only on step 2 if a gym is selected
   if (state.currentStep === 2 && state.selectedBusinessUnit) {
@@ -12385,7 +12397,6 @@ function updateSelectedGymDisplay() {
       selectedGymDisplay.style.display = 'none';
       
       // Reset main content margin when display is hidden
-      const mainContent = document.getElementById('mainContent');
       if (mainContent) {
         mainContent.style.marginTop = '';
       }
@@ -12395,6 +12406,11 @@ function updateSelectedGymDisplay() {
         gymsArrayLength: gymsWithDistances?.length || 0,
         gymsArray: gymsWithDistances?.slice(0, 3).map(g => ({ id: String(g.id), name: g.name })) || []
       });
+    }
+  } else {
+    // Not on step 2 - ensure margin is reset
+    if (mainContent) {
+      mainContent.style.marginTop = '';
     }
   }
 }
