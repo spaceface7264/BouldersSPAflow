@@ -2398,10 +2398,6 @@ class PaymentAPI {
           }
         }
         
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:1995',message:'Payment link generation FAILED',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,paymentMethod,paymentMethodId,businessUnit,responseStatus:response.status,errorText:errorText.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
-        
         throw new Error(`Generate Payment Link Card failed: ${response.status} - ${errorText}`);
       }
       
@@ -2424,10 +2420,6 @@ class PaymentAPI {
           console.error('[Step 9] Data object keys:', Object.keys(data.data));
         }
         
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:2013',message:'Payment link MISSING from response',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,responseKeys:Object.keys(data),dataKeys:data.data?Object.keys(data.data):[],responseSample:JSON.stringify(data).substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
         throw new Error('Payment link not found in API response');
       }
       
@@ -2438,18 +2430,9 @@ class PaymentAPI {
       }
       console.log('[Step 9] Payment link extracted from response.url:', paymentLink);
       
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:2022',message:'Payment link generation SUCCESS',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,paymentMethod,paymentMethodId,businessUnit,hasPaymentLink:!!paymentLink,paymentLinkPrefix:paymentLink?paymentLink.substring(0,30):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      
       return { ...data, paymentLink: paymentLink, url: paymentLink };
     } catch (error) {
       console.error('[Step 9] Generate payment link error:', error);
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:2030',message:'Payment link generation ERROR',data:{orderId,selectedProductType:state?.selectedProductType,selectedProductId:state?.selectedProductId,membershipPlanId:state?.membershipPlanId,paymentMethod,errorMessage:error.message,errorStack:error.stack?.substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-      
       throw error;
     }
   }
@@ -3311,9 +3294,6 @@ function formatDistance(distance) {
 
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3313',message:'loadGymsFromAPI ENTRY',data:{currentStep:state.currentStep,hasUserLocation:!!userLocation},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
   try {
     const response = await businessUnitsAPI.getBusinessUnits();
     
@@ -3486,9 +3466,6 @@ async function loadGymsFromAPI() {
     
     // Re-setup forward arrow event listener
     setupForwardArrowEventListeners();
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3486',message:'loadGymsFromAPI SUCCESS EXIT',data:{currentStep:state.currentStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
   } catch (error) {
     console.error('Failed to load gyms from API:', error);
     
@@ -3515,9 +3492,6 @@ async function loadGymsFromAPI() {
 
 // Find nearest gym using geolocation
 async function findNearestGym() {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3511',message:'findNearestGym ENTRY',data:{currentStep:state.currentStep,disabled:document.getElementById('findNearestGym')?.disabled,loading:document.getElementById('findNearestGym')?.classList.contains('loading'),hasUserLocation:!!userLocation},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   const locationBtn = document.getElementById('findNearestGym');
   const locationStatus = document.getElementById('locationStatus');
   
@@ -3550,9 +3524,6 @@ async function findNearestGym() {
   // Update button state - show loading
   locationBtn.disabled = true;
   locationBtn.classList.add('loading');
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3542',message:'findNearestGym button disabled',data:{currentStep:state.currentStep,disabled:locationBtn.disabled,loading:locationBtn.classList.contains('loading')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-  // #endregion
   
   // Hide status text
   locationStatus.style.display = 'none';
@@ -3572,21 +3543,12 @@ async function findNearestGym() {
     locationStatus.style.display = 'none';
     
     // Reload gyms with distance sorting
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3563',message:'findNearestGym BEFORE loadGymsFromAPI',data:{currentStep:state.currentStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     await loadGymsFromAPI();
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3563',message:'findNearestGym AFTER loadGymsFromAPI',data:{currentStep:state.currentStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     
     // Highlight icon button (add active class)
     locationBtn.classList.add('active');
     locationBtn.classList.remove('loading');
     locationBtn.disabled = false;
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3568',message:'findNearestGym SUCCESS EXIT',data:{currentStep:state.currentStep},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     
   } catch (error) {
     // Log location errors as warnings (not errors) since they're handled gracefully
@@ -3641,9 +3603,6 @@ async function findNearestGym() {
     locationBtn.classList.remove('active');
     locationBtn.classList.remove('loading');
     locationBtn.disabled = false;
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3622',message:'findNearestGym ERROR EXIT',data:{currentStep:state.currentStep,errorType:error.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
   }
 }
 
@@ -3689,9 +3648,6 @@ function setupGymEventListeners() {
   const gymItems = document.querySelectorAll('.gym-item');
   gymItems.forEach(item => {
     item.addEventListener('click', (e) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:3667',message:'gym-item CLICK',data:{currentStep:state.currentStep,gymId:item.dataset.gymId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       handleGymSelection(item);
     });
   });
@@ -4445,9 +4401,6 @@ function setupEventListeners() {
   // Location button
   const findNearestGymBtn = document.getElementById('findNearestGym');
   findNearestGymBtn?.addEventListener('click', (e) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:4410',message:'findNearestGym CLICK',data:{currentStep:state.currentStep,disabled:findNearestGymBtn.disabled,loading:findNearestGymBtn.classList.contains('loading')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     findNearestGym();
   });
 
@@ -5623,9 +5576,6 @@ function handleCategoryToggle(category) {
 }
 
 function handlePlanSelection(selectedCard) {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5540',message:'handlePlanSelection ENTRY',data:{currentStep:state.currentStep,planId:selectedCard.dataset.plan},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
   // Remove selected class from all plan cards in the same category
   const category = selectedCard.closest('.category-item').dataset.category;
   const allCardsInCategory = selectedCard.closest('.category-item').querySelectorAll('.plan-card');
@@ -5766,9 +5716,6 @@ function setupNewAccessStep() {
   // Plan selection
   document.querySelectorAll('.plan-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5712',message:'plan-card CLICK',data:{currentStep:state.currentStep,planId:card.dataset.plan,isSelected:card.classList.contains('selected')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       // Don't handle clicks on quantity controls - let them handle their own events
       if (e.target.closest('.quantity-selector')) {
         return;
@@ -5873,9 +5820,7 @@ function setupNewAccessStep() {
           }
           
           // Auto-advance to next step after a short delay
-          // #region agent log
           pendingNavigationTimeouts.punchcard = setTimeout(() => {
-            fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5811',message:'punchcard setTimeout CALLBACK',data:{currentStep:state.currentStep,planId:planId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
             // Clear timeout reference before navigation
             pendingNavigationTimeouts.punchcard = null;
             // Only navigate if we're still on step 2 (prevent stale state navigation)
@@ -5883,8 +5828,6 @@ function setupNewAccessStep() {
               nextStep();
             }
           }, 500);
-          fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5811',message:'punchcard setTimeout SET',data:{currentStep:state.currentStep,planId:planId,timeoutId:pendingNavigationTimeouts.punchcard.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
         } else {
           // Membership - update access heads-up
           updateAccessHeadsUp(card);
@@ -5904,9 +5847,7 @@ function setupNewAccessStep() {
           }
           
           // Reset card animation and auto-advance to next step
-          // #region agent log
           pendingNavigationTimeouts.membership = setTimeout(() => {
-            fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5827',message:'membership setTimeout CALLBACK',data:{currentStep:state.currentStep,planId:planId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
             // Clear timeout reference before navigation
             pendingNavigationTimeouts.membership = null;
             card.style.transform = 'scale(1)';
@@ -5916,8 +5857,6 @@ function setupNewAccessStep() {
               nextStep();
             }
           }, 500);
-          fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:5827',message:'membership setTimeout SET',data:{currentStep:state.currentStep,planId:planId,timeoutId:pendingNavigationTimeouts.membership.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
         }
     });
   });
@@ -8274,10 +8213,6 @@ async function handleCheckout() {
     // Backend requirement: Generate Payment Link Card immediately after subscription is added to cart
     let paymentLink = null;
     
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:6200',message:'Checkout started - tracking product',data:{selectedProductType:state.selectedProductType,selectedProductId:state.selectedProductId,membershipPlanId:state.membershipPlanId,hasValueCards:state.valueCardQuantities?.size>0,valueCardCount:state.valueCardQuantities?.size||0,hasAddons:state.addonIds?.size>0,addonCount:state.addonIds?.size||0,orderId:state.orderId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     try {
       console.log('[checkout] Adding items to order...');
       
@@ -8844,10 +8779,6 @@ async function handleCheckout() {
                 quantity,
                 isMembership
               });
-              
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:6688',message:'Value card add error in checkout',data:{planId,numericProductId,quantity,orderId:state.orderId,errorMessage:error.message,is403:error.message.includes('403'),is401:error.message.includes('401'),isMembership,willContinue:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'})}).catch(()=>{});
-              // #endregion
               
               // Don't throw immediately - continue to payment link generation
               // We'll handle the error after payment link is generated
