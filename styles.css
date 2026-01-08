@@ -3063,6 +3063,7 @@ body {
     background-color: #111827;
     border: 1px solid #374151;
     border-radius: 12px;
+    position: relative;
 }
 
 .login-status-content {
@@ -3126,8 +3127,25 @@ body {
 }
 
 .login-status .login-btn {
-    align-self: flex-start;
-    min-width: 120px;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: auto;
+    min-width: auto;
+    padding: 6px 12px;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    background-color: transparent;
+    color: #9CA3AF;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.login-status .login-btn:hover {
+    background-color: rgba(244, 1, 245, 0.1);
+    color: #F401F5;
+    border-color: #F401F5;
 }
 
 .buyer-section {

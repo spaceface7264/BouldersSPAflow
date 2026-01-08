@@ -4335,6 +4335,8 @@ function cacheDom() {
   DOM.loginStatusName = document.querySelector('[data-auth-name]');
   DOM.loginStatusDetails = document.querySelector('[data-auth-details]');
   DOM.loginFormContainer = document.querySelector('[data-login-form-container]');
+  // Find form-container that contains login-status (parent of login-status)
+  DOM.loginFormContainerWrapper = DOM.loginStatus?.closest('.form-container');
   DOM.authModeToggle = document.querySelector('.auth-mode-toggle');
   DOM.forgotPasswordLink = document.querySelector('[data-action="forgot-password"]');
   DOM.forgotPasswordModal = document.getElementById('forgotPasswordModal');
@@ -5082,6 +5084,34 @@ function refreshLoginUI() {
   if (DOM.loginFormContainer) {
     DOM.loginFormContainer.style.display = authenticated ? 'none' : '';
   }
+  
+  // Hide form-container when logged in, but keep login-status visible
+  // Move login-status outside form-container when authenticated so it remains visible
+  if (DOM.loginFormContainerWrapper && DOM.loginStatus) {
+    if (authenticated) {
+      // Hide form-container
+      DOM.loginFormContainerWrapper.style.display = 'none';
+      
+      // Move login-status outside form-container to keep it visible
+      // Find the parent of form-container (info-section)
+      const formContainerParent = DOM.loginFormContainerWrapper.parentElement;
+      if (formContainerParent && DOM.loginStatus.parentElement === DOM.loginFormContainerWrapper) {
+        // Move login-status to be a sibling of form-container
+        formContainerParent.insertBefore(DOM.loginStatus, DOM.loginFormContainerWrapper);
+        DOM.loginStatus.style.display = 'block';
+      }
+    } else {
+      // Show form-container when not authenticated
+      DOM.loginFormContainerWrapper.style.display = '';
+      
+      // Move login-status back inside form-container if it was moved out
+      if (DOM.loginStatus.parentElement !== DOM.loginFormContainerWrapper) {
+        // Insert login-status as first child of form-container
+        DOM.loginFormContainerWrapper.insertBefore(DOM.loginStatus, DOM.loginFormContainerWrapper.firstChild);
+      }
+    }
+  }
+  
   // Hide auth mode toggle when user is logged in
   if (DOM.authModeToggle) {
     DOM.authModeToggle.style.display = authenticated ? 'none' : '';
