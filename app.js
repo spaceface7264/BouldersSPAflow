@@ -3565,8 +3565,6 @@ async function loadGymsFromAPI() {
     // Re-setup event listeners for new gym items
     setupGymEventListeners();
     
-    // Re-setup forward arrow event listener
-    setupForwardArrowEventListeners();
   } catch (error) {
     console.error('Failed to load gyms from API:', error);
     
@@ -3754,27 +3752,6 @@ function setupGymEventListeners() {
   });
 }
 
-// Setup event listeners for forward arrow
-function setupForwardArrowEventListeners() {
-  const forwardArrowBtn = document.getElementById('forwardArrowBtn');
-  if (forwardArrowBtn) {
-    forwardArrowBtn.addEventListener('click', handleForwardNavigation);
-  }
-}
-
-// Handle forward navigation
-function handleForwardNavigation() {
-  // Step 3: Hold the app on step 1 (gym selection) until one option is selected
-  if (state.currentStep === 1 && !state.selectedGymId) {
-    // Show a message or prevent navigation if no gym is selected
-    return;
-  }
-  
-  // Only allow forward navigation if we're not on the last step
-  if (state.currentStep < TOTAL_STEPS) {
-    nextStep();
-  }
-}
 
 // Track pending navigation timeouts to prevent double-clicks and stale state
 const pendingNavigationTimeouts = {
@@ -4174,7 +4151,6 @@ function init() {
   initAuthModeToggle();
   updateCheckoutButton();
   setupEventListeners();
-  setupForwardArrowEventListeners();
   // Apply conditional visibility for Boost on load
   applyConditionalSteps();
   updateStepIndicator();
@@ -4525,9 +4501,6 @@ function setupEventListeners() {
   });
 
 
-  // Back arrow event listener
-  const backToGymBtn = document.getElementById('backToGymBtn');
-  backToGymBtn?.addEventListener('click', () => handleBackToGym());
 
   DOM.toggleButtons?.forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -6564,18 +6537,10 @@ function initAuthModeToggle() {
     DOM.authModeToggle.style.display = isAuthenticated ? 'none' : '';
   }
   
-  const initialMode = isAuthenticated ? 'login' : 'create';
-  
-  const initialBtn = document.querySelector(`[data-mode="${initialMode}"]`);
-  if (initialBtn) {
-    initialBtn.classList.add('active');
-    // Also switch the mode to show correct section
-    switchAuthMode(initialMode);
-  } else {
-    // Fallback to create account if button not found
-    const createBtn = document.querySelector('[data-mode="create"]');
-    if (createBtn) createBtn.classList.add('active');
-  }
+  // Don't set any button as active initially - wait for user to click
+  // Hide both sections initially
+  if (loginSection) loginSection.style.display = 'none';
+  if (createSection) createSection.style.display = 'none';
   
   toggleBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -11385,16 +11350,6 @@ function updateNavigationButtons() {
     DOM.nextBtn.textContent = state.currentStep === TOTAL_STEPS ? 'Complete' : 'Next';
   }
   
-  // Update forward arrow visibility
-  const forwardArrowBtn = document.getElementById('forwardArrowBtn');
-  if (forwardArrowBtn) {
-    // Hide forward arrow on last step
-    if (state.currentStep === TOTAL_STEPS) {
-      forwardArrowBtn.style.display = 'none';
-    } else {
-      forwardArrowBtn.style.display = 'flex';
-    }
-  }
 }
 function updateMainSubtitle() {
   if (!DOM.mainSubtitle || !DOM.mainTitle) return;

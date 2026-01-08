@@ -796,6 +796,12 @@ body {
     text-align: left;
 }
 
+/* Center titles and subtitles in step 4 to match other steps */
+#step-4 .main-subtitle,
+#step-4 .secondary-subtitle {
+    text-align: center;
+}
+
 
 .step-panel-title {
     font-size: var(--font-size-3xl);
@@ -1230,113 +1236,10 @@ body {
     display: none;
 }
 
-/* Back Arrow Button */
-.back-arrow-btn {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: none;
-    border: none;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    color: var(--color-text-secondary);
-    z-index: 10;
-    padding: 0;
-}
-
-.back-arrow-btn:hover {
-    color: #f0f;
-    transform: translateX(-2px);
-}
-
-.back-arrow-btn:active {
-    transform: translateX(-4px);
-}
-
-.back-arrow-btn svg {
-    width: 20px;
-    height: 20px;
-}
-
-/* Hide back arrow on all steps except step 2 */
-.step-panel:not(#step-2) .back-arrow-btn {
-    display: none;
-}
-
-/* Forward Arrow Button */
+/* Navigation arrows removed */
+.back-arrow-btn,
 .forward-arrow-btn {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: none;
-    border: none;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    color: var(--color-text-secondary);
-    z-index: 10;
-    padding: 0;
-}
-
-.forward-arrow-btn:hover {
-    color: #f0f;
-    transform: translateX(2px);
-}
-
-.forward-arrow-btn:active {
-    transform: translateX(4px);
-}
-
-.forward-arrow-btn svg {
-    width: 20px;
-    height: 20px;
-}
-
-/* Hide forward arrow on last step */
-.step-panel#step-5 .forward-arrow-btn {
-    display: none;
-}
-
-/* Mobile responsive for arrows */
-@media (max-width: 640px) {
-    .auth-mode-toggle {
-        margin-bottom: 24px;
-    }
-    
-    .auth-mode-btn {
-        padding: 10px 16px;
-        font-size: var(--font-size-base);
-    }
-    
-    .back-arrow-btn,
-    .forward-arrow-btn {
-        width: 44px;
-        height: 44px;
-        top: 16px;
-    }
-    
-    .back-arrow-btn {
-        left: 16px;
-    }
-    
-    .forward-arrow-btn {
-        right: 16px;
-    }
-    
-    .back-arrow-btn svg,
-    .forward-arrow-btn svg {
-        width: 18px;
-        height: 18px;
-    }
+    display: none !important;
 }
 
 /* Gym Heads-up Display */
@@ -3809,7 +3712,7 @@ body {
     display: grid;
     grid-template-columns: 1fr 400px;
     gap: 40px;
-    margin-top: 40px;
+    margin-top: 20px;
     justify-content: center;
     max-width: 1200px;
     margin-left: auto;
@@ -3874,11 +3777,23 @@ body {
     height: calc(100% - 8px);
     background: linear-gradient(135deg, #f0f 0%, #e609e6 100%);
     border-radius: 8px;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
     z-index: 1;
+    opacity: 0; /* Hidden by default when no button is active */
 }
 
+/* Show slider when any button is active */
+.auth-mode-btn.active ~ .auth-mode-slider {
+    opacity: 1;
+}
+
+/* Slider stays left when login (first button) is active */
 .auth-mode-btn[data-mode="login"].active ~ .auth-mode-slider {
+    transform: translateX(0);
+}
+
+/* Slider moves right when create (second button) is active */
+.auth-mode-btn[data-mode="create"].active ~ .auth-mode-slider {
     transform: translateX(calc(100% + 4px));
 }
 
@@ -4591,12 +4506,7 @@ main {
 /* Mobile Footer - Best Practice */
 @media (max-width: 768px) {
     .global-footer {
-        padding: 2px 0 16px;
-        margin-top: 0;
-        margin-left: -16px;
-        margin-right: -16px;
-        margin-bottom: -12px;
-        width: calc(100% + 32px);
+        display: none; /* Hide footer on mobile */
     }
     
     .footer-content {
@@ -4622,10 +4532,7 @@ main {
 /* Extra small mobile screens */
 @media (max-width: 480px) {
     .global-footer {
-        margin-left: -20px;
-        margin-right: -20px;
-        width: calc(100% + 40px);
-        padding: 20px 0 12px;
+        display: none; /* Hide footer on mobile */
     }
     
     .footer-content {
@@ -5163,10 +5070,12 @@ main {
     
     .info-form-section {
         max-width: none;
+        order: 1; /* Show form section first on mobile */
     }
 
     .order-summary-section {
         position: static;
+        order: 2; /* Show order summary second on mobile */
     }
 
     .order-summary {
