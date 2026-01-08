@@ -3922,9 +3922,7 @@ body {
     padding: 24px;
     position: sticky;
     top: 20px;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
+   
 }
 
 .summary-header {
@@ -3993,6 +3991,105 @@ body {
     color: white;
     font-weight: 500;
     font-size: var(--font-size-base);
+}
+
+/* Home Gym Info Icon */
+.item-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.home-gym-info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    transition: color 0.2s ease;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.home-gym-info-icon:hover {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.home-gym-info-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Home Gym Info Wrapper */
+.home-gym-info-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Home Gym Tooltip */
+.home-gym-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    min-width: 280px;
+    max-width: 320px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+}
+
+.home-gym-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid rgba(0, 0, 0, 0.95);
+}
+
+.home-gym-tooltip.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+
+.home-gym-tooltip .tooltip-content {
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.home-gym-tooltip .tooltip-content p {
+    margin: 0 0 8px 0;
+}
+
+.home-gym-tooltip .tooltip-content p:last-child {
+    margin-bottom: 0;
+}
+
+.home-gym-tooltip .tooltip-content strong {
+    color: white;
+    font-weight: 600;
+}
+
+.cart-item {
+    position: relative;
 }
 
 /* Payment Overview */
