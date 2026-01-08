@@ -3985,6 +3985,13 @@ body {
     color: var(--color-text-secondary);
     font-size: var(--font-size-base);
     font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.item-name:has(.home-gym-info) {
+    font-weight: 500;
 }
 
 .item-price {
@@ -3993,19 +4000,27 @@ body {
     font-size: var(--font-size-base);
 }
 
-/* Home Gym Info Icon */
-.item-name {
+/* Home Gym Info */
+.home-gym-info {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+.home-gym-text {
+    color: var(--color-text-secondary);
 }
 
 .home-gym-info-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
     color: rgba(255, 255, 255, 0.6);
     cursor: pointer;
     transition: color 0.2s ease;

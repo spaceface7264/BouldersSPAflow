@@ -7920,85 +7920,6 @@ function renderCartItems() {
   if (!templates.cartItem || !DOM.cartItems) return;
   DOM.cartItems.innerHTML = '';
 
-  // Add selected Home Gym as first item in cart
-  if (state.selectedGymId || state.selectedBusinessUnit) {
-    const gymId = state.selectedGymId || state.selectedBusinessUnit;
-    // Find gym in gymsWithDistances array
-    const selectedGym = gymsWithDistances.find(gym => 
-      String(gym.id) === String(gymId)
-    );
-    
-    if (selectedGym) {
-      const gymItem = templates.cartItem.content.firstElementChild.cloneNode(true);
-      const nameEl = gymItem.querySelector('[data-element="name"]');
-      const priceEl = gymItem.querySelector('[data-element="price"]');
-
-      if (nameEl) {
-        // Create a container for the gym name and info icon
-        nameEl.innerHTML = '';
-        const gymNameText = document.createTextNode(`Home Gym: ${selectedGym.name}`);
-        nameEl.appendChild(gymNameText);
-        
-        // Create info icon
-        const infoIcon = document.createElement('span');
-        infoIcon.className = 'home-gym-info-icon';
-        infoIcon.setAttribute('aria-label', 'Information about home gym');
-        infoIcon.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="16" x2="12" y2="12"></line>
-            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-          </svg>
-        `;
-        
-        // Create wrapper for info icon and tooltip
-        const infoWrapper = document.createElement('span');
-        infoWrapper.className = 'home-gym-info-wrapper';
-        
-        // Create tooltip
-        const tooltip = document.createElement('div');
-        tooltip.className = 'home-gym-tooltip';
-        tooltip.innerHTML = `
-          <div class="tooltip-content">
-            <p><strong>You get access to all gyms.</strong></p>
-            <p>This is the gym where you pick up your card.</p>
-          </div>
-        `;
-        
-        // Add click handler to toggle tooltip
-        infoIcon.addEventListener('click', (e) => {
-          e.stopPropagation();
-          // Close other tooltips
-          document.querySelectorAll('.home-gym-tooltip').forEach(t => {
-            if (t !== tooltip) t.classList.remove('show');
-          });
-          const wasVisible = tooltip.classList.contains('show');
-          tooltip.classList.toggle('show');
-          
-          // If tooltip is now visible, set up outside click handler
-          if (!wasVisible && tooltip.classList.contains('show')) {
-            setTimeout(() => {
-              const outsideClickHandler = (e) => {
-                if (!infoWrapper.contains(e.target)) {
-                  tooltip.classList.remove('show');
-                  document.removeEventListener('click', outsideClickHandler);
-                }
-              };
-              document.addEventListener('click', outsideClickHandler, { once: true });
-            }, 0);
-          }
-        });
-        
-        infoWrapper.appendChild(infoIcon);
-        infoWrapper.appendChild(tooltip);
-        nameEl.appendChild(infoWrapper);
-      }
-      if (priceEl) priceEl.textContent = ''; // Gym selection is free
-
-      DOM.cartItems.appendChild(gymItem);
-    }
-  }
-
   if (!state.cartItems.length) {
     // Only show empty message if there's no gym selected either
     if (!state.selectedGymId && !state.selectedBusinessUnit) {
@@ -8010,12 +7931,96 @@ function renderCartItems() {
     return;
   }
 
-  state.cartItems.forEach((item) => {
+  // Helper function to create Home Gym info element
+  function createHomeGymInfo(selectedGym) {
+    const gymInfoContainer = document.createElement('div');
+    gymInfoContainer.className = 'home-gym-info';
+    
+    const gymInfoText = document.createElement('span');
+    gymInfoText.className = 'home-gym-text';
+    gymInfoText.textContent = `Home Gym: ${selectedGym.name}`;
+    
+    // Create info icon
+    const infoIcon = document.createElement('span');
+    infoIcon.className = 'home-gym-info-icon';
+    infoIcon.setAttribute('aria-label', 'Information about home gym');
+    infoIcon.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+    `;
+    
+    // Create wrapper for info icon and tooltip
+    const infoWrapper = document.createElement('span');
+    infoWrapper.className = 'home-gym-info-wrapper';
+    
+    // Create tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'home-gym-tooltip';
+    tooltip.innerHTML = `
+      <div class="tooltip-content">
+        <p><strong>You get access to all gyms.</strong></p>
+        <p>This is the gym where you pick up your card.</p>
+      </div>
+    `;
+    
+    // Add click handler to toggle tooltip
+    infoIcon.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Close other tooltips
+      document.querySelectorAll('.home-gym-tooltip').forEach(t => {
+        if (t !== tooltip) t.classList.remove('show');
+      });
+      const wasVisible = tooltip.classList.contains('show');
+      tooltip.classList.toggle('show');
+      
+      // If tooltip is now visible, set up outside click handler
+      if (!wasVisible && tooltip.classList.contains('show')) {
+        setTimeout(() => {
+          const outsideClickHandler = (e) => {
+            if (!infoWrapper.contains(e.target)) {
+              tooltip.classList.remove('show');
+              document.removeEventListener('click', outsideClickHandler);
+            }
+          };
+          document.addEventListener('click', outsideClickHandler, { once: true });
+        }, 0);
+      }
+    });
+    
+    infoWrapper.appendChild(infoIcon);
+    infoWrapper.appendChild(tooltip);
+    gymInfoContainer.appendChild(gymInfoText);
+    gymInfoContainer.appendChild(infoWrapper);
+    
+    return gymInfoContainer;
+  }
+
+  // Get selected gym info
+  let selectedGym = null;
+  if (state.selectedGymId || state.selectedBusinessUnit) {
+    const gymId = state.selectedGymId || state.selectedBusinessUnit;
+    selectedGym = gymsWithDistances.find(gym => 
+      String(gym.id) === String(gymId)
+    );
+  }
+
+  state.cartItems.forEach((item, index) => {
     const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
     const nameEl = cartItem.querySelector('[data-element="name"]');
     const priceEl = cartItem.querySelector('[data-element="price"]');
 
-    if (nameEl) nameEl.textContent = item.name;
+    if (nameEl) {
+      nameEl.textContent = item.name;
+      
+      // Add Home Gym info below the first item's name
+      if (index === 0 && selectedGym) {
+        const gymInfo = createHomeGymInfo(selectedGym);
+        nameEl.appendChild(gymInfo);
+      }
+    }
     
     // Hide price for membership items (price already shown in Monthly fee section)
     if (priceEl) {
