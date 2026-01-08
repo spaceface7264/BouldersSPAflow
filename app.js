@@ -4532,6 +4532,9 @@ function setupEventListeners() {
   // Setup form field scrolling for mobile
   setupFormFieldScrolling();
   
+  // Ensure form fields get focused when clicked
+  setupFormFieldFocus();
+  
   // Setup save account button validation
   setupSaveAccountButtonValidation();
 
@@ -5990,6 +5993,31 @@ function setupFormFieldScrolling() {
     input.addEventListener('focus', function() {
       // Auto-scroll removed - will be revisited later
     });
+  });
+}
+
+function setupFormFieldFocus() {
+  // Ensure form inputs get focused when clicked
+  const formInputs = document.querySelectorAll('input, select, textarea');
+  
+  formInputs.forEach((input) => {
+    // Ensure focus on click
+    input.addEventListener('click', function(e) {
+      // Only focus if not already focused
+      if (document.activeElement !== this) {
+        this.focus();
+      }
+    });
+    
+    // Also handle label clicks - labels with 'for' attribute should work automatically
+    // Handle clicking on labels to focus the associated input
+    const label = input.closest('.form-group')?.querySelector(`label[for="${input.id}"]`);
+    if (label) {
+      label.addEventListener('click', function(e) {
+        e.preventDefault();
+        input.focus();
+      });
+    }
   });
 }
 
