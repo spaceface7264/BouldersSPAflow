@@ -153,13 +153,13 @@
                                 <div class="category-header">
                                     <div class="category-info">
                                         <div class="category-title" data-i18n-key="category.campaign">Campaign</div>
-                                        <div class="category-subtitle">Limited time offers</div>
+                                        <div class="category-subtitle" data-i18n-key="category.campaign.subtitle">Limited time offers</div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
                                 <div class="category-content">
                                     <div class="category-description">
-                                        <p>Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.</p>
+                                        <p data-i18n-key="category.campaign.desc">Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.</p>
                                     </div>
                                     <div class="plans-list">
                                         <!-- Products will be loaded from API -->
@@ -172,7 +172,7 @@
                                 <div class="category-header">
                                     <div class="category-info">
                                         <div class="category-title" data-i18n-key="category.membership">Membership</div>
-                                        <div class="category-subtitle">Ongoing subscription, unlimited access</div>
+                                        <div class="category-subtitle" data-i18n-key="category.membership.subtitle">Ongoing subscription, unlimited access</div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
@@ -191,7 +191,7 @@
                                 <div class="category-header">
                                     <div class="category-info">
                                         <div class="category-title" data-i18n-key="category.15daypass">15 Day Pass</div>
-                                        <div class="category-subtitle">Temporary access pass</div>
+                                        <div class="category-subtitle" data-i18n-key="category.15daypass.subtitle">Temporary access pass</div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
@@ -209,8 +209,8 @@
                             <div class="category-item" data-category="punchcard">
                                 <div class="category-header">
                                     <div class="category-info">
-                                        <div class="category-title">Punch Card</div>
-                                        <div class="category-subtitle">10 entries, shareable physical card</div>
+                                        <div class="category-title" data-i18n-key="category.punchcard">Punch Card</div>
+                                        <div class="category-subtitle" data-i18n-key="category.punchcard.subtitle">10 entries, shareable physical card</div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
@@ -830,10 +830,6 @@
             <div class="terms-modal-header">
                 <h3 class="terms-modal-title" id="termsModalTitle">Terms and Conditions</h3>
                 <div class="terms-modal-header-actions">
-                    <div class="terms-modal-language-switcher">
-                        <button class="language-btn active" data-lang="da" id="termsModalLangDa">DA</button>
-                        <button class="language-btn" data-lang="en" id="termsModalLangEn">EN</button>
-                    </div>
                     <button class="terms-modal-close" id="termsModalClose" aria-label="Close">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 6L6 18M6 6l12 12"/>
@@ -924,19 +920,6 @@
                         </a>
                     </li>
                 </ul>
-            </div>
-            
-            <div class="footer-section">
-                <div class="language-switcher">
-                    <button class="language-btn" id="languageSwitcher" data-lang="da">
-                        <span class="language-label" data-i18n-key="footer.language.danish">Dansk</span>
-                        <span class="language-code">DK</span>
-                    </button>
-                    <button class="language-btn" id="languageSwitcherEng" data-lang="en">
-                        <span class="language-label" data-i18n-key="footer.language.english">English</span>
-                        <span class="language-code">ENG</span>
-                    </button>
-                </div>
             </div>
         </div>
         

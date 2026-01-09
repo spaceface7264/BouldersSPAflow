@@ -4478,7 +4478,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Kampagne', 'category.membership': 'Medlemskab', 'category.15daypass': '15 Dages Klatring', 'category.punchcard': 'Klippekort',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Løbende abonnement, ubegrænset adgang', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': 'Midlertidig adgangspas', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': '10 indgange, delbart fysisk kort',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Få 15 dages ubegrænset adgang til alle haller. Perfekt til at prøve klatring eller et kortvarigt besøg.',
     'category.punchcard.desc': 'Du kan købe 1 type klippekort ad gangen. Hvert indgang bruger et klip på dit klippekort. Kortet er gyldigt i 5 år og giver ikke medlemsfordele. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen.',
@@ -4495,7 +4495,7 @@ const translations = {
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
-    'footer.terms.title': 'Vilkår og Betingelser', 'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab', 'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
+    'footer.terms.title': 'Vilkår og Betingelser', 'footer.terms.all': 'Vilkår og Betingelser', 'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab', 'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
     'footer.policies.title': 'Politikker', 'footer.policies.privacy': 'Privatlivspolitik', 'footer.policies.cookie': 'Cookiepolitik', 'footer.rights': 'Alle rettigheder forbeholdes',
     'addons.intro': 'Forbedre din klatreoplevelse med vores add-on produkter.',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
@@ -4504,7 +4504,7 @@ const translations = {
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Campaign', 'category.membership': 'Membership', 'category.15daypass': '15 Day Pass', 'category.punchcard': 'Punch Card',
+    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.membership': 'Membership', 'category.membership.subtitle': 'Ongoing subscription, unlimited access', 'category.15daypass': '15 Day Pass', 'category.15daypass.subtitle': 'Temporary access pass', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': '10 entries, shareable physical card',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym.',
@@ -4521,7 +4521,7 @@ const translations = {
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
-    'footer.terms.title': 'Terms and Conditions', 'footer.terms.membership': 'Terms and Conditions for Membership', 'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
+    'footer.terms.title': 'Terms and Conditions', 'footer.terms.all': 'Terms and Conditions', 'footer.terms.membership': 'Terms and Conditions for Membership', 'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
     'footer.policies.title': 'Policies', 'footer.policies.privacy': 'Privacy Policy', 'footer.policies.cookie': 'Cookie Policy', 'footer.rights': 'All rights reserved',
     'addons.intro': 'Enhance your climbing experience with our add-on products.',
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
@@ -4916,8 +4916,6 @@ function cacheDom() {
   DOM.termsModalLoading = document.getElementById('termsModalLoading');
   DOM.termsModalClose = document.getElementById('termsModalClose');
   DOM.termsModalTabs = document.getElementById('termsModalTabs');
-  DOM.termsModalLangDa = document.getElementById('termsModalLangDa');
-  DOM.termsModalLangEn = document.getElementById('termsModalLangEn');
   DOM.termsModalSearch = document.getElementById('termsModalSearch');
   DOM.termsSearchInput = document.getElementById('termsSearchInput');
   DOM.termsSearchClear = document.getElementById('termsSearchClear');
@@ -5096,13 +5094,6 @@ function setupEventListeners() {
       const tab = e.target.closest('.terms-tab');
       const tabType = tab.dataset.tab;
       switchTermsTab(tabType);
-    }
-    
-    // Language switching in terms modal
-    if (e.target.closest('#termsModalLangDa') || e.target.closest('#termsModalLangEn')) {
-      const langBtn = e.target.closest('.language-btn');
-      const lang = langBtn.dataset.lang;
-      switchModalLanguage('terms', lang);
     }
     
     // Language switching in data policy modal
