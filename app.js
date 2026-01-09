@@ -7452,15 +7452,12 @@ function handleCategoryToggle(category) {
       const wasExpanded = item.classList.contains('expanded');
       item.classList.toggle('expanded');
       
-      // Focus the expanded category content
+      // Focus the expanded category item
       if (!wasExpanded && item.classList.contains('expanded')) {
         setTimeout(() => {
-          const categoryContent = item.querySelector('.category-content');
-          if (categoryContent) {
-            categoryContent.setAttribute('tabindex', '-1');
-            categoryContent.focus();
-            categoryContent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
+          item.setAttribute('tabindex', '-1');
+          item.focus();
+          item.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100);
       }
     } else {
@@ -7595,15 +7592,12 @@ function setupNewAccessStep() {
           footerText.innerHTML = footerTexts[categoryType];
         }
         
-        // Focus the expanded category content for accessibility
+        // Focus the expanded category item for accessibility
         setTimeout(() => {
-          const categoryContent = category.querySelector('.category-content');
-          if (categoryContent) {
-            categoryContent.setAttribute('tabindex', '-1');
-            categoryContent.focus();
-            // Scroll into view smoothly
-            categoryContent.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
+          category.setAttribute('tabindex', '-1');
+          category.focus();
+          // Scroll into view smoothly
+          category.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100); // Small delay to ensure expansion animation has started
       } else {
         currentCategory = null;

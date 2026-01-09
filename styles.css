@@ -1659,6 +1659,23 @@ body {
     position: relative;
 }
 
+.category-item:focus {
+    outline: 0px solid #f0f;
+}
+
+/* Shadow at bottom of expanded items to indicate scrollable content */
+.category-item.expanded::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(to bottom, transparent, rgba(34, 30, 30, 0.646));
+    pointer-events: none;
+    z-index: 1;
+}
+
 /* Campaign category - match other categories but with green border stroke and glow */
 .category-item[data-category="campaign"] {
     background: var(--color-item-bg);
