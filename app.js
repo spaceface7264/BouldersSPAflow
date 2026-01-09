@@ -8659,7 +8659,10 @@ async function handleApplyDiscount() {
   
   // If order doesn't exist yet, try to create one so we can apply the coupon immediately
   // This allows the price to update right away when Apply is clicked
-  if (!state.orderId) {
+  // BUT: If we have fullOrder data, we might have an order ID we can use
+  const existingOrderId = state.orderId || state.fullOrder?.id;
+  
+  if (!existingOrderId) {
     // Check if user has items selected (membership or value cards)
     const hasItems = state.membershipPlanId || (state.valueCardQuantities && Array.from(state.valueCardQuantities.values()).some(qty => qty > 0));
     
@@ -8671,15 +8674,30 @@ async function handleApplyDiscount() {
       clearDiscountMessage();
       
       try {
+        // Check prerequisites before creating order
+        if (!state.customerId) {
+          throw new Error('Please log in or create an account to apply a discount');
+        }
+        if (!state.selectedBusinessUnit) {
+          throw new Error('Please select a gym location first');
+        }
+        
         // Create order first
         const ensuredOrderId = await ensureOrderCreated('discount-application');
         if (!ensuredOrderId) {
-          throw new Error('Failed to create order for coupon application');
+          // Provide more specific error message
+          let errorMsg = 'Failed to create order for coupon application';
+          if (!state.customerId) {
+            errorMsg = 'Please log in or create an account to apply a discount';
+          } else if (!state.selectedBusinessUnit) {
+            errorMsg = 'Please select a gym location first';
+          }
+          throw new Error(errorMsg);
         }
         state.orderId = ensuredOrderId;
         console.log('[Discount] Order created:', state.orderId);
         
-        // Now add membership/subscription to order if needed (only if it's actually a membership)
+        // Now add product to order before applying coupon
         // Check if this is a membership (not a punch card)
         const isMembership = state.membershipPlanId && 
           (state.selectedProductType === 'membership' || 
@@ -8689,9 +8707,50 @@ async function handleApplyDiscount() {
           try {
             await ensureSubscriptionAttached('discount-application');
             console.log('[Discount] Membership ensured on order');
+            
+            // Refresh fullOrder data after subscription is attached
+            try {
+              const updatedOrder = await orderAPI.getOrder(state.orderId);
+              state.fullOrder = updatedOrder;
+            } catch (fetchError) {
+              console.warn('[Discount] Could not refresh order data:', fetchError);
+            }
           } catch (subError) {
             console.warn('[Discount] Could not attach membership to order:', subError);
-            // Continue anyway - coupon might still work
+            throw subError; // Don't continue if membership attachment fails
+          }
+        } else if (state.selectedProductType === 'punch-card' && state.valueCardQuantities && state.valueCardQuantities.size > 0) {
+          // Add punch cards to order before applying coupon
+          console.log('[Discount] Adding punch cards to order before applying coupon...');
+          const orderAPI = new OrderAPI();
+          
+          for (const [planId, quantity] of state.valueCardQuantities.entries()) {
+            if (quantity > 0) {
+              try {
+                // Extract numeric product ID from "punch-43" format
+                const numericProductId = typeof planId === 'string' && planId.startsWith('punch-')
+                  ? parseInt(planId.replace('punch-', ''), 10)
+                  : planId;
+                
+                // API doesn't accept quantity in payload - call API once per quantity
+                for (let i = 0; i < quantity; i++) {
+                  await orderAPI.addValueCardItem(state.orderId, numericProductId, 1);
+                  console.log(`[Discount] ✅ Value card added: ${planId} (productId: ${numericProductId}) [${i + 1}/${quantity}]`);
+                }
+              } catch (error) {
+                console.error(`[Discount] ❌ Failed to add value card ${planId}:`, error);
+                throw new Error(`Failed to add punch card to order: ${error.message}`);
+              }
+            }
+          }
+          
+          // Refresh fullOrder data after punch cards are added
+          try {
+            const updatedOrder = await orderAPI.getOrder(state.orderId);
+            state.fullOrder = updatedOrder;
+            console.log('[Discount] Order refreshed after adding punch cards');
+          } catch (fetchError) {
+            console.warn('[Discount] Could not refresh order data:', fetchError);
           }
         }
         
@@ -8699,39 +8758,76 @@ async function handleApplyDiscount() {
         DOM.applyDiscountBtn.textContent = 'Applying...';
       } catch (orderError) {
         console.error('[Discount] Failed to create order for coupon:', orderError);
-        // Store coupon code for later application during checkout
-        state.discountCode = discountCode;
-        state.discountApplied = false;
-        // Update cart display even though we can't apply discount yet
-        // This ensures the cart is refreshed and shows current state
-        updateCartSummary();
-        showDiscountMessage(`Coupon "${discountCode}" will be applied at checkout`, 'info');
-        DOM.discountInput.style.borderColor = '#10B981';
+        // Show specific error message
+        const errorMsg = orderError.message || 'Failed to create order. Please try again.';
+        
+        // Check if it's a prerequisite issue
+        let displayMsg = errorMsg;
+        if (errorMsg.includes('log in') || errorMsg.includes('account')) {
+          displayMsg = '✗ Please log in or create an account to apply a discount code';
+        } else if (errorMsg.includes('gym location') || errorMsg.includes('business unit')) {
+          displayMsg = '✗ Please select a gym location first';
+        } else {
+          displayMsg = `✗ ${errorMsg}`;
+        }
+        
+        showDiscountMessage(displayMsg, 'error');
+        DOM.discountInput.style.borderColor = '#EF4444';
+        DOM.discountInput.style.backgroundColor = '#FEF2F2';
         DOM.applyDiscountBtn.disabled = false;
         DOM.applyDiscountBtn.textContent = 'Apply';
+        
+        // Clear error styling after delay
+        setTimeout(() => {
+          if (DOM.discountInput && !state.discountApplied) {
+            DOM.discountInput.style.borderColor = '';
+            DOM.discountInput.style.backgroundColor = '';
+          }
+        }, 5000);
         return;
       }
     } else {
-      // No items selected - just store coupon code for later
-      state.discountCode = discountCode;
-      state.discountApplied = false;
-      // Update cart display
-      updateCartSummary();
-      showDiscountMessage(`Coupon "${discountCode}" will be applied at checkout. Please select items first.`, 'info');
-      DOM.discountInput.style.borderColor = '#10B981';
+      // No items selected - show error message
+      showDiscountMessage('✗ Please select a membership or punch card first', 'error');
+      DOM.discountInput.style.borderColor = '#EF4444';
+      DOM.discountInput.style.backgroundColor = '#FEF2F2';
+      setTimeout(() => {
+        if (DOM.discountInput && !state.discountApplied) {
+          DOM.discountInput.style.borderColor = '';
+          DOM.discountInput.style.backgroundColor = '';
+        }
+      }, 5000);
       return;
     }
   }
   
   // Order exists - apply coupon immediately
+  // Use existingOrderId if state.orderId wasn't set but fullOrder has an ID
+  const orderIdToUse = state.orderId || existingOrderId;
+  
+  if (!orderIdToUse) {
+    console.error('[Discount] No order ID available for discount application');
+    showDiscountMessage('✗ No order found. Please refresh the page and try again.', 'error');
+    DOM.applyDiscountBtn.disabled = false;
+    DOM.applyDiscountBtn.textContent = 'Apply';
+    return;
+  }
+  
   // Set loading state
   DOM.applyDiscountBtn.disabled = true;
   DOM.applyDiscountBtn.textContent = 'Applying...';
   clearDiscountMessage();
   
+  // Ensure state.orderId is set for consistency
+  if (!state.orderId && orderIdToUse) {
+    state.orderId = orderIdToUse;
+  }
+  
   try {
     const orderAPI = new OrderAPI();
-    const response = await orderAPI.applyDiscountCode(state.orderId, discountCode);
+    console.log('[Discount] Applying discount code:', discountCode, 'to order:', orderIdToUse);
+    const response = await orderAPI.applyDiscountCode(orderIdToUse, discountCode);
+    console.log('[Discount] API response received:', response);
     
     // Extract discount information from response
     // API returns Order object with couponDiscount field
@@ -8811,11 +8907,25 @@ async function handleApplyDiscount() {
       state.discountApplied = true;
       state.totals.discountAmount = discountAmount;
       
+      // CRITICAL: Update fullOrder with discounted prices from API response
+      // This ensures payment overview shows the discounted prices
+      if (response && !state.fullOrder) {
+        state.fullOrder = response;
+      } else if (response && state.fullOrder) {
+        // Merge updated price data into existing fullOrder
+        state.fullOrder.price = response.price || state.fullOrder.price;
+        state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
+        if (response.subscriptionItems && response.subscriptionItems.length > 0) {
+          state.fullOrder.subscriptionItems = response.subscriptionItems;
+        }
+      }
+      
       console.log('[Discount] Applying discount:', {
         discountCode,
         discountAmount,
         subtotal,
         finalTotal: subtotal - discountAmount,
+        orderPrice: state.fullOrder?.price,
       });
       
       // CRITICAL: Update cart totals using API-based function - this recalculates everything
@@ -8827,11 +8937,27 @@ async function handleApplyDiscount() {
       // Force update discount display
       updateDiscountDisplay();
       
-      // Also update any other cart total elements that might exist
-      const allCartTotals = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"]');
+      // CRITICAL: Update payment overview to show discounted prices
+      updatePaymentOverview();
+      
+      // Calculate new total for display
+      const newTotal = state.totals.cartTotal || (subtotal - discountAmount);
+      
+      // Update all cart total elements and highlight them
+      const allCartTotals = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
       allCartTotals.forEach(el => {
-        const expectedTotal = currencyFormatter.format(state.totals.cartTotal);
-        el.textContent = expectedTotal;
+        // Only update text for cart total elements, payment overview is handled by updatePaymentOverview
+        if (el.hasAttribute('data-summary-field') && 
+            (el.getAttribute('data-summary-field') === 'cart-total' || 
+             el.getAttribute('data-summary-field') === 'order-total')) {
+          const expectedTotal = currencyFormatter.format(state.totals.cartTotal);
+          el.textContent = expectedTotal;
+        }
+        // Highlight the new price
+        el.classList.add('price-updated');
+        setTimeout(() => {
+          el.classList.remove('price-updated');
+        }, 2000);
       });
       
       // Double-check the display was updated
@@ -8849,13 +8975,33 @@ async function handleApplyDiscount() {
         if (displayedTotal !== expectedTotal) {
           console.warn('[Discount] Cart total mismatch, forcing update');
           DOM.cartTotal.textContent = expectedTotal;
+          DOM.cartTotal.classList.add('price-updated');
+          setTimeout(() => {
+            DOM.cartTotal.classList.remove('price-updated');
+          }, 2000);
         }
       } else {
         console.error('[Discount] DOM.cartTotal element not found after applying discount!');
       }
       
-      // Show success message with discount amount
-      showDiscountMessage(`Coupon "${discountCode}" applied! Discount: ${currencyFormatter.format(discountAmount)}`, 'success');
+      // Get updated payment amounts for success message
+      const payNowElement = document.querySelector('[data-summary-field="pay-now"]');
+      const monthlyPaymentElement = document.querySelector('[data-summary-field="monthly-payment"]');
+      const payNowText = payNowElement ? payNowElement.textContent : '';
+      const monthlyPaymentText = monthlyPaymentElement ? monthlyPaymentElement.textContent : '';
+      
+      // Show success message with discount amount and new prices
+      let successMessage = `✓ Coupon "${discountCode}" applied successfully! Discount: ${currencyFormatter.format(discountAmount)}.`;
+      if (payNowText) {
+        successMessage += ` Pay now: ${payNowText}`;
+      }
+      if (monthlyPaymentText) {
+        successMessage += ` Monthly: ${monthlyPaymentText}`;
+      }
+      if (!payNowText && !monthlyPaymentText) {
+        successMessage += ` New total: ${currencyFormatter.format(newTotal)}`;
+      }
+      showDiscountMessage(successMessage, 'success');
       
       // Force a visual update by triggering a reflow
       if (DOM.cartTotal) {
@@ -8866,6 +9012,7 @@ async function handleApplyDiscount() {
       DOM.discountInput.disabled = true;
       DOM.discountInput.style.opacity = '0.6';
       DOM.discountInput.style.borderColor = '#10B981';
+      DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
     } else {
       // Check if coupon was actually applied to the order (even if discountAmount is 0)
       // The API might return success but with 0 discount (e.g., for future use coupons)
@@ -8875,11 +9022,34 @@ async function handleApplyDiscount() {
         state.discountCode = discountCode;
         state.discountApplied = true;
         state.totals.discountAmount = 0; // Set to 0 if that's what the API returned
+        
+        // Update fullOrder with response to ensure payment overview uses latest data
+        if (response && !state.fullOrder) {
+          state.fullOrder = response;
+        } else if (response && state.fullOrder) {
+          state.fullOrder.price = response.price || state.fullOrder.price;
+          state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
+        }
+        
         updateCartSummary(); // updateCartSummary() already calls renderCartTotal()
-        showDiscountMessage(`Coupon "${discountCode}" applied successfully`, 'success');
+        updatePaymentOverview(); // Update payment overview with discounted prices
+        
+        const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
+        showDiscountMessage(`✓ Coupon "${discountCode}" applied successfully. Total: ${currencyFormatter.format(newTotal)}`, 'success');
+        
+        // Highlight the new price in cart total elements and payment overview
+        const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
+        cartTotalElements.forEach(el => {
+          el.classList.add('price-updated');
+          setTimeout(() => {
+            el.classList.remove('price-updated');
+          }, 2000);
+        });
+        
         DOM.discountInput.disabled = true;
         DOM.discountInput.style.opacity = '0.6';
         DOM.discountInput.style.borderColor = '#10B981';
+        DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
       } else {
         throw new Error('Invalid coupon code or no discount applied');
       }
@@ -8904,6 +9074,7 @@ async function handleApplyDiscount() {
     state.discountApplied = false;
     state.totals.discountAmount = 0;
     updateCartSummary(); // Update cart using API-based function
+    updateDiscountDisplay(); // Clear discount display
     
     // Parse error message to extract error code
     let errorMessageText = 'Failed to apply coupon. Please try again.';
@@ -8911,23 +9082,37 @@ async function handleApplyDiscount() {
     
     // Check for specific error codes in the response
     if (errorText.includes('COUPON_NOT_APPLICABLE')) {
-      errorMessageText = 'This coupon is not applicable to your current order. It may have restrictions on products, minimum order amount, or other conditions.';
+      errorMessageText = '✗ This coupon is not applicable to your current order. It may have restrictions on products, minimum order amount, or other conditions.';
     } else if (errorText.includes('COUPON_NOT_FOUND') || errorText.includes('404')) {
-      errorMessageText = 'Coupon code not found. Please check the code and try again.';
+      errorMessageText = '✗ Coupon code not found. Please check the code and try again.';
     } else if (errorText.includes('COUPON_EXPIRED') || errorText.includes('expired')) {
-      errorMessageText = 'This coupon has expired and is no longer valid.';
+      errorMessageText = '✗ This coupon has expired and is no longer valid.';
     } else if (errorText.includes('COUPON_ALREADY_USED')) {
-      errorMessageText = 'This coupon has already been used and cannot be applied again.';
+      errorMessageText = '✗ This coupon has already been used and cannot be applied again.';
     } else if (errorText.includes('403') || errorText.includes('Forbidden')) {
-      errorMessageText = 'This coupon cannot be applied. It may have restrictions or is not valid for your order.';
+      errorMessageText = '✗ This coupon cannot be applied. It may have restrictions or is not valid for your order.';
     } else if (errorText.includes('400') || errorText.includes('invalid')) {
-      errorMessageText = 'Invalid coupon code. Please check the code and try again.';
+      errorMessageText = '✗ Invalid coupon code. Please check the code and try again.';
     } else if (errorText.includes('405')) {
-      errorMessageText = 'Coupon application method not supported. Please contact support.';
+      errorMessageText = '✗ Coupon application method not supported. Please contact support.';
+    } else {
+      errorMessageText = '✗ ' + errorMessageText;
     }
     
     showDiscountMessage(errorMessageText, 'error');
+    
+    // Reset input styling on error
     DOM.discountInput.style.borderColor = '#EF4444'; // Red border on error
+    DOM.discountInput.style.backgroundColor = '#FEF2F2'; // Light red background
+    DOM.discountInput.focus(); // Focus input so user can try again
+    
+    // Clear error styling after a delay
+    setTimeout(() => {
+      if (DOM.discountInput && !state.discountApplied) {
+        DOM.discountInput.style.borderColor = '';
+        DOM.discountInput.style.backgroundColor = '';
+      }
+    }, 5000);
   } finally {
     // Reset button state
     DOM.applyDiscountBtn.disabled = false;
@@ -9375,7 +9560,31 @@ function renderCartItems() {
       if (item.type === 'membership') {
         priceEl.style.display = 'none';
       } else {
-        priceEl.textContent = item.amount ? numberFormatter.format(item.amount) + ' kr' : '';
+        // Calculate discounted price for this item
+        let displayPrice = item.amount;
+        let originalPrice = item.amount;
+        
+        // If discount is applied, calculate discounted price proportionally
+        if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
+          // Calculate discount ratio
+          const discountRatio = state.totals.discountAmount / state.totals.subtotal;
+          // Apply discount proportionally to this item
+          const itemDiscount = item.amount * discountRatio;
+          displayPrice = Math.max(0, item.amount - itemDiscount);
+          
+          // If discount is 100% or more, show 0
+          if (state.totals.discountAmount >= state.totals.subtotal) {
+            displayPrice = 0;
+          }
+        }
+        
+        // Display price - show discounted price if different from original
+        if (displayPrice !== originalPrice && state.discountApplied) {
+          // Show original price with strikethrough and discounted price
+          priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${numberFormatter.format(originalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${numberFormatter.format(displayPrice)} kr</span>`;
+        } else {
+          priceEl.textContent = displayPrice ? numberFormatter.format(displayPrice) + ' kr' : '';
+        }
       }
     }
 
@@ -9871,7 +10080,11 @@ function updateDiscountDisplay() {
   let discountDisplay = document.querySelector('.discount-display');
   
   // Show discount display if discount is applied OR if discount code is stored (pending application)
-  if ((state.discountApplied && state.totals.discountAmount > 0) || (state.discountCode && !state.discountApplied)) {
+  // BUT: Don't show pending message if we're currently applying a discount (button is disabled)
+  const isApplyingDiscount = DOM.applyDiscountBtn && DOM.applyDiscountBtn.disabled && DOM.applyDiscountBtn.textContent.includes('Applying');
+  const shouldShowPending = state.discountCode && !state.discountApplied && !isApplyingDiscount;
+  
+  if ((state.discountApplied && state.totals.discountAmount > 0) || shouldShowPending) {
     // Ensure subtotal is calculated - but don't call updateCartTotals() to avoid recursion
     // Instead, just recalculate subtotal if needed
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
