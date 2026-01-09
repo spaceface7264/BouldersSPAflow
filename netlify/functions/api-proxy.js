@@ -66,7 +66,7 @@ exports.handler = async (event, context) => {
     const requestOptions = {
       method: event.httpMethod,
       headers: {
-        'Accept-Language': 'da-DK', // Step 2: Language default
+        'Accept-Language': event.headers['accept-language'] || event.headers['Accept-Language'] || 'da-DK', // Use client's language preference or default
         'Content-Type': 'application/json',
         // Forward Authorization header if present (for future auth steps)
         ...(event.headers['authorization'] || event.headers['Authorization'] 

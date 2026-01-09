@@ -196,7 +196,7 @@ class BusinessUnitsAPI {
       console.log('Fetching business units from:', url);
       
       const headers = {
-        'Accept-Language': 'da-DK', // Step 2: Language default
+        'Accept-Language': getAcceptLanguageHeader(), // Step 2: Language default
         'Content-Type': 'application/json',
         // No Authorization header needed - endpoint uses "No Auth"
       };
@@ -305,10 +305,13 @@ class BusinessUnitsAPI {
       }
       console.log('Fetching subscriptions from:', url);
       
+      const acceptLanguage = getAcceptLanguageHeader();
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': acceptLanguage,
         'Content-Type': 'application/json',
       };
+      
+      console.log('[API] Fetching subscriptions with Accept-Language:', acceptLanguage);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -322,6 +325,7 @@ class BusinessUnitsAPI {
       }
       
       const data = await response.json();
+      console.log('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), imageBannerText: data[0].imageBanner?.text?.substring(0, 50) } : 'empty');
       return data;
     } catch (error) {
       console.error('Error fetching subscriptions:', error);
@@ -341,10 +345,13 @@ class BusinessUnitsAPI {
       }
       console.log('Fetching value cards from:', url);
       
+      const acceptLanguage = getAcceptLanguageHeader();
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': acceptLanguage,
         'Content-Type': 'application/json',
       };
+      
+      console.log('[API] Fetching value cards with Accept-Language:', acceptLanguage);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -358,6 +365,11 @@ class BusinessUnitsAPI {
       }
       
       const data = await response.json();
+      console.log('[API] Value cards response sample:', data[0] ? { 
+        id: data[0].id, 
+        name: data[0].name, 
+        description: data[0].description?.substring(0, 50) 
+      } : 'empty');
       return data;
     } catch (error) {
       console.error('Error fetching value cards:', error);
@@ -379,7 +391,7 @@ class BusinessUnitsAPI {
       console.log('Fetching subscription additions from:', url);
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
@@ -427,7 +439,7 @@ class BusinessUnitsAPI {
       console.log('[Step 8] Fetching additional catalog products from:', url);
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
@@ -512,7 +524,7 @@ class ReferenceDataAPI {
       console.log(`[Step 4] Fetching reference data (${type}) from:`, url);
       
       const headers = {
-        'Accept-Language': 'da-DK', // Step 2: Language default
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
@@ -603,7 +615,7 @@ class ReferenceDataAPI {
       console.log('[PostalCode] Looking up city for postal code:', cleanPostalCode, 'from:', url);
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
@@ -715,7 +727,7 @@ class AuthAPI {
       console.log('[Step 6] Logging in:', url);
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
@@ -835,7 +847,7 @@ class AuthAPI {
       }
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       };
@@ -882,7 +894,7 @@ class AuthAPI {
       }
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
@@ -953,7 +965,7 @@ class AuthAPI {
       console.log('[Step 6] Requesting password reset:', url);
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
@@ -1028,7 +1040,7 @@ class AuthAPI {
       console.log('[Step 6] Customer data being sent:', JSON.stringify(requestPayload, null, 2));
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
@@ -1174,7 +1186,7 @@ class AuthAPI {
       }
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       };
@@ -1221,7 +1233,7 @@ class AuthAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -1264,7 +1276,7 @@ class AuthAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -1535,7 +1547,7 @@ class OrderAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -1586,7 +1598,7 @@ class OrderAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -2002,7 +2014,7 @@ class OrderAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -2056,7 +2068,7 @@ class OrderAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -2104,7 +2116,7 @@ class OrderAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -2151,7 +2163,7 @@ class OrderAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -2200,7 +2212,7 @@ class OrderAPI {
         : null;
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -2404,7 +2416,7 @@ class PaymentAPI {
       }
       
       const headers = {
-        'Accept-Language': 'da-DK',
+        'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
@@ -3958,8 +3970,42 @@ const pendingNavigationTimeouts = {
   punchcard: null
 };
 
+// Language management
+const SUPPORTED_LANGUAGES = {
+  'da-DK': { code: 'da-DK', name: 'Dansk', flag: '🇩🇰' },
+  'en-GB': { code: 'en-GB', name: 'English', flag: '🇬🇧' }
+};
+
+const DEFAULT_LANGUAGE = 'da-DK';
+
+function getStoredLanguage() {
+  try {
+    const stored = localStorage.getItem('selectedLanguage');
+    return stored && SUPPORTED_LANGUAGES[stored] ? stored : DEFAULT_LANGUAGE;
+  } catch {
+    return DEFAULT_LANGUAGE;
+  }
+}
+
+function setStoredLanguage(languageCode) {
+  try {
+    if (SUPPORTED_LANGUAGES[languageCode]) {
+      localStorage.setItem('selectedLanguage', languageCode);
+      return true;
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  return false;
+}
+
+function getAcceptLanguageHeader() {
+  return state.language || DEFAULT_LANGUAGE;
+}
+
 const state = {
   currentStep: 1,
+  language: getStoredLanguage(), // Current selected language
   selectedGymId: null,
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
@@ -4344,6 +4390,10 @@ function init() {
   } catch (e) {
     console.warn('[Init] Could not load created emails from localStorage:', e);
   }
+  
+  // Initialize language (must be before API calls)
+  initLanguageSwitcher();
+  
   cacheDom();
   cacheTemplates();
   renderCatalog();
@@ -4485,31 +4535,85 @@ function updateTranslations() {
   }
 }
 
+// Change language and reload products
+async function changeLanguage(languageCode) {
+  if (!SUPPORTED_LANGUAGES[languageCode]) {
+    console.warn('[Language] Unsupported language code:', languageCode);
+    return;
+  }
+  
+  // Update state and storage
+  state.language = languageCode;
+  setStoredLanguage(languageCode);
+  
+  // Update HTML lang attribute
+  document.documentElement.lang = languageCode.split('-')[0]; // 'da-DK' -> 'da'
+  
+  // Update language switcher UI
+  updateLanguageSwitcherUI();
+  
+  // Reload products if we're on step 2 or later
+  if (state.currentStep >= 2 && state.selectedBusinessUnit) {
+    console.log('[Language] Reloading products with language:', languageCode);
+    // Clear cached products to force fresh fetch
+    state.subscriptions = [];
+    state.campaignSubscriptions = [];
+    state.dayPassSubscriptions = [];
+    state.valueCards = [];
+    await loadProductsFromAPI();
+    renderProductsFromAPI();
+  }
+  
+  // Reload gyms if we're on step 1
+  if (state.currentStep === 1) {
+    console.log('[Language] Reloading gyms with language:', languageCode);
+    await loadGymsFromAPI();
+  }
+}
+
+// Update language switcher UI to show active language
+function updateLanguageSwitcherUI() {
+  const switcher = document.getElementById('languageSwitcher');
+  if (!switcher) return;
+  
+  const buttons = switcher.querySelectorAll('.language-btn');
+  buttons.forEach(btn => {
+    const langCode = btn.dataset.lang;
+    if (langCode === state.language) {
+      btn.classList.add('active');
+      btn.setAttribute('aria-pressed', 'true');
+    } else {
+      btn.classList.remove('active');
+      btn.setAttribute('aria-pressed', 'false');
+    }
+  });
+}
+
 // Initialize language switcher
 function initLanguageSwitcher() {
-  const danishBtn = document.getElementById('languageSwitcher');
-  const englishBtn = document.getElementById('languageSwitcherEng');
-  
-  if (danishBtn) {
-    danishBtn.addEventListener('click', () => {
-      setCurrentLanguage('da');
-    });
-  }
-  
-  if (englishBtn) {
-    englishBtn.addEventListener('click', () => {
-      setCurrentLanguage('en');
-    });
-  }
+  const switcher = document.getElementById('languageSwitcher');
+  if (!switcher) return;
   
   // Set initial language
-  const currentLang = getCurrentLanguage();
-  document.documentElement.lang = currentLang;
-  updateTranslations();
+  const currentLang = state.language || DEFAULT_LANGUAGE;
+  document.documentElement.lang = currentLang.split('-')[0];
+  updateLanguageSwitcherUI();
+  
+  // Add click handlers to language buttons
+  const buttons = switcher.querySelectorAll('.language-btn');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const langCode = btn.dataset.lang;
+      if (langCode && langCode !== state.language) {
+        await changeLanguage(langCode);
+      }
+    });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Initialize language switcher
+  // Initialize language switcher (must be early to set language before API calls)
   initLanguageSwitcher();
   
   // Check if we're returning from payment before initializing
@@ -10651,7 +10755,7 @@ async function handleCheckout() {
                   state.orderId,
                   subscriptionUrl,
                   {
-                    'Accept-Language': 'da-DK',
+                    'Accept-Language': getAcceptLanguageHeader(),
                     'Content-Type': 'application/json',
                     ...(typeof window.getAccessToken === 'function' && window.getAccessToken() 
                       ? { 'Authorization': `Bearer ${window.getAccessToken()}` } 

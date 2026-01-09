@@ -589,6 +589,51 @@ body {
     min-width: 120px;
 }
 
+/* Language Switcher */
+.language-switcher {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.language-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: white;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.language-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.language-btn.active {
+    background: rgba(244, 1, 245, 0.2);
+    border-color: #F401F5;
+    color: #F401F5;
+}
+
+.language-flag {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.language-name {
+    font-weight: 600;
+}
 
 /* Mobile Header Styles */
 @media (max-width: 768px) {
@@ -616,6 +661,20 @@ body {
         font-size: var(--font-size-m);
         letter-spacing: 1px;
     }
+    
+    .language-switcher {
+        right: 16px;
+        gap: 6px;
+    }
+    
+    .language-btn {
+        padding: 5px 10px;
+        font-size: var(--font-size-xs);
+    }
+    
+    .language-flag {
+        font-size: 14px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -639,6 +698,24 @@ body {
     .header-text {
         font-size: var(--font-size-lg);
         letter-spacing: 1px;
+    }
+    
+    .language-switcher {
+        right: 12px;
+        gap: 4px;
+    }
+    
+    .language-btn {
+        padding: 4px 8px;
+        font-size: var(--font-size-xs);
+    }
+    
+    .language-flag {
+        font-size: 12px;
+    }
+    
+    .language-name {
+        display: none; /* Hide text on very small screens, show only flag */
     }
 }
 
