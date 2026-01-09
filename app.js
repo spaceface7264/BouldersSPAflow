@@ -761,6 +761,24 @@ class AuthAPI {
           throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${response.status} - ${errorText})`);
         }
         
+        // Handle 401 errors - parse JSON to extract actual error message
+        if (response.status === 401) {
+          try {
+            const errorData = JSON.parse(errorText);
+            // Check for INVALID_CREDENTIALS or other specific error codes
+            if (errorData.error?.code === 'INVALID_CREDENTIALS' || errorData.error?.message) {
+              // Preserve the original error structure so getErrorMessage can parse it
+              throw new Error(`Login failed: ${response.status} - ${errorText}`);
+            }
+          } catch (e) {
+            // If this is our thrown error, re-throw it
+            if (e.message && e.message.includes('Login failed')) {
+              throw e;
+            }
+            // If JSON parsing fails, fall through to default error
+          }
+        }
+        
         throw new Error(`Login failed: ${response.status} - ${errorText}`);
       }
       
@@ -12156,13 +12174,26 @@ function getErrorMessage(error, context = 'operation') {
     return 'Network error. Please check your connection and try again.';
   }
 
-  // Try to parse validation errors from API response (400/403 errors with details)
-  if (error.message.includes('400') || error.message.includes('403')) {
+  // Try to parse validation errors from API response (400/401/403 errors with details)
+  if (error.message.includes('400') || error.message.includes('401') || error.message.includes('403')) {
     try {
-      // Extract JSON from error message
-      const jsonMatch = error.message.match(/\{[\s\S]*\}/);
+      // Extract JSON from error message - try multiple patterns
+      let jsonMatch = error.message.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        // Also try to parse the entire error text if it's JSON
+        jsonMatch = error.message.match(/-\s*(\{[\s\S]*\})/);
+        if (jsonMatch) {
+          jsonMatch = [jsonMatch[1]];
+        }
+      }
+      
       if (jsonMatch) {
         const errorData = JSON.parse(jsonMatch[0]);
+        
+        // Handle 401 errors with specific error codes (like INVALID_CREDENTIALS)
+        if (errorData.code === 'INVALID_CREDENTIALS' || errorData.error?.code === 'INVALID_CREDENTIALS') {
+          return errorData.message || errorData.error?.message || 'Invalid username or password';
+        }
         
         // Handle validation errors with details array
         if (errorData.error?.details && Array.isArray(errorData.error.details)) {
@@ -12179,9 +12210,18 @@ function getErrorMessage(error, context = 'operation') {
             .join(', ');
           return `Missing required fields: ${fieldErrors}`;
         }
+        
+        // Handle generic error messages from API
+        if (errorData.error?.message) {
+          return errorData.error.message;
+        }
+        if (errorData.message) {
+          return errorData.message;
+        }
       }
     } catch (e) {
       // If parsing fails, fall through to default error message
+      console.warn('[getErrorMessage] Failed to parse error JSON:', e);
     }
   }
 
@@ -12194,6 +12234,10 @@ function getErrorMessage(error, context = 'operation') {
       case 400:
         return 'Invalid information provided. Please check your details and try again.';
       case 401:
+        // For login context, show invalid credentials message
+        if (context === 'Login') {
+          return 'Invalid username or password. Please check your credentials and try again.';
+        }
         return 'Your session has expired. Please try again.';
       case 403:
         return 'You do not have permission to perform this action.';
