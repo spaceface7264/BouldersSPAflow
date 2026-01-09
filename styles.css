@@ -173,8 +173,22 @@
   
   .addons-grid .addon-card .plan-info {
     display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 16px;
+    min-height: 100%;
+  }
+
+  .addons-grid .addon-card .plan-content-left {
+    flex: 1;
+    min-width: 0;
+    display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
+    align-items: flex-start;
+    justify-content: space-between;
+    min-height: 100%;
   }
   
   .addons-grid .addon-card .plan-type {
@@ -182,20 +196,25 @@
     font-weight: 700;
     font-size: var(--font-size-md);
     margin: 0;
+    line-height: 1.4;
   }
   
-  .addons-grid .addon-card .plan-details {
+  .addons-grid .addon-card .plan-content-right {
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-start;
     gap: 4px;
-    text-align: left;
+    align-self: flex-start;
   }
   
   .addons-grid .addon-card .plan-price {
     display: flex;
     align-items: baseline;
     gap: 4px;
-    margin: 4px 0;
+    margin: 0;
+    white-space: nowrap;
   }
   
   .addons-grid .addon-card .plan-price .price-amount {
@@ -213,8 +232,11 @@
   .addons-grid .addon-card .plan-description {
     color: var(--color-text-muted);
     font-size: var(--font-size-sm);
-    line-height: 18px;
+    line-height: 1.5;
     margin: 0;
+    text-align: left;
+    align-self: flex-start;
+    width: 100%;
   }
   
   .addons-grid .addon-card .plan-meta {
@@ -1308,6 +1330,7 @@ body {
     flex-wrap: wrap;
     justify-content: flex-start; /* Changed from space-between to keep left-aligned */
     width: 100%;
+    position: relative; /* For absolute positioning of distance badge */
 }
 
 .gym-address {
@@ -1316,6 +1339,18 @@ body {
     text-align: left; /* Ensure left alignment */
     flex-shrink: 1;
     min-width: 0; /* Allow text to wrap if needed */
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 60px; /* Prevent text from going under badge */
+}
+
+.gym-address-street {
+    line-height: 1.4;
+}
+
+.gym-address-postal-city {
+    line-height: 1.4;
 }
 
 
@@ -1365,6 +1400,10 @@ body {
 
 /* Distance Badge */
 .gym-distance-badge {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    right: 50px; /* Position to the left of check circle */
     display: inline-flex;
     align-items: center;
     padding: 4px 10px;
@@ -1375,6 +1414,17 @@ body {
     font-size: 11px;
     font-weight: 500;
     white-space: nowrap;
+    z-index: 1;
+    margin: 0;
+}
+
+/* On mobile, make badge background solid to hide text behind it */
+@media (max-width: 768px) {
+    .gym-item .gym-distance-badge {
+        background-color: var(--color-item-bg); /* Solid background */
+        border: 1px solid var(--color-item-border);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Add shadow for depth */
+    }
 }
 
 .no-results {
@@ -1845,13 +1895,11 @@ body {
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
-    align-items: stretch; /* Changed from 'left' to 'stretch' for proper height */
-    justify-content: space-between;
-    padding-top: 12px;
-    padding-bottom: 12px;
-    gap: 12px;
-    height: auto; /* Allow cards to expand to fit content */
-    min-height: auto; /* Remove fixed min-height */
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 16px 20px;
+    position: relative;
+    min-height: 100px; /* Ensure minimum height to fill card */
     opacity: 0;
     transform: translateY(15px) scale(0.95);
 }
@@ -1917,7 +1965,7 @@ body {
 }
 
 .plan-card:last-child {
-    padding-bottom: 0; /* Remove padding to prevent purple area and allow scrolling to bottom */
+    padding-bottom: 24px; /* Extra bottom padding for last card */
 }
 
 /* No products available message */
@@ -1964,27 +2012,50 @@ body {
 .plan-info {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 16px;
+    padding-right: 0;
+    min-height: 100%;
+}
+
+.plan-content-left {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+    justify-content: space-between;
+    min-height: 100%;
 }
 
 .plan-type {
     font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--color-button-primary);
-    margin-bottom: 6px;
     text-align: left;
+    line-height: 1.4;
+    margin: 0;
 }
 
-.plan-details {
+.plan-content-right {
+    flex-shrink: 0;
     display: flex;
-    flex-direction: column;
-    text-align: left;
-    gap: 4px;
+    align-items: flex-start;
+    justify-content: flex-end;
+    align-self: flex-start;
+    padding-top: 0;
 }
 
 .plan-price {
     display: flex;
     align-items: baseline;
     gap: 4px;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .price-amount {
@@ -1998,6 +2069,7 @@ body {
     font-size: var(--font-size-sm);
     color: #f0f;
     font-weight: 500;
+    line-height: 1.2;
 }
 
 .plan-description {
@@ -2005,17 +2077,24 @@ body {
     color: var(--color-text-muted);
     line-height: 1.5;
     white-space: normal; /* Allow wrapping, but preserve <br> tags */
+    margin: 0;
+    text-align: left;
+    align-self: flex-start;
+    width: 100%;
 }
 
-.check-circle {
-    margin-top: 16px;
+.plan-card .check-circle {
+    position: absolute;
+    bottom: 16px;
+    right: 20px;
     width: 28px;
     height: 28px;
+    margin: 0 0 4px 0; /* Add bottom margin */
+    flex-shrink: 0;
     border: 2px solid var(--color-item-border);
     border-radius: 50%;
-    flex-shrink: 0;
     display: flex;
-    align-items: right;
+    align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
 }
@@ -2087,9 +2166,29 @@ body {
     }
 
     .plan-card {
-        padding: 12px 14px;
-        height: auto; /* Allow cards to expand to fit content */
-        min-height: auto;
+        padding: 14px 16px;
+        min-height: 70px;
+    }
+
+    .plan-info {
+        gap: 12px;
+        padding-right: 0;
+    }
+
+    .plan-content-left {
+        gap: 4px;
+    }
+
+    .plan-content-right {
+        align-self: flex-start;
+    }
+
+    .plan-card .check-circle {
+        bottom: 14px;
+        right: 16px;
+        width: 24px;
+        height: 24px;
+        margin: 0 0 4px 0; /* Add bottom margin */
     }
 
     .plan-type {
@@ -2097,11 +2196,16 @@ body {
     }
 
     .price-amount {
-        font-size: var(--font-size-md);
+        font-size: var(--font-size-lg);
     }
 
     .plan-description {
         font-size: var(--font-size-sm);
+    }
+
+    .plan-card .check-circle {
+        width: 24px;
+        height: 24px;
     }
 }
 
@@ -2132,6 +2236,25 @@ body {
 
     .plan-card {
         padding: 16px 20px;
+        min-height: 100px;
+    }
+
+    .plan-info {
+        padding-right: 0;
+        gap: 16px;
+        align-items: stretch;
+        min-height: 100%;
+    }
+
+    .plan-content-left {
+        justify-content: space-between;
+        min-height: 100%;
+    }
+
+    .plan-card .check-circle {
+        bottom: 16px;
+        right: 20px;
+        margin: 0 0 4px 0; /* Add bottom margin */
     }
 
     .plan-card:hover {
@@ -2140,12 +2263,6 @@ body {
 
     .category-item:hover {
         border-color: #f0f;
-    }
-
-    .plan-details {
-        flex-direction: row;
-        align-items: left;
-        gap: 12px;
     }
 
     .footer-text {
@@ -2609,7 +2726,7 @@ body {
 .plan-info {
     font-size: var(--font-size-base);
     color: #6B7280;
-    margin-bottom: 20px;
+    margin-bottom: 0px;
     font-style: none;
 }
 
@@ -5632,12 +5749,29 @@ main {
 
     .gym-item {
         padding: 14px 16px;
+        align-items: center; /* Ensure vertical centering */
     }
 
     .gym-details {
         flex-direction: column;
         align-items: flex-start;
         gap: 4px;
+    }
+
+    /* Move distance badge to right side, vertically centered on mobile */
+    .gym-item .gym-distance-badge {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        right: 50px; /* Position to the left of check circle (24px + gap) */
+        margin: 0;
+        z-index: 1;
+    }
+
+    /* Ensure check circle is also vertically centered */
+    .gym-item .check-circle {
+        align-self: center;
+        margin: 0;
     }
 
     .search-input {

@@ -3055,13 +3055,15 @@ function renderProductsFromAPI() {
     
     planCard.innerHTML = `
       <div class="plan-info">
-        <div class="plan-type">${product.name || 'Membership'}</div>
-        <div class="plan-details">
+        <div class="plan-content-left">
+          <div class="plan-type">${product.name || 'Membership'}</div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
+        </div>
+        <div class="plan-content-right">
           <div class="plan-price">
             <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
             <span class="price-unit">${priceUnit}</span>
           </div>
-          ${descriptionHtml ? `<span class="plan-description">${descriptionHtml}</span>` : ''}
         </div>
       </div>
       <div class="check-circle"></div>
@@ -3176,13 +3178,15 @@ function renderProductsFromAPI() {
         
         planCard.innerHTML = `
           <div class="plan-info">
-            <div class="plan-type">${product.name || 'Punch Card'}</div>
-            <div class="plan-details">
+            <div class="plan-content-left">
+              <div class="plan-type">${product.name || 'Punch Card'}</div>
+              ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
+            </div>
+            <div class="plan-content-right">
               <div class="plan-price">
                 <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
                 <span class="price-unit">kr</span>
               </div>
-              ${descriptionHtml ? `<span class="plan-description">${descriptionHtml}</span>` : ''}
             </div>
           </div>
           <div class="check-circle"></div>
@@ -4193,7 +4197,9 @@ function createGymItem(gym, isNearest = false) {
   gymItem.setAttribute('data-gym-id', `gym-${gym.id}`);
   
   const address = gym.address;
-  const addressString = `${address.street}, ${address.postalCode} ${address.city}`;
+  // Break address before zipcode - street on first line, zipcode + city on second
+  const addressStreet = address.street;
+  const addressPostalCity = `${address.postalCode} ${address.city}`;
   
   // Add distance badge if available
   const distanceBadge = gym.distance !== null && gym.distance !== undefined
@@ -4207,11 +4213,14 @@ function createGymItem(gym, isNearest = false) {
   
   gymItem.innerHTML = `
     ${nearestBadge}
+    ${distanceBadge}
     <div class="gym-info">
       <div class="gym-name">${gym.name}</div>
       <div class="gym-details">
-        <div class="gym-address">${addressString}</div>
-        ${distanceBadge}
+        <div class="gym-address">
+          <div class="gym-address-street">${addressStreet}</div>
+          <div class="gym-address-postal-city">${addressPostalCity}</div>
+        </div>
       </div>
     </div>
     <div class="check-circle"></div>
