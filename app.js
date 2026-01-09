@@ -4502,8 +4502,32 @@ const translations = {
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabat', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
+    'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
+    'form.dateOfBirth': 'Fødselsdato*', 'form.streetAddress': 'Gade og husnummer*', 'form.streetAddress.placeholder': 'Gade og husnummer',
+    'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By', 'form.city.placeholder': 'Auto',
+    'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Indtast din e-mail', 'form.country': 'Land', 'form.phoneNumber': 'Mobilnummer*',
+    'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
+    'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Gem konto',
+    'form.buyer': 'Køber', 'form.createProfile': 'OPRET PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
+    'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
+    'form.parentDateOfBirth': 'Fødselsdato*', 'form.parentStreetAddress': 'Gade og husnummer*', 'form.parentStreetAddress.placeholder': 'Indtast gade og husnummer',
+    'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By', 'form.parentCity.placeholder': 'København',
+    'form.parentEmail': 'E-mail*', 'form.parentEmail.placeholder': 'Indtast din e-mail', 'form.parentCountryCode': 'Land',
+    'form.parentPhoneNumber': 'Mobilnummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Samme adresse og kontaktinformation',
+    'form.error.firstName': 'Indtast venligst dit fornavn', 'form.error.lastName': 'Indtast venligst dit efternavn',
+    'form.error.email': 'Indtast venligst en gyldig e-mailadresse',
+    'form.resetPassword': 'NULSTIL ADGANGSKODE', 'form.resetPassword.desc': 'Indtast din e-mailadresse, og vi sender dig instruktioner til at nulstille din adgangskode.',
+    'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
+    'button.cancel': 'Annuller', 'button.close': 'Luk',
+    'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
+    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
+    'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
+    'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>',
+    'cart.consent.marketing': 'Jeg vil gerne modtage marketing-e-mails. Læs vores <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datapolitik</a>.',
+    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
+    'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
+    'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
@@ -4528,8 +4552,32 @@ const translations = {
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
+    'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
+    'form.dateOfBirth': 'Date of birth*', 'form.streetAddress': 'Street and house number*', 'form.streetAddress.placeholder': 'Street and house nr',
+    'form.postalCode': 'Postal code*', 'form.postalCode.placeholder': 'Zipcode', 'form.city': 'City', 'form.city.placeholder': 'Auto',
+    'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Enter your email', 'form.country': 'Country', 'form.phoneNumber': 'Mobile number*',
+    'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Password*', 'form.password.create.placeholder': 'Create a password',
+    'form.confirmPassword': 'Confirm password*', 'form.confirmPassword.placeholder': 'Confirm your password', 'form.saveAccount': 'Save Account',
+    'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
+    'form.parentFullName': 'First and last name*', 'form.parentFullName.placeholder': 'Enter your full name',
+    'form.parentDateOfBirth': 'Date of birth*', 'form.parentStreetAddress': 'Street and house number*', 'form.parentStreetAddress.placeholder': 'Enter street and house number',
+    'form.parentPostalCode': 'Postal code*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'City', 'form.parentCity.placeholder': 'Copenhagen',
+    'form.parentEmail': 'E-mail*', 'form.parentEmail.placeholder': 'Enter your email', 'form.parentCountryCode': 'Country',
+    'form.parentPhoneNumber': 'Mobile number*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Same address and contact information',
+    'form.error.firstName': 'Please enter your first name', 'form.error.lastName': 'Please enter your last name',
+    'form.error.email': 'Please enter a valid email address',
+    'form.resetPassword': 'RESET PASSWORD', 'form.resetPassword.desc': 'Enter your email address and we\'ll send you instructions to reset your password.',
+    'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
+    'button.cancel': 'Cancel', 'button.close': 'Close',
+    'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
+    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
+    'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
+    'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>',
+    'cart.consent.marketing': 'I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.',
+    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
+    'step4.loginPrompt': 'Log in to your existing account or create a new one.',
+    'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
@@ -4567,6 +4615,9 @@ function updatePageTranslations() {
       } else if (element.hasAttribute('data-i18n-title')) {
         // Handle title attributes
         element.title = translation;
+      } else if (element.hasAttribute('data-i18n-aria-label')) {
+        // Handle aria-label attributes
+        element.setAttribute('aria-label', translation);
       } else if (element.tagName === 'BUTTON') {
         // Handle buttons - preserve SVG icons if present
         if (element.querySelector('svg')) {
@@ -4589,8 +4640,22 @@ function updatePageTranslations() {
           element.textContent = translation;
         }
       } else {
-        element.textContent = translation;
+        // Handle HTML content for elements that may contain links (like consent text)
+        if (translation.includes('<a') || translation.includes('<span')) {
+          element.innerHTML = translation;
+        } else {
+          element.textContent = translation;
+        }
       }
+    }
+  });
+  
+  // Update elements with data-i18n-placeholder attribute (separate from data-i18n-key)
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
+    const key = element.getAttribute('data-i18n-placeholder');
+    const translation = t(key);
+    if (translation && translation !== key) {
+      element.placeholder = translation;
     }
   });
   
@@ -4656,21 +4721,96 @@ function updatePageTranslations() {
 
 // Update form translations
 function updateFormTranslations() {
+  // Login form
   const emailLabel = document.querySelector('label[for="loginEmail"]');
-  if (emailLabel) emailLabel.textContent = t('form.email');
+  if (emailLabel && emailLabel.hasAttribute('data-i18n-key')) {
+    emailLabel.textContent = t('form.email');
+  }
   
   const emailInput = document.getElementById('loginEmail');
-  if (emailInput) emailInput.placeholder = t('form.email.placeholder');
+  if (emailInput && emailInput.hasAttribute('data-i18n-placeholder')) {
+    emailInput.placeholder = t('form.email.placeholder');
+  }
   
   const passwordLabel = document.querySelector('label[for="loginPassword"]');
-  if (passwordLabel) passwordLabel.textContent = t('form.password');
+  if (passwordLabel && passwordLabel.hasAttribute('data-i18n-key')) {
+    passwordLabel.textContent = t('form.password');
+  }
   
   const passwordInput = document.getElementById('loginPassword');
-  if (passwordInput) passwordInput.placeholder = t('form.password.placeholder');
+  if (passwordInput && passwordInput.hasAttribute('data-i18n-placeholder')) {
+    passwordInput.placeholder = t('form.password.placeholder');
+  }
   
   const forgotPasswordLink = document.querySelector('[data-action="forgot-password"]');
-  if (forgotPasswordLink) forgotPasswordLink.textContent = t('form.forgotPassword');
+  if (forgotPasswordLink && forgotPasswordLink.hasAttribute('data-i18n-key')) {
+    forgotPasswordLink.textContent = t('form.forgotPassword');
+  }
   
+  // Registration form fields
+  const formFields = [
+    { id: 'firstName', labelKey: 'form.firstName', placeholderKey: 'form.firstName.placeholder' },
+    { id: 'lastName', labelKey: 'form.lastName', placeholderKey: 'form.lastName.placeholder' },
+    { id: 'dateOfBirth', labelKey: 'form.dateOfBirth' },
+    { id: 'streetAddress', labelKey: 'form.streetAddress', placeholderKey: 'form.streetAddress.placeholder' },
+    { id: 'postalCode', labelKey: 'form.postalCode', placeholderKey: 'form.postalCode.placeholder' },
+    { id: 'city', labelKey: 'form.city', placeholderKey: 'form.city.placeholder' },
+    { id: 'email', labelKey: 'form.email.create', placeholderKey: 'form.email.create.placeholder' },
+    { id: 'phoneNumber', labelKey: 'form.phoneNumber', placeholderKey: 'form.phoneNumber.placeholder' },
+    { id: 'password', labelKey: 'form.password.create', placeholderKey: 'form.password.create.placeholder' },
+    { id: 'confirmPassword', labelKey: 'form.confirmPassword', placeholderKey: 'form.confirmPassword.placeholder' },
+  ];
+  
+  formFields.forEach(field => {
+    const label = document.querySelector(`label[for="${field.id}"]`);
+    if (label && label.hasAttribute('data-i18n-key')) {
+      label.textContent = t(field.labelKey);
+    }
+    
+    if (field.placeholderKey) {
+      const input = document.getElementById(field.id);
+      if (input && input.hasAttribute('data-i18n-placeholder')) {
+        input.placeholder = t(field.placeholderKey);
+      }
+    }
+  });
+  
+  // Parent/Guardian form fields
+  const parentFields = [
+    { id: 'parentFullName', labelKey: 'form.parentFullName', placeholderKey: 'form.parentFullName.placeholder' },
+    { id: 'parentDateOfBirth', labelKey: 'form.parentDateOfBirth' },
+    { id: 'parentStreetAddress', labelKey: 'form.parentStreetAddress', placeholderKey: 'form.parentStreetAddress.placeholder' },
+    { id: 'parentPostalCode', labelKey: 'form.parentPostalCode', placeholderKey: 'form.parentPostalCode.placeholder' },
+    { id: 'parentCity', labelKey: 'form.parentCity', placeholderKey: 'form.parentCity.placeholder' },
+    { id: 'parentEmail', labelKey: 'form.parentEmail', placeholderKey: 'form.parentEmail.placeholder' },
+    { id: 'parentPhoneNumber', labelKey: 'form.parentPhoneNumber', placeholderKey: 'form.parentPhoneNumber.placeholder' },
+    { id: 'parentPassword', labelKey: 'form.password.create', placeholderKey: 'form.password.create.placeholder' },
+  ];
+  
+  parentFields.forEach(field => {
+    const label = document.querySelector(`label[for="${field.id}"]`);
+    if (label && label.hasAttribute('data-i18n-key')) {
+      label.textContent = t(field.labelKey);
+    }
+    
+    if (field.placeholderKey) {
+      const input = document.getElementById(field.id);
+      if (input && input.hasAttribute('data-i18n-placeholder')) {
+        input.placeholder = t(field.placeholderKey);
+      }
+    }
+  });
+  
+  // Error messages
+  const errorMessages = document.querySelectorAll('.error-message[data-i18n-key]');
+  errorMessages.forEach(error => {
+    const key = error.getAttribute('data-i18n-key');
+    if (key) {
+      error.textContent = t(key);
+    }
+  });
+  
+  // Buttons and other elements
   const loginStatusLabel = document.querySelector('.login-status-label');
   if (loginStatusLabel) loginStatusLabel.textContent = t('form.loggedInAs');
   
@@ -4679,20 +4819,116 @@ function updateFormTranslations() {
     addressLabel.textContent = t('form.address');
   }
   
+  // Save account button
+  const saveAccountBtn = document.querySelector('.save-account-btn[data-i18n-key]');
+  if (saveAccountBtn) {
+    saveAccountBtn.textContent = t('form.saveAccount');
+  }
+  
+  // Login button
+  const loginBtn = document.querySelector('.login-btn[data-i18n-key="form.login"]');
+  if (loginBtn) {
+    loginBtn.textContent = t('form.login').toUpperCase();
+  }
+  
   // Discount code placeholder is handled by data-i18n-placeholder attribute
   
   // Update apply button
   const applyDiscountBtn = document.querySelector('.apply-discount-btn');
-  if (applyDiscountBtn) {
+  if (applyDiscountBtn && applyDiscountBtn.hasAttribute('data-i18n-key')) {
     applyDiscountBtn.textContent = t('button.apply');
+  }
+  
+  // Forgot password modal
+  const resetPasswordTitle = document.querySelector('#forgotPasswordModal .info-section-title[data-i18n-key="form.resetPassword"]');
+  if (resetPasswordTitle) {
+    resetPasswordTitle.textContent = t('form.resetPassword');
+  }
+  
+  const resetPasswordDesc = document.querySelector('.forgot-password-description[data-i18n-key]');
+  if (resetPasswordDesc) {
+    resetPasswordDesc.textContent = t('form.resetPassword.desc');
+  }
+  
+  const resetPasswordSuccess = document.querySelector('.forgot-password-success-message[data-i18n-key]');
+  if (resetPasswordSuccess) {
+    resetPasswordSuccess.textContent = t('form.resetPassword.success');
+  }
+  
+  const sendResetLinkBtn = document.querySelector('.login-btn[data-i18n-key="form.sendResetLink"]');
+  if (sendResetLinkBtn) {
+    sendResetLinkBtn.textContent = t('form.sendResetLink');
+  }
+  
+  const cancelBtn = document.querySelector('.forgot-password-cancel-btn[data-i18n-key]');
+  if (cancelBtn) {
+    cancelBtn.textContent = t('button.cancel');
+  }
+  
+  const closeBtn = document.querySelector('.login-btn[data-i18n-key="button.close"]');
+  if (closeBtn) {
+    closeBtn.textContent = t('button.close');
   }
 }
 
 // Update cart translations
 function updateCartTranslations() {
-  // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
-  // But we can update static ones here
+  // Cart title
+  const cartTitle = document.querySelector('.summary-title[data-i18n-key="cart.title"]');
+  if (cartTitle) {
+    cartTitle.textContent = t('cart.title');
+  }
+  
+  // Discount section
+  const discountToggle = document.querySelector('.discount-toggle span[data-i18n-key="cart.discount"]');
+  if (discountToggle) {
+    discountToggle.textContent = t('cart.discount');
+  }
+  
+  const discountInput = document.querySelector('.discount-input[data-i18n-placeholder]');
+  if (discountInput) {
+    discountInput.placeholder = t('cart.discount.placeholder');
+  }
+  
+  // Payment method section
+  const paymentTitle = document.querySelector('.payment-title[data-i18n-key]');
+  if (paymentTitle) {
+    paymentTitle.textContent = t('cart.paymentMethod');
+  }
+  
+  const paymentRedirect = document.querySelector('.payment-methods p[data-i18n-key]');
+  if (paymentRedirect) {
+    paymentRedirect.textContent = t('cart.paymentRedirect');
+  }
+  
+  // Card payment label
+  const cardPaymentLabel = document.querySelector('#cardPayment + label span[data-i18n-key="cart.cardPayment"]');
+  if (cardPaymentLabel) {
+    cardPaymentLabel.textContent = t('cart.cardPayment');
+  }
+  
+  // Checkout button
+  const checkoutBtn = document.querySelector('.checkout-btn[data-i18n-key]');
+  if (checkoutBtn) {
+    checkoutBtn.textContent = t('cart.checkout');
+  }
+  
+  // Consent checkboxes
+  const termsConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.terms"]');
+  if (termsConsent) {
+    // Handle HTML content with links
+    const termsHtml = t('cart.consent.terms');
+    termsConsent.innerHTML = termsHtml;
+  }
+  
+  const marketingConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.marketing"]');
+  if (marketingConsent) {
+    const marketingHtml = t('cart.consent.marketing');
+    marketingConsent.innerHTML = marketingHtml;
+  }
+  
   // Payment overview labels are handled by data-i18n-key attributes in HTML
+  // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
 }
 
 // Update heads-up displays
@@ -4885,6 +5121,7 @@ function cacheDom() {
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
   DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
+  DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
   DOM.termsConsent = document.getElementById('termsConsent');
   DOM.discountToggle = document.querySelector('.discount-toggle');
@@ -6511,7 +6748,6 @@ async function handleSaveAccount() {
     { id: 'dateOfBirth', name: 'Date of birth' },
     { id: 'streetAddress', name: 'Street address' },
     { id: 'postalCode', name: 'Postal code' },
-    { id: 'country', name: 'Country' },
     { id: 'email', name: 'Email' },
     { id: 'phoneNumber', name: 'Phone number' },
     { id: 'password', name: 'Password' },
@@ -6607,16 +6843,17 @@ async function handleSaveAccount() {
     const streetAddress = payload.customer?.address?.street || document.getElementById('streetAddress')?.value?.trim() || payload.customer?.address;
     const city = payload.customer?.address?.city || document.getElementById('city')?.value?.trim() || payload.customer?.city;
     const postalCode = payload.customer?.address?.postalCode || document.getElementById('postalCode')?.value?.trim() || payload.customer?.postalCode;
-    const country = payload.customer?.country || document.getElementById('country')?.value?.trim() || 'DK';
+    // Country is always Denmark (DK) for this application
+    const country = 'DK';
     
     // Build shippingAddress object if we have address data (API expects shippingAddress)
     let shippingAddress = null;
-    if (streetAddress || city || postalCode || country) {
+    if (streetAddress || city || postalCode) {
       shippingAddress = {};
       if (streetAddress) shippingAddress.street = streetAddress;
       if (city) shippingAddress.city = city;
       if (postalCode) shippingAddress.postalCode = postalCode;
-      shippingAddress.country = country;
+      shippingAddress.country = country; // Always DK
     }
     
     const customerData = {
@@ -6629,7 +6866,7 @@ async function handleSaveAccount() {
       address: streetAddress, // Keep for backward compatibility
       city: city, // Keep for backward compatibility
       postalCode: postalCode, // Keep for backward compatibility - ensure it's always included
-      country: country, // Country from form or default to Denmark
+      country: country, // Always DK
       primaryGym: payload.customer?.primaryGym || state.selectedBusinessUnit,
       password: payload.customer?.password || document.getElementById('password')?.value,
       customerType: 1, // Required by API
@@ -7851,10 +8088,10 @@ function switchAuthMode(mode, email = null) {
     if (mode === 'login') {
       btn.dataset.mode = 'create';
       const textSpan = btn.querySelector('.auth-mode-switch-text');
-      if (textSpan) textSpan.textContent = 'Create Account';
+      if (textSpan) textSpan.textContent = t('form.authSwitch.createAccount');
       // Update icon to account icon
       btn.innerHTML = `
-        <span class="auth-mode-switch-text">Create Account</span>
+        <span class="auth-mode-switch-text">${t('form.authSwitch.createAccount')}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path>
         </svg>
@@ -7862,10 +8099,10 @@ function switchAuthMode(mode, email = null) {
     } else {
       btn.dataset.mode = 'login';
       const textSpan = btn.querySelector('.auth-mode-switch-text');
-      if (textSpan) textSpan.textContent = 'Login';
+      if (textSpan) textSpan.textContent = t('form.authSwitch.login');
       // Update icon to login icon
       btn.innerHTML = `
-        <span class="auth-mode-switch-text">Login</span>
+        <span class="auth-mode-switch-text">${t('form.authSwitch.login')}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
           <polyline points="10 17 15 12 10 7"></polyline>
@@ -9636,6 +9873,9 @@ function updatePaymentOverview() {
   if (!DOM.paymentBillingPeriod) {
     DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   }
+  if (!DOM.paymentBoundUntil) {
+    DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
+  }
   
   if (!DOM.paymentOverview || !DOM.payNow || !DOM.monthlyPayment) {
     return;
@@ -10041,17 +10281,11 @@ function updatePaymentOverview() {
       billingPeriodText = `${t('cart.validUntil')} ${formatDate(billingPeriod.end)}`;
     } else if (billingPeriod) {
       // Regular membership: show billing period
-      billingPeriodText = `Period ${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
-      
-      // If there's a boundUntil date (end of promotional period), show that too
-      if (hasOrderData && subscriptionItem?.boundUntil) {
-        const boundUntilDate = new Date(subscriptionItem.boundUntil);
-        billingPeriodText += ` (bound until ${formatDate(boundUntilDate)})`;
-      }
+      billingPeriodText = `${t('cart.period')} ${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
     } else if (hasOrderData && subscriptionItem?.boundUntil) {
       // No initialPaymentPeriod, but there's a boundUntil date
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
-      billingPeriodText = `Bound until ${formatDate(boundUntilDate)}`;
+      billingPeriodText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
     }
     
     // Fallback to state.billingPeriod if available
@@ -10061,11 +10295,23 @@ function updatePaymentOverview() {
     
     // If still no billing period, show default message
     if (!billingPeriodText) {
-      billingPeriodText = 'Billing period confirmed after checkout.';
+      billingPeriodText = t('cart.billingPeriodConfirmed');
     }
     
     DOM.paymentBillingPeriod.textContent = billingPeriodText;
     DOM.paymentBillingPeriod.style.display = 'block';
+    
+    // Display boundUntil date separately if available (for memberships with promotional periods)
+    if (DOM.paymentBoundUntil) {
+      if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPassWithShoes) {
+        const boundUntilDate = new Date(subscriptionItem.boundUntil);
+        const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
+        DOM.paymentBoundUntil.textContent = boundUntilText;
+        DOM.paymentBoundUntil.style.display = 'block';
+      } else {
+        DOM.paymentBoundUntil.style.display = 'none';
+      }
+    }
   }
   
   console.log('[Payment Overview] ✅ Updated:', {
@@ -10524,16 +10770,17 @@ async function handleCheckout() {
         const streetAddress = payload.customer?.address?.street || payload.customer?.address;
         const city = payload.customer?.address?.city || payload.customer?.city;
         const postalCode = payload.customer?.address?.postalCode || payload.customer?.postalCode;
-        const country = payload.customer?.country || document.getElementById('country')?.value?.trim() || 'DK';
+        // Country is always Denmark (DK) for this application
+        const country = 'DK';
         
         // Build shippingAddress object if we have address data (API expects shippingAddress)
         let shippingAddress = null;
-        if (streetAddress || city || postalCode || country) {
+        if (streetAddress || city || postalCode) {
           shippingAddress = {};
           if (streetAddress) shippingAddress.street = streetAddress;
           if (city) shippingAddress.city = city;
           if (postalCode) shippingAddress.postalCode = postalCode;
-          shippingAddress.country = country;
+          shippingAddress.country = country; // Always DK
         }
         
         const customerData = {

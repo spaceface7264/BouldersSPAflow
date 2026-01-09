@@ -261,8 +261,8 @@
             <!-- Step 4: Info -->
             <div class="step-panel" id="step-4">
                 <div class="step-panel-content">
-                    <p class="main-subtitle">Complete your purchase</p>
-                    <p class="secondary-subtitle">Log in to your existing account or create a new one.</p>
+                    <p class="main-subtitle" data-i18n-key="step4.completePurchase">Complete your purchase</p>
+                    <p class="secondary-subtitle" data-i18n-key="step4.loginPrompt">Log in to your existing account or create a new one.</p>
 
                     <div class="info-layout">
                         <div class="info-form-section">
@@ -299,44 +299,44 @@
                                     </div>
 
                                     <div data-login-form-container>
-                                        <h3 class="info-section-title">LOG IN</h3>
+                                        <h3 class="info-section-title" data-i18n-key="form.login">LOG IN</h3>
 
                                         <form class="login-form">
                                             <div class="form-group">
-                                                <label for="loginEmail">E-mail*</label>
-                                                <input type="email" id="loginEmail" name="loginEmail" placeholder="E-mail">
+                                                <label for="loginEmail" data-i18n-key="form.email">E-mail*</label>
+                                                <input type="email" id="loginEmail" name="loginEmail" placeholder="" data-i18n-placeholder="form.email.placeholder">
                                         </div>
                                                 
                                             <div class="form-group">
-                                                <label for="loginPassword">Password*</label>
-                                                <input type="password" id="loginPassword" name="loginPassword" placeholder="Enter your password">
-                                                <a href="#" class="forgot-password-link" data-action="forgot-password">Forgot password?</a>
+                                                <label for="loginPassword" data-i18n-key="form.password">Password*</label>
+                                                <input type="password" id="loginPassword" name="loginPassword" placeholder="" data-i18n-placeholder="form.password.placeholder">
+                                                <a href="#" class="forgot-password-link" data-action="forgot-password" data-i18n-key="form.forgotPassword">Forgot password?</a>
                                         </div>
                                                 
-                                            <button type="submit" class="login-btn">LOG IN</button>
+                                            <button type="submit" class="login-btn" data-i18n-key="form.login">LOG IN</button>
                                         </form>
                                         
                                         <!-- Forgot Password Modal -->
                                         <div class="forgot-password-modal" id="forgotPasswordModal" style="display: none;">
                                             <div class="forgot-password-modal-content">
-                                                <h3 class="info-section-title">RESET PASSWORD</h3>
-                                                <p class="forgot-password-description">Enter your email address and we'll send you instructions to reset your password.</p>
+                                                <h3 class="info-section-title" data-i18n-key="form.resetPassword">RESET PASSWORD</h3>
+                                                <p class="forgot-password-description" data-i18n-key="form.resetPassword.desc">Enter your email address and we'll send you instructions to reset your password.</p>
                                                 
                                                 <form class="forgot-password-form" id="forgotPasswordForm">
                                                     <div class="form-group">
-                                                        <label for="forgotPasswordEmail">E-mail*</label>
-                                                        <input type="email" id="forgotPasswordEmail" name="forgotPasswordEmail" placeholder="Enter your email" required>
+                                                        <label for="forgotPasswordEmail" data-i18n-key="form.email">E-mail*</label>
+                                                        <input type="email" id="forgotPasswordEmail" name="forgotPasswordEmail" placeholder="" data-i18n-placeholder="form.email.create.placeholder" required>
                                                     </div>
                                                     
                                                     <div class="forgot-password-actions">
-                                                        <button type="button" class="forgot-password-cancel-btn" data-action="close-forgot-password">Cancel</button>
-                                                        <button type="submit" class="login-btn">SEND RESET LINK</button>
+                                                        <button type="button" class="forgot-password-cancel-btn" data-action="close-forgot-password" data-i18n-key="button.cancel">Cancel</button>
+                                                        <button type="submit" class="login-btn" data-i18n-key="form.sendResetLink">SEND RESET LINK</button>
                                                     </div>
                                                 </form>
                                                 
                                                 <div class="forgot-password-success" id="forgotPasswordSuccess" style="display: none;">
-                                                    <p class="forgot-password-success-message">Password reset instructions have been sent to your email.</p>
-                                                    <button type="button" class="login-btn" data-action="close-forgot-password">Close</button>
+                                                    <p class="forgot-password-success-message" data-i18n-key="form.resetPassword.success">Password reset instructions have been sent to your email.</p>
+                                                    <button type="button" class="login-btn" data-action="close-forgot-password" data-i18n-key="button.close">Close</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -356,29 +356,29 @@
                                     <line x1="15" y1="12" x2="3" y2="12"></line>
                                 </svg>
                             </button>
-                            <h3 class="info-section-title">CREATE PROFILE</h3>
+                            <h3 class="info-section-title" data-i18n-key="form.createProfile">CREATE PROFILE</h3>
                         <div class="buyer-section">
                             <div class="buyer-header">
-                                <h4 class="buyer-title">Buyer</h4>
+                                <h4 class="buyer-title" data-i18n-key="form.buyer">Buyer</h4>
                             </div>
                         </div>
                             <form class="registration-form">
                         <div class="form-row">
                         <div class="form-group">
-                                    <label for="firstName">First name*</label>
-                                    <input type="text" id="firstName" name="firstName" placeholder="First Name" data-api-field="customer.firstName" required>
-                                     <div class="error-message">Please enter your first name</div>
+                                    <label for="firstName" data-i18n-key="form.firstName">First name*</label>
+                                    <input type="text" id="firstName" name="firstName" placeholder="" data-i18n-placeholder="form.firstName.placeholder" data-api-field="customer.firstName" required>
+                                     <div class="error-message" data-i18n-key="form.error.firstName">Please enter your first name</div>
                                  </div>
                                  
                                  <div class="form-group">
-                                    <label for="lastName">Last name*</label>
-                                    <input type="text" id="lastName" name="lastName" placeholder="Lst name" data-api-field="customer.lastName" required>
-                                     <div class="error-message">Please enter your last name</div>
+                                    <label for="lastName" data-i18n-key="form.lastName">Last name*</label>
+                                    <input type="text" id="lastName" name="lastName" placeholder="" data-i18n-placeholder="form.lastName.placeholder" data-api-field="customer.lastName" required>
+                                     <div class="error-message" data-i18n-key="form.error.lastName">Please enter your last name</div>
                                  </div>
                              </div>
                              
                              <div class="form-group">
-                                 <label for="dateOfBirth">Date of birth*</label>
+                                 <label for="dateOfBirth" data-i18n-key="form.dateOfBirth">Date of birth*</label>
                                  <div class="date-input-container">
                                      <input type="date" id="dateOfBirth" name="dateOfBirth" class="date-input" data-api-field="customer.dateOfBirth" required>
                                      
@@ -386,31 +386,30 @@
                              </div>
                              
                             <div class="form-group">
-                                <label for="streetAddress">Street and house number*</label>
-                                <input type="text" id="streetAddress" name="streetAddress" placeholder="Street and house nr" data-api-field="customer.address.street" required>
+                                <label for="streetAddress" data-i18n-key="form.streetAddress">Street and house number*</label>
+                                <input type="text" id="streetAddress" name="streetAddress" placeholder="" data-i18n-placeholder="form.streetAddress.placeholder" data-api-field="customer.address.street" required>
                         </div>
                         
                         <div class="form-row">
                             <div class="form-group">
-                                    <label for="postalCode">Postal code*</label>
-                                    <input type="text" id="postalCode" name="postalCode" placeholder="Zipcode" data-api-field="customer.address.postalCode" required>
+                                    <label for="postalCode" data-i18n-key="form.postalCode">Postal code*</label>
+                                    <input type="text" id="postalCode" name="postalCode" placeholder="" data-i18n-placeholder="form.postalCode.placeholder" data-api-field="customer.address.postalCode" required>
                             </div>
                             
                             <div class="form-group">
-                                     <label for="city">City</label>
-                                     <input type="text" id="city" name="city" placeholder="Auto" data-api-field="customer.address.city" readonly>
+                                     <label for="city" data-i18n-key="form.city">City</label>
+                                     <input type="text" id="city" name="city" placeholder="" data-i18n-placeholder="form.city.placeholder" data-api-field="customer.address.city" readonly>
                             </div>
                         </div>
                         
                         <div class="form-group">
-                                 <label for="email">E-mail*</label>
-                                 <input type="email" id="email" name="email" placeholder="Enter your email" data-api-field="customer.email" required>
-                                 <div class="error-message">Please enter a valid email address</div>
+                                 <label for="email" data-i18n-key="form.email.create">E-mail*</label>
+                                 <input type="email" id="email" name="email" placeholder="" data-i18n-placeholder="form.email.create.placeholder" data-api-field="customer.email" required>
+                                 <div class="error-message" data-i18n-key="form.error.email">Please enter a valid email address</div>
                              </div>
                              
                              <div class="form-row">
                                  <div class="form-group phone-country">
-                                     <label for="countryCode">Country</label>
                                      <div class="country-selector">
                                          <span class="flag-icon">🇩🇰</span>
                                          <select id="countryCode" name="countryCode" data-api-field="customer.phone.countryCode" required>
@@ -420,24 +419,24 @@
                                  </div>
                                  
                                  <div class="form-group phone-number">
-                                     <label for="phoneNumber">Mobile number*</label>
-                                     <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="12345678" data-api-field="customer.phone.number">
+                                     <label for="phoneNumber" data-i18n-key="form.phoneNumber">Mobile number*</label>
+                                     <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="" data-i18n-placeholder="form.phoneNumber.placeholder" data-api-field="customer.phone.number">
                                  </div>
                              </div>
                              
                              <div class="form-group">
-                                 <label for="password">Password*</label>
-                                 <input type="password" id="password" name="password" placeholder="Create a password" data-api-field="customer.password" required>
+                                 <label for="password" data-i18n-key="form.password.create">Password*</label>
+                                 <input type="password" id="password" name="password" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="customer.password" required>
                              </div>
                              
                             <div class="form-group">
-                                <label for="confirmPassword">Confirm password*</label>
-                                <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" data-api-field="customer.passwordConfirmation" required>
+                                <label for="confirmPassword" data-i18n-key="form.confirmPassword">Confirm password*</label>
+                                <input type="password" id="confirmPassword" name="confirmPassword" placeholder="" data-i18n-placeholder="form.confirmPassword.placeholder" data-api-field="customer.passwordConfirmation" required>
                             </div>
                             
                             <!-- Save Account Button -->
                             <div class="form-group">
-                                <button type="button" class="save-account-btn" data-action="save-account">
+                                <button type="button" class="save-account-btn" data-action="save-account" data-i18n-key="form.saveAccount">
                                     Save Account
                                 </button>
                                 <div class="save-account-message" id="saveAccountMessage" style="display: none;"></div>
@@ -446,7 +445,7 @@
                         
                         <!-- Parent/Guardian Registration Form -->
                         <div class="parent-guardian-form" id="parentGuardianForm" style="display: none;">
-                            <h4 class="parent-form-title">Parent/Guardian Information</h4>
+                            <h4 class="parent-form-title" data-i18n-key="form.parentGuardian">Parent/Guardian Information</h4>
 
                             
                             <!-- Same Address Toggle -->
@@ -454,18 +453,18 @@
                                 <label class="toggle-label">
                                     <input type="checkbox" class="toggle-input" id="sameAddressToggle" data-api-field="guardian.sameAddressAsCustomer">
                                     <span class="toggle-slider"></span>
-                                    Same address and contact information
+                                    <span data-i18n-key="form.sameAddress">Same address and contact information</span>
                                 </label>
             </div>
             
                             <form class="registration-form">
                                 <div class="form-group">
-                                    <label for="parentFullName">First and last name*</label>
-                                    <input type="text" id="parentFullName" name="parentFullName" placeholder="Enter your full name" data-api-field="guardian.fullName" required>
+                                    <label for="parentFullName" data-i18n-key="form.parentFullName">First and last name*</label>
+                                    <input type="text" id="parentFullName" name="parentFullName" placeholder="" data-i18n-placeholder="form.parentFullName.placeholder" data-api-field="guardian.fullName" required>
             </div>
             
                                 <div class="form-group">
-                                    <label for="parentDateOfBirth">Date of birth*</label>
+                                    <label for="parentDateOfBirth" data-i18n-key="form.parentDateOfBirth">Date of birth*</label>
                                     <div class="date-input-container">
                                         <input type="date" id="parentDateOfBirth" name="parentDateOfBirth" class="date-input" data-api-field="guardian.dateOfBirth" required>
                                        
@@ -473,30 +472,29 @@
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label for="parentStreetAddress">Street and house number*</label>
-                                    <input type="text" id="parentStreetAddress" name="parentStreetAddress" placeholder="Enter street and house number" data-api-field="guardian.address.street" required>
+                                    <label for="parentStreetAddress" data-i18n-key="form.parentStreetAddress">Street and house number*</label>
+                                    <input type="text" id="parentStreetAddress" name="parentStreetAddress" placeholder="" data-i18n-placeholder="form.parentStreetAddress.placeholder" data-api-field="guardian.address.street" required>
                                 </div>
                                 
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="parentPostalCode">Postal code*</label>
-                                        <input type="text" id="parentPostalCode" name="parentPostalCode" placeholder="1234" data-api-field="guardian.address.postalCode" required>
+                                        <label for="parentPostalCode" data-i18n-key="form.parentPostalCode">Postal code*</label>
+                                        <input type="text" id="parentPostalCode" name="parentPostalCode" placeholder="" data-i18n-placeholder="form.parentPostalCode.placeholder" data-api-field="guardian.address.postalCode" required>
                                     </div>
                                     
                                     <div class="form-group">
-                                        <label for="parentCity">City</label>
-                                        <input type="text" id="parentCity" name="parentCity" placeholder="Copenhagen" data-api-field="guardian.address.city" readonly>
+                                        <label for="parentCity" data-i18n-key="form.parentCity">City</label>
+                                        <input type="text" id="parentCity" name="parentCity" placeholder="" data-i18n-placeholder="form.parentCity.placeholder" data-api-field="guardian.address.city" readonly>
                                     </div>
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label for="parentEmail">E-mail*</label>
-                                    <input type="email" id="parentEmail" name="parentEmail" placeholder="Enter your email" data-api-field="guardian.email" required>
+                                    <label for="parentEmail" data-i18n-key="form.parentEmail">E-mail*</label>
+                                    <input type="email" id="parentEmail" name="parentEmail" placeholder="" data-i18n-placeholder="form.parentEmail.placeholder" data-api-field="guardian.email" required>
                                 </div>
                                 
                                 <div class="form-row">
                                     <div class="form-group phone-country">
-                                        <label for="parentCountryCode">Country</label>
                                         <div class="country-selector">
                                             <span class="flag-icon">🇩🇰</span>
                                             <select id="parentCountryCode" name="parentCountryCode" data-api-field="guardian.phone.countryCode" required>
@@ -507,14 +505,14 @@
                                     </div>
                                     
                                     <div class="form-group phone-number">
-                                        <label for="parentPhoneNumber">Mobile number*</label>
-                                        <input type="tel" id="parentPhoneNumber" name="parentPhoneNumber" placeholder="12345678" data-api-field="guardian.phone.number">
+                                        <label for="parentPhoneNumber" data-i18n-key="form.parentPhoneNumber">Mobile number*</label>
+                                        <input type="tel" id="parentPhoneNumber" name="parentPhoneNumber" placeholder="" data-i18n-placeholder="form.parentPhoneNumber.placeholder" data-api-field="guardian.phone.number">
                                     </div>
                                 </div>
                                 
                                 <div class="form-group">
-                                    <label for="parentPassword">Password*</label>
-                                    <input type="password" id="parentPassword" name="parentPassword" placeholder="Create a password" data-api-field="guardian.password" required>
+                                    <label for="parentPassword" data-i18n-key="form.password.create">Password*</label>
+                                    <input type="password" id="parentPassword" name="parentPassword" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="guardian.password" required>
                                 </div>
                                 
                                 <div class="form-group">
@@ -541,11 +539,11 @@
                         </div>
                         
                         <!-- Order Summary Section -->
-                        <div class="order-summary-section">
+                                <div class="order-summary-section">
                             <div class="order-summary">
                                 <div class="summary-header">
-                                    <h3 class="summary-title">Cart</h3>
-                                    <button class="summary-edit-btn" type="button" data-action="edit-cart" aria-label="Edit cart">
+                                    <h3 class="summary-title" data-i18n-key="cart.title">Cart</h3>
+                                    <button class="summary-edit-btn" type="button" data-action="edit-cart" aria-label="Edit cart" data-i18n-aria-label="button.edit">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                             <path d="M12 20h9"/>
                                             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
@@ -599,6 +597,7 @@
                                             <span class="payment-amount" data-summary-field="pay-now">0,00 kr.</span>
                                         </div>
                                         <div class="payment-overview-billing-period" data-summary-field="payment-billing-period"></div>
+                                        <div class="payment-overview-bound-until" data-summary-field="payment-bound-until" style="display: none;"></div>
                                     </div>
                                 </div>
                                 
@@ -609,7 +608,7 @@
                                         <span class="toggle-icon">+</span>
                                     </button>
                                     <div class="discount-form" style="display: none;">
-                                        <input type="text" placeholder="" class="discount-input" data-i18n-placeholder="cart.discount">
+                                        <input type="text" placeholder="" class="discount-input" data-i18n-placeholder="cart.discount.placeholder">
                                         <button type="button" class="apply-discount-btn" data-i18n-key="button.apply">Apply</button>
                                     </div>
                                 </div>
@@ -619,20 +618,20 @@
                                     <label class="consent-checkbox">
                                         <input type="checkbox" id="termsConsent" data-api-field="consent.terms" required>
                                         <span class="checkmark"></span>
-                                        <span class="consent-text">I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a></span>
+                                        <span class="consent-text" data-i18n-key="cart.consent.terms">I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a></span>
                                     </label>
                                     
                                     <label class="consent-checkbox">
                                         <input type="checkbox" id="marketingConsent" data-api-field="consent.marketing" checked>
                                         <span class="checkmark"></span>
-                                        <span class="consent-text">I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.</span>
+                                        <span class="consent-text" data-i18n-key="cart.consent.marketing">I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.</span>
                                     </label>
                                 </div>
                                 
                                 <!-- Payment Methods -->
                                 <div class="payment-methods">
-                                    <h4 class="payment-title">Choose payment method</h4>
-                                    <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem; margin-top: 0.5rem;">
+                                    <h4 class="payment-title" data-i18n-key="cart.paymentMethod">Choose payment method</h4>
+                                    <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem; margin-top: 0.5rem;" data-i18n-key="cart.paymentRedirect">
                                         You will be redirected to our secure payment provider to complete your payment.
                                     </p>
                                     
@@ -645,7 +644,7 @@
                                                     <path d="M1 7h22" stroke="currentColor" stroke-width="2"/>
                                                 </svg>
                                             </div>
-                                            <span>Card payment</span>
+                                            <span data-i18n-key="cart.cardPayment">Card payment</span>
                                         </label>
                                     </div>
                                     
@@ -670,7 +669,7 @@
                                 </div>
                                 
                                 <!-- Checkout Button -->
-                                <button class="checkout-btn" data-action="submit-checkout" disabled>
+                                <button class="checkout-btn" data-action="submit-checkout" disabled data-i18n-key="cart.checkout">
                                     Checkout
                                 </button>
                                 
