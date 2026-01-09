@@ -12812,25 +12812,25 @@ function showStep(stepNumber) {
     });
   }
   
-  // On desktop, default to login form when showing step 4 (if not authenticated)
+  // Default to create account form when showing step 4 (if not authenticated)
   if (stepNumber === 4 && !isUserAuthenticated()) {
     // Initialize auth mode toggle immediately
     initAuthModeToggle();
     
-    // Ensure login form is visible
+    // Ensure create account form is visible
     setTimeout(() => {
       const loginSection = document.querySelector('[data-auth-section="login"]');
       const createSection = document.querySelector('[data-auth-section="create"]');
       
       if (loginSection && createSection) {
-        // Activate login mode
-        switchAuthMode('login');
+        // Activate create account mode
+        switchAuthMode('create');
         
         // Ensure sections are properly displayed
-        loginSection.style.display = 'block';
-        loginSection.style.visibility = 'visible';
-        loginSection.style.opacity = '1';
-        createSection.style.display = 'none';
+        createSection.style.display = 'block';
+        createSection.style.visibility = 'visible';
+        createSection.style.opacity = '1';
+        loginSection.style.display = 'none';
       }
     }, 50);
   }

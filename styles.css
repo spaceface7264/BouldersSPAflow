@@ -5009,15 +5009,15 @@ main {
 
 .footer-section h4 {
     color: var(--color-text-secondary);
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-sm);
     font-weight: 600;
     margin: 0 0 8px 0;
 }
 
 .footer-section p {
     color: var(--color-text-muted);
-    font-size: var(--font-size-base);
-    line-height: 1.4;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
     margin: 0;
 }
 
@@ -5034,7 +5034,7 @@ main {
 .footer-section ul li a {
     color: var(--color-text-muted);
     text-decoration: none;
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-sm);
     transition: color 0.2s ease;
 }
 
@@ -5109,7 +5109,7 @@ main {
 
 .footer-bottom p {
     color: var(--color-text-subtle);
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-xs);
     margin: 0;
 }
 
