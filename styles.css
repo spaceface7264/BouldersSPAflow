@@ -1569,6 +1569,52 @@ body {
     cursor: pointer;
     transition: all 0.3s ease;
     overflow: hidden;
+    position: relative;
+}
+
+/* Campaign category special styling - subtle */
+.category-item[data-category="campaign"] {
+    background: linear-gradient(135deg, rgba(244, 1, 245, 0.03) 0%, var(--color-item-bg) 100%);
+    border: 2px solid rgba(244, 1, 245, 0.25);
+}
+
+.category-item[data-category="campaign"]:hover {
+    border-color: rgba(244, 1, 245, 0.4);
+}
+
+.category-item[data-category="campaign"] .category-title {
+    color: #F401F5;
+    font-weight: 600;
+}
+
+.category-item[data-category="campaign"] .category-subtitle {
+    color: rgba(244, 1, 245, 0.7);
+}
+
+.category-item[data-category="campaign"] .category-icon {
+    color: #F401F5;
+}
+
+.category-item[data-category="campaign"].expanded {
+    border-color: rgba(244, 1, 245, 0.4);
+}
+
+.category-item[data-category="campaign"].expanded .category-icon {
+    color: #F401F5;
+}
+
+
+/* Campaign product cards - subtle accent */
+.category-item[data-category="campaign"] .plan-card {
+    border-left: 2px solid rgba(244, 1, 245, 0.2);
+}
+
+.category-item[data-category="campaign"] .plan-card:hover {
+    border-left-color: rgba(244, 1, 245, 0.4);
+}
+
+.category-item[data-category="campaign"] .plan-card.selected {
+    border-left-color: rgba(244, 1, 245, 0.5);
 }
 
 
@@ -1880,7 +1926,8 @@ body {
 .plan-description {
     font-size: var(--font-size-base);
     color: var(--color-text-muted);
-    line-height: 1.3;
+    line-height: 1.5;
+    white-space: normal; /* Allow wrapping, but preserve <br> tags */
 }
 
 .check-circle {

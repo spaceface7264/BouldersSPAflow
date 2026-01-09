@@ -1761,8 +1761,12 @@ class OrderAPI {
    * @returns {Object|null} Expected price info { amountInCents, amountInDKK, daysRemaining, daysInMonth } or null
    */
   _calculateExpectedPartialMonthPrice(productId, startDate) {
-    // Check both membership subscriptions and 15 Day Pass subscriptions
-    const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+    // Check all subscription types: campaign, membership, and 15 Day Pass
+    const allSubscriptions = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || [])
+    ];
     const membership = allSubscriptions.find(p => 
       p.id === productId || 
       p.id === Number(productId) ||
@@ -2702,12 +2706,12 @@ async function loadReferenceData() {
 
 // Helper function to check if product should be displayed based on labels
 // Rules:
-// 1. If product has "Hidden" label (case-insensitive) → exclude (even if it also has "Public")
-// 2. If product has "Public" label (case-insensitive) → include
-// 3. Otherwise (no labels or other labels) → exclude (requires explicit "Public" label)
+// 1. If product has "Hidden" label (case-insensitive) → exclude (even if it also has "Public" or "PublicCampaign")
+// 2. If product has "Public" or "PublicCampaign" label (case-insensitive) → include
+// 3. Otherwise (no labels or other labels) → exclude (requires explicit "Public" or "PublicCampaign" label)
 function shouldDisplayProductByLabels(product) {
   if (!product.productLabels || !Array.isArray(product.productLabels) || product.productLabels.length === 0) {
-    // No labels → exclude (requires explicit "Public" label)
+    // No labels → exclude (requires explicit "Public" or "PublicCampaign" label)
     return false;
   }
   
@@ -2721,17 +2725,20 @@ function shouldDisplayProductByLabels(product) {
     return false;
   }
   
-  // Check for "Public" label (case-insensitive)
+  // Check for "Public" or "PublicCampaign" label (case-insensitive)
   const hasPublicLabel = product.productLabels.some(
-    label => label.name && label.name.toLowerCase() === 'public'
+    label => {
+      const labelName = label.name?.toLowerCase();
+      return labelName === 'public' || labelName === 'publiccampaign';
+    }
   );
   
   if (hasPublicLabel) {
-    // Has "Public" label and no "Hidden" label → include
+    // Has "Public" or "PublicCampaign" label and no "Hidden" label → include
     return true;
   }
   
-  // Has labels but neither "Public" nor "Hidden" → exclude (requires explicit "Public" label)
+  // Has labels but neither "Public", "PublicCampaign", nor "Hidden" → exclude (requires explicit display label)
   return false;
 }
 
@@ -2917,31 +2924,48 @@ async function loadProductsFromAPI() {
     });
     
 
-    // Separate subscriptions into Membership and 15 Day Pass categories based on labels
+    // Separate subscriptions into Campaign, Membership, and 15 Day Pass categories based on labels
+    // Priority: PublicCampaign > 15 Day Pass > Public
+    // Products with "PublicCampaign" label → Campaign category
     // Products with "15 Day Pass" label → 15 Day Pass category
-    // Products with "Public" label (but not "15 Day Pass") → Membership category
-    const membershipSubscriptions = subscriptions.filter(product => {
-      // Check if product has "15 Day Pass" label
+    // Products with "Public" label (but not "PublicCampaign" or "15 Day Pass") → Membership category
+    const campaignSubscriptions = subscriptions.filter(product => {
+      // Check if product has "PublicCampaign" label
+      const hasPublicCampaignLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === 'publiccampaign'
+      );
+      return hasPublicCampaignLabel;
+    });
+    
+    const dayPassSubscriptions = subscriptions.filter(product => {
+      // Check if product has "15 Day Pass" label (but not "PublicCampaign")
       const has15DayPassLabel = product.productLabels?.some(
         label => label.name && label.name.toLowerCase() === '15 day pass'
       );
-      // If it has "15 Day Pass" label, exclude from membership
-      if (has15DayPassLabel) {
+      const hasPublicCampaignLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === 'publiccampaign'
+      );
+      return has15DayPassLabel && !hasPublicCampaignLabel;
+    });
+    
+    const membershipSubscriptions = subscriptions.filter(product => {
+      // Check if product has "PublicCampaign" or "15 Day Pass" label
+      const hasPublicCampaignLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === 'publiccampaign'
+      );
+      const has15DayPassLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === '15 day pass'
+      );
+      // If it has "PublicCampaign" or "15 Day Pass" label, exclude from membership
+      if (hasPublicCampaignLabel || has15DayPassLabel) {
         return false;
       }
       // Otherwise, include if it has "Public" label (already filtered by shouldDisplayProductByLabels)
       return true;
     });
     
-    const dayPassSubscriptions = subscriptions.filter(product => {
-      // Check if product has "15 Day Pass" label
-      const has15DayPassLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === '15 day pass'
-      );
-      return has15DayPassLabel;
-    });
-    
     // Store in state
+    state.campaignSubscriptions = campaignSubscriptions;
     state.subscriptions = membershipSubscriptions;
     state.dayPassSubscriptions = dayPassSubscriptions;
     state.valueCards = valueCards;
@@ -2983,7 +3007,29 @@ function renderProductsFromAPI() {
     const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
                      intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
     
-    const description = product.description || product.productNumber || '';
+    // Get description - prefer imageBanner.text for campaign products, otherwise use description
+    // For campaign products, check both imageBanner.text and description fields
+    let description = '';
+    if (category === 'campaign') {
+      // Campaign: prefer imageBanner.text, but fall back to description if imageBanner.text is empty or single-line
+      const bannerText = product.imageBanner?.text || '';
+      const descText = product.description || '';
+      // If bannerText exists and has newlines, use it; otherwise try description
+      description = (bannerText && bannerText.includes('\n')) ? bannerText : 
+                    (descText && descText.includes('\n')) ? descText : 
+                    bannerText || descText || product.productNumber || '';
+    } else {
+      description = product.imageBanner?.text || product.description || product.productNumber || '';
+    }
+    
+    // Preserve line breaks from backend - escape HTML and preserve newlines
+    const descriptionHtml = description 
+      ? description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>')
+      : '';
     
     planCard.innerHTML = `
       <div class="plan-info">
@@ -2993,7 +3039,7 @@ function renderProductsFromAPI() {
             <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
             <span class="price-unit">${priceUnit}</span>
           </div>
-          ${description ? `<span class="plan-description">${description}</span>` : ''}
+          ${descriptionHtml ? `<span class="plan-description">${descriptionHtml}</span>` : ''}
         </div>
       </div>
       <div class="check-circle"></div>
@@ -3001,6 +3047,28 @@ function renderProductsFromAPI() {
     
     return planCard;
   };
+  
+  // Render campaign subscriptions into the campaign category
+  const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
+  const campaignPlansList = document.querySelector('[data-category="campaign"] .plans-list');
+  
+  if (campaignCategoryItem) {
+    // Hide campaign category if no products
+    if (!state.campaignSubscriptions || state.campaignSubscriptions.length === 0) {
+      campaignCategoryItem.style.display = 'none';
+    } else {
+      // Show category and render products
+      campaignCategoryItem.style.display = '';
+      if (campaignPlansList) {
+        campaignPlansList.innerHTML = '';
+        state.campaignSubscriptions.forEach((product) => {
+          const planCard = renderSubscriptionCard(product, 'campaign');
+          // Event listeners will be set up by setupNewAccessStep()
+          campaignPlansList.appendChild(planCard);
+        });
+      }
+    }
+  }
   
   // Render subscriptions (memberships) into the membership category
   const membershipPlansList = document.querySelector('[data-category="membership"] .plans-list');
@@ -3072,6 +3140,15 @@ function renderProductsFromAPI() {
         // Value cards are one-time purchases, so no interval unit needed
         const description = product.description || product.productNumber || '';
         
+        // Preserve line breaks from backend
+        const descriptionHtml = description 
+          ? description
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/\n/g, '<br>')
+          : '';
+        
         planCard.innerHTML = `
           <div class="plan-info">
             <div class="plan-type">${product.name || 'Punch Card'}</div>
@@ -3080,7 +3157,7 @@ function renderProductsFromAPI() {
                 <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
                 <span class="price-unit">kr</span>
               </div>
-              ${description ? `<span class="plan-description">${description}</span>` : ''}
+              ${descriptionHtml ? `<span class="plan-description">${descriptionHtml}</span>` : ''}
             </div>
           </div>
           <div class="check-circle"></div>
@@ -3917,7 +3994,8 @@ const state = {
   // Email tracking to prevent duplicate account creation
   createdEmails: new Set(), // Track emails that have been used to create accounts in this session
   // Step 5: Store fetched products from API
-  subscriptions: [], // Fetched membership products (with "Public" label, excluding "15 Day Pass")
+  campaignSubscriptions: [], // Fetched campaign products (with "PublicCampaign" label)
+  subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15 Day Pass")
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
   subscriptionAdditions: [], // Fetched add-ons for selected membership
@@ -6605,8 +6683,9 @@ function handleLogout() {
 function renderCatalog() {
   // Step 5: Only render mock data if API data is not available yet
   // API data will be loaded when business unit is selected and will replace this
-  // Check if we have any products (membership, 15 Day Pass, or value cards)
-  const hasAnyProducts = (state.subscriptions?.length || 0) > 0 || 
+  // Check if we have any products (campaign, membership, 15 Day Pass, or value cards)
+  const hasAnyProducts = (state.campaignSubscriptions?.length || 0) > 0 ||
+                         (state.subscriptions?.length || 0) > 0 || 
                          (state.dayPassSubscriptions?.length || 0) > 0 || 
                          (state.valueCards?.length || 0) > 0;
   if (!hasAnyProducts) {
@@ -6804,6 +6883,8 @@ function updateAccessHeadsUp(selectedCard) {
     let displayName = planType;
     if (category === 'punchcard') {
       displayName = `${planType} Punch Card`;
+    } else if (category === 'campaign') {
+      displayName = `${planType} Campaign`;
     } else if (category === 'membership') {
       displayName = `${planType} Membership`;
     } else if (category === '15daypass') {
@@ -7168,7 +7249,7 @@ function handlePlanSelection(selectedCard) {
   // Step 5: Store the selected plan and product details
   const planId = selectedCard.dataset.plan;
   const productId = selectedCard.dataset.productId || planId; // Use API product ID if available
-  const isMembership = category === 'membership' || category === '15daypass';
+  const isMembership = category === 'campaign' || category === 'membership' || category === '15daypass';
   
   state.membershipPlanId = planId; // Keep for backward compatibility
   state.selectedProductId = productId; // Store API product ID
@@ -7210,6 +7291,7 @@ function setupNewAccessStep() {
   }
   
   const footerTexts = {
+    campaign: 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last. By purchasing a campaign offer, you accept <a href="#">terms and Conditions</a>.',
     membership: 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. By signing up you accept <a href="#">terms and Conditions</a>.',
     '15daypass': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit. By purchasing a 15 Day Pass, you accept <a href="#">terms and Conditions</a>.',
     punchcard: 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym. By purchasing a value card, you accept <a href="#">terms and Conditions</a>.'
@@ -7354,14 +7436,14 @@ function setupNewAccessStep() {
       state.membershipPlanId = planId; // Keep for backward compatibility
       state.selectedProductId = productId; // Store API product ID
       // Determine product type based on category
-      if (category === 'membership' || category === '15daypass') {
-        state.selectedProductType = 'membership'; // Both are subscription products
+      if (category === 'campaign' || category === 'membership' || category === '15daypass') {
+        state.selectedProductType = 'membership'; // All are subscription products
       } else {
         state.selectedProductType = 'punch-card';
       }
       
-      // Step 5: If membership or 15 Day Pass is selected, fetch add-ons immediately
-      if ((category === 'membership' || category === '15daypass') && productId) {
+      // Step 5: If campaign, membership, or 15 Day Pass is selected, fetch add-ons immediately
+      if ((category === 'campaign' || category === 'membership' || category === '15daypass') && productId) {
         loadSubscriptionAdditions(productId);
       } else {
         // Clear add-ons if punch card is selected
@@ -8714,8 +8796,12 @@ function updateCartSummary() {
       ? parseInt(state.selectedProductId) 
       : state.selectedProductId;
     
-    // Check both membership subscriptions and 15 Day Pass subscriptions
-    const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+    // Check all subscription types: campaign, membership, and 15 Day Pass
+    const allSubscriptions = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || [])
+    ];
     const membership = allSubscriptions.find(p => 
       p.id === state.selectedProductId || 
       p.id === productIdNum ||
@@ -8733,12 +8819,20 @@ function updateCartSummary() {
                            0;
       const price = priceInCents > 0 ? priceInCents / 100 : 0;
       
+      // Get imageBanner text if available
+      const bannerText = membership.imageBanner?.text || '';
+      const displayName = bannerText 
+        ? `${membership.name || 'Membership'} - ${bannerText}`
+        : membership.name || 'Membership';
+      
       items.push({
         id: membership.id,
-        name: membership.name || 'Membership',
+        name: displayName,
         amount: price,
         type: 'membership',
         productId: membership.id, // Store API product ID for order creation
+        imageBannerText: bannerText, // Store separately for rendering
+        productName: membership.name || 'Membership', // Store original name
       });
       state.totals.membershipMonthly = price;
     } else {
@@ -8975,12 +9069,45 @@ function renderCartItems() {
     const priceEl = cartItem.querySelector('[data-element="price"]');
 
     if (nameEl) {
-      nameEl.textContent = item.name;
-      
-      // Add Home Gym info below the first item's name
-      if (index === 0 && selectedGym) {
-        const gymInfo = createHomeGymInfo(selectedGym);
-        nameEl.appendChild(gymInfo);
+      // For membership items with imageBanner text, display name and banner text separately
+      if (item.type === 'membership' && item.imageBannerText) {
+        // Clear any existing content
+        nameEl.innerHTML = '';
+        
+        const nameContainer = document.createElement('div');
+        nameContainer.style.display = 'flex';
+        nameContainer.style.flexDirection = 'column';
+        nameContainer.style.gap = '4px';
+        
+        const productNameSpan = document.createElement('span');
+        productNameSpan.textContent = item.productName || item.name;
+        productNameSpan.style.fontWeight = '500';
+        
+        const bannerTextSpan = document.createElement('span');
+        // Preserve line breaks from backend - replace newlines with <br> tags
+        const bannerTextWithBreaks = item.imageBannerText.replace(/\n/g, '<br>');
+        bannerTextSpan.innerHTML = bannerTextWithBreaks;
+        bannerTextSpan.style.fontSize = 'var(--font-size-sm)';
+        bannerTextSpan.style.color = 'var(--color-text-muted)';
+        bannerTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
+        
+        nameContainer.appendChild(productNameSpan);
+        nameContainer.appendChild(bannerTextSpan);
+        nameEl.appendChild(nameContainer);
+        
+        // Add Home Gym info below the name container for first item
+        if (index === 0 && selectedGym) {
+          const gymInfo = createHomeGymInfo(selectedGym);
+          nameEl.appendChild(gymInfo);
+        }
+      } else {
+        nameEl.textContent = item.name;
+        
+        // Add Home Gym info below the first item's name
+        if (index === 0 && selectedGym) {
+          const gymInfo = createHomeGymInfo(selectedGym);
+          nameEl.appendChild(gymInfo);
+        }
       }
     }
     
@@ -9083,11 +9210,15 @@ function updatePaymentOverview() {
   let billingPeriod = null;
   
   if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
+    // CRITICAL: Use API price from order - this is the authoritative source
+    // This ensures "Pay now" matches exactly what backend sends to payment window
     // Extract price amount (CurrencyOut can be object with .amount or direct number)
     const orderPriceAmount = state.fullOrder.price.amount;
     const orderPriceDKK = typeof orderPriceAmount === 'object' 
       ? orderPriceAmount.amount / 100 
       : orderPriceAmount / 100;
+    
+    console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
     
     // Get initialPaymentPeriod (per OpenAPI: SubscriptionItemOut.initialPaymentPeriod - DayRange)
     const initialPaymentPeriod = subscriptionItem.initialPaymentPeriod;
@@ -9165,8 +9296,12 @@ function updatePaymentOverview() {
         ? parseInt(state.selectedProductId) 
         : state.selectedProductId;
       
-      // Check both membership subscriptions and 15 Day Pass subscriptions
-      const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+      // Check all subscription types: campaign, membership, and 15 Day Pass
+      const allSubscriptions = [
+        ...(state.campaignSubscriptions || []),
+        ...(state.subscriptions || []),
+        ...(state.dayPassSubscriptions || [])
+      ];
       const membership = allSubscriptions.find(p => 
         p.id === state.selectedProductId || 
         p.id === productIdNum ||
@@ -9242,13 +9377,31 @@ function updatePaymentOverview() {
   // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
   let monthlyPaymentAmount = 0;
   
+  // CRITICAL: Always prioritize API data from order
+  // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount is the recurring price AFTER promotional period
+  // For products with promotions, this shows the regular price after discount period ends
   if (hasOrderData && subscriptionItem.payRecurring?.price?.amount !== undefined) {
-    monthlyPaymentAmount = subscriptionItem.payRecurring.price.amount / 100;
-    console.log('[Payment Overview] ✅ Monthly payment from payRecurring:', monthlyPaymentAmount, 'DKK');
+    // Use API price from order - this is the authoritative source
+    const recurringPriceAmount = subscriptionItem.payRecurring.price.amount;
+    monthlyPaymentAmount = typeof recurringPriceAmount === 'object' 
+      ? recurringPriceAmount.amount / 100 
+      : recurringPriceAmount / 100;
+    console.log('[Payment Overview] ✅ Monthly payment from API (payRecurring.price.amount):', monthlyPaymentAmount, 'DKK');
+  } else if (hasOrderData && subscriptionItem?.product?.priceWithInterval?.price?.amount !== undefined) {
+    // Fallback: Use product price from order if payRecurring not available
+    const productPriceAmount = subscriptionItem.product.priceWithInterval.price.amount;
+    monthlyPaymentAmount = typeof productPriceAmount === 'object' 
+      ? productPriceAmount.amount / 100 
+      : productPriceAmount / 100;
+    console.log('[Payment Overview] ⚠️ Monthly payment from API (product.priceWithInterval - fallback):', monthlyPaymentAmount, 'DKK');
   } else {
-    // Fallback: Try to get from product data
-    // Check both membership subscriptions and 15 Day Pass subscriptions
-    const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+    // No order data yet - use product data from API response
+    // Check all subscription types: campaign, membership, and 15 Day Pass
+    const allSubscriptions = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || [])
+    ];
     if (state.selectedProductId && allSubscriptions.length > 0) {
       const productIdNum = typeof state.selectedProductId === 'string' 
         ? parseInt(state.selectedProductId) 
@@ -9261,8 +9414,9 @@ function updatePaymentOverview() {
       );
       
       if (membership?.priceWithInterval?.price?.amount !== undefined) {
+        // Use price from API product data
         monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
-        console.log('[Payment Overview] Monthly payment from product data:', monthlyPaymentAmount, 'DKK');
+        console.log('[Payment Overview] Monthly payment from API product data (priceWithInterval):', monthlyPaymentAmount, 'DKK');
       } else {
         monthlyPaymentAmount = state.totals.membershipMonthly || 0;
         console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
@@ -11165,8 +11319,8 @@ function buildOrderSummary(payload, order = null, customer = null) {
   // Check both membership subscriptions and 15 Day Pass subscriptions
   const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
   if (membershipPlanId && allSubscriptions.length > 0) {
-    // Extract numeric ID from 'membership-134' or '15daypass-XXX' format
-    const numericId = membershipPlanId.replace(/^(membership|15daypass)-/, '');
+    // Extract numeric ID from 'campaign-XXX', 'membership-134', or '15daypass-XXX' format
+    const numericId = membershipPlanId.replace(/^(campaign|membership|15daypass)-/, '');
     const productId = parseInt(numericId, 10);
     
     // Find membership in API subscriptions (check both arrays)
