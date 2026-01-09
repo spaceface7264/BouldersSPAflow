@@ -4502,7 +4502,7 @@ const translations = {
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabat', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling',
+    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabat', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
@@ -4528,7 +4528,7 @@ const translations = {
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment',
+    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
@@ -9462,6 +9462,29 @@ function updatePaymentOverview() {
   const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
   const hasOrderData = !!subscriptionItem;
   
+  // Check if this is a 15-day pass with shoes (one-time payment product)
+  // Check both order data and product data
+  const allSubscriptions = [
+    ...(state.campaignSubscriptions || []),
+    ...(state.subscriptions || []),
+    ...(state.dayPassSubscriptions || [])
+  ];
+  const productIdNum = typeof state.selectedProductId === 'string' 
+    ? parseInt(state.selectedProductId) 
+    : state.selectedProductId;
+  const currentProduct = allSubscriptions.find(p => 
+    p.id === state.selectedProductId || 
+    p.id === productIdNum ||
+    String(p.id) === String(state.selectedProductId)
+  );
+  
+  // Check product name from order data first, then fall back to product data
+  const productFromOrder = subscriptionItem?.product;
+  const productName = productFromOrder?.name || currentProduct?.name || '';
+  const is15DayPassWithShoes = productName && 
+    productName.toLowerCase().includes('15 dages klatring') &&
+    productName.toLowerCase().includes('sko');
+  
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
   // ============================================================================
@@ -9485,73 +9508,92 @@ function updatePaymentOverview() {
     
     console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
     
-    // Get initialPaymentPeriod (per OpenAPI: SubscriptionItemOut.initialPaymentPeriod - DayRange)
-    const initialPaymentPeriod = subscriptionItem.initialPaymentPeriod;
-    const payRecurring = subscriptionItem.payRecurring;
-    const recurringPriceAmount = payRecurring?.price?.amount || 0;
-    
-    // Verify backend pricing is correct using robust verification method
-    const productId = subscriptionItem?.product?.id || state.selectedProductId;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startDateStr = today.toISOString().split('T')[0];
-    const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
-    
-    if (initialPaymentPeriod?.start) {
-      const backendStartDate = new Date(initialPaymentPeriod.start);
-      const backendEndDate = new Date(initialPaymentPeriod.end);
+    if (is15DayPassWithShoes) {
+      // For 15-day pass with shoes: always use full price (one-time payment)
+      payNowAmount = orderPriceDKK;
       
-      // Use verification method to check if pricing is correct
-      const verification = orderAPI._verifySubscriptionPricing(
-        state.fullOrder,
-        productId,
-        expectedPrice,
-        today
-      );
+      // Set valid until date (15 days from today)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const validUntil = new Date(today);
+      validUntil.setDate(validUntil.getDate() + 15);
       
-      if (verification.isCorrect) {
-        // Backend calculated correctly - use backend's price
-        payNowAmount = orderPriceDKK;
-        billingPeriod = {
-          start: backendStartDate,
-          end: backendEndDate
-        };
-        console.log('[Payment Overview] ✅ Backend pricing is correct:', payNowAmount, 'DKK');
-      } else {
-        // Backend pricing is incorrect - calculate correct price client-side
-        console.warn('[Payment Overview] ⚠️ Backend pricing is incorrect!');
-        console.warn('[Payment Overview] ⚠️ Backend shows:', orderPriceDKK, 'DKK');
-        console.warn('[Payment Overview] ⚠️ Expected:', expectedPrice?.amountInDKK || 'N/A', 'DKK');
-        console.warn('[Payment Overview] ⚠️ Verification:', verification);
+      billingPeriod = {
+        start: today,
+        end: validUntil,
+        is15DayPass: true
+      };
+      
+      console.log('[Payment Overview] ✅ 15-day pass with shoes: Full price (one-time payment):', payNowAmount, 'DKK');
+    } else {
+      // Regular membership: Get initialPaymentPeriod (per OpenAPI: SubscriptionItemOut.initialPaymentPeriod - DayRange)
+      const initialPaymentPeriod = subscriptionItem.initialPaymentPeriod;
+      const payRecurring = subscriptionItem.payRecurring;
+      const recurringPriceAmount = payRecurring?.price?.amount || 0;
+      
+      // Verify backend pricing is correct using robust verification method
+      const productId = subscriptionItem?.product?.id || state.selectedProductId;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startDateStr = today.toISOString().split('T')[0];
+      const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+      
+      if (initialPaymentPeriod?.start) {
+        const backendStartDate = new Date(initialPaymentPeriod.start);
+        const backendEndDate = new Date(initialPaymentPeriod.end);
         
-        if (expectedPrice) {
-          // Use calculated correct price
-          payNowAmount = expectedPrice.amountInDKK;
-          
-          // Set billing period to today - end of month
-          const currentMonth = today.getMonth();
-          const currentYear = today.getFullYear();
-          const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-          billingPeriod = {
-            start: today,
-            end: lastDayOfMonth
-          };
-          console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
-          console.warn('[Payment Overview] ⚠️ NOTE: Payment window may show different price if backend bug persists');
-        } else {
-          // Can't calculate expected price - use backend price as fallback
+        // Use verification method to check if pricing is correct
+        const verification = orderAPI._verifySubscriptionPricing(
+          state.fullOrder,
+          productId,
+          expectedPrice,
+          today
+        );
+        
+        if (verification.isCorrect) {
+          // Backend calculated correctly - use backend's price
           payNowAmount = orderPriceDKK;
           billingPeriod = {
             start: backendStartDate,
             end: backendEndDate
           };
-          console.warn('[Payment Overview] ⚠️ Cannot calculate expected price - using backend price as fallback');
+          console.log('[Payment Overview] ✅ Backend pricing is correct:', payNowAmount, 'DKK');
+        } else {
+          // Backend pricing is incorrect - calculate correct price client-side
+          console.warn('[Payment Overview] ⚠️ Backend pricing is incorrect!');
+          console.warn('[Payment Overview] ⚠️ Backend shows:', orderPriceDKK, 'DKK');
+          console.warn('[Payment Overview] ⚠️ Expected:', expectedPrice?.amountInDKK || 'N/A', 'DKK');
+          console.warn('[Payment Overview] ⚠️ Verification:', verification);
+          
+          if (expectedPrice) {
+            // Use calculated correct price
+            payNowAmount = expectedPrice.amountInDKK;
+            
+            // Set billing period to today - end of month
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            billingPeriod = {
+              start: today,
+              end: lastDayOfMonth
+            };
+            console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
+            console.warn('[Payment Overview] ⚠️ NOTE: Payment window may show different price if backend bug persists');
+          } else {
+            // Can't calculate expected price - use backend price as fallback
+            payNowAmount = orderPriceDKK;
+            billingPeriod = {
+              start: backendStartDate,
+              end: backendEndDate
+            };
+            console.warn('[Payment Overview] ⚠️ Cannot calculate expected price - using backend price as fallback');
+          }
         }
+      } else {
+        // No initialPaymentPeriod - use order price as-is
+        payNowAmount = orderPriceDKK;
+        console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
       }
-    } else {
-      // No initialPaymentPeriod - use order price as-is
-      payNowAmount = orderPriceDKK;
-      console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
     }
   } else {
     // No order data yet - calculate price from product data
@@ -9574,53 +9616,78 @@ function updatePaymentOverview() {
       );
       
       if (membership) {
-        // Calculate partial month price client-side
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const startDateStr = today.toISOString().split('T')[0];
+        // Check if this is 15-day pass with shoes (one-time payment)
+        const is15DayPassWithShoes = membership.name && 
+          membership.name.toLowerCase().includes('15 dages klatring') &&
+          membership.name.toLowerCase().includes('sko');
         
-        // Try to use the helper function if available
-        if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
-          const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
-          if (expectedPrice) {
-            payNowAmount = expectedPrice.amountInDKK;
+        if (is15DayPassWithShoes) {
+          // For 15-day pass with shoes: always use full price (one-time payment)
+          const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+          payNowAmount = priceInCents / 100;
+          
+          // Set valid until date (15 days from today)
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const validUntil = new Date(today);
+          validUntil.setDate(validUntil.getDate() + 15);
+          
+          billingPeriod = {
+            start: today,
+            end: validUntil,
+            is15DayPass: true
+          };
+          
+          console.log('[Payment Overview] ✅ 15-day pass with shoes: Full price (one-time payment):', payNowAmount, 'DKK');
+        } else {
+          // Regular membership: Calculate partial month price client-side
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const startDateStr = today.toISOString().split('T')[0];
+          
+          // Try to use the helper function if available
+          if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
+            const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
+            if (expectedPrice) {
+              payNowAmount = expectedPrice.amountInDKK;
+              
+              // Set billing period to today - end of month
+              const currentMonth = today.getMonth();
+              const currentYear = today.getFullYear();
+              const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+              billingPeriod = {
+                start: today,
+                end: lastDayOfMonth
+              };
+              console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month):', payNowAmount, 'DKK');
+            } else {
+              // Fallback to full month price
+              const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+              payNowAmount = priceInCents / 100;
+              console.log('[Payment Overview] ⚠️ Pay now from product data (full month - fallback):', payNowAmount, 'DKK');
+            }
+          } else {
+            // Calculate partial month price manually
+            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+            const monthlyPrice = priceInCents / 100;
             
-            // Set billing period to today - end of month
+            // Calculate days until end of month
             const currentMonth = today.getMonth();
             const currentYear = today.getFullYear();
             const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            const daysInMonth = lastDayOfMonth.getDate();
+            const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
+            
+            // Calculate partial month price
+            payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+            
             billingPeriod = {
               start: today,
               end: lastDayOfMonth
             };
-            console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month):', payNowAmount, 'DKK');
-          } else {
-            // Fallback to full month price
-            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
-            payNowAmount = priceInCents / 100;
-            console.log('[Payment Overview] ⚠️ Pay now from product data (full month - fallback):', payNowAmount, 'DKK');
+            
+            console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month, manual calc):', payNowAmount, 'DKK');
           }
-        } else {
-          // Calculate partial month price manually
-          const priceInCents = membership.priceWithInterval?.price?.amount || 0;
-          const monthlyPrice = priceInCents / 100;
-          
-          // Calculate days until end of month
-          const currentMonth = today.getMonth();
-          const currentYear = today.getFullYear();
-          const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-          const daysInMonth = lastDayOfMonth.getDate();
-          const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
-          
-          // Calculate partial month price
-          payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
-          
-          billingPeriod = {
-            start: today,
-            end: lastDayOfMonth
-          };
-          
-          console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month, manual calc):', payNowAmount, 'DKK');
         }
       } else {
         // Fallback: Use cart total
@@ -9637,59 +9704,65 @@ function updatePaymentOverview() {
   // ============================================================================
   // CALCULATE "MÅNEDLIG BETALING HEREFTER" (MONTHLY PAYMENT THEREAFTER)
   // ============================================================================
-  // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount
-  // This is ALWAYS the regular monthly price after any promotional period
-  // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
+  // Skip monthly payment calculation for 15-day pass with shoes (one-time payment)
   let monthlyPaymentAmount = 0;
   
-  // CRITICAL: Always prioritize API data from order
-  // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount is the recurring price AFTER promotional period
-  // For products with promotions, this shows the regular price after discount period ends
-  if (hasOrderData && subscriptionItem.payRecurring?.price?.amount !== undefined) {
-    // Use API price from order - this is the authoritative source
-    const recurringPriceAmount = subscriptionItem.payRecurring.price.amount;
-    monthlyPaymentAmount = typeof recurringPriceAmount === 'object' 
-      ? recurringPriceAmount.amount / 100 
-      : recurringPriceAmount / 100;
-    console.log('[Payment Overview] ✅ Monthly payment from API (payRecurring.price.amount):', monthlyPaymentAmount, 'DKK');
-  } else if (hasOrderData && subscriptionItem?.product?.priceWithInterval?.price?.amount !== undefined) {
-    // Fallback: Use product price from order if payRecurring not available
-    const productPriceAmount = subscriptionItem.product.priceWithInterval.price.amount;
-    monthlyPaymentAmount = typeof productPriceAmount === 'object' 
-      ? productPriceAmount.amount / 100 
-      : productPriceAmount / 100;
-    console.log('[Payment Overview] ⚠️ Monthly payment from API (product.priceWithInterval - fallback):', monthlyPaymentAmount, 'DKK');
-  } else {
-    // No order data yet - use product data from API response
-    // Check all subscription types: campaign, membership, and 15 Day Pass
-    const allSubscriptions = [
-      ...(state.campaignSubscriptions || []),
-      ...(state.subscriptions || []),
-      ...(state.dayPassSubscriptions || [])
-    ];
-    if (state.selectedProductId && allSubscriptions.length > 0) {
-      const productIdNum = typeof state.selectedProductId === 'string' 
-        ? parseInt(state.selectedProductId) 
-        : state.selectedProductId;
-      
-      const membership = allSubscriptions.find(p => 
-        p.id === state.selectedProductId || 
-        p.id === productIdNum ||
-        String(p.id) === String(state.selectedProductId)
-      );
-      
-      if (membership?.priceWithInterval?.price?.amount !== undefined) {
-        // Use price from API product data
-        monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
-        console.log('[Payment Overview] Monthly payment from API product data (priceWithInterval):', monthlyPaymentAmount, 'DKK');
+  if (!is15DayPassWithShoes) {
+    // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount
+    // This is ALWAYS the regular monthly price after any promotional period
+    // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
+    
+    // CRITICAL: Always prioritize API data from order
+    // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount is the recurring price AFTER promotional period
+    // For products with promotions, this shows the regular price after discount period ends
+    if (hasOrderData && subscriptionItem.payRecurring?.price?.amount !== undefined) {
+      // Use API price from order - this is the authoritative source
+      const recurringPriceAmount = subscriptionItem.payRecurring.price.amount;
+      monthlyPaymentAmount = typeof recurringPriceAmount === 'object' 
+        ? recurringPriceAmount.amount / 100 
+        : recurringPriceAmount / 100;
+      console.log('[Payment Overview] ✅ Monthly payment from API (payRecurring.price.amount):', monthlyPaymentAmount, 'DKK');
+    } else if (hasOrderData && subscriptionItem?.product?.priceWithInterval?.price?.amount !== undefined) {
+      // Fallback: Use product price from order if payRecurring not available
+      const productPriceAmount = subscriptionItem.product.priceWithInterval.price.amount;
+      monthlyPaymentAmount = typeof productPriceAmount === 'object' 
+        ? productPriceAmount.amount / 100 
+        : productPriceAmount / 100;
+      console.log('[Payment Overview] ⚠️ Monthly payment from API (product.priceWithInterval - fallback):', monthlyPaymentAmount, 'DKK');
+    } else {
+      // No order data yet - use product data from API response
+      // Check all subscription types: campaign, membership, and 15 Day Pass
+      const allSubscriptionsForMonthly = [
+        ...(state.campaignSubscriptions || []),
+        ...(state.subscriptions || []),
+        ...(state.dayPassSubscriptions || [])
+      ];
+      if (state.selectedProductId && allSubscriptionsForMonthly.length > 0) {
+        const productIdNum = typeof state.selectedProductId === 'string' 
+          ? parseInt(state.selectedProductId) 
+          : state.selectedProductId;
+        
+        const membership = allSubscriptionsForMonthly.find(p => 
+          p.id === state.selectedProductId || 
+          p.id === productIdNum ||
+          String(p.id) === String(state.selectedProductId)
+        );
+        
+        if (membership?.priceWithInterval?.price?.amount !== undefined) {
+          // Use price from API product data
+          monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
+          console.log('[Payment Overview] Monthly payment from API product data (priceWithInterval):', monthlyPaymentAmount, 'DKK');
+        } else {
+          monthlyPaymentAmount = state.totals.membershipMonthly || 0;
+          console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
+        }
       } else {
         monthlyPaymentAmount = state.totals.membershipMonthly || 0;
         console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
       }
-    } else {
-      monthlyPaymentAmount = state.totals.membershipMonthly || 0;
-      console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
     }
+  } else {
+    console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass with shoes - one-time payment)');
   }
   
   // ============================================================================
@@ -9726,11 +9799,25 @@ function updatePaymentOverview() {
   }
   
   // Update "Månedlig betaling herefter" (Monthly payment thereafter)
+  // Hide monthly payment for 15-day pass with shoes (one-time payment)
   if (DOM.monthlyPayment) {
-    if (monthlyPaymentAmount > 0) {
-      DOM.monthlyPayment.textContent = `${currencyFormatter.format(monthlyPaymentAmount)}/md`;
+    if (is15DayPassWithShoes) {
+      // Hide monthly payment section for one-time payment products
+      const monthlyPaymentItem = DOM.monthlyPayment.closest('.payment-overview-item');
+      if (monthlyPaymentItem) {
+        monthlyPaymentItem.style.display = 'none';
+      }
     } else {
-      DOM.monthlyPayment.textContent = '—';
+      // Show monthly payment for regular memberships
+      const monthlyPaymentItem = DOM.monthlyPayment.closest('.payment-overview-item');
+      if (monthlyPaymentItem) {
+        monthlyPaymentItem.style.display = '';
+      }
+      if (monthlyPaymentAmount > 0) {
+        DOM.monthlyPayment.textContent = `${currencyFormatter.format(monthlyPaymentAmount)}/md`;
+      } else {
+        DOM.monthlyPayment.textContent = '—';
+      }
     }
   }
   
@@ -9738,15 +9825,19 @@ function updatePaymentOverview() {
   if (DOM.paymentBillingPeriod) {
     let billingPeriodText = '';
     
-    if (billingPeriod) {
-      // Format dates in Danish format (DD.MM.YYYY)
-      const formatDate = (date) => {
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}.${month}.${year}`;
-      };
-      
+    // Format dates in Danish format (DD.MM.YYYY)
+    const formatDate = (date) => {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}.${month}.${year}`;
+    };
+    
+    if (is15DayPassWithShoes && billingPeriod?.is15DayPass) {
+      // For 15-day pass: show "Valid until [date 15 days in future]"
+      billingPeriodText = `${t('cart.validUntil')} ${formatDate(billingPeriod.end)}`;
+    } else if (billingPeriod) {
+      // Regular membership: show billing period
       billingPeriodText = `Period ${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
       
       // If there's a boundUntil date (end of promotional period), show that too
@@ -9757,12 +9848,6 @@ function updatePaymentOverview() {
     } else if (hasOrderData && subscriptionItem?.boundUntil) {
       // No initialPaymentPeriod, but there's a boundUntil date
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
-      const formatDate = (date) => {
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}.${month}.${year}`;
-      };
       billingPeriodText = `Bound until ${formatDate(boundUntilDate)}`;
     }
     
