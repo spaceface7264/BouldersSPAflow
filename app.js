@@ -10538,8 +10538,66 @@ function updatePaymentOverview() {
   // ============================================================================
   
   // Update "Betales nu" (Pay now)
+  // Format dates in Danish format (DD.MM.YYYY) - moved up to use for period
+  const formatDate = (date) => {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
+  };
+  
+  // Prepare billing period text
+  let billingPeriodText = '';
+  if (is15DayPassWithShoes && billingPeriod?.is15DayPass) {
+    // For 15-day pass: show "Valid until [date 15 days in future]"
+    billingPeriodText = `${t('cart.validUntil')} ${formatDate(billingPeriod.end)}`;
+  } else if (billingPeriod) {
+    // Regular membership: show billing period dates only
+    billingPeriodText = `${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
+  } else if (hasOrderData && subscriptionItem?.boundUntil) {
+    // No initialPaymentPeriod, but there's a boundUntil date
+    const boundUntilDate = new Date(subscriptionItem.boundUntil);
+    billingPeriodText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
+  }
+  
+  // Fallback to state.billingPeriod if available
+  if (!billingPeriodText && state.billingPeriod) {
+    billingPeriodText = state.billingPeriod;
+  }
+  
+  // If still no billing period, show default message
+  if (!billingPeriodText) {
+    billingPeriodText = t('cart.billingPeriodConfirmed');
+  }
+  
   if (DOM.payNow) {
-    DOM.payNow.textContent = currencyFormatter.format(payNowAmount);
+    const amountText = currencyFormatter.format(payNowAmount);
+    DOM.payNow.textContent = amountText;
+    
+    // Add period after "Pay now" label but before amount
+    const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
+    if (payNowRow && billingPeriodText) {
+      let periodElement = payNowRow.querySelector('.payment-label-period');
+      if (!periodElement) {
+        // Create period element if it doesn't exist
+        periodElement = document.createElement('span');
+        periodElement.className = 'payment-label-period payment-period';
+        // Insert after the label, before the amount
+        const label = payNowRow.querySelector('.payment-label');
+        if (label && label.nextSibling) {
+          label.parentNode.insertBefore(periodElement, label.nextSibling);
+        } else if (label) {
+          label.parentNode.insertBefore(periodElement, DOM.payNow);
+        }
+      }
+      periodElement.textContent = `(${billingPeriodText})`;
+    } else if (payNowRow) {
+      // Hide period element if no billing period text
+      const periodElement = payNowRow.querySelector('.payment-label-period');
+      if (periodElement) {
+        periodElement.textContent = '';
+      }
+    }
     
     // Verify this matches payment window price (only if order data is available)
     if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
@@ -10589,53 +10647,15 @@ function updatePaymentOverview() {
     }
   }
   
-  // Update billing period display (shown below "Betales nu")
-  if (DOM.paymentBillingPeriod) {
-    let billingPeriodText = '';
-    
-    // Format dates in Danish format (DD.MM.YYYY)
-    const formatDate = (date) => {
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = date.getFullYear();
-      return `${day}.${month}.${year}`;
-    };
-    
-    if (is15DayPassWithShoes && billingPeriod?.is15DayPass) {
-      // For 15-day pass: show "Valid until [date 15 days in future]"
-      billingPeriodText = `${t('cart.validUntil')} ${formatDate(billingPeriod.end)}`;
-    } else if (billingPeriod) {
-      // Regular membership: show billing period
-      billingPeriodText = `${t('cart.period')} ${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
-    } else if (hasOrderData && subscriptionItem?.boundUntil) {
-      // No initialPaymentPeriod, but there's a boundUntil date
+  // Display boundUntil date separately if available (for memberships with promotional periods)
+  if (DOM.paymentBoundUntil) {
+    if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPassWithShoes) {
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
-      billingPeriodText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
-    }
-    
-    // Fallback to state.billingPeriod if available
-    if (!billingPeriodText && state.billingPeriod) {
-      billingPeriodText = state.billingPeriod;
-    }
-    
-    // If still no billing period, show default message
-    if (!billingPeriodText) {
-      billingPeriodText = t('cart.billingPeriodConfirmed');
-    }
-    
-    DOM.paymentBillingPeriod.textContent = billingPeriodText;
-    DOM.paymentBillingPeriod.style.display = 'block';
-    
-    // Display boundUntil date separately if available (for memberships with promotional periods)
-    if (DOM.paymentBoundUntil) {
-      if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPassWithShoes) {
-        const boundUntilDate = new Date(subscriptionItem.boundUntil);
-        const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
-        DOM.paymentBoundUntil.textContent = boundUntilText;
-        DOM.paymentBoundUntil.style.display = 'block';
-      } else {
-        DOM.paymentBoundUntil.style.display = 'none';
-      }
+      const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
+      DOM.paymentBoundUntil.textContent = boundUntilText;
+      DOM.paymentBoundUntil.style.display = 'block';
+    } else {
+      DOM.paymentBoundUntil.style.display = 'none';
     }
   }
   

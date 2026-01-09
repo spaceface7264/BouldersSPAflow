@@ -4792,7 +4792,24 @@ body {
 .payment-overview-paynow-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.payment-overview-paynow-row .payment-label {
+    flex-shrink: 0;
+}
+
+.payment-overview-paynow-row .payment-label-period {
+    flex-shrink: 0;
+    margin-left: 0;
+    vertical-align: baseline;
+    display: inline;
+}
+
+.payment-overview-paynow-row .payment-amount {
+    margin-left: auto;
+    align-self: baseline;
 }
 
 /* Payment Overview Labels */
@@ -4802,6 +4819,14 @@ body {
     font-weight: 500;
 }
 
+.payment-label-period {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-style: normal;
+    font-weight: 400;
+    margin-left: 4px;
+}
+
 /* Payment Overview Amounts */
 .payment-overview .payment-amount {
     color: var(--color-text-white);
@@ -4809,11 +4834,12 @@ body {
     font-weight: 300;
 }
 
-.payment-overview-billing-period {
+.payment-period {
     color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    font-style: italic;
-    text-align: left;
+    font-size: var(--font-size-xs);
+    font-style: normal;
+    font-weight: 400;
+    margin-left: 4px;
 }
 
 .payment-overview-bound-until {
