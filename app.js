@@ -295,7 +295,8 @@ class BusinessUnitsAPI {
       // Note: We don't send subscriber/customer parameters for anonymous users
       // Backend should set allowedToOrder based on "kan bookes via internet" checkbox
       let url;
-      const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}` : '';
+      const cacheBuster = `&_t=${Date.now()}`;
+      const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}${cacheBuster}` : `?_t=${Date.now()}`;
       if (this.useProxy) {
         // For proxy, include query params in the path
         url = `${this.baseUrl}?path=/api/products/subscriptions${queryParam}`;
@@ -321,7 +322,6 @@ class BusinessUnitsAPI {
       }
       
       const data = await response.json();
-      console.log('Subscriptions API response:', data);
       return data;
     } catch (error) {
       console.error('Error fetching subscriptions:', error);
@@ -333,10 +333,11 @@ class BusinessUnitsAPI {
   async getValueCards() {
     try {
       let url;
+      const cacheBuster = `?_t=${Date.now()}`;
       if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/products/valuecards`;
+        url = `${this.baseUrl}?path=/api/products/valuecards${cacheBuster}`;
       } else {
-        url = `${this.baseUrl}/api/products/valuecards`;
+        url = `${this.baseUrl}/api/products/valuecards${cacheBuster}`;
       }
       console.log('Fetching value cards from:', url);
       
@@ -357,7 +358,6 @@ class BusinessUnitsAPI {
       }
       
       const data = await response.json();
-      console.log('Value cards API response:', data);
       return data;
     } catch (error) {
       console.error('Error fetching value cards:', error);
@@ -1761,7 +1761,9 @@ class OrderAPI {
    * @returns {Object|null} Expected price info { amountInCents, amountInDKK, daysRemaining, daysInMonth } or null
    */
   _calculateExpectedPartialMonthPrice(productId, startDate) {
-    const membership = state.subscriptions?.find(p => 
+    // Check both membership subscriptions and 15 Day Pass subscriptions
+    const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+    const membership = allSubscriptions.find(p => 
       p.id === productId || 
       p.id === Number(productId) ||
       String(p.id) === String(productId)
@@ -2698,6 +2700,41 @@ async function loadReferenceData() {
   }
 }
 
+// Helper function to check if product should be displayed based on labels
+// Rules:
+// 1. If product has "Hidden" label (case-insensitive) → exclude (even if it also has "Public")
+// 2. If product has "Public" label (case-insensitive) → include
+// 3. Otherwise (no labels or other labels) → exclude (requires explicit "Public" label)
+function shouldDisplayProductByLabels(product) {
+  if (!product.productLabels || !Array.isArray(product.productLabels) || product.productLabels.length === 0) {
+    // No labels → exclude (requires explicit "Public" label)
+    return false;
+  }
+  
+  // Check for "Hidden" label first (case-insensitive)
+  const hasHiddenLabel = product.productLabels.some(
+    label => label.name && label.name.toLowerCase() === 'hidden'
+  );
+  
+  if (hasHiddenLabel) {
+    // "Hidden" label takes priority → exclude
+    return false;
+  }
+  
+  // Check for "Public" label (case-insensitive)
+  const hasPublicLabel = product.productLabels.some(
+    label => label.name && label.name.toLowerCase() === 'public'
+  );
+  
+  if (hasPublicLabel) {
+    // Has "Public" label and no "Hidden" label → include
+    return true;
+  }
+  
+  // Has labels but neither "Public" nor "Hidden" → exclude (requires explicit "Public" label)
+  return false;
+}
+
 // Step 5: Load products (subscriptions and value cards) from API
 // API Endpoints (per OpenAPI documentation):
 // - GET /api/ver3/products/subscriptions?businessUnit={id} (line ~8287)
@@ -2730,13 +2767,6 @@ async function loadProductsFromAPI() {
       ? valueCardsResponse
       : (valueCardsResponse.data || valueCardsResponse.items || []);
 
-    // Debug: Log all products received from API to verify what backend sends
-    console.log('[Product Filter] Raw API response received:', {
-      subscriptionsCount: subscriptions.length,
-      valueCardsCount: valueCards.length,
-      subscriptionNames: subscriptions.map(p => p.name),
-      valueCardNames: valueCards.map(p => p.name)
-    });
 
     // Filter out products that shouldn't be displayed according to OpenAPI documentation
     // Reference: docs/brp-api3-openapi.yaml - SubscriptionProductOut schema (line ~14970)
@@ -2793,7 +2823,6 @@ async function loadProductsFromAPI() {
       // but if backend doesn't do this correctly, we need to handle it defensively
       if (product.hasOwnProperty('allowedToOrder')) {
         if (product.allowedToOrder === false) {
-          console.log(`[Product Filter] Excluding subscription product ${product.id} (${product.name}): allowedToOrder is false`);
           return false;
         }
         // If allowedToOrder is explicitly true, continue to next checks
@@ -2835,7 +2864,6 @@ async function loadProductsFromAPI() {
       if (!product.priceWithInterval || !product.priceWithInterval.price || 
           product.priceWithInterval.price.amount === undefined || 
           product.priceWithInterval.price.amount === null) {
-        console.log(`[Product Filter] Excluding subscription product ${product.id} (${product.name}): missing priceWithInterval.price.amount (cannot be purchased)`);
         return false;
       }
       
@@ -2847,17 +2875,19 @@ async function loadProductsFromAPI() {
           (bu) => bu.id === state.selectedBusinessUnit || bu.id === parseInt(state.selectedBusinessUnit, 10)
         );
         if (!isAvailableForBusinessUnit) {
-          console.log(`[Product Filter] Excluding subscription product ${product.id} (${product.name}): not available for business unit ${state.selectedBusinessUnit}`);
           return false;
         }
+      }
+      
+      // Check 3: Label-based filtering
+      // Only display products with "Public" label, exclude products with "Hidden" label
+      if (!shouldDisplayProductByLabels(product)) {
+        return false;
       }
       
       return true;
     });
     
-    if (subscriptions.length !== originalSubscriptionCount) {
-      console.log(`[Product Filter] Filtered ${originalSubscriptionCount - subscriptions.length} subscription product(s)`);
-    }
 
     // Filter value card products
     // According to OpenAPI spec (ValueCardProductOut):
@@ -2873,23 +2903,49 @@ async function loadProductsFromAPI() {
           (bu) => bu.id === state.selectedBusinessUnit || bu.id === parseInt(state.selectedBusinessUnit, 10)
         );
         if (!isAvailableForBusinessUnit) {
-          console.log(`[Product Filter] Excluding value card product ${product.id} (${product.name}): not available for business unit ${state.selectedBusinessUnit}`);
           return false;
         }
+      }
+      
+      // Check: Label-based filtering
+      // Only display products with "Public" label, exclude products with "Hidden" label
+      if (!shouldDisplayProductByLabels(product)) {
+        return false;
       }
       
       return true;
     });
     
-    if (valueCards.length !== originalValueCardCount) {
-      console.log(`[Product Filter] Filtered ${originalValueCardCount - valueCards.length} value card product(s)`);
-    }
 
+    // Separate subscriptions into Membership and 15 Day Pass categories based on labels
+    // Products with "15 Day Pass" label → 15 Day Pass category
+    // Products with "Public" label (but not "15 Day Pass") → Membership category
+    const membershipSubscriptions = subscriptions.filter(product => {
+      // Check if product has "15 Day Pass" label
+      const has15DayPassLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === '15 day pass'
+      );
+      // If it has "15 Day Pass" label, exclude from membership
+      if (has15DayPassLabel) {
+        return false;
+      }
+      // Otherwise, include if it has "Public" label (already filtered by shouldDisplayProductByLabels)
+      return true;
+    });
+    
+    const dayPassSubscriptions = subscriptions.filter(product => {
+      // Check if product has "15 Day Pass" label
+      const has15DayPassLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === '15 day pass'
+      );
+      return has15DayPassLabel;
+    });
+    
     // Store in state
-    state.subscriptions = subscriptions;
+    state.subscriptions = membershipSubscriptions;
+    state.dayPassSubscriptions = dayPassSubscriptions;
     state.valueCards = valueCards;
 
-    console.log(`Loaded ${subscriptions.length} subscriptions and ${valueCards.length} value cards`);
 
     // Re-render the membership plans with API data
     renderProductsFromAPI();
@@ -2902,102 +2958,156 @@ async function loadProductsFromAPI() {
 
 // Step 5: Render products from API data into the UI
 function renderProductsFromAPI() {
+  // Helper function to render a subscription product card
+  const renderSubscriptionCard = (product, category) => {
+    const planCard = document.createElement('div');
+    planCard.className = 'plan-card';
+    const productId = product.id;
+    planCard.dataset.plan = `${category}-${productId}`;
+    planCard.dataset.productId = productId;
+    planCard.dataset.category = category;
+    
+    // Extract price from API structure
+    const priceInCents = product.priceWithInterval?.price?.amount || 
+                         product.price?.amount || 
+                         product.amount || 
+                         0;
+    const price = priceInCents > 0 ? priceInCents / 100 : 0;
+    const currency = product.priceWithInterval?.price?.currency || 
+                     product.price?.currency || 
+                     product.currency || 
+                     'DKK';
+    
+    // Determine price unit from interval
+    const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
+    const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
+                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
+    
+    const description = product.description || product.productNumber || '';
+    
+    planCard.innerHTML = `
+      <div class="plan-info">
+        <div class="plan-type">${product.name || 'Membership'}</div>
+        <div class="plan-details">
+          <div class="plan-price">
+            <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
+            <span class="price-unit">${priceUnit}</span>
+          </div>
+          ${description ? `<span class="plan-description">${description}</span>` : ''}
+        </div>
+      </div>
+      <div class="check-circle"></div>
+    `;
+    
+    return planCard;
+  };
+  
   // Render subscriptions (memberships) into the membership category
   const membershipPlansList = document.querySelector('[data-category="membership"] .plans-list');
-  if (membershipPlansList && state.subscriptions.length > 0) {
+  if (membershipPlansList) {
     membershipPlansList.innerHTML = '';
     
-    state.subscriptions.forEach((product) => {
-      const planCard = document.createElement('div');
-      planCard.className = 'plan-card';
-      // Use numeric ID from API (e.g., 56)
-      const productId = product.id;
-      planCard.dataset.plan = `membership-${productId}`; // For backward compatibility
-      planCard.dataset.productId = productId; // Store API product ID (numeric)
-      
-      // Extract price from API structure: priceWithInterval.price.amount is in cents/øre (e.g., 46900 = 469.00 DKK)
-      const priceInCents = product.priceWithInterval?.price?.amount || 
-                           product.price?.amount || 
-                           product.amount || 
-                           0;
-      const price = priceInCents > 0 ? priceInCents / 100 : 0; // Convert from cents to main currency unit
-      const currency = product.priceWithInterval?.price?.currency || 
-                       product.price?.currency || 
-                       product.currency || 
-                       'DKK';
-      
-      // Determine price unit from interval (e.g., "MONTH" = "kr/mo")
-      const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
-      const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
-                       intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
-      
-      const description = product.description || product.productNumber || '';
-      
-      planCard.innerHTML = `
-        <div class="plan-info">
-          <div class="plan-type">${product.name || 'Membership'}</div>
-          <div class="plan-details">
-            <div class="plan-price">
-              <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
-              <span class="price-unit">${priceUnit}</span>
-            </div>
-            ${description ? `<span class="plan-description">${description}</span>` : ''}
-          </div>
+    if (state.subscriptions.length > 0) {
+      state.subscriptions.forEach((product) => {
+        const planCard = renderSubscriptionCard(product, 'membership');
+        // Event listeners will be set up by setupNewAccessStep()
+        membershipPlansList.appendChild(planCard);
+      });
+    } else {
+      // Show "No products available" message
+      const noProductsMessage = document.createElement('div');
+      noProductsMessage.className = 'no-products-message';
+      noProductsMessage.innerHTML = `
+        <div class="no-products-content">
+          <p>No membership options available at this time.</p>
         </div>
-        <div class="check-circle"></div>
       `;
-      
-      // Event listeners will be set up by setupNewAccessStep()
-      membershipPlansList.appendChild(planCard);
-    });
+      membershipPlansList.appendChild(noProductsMessage);
+    }
+  }
+
+  // Render 15 Day Pass subscriptions into the 15daypass category
+  const dayPassPlansList = document.querySelector('[data-category="15daypass"] .plans-list');
+  if (dayPassPlansList) {
+    dayPassPlansList.innerHTML = '';
+    
+    if (state.dayPassSubscriptions && state.dayPassSubscriptions.length > 0) {
+      state.dayPassSubscriptions.forEach((product) => {
+        const planCard = renderSubscriptionCard(product, '15daypass');
+        // Event listeners will be set up by setupNewAccessStep()
+        dayPassPlansList.appendChild(planCard);
+      });
+    } else {
+      // Show "No products available" message
+      const noProductsMessage = document.createElement('div');
+      noProductsMessage.className = 'no-products-message';
+      noProductsMessage.innerHTML = `
+        <div class="no-products-content">
+          <p>No 15 Day Pass options available at this time.</p>
+        </div>
+      `;
+      dayPassPlansList.appendChild(noProductsMessage);
+    }
   }
 
   // Render value cards (punch cards) into the punchcard category
   const punchCardPlansList = document.querySelector('[data-category="punchcard"] .plans-list');
-  if (punchCardPlansList && state.valueCards.length > 0) {
+  if (punchCardPlansList) {
     punchCardPlansList.innerHTML = '';
     
-    state.valueCards.forEach((product) => {
-      const planCard = document.createElement('div');
-      planCard.className = 'plan-card';
-      // Use numeric ID from API
-      const productId = product.id;
-      planCard.dataset.plan = `punch-${productId}`; // For backward compatibility
-      planCard.dataset.productId = productId; // Store API product ID (numeric)
-      
-      // Extract price from API structure: price.amount is in cents/øre (e.g., 77500 = 775.00 DKK)
-      const priceInCents = product.price?.amount || product.amount || 0;
-      const price = priceInCents / 100; // Convert from cents to main currency unit
-      planCard.dataset.price = price;
-      
-      // Value cards are one-time purchases, so no interval unit needed
-      const description = product.description || product.productNumber || '';
-      
-      planCard.innerHTML = `
-        <div class="plan-info">
-          <div class="plan-type">${product.name || 'Punch Card'}</div>
-          <div class="plan-details">
-            <div class="plan-price">
-              <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
-              <span class="price-unit">kr</span>
+    if (state.valueCards.length > 0) {
+      state.valueCards.forEach((product) => {
+        const planCard = document.createElement('div');
+        planCard.className = 'plan-card';
+        // Use numeric ID from API
+        const productId = product.id;
+        planCard.dataset.plan = `punch-${productId}`; // For backward compatibility
+        planCard.dataset.productId = productId; // Store API product ID (numeric)
+        
+        // Extract price from API structure: price.amount is in cents/øre (e.g., 77500 = 775.00 DKK)
+        const priceInCents = product.price?.amount || product.amount || 0;
+        const price = priceInCents / 100; // Convert from cents to main currency unit
+        planCard.dataset.price = price;
+        
+        // Value cards are one-time purchases, so no interval unit needed
+        const description = product.description || product.productNumber || '';
+        
+        planCard.innerHTML = `
+          <div class="plan-info">
+            <div class="plan-type">${product.name || 'Punch Card'}</div>
+            <div class="plan-details">
+              <div class="plan-price">
+                <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
+                <span class="price-unit">kr</span>
+              </div>
+              ${description ? `<span class="plan-description">${description}</span>` : ''}
             </div>
-            ${description ? `<span class="plan-description">${description}</span>` : ''}
           </div>
-        </div>
-        <div class="check-circle"></div>
-        <div class="quantity-panel">
-          <div class="quantity-selector">
-            <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
-            <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
-            <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+          <div class="check-circle"></div>
+          <div class="quantity-panel">
+            <div class="quantity-selector">
+              <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
+              <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
+              <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+            </div>
+            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
           </div>
-          <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+        `;
+        
+        // Event listeners will be set up by setupNewAccessStep()
+        punchCardPlansList.appendChild(planCard);
+      });
+    } else {
+      // Show "No products available" message
+      const noProductsMessage = document.createElement('div');
+      noProductsMessage.className = 'no-products-message';
+      noProductsMessage.innerHTML = `
+        <div class="no-products-content">
+          <p>No punch card options available at this time.</p>
         </div>
       `;
-      
-      // Event listeners will be set up by setupNewAccessStep()
-      punchCardPlansList.appendChild(planCard);
-    });
+      punchCardPlansList.appendChild(noProductsMessage);
+    }
   }
   
   // Re-setup event listeners for the new cards
@@ -3807,7 +3917,8 @@ const state = {
   // Email tracking to prevent duplicate account creation
   createdEmails: new Set(), // Track emails that have been used to create accounts in this session
   // Step 5: Store fetched products from API
-  subscriptions: [], // Fetched membership products
+  subscriptions: [], // Fetched membership products (with "Public" label, excluding "15 Day Pass")
+  dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
   subscriptionAdditions: [], // Fetched add-ons for selected membership
   selectedProductType: null, // 'membership' or 'punch-card'
@@ -6494,7 +6605,11 @@ function handleLogout() {
 function renderCatalog() {
   // Step 5: Only render mock data if API data is not available yet
   // API data will be loaded when business unit is selected and will replace this
-  if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
+  // Check if we have any products (membership, 15 Day Pass, or value cards)
+  const hasAnyProducts = (state.subscriptions?.length || 0) > 0 || 
+                         (state.dayPassSubscriptions?.length || 0) > 0 || 
+                         (state.valueCards?.length || 0) > 0;
+  if (!hasAnyProducts) {
     renderMembershipPlans();
     renderValueCards();
   }
@@ -6691,6 +6806,8 @@ function updateAccessHeadsUp(selectedCard) {
       displayName = `${planType} Punch Card`;
     } else if (category === 'membership') {
       displayName = `${planType} Membership`;
+    } else if (category === '15daypass') {
+      displayName = `${planType} 15 Day Pass`;
     }
     
     accessName.textContent = displayName;
@@ -7051,7 +7168,7 @@ function handlePlanSelection(selectedCard) {
   // Step 5: Store the selected plan and product details
   const planId = selectedCard.dataset.plan;
   const productId = selectedCard.dataset.productId || planId; // Use API product ID if available
-  const isMembership = category === 'membership';
+  const isMembership = category === 'membership' || category === '15daypass';
   
   state.membershipPlanId = planId; // Keep for backward compatibility
   state.selectedProductId = productId; // Store API product ID
@@ -7094,6 +7211,7 @@ function setupNewAccessStep() {
   
   const footerTexts = {
     membership: 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. By signing up you accept <a href="#">terms and Conditions</a>.',
+    '15daypass': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit. By purchasing a 15 Day Pass, you accept <a href="#">terms and Conditions</a>.',
     punchcard: 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym. By purchasing a value card, you accept <a href="#">terms and Conditions</a>.'
   };
 
@@ -7109,7 +7227,6 @@ function setupNewAccessStep() {
       return;
     }
     
-    console.log('Setting up category header for:', category.dataset.category, header);
     
     // Remove existing listeners by cloning (simpler than tracking and removing)
     const newHeader = header.cloneNode(true);
@@ -7236,10 +7353,15 @@ function setupNewAccessStep() {
       const productId = card.dataset.productId || planId; // Use API product ID if available
       state.membershipPlanId = planId; // Keep for backward compatibility
       state.selectedProductId = productId; // Store API product ID
-      state.selectedProductType = category === 'membership' ? 'membership' : 'punch-card';
+      // Determine product type based on category
+      if (category === 'membership' || category === '15daypass') {
+        state.selectedProductType = 'membership'; // Both are subscription products
+      } else {
+        state.selectedProductType = 'punch-card';
+      }
       
-      // Step 5: If membership is selected, fetch add-ons immediately
-      if (category === 'membership' && productId) {
+      // Step 5: If membership or 15 Day Pass is selected, fetch add-ons immediately
+      if ((category === 'membership' || category === '15daypass') && productId) {
         loadSubscriptionAdditions(productId);
       } else {
         // Clear add-ons if punch card is selected
@@ -8592,7 +8714,9 @@ function updateCartSummary() {
       ? parseInt(state.selectedProductId) 
       : state.selectedProductId;
     
-    const membership = state.subscriptions.find(p => 
+    // Check both membership subscriptions and 15 Day Pass subscriptions
+    const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+    const membership = allSubscriptions.find(p => 
       p.id === state.selectedProductId || 
       p.id === productIdNum ||
       String(p.id) === String(state.selectedProductId)
@@ -8621,7 +8745,7 @@ function updateCartSummary() {
       console.warn('Cart: Membership not found', {
         selectedProductId: state.selectedProductId,
         selectedProductType: state.selectedProductType,
-        availableSubscriptions: state.subscriptions.map(s => ({ id: s.id, name: s.name }))
+        availableSubscriptions: allSubscriptions.map(s => ({ id: s.id, name: s.name }))
       });
     }
   }
@@ -9041,7 +9165,9 @@ function updatePaymentOverview() {
         ? parseInt(state.selectedProductId) 
         : state.selectedProductId;
       
-      const membership = state.subscriptions.find(p => 
+      // Check both membership subscriptions and 15 Day Pass subscriptions
+      const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+      const membership = allSubscriptions.find(p => 
         p.id === state.selectedProductId || 
         p.id === productIdNum ||
         String(p.id) === String(state.selectedProductId)
@@ -9121,12 +9247,14 @@ function updatePaymentOverview() {
     console.log('[Payment Overview] ✅ Monthly payment from payRecurring:', monthlyPaymentAmount, 'DKK');
   } else {
     // Fallback: Try to get from product data
-    if (state.selectedProductId && state.subscriptions) {
+    // Check both membership subscriptions and 15 Day Pass subscriptions
+    const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+    if (state.selectedProductId && allSubscriptions.length > 0) {
       const productIdNum = typeof state.selectedProductId === 'string' 
         ? parseInt(state.selectedProductId) 
         : state.selectedProductId;
       
-      const membership = state.subscriptions.find(p => 
+      const membership = allSubscriptions.find(p => 
         p.id === state.selectedProductId || 
         p.id === productIdNum ||
         String(p.id) === String(state.selectedProductId)
@@ -11034,13 +11162,15 @@ function buildOrderSummary(payload, order = null, customer = null) {
   // Try to find membership from API subscriptions first, then fall back to static plans
   let membership = null;
   const membershipPlanId = state.membershipPlanId ?? '';
-  if (membershipPlanId && state.subscriptions && state.subscriptions.length > 0) {
-    // Extract numeric ID from 'membership-134' format
-    const numericId = membershipPlanId.replace('membership-', '');
+  // Check both membership subscriptions and 15 Day Pass subscriptions
+  const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+  if (membershipPlanId && allSubscriptions.length > 0) {
+    // Extract numeric ID from 'membership-134' or '15daypass-XXX' format
+    const numericId = membershipPlanId.replace(/^(membership|15daypass)-/, '');
     const productId = parseInt(numericId, 10);
     
-    // Find membership in API subscriptions
-    membership = state.subscriptions.find(sub => 
+    // Find membership in API subscriptions (check both arrays)
+    membership = allSubscriptions.find(sub => 
       sub.id === productId || 
       String(sub.id) === numericId ||
       sub.id === membershipPlanId
@@ -11328,7 +11458,8 @@ async function loadOrderForConfirmation(orderId) {
       }
       
       // Load subscriptions from API if we have a business unit, so membership lookup works
-      if (state.selectedBusinessUnit && (state.subscriptions.length === 0 || state.valueCards.length === 0)) {
+      const hasAllProducts = (state.subscriptions?.length || 0) > 0 && (state.valueCards?.length || 0) > 0;
+      if (state.selectedBusinessUnit && !hasAllProducts) {
         console.log('[Payment Return] Loading products from API for membership lookup...');
         await loadProductsFromAPI();
       }
@@ -11959,7 +12090,10 @@ function nextStep(fromStep) {
     // Step 5: Load products when step 2 (access type selection) is shown
     if (state.selectedBusinessUnit) {
       // Only load if we don't already have products loaded
-      if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
+      const hasAnyProducts = (state.subscriptions?.length || 0) > 0 || 
+                             (state.dayPassSubscriptions?.length || 0) > 0 || 
+                             (state.valueCards?.length || 0) > 0;
+      if (!hasAnyProducts) {
         loadProductsFromAPI();
       }
       // Update selected gym display
@@ -12030,7 +12164,10 @@ function nextStep(fromStep) {
   // Step 5: Load products when step 2 (access type selection) is shown
   if (state.currentStep === 2 && state.selectedBusinessUnit) {
     // Only load if we don't already have products loaded
-    if (state.subscriptions.length === 0 && state.valueCards.length === 0) {
+    const hasAnyProducts = (state.subscriptions?.length || 0) > 0 || 
+                           (state.dayPassSubscriptions?.length || 0) > 0 || 
+                           (state.valueCards?.length || 0) > 0;
+    if (!hasAnyProducts) {
       loadProductsFromAPI();
     }
     // Update selected gym display when step 2 is shown

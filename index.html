@@ -150,47 +150,26 @@
                                         <p>Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. </p>
                                     </div>
                                     <div class="plans-list">
-                                        <div class="plan-card" data-plan="student">
-                                            <div class="plan-info">
-                                                <div class="plan-type">Student</div>
-                                                <div class="plan-details">
-                                                    <div class="plan-price">
-                                                        <span class="price-amount">379</span>
-                                                        <span class="price-unit">kr/mo</span>
-                                                    </div>
-                                                    <span class="plan-description">Valid student ID required</span>
-                                                </div>
-                                            </div>
-                                            <div class="check-circle"></div>
-                                        </div>
+                                        <!-- Products will be loaded from API -->
+                                    </div>
+                                </div>
+                            </div>
 
-                                        <div class="plan-card" data-plan="adult">
-                                            <div class="plan-info">
-                                                <div class="plan-type">Adult</div>
-                                                <div class="plan-details">
-                                                    <div class="plan-price">
-                                                        <span class="price-amount">445</span>
-                                                        <span class="price-unit">kr/mo</span>
-                                                    </div>
-                                                    <span class="plan-description">Ages 16+</span>
-                                                </div>
-                                            </div>
-                                            <div class="check-circle"></div>
-                                        </div>
-
-                                        <div class="plan-card" data-plan="junior">
-                                            <div class="plan-info">
-                                                <div class="plan-type">Junior</div>
-                                                <div class="plan-details">
-                                                    <div class="plan-price">
-                                                        <span class="price-amount">249</span>
-                                                        <span class="price-unit">kr/mo</span>
-                                                    </div>
-                                                    <span class="plan-description">Under 16 years</span>
-                                                </div>
-                                            </div>
-                                            <div class="check-circle"></div>
-                                        </div>
+                            <!-- 15 Day Pass Category -->
+                            <div class="category-item" data-category="15daypass">
+                                <div class="category-header">
+                                    <div class="category-info">
+                                        <div class="category-title">15 Day Pass</div>
+                                        <div class="category-subtitle">Temporary access pass</div>
+                                    </div>
+                                    <i data-lucide="chevron-down" class="category-icon"></i>
+                                </div>
+                                <div class="category-content">
+                                    <div class="category-description">
+                                        <p>Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.</p>
+                                    </div>
+                                    <div class="plans-list">
+                                        <!-- Products will be loaded from API -->
                                     </div>
                                 </div>
                             </div>
@@ -209,77 +188,7 @@
                                         <p>You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym.</p>
                                     </div>
                                     <div class="plans-list">
-                                        <div class="plan-card" data-plan="adult-punch" data-price="1200">
-                                            <div class="plan-info">
-                                                <div class="plan-type">Adult</div>
-                                                <div class="plan-details">
-                                                    <div class="plan-price">
-                                                        <span class="price-amount">1,200</span>
-                                                        <span class="price-unit">kr</span>
-                                                    </div>
-                                                    <span class="plan-description">10 entries • Ages 16+</span>
-                                                </div>
-                                            </div>
-                                            <div class="check-circle"></div>
-                                        </div>
-                                        
-                                        <!-- Quantity Selection Panel (initially hidden) -->
-                                        <div class="quantity-panel" style="display: none;">
-                                            <div class="quantity-header">
-                                                <span class="quantity-label">Select Quantity</span>
-                                                <span class="quantity-total" data-element="quantityTotal">1,200 kr</span>
-                                            </div>
-                                            
-                                            <div class="quantity-selector">
-                                                <div class="quantity-controls">
-                                                    <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="adult-punch" disabled="">−</button>
-                                                    <div class="quantity-display">
-                                                        <span data-element="quantityValue">1</span>
-                                                    </div>
-                                                    <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="adult-punch">+</button>
-                                                </div>
-                                                
-                                                <button class="continue-arrow" data-action="continue-punch-card">
-                                                    <i data-lucide="arrow-right"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div class="plan-card" data-plan="junior-punch" data-price="800">
-                                            <div class="plan-info">
-                                                <div class="plan-type">Junior</div>
-                                                <div class="plan-details">
-                                                    <div class="plan-price">
-                                                        <span class="price-amount">800</span>
-                                                        <span class="price-unit">kr</span>
-                                                    </div>
-                                                    <span class="plan-description">10 entries • Up to 15 years</span>
-                                                </div>
-                                            </div>
-                                            <div class="check-circle"></div>
-                                        </div>
-                                        
-                                        <!-- Junior Punch Card Quantity Selection Panel (initially hidden) -->
-                                        <div class="quantity-panel" style="display: none;">
-                                            <div class="quantity-header">
-                                                <span class="quantity-label">Select Quantity</span>
-                                                <span class="quantity-total" data-element="quantityTotal">800 kr</span>
-                                            </div>
-                                            
-                                            <div class="quantity-selector">
-                                                <div class="quantity-controls">
-                                                    <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="junior-punch" disabled="">−</button>
-                                                    <div class="quantity-display">
-                                                        <span data-element="quantityValue">1</span>
-                                                    </div>
-                                                    <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="junior-punch">+</button>
-                                                </div>
-                                                
-                                                <button class="continue-arrow" data-action="continue-punch-card">
-                                                    <i data-lucide="arrow-right"></i>
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <!-- Products will be loaded from API -->
                                     </div>
                                 </div>
                             </div>
