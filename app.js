@@ -795,12 +795,6 @@ class AuthAPI {
         expiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
       }
       
-      // Debug: Log the actual structure
-      if (data.data) {
-        console.log('[Step 6] Data object keys:', Object.keys(data.data));
-        console.log('[Step 6] Data object:', JSON.stringify(data.data, null, 2));
-      }
-      
       if (accessToken && refreshToken) {
         if (typeof window.saveTokens === 'function') {
           const metadata = {
