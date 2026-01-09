@@ -33,6 +33,18 @@
                     <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
                     <div class="logo-fallback">BOULDERS</div>
                 </div>
+                
+                <!-- Language Switcher -->
+                <div class="language-switcher" id="languageSwitcher">
+                    <button type="button" class="language-btn" data-lang="da-DK" aria-label="Switch to Danish">
+                        <span class="language-flag">🇩🇰</span>
+                        <span class="language-name">DA</span>
+                    </button>
+                    <button type="button" class="language-btn" data-lang="en-GB" aria-label="Switch to English">
+                        <span class="language-flag">🇬🇧</span>
+                        <span class="language-name">EN</span>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -40,7 +52,7 @@
     <!-- Selected Gym Heads-up Display -->
     <div class="gym-heads-up" id="gymHeadsUp">
         <div class="gym-heads-up-content">
-            <span class="gym-heads-up-label">Home gym selected:</span>
+            <span class="gym-heads-up-label" data-i18n-key="gym.headsUp">Home gym selected:</span>
             <span class="gym-heads-up-name" id="selectedGymName">-</span>
         </div>
     </div>
@@ -48,7 +60,7 @@
     <!-- Selected Access Type Heads-up Display -->
     <div class="access-heads-up" id="accessHeadsUp">
         <div class="access-heads-up-content">
-            <span class="access-heads-up-label">Access type selected:</span>
+            <span class="access-heads-up-label" data-i18n-key="access.headsUp">Access type selected:</span>
             <span class="access-heads-up-name" id="selectedAccessName">-</span>
         </div>
     </div>
@@ -59,27 +71,27 @@
             <div class="step-indicator-content">
                 <div class="step active">
                     <div class="step-circle active">1</div>
-                    <div class="step-label">Home Gym</div>
+                    <div class="step-label" data-i18n-key="step.homeGym">Home Gym</div>
                 </div>
                 <div class="step-connector"></div>
                 <div class="step inactive">
                     <div class="step-circle inactive">2</div>
-                    <div class="step-label">Access</div>
+                    <div class="step-label" data-i18n-key="step.access">Access</div>
                 </div>
                 <div class="step-connector"></div>
                 <div class="step inactive">
                     <div class="step-circle inactive">3</div>
-                    <div class="step-label">Boost</div>
+                    <div class="step-label" data-i18n-key="step.boost">Boost</div>
                 </div>
                 <div class="step-connector"></div>
                 <div class="step inactive">
                     <div class="step-circle inactive">4</div>
-                    <div class="step-label">Send</div>
+                    <div class="step-label" data-i18n-key="step.send">Send</div>
                 </div>
             </div>
         </div>
         <div class="selected-gym-display" id="selectedGymDisplay" style="display: none;">
-            <span class="selected-gym-label">Selected Gym:</span>
+            <span class="selected-gym-label" data-i18n-key="header.selectedGym">Selected Gym:</span>
             <button type="button" class="selected-gym-link" id="selectedGymLink" data-action="edit-gym">
                 <span id="selectedGymNameDisplay">-</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -98,8 +110,8 @@
             <!-- Step 1: Gym Selection -->
             <div class="step-panel active" id="step-1">
                 <div class="step-panel-content">
-                    <p class="main-subtitle">Choose your home gym</p>
-                    <p class="secondary-subtitle">This is where you will primarily train − you will have access to all gyms.</p>
+                    <p class="main-subtitle" data-i18n-key="main.subtitle.step1">Choose your home gym</p>
+                    <p class="secondary-subtitle" data-i18n-key="main.subtitle.step1.secondary">This is where you will primarily train − you will have access to all gyms.</p>
                     
                     <!-- Search Input -->
                     <div class="search-wrapper">
@@ -107,8 +119,8 @@
                             <circle cx="11" cy="11" r="8"></circle>
                             <path d="m21 21-4.35-4.35"></path>
                         </svg>
-                        <input type="text" class="search-input" placeholder="Search gyms..." id="gymSearch">
-                        <button type="button" class="location-icon-btn" id="findNearestGym" title="Find nearest gym">
+                        <input type="text" class="search-input" placeholder="" id="gymSearch" data-i18n-key="button.searchGyms" data-i18n-placeholder="button.searchGyms">
+                        <button type="button" class="location-icon-btn" id="findNearestGym" title="" data-i18n-title="button.findNearest">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                                 <circle cx="12" cy="10" r="3"></circle>
@@ -123,7 +135,7 @@
                     </div>
                     
                     <!-- No Results Message -->
-                    <div class="no-results hidden" id="noResults">
+                    <div class="no-results hidden" id="noResults" data-i18n-key="search.noResults">
                         No gyms found matching your search.
                     </div>
                 </div>
@@ -133,21 +145,21 @@
             <div class="step-panel" id="step-2">
                 <div class="step-panel-content">
                     <div class="container">
-                        <p class="main-subtitle">Choose your access type</p>
-                        <p class="secondary-subtitle">Choose membership if you climb at least once a month.</p>
+                        <p class="main-subtitle" data-i18n-key="main.subtitle.step2">Choose your access type</p>
+                        <p class="secondary-subtitle" data-i18n-key="main.subtitle.step2.secondary">Choose membership if you climb at least once a month.</p>
                         <div class="category-list">
                             <!-- Campaign Category -->
                             <div class="category-item" data-category="campaign">
                                 <div class="category-header">
                                     <div class="category-info">
-                                        <div class="category-title">Campaign</div>
-                                        <div class="category-subtitle">Limited time offers</div>
+                                        <div class="category-title" data-i18n-key="category.campaign">Campaign</div>
+                                        <div class="category-subtitle" data-i18n-key="category.campaign.subtitle">Limited time offers</div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
                                 <div class="category-content">
                                     <div class="category-description">
-                                        <p>Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.</p>
+                                        <p data-i18n-key="category.campaign.desc">Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.</p>
                                     </div>
                                     <div class="plans-list">
                                         <!-- Products will be loaded from API -->
@@ -159,14 +171,14 @@
                             <div class="category-item" data-category="membership">
                                 <div class="category-header">
                                     <div class="category-info">
-                                        <div class="category-title">Membership</div>
-                                        <div class="category-subtitle">Ongoing subscription, unlimited access</div>
+                                        <div class="category-title" data-i18n-key="category.membership">Membership</div>
+                                        <div class="category-subtitle" data-i18n-key="category.membership.subtitle">Ongoing subscription, unlimited access</div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
                                 <div class="category-content">
                                     <div class="category-description">
-                                        <p>Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. </p>
+                                        <p data-i18n-key="category.membership.desc">Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. </p>
                                     </div>
                                     <div class="plans-list">
                                         <!-- Products will be loaded from API -->
@@ -178,14 +190,14 @@
                             <div class="category-item" data-category="15daypass">
                                 <div class="category-header">
                                     <div class="category-info">
-                                        <div class="category-title">15 Day Pass</div>
-                                        <div class="category-subtitle">Temporary access pass</div>
+                                        <div class="category-title" data-i18n-key="category.15daypass">15 Day Pass</div>
+                                        <div class="category-subtitle" data-i18n-key="category.15daypass.subtitle">Temporary access pass</div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
                                 <div class="category-content">
                                     <div class="category-description">
-                                        <p>Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.</p>
+                                        <p data-i18n-key="category.15daypass.desc">Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.</p>
                                     </div>
                                     <div class="plans-list">
                                         <!-- Products will be loaded from API -->
@@ -197,14 +209,14 @@
                             <div class="category-item" data-category="punchcard">
                                 <div class="category-header">
                                     <div class="category-info">
-                                        <div class="category-title">Punch Card</div>
-                                        <div class="category-subtitle">10 entries, shareable physical card</div>
+                                        <div class="category-title" data-i18n-key="category.punchcard">Punch Card</div>
+                                        <div class="category-subtitle" data-i18n-key="category.punchcard.subtitle">10 entries, shareable physical card</div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
                                 <div class="category-content">
                                     <div class="category-description">
-                                        <p>You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym.</p>
+                                        <p data-i18n-key="category.punchcard.desc">You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym.</p>
                                     </div>
                                     <div class="plans-list">
                                         <!-- Products will be loaded from API -->
@@ -221,7 +233,7 @@
             <!-- Step 3: Add-ons -->
             <div class="step-panel" id="step-3">
                 <div class="step-panel-content">
-                            <p class="main-subtitle" id="mainSubtitle">Would you like fries with that?</p>
+                            <p class="main-subtitle" id="mainSubtitle" data-i18n-key="main.subtitle.step3">Would you like fries with that?</p>
 
                     <!-- Add-on Products -->
                     <div class="plan-section">
@@ -231,10 +243,10 @@
                         
                         <div class="plan-options" id="addonMode" data-scroll-container data-component="addon-plans"></div>
                         <div class="skip-section">
-                            <button type="button" class="back-btn" id="backFromAddons" data-action="go-back-step">
+                                <button type="button" class="back-btn" id="backFromAddons" data-action="go-back-step" data-i18n-key="button.back">
                                 Back
                             </button>
-                            <button type="button" class="skip-btn" id="skipAddons" data-action="toggle-addons-step">
+                            <button type="button" class="skip-btn" id="skipAddons" data-action="toggle-addons-step" data-i18n-key="button.skip">
                                 Skip
                             </button>
                         </div>
@@ -578,12 +590,12 @@
                                 <!-- Payment Overview -->
                                 <div class="payment-overview" style="display: none;">
                                     <div class="payment-overview-item">
-                                        <span class="payment-label">Monthly fee:</span>
+                                        <span class="payment-label" data-i18n-key="cart.monthlyFee">Monthly fee:</span>
                                         <span class="payment-amount" data-summary-field="monthly-payment">0,00 kr./md</span>
                                     </div>
                                     <div class="payment-overview-item payment-overview-paynow">
                                         <div class="payment-overview-paynow-row">
-                                            <span class="payment-label">Pay now:</span>
+                                            <span class="payment-label" data-i18n-key="cart.payNow">Pay now:</span>
                                             <span class="payment-amount" data-summary-field="pay-now">0,00 kr.</span>
                                         </div>
                                         <div class="payment-overview-billing-period" data-summary-field="payment-billing-period"></div>
@@ -593,12 +605,12 @@
                                 <!-- Discount Code -->
                                 <div class="discount-section">
                                     <button class="discount-toggle" type="button">
-                                        <span>Discount code</span>
+                                        <span data-i18n-key="cart.discount">Discount code</span>
                                         <span class="toggle-icon">+</span>
                                     </button>
                                     <div class="discount-form" style="display: none;">
-                                        <input type="text" placeholder="Enter discount code" class="discount-input">
-                                        <button type="button" class="apply-discount-btn">Apply</button>
+                                        <input type="text" placeholder="" class="discount-input" data-i18n-placeholder="cart.discount">
+                                        <button type="button" class="apply-discount-btn" data-i18n-key="button.apply">Apply</button>
                                     </div>
                                 </div>
                                 
@@ -724,14 +736,14 @@
                             
                             <!-- Membership Details Card -->
                             <div class="confirmation-card">
-                                <h3 class="card-title">Membership Details</h3>
+                                <h3 class="card-title" data-i18n-key="cart.membershipDetails">Membership Details</h3>
                                 <div class="membership-info">
                                     <div class="membership-item">
-                                        <span class="membership-label">Member Name:</span>
+                                        <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
                                         <span class="membership-value" data-summary-field="member-name">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Membership Number:</span>
+                                        <span class="membership-label" data-i18n-key="cart.membershipNumber">Membership Number:</span>
                                         <span class="membership-value" data-summary-field="membership-number">—</span>
                                     </div>
                                     <div class="membership-item">
@@ -790,7 +802,7 @@
                                                 <path d="M22 4L12 14.01l-3-3"/>
                                             </svg>
                                         </div>
-                                        <span>Membership activation & auto-renewal setup</span>
+                                        <span data-i18n-key="cart.membershipActivation">Membership activation & auto-renewal setup</span>
                                     </li>
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -818,10 +830,6 @@
             <div class="terms-modal-header">
                 <h3 class="terms-modal-title" id="termsModalTitle">Terms and Conditions</h3>
                 <div class="terms-modal-header-actions">
-                    <div class="terms-modal-language-switcher">
-                        <button class="language-btn active" data-lang="da" id="termsModalLangDa">DA</button>
-                        <button class="language-btn" data-lang="en" id="termsModalLangEn">EN</button>
-                    </div>
                     <button class="terms-modal-close" id="termsModalClose" aria-label="Close">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 6L6 18M6 6l12 12"/>
@@ -831,8 +839,8 @@
             </div>
             <!-- Tabs for Terms Modal (only shown when termsType is 'terms') -->
             <div class="terms-modal-tabs" id="termsModalTabs" style="display: none;">
-                <button class="terms-tab active" data-tab="membership">Membership / 15 Day</button>
-                <button class="terms-tab" data-tab="punchcard">Punch Card</button>
+                <button class="terms-tab active" data-tab="membership" data-i18n-key="terms.tab.membership">Membership / 15 Day</button>
+                <button class="terms-tab" data-tab="punchcard" data-i18n-key="terms.tab.punchcard">Punch Card</button>
             </div>
             <!-- Search Input -->
             <div class="terms-modal-search" id="termsModalSearch" style="display: none;">
@@ -912,19 +920,6 @@
                         </a>
                     </li>
                 </ul>
-            </div>
-            
-            <div class="footer-section">
-                <div class="language-switcher">
-                    <button class="language-btn" id="languageSwitcher" data-lang="da">
-                        <span class="language-label" data-i18n-key="footer.language.danish">Dansk</span>
-                        <span class="language-code">DK</span>
-                    </button>
-                    <button class="language-btn" id="languageSwitcherEng" data-lang="en">
-                        <span class="language-label" data-i18n-key="footer.language.english">English</span>
-                        <span class="language-code">ENG</span>
-                    </button>
-                </div>
             </div>
         </div>
         

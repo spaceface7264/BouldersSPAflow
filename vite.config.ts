@@ -78,9 +78,11 @@ export default defineConfig(({ command }) => ({
         secure: true,
         configure: (proxy, _options) => {
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Add required headers for API requests
-            proxyReq.setHeader('Accept-Language', 'da-DK');
+            // Forward Accept-Language header from client request, or default to da-DK
+            const acceptLanguage = req.headers['accept-language'] || req.headers['Accept-Language'] || 'da-DK';
+            proxyReq.setHeader('Accept-Language', acceptLanguage);
             proxyReq.setHeader('Content-Type', 'application/json');
+            console.log('[Vite Proxy] Forwarding Accept-Language:', acceptLanguage);
           });
         },
       },

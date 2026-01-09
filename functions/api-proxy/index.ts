@@ -69,7 +69,7 @@ export async function onRequest(context: any) {
   try {
     // Build request headers
     const headers: Record<string, string> = {
-      'Accept-Language': 'da-DK', // Step 2: Language default
+      'Accept-Language': request.headers.get('Accept-Language') || 'da-DK', // Use client's language preference or default
       'Content-Type': 'application/json',
     };
 
