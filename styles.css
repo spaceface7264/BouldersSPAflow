@@ -691,6 +691,10 @@ body {
     font-size: var(--font-size-sm);
 }
 
+.selected-gym-link > * {
+    pointer-events: none; /* Allow clicks to pass through to button */
+}
+
 .selected-gym-link:hover {
     color: #D401D5;
     background-color: rgba(244, 1, 245, 0.1);
@@ -701,6 +705,7 @@ body {
     height: 14px;
     opacity: 0.8;
     transition: opacity 0.2s ease;
+    pointer-events: none; /* Allow clicks to pass through to button */
 }
 
 .selected-gym-link:hover svg {
@@ -1572,61 +1577,22 @@ body {
     position: relative;
 }
 
-/* Campaign category - match other categories but with green border stroke and crawling glow */
-@keyframes crawlGlow {
-    0% {
-        box-shadow: 
-            0 0 10px rgba(34, 197, 94, 0.3),
-            0 0 20px rgba(34, 197, 94, 0.2),
-            0 0 30px rgba(34, 197, 94, 0.1),
-            0 0 0 rgba(34, 197, 94, 0.4);
-    }
-    25% {
-        box-shadow: 
-            10px 0 10px rgba(34, 197, 94, 0.3),
-            20px 0 20px rgba(34, 197, 94, 0.2),
-            30px 0 30px rgba(34, 197, 94, 0.1),
-            0 0 0 rgba(34, 197, 94, 0.4);
-    }
-    50% {
-        box-shadow: 
-            0 10px 10px rgba(34, 197, 94, 0.3),
-            0 20px 20px rgba(34, 197, 94, 0.2),
-            0 30px 30px rgba(34, 197, 94, 0.1),
-            0 0 0 rgba(34, 197, 94, 0.4);
-    }
-    75% {
-        box-shadow: 
-            -10px 0 10px rgba(34, 197, 94, 0.3),
-            -20px 0 20px rgba(34, 197, 94, 0.2),
-            -30px 0 30px rgba(34, 197, 94, 0.1),
-            0 0 0 rgba(34, 197, 94, 0.4);
-    }
-    100% {
-        box-shadow: 
-            0 0 10px rgba(34, 197, 94, 0.3),
-            0 0 20px rgba(34, 197, 94, 0.2),
-            0 0 30px rgba(34, 197, 94, 0.1),
-            0 0 0 rgba(34, 197, 94, 0.4);
-    }
-}
-
+/* Campaign category - match other categories but with green border stroke and glow */
 .category-item[data-category="campaign"] {
     background: var(--color-item-bg);
     border: 2px solid rgba(34, 197, 94, 0.4);
-    position: relative;
-    animation: crawlGlow 3s ease-in-out infinite;
-    transition: border-color 0.3s ease;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
+    transition: all 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
 .category-item[data-category="campaign"]:hover {
     border-color: rgba(34, 197, 94, 0.6);
-    animation-duration: 2s;
+    box-shadow: 0 0 16px rgba(34, 197, 94, 0.4);
 }
 
 .category-item[data-category="campaign"].expanded {
     border-color: rgba(34, 197, 94, 0.7);
-    animation-duration: 1.5s;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
 }
 
 
