@@ -3099,10 +3099,13 @@ function renderProductsFromAPI() {
       noProductsMessage.className = 'no-products-message';
       noProductsMessage.innerHTML = `
         <div class="no-products-content">
-          <p>No membership options available at this time.</p>
+          <p data-i18n-key="message.noProducts.membership">No membership options available at this time.</p>
         </div>
       `;
       membershipPlansList.appendChild(noProductsMessage);
+      // Update translation immediately
+      const messageP = noProductsMessage.querySelector('p[data-i18n-key]');
+      if (messageP) messageP.textContent = t('message.noProducts.membership');
     }
   }
 
@@ -3192,10 +3195,13 @@ function renderProductsFromAPI() {
       noProductsMessage.className = 'no-products-message';
       noProductsMessage.innerHTML = `
         <div class="no-products-content">
-          <p>No punch card options available at this time.</p>
+          <p data-i18n-key="message.noProducts.punchcard">No punch card options available at this time.</p>
         </div>
       `;
       punchCardPlansList.appendChild(noProductsMessage);
+      // Update translation immediately
+      const messageP = noProductsMessage.querySelector('p[data-i18n-key]');
+      if (messageP) messageP.textContent = t('message.noProducts.punchcard');
     }
   }
   
@@ -4468,71 +4474,225 @@ function hideLoadingOverlay() {
 }
 
 
-// Translation system
+// Comprehensive translation system - using da-DK and en-GB to match API language codes
 const translations = {
-  da: {
-    'footer.terms.title': 'Vilkår og Betingelser',
-    'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab',
-    'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
-    'footer.policies.title': 'Politikker',
-    'footer.policies.privacy': 'Privatlivspolitik',
-    'footer.policies.cookie': 'Cookiepolitik',
-    'footer.language.danish': 'Dansk',
-    'footer.language.english': 'English',
-    'footer.rights': 'Alle rettigheder forbeholdes',
-    'modal.loading': 'Indlæser...',
+  'da-DK': {
+    'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
+    'category.campaign': 'Kampagne', 'category.membership': 'Medlemskab', 'category.15daypass': '15 Dages Klatring', 'category.punchcard': 'Klippekort',
+    'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
+    'category.15daypass.desc': 'Få 15 dages ubegrænset adgang til alle haller. Perfekt til at prøve klatring eller et kortvarigt besøg.',
+    'category.punchcard.desc': 'Du kan købe 1 type klippekort ad gangen. Hvert indgang bruger et klip på dit klippekort. Kortet er gyldigt i 5 år og giver ikke medlemsfordele. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen.',
+    'header.selectedGym': 'Valgt hal:', 'gym.headsUp': 'Hjemmehal valgt:', 'access.headsUp': 'Adgangstype valgt:',
+    'main.subtitle.step1': 'Vælg din hjemmehal', 'main.subtitle.step1.secondary': 'Dette er hvor du primært træner − du får adgang til alle haller.',
+    'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om måneden.',
+    'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
+    'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger',
+    'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend',
+    'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
+    'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
+    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabat', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling',
+    'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
+    'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
+    'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
+    'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
+    'footer.terms.title': 'Vilkår og Betingelser', 'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab', 'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
+    'footer.policies.title': 'Politikker', 'footer.policies.privacy': 'Privatlivspolitik', 'footer.policies.cookie': 'Cookiepolitik', 'footer.rights': 'Alle rettigheder forbeholdes',
+    'addons.intro': 'Forbedre din klatreoplevelse med vores add-on produkter.',
+    'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
+    'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
+    'search.noResults': 'Ingen haller fundet der matcher din søgning.',
   },
-  en: {
-    'footer.terms.title': 'Terms and Conditions',
-    'footer.terms.membership': 'Terms and Conditions for Membership',
-    'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
-    'footer.policies.title': 'Policies',
-    'footer.policies.privacy': 'Privacy Policy',
-    'footer.policies.cookie': 'Cookie Policy',
-    'footer.language.danish': 'Dansk',
-    'footer.language.english': 'English',
-    'footer.rights': 'All rights reserved',
-    'modal.loading': 'Loading...',
+  'en-GB': {
+    'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
+    'category.campaign': 'Campaign', 'category.membership': 'Membership', 'category.15daypass': '15 Day Pass', 'category.punchcard': 'Punch Card',
+    'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
+    'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
+    'category.punchcard.desc': 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym.',
+    'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
+    'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
+    'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a month.',
+    'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
+    'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit',
+    'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply',
+    'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
+    'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
+    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment',
+    'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
+    'message.noProducts.membership': 'No membership options available at this time.',
+    'message.noProducts.punchcard': 'No punch card options available at this time.',
+    'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
+    'footer.terms.title': 'Terms and Conditions', 'footer.terms.membership': 'Terms and Conditions for Membership', 'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
+    'footer.policies.title': 'Policies', 'footer.policies.privacy': 'Privacy Policy', 'footer.policies.cookie': 'Cookie Policy', 'footer.rights': 'All rights reserved',
+    'addons.intro': 'Enhance your climbing experience with our add-on products.',
+    'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
+    'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
+    'search.noResults': 'No gyms found matching your search.',
   },
 };
 
-// Get current language from localStorage or default to 'da'
-function getCurrentLanguage() {
-  return localStorage.getItem('boulders-language') || 'da';
-}
-
-// Set current language
-function setCurrentLanguage(lang) {
-  localStorage.setItem('boulders-language', lang);
-  document.documentElement.lang = lang;
-  updateTranslations();
+// Get translation for current language
+function t(key, fallback = '') {
+  const lang = state.language || DEFAULT_LANGUAGE;
+  return translations[lang]?.[key] || translations[DEFAULT_LANGUAGE]?.[key] || fallback || key;
 }
 
 // Update all translations on the page
-function updateTranslations() {
-  const lang = getCurrentLanguage();
-  const elements = document.querySelectorAll('[data-i18n-key]');
+function updatePageTranslations() {
+  const lang = state.language || DEFAULT_LANGUAGE;
   
-  elements.forEach(element => {
+  // Update elements with data-i18n-key attribute
+  document.querySelectorAll('[data-i18n-key]').forEach(element => {
     const key = element.getAttribute('data-i18n-key');
-    if (translations[lang] && translations[lang][key]) {
-      element.textContent = translations[lang][key];
+    const translation = t(key);
+    if (translation && translation !== key) {
+      // Handle input placeholders
+      if (element.tagName === 'INPUT') {
+        if (element.hasAttribute('data-i18n-placeholder') || element.hasAttribute('placeholder') || key.includes('placeholder') || key.includes('searchGyms')) {
+          element.placeholder = translation;
+        } else {
+          element.value = translation; // For input values
+        }
+      } else if (element.hasAttribute('data-i18n-title')) {
+        // Handle title attributes
+        element.title = translation;
+      } else if (element.tagName === 'BUTTON') {
+        // Handle buttons - preserve SVG icons if present
+        if (element.querySelector('svg')) {
+          // Button with icon - update text but keep icon
+          const textNodes = Array.from(element.childNodes).filter(node => 
+            node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== ''
+          );
+          textNodes.forEach(node => node.remove());
+          const icon = element.querySelector('svg');
+          if (icon && icon.previousSibling) {
+            // Insert before icon
+            element.insertBefore(document.createTextNode(' ' + translation + ' '), icon);
+          } else if (icon) {
+            // Icon is first child, append text after
+            element.appendChild(document.createTextNode(' ' + translation));
+          } else {
+            element.textContent = translation;
+          }
+        } else {
+          element.textContent = translation;
+        }
+      } else {
+        element.textContent = translation;
+      }
     }
   });
   
-  // Update language button active states
-  const danishBtn = document.getElementById('languageSwitcher');
-  const englishBtn = document.getElementById('languageSwitcherEng');
-  
-  if (danishBtn && englishBtn) {
-    if (lang === 'da') {
-      danishBtn.classList.add('active');
-      englishBtn.classList.remove('active');
-    } else {
-      danishBtn.classList.remove('active');
-      englishBtn.classList.add('active');
+  // Update step labels
+  const stepLabels = document.querySelectorAll('.step-label');
+  stepLabels.forEach((label, index) => {
+    const stepKeys = ['step.homeGym', 'step.access', 'step.boost', 'step.send'];
+    if (stepKeys[index]) {
+      label.textContent = t(stepKeys[index]);
     }
+  });
+  
+  // Update category titles
+  const categoryTitles = {
+    'campaign': 'category.campaign',
+    'membership': 'category.membership',
+    '15daypass': 'category.15daypass',
+    'punchcard': 'category.punchcard',
+  };
+  
+  Object.entries(categoryTitles).forEach(([category, key]) => {
+    const titleEl = document.querySelector(`[data-category="${category}"] .category-title`);
+    if (titleEl) {
+      titleEl.textContent = t(key);
+    }
+    
+    const descEl = document.querySelector(`[data-category="${category}"] .category-description p`);
+    if (descEl) {
+      const descKey = `${key}.desc`;
+      const desc = t(descKey);
+      if (desc) {
+        descEl.textContent = desc;
+      }
+    }
+  });
+  
+  // Update main subtitles
+  updateMainSubtitle();
+  
+  // Update navigation buttons
+  updateNavigationButtons();
+  
+  // Update form labels and placeholders
+  updateFormTranslations();
+  
+  // Update cart labels
+  updateCartTranslations();
+  
+  // Update heads-up displays
+  updateHeadsUpTranslations();
+  
+  // Update terms tabs if modal is open
+  const termsTabs = document.querySelectorAll('.terms-tab[data-i18n-key]');
+  termsTabs.forEach(tab => {
+    const key = tab.getAttribute('data-i18n-key');
+    if (key) {
+      tab.textContent = t(key);
+    }
+  });
+  
+  console.log('[Translations] Page translations updated for language:', lang);
+}
+
+// Update form translations
+function updateFormTranslations() {
+  const emailLabel = document.querySelector('label[for="loginEmail"]');
+  if (emailLabel) emailLabel.textContent = t('form.email');
+  
+  const emailInput = document.getElementById('loginEmail');
+  if (emailInput) emailInput.placeholder = t('form.email.placeholder');
+  
+  const passwordLabel = document.querySelector('label[for="loginPassword"]');
+  if (passwordLabel) passwordLabel.textContent = t('form.password');
+  
+  const passwordInput = document.getElementById('loginPassword');
+  if (passwordInput) passwordInput.placeholder = t('form.password.placeholder');
+  
+  const forgotPasswordLink = document.querySelector('[data-action="forgot-password"]');
+  if (forgotPasswordLink) forgotPasswordLink.textContent = t('form.forgotPassword');
+  
+  const loginStatusLabel = document.querySelector('.login-status-label');
+  if (loginStatusLabel) loginStatusLabel.textContent = t('form.loggedInAs');
+  
+  const addressLabel = document.querySelector('.profile-detail-label');
+  if (addressLabel && (addressLabel.textContent.includes('Address') || addressLabel.textContent.includes('Adresse'))) {
+    addressLabel.textContent = t('form.address');
   }
+  
+  // Discount code placeholder is handled by data-i18n-placeholder attribute
+  
+  // Update apply button
+  const applyDiscountBtn = document.querySelector('.apply-discount-btn');
+  if (applyDiscountBtn) {
+    applyDiscountBtn.textContent = t('button.apply');
+  }
+}
+
+// Update cart translations
+function updateCartTranslations() {
+  // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
+  // But we can update static ones here
+  // Payment overview labels are handled by data-i18n-key attributes in HTML
+}
+
+// Update heads-up displays
+function updateHeadsUpTranslations() {
+  const gymHeadsUpLabel = document.querySelector('.gym-heads-up-label');
+  if (gymHeadsUpLabel) gymHeadsUpLabel.textContent = t('gym.headsUp');
+  
+  const accessHeadsUpLabel = document.querySelector('.access-heads-up-label');
+  if (accessHeadsUpLabel) accessHeadsUpLabel.textContent = t('access.headsUp');
+  
+  const selectedGymLabel = document.querySelector('.selected-gym-label');
+  if (selectedGymLabel) selectedGymLabel.textContent = t('header.selectedGym');
 }
 
 // Change language and reload products
@@ -4551,6 +4711,9 @@ async function changeLanguage(languageCode) {
   
   // Update language switcher UI
   updateLanguageSwitcherUI();
+  
+  // Update all page translations
+  updatePageTranslations();
   
   // Reload products if we're on step 2 or later
   if (state.currentStep >= 2 && state.selectedBusinessUnit) {
@@ -4598,6 +4761,9 @@ function initLanguageSwitcher() {
   const currentLang = state.language || DEFAULT_LANGUAGE;
   document.documentElement.lang = currentLang.split('-')[0];
   updateLanguageSwitcherUI();
+  
+  // Update page translations on initial load
+  updatePageTranslations();
   
   // Add click handlers to language buttons
   const buttons = switcher.querySelectorAll('.language-btn');
@@ -5635,26 +5801,14 @@ function openTermsModal(termsType) {
   
   state.currentModalType = termsType;
   
-  const currentLang = getCurrentLanguage();
-  updateLanguageSwitcher('terms', currentLang);
+  // Language is managed by state.language - use translation function
+  const currentLang = state.language || DEFAULT_LANGUAGE;
   
   const termsTitles = {
-    membership: {
-      da: 'Vilkår og Betingelser for Medlemskab',
-      en: 'Terms and Conditions for Membership',
-    },
-    punchcard: {
-      da: 'Vilkår og Betingelser for Klippekort',
-      en: 'Terms and Conditions for Punch Card',
-    },
-    privacy: {
-      da: 'Privatlivspolitik',
-      en: 'Privacy Policy',
-    },
-    cookie: {
-      da: 'Cookiepolitik',
-      en: 'Cookie Policy',
-    },
+    membership: t('footer.terms.membership'),
+    punchcard: t('footer.terms.punchcard'),
+    privacy: t('footer.policies.privacy'),
+    cookie: t('footer.policies.cookie'),
   };
   
   // Handle 'terms' type with tabs
@@ -5755,17 +5909,19 @@ function switchTermsTab(tabType) {
   });
   
   // Update tab labels based on language
-  const currentLang = getCurrentLanguage();
+  // Terms tabs are now handled by updatePageTranslations via data-i18n-key
+  // This function can be removed or simplified
   tabs.forEach(tab => {
-    if (tab.dataset.tab === 'membership') {
-      tab.textContent = currentLang === 'da' ? 'Medlemskab / 15 dage' : 'Membership / 15 Day';
-    } else if (tab.dataset.tab === 'punchcard') {
-      tab.textContent = currentLang === 'da' ? 'Klippekort' : 'Punch Card';
+    const key = tab.getAttribute('data-i18n-key');
+    if (key) {
+      tab.textContent = t(key);
     }
   });
   
   // Load content for selected tab
-  const content = termsContent[tabType]?.[currentLang] || termsContent[tabType]?.da || '<p>Content not available.</p>';
+  // Convert da-DK to da, en-GB to en for content lookup
+  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  const content = termsContent[tabType]?.[langCode] || termsContent[tabType]?.da || '<p>Content not available.</p>';
   
   if (termsContent[tabType]) {
     DOM.termsModalContent.innerHTML = content;
@@ -5882,57 +6038,46 @@ function clearTermsSearch() {
   }
 }
 
+// Legacy function - language is now managed by state.language
+// This function is kept for backward compatibility but does nothing
 function updateLanguageSwitcher(modalType, lang) {
-  if (modalType === 'terms') {
-    if (DOM.termsModalLangDa && DOM.termsModalLangEn) {
-      DOM.termsModalLangDa.classList.toggle('active', lang === 'da');
-      DOM.termsModalLangEn.classList.toggle('active', lang === 'en');
-    }
-  } else if (modalType === 'privacy') {
-    if (DOM.dataPolicyModalLangDa && DOM.dataPolicyModalLangEn) {
-      DOM.dataPolicyModalLangDa.classList.toggle('active', lang === 'da');
-      DOM.dataPolicyModalLangEn.classList.toggle('active', lang === 'en');
-    }
-  }
+  // Language switching is now handled by changeLanguage() and updatePageTranslations()
+  // Modal language switchers should use the main language switcher
 }
 
 function switchModalLanguage(modalType, lang) {
-  setCurrentLanguage(lang);
+  // Language is now managed by state.language and changeLanguage()
+  // Update translations for the modal
+  updatePageTranslations();
   
   if (modalType === 'terms') {
-    updateLanguageSwitcher('terms', lang);
+    // Terms tabs are handled by updatePageTranslations via data-i18n-key
     
     // Update title
     const currentTab = state.currentModalTab || 'membership';
     if (state.currentModalType === 'terms') {
-      const title = lang === 'da' ? 'Vilkår og Betingelser' : 'Terms and Conditions';
+      const title = t('footer.terms.title');
       if (DOM.termsModalTitle) {
         DOM.termsModalTitle.textContent = title;
       }
       
-      // Update tab labels
-      const tabs = DOM.termsModalTabs?.querySelectorAll('.terms-tab');
+      // Update tab labels (handled by updatePageTranslations via data-i18n-key)
+      const tabs = DOM.termsModalTabs?.querySelectorAll('.terms-tab[data-i18n-key]');
       tabs?.forEach(tab => {
-        if (tab.dataset.tab === 'membership') {
-          tab.textContent = lang === 'da' ? 'Medlemskab / 15 dage' : 'Membership / 15 Day';
-        } else if (tab.dataset.tab === 'punchcard') {
-          tab.textContent = lang === 'da' ? 'Klippekort' : 'Punch Card';
+        const key = tab.getAttribute('data-i18n-key');
+        if (key) {
+          tab.textContent = t(key);
         }
       });
       
-      // Update search placeholder
-      if (DOM.termsSearchInput) {
-        const placeholder = lang === 'da' 
-          ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
-          : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
-        DOM.termsSearchInput.placeholder = placeholder;
-      }
-      
+      // Update search placeholder (if needed, add to translations)
       // Reload content for current tab (this will clear search)
       switchTermsTab(currentTab);
       
       // Store original content for search after language switch
-      const content = termsContent[currentTab]?.[lang] || termsContent[currentTab]?.da || '';
+      // Convert da-DK to da, en-GB to en for content lookup
+      const langCode = lang.split('-')[0];
+      const content = termsContent[currentTab]?.[langCode] || termsContent[currentTab]?.da || '';
       state.termsOriginalContent = content;
     } else {
       // For non-tabbed content
@@ -5968,10 +6113,10 @@ function switchModalLanguage(modalType, lang) {
       }
     }
   } else if (modalType === 'privacy') {
-    updateLanguageSwitcher('privacy', lang);
-    
     // Update data policy content
-    const content = termsContent.privacy?.[lang] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
+    // Convert da-DK to da, en-GB to en for content lookup
+    const langCode = lang.split('-')[0];
+    const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
     
     if (DOM.dataPolicyModalContent) {
       DOM.dataPolicyModalContent.innerHTML = content;
@@ -5985,10 +6130,12 @@ function openDataPolicyModal() {
   
   state.currentModalType = 'privacy';
   
-  const currentLang = getCurrentLanguage();
-  updateLanguageSwitcher('privacy', currentLang);
+  // Language is managed by state.language - translations handled by updatePageTranslations
+  updatePageTranslations();
   
-  const content = termsContent.privacy?.[currentLang] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
+  // Convert da-DK to da, en-GB to en for content lookup
+  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
   
   // Set content
   DOM.dataPolicyModalContent.innerHTML = content;
@@ -9096,7 +9243,7 @@ function renderCartItems() {
     if (!state.selectedGymId && !state.selectedBusinessUnit) {
       const empty = document.createElement('div');
       empty.className = 'cart-empty';
-      empty.textContent = 'Your cart is empty';
+      empty.textContent = t('cart.empty');
       DOM.cartItems.appendChild(empty);
     }
     return;
@@ -9109,7 +9256,7 @@ function renderCartItems() {
     
     const gymInfoText = document.createElement('span');
     gymInfoText.className = 'home-gym-text';
-    gymInfoText.textContent = `Home Gym: ${selectedGym.name}`;
+    gymInfoText.textContent = `${t('homeGym.label')} ${selectedGym.name}`;
     
     // Create info icon
     const infoIcon = document.createElement('span');
@@ -9132,8 +9279,8 @@ function renderCartItems() {
     tooltip.className = 'home-gym-tooltip';
     tooltip.innerHTML = `
       <div class="tooltip-content">
-        <p><strong>You get access to all gyms.</strong></p>
-        <p>This is the gym where you pick up your card.</p>
+        <p><strong>${t('homeGym.tooltip.title')}</strong></p>
+        <p>${t('homeGym.tooltip.desc')}</p>
       </div>
     `;
     
@@ -12889,14 +13036,25 @@ function updateMainSubtitle() {
   if (!DOM.mainSubtitle || !DOM.mainTitle) return;
 
   const subtitles = {
-    1: 'Choose your home gym',
-    2: 'Choose your access type',
-    3: 'Need an add-on?',
-    4: 'Log in to your existing account or create a new one',
-    5: 'Welcome to Boulders!',
+    1: t('main.subtitle.step1'),
+    2: t('main.subtitle.step2'),
+    3: t('main.subtitle.step3'),
+    4: t('main.subtitle.step4'),
+    5: 'Welcome to Boulders!', // Step 5 is success page
   };
 
-  DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? 'Choose your membership type';
+  DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? t('main.subtitle.step2');
+  
+  // Update secondary subtitle for current step
+  const secondarySubtitle = document.querySelector('.secondary-subtitle');
+  if (secondarySubtitle) {
+    if (state.currentStep === 1) {
+      secondarySubtitle.textContent = t('main.subtitle.step1.secondary');
+    } else if (state.currentStep === 2) {
+      secondarySubtitle.textContent = t('main.subtitle.step2.secondary');
+    }
+  }
+  
   DOM.mainTitle.textContent = state.currentStep === TOTAL_STEPS ? 'WELCOME TO BOULDERS' : 'JOIN BOULDERS';
 }
 
