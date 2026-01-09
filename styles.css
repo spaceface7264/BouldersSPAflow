@@ -4192,6 +4192,7 @@ body {
     transition: border-color 0.3s ease;
     width: fit-content;
     min-width: fit-content;
+    max-width: 180px;         /* Limit overall selector width */
 }
 
 .country-selector:focus-within {
@@ -4211,12 +4212,18 @@ body {
     outline: none;
     cursor: pointer;
     margin-right: 8px;
+    width: 140px;             /* Fixed width for country code selector */
+    max-width: 140px;         /* Prevent expansion */
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .country-selector select#countryCode {
     padding: 10px 1px;        /* tighten the left/right space */
     margin-right: 4px;        /* shrink the gap before the arrow */
     font-size: var(--font-size-base);
+    width: 130px;             /* Fixed width for country code */
+    max-width: 130px;          /* Prevent expansion */
 }
 
 
@@ -4255,6 +4262,7 @@ body {
 .phone-country {
     flex: 0 0 auto;
     min-width: fit-content;
+    max-width: 150px;         /* Limit phone country selector container width */
 }
 
 .phone-number {

@@ -3813,6 +3813,234 @@ async function loadGymsFromAPI() {
   }
 }
 
+// Load countries from API and populate country code selectors
+async function loadCountriesFromAPI() {
+  try {
+    // Determine base URL and proxy settings (same logic as BusinessUnitsAPI)
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
+                               window.location.hostname.includes('join.boulders.dk') ||
+                               window.location.hostname === 'boulders.dk';
+    const isCloudflareWorker = window.location.hostname.includes('workers.dev');
+    const isNetlify = window.location.hostname.includes('netlify.app');
+    
+    let baseUrl;
+    let useProxy = false;
+    
+    if (isDevelopment) {
+      baseUrl = '';
+      useProxy = false;
+    } else if (isNetlify) {
+      baseUrl = '/.netlify/functions/api-proxy';
+      useProxy = true;
+    } else if (isCloudflarePages) {
+      baseUrl = '/api-proxy';
+      useProxy = true;
+    } else if (isCloudflareWorker) {
+      baseUrl = 'https://api-join.boulders.dk';
+      useProxy = false;
+    } else {
+      baseUrl = 'https://api-join.boulders.dk';
+      useProxy = false;
+    }
+    
+    // Build URL for countries endpoint
+    // Note: /api/ver3/ endpoints use boulders.brpsystems.com/apiserver base URL
+    // In development, use Vite proxy which handles this
+    // In production with proxy, the proxy handles the base URL mapping
+    let url;
+    if (useProxy) {
+      url = `${baseUrl}?path=/api/ver3/services/countries`;
+    } else if (isDevelopment) {
+      // In development, use Vite proxy (relative URL)
+      url = '/api/ver3/services/countries';
+    } else {
+      // Direct API call (shouldn't happen in production, but fallback)
+      url = 'https://boulders.brpsystems.com/apiserver/api/ver3/services/countries';
+    }
+    
+    console.log('[Countries] Fetching countries from:', url);
+    console.log('[Countries] Development mode:', isDevelopment, 'Use proxy:', useProxy);
+    
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+    };
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+    });
+    
+    console.log('[Countries] Response status:', response.status, response.statusText);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Countries] Failed to load countries (${response.status}):`, errorText);
+      console.warn(`[Countries] Using default +45 only.`);
+      return; // Fallback to default +45
+    }
+    
+    const countries = await response.json();
+    console.log('[Countries] Loaded countries from API:', countries);
+    console.log('[Countries] Number of countries:', countries?.length || 0);
+    
+    if (!Array.isArray(countries) || countries.length === 0) {
+      console.warn('[Countries] No countries returned from API. Using default +45 only.');
+      return; // Fallback to default +45
+    }
+    
+    // Sort countries alphabetically by name
+    const sortedCountries = countries.sort((a, b) => {
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+    
+    // Populate both country code selectors
+    const countryCodeSelect = document.getElementById('countryCode');
+    const parentCountryCodeSelect = document.getElementById('parentCountryCode');
+    
+    console.log('[Countries] Found selectors - countryCode:', !!countryCodeSelect, 'parentCountryCode:', !!parentCountryCodeSelect);
+    
+    if (countryCodeSelect) {
+      populateCountrySelector(countryCodeSelect, sortedCountries);
+      console.log('[Countries] Populated countryCode selector with', countryCodeSelect.options.length, 'options');
+      // Add event listener to update flag when selection changes
+      countryCodeSelect.addEventListener('change', () => {
+        updateCountryFlagIcon(countryCodeSelect);
+      });
+    } else {
+      console.warn('[Countries] countryCode selector not found in DOM');
+    }
+    
+    if (parentCountryCodeSelect) {
+      populateCountrySelector(parentCountryCodeSelect, sortedCountries);
+      console.log('[Countries] Populated parentCountryCode selector with', parentCountryCodeSelect.options.length, 'options');
+      // Add event listener to update flag when selection changes
+      parentCountryCodeSelect.addEventListener('change', () => {
+        updateCountryFlagIcon(parentCountryCodeSelect);
+      });
+    } else {
+      console.warn('[Countries] parentCountryCode selector not found in DOM');
+    }
+    
+    console.log('[Countries] Country selectors populated successfully');
+  } catch (error) {
+    console.warn('[Countries] Error loading countries from API:', error);
+    // Fallback to default +45 - selectors already have this option
+  }
+}
+
+// Helper function to get flag emoji from ISO 3166-1 alpha-2 country code
+function getFlagEmoji(alpha2) {
+  if (!alpha2 || alpha2.length !== 2) return '🌍'; // Default globe emoji
+  
+  // Convert alpha2 to flag emoji using regional indicator symbols
+  // Each letter is converted to its regional indicator symbol (U+1F1E6 to U+1F1FF)
+  const codePoints = alpha2
+    .toUpperCase()
+    .split('')
+    .map(char => 127397 + char.charCodeAt(0));
+  
+  return String.fromCodePoint(...codePoints);
+}
+
+// Store country data mapping for flag lookups
+let countryDataMap = new Map(); // Maps phoneCountryCode (as string like "+45") to {alpha2, name, phoneCountryCode}
+
+// Helper function to populate a country selector with countries
+function populateCountrySelector(selectElement, countries) {
+  if (!selectElement || !Array.isArray(countries)) return;
+  
+  // Store current selected value
+  const currentValue = selectElement.value || '+45';
+  
+  // Clear existing options (except keep the structure)
+  selectElement.innerHTML = '';
+  
+  // Clear and rebuild country data map
+  countryDataMap.clear();
+  
+  // Add countries as options
+  countries.forEach(country => {
+    if (country.phoneCountryCode != null) {
+      const option = document.createElement('option');
+      const phoneCode = `+${country.phoneCountryCode}`;
+      option.value = phoneCode;
+      // Format: "+45 Denmark" or "+45" if no name
+      const countryName = country.name || country.alpha2 || '';
+      option.textContent = countryName ? `${phoneCode} ${countryName}` : phoneCode;
+      
+      // Store data attribute for flag lookup
+      if (country.alpha2) {
+        option.dataset.alpha2 = country.alpha2;
+        // Store in map for quick lookup
+        countryDataMap.set(phoneCode, {
+          alpha2: country.alpha2,
+          name: country.name,
+          phoneCountryCode: country.phoneCountryCode
+        });
+      }
+      
+      selectElement.appendChild(option);
+    }
+  });
+  
+  // Set default selection to +45 (Denmark) if available, otherwise keep current or select first
+  if (selectElement.querySelector('option[value="+45"]')) {
+    selectElement.value = '+45';
+  } else if (selectElement.options.length > 0) {
+    selectElement.value = selectElement.options[0].value;
+  }
+  
+  // If current value exists, try to restore it
+  if (currentValue && selectElement.querySelector(`option[value="${currentValue}"]`)) {
+    selectElement.value = currentValue;
+  }
+  
+  // Update flag icon for the selected value
+  updateCountryFlagIcon(selectElement);
+}
+
+// Helper function to update flag icon based on selected country code
+function updateCountryFlagIcon(selectElement) {
+  if (!selectElement) return;
+  
+  const selectedValue = selectElement.value;
+  const flagIcon = selectElement.closest('.country-selector')?.querySelector('.flag-icon');
+  
+  if (!flagIcon) return;
+  
+  // Find the selected option
+  const selectedOption = selectElement.querySelector(`option[value="${selectedValue}"]`);
+  const alpha2 = selectedOption?.dataset.alpha2 || countryDataMap.get(selectedValue)?.alpha2;
+  
+  if (alpha2) {
+    flagIcon.textContent = getFlagEmoji(alpha2);
+  } else {
+    // Fallback: try to infer from phone code (common countries)
+    const phoneCode = selectedValue.replace('+', '');
+    const commonFlags = {
+      '45': 'DK', // Denmark
+      '46': 'SE', // Sweden
+      '47': 'NO', // Norway
+      '358': 'FI', // Finland
+      '49': 'DE', // Germany
+      '33': 'FR', // France
+      '44': 'GB', // United Kingdom
+      '1': 'US', // United States
+    };
+    
+    const inferredAlpha2 = commonFlags[phoneCode];
+    if (inferredAlpha2) {
+      flagIcon.textContent = getFlagEmoji(inferredAlpha2);
+    } else {
+      flagIcon.textContent = '🌍'; // Default globe emoji
+    }
+  }
+}
+
 
 // Find nearest gym using geolocation
 async function findNearestGym() {
@@ -4429,6 +4657,12 @@ function init() {
   
   // Load gyms from API
   loadGymsFromAPI();
+  
+  // Load countries from API and populate country code selectors
+  loadCountriesFromAPI();
+  
+  // Load countries from API and populate country code selectors
+  loadCountriesFromAPI();
   
   // Restore location button active state if location exists
   const locationBtn = document.getElementById('findNearestGym');
@@ -13143,13 +13377,11 @@ function nextStep(fromStep) {
       }, 100);
     }
     
-    // Scroll to top on mobile only
-    if (window.innerWidth <= 768) {
+    // Scroll to top when navigating steps
+    scrollToTop();
+    setTimeout(() => {
       scrollToTop();
-      setTimeout(() => {
-        scrollToTop();
-      }, 200);
-    }
+    }, 200);
     
     return; // Early return - don't continue with normal navigation logic
   }
@@ -13201,6 +13433,12 @@ function nextStep(fromStep) {
   updateStepIndicator();
   updateNavigationButtons();
   updateMainSubtitle();
+  
+  // Scroll to top when navigating steps
+  scrollToTop();
+  setTimeout(() => {
+    scrollToTop();
+  }, 200);
 
   // Step 5: Load products when step 2 (access type selection) is shown
   if (state.currentStep === 2 && state.selectedBusinessUnit) {
@@ -13318,7 +13556,7 @@ function prevStep() {
   updateNavigationButtons();
   updateMainSubtitle();
 
-  // Scroll to top immediately and with delay
+  // Scroll to top when navigating steps
   scrollToTop();
   setTimeout(() => {
     scrollToTop();
@@ -13382,6 +13620,12 @@ function showStep(stepNumber) {
       }
     }
   });
+  
+  // Scroll to top when showing a step
+  scrollToTop();
+  setTimeout(() => {
+    scrollToTop();
+  }, 100);
   
   // Update selected gym display when showing step 2
   if (stepNumber === 2) {
