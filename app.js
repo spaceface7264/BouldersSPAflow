@@ -1711,10 +1711,6 @@ class OrderAPI {
       const data = await response.json();
       console.log('[Step 7] Add subscription item response:', data);
       
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:1711',message:'addSubscriptionItem raw API response',data:{orderId:data?.id,hasSubscriptionItems:!!data?.subscriptionItems,subscriptionItemsLength:data?.subscriptionItems?.length||0,firstSubscriptionItem:data?.subscriptionItems?.[0]?JSON.stringify(data.subscriptionItems[0]):null,boundUntil:data?.subscriptionItems?.[0]?.boundUntil,responseKeys:Object.keys(data||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      
       // CRITICAL: Check if backend accepted startDate
       const subscriptionItem = data?.subscriptionItems?.[0];
       const responseStartDate = subscriptionItem?.initialPaymentPeriod?.start;
@@ -2150,9 +2146,6 @@ class OrderAPI {
       
       const data = await response.json();
       console.log('[Step 7] Get order response:', data);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:2146',message:'getOrder raw API response',data:{orderId:data?.id,hasSubscriptionItems:!!data?.subscriptionItems,subscriptionItemsLength:data?.subscriptionItems?.length||0,firstSubscriptionItem:data?.subscriptionItems?.[0]?JSON.stringify(data.subscriptionItems[0]):null,boundUntil:data?.subscriptionItems?.[0]?.boundUntil,responseKeys:Object.keys(data||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       return data;
     } catch (error) {
       console.error('[Step 7] Get order error:', error);
@@ -8956,10 +8949,6 @@ async function handleApplyDiscount() {
             try {
               const updatedOrder = await orderAPI.getOrder(state.orderId);
               state.fullOrder = updatedOrder;
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:8951',message:'state.fullOrder set after discount',data:{orderId:updatedOrder?.id,hasSubscriptionItems:!!updatedOrder?.subscriptionItems,subscriptionItemsLength:updatedOrder?.subscriptionItems?.length||0,boundUntil:updatedOrder?.subscriptionItems?.[0]?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-              // #endregion
-              renderCartItems(); // Re-render cart to show boundUntil
             } catch (fetchError) {
               console.warn('[Discount] Could not refresh order data:', fetchError);
             }
@@ -8996,11 +8985,7 @@ async function handleApplyDiscount() {
           try {
             const updatedOrder = await orderAPI.getOrder(state.orderId);
             state.fullOrder = updatedOrder;
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:8987',message:'state.fullOrder set after punch cards',data:{orderId:updatedOrder?.id,hasSubscriptionItems:!!updatedOrder?.subscriptionItems,subscriptionItemsLength:updatedOrder?.subscriptionItems?.length||0,boundUntil:updatedOrder?.subscriptionItems?.[0]?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-            // #endregion
             console.log('[Discount] Order refreshed after adding punch cards');
-            renderCartItems(); // Re-render cart to show boundUntil
           } catch (fetchError) {
             console.warn('[Discount] Could not refresh order data:', fetchError);
           }
@@ -9163,15 +9148,10 @@ async function handleApplyDiscount() {
       // This ensures payment overview shows the discounted prices
       if (response && !state.fullOrder) {
         state.fullOrder = response;
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9150',message:'state.fullOrder set from applyDiscountCode',data:{orderId:response?.id,hasSubscriptionItems:!!response?.subscriptionItems,subscriptionItemsLength:response?.subscriptionItems?.length||0,boundUntil:response?.subscriptionItems?.[0]?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-        renderCartItems(); // Re-render cart to show boundUntil
       } else if (response && state.fullOrder) {
         // Merge updated price data into existing fullOrder
         state.fullOrder.price = response.price || state.fullOrder.price;
         state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
-        renderCartItems(); // Re-render cart after price update
         if (response.subscriptionItems && response.subscriptionItems.length > 0) {
           state.fullOrder.subscriptionItems = response.subscriptionItems;
         }
@@ -9283,14 +9263,9 @@ async function handleApplyDiscount() {
         // Update fullOrder with response to ensure payment overview uses latest data
         if (response && !state.fullOrder) {
           state.fullOrder = response;
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9265',message:'state.fullOrder set from applyDiscountCode (else branch)',data:{orderId:response?.id,hasSubscriptionItems:!!response?.subscriptionItems,subscriptionItemsLength:response?.subscriptionItems?.length||0,boundUntil:response?.subscriptionItems?.[0]?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-          // #endregion
-          renderCartItems(); // Re-render cart to show boundUntil
         } else if (response && state.fullOrder) {
           state.fullOrder.price = response.price || state.fullOrder.price;
           state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
-          renderCartItems(); // Re-render cart after price update
         }
         
         updateCartSummary(); // updateCartSummary() already calls renderCartTotal()
@@ -9514,10 +9489,6 @@ function updateCartSummary() {
       String(p.id) === String(state.selectedProductId)
     );
     
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9504',message:'Finding membership product',data:{selectedProductId:state.selectedProductId,productIdNum,membershipFound:!!membership,membershipId:membership?.id,membershipBoundUntil:membership?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     if (membership) {
       // Extract price from API structure (cents to DKK)
       // The API uses priceWithInterval, not price directly
@@ -9543,8 +9514,6 @@ function updateCartSummary() {
         productId: membership.id, // Store API product ID for order creation
         imageBannerText: bannerText, // Store separately for rendering
         productName: membership.name || 'Membership', // Store original name
-        boundUntil: membership.boundUntil, // Store boundUntil from product if available (may not be in product data)
-        productLabels: membership.productLabels || [], // Store product labels to check for PublicCampaign
       });
       state.totals.membershipMonthly = price;
     } else {
@@ -9615,11 +9584,7 @@ function updateCartSummary() {
     orderAPI.getOrder(state.orderId)
       .then(order => {
         state.fullOrder = order;
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9586',message:'state.fullOrder set from getOrder',data:{orderId:order?.id,hasSubscriptionItems:!!order?.subscriptionItems,subscriptionItemsLength:order?.subscriptionItems?.length||0,boundUntil:order?.subscriptionItems?.[0]?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         updatePaymentOverview();
-        renderCartItems(); // Re-render cart to show boundUntil
         console.log('[Cart Summary] Order data fetched and payment overview updated');
       })
       .catch(error => {
@@ -9689,9 +9654,6 @@ function updateCartTotals() {
 }
 
 function renderCartItems() {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9687',message:'renderCartItems called',data:{hasFullOrder:!!state.fullOrder,fullOrderId:state.fullOrder?.id,hasSubscriptionItems:!!state.fullOrder?.subscriptionItems,subscriptionItemsLength:state.fullOrder?.subscriptionItems?.length||0,subscriptionItemBoundUntil:state.fullOrder?.subscriptionItems?.[0]?.boundUntil,cartItemsLength:state.cartItems?.length||0,stackTrace:new Error().stack?.split('\n').slice(1,4).join('|')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   if (!templates.cartItem || !DOM.cartItems) return;
   DOM.cartItems.innerHTML = '';
 
@@ -9783,16 +9745,9 @@ function renderCartItems() {
   }
 
   state.cartItems.forEach((item, index) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9747',message:'Processing cart item',data:{index,itemType:item.type,itemName:item.name,isMembership:item.type==='membership'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
     const nameEl = cartItem.querySelector('[data-element="name"]');
     const priceEl = cartItem.querySelector('[data-element="price"]');
-    const boundUntilEl = cartItem.querySelector('[data-element="boundUntil"]');
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9751',message:'boundUntilEl query result',data:{boundUntilElFound:!!boundUntilEl,itemType:item.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
 
     if (nameEl) {
       // For membership items with imageBanner text, display name and banner text separately
@@ -9868,59 +9823,6 @@ function renderCartItems() {
           priceEl.textContent = displayPrice ? numberFormatter.format(displayPrice) + ' kr' : '';
         }
       }
-    }
-    
-    // Display boundUntil date for membership items
-    if (item.type === 'membership' && boundUntilEl) {
-      // Check if product has PublicCampaign label - force display for these products
-      const hasPublicCampaignLabel = item.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
-      
-      // Check for boundUntil in order data first (most accurate)
-      const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
-      // Also check if boundUntil was stored in cart item data
-      const boundUntilFromItem = item.boundUntil;
-      
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9879',message:'Checking boundUntil for membership',data:{hasFullOrder:!!state.fullOrder,fullOrderId:state.fullOrder?.id,hasSubscriptionItems:!!state.fullOrder?.subscriptionItems,subscriptionItemsLength:state.fullOrder?.subscriptionItems?.length||0,subscriptionItemExists:!!subscriptionItem,subscriptionItemKeys:subscriptionItem?Object.keys(subscriptionItem):[],subscriptionItemFull:subscriptionItem?JSON.stringify(subscriptionItem):null,boundUntilFromOrder:subscriptionItem?.boundUntil,boundUntilFromItem,hasPublicCampaignLabel,fullOrderKeys:state.fullOrder?Object.keys(state.fullOrder):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
-      
-      const boundUntilValue = subscriptionItem?.boundUntil || boundUntilFromItem;
-      if (boundUntilValue) {
-        const boundUntilDate = new Date(boundUntilValue);
-        const formatDate = (date) => {
-          const day = String(date.getDate()).padStart(2, '0');
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const year = date.getFullYear();
-          return `${day}.${month}.${year}`;
-        };
-        const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
-        boundUntilEl.textContent = boundUntilText;
-        boundUntilEl.style.display = 'block';
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9884',message:'boundUntil displayed',data:{boundUntilText,displayStyle:boundUntilEl.style.display,source:subscriptionItem?.boundUntil?'order':'item'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-      } else if (hasPublicCampaignLabel) {
-        // Force display for PublicCampaign products even if date not available yet
-        // Show placeholder text indicating date will be confirmed after checkout
-        boundUntilEl.textContent = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${t('cart.billingPeriodConfirmed')}`;
-        boundUntilEl.style.display = 'block';
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9884',message:'boundUntil displayed for PublicCampaign (placeholder)',data:{hasPublicCampaignLabel,displayStyle:boundUntilEl.style.display},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-      } else {
-        boundUntilEl.style.display = 'none';
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9889',message:'boundUntil hidden - no data',data:{hasSubscriptionItem:!!subscriptionItem,hasBoundUntil:!!subscriptionItem?.boundUntil,itemBoundUntil:item.boundUntil,hasPublicCampaignLabel},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-      }
-    } else if (boundUntilEl) {
-      // Hide boundUntil for non-membership items
-      boundUntilEl.style.display = 'none';
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:9896',message:'boundUntil hidden - not membership',data:{itemType:item.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
     }
 
     DOM.cartItems.appendChild(cartItem);
@@ -10401,31 +10303,14 @@ function updatePaymentOverview() {
     
     // Display boundUntil date separately if available (for memberships with promotional periods)
     if (DOM.paymentBoundUntil) {
-      // Check if any cart item has PublicCampaign label
-      const hasPublicCampaignProduct = state.cartItems?.some(item => 
-        item.type === 'membership' && item.productLabels?.some(
-          label => label.name && label.name.toLowerCase() === 'publiccampaign'
-        )
-      );
-      
       if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPassWithShoes) {
         const boundUntilDate = new Date(subscriptionItem.boundUntil);
         const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
         DOM.paymentBoundUntil.textContent = boundUntilText;
         DOM.paymentBoundUntil.style.display = 'block';
-      } else if (hasPublicCampaignProduct && !is15DayPassWithShoes) {
-        // Force display for PublicCampaign products even if date not available yet
-        const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${t('cart.billingPeriodConfirmed')}`;
-        DOM.paymentBoundUntil.textContent = boundUntilText;
-        DOM.paymentBoundUntil.style.display = 'block';
       } else {
         DOM.paymentBoundUntil.style.display = 'none';
       }
-    }
-    
-    // Re-render cart items to show boundUntil now that order data is available
-    if (hasOrderData && subscriptionItem?.boundUntil) {
-      renderCartItems();
     }
   }
   
@@ -10564,23 +10449,6 @@ function clearStoredOrderData(reason = 'manual') {
 async function ensureOrderCreated(context = 'auto') {
   if (state.orderId) {
     console.log(`[checkout] Reusing existing order ${state.orderId} (${context})`);
-    // Fetch full order to check if it has subscriptionItems with boundUntil
-    try {
-      const existingOrder = await orderAPI.getOrder(state.orderId);
-      if (existingOrder) {
-        state.fullOrder = existingOrder;
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10532',message:'Reusing existing order - fetched full order',data:{orderId:existingOrder?.id,hasSubscriptionItems:!!existingOrder?.subscriptionItems,subscriptionItemsLength:existingOrder?.subscriptionItems?.length||0,boundUntil:existingOrder?.subscriptionItems?.[0]?.boundUntil,context},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-        // If we're on step 4 and order has subscriptionItems, re-render cart
-        if (state.currentStep === 4 && existingOrder?.subscriptionItems?.length > 0) {
-          updatePaymentOverview();
-          renderCartItems();
-        }
-      }
-    } catch (error) {
-      console.warn(`[checkout] Could not fetch existing order ${state.orderId}:`, error);
-    }
     persistOrderSnapshot(state.orderId);
     return state.orderId;
   }
@@ -10614,14 +10482,10 @@ async function ensureOrderCreated(context = 'auto') {
     // Store full order object for payment overview
     // Note: This order might not have subscriptionItems yet, but we'll update it later
     state.fullOrder = order;
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10556',message:'state.fullOrder set in ensureOrderCreated',data:{orderId:order?.id,hasSubscriptionItems:!!order?.subscriptionItems,subscriptionItemsLength:order?.subscriptionItems?.length||0,boundUntil:order?.subscriptionItems?.[0]?.boundUntil,context},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     
     // Update payment overview if we're on step 4
     if (state.currentStep === 4) {
       updatePaymentOverview();
-      renderCartItems(); // Re-render cart after order is created
     }
     
     persistOrderSnapshot(state.orderId);
@@ -10670,32 +10534,18 @@ async function ensureSubscriptionAttached(context = 'auto') {
   }
 
   subscriptionAttachPromise = (async () => {
-    // Use selectedProductId (numeric) instead of membershipPlanId (may have prefix like "campaign-374")
-    const productIdToUse = state.selectedProductId || state.membershipPlanId;
-    console.log(`[checkout] Attaching membership ${productIdToUse} to order ${orderId} (${context})...`);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10613',message:'ensureSubscriptionAttached called',data:{orderId,membershipPlanId:state.membershipPlanId,selectedProductId:state.selectedProductId,productIdToUse,context},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
+    console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
-    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, productIdToUse);
+    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
     state.subscriptionAttachedOrderId = orderId;
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10613',message:'addSubscriptionItem response',data:{hasResponse:!!subscriptionResponse,hasSubscriptionItems:!!subscriptionResponse?.subscriptionItems,subscriptionItemsLength:subscriptionResponse?.subscriptionItems?.length||0,boundUntil:subscriptionResponse?.subscriptionItems?.[0]?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     
     // CRITICAL: Use the order from addSubscriptionItem response if available (has correct price after re-add)
     // Otherwise fetch updated order with subscriptionItems for payment overview
     let updatedOrder = subscriptionResponse;
     if (!updatedOrder || !updatedOrder.subscriptionItems) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10619',message:'Fetching order via getOrder',data:{orderId,reason:'subscriptionResponse missing subscriptionItems'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       try {
         updatedOrder = await orderAPI.getOrder(orderId);
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10621',message:'getOrder response',data:{orderId:updatedOrder?.id,hasSubscriptionItems:!!updatedOrder?.subscriptionItems,subscriptionItemsLength:updatedOrder?.subscriptionItems?.length||0,boundUntil:updatedOrder?.subscriptionItems?.[0]?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
       } catch (error) {
         console.warn(`[checkout] Could not fetch order for payment overview:`, error);
         return orderId;
@@ -10705,9 +10555,6 @@ async function ensureSubscriptionAttached(context = 'auto') {
     // Store full order for payment overview - this now has the correct price
     state.fullOrder = updatedOrder;
     state.order = updatedOrder; // Also update state.order for backward compatibility
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10656',message:'state.fullOrder set in ensureSubscriptionAttached',data:{orderId:updatedOrder?.id,hasSubscriptionItems:!!updatedOrder?.subscriptionItems,subscriptionItemsLength:updatedOrder?.subscriptionItems?.length||0,boundUntil:updatedOrder?.subscriptionItems?.[0]?.boundUntil,context},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     
     // Log the order price to verify it matches what will be sent to payment window
     const orderPriceDKK = updatedOrder?.price?.amount ? updatedOrder.price.amount / 100 : 0;
@@ -10719,14 +10566,9 @@ async function ensureSubscriptionAttached(context = 'auto') {
       initialPeriodStart,
       hasSubscriptionItems: !!subscriptionItem,
       productId: subscriptionItem?.product?.id,
-      boundUntil: subscriptionItem?.boundUntil,
     });
     
     updatePaymentOverview();
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10675',message:'About to call renderCartItems after ensureSubscriptionAttached',data:{hasFullOrder:!!state.fullOrder,hasSubscriptionItems:!!state.fullOrder?.subscriptionItems,boundUntil:state.fullOrder?.subscriptionItems?.[0]?.boundUntil},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    renderCartItems(); // Re-render cart items to show boundUntil now that order data is available
     console.log(`[checkout] Order updated with subscriptionItems for payment overview`);
     
     persistOrderSnapshot(orderId);
@@ -10766,18 +10608,9 @@ async function autoEnsureOrderIfReady(context = 'auto') {
   }
   try {
     await ensureOrderCreated(`${context}-order`);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10690',message:'autoEnsureOrderIfReady - order created, calling ensureSubscriptionAttached',data:{context,hasMembershipPlanId:!!state.membershipPlanId,selectedProductType:state.selectedProductType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     await ensureSubscriptionAttached(`${context}-subscription`);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10692',message:'autoEnsureOrderIfReady - subscription attached',data:{context,hasFullOrder:!!state.fullOrder,hasSubscriptionItems:!!state.fullOrder?.subscriptionItems,subscriptionItemsLength:state.fullOrder?.subscriptionItems?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
   } catch (error) {
     console.warn(`[checkout] Auto ensure order failed (${context}):`, error);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/50e61037-73d2-4f3b-acc0-ea461f14b6ed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:10693',message:'autoEnsureOrderIfReady failed',data:{context,error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
   }
 }
 
@@ -13328,15 +13161,6 @@ function nextStep(fromStep) {
   // Update cart when step 4 (Send/Info) is shown
   if (state.currentStep === 4) {
     updateCartSummary();
-    // Ensure order and subscription are attached if user is authenticated
-    if (isUserAuthenticated() && state.selectedProductType === 'membership') {
-      autoEnsureOrderIfReady('step-4-navigation').then(() => {
-        // Re-render cart after order data is available
-        renderCartItems();
-      }).catch(err => {
-        console.warn('[Navigation] Auto order creation failed:', err);
-      });
-    }
     // If user is logged in, ensure login tab is selected
     if (isUserAuthenticated()) {
       switchAuthMode('login');
