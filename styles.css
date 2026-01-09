@@ -4495,10 +4495,26 @@ body {
 
 .cart-item {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
+    align-items: flex-start;
     justify-content: space-between;
     padding: 12px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 8px;
+}
+
+.cart-item > .item-name {
+    flex: 1;
+    min-width: 0;
+}
+
+.cart-item > .item-price {
+    flex-shrink: 0;
+}
+
+.cart-item > .item-bound-until {
+    flex-basis: 100%;
+    margin-top: 4px;
 }
 
 .cart-item:first-child {
@@ -4528,6 +4544,15 @@ body {
     color: white;
     font-weight: 500;
     font-size: var(--font-size-base);
+}
+
+.item-bound-until {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    margin-top: 6px;
+    display: block;
+    width: 100%;
 }
 
 /* Home Gym Info */
