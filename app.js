@@ -7678,6 +7678,17 @@ function handleGlobalClick(event) {
   if (!actionable) return;
 
   const action = actionable.dataset.action;
+  
+  // Debug: Log edit-gym button clicks
+  if (action === 'edit-gym') {
+    console.log('[Edit Gym Click] Button clicked:', {
+      target: event.target,
+      actionable: actionable,
+      action: action,
+      buttonId: actionable.id,
+      buttonElement: document.getElementById('selectedGymLink')
+    });
+  }
 
   switch (action) {
     case 'select-membership': {
@@ -12707,6 +12718,24 @@ function updateSelectedGymDisplay() {
     if (gymName && gymName.trim() !== '' && gymName !== '-') {
       selectedGymNameDisplay.textContent = gymName;
       selectedGymDisplay.style.display = 'flex';
+      
+      // Ensure button is clickable - add direct event listener as backup
+      const selectedGymLink = document.getElementById('selectedGymLink');
+      if (selectedGymLink) {
+        // Remove any existing listeners to avoid duplicates
+        const newButton = selectedGymLink.cloneNode(true);
+        selectedGymLink.parentNode.replaceChild(newButton, selectedGymLink);
+        
+        // Add direct click handler
+        newButton.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('[Edit Gym] Direct click handler triggered');
+          handleBackToGym();
+        });
+        
+        console.log('[Selected Gym Display] Button event listener attached');
+      }
       
       // Adjust main content margin to account for selected gym display height
       // Use setTimeout to ensure height is calculated after display is shown
