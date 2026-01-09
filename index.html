@@ -281,16 +281,27 @@
                                             <div class="login-status-profile">
                                                 <div class="login-status-header">
                                                     <p class="login-status-label">Logged in as</p>
-                                                    <p class="login-status-name" data-auth-name>-</p>
-                                                    <p class="login-status-email" data-auth-email>-</p>
-                                                    <p class="login-status-dob" data-auth-dob style="display: none;">-</p>
-                                                    <p class="login-status-address" data-auth-address style="display: none;">-</p>
-                                                    <p class="login-status-phone" data-auth-phone style="display: none;">-</p>
-                                                </div>
-                                                <div class="login-status-details" data-auth-details style="display: none;">
-                                                    <div class="profile-detail-item" data-profile-item="address" style="display: none;">
-                                                        <span class="profile-detail-label">Address:</span>
-                                                        <span class="profile-detail-value" data-profile-address>-</span>
+                                                    <div class="profile-info-grid">
+                                                        <div class="profile-info-row" data-auth-name-row style="display: none;">
+                                                            <span class="profile-info-label">Name:</span>
+                                                            <span class="profile-info-value" data-auth-name>-</span>
+                                                        </div>
+                                                        <div class="profile-info-row" data-auth-dob-row style="display: none;">
+                                                            <span class="profile-info-label">Date of birth:</span>
+                                                            <span class="profile-info-value" data-auth-dob>-</span>
+                                                        </div>
+                                                        <div class="profile-info-row" data-auth-email-row style="display: none;">
+                                                            <span class="profile-info-label">Email:</span>
+                                                            <span class="profile-info-value" data-auth-email>-</span>
+                                                        </div>
+                                                        <div class="profile-info-row" data-auth-address-row style="display: none;">
+                                                            <span class="profile-info-label">Address:</span>
+                                                            <span class="profile-info-value" data-auth-address>-</span>
+                                                        </div>
+                                                        <div class="profile-info-row" data-auth-phone-row style="display: none;">
+                                                            <span class="profile-info-label">Phone:</span>
+                                                            <span class="profile-info-value" data-auth-phone>-</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -424,14 +435,9 @@
                                  </div>
                              </div>
                              
-                             <div class="form-group">
-                                 <label for="password" data-i18n-key="form.password.create">Password*</label>
-                                 <input type="password" id="password" name="password" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="customer.password" required>
-                             </div>
-                             
                             <div class="form-group">
-                                <label for="confirmPassword" data-i18n-key="form.confirmPassword">Confirm password*</label>
-                                <input type="password" id="confirmPassword" name="confirmPassword" placeholder="" data-i18n-placeholder="form.confirmPassword.placeholder" data-api-field="customer.passwordConfirmation" required>
+                                <label for="password" data-i18n-key="form.password.create">Password*</label>
+                                <input type="password" id="password" name="password" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="customer.password" required minlength="8">
                             </div>
                             
                             <!-- Save Account Button -->
@@ -512,12 +518,7 @@
                                 
                                 <div class="form-group">
                                     <label for="parentPassword" data-i18n-key="form.password.create">Password*</label>
-                                    <input type="password" id="parentPassword" name="parentPassword" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="guardian.password" required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="parentConfirmPassword">Confirm password*</label>
-                                    <input type="password" id="parentConfirmPassword" name="parentConfirmPassword" placeholder="Confirm your password" data-api-field="guardian.passwordConfirmation" required>
+                                    <input type="password" id="parentPassword" name="parentPassword" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="guardian.password" required minlength="8">
                                 </div>
                                 
                                 <div class="form-group">

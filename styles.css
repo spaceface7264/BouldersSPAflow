@@ -3307,61 +3307,67 @@ body {
 }
 
 .login-status-header {
-    margin-bottom: 12px;
+    margin-bottom: 0;
+    padding-bottom: 16px;
 }
 
 .login-status-label {
-    margin: 0 0 4px 0;
+    margin: 0 0 16px 0;
     font-size: var(--font-size-sm);
     color: #9CA3AF;
 }
 
-.login-status-name {
-    margin: 0 0 4px 0;
-    font-size: var(--font-size-lg);
-    font-weight: 600;
-    color: #FFFFFF;
-}
-
-.login-status-email {
-    margin: 0 0 4px 0;
-    font-size: var(--font-size-base);
-    color: #D1D5DB;
-}
-
-.login-status-dob,
-.login-status-address,
-.login-status-phone {
-    margin: 4px 0;
-    font-size: var(--font-size-sm);
-    color: #D1D5DB;
-}
-
-.login-status-details {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+.profile-info-grid {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0;
 }
 
-.profile-detail-item {
+.profile-info-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     font-size: var(--font-size-sm);
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.profile-detail-label {
+.profile-info-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.profile-info-row:first-child {
+    padding-top: 0;
+}
+
+.profile-info-label {
     color: #9CA3AF;
     font-weight: 500;
+    flex-shrink: 0;
+    min-width: 120px;
+    padding-right: 8px;
 }
 
-.profile-detail-value {
+.profile-info-value {
     color: #FFFFFF;
     text-align: right;
+    flex: 1;
+    word-break: break-word;
+    padding-left: 8px;
+}
+
+.profile-info-row[data-auth-name-row] {
+    padding-top: 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.profile-info-row[data-auth-name-row] .profile-info-value {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: #FFFFFF;
 }
 
 .login-status .login-btn {

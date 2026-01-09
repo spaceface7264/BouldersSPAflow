@@ -122,7 +122,6 @@ const REQUIRED_FIELDS = [
   'email',
   'countryCode',
   'password',
-  'confirmPassword',
   'primaryGym',
 ];
 
@@ -134,7 +133,6 @@ const PARENT_REQUIRED_FIELDS = [
   'parentEmail',
   'parentCountryCode',
   'parentPassword',
-  'parentConfirmPassword',
   'parentPrimaryGym',
 ];
 
@@ -4102,18 +4100,22 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
   }
 
   // Fetch customer profile if we have customer ID and access token
-  if (state.customerId && isUserAuthenticated() && !state.authenticatedCustomer) {
+  // Always fetch to ensure we have complete profile data (not just partial form data)
+  if (state.customerId && isUserAuthenticated()) {
     try {
       const customerData = await authAPI.getCustomer(state.customerId);
       state.authenticatedCustomer = customerData;
       console.log('[Auth] Customer profile loaded:', customerData);
+      // Refresh UI after loading profile to show all fields
+      refreshLoginUI();
     } catch (profileError) {
       console.warn('[Auth] Could not fetch customer profile:', profileError);
-      // Continue even if profile fetch fails
+      // Continue even if profile fetch fails - refresh UI with whatever data we have
+      refreshLoginUI();
     }
+  } else {
+    refreshLoginUI();
   }
-
-  refreshLoginUI();
   autoEnsureOrderIfReady('auth-state-sync')
     .then(() => {
       // Order should now be created and subscription attached
@@ -4758,7 +4760,6 @@ function updateFormTranslations() {
     { id: 'email', labelKey: 'form.email.create', placeholderKey: 'form.email.create.placeholder' },
     { id: 'phoneNumber', labelKey: 'form.phoneNumber', placeholderKey: 'form.phoneNumber.placeholder' },
     { id: 'password', labelKey: 'form.password.create', placeholderKey: 'form.password.create.placeholder' },
-    { id: 'confirmPassword', labelKey: 'form.confirmPassword', placeholderKey: 'form.confirmPassword.placeholder' },
   ];
   
   formFields.forEach(field => {
@@ -5147,7 +5148,11 @@ function cacheDom() {
   DOM.loginStatusDob = document.querySelector('[data-auth-dob]');
   DOM.loginStatusAddress = document.querySelector('[data-auth-address]');
   DOM.loginStatusPhone = document.querySelector('[data-auth-phone]');
-  DOM.loginStatusDetails = document.querySelector('[data-auth-details]');
+  DOM.loginStatusNameRow = document.querySelector('[data-auth-name-row]');
+  DOM.loginStatusDobRow = document.querySelector('[data-auth-dob-row]');
+  DOM.loginStatusEmailRow = document.querySelector('[data-auth-email-row]');
+  DOM.loginStatusAddressRow = document.querySelector('[data-auth-address-row]');
+  DOM.loginStatusPhoneRow = document.querySelector('[data-auth-phone-row]');
   DOM.loginFormContainer = document.querySelector('[data-login-form-container]');
   // Find form-container that contains login-status (parent of login-status)
   DOM.loginFormContainerWrapper = DOM.loginStatus?.closest('.form-container');
@@ -5460,27 +5465,40 @@ async function handleLoginSubmit(event) {
     const response = await authAPI.login(email, password);
     const payload = response?.data ?? response;
     const username = payload?.username || email;
-    showToast(`Logged in as ${username}.`, 'success');
     state.authenticatedEmail = email;
     
     // Sync customer state and fetch profile
     await syncAuthenticatedCustomerState(username, email);
     
-    // Fetch full customer profile if not already fetched
-    if (!state.authenticatedCustomer) {
-      try {
-        const customerId = state.customerId || username;
-        if (customerId) {
-          const customerData = await authAPI.getCustomer(customerId);
-          state.authenticatedCustomer = customerData;
-          console.log('[login] Customer profile loaded:', customerData);
-          // Refresh UI again to show profile data
-          refreshLoginUI();
+    // Always fetch full customer profile to ensure we have complete data
+    try {
+      const customerId = state.customerId || username;
+      if (customerId) {
+        const customerData = await authAPI.getCustomer(customerId);
+        state.authenticatedCustomer = customerData;
+        console.log('[login] Customer profile loaded:', customerData);
+        
+        // Get display name for toast
+        let displayName = email;
+        if (customerData?.firstName && customerData?.lastName) {
+          displayName = `${customerData.firstName} ${customerData.lastName}`;
+        } else if (customerData?.firstName) {
+          displayName = customerData.firstName;
+        } else if (customerData?.lastName) {
+          displayName = customerData.lastName;
         }
-      } catch (profileError) {
-        console.warn('[login] Could not fetch customer profile:', profileError);
-        // Continue even if profile fetch fails
+        showToast(`Logged in as ${displayName}.`, 'success');
+        
+        // Refresh UI again to show profile data
+        refreshLoginUI();
+      } else {
+        showToast(`Logged in as ${email}.`, 'success');
       }
+    } catch (profileError) {
+      console.warn('[login] Could not fetch customer profile:', profileError);
+      // Continue even if profile fetch fails - refresh UI with whatever data we have
+      showToast(`Logged in as ${email}.`, 'success');
+      refreshLoginUI();
     }
     
     try {
@@ -6537,25 +6555,20 @@ function refreshLoginUI() {
     DOM.loginStatus.style.display = authenticated ? 'block' : 'none';
   }
   
-  // Update name display
-  if (DOM.loginStatusName) {
+  // Update name display (order: 1)
+  if (DOM.loginStatusName && DOM.loginStatusNameRow) {
     if (nameDisplay) {
       DOM.loginStatusName.textContent = nameDisplay;
-      DOM.loginStatusName.style.display = 'block';
+      DOM.loginStatusNameRow.style.display = 'flex';
     } else {
-      DOM.loginStatusName.style.display = 'none';
+      DOM.loginStatusNameRow.style.display = 'none';
     }
   }
   
-  // Update email display
-  if (DOM.loginStatusEmail) {
-    DOM.loginStatusEmail.textContent = emailDisplay;
-  }
-  
-  // Update date of birth display (use customer data or form data)
-  if (DOM.loginStatusDob) {
+  // Update date of birth display (order: 2)
+  if (DOM.loginStatusDob && DOM.loginStatusDobRow) {
     let dobDisplay = null;
-    const dobSource = customer?.dateOfBirth || formCustomer?.dateOfBirth;
+    const dobSource = customer?.dateOfBirth || customer?.birthDate || formCustomer?.dateOfBirth;
     if (dobSource) {
       if (typeof dobSource === 'string') {
         // Format date string if needed (YYYY-MM-DD to DD/MM/YYYY)
@@ -6570,19 +6583,29 @@ function refreshLoginUI() {
       }
     }
     if (dobDisplay) {
-      DOM.loginStatusDob.textContent = `Date of birth: ${dobDisplay}`;
-      DOM.loginStatusDob.style.display = 'block';
+      DOM.loginStatusDob.textContent = dobDisplay;
+      DOM.loginStatusDobRow.style.display = 'flex';
     } else {
-      DOM.loginStatusDob.style.display = 'none';
+      DOM.loginStatusDobRow.style.display = 'none';
     }
   }
   
-  // Update address display (use customer data or form data)
-  if (DOM.loginStatusAddress) {
+  // Update email display (order: 3)
+  if (DOM.loginStatusEmail && DOM.loginStatusEmailRow) {
+    if (emailDisplay && emailDisplay !== 'Account') {
+      DOM.loginStatusEmail.textContent = emailDisplay;
+      DOM.loginStatusEmailRow.style.display = 'flex';
+    } else {
+      DOM.loginStatusEmailRow.style.display = 'none';
+    }
+  }
+  
+  // Update address display (order: 4)
+  if (DOM.loginStatusAddress && DOM.loginStatusAddressRow) {
     let addressParts = [];
-    const addressSource = customer?.address || formCustomer?.address;
-    const postalCodeSource = customer?.postalCode || formCustomer?.address?.postalCode;
-    const citySource = customer?.city || formCustomer?.address?.city;
+    const addressSource = customer?.address || customer?.shippingAddress || formCustomer?.address;
+    const postalCodeSource = customer?.postalCode || customer?.shippingAddress?.postalCode || formCustomer?.address?.postalCode;
+    const citySource = customer?.city || customer?.shippingAddress?.city || formCustomer?.address?.city;
     
     if (addressSource) {
       if (typeof addressSource === 'string') {
@@ -6599,15 +6622,15 @@ function refreshLoginUI() {
     }
     const addressDisplay = addressParts.length > 0 ? addressParts.join(', ') : null;
     if (addressDisplay) {
-      DOM.loginStatusAddress.textContent = `Address: ${addressDisplay}`;
-      DOM.loginStatusAddress.style.display = 'block';
+      DOM.loginStatusAddress.textContent = addressDisplay;
+      DOM.loginStatusAddressRow.style.display = 'flex';
     } else {
-      DOM.loginStatusAddress.style.display = 'none';
+      DOM.loginStatusAddressRow.style.display = 'none';
     }
   }
   
-  // Update phone number display (use customer data or form data)
-  if (DOM.loginStatusPhone) {
+  // Update phone number display (order: 5)
+  if (DOM.loginStatusPhone && DOM.loginStatusPhoneRow) {
     let phoneDisplay = null;
     const phoneSource = customer?.mobilePhone || customer?.phone || formCustomer?.phone;
     const phoneCountryCodeSource = customer?.phoneCountryCode || formCustomer?.phone?.countryCode;
@@ -6624,54 +6647,10 @@ function refreshLoginUI() {
     }
     
     if (phoneDisplay) {
-      DOM.loginStatusPhone.textContent = `Phone: ${phoneDisplay}`;
-      DOM.loginStatusPhone.style.display = 'block';
+      DOM.loginStatusPhone.textContent = phoneDisplay;
+      DOM.loginStatusPhoneRow.style.display = 'flex';
     } else {
-      DOM.loginStatusPhone.style.display = 'none';
-    }
-  }
-  
-  // Update profile details - only show address if not already in header
-  if (DOM.loginStatusDetails && customer) {
-    let hasDetails = false;
-    
-    // Address in details section (if not shown in header)
-    const addressItem = document.querySelector('[data-profile-item="address"]');
-    const addressValue = document.querySelector('[data-profile-address]');
-    if (addressItem && addressValue) {
-      let addressParts = [];
-      const addressSource = customer?.address || formCustomer?.address;
-      const postalCodeSource = customer?.postalCode || formCustomer?.address?.postalCode;
-      const citySource = customer?.city || formCustomer?.address?.city;
-      
-      if (addressSource) {
-        if (typeof addressSource === 'string') {
-          addressParts.push(addressSource);
-        } else if (addressSource.street) {
-          addressParts.push(addressSource.street);
-        }
-      }
-      if (postalCodeSource) {
-        addressParts.push(postalCodeSource);
-      }
-      if (citySource) {
-        addressParts.push(citySource);
-      }
-      const addressDisplay = addressParts.length > 0 ? addressParts.join(', ') : null;
-      if (addressDisplay) {
-        addressValue.textContent = addressDisplay;
-        addressItem.style.display = 'flex';
-        hasDetails = true;
-      } else {
-        addressItem.style.display = 'none';
-      }
-    }
-    
-    // Show details container if we have any details
-    if (hasDetails) {
-      DOM.loginStatusDetails.style.display = 'block';
-    } else {
-      DOM.loginStatusDetails.style.display = 'none';
+      DOM.loginStatusPhoneRow.style.display = 'none';
     }
   }
   
@@ -6751,7 +6730,6 @@ async function handleSaveAccount() {
     { id: 'email', name: 'Email' },
     { id: 'phoneNumber', name: 'Phone number' },
     { id: 'password', name: 'Password' },
-    { id: 'confirmPassword', name: 'Confirm password' },
   ];
   
   const missingFields = [];
@@ -6762,24 +6740,30 @@ async function handleSaveAccount() {
     }
   });
   
-  // Validate password match
-  const password = document.getElementById('password')?.value;
-  const confirmPassword = document.getElementById('confirmPassword')?.value;
-  if (password && confirmPassword && password !== confirmPassword) {
-    showSaveAccountMessage('Passwords do not match', 'error');
-    // Animate save account button with red flash
+  // Validate password length
+  const passwordInput = document.getElementById('password');
+  if (passwordInput && passwordInput.value && passwordInput.value.length < 8) {
+    showSaveAccountMessage('Password must be at least 8 characters long.', 'error');
+    highlightFieldError('password', true);
     const saveBtn = document.querySelector('[data-action="save-account"]');
     if (saveBtn) {
-      saveBtn.classList.remove('error-flash');
-      void saveBtn.offsetWidth;
-      saveBtn.classList.add('error-flash');
-      setTimeout(() => {
-        saveBtn.classList.remove('error-flash');
-      }, 600);
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Account';
     }
-    // Highlight password fields
-    highlightFieldError('password', true); // Animate when triggered from button click
-    highlightFieldError('confirmPassword', true); // Animate when triggered from button click
+    return;
+  }
+  
+  // Validate parent password length if parent form is visible
+  const parentPasswordInput = document.getElementById('parentPassword');
+  const parentForm = document.getElementById('parentGuardianForm');
+  if (parentPasswordInput && parentForm && parentForm.style.display !== 'none' && parentPasswordInput.value && parentPasswordInput.value.length < 8) {
+    showSaveAccountMessage('Parent/Guardian password must be at least 8 characters long.', 'error');
+    highlightFieldError('parentPassword', true);
+    const saveBtn = document.querySelector('[data-action="save-account"]');
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Account';
+    }
     return;
   }
   
@@ -6961,6 +6945,9 @@ async function handleSaveAccount() {
     console.log('[Save Account] Creating customer account...');
     const customer = await authAPI.createCustomer(customerData);
     
+    // Log the full customer creation response to check for tokens
+    console.log('[Save Account] Customer creation response:', JSON.stringify(customer, null, 2));
+    
     // Track this email as used for account creation
     if (email) {
       state.createdEmails.add(email);
@@ -7012,8 +6999,70 @@ async function handleSaveAccount() {
         }
       }
       
-      // Note: If tokens are not provided in account creation response, user will need to log in manually
-      // We don't automatically log in to avoid rate limit issues
+      // If tokens are not provided in account creation response, automatically log in
+      // Get password directly from form field to ensure we have it even if it was removed from customerData
+      const password = customerData.password || document.getElementById('password')?.value;
+      if (!hasTokens && email && password) {
+        try {
+          console.log('[Save Account] Tokens not provided, automatically logging in...');
+          // Add a small delay to avoid hitting rate limits immediately after account creation
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const loginResponse = await authAPI.login(email, password);
+          const loginPayload = loginResponse?.data ?? loginResponse;
+          const username = loginPayload?.username || email;
+          
+          // Extract and save tokens from login response
+          const loginAccessToken = loginPayload?.accessToken || loginPayload?.access_token;
+          const loginRefreshToken = loginPayload?.refreshToken || loginPayload?.refresh_token;
+          let loginExpiresAt = loginPayload?.expiresAt || loginPayload?.expires_at;
+          const loginExpiresIn = loginPayload?.expiresIn || loginPayload?.expires_in;
+          if (!loginExpiresAt && loginExpiresIn) {
+            const expiresInMs = Number(loginExpiresIn) * 1000;
+            loginExpiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
+          }
+          
+          if (loginAccessToken && loginRefreshToken && typeof window.saveTokens === 'function') {
+            const loginMetadata = {
+              username: username,
+              email: email,
+              roles: loginPayload?.roles,
+              tokenType: loginPayload?.tokenType || loginPayload?.token_type,
+              expiresIn: loginPayload?.expiresIn || loginPayload?.expires_in,
+            };
+            window.saveTokens(loginAccessToken, loginRefreshToken, loginExpiresAt, loginMetadata);
+            console.log('[Save Account] ✅ Tokens saved from login response');
+          }
+          
+          // Sync customer state and fetch profile (syncAuthenticatedCustomerState will fetch and refresh UI)
+          await syncAuthenticatedCustomerState(username, email);
+          
+          hasTokens = true; // Mark as logged in
+          console.log('[Save Account] ✅ Successfully logged in after account creation');
+        } catch (loginError) {
+          console.warn('[Save Account] Auto-login failed:', loginError);
+          
+          // Handle rate limit errors specifically
+          const errorMessage = loginError.message || String(loginError);
+          if (errorMessage.includes('429') || errorMessage.includes('Rate limit') || errorMessage.includes('Too many requests')) {
+            // Extract retryAfter if available
+            let retryAfterSeconds = 60; // Default 1 minute
+            const retryAfterMatch = errorMessage.match(/retryAfter["\s:]*(\d+)/i);
+            if (retryAfterMatch) {
+              retryAfterSeconds = parseInt(retryAfterMatch[1], 10);
+            }
+            const retryMinutes = Math.ceil(retryAfterSeconds / 60);
+            
+            console.warn(`[Save Account] Rate limit hit. Will retry login automatically in ${retryMinutes} minute(s)`);
+            showSaveAccountMessage(`Account saved successfully! Login temporarily rate-limited. Please log in manually to continue, or wait ${retryMinutes} minute(s) and refresh.`, 'error');
+            showToast('Account saved! Login rate-limited. Please log in manually.', 'warning');
+          } else {
+            // Other login errors
+            console.warn('[Save Account] Auto-login failed, user will need to log in manually:', loginError);
+            showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
+            showToast('Account saved successfully!', 'success');
+          }
+        }
+      }
       
       // Store customer data from form temporarily until profile is fetched
       if (!state.authenticatedCustomer && customerData) {
@@ -7031,15 +7080,18 @@ async function handleSaveAccount() {
         console.log('[Save Account] Stored customer data from form:', state.authenticatedCustomer);
       }
       
-      // Fetch customer profile if tokens are available
+      // Fetch customer profile if tokens are available (always fetch to get complete data)
       if (hasTokens && customerId) {
         try {
           const customerProfile = await authAPI.getCustomer(customerId);
           state.authenticatedCustomer = customerProfile;
           console.log('[Save Account] Customer profile loaded:', customerProfile);
+          // Refresh UI to show all profile fields
+          refreshLoginUI();
         } catch (profileError) {
           console.warn('[Save Account] Could not fetch customer profile:', profileError);
-          // Keep the form data we stored above
+          // Keep the form data we stored above and refresh UI
+          refreshLoginUI();
         }
       }
       
@@ -7050,6 +7102,17 @@ async function handleSaveAccount() {
       if (hasTokens) {
         showSaveAccountMessage('Account saved successfully! You are now logged in. You can proceed to checkout.', 'success');
         showToast('Account saved and logged in successfully!', 'success');
+        
+        // Auto-create order and attach subscription if on step 4
+        if (state.currentStep === 4) {
+          try {
+            await ensureOrderCreated('profile-create');
+            await ensureSubscriptionAttached('profile-create');
+            updatePaymentOverview();
+          } catch (orderError) {
+            console.warn('[Save Account] Auto order creation after login failed:', orderError);
+          }
+        }
       } else {
         showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
         showToast('Account saved successfully!', 'success');
@@ -7128,7 +7191,6 @@ function checkSaveAccountButtonState() {
     'email',
     'phoneNumber',
     'password',
-    'confirmPassword',
   ];
   
   let allFieldsFilled = true;
@@ -7139,13 +7201,8 @@ function checkSaveAccountButtonState() {
     }
   });
   
-  // Check password match
-  const password = document.getElementById('password')?.value;
-  const confirmPassword = document.getElementById('confirmPassword')?.value;
-  const passwordsMatch = password && confirmPassword && password === confirmPassword;
-  
-  // Add 'valid' class if all fields are filled and passwords match
-  if (allFieldsFilled && passwordsMatch) {
+  // Add 'valid' class if all fields are filled
+  if (allFieldsFilled) {
     saveBtn.classList.add('valid');
   } else {
     saveBtn.classList.remove('valid');
