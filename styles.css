@@ -1572,49 +1572,20 @@ body {
     position: relative;
 }
 
-/* Campaign category special styling - subtle */
+/* Campaign category - match other categories but with subtle green border glow */
 .category-item[data-category="campaign"] {
-    background: linear-gradient(135deg, rgba(244, 1, 245, 0.03) 0%, var(--color-item-bg) 100%);
-    border: 2px solid rgba(244, 1, 245, 0.25);
+    background: var(--color-item-bg);
+    border: 2px solid var(--color-item-border);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    transition: all 0.3s ease, box-shadow 0.3s ease;
 }
 
 .category-item[data-category="campaign"]:hover {
-    border-color: rgba(244, 1, 245, 0.4);
-}
-
-.category-item[data-category="campaign"] .category-title {
-    color: #F401F5;
-    font-weight: 600;
-}
-
-.category-item[data-category="campaign"] .category-subtitle {
-    color: rgba(244, 1, 245, 0.7);
-}
-
-.category-item[data-category="campaign"] .category-icon {
-    color: #F401F5;
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.3), 0 0 0 1px rgba(34, 197, 94, 0.2);
 }
 
 .category-item[data-category="campaign"].expanded {
-    border-color: rgba(244, 1, 245, 0.4);
-}
-
-.category-item[data-category="campaign"].expanded .category-icon {
-    color: #F401F5;
-}
-
-
-/* Campaign product cards - subtle accent */
-.category-item[data-category="campaign"] .plan-card {
-    border-left: 2px solid rgba(244, 1, 245, 0.2);
-}
-
-.category-item[data-category="campaign"] .plan-card:hover {
-    border-left-color: rgba(244, 1, 245, 0.4);
-}
-
-.category-item[data-category="campaign"] .plan-card.selected {
-    border-left-color: rgba(244, 1, 245, 0.5);
+    box-shadow: 0 0 16px rgba(34, 197, 94, 0.4), 0 0 0 1px rgba(34, 197, 94, 0.3);
 }
 
 
