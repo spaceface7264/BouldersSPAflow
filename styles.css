@@ -883,7 +883,7 @@ body {
     display: flex;
     flex-direction: column;
     flex: 1;
-    min-height: 0;
+    min-height: 100vh; /* Ensure footer requires scrolling */
 }
 
 .main-title {
@@ -4962,14 +4962,21 @@ main {
     background: transparent;
     position: relative;
     z-index: 1;
-    min-height: 0; /* Allow flex children to shrink below content size */
+    min-height: 100vh; /* Ensure footer requires scrolling */
+}
+
+/* Ensure main content wrapper takes full height */
+#mainContent {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Global Footer - scrolls naturally into view */
 .global-footer {
     background: var(--color-surface-dark);
     border-top: 1px solid var(--color-item-border);
-    padding: 40px 0 20px;
+    padding: 24px 0 16px;
     opacity: 0;
     transform: translateY(20px);
     animation: footerFadeIn 0.6s ease-out 0.3s forwards;
@@ -4994,9 +5001,9 @@ main {
     margin: 0 auto;
     padding: 0 20px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 32px;
-    margin-bottom: 32px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 16px;
 }
 
 
@@ -5004,13 +5011,13 @@ main {
     color: var(--color-text-secondary);
     font-size: var(--font-size-md);
     font-weight: 600;
-    margin: 0 0 12px 0;
+    margin: 0 0 8px 0;
 }
 
 .footer-section p {
     color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    line-height: 1.5;
+    font-size: var(--font-size-base);
+    line-height: 1.4;
     margin: 0;
 }
 
@@ -5021,13 +5028,13 @@ main {
 }
 
 .footer-section ul li {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .footer-section ul li a {
     color: var(--color-text-muted);
     text-decoration: none;
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-md);
     transition: color 0.2s ease;
 }
 
@@ -5095,15 +5102,26 @@ main {
 .footer-bottom {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px 20px 0;
+    padding: 12px 20px 0;
     border-top: 1px solid var(--color-item-border);
     text-align: center;
 }
 
 .footer-bottom p {
     color: var(--color-text-subtle);
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-sm);
     margin: 0;
+}
+
+.footer-bottom p a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.footer-bottom p a:hover {
+    color: var(--color-brand-accent);
+    text-decoration: underline;
 }
 /* Mobile Footer - Best Practice */
 @media (max-width: 768px) {
