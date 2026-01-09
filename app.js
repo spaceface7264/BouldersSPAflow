@@ -1705,6 +1705,39 @@ class OrderAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Step 7] Add subscription item error (${response.status}):`, errorText);
+        
+        // Parse error to check for campaign blocking errors
+        let errorData = null;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          // If not JSON, use the text as-is
+        }
+        
+        // Check if this is a blocking error (user has subscription with blocking label)
+        const errorMessage = errorData?.message || errorData?.error?.message || errorText || '';
+        const errorCode = errorData?.errorCode || errorData?.error?.code || '';
+        const errorLower = errorMessage.toLowerCase();
+        
+        // Check for blocking-related error messages/codes
+        const isBlockingError = 
+          errorLower.includes('not available') ||
+          errorLower.includes('already has a subscription') ||
+          errorLower.includes('blocked') ||
+          errorLower.includes('cannot purchase') ||
+          errorCode.toLowerCase().includes('blocked') ||
+          errorCode.toLowerCase().includes('not_available') ||
+          response.status === 403; // 403 often indicates blocking
+        
+        if (isBlockingError) {
+          // Create a more specific error with blocking information
+          const blockingError = new Error(`Campaign purchase blocked: ${errorMessage || errorText}`);
+          blockingError.isBlockingError = true;
+          blockingError.statusCode = response.status;
+          blockingError.errorData = errorData;
+          throw blockingError;
+        }
+        
         throw new Error(`Add subscription item failed: ${response.status} - ${errorText}`);
       }
       
@@ -4502,7 +4535,7 @@ const translations = {
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabat', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
+    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabat', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'error.campaignBlocked': 'Dette kampagnetilbud er ikke tilgængeligt for din konto. Du har muligvis allerede et abonnement, der forhindrer køb af denne kampagne.',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
@@ -4528,7 +4561,7 @@ const translations = {
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
+    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'error.campaignBlocked': 'This campaign offer is not available for your account. You may already have a subscription that prevents purchasing this campaign.',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
@@ -10083,50 +10116,105 @@ async function ensureSubscriptionAttached(context = 'auto') {
   subscriptionAttachPromise = (async () => {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
-    // Add subscription item - this may return updated order if startDate was fixed by re-adding
-    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
-    state.subscriptionAttachedOrderId = orderId;
+    // Check if this is a campaign product (for blocking error handling)
+    const allSubscriptions = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || [])
+    ];
+    const productIdNum = typeof state.membershipPlanId === 'string' && state.membershipPlanId.includes('-')
+      ? parseInt(state.membershipPlanId.split('-').pop(), 10)
+      : state.membershipPlanId;
+    const selectedProduct = allSubscriptions.find(p => 
+      p.id === productIdNum || 
+      String(p.id) === String(productIdNum) ||
+      String(p.id) === String(state.membershipPlanId)
+    );
+    const isCampaignProduct = selectedProduct?.productLabels?.some(
+      label => label.name && label.name.toLowerCase() === 'publiccampaign'
+    );
     
-    // CRITICAL: Use the order from addSubscriptionItem response if available (has correct price after re-add)
-    // Otherwise fetch updated order with subscriptionItems for payment overview
-    let updatedOrder = subscriptionResponse;
-    if (!updatedOrder || !updatedOrder.subscriptionItems) {
-      try {
-        updatedOrder = await orderAPI.getOrder(orderId);
-      } catch (error) {
-        console.warn(`[checkout] Could not fetch order for payment overview:`, error);
-        return orderId;
+    try {
+      // Add subscription item - this may return updated order if startDate was fixed by re-adding
+      const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+      state.subscriptionAttachedOrderId = orderId;
+      
+      // CRITICAL: Use the order from addSubscriptionItem response if available (has correct price after re-add)
+      // Otherwise fetch updated order with subscriptionItems for payment overview
+      let updatedOrder = subscriptionResponse;
+      if (!updatedOrder || !updatedOrder.subscriptionItems) {
+        try {
+          updatedOrder = await orderAPI.getOrder(orderId);
+        } catch (error) {
+          console.warn(`[checkout] Could not fetch order for payment overview:`, error);
+          return orderId;
+        }
       }
+      
+      // Store full order for payment overview - this now has the correct price
+      state.fullOrder = updatedOrder;
+      state.order = updatedOrder; // Also update state.order for backward compatibility
+      
+      // Log the order price to verify it matches what will be sent to payment window
+      const orderPriceDKK = updatedOrder?.price?.amount ? updatedOrder.price.amount / 100 : 0;
+      const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
+      const initialPeriodStart = subscriptionItem?.initialPaymentPeriod?.start;
+      console.log('[ensureSubscriptionAttached] ✅ Order data after subscription add:', {
+        orderId,
+        orderPrice: orderPriceDKK,
+        initialPeriodStart,
+        hasSubscriptionItems: !!subscriptionItem,
+        productId: subscriptionItem?.product?.id,
+      });
+      
+      updatePaymentOverview();
+      console.log(`[checkout] Order updated with subscriptionItems for payment overview`);
+      
+      persistOrderSnapshot(orderId);
+      console.log(`[checkout] Membership attached to order ${orderId} (${context})`);
+      return orderId;
+    } catch (error) {
+      // Handle blocking errors for campaign products
+      if (error.isBlockingError && isCampaignProduct) {
+        console.error(`[checkout] ❌ Campaign purchase blocked (${context}):`, error);
+        
+        // Extract error message from API response
+        const errorMessage = error.errorData?.message || 
+                            error.errorData?.error?.message || 
+                            error.message || 
+                            'This campaign is not available for your account.';
+        
+        // Throw a user-friendly error
+        const blockingError = new Error(errorMessage);
+        blockingError.isBlockingError = true;
+        blockingError.isCampaignBlocked = true;
+        throw blockingError;
+      }
+      
+      // Re-throw other errors
+      throw error;
     }
-    
-    // Store full order for payment overview - this now has the correct price
-    state.fullOrder = updatedOrder;
-    state.order = updatedOrder; // Also update state.order for backward compatibility
-    
-    // Log the order price to verify it matches what will be sent to payment window
-    const orderPriceDKK = updatedOrder?.price?.amount ? updatedOrder.price.amount / 100 : 0;
-    const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
-    const initialPeriodStart = subscriptionItem?.initialPaymentPeriod?.start;
-    console.log('[ensureSubscriptionAttached] ✅ Order data after subscription add:', {
-      orderId,
-      orderPrice: orderPriceDKK,
-      initialPeriodStart,
-      hasSubscriptionItems: !!subscriptionItem,
-      productId: subscriptionItem?.product?.id,
-    });
-    
-    updatePaymentOverview();
-    console.log(`[checkout] Order updated with subscriptionItems for payment overview`);
-    
-    persistOrderSnapshot(orderId);
-    console.log(`[checkout] Membership attached to order ${orderId} (${context})`);
-    return orderId;
   })();
 
   try {
     return await subscriptionAttachPromise;
   } catch (error) {
     console.error(`[checkout] Failed to attach subscription (${context}):`, error);
+    
+    // Handle campaign blocking errors
+    if (error.isBlockingError && error.isCampaignBlocked) {
+      // Show user-friendly error message
+      const errorMessage = error.message || 
+                          t('error.campaignBlocked', 'This campaign offer is not available for your account. You may already have a subscription that prevents purchasing this campaign.');
+      showToast(errorMessage, 'error');
+      
+      // Reset checkout state
+      setCheckoutLoadingState(false);
+      state.checkoutInProgress = false;
+      
+      // Don't throw - allow user to see the error and potentially select a different product
+      return null;
+    }
     throw error;
   } finally {
     subscriptionAttachPromise = null;
@@ -10663,7 +10751,16 @@ async function handleCheckout() {
       // Add membership/subscription FIRST (only if it's actually a membership)
       if (isMembership) {
 	        try {
-	          await ensureSubscriptionAttached('checkout-flow');
+	          const attachedOrderId = await ensureSubscriptionAttached('checkout-flow');
+	          
+	          // Check if subscription attach was blocked
+	          if (!attachedOrderId) {
+	            // Subscription attach failed (likely blocked) - error already shown to user
+	            setCheckoutLoadingState(false);
+	            state.checkoutInProgress = false;
+	            return; // Stop checkout process
+	          }
+	          
 	          console.log('[checkout] Membership ensured on order');
 	          
 	          // Ensure payment overview is updated after subscription is attached
@@ -10672,6 +10769,18 @@ async function handleCheckout() {
 	          if (state.order) {
 	            updatePaymentOverview();
 	          }
+	        } catch (subscriptionError) {
+	          // Handle subscription attach errors (including blocking errors)
+	          if (subscriptionError.isBlockingError && subscriptionError.isCampaignBlocked) {
+	            // Error already handled and shown to user in ensureSubscriptionAttached
+	            setCheckoutLoadingState(false);
+	            state.checkoutInProgress = false;
+	            return; // Stop checkout process
+	          }
+	          
+	          // Re-throw other errors
+	          throw subscriptionError;
+	        }
           
           // CRITICAL: Apply coupon BEFORE generating payment link
           // This ensures the payment portal shows the discounted price
@@ -10907,29 +11016,30 @@ async function handleCheckout() {
           // The order should now have the discount applied, so payment link will show discounted price
           // Backend requirement: "Generate Payment Link Card" request must be made when subscription is added to cart
           // This is what triggers the payment flow according to backend team
-          console.log('[checkout] ===== GENERATE PAYMENT LINK CARD =====');
-          console.log('[checkout] Generating Payment Link Card (backend requirement)');
-          console.log('[checkout] Order ID:', state.orderId);
-          console.log('[checkout] Payment Method:', state.paymentMethod);
-          console.log('[checkout] Business Unit:', state.selectedBusinessUnit);
-          
-          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const baseUrl = isLocal
-            ? 'https://join.boulders.dk'
-            : window.location.origin.replace('http://', 'https://');
-          const returnUrl = `${baseUrl}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
-          console.log('[checkout] Return URL:', returnUrl);
-          
-          // API Documentation: POST /api/payment/generate-link
-          // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
-          if (!state.orderId) {
-            throw new Error('Order ID is required to generate payment link');
-          }
-          
-          // CRITICAL: Final verification and fix of order price before payment link generation
-          // The payment link API reads order.price.amount from backend, so we MUST ensure it's correct
-          // This is our last chance to fix backend pricing bugs before payment window shows wrong price
           try {
+            console.log('[checkout] ===== GENERATE PAYMENT LINK CARD =====');
+            console.log('[checkout] Generating Payment Link Card (backend requirement)');
+            console.log('[checkout] Order ID:', state.orderId);
+            console.log('[checkout] Payment Method:', state.paymentMethod);
+            console.log('[checkout] Business Unit:', state.selectedBusinessUnit);
+            
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const baseUrl = isLocal
+              ? 'https://join.boulders.dk'
+              : window.location.origin.replace('http://', 'https://');
+            const returnUrl = `${baseUrl}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
+            console.log('[checkout] Return URL:', returnUrl);
+            
+            // API Documentation: POST /api/payment/generate-link
+            // Payload: { orderId, paymentMethodId, businessUnit, returnUrl }
+            if (!state.orderId) {
+              throw new Error('Order ID is required to generate payment link');
+            }
+            
+            // CRITICAL: Final verification and fix of order price before payment link generation
+            // The payment link API reads order.price.amount from backend, so we MUST ensure it's correct
+            // This is our last chance to fix backend pricing bugs before payment window shows wrong price
+            try {
             console.log('[checkout] ===== FINAL ORDER PRICE VERIFICATION BEFORE PAYMENT LINK =====');
             // Wait a bit to ensure backend has fully processed everything
             await new Promise(resolve => setTimeout(resolve, 1000));
