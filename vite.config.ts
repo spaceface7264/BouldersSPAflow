@@ -73,19 +73,28 @@ export default defineConfig(({ command }) => ({
     // Proxy API requests to avoid CORS issues in development
     proxy: {
       // Handle /api/ver3/ endpoints - these go to boulders.brpsystems.com/apiserver
-      // Note: Vite proxy keeps the path, so /api/ver3/services/countries becomes
-      // https://boulders.brpsystems.com/apiserver/api/ver3/services/countries
+      // Vite proxy by default strips the matched prefix (/api/ver3), so we need to rewrite
+      // to keep the full path including /api/ver3
       '/api/ver3': {
         target: 'https://boulders.brpsystems.com/apiserver',
         changeOrigin: true,
         secure: true,
+        rewrite: (path) => {
+          // Vite strips the matched prefix, so /api/ver3/services/countries becomes /services/countries
+          // We need to add /api/ver3 back to get /api/ver3/services/countries
+          // But check if it's already there to avoid doubling
+          if (path.startsWith('/api/ver3')) {
+            return path; // Already has the prefix
+          }
+          return `/api/ver3${path}`;
+        },
         configure: (proxy, _options) => {
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             // Forward Accept-Language header from client request, or default to da-DK
             const acceptLanguage = req.headers['accept-language'] || req.headers['Accept-Language'] || 'da-DK';
             proxyReq.setHeader('Accept-Language', acceptLanguage);
             proxyReq.setHeader('Content-Type', 'application/json');
-            console.log('[Vite Proxy] Forwarding /api/ver3 request:', req.url, 'with Accept-Language:', acceptLanguage);
+            console.log('[Vite Proxy] Forwarding /api/ver3 request:', req.url, 'to:', proxyReq.path, 'with Accept-Language:', acceptLanguage);
           });
         },
       },

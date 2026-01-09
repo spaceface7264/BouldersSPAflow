@@ -3818,6 +3818,17 @@ async function loadCountriesFromAPI() {
   try {
     // Determine base URL and proxy settings (same logic as BusinessUnitsAPI)
     const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    // Helper to log only in development
+    const devLog = (...args) => {
+      if (isDevelopment) console.log(...args);
+    };
+    const devWarn = (...args) => {
+      if (isDevelopment) console.warn(...args);
+    };
+    const devError = (...args) => {
+      if (isDevelopment) console.error(...args);
+    };
     const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
                                window.location.hostname.includes('join.boulders.dk') ||
                                window.location.hostname === 'boulders.dk';
@@ -3859,8 +3870,7 @@ async function loadCountriesFromAPI() {
       url = 'https://boulders.brpsystems.com/apiserver/api/ver3/services/countries';
     }
     
-    console.log('[Countries] Fetching countries from:', url);
-    console.log('[Countries] Development mode:', isDevelopment, 'Use proxy:', useProxy);
+    devLog('[Countries] Fetching countries from:', url);
     
     const headers = {
       'Accept-Language': getAcceptLanguageHeader(),
@@ -3872,21 +3882,21 @@ async function loadCountriesFromAPI() {
       headers,
     });
     
-    console.log('[Countries] Response status:', response.status, response.statusText);
+    devLog('[Countries] Response status:', response.status, response.statusText);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Countries] Failed to load countries (${response.status}):`, errorText);
-      console.warn(`[Countries] Using default +45 only.`);
+      devError(`[Countries] Failed to load countries (${response.status}):`, errorText);
+      devWarn(`[Countries] Using default +45 only.`);
       return; // Fallback to default +45
     }
     
     const countries = await response.json();
-    console.log('[Countries] Loaded countries from API:', countries);
-    console.log('[Countries] Number of countries:', countries?.length || 0);
+    devLog('[Countries] Loaded countries from API:', countries);
+    devLog('[Countries] Number of countries:', countries?.length || 0);
     
     if (!Array.isArray(countries) || countries.length === 0) {
-      console.warn('[Countries] No countries returned from API. Using default +45 only.');
+      devWarn('[Countries] No countries returned from API. Using default +45 only.');
       return; // Fallback to default +45
     }
     
@@ -3901,33 +3911,48 @@ async function loadCountriesFromAPI() {
     const countryCodeSelect = document.getElementById('countryCode');
     const parentCountryCodeSelect = document.getElementById('parentCountryCode');
     
-    console.log('[Countries] Found selectors - countryCode:', !!countryCodeSelect, 'parentCountryCode:', !!parentCountryCodeSelect);
+    devLog('[Countries] Found selectors - countryCode:', !!countryCodeSelect, 'parentCountryCode:', !!parentCountryCodeSelect);
+    
+    if (!countryCodeSelect && !parentCountryCodeSelect) {
+      devWarn('[Countries] Neither selector found in DOM. Retrying in 500ms...');
+      // Retry after a delay in case DOM isn't ready yet (only retry once)
+      if (!loadCountriesFromAPI.retryAttempted) {
+        loadCountriesFromAPI.retryAttempted = true;
+        setTimeout(() => {
+          loadCountriesFromAPI();
+        }, 500);
+      }
+      return;
+    }
+    
+    // Reset retry flag on successful execution
+    loadCountriesFromAPI.retryAttempted = false;
     
     if (countryCodeSelect) {
       populateCountrySelector(countryCodeSelect, sortedCountries);
-      console.log('[Countries] Populated countryCode selector with', countryCodeSelect.options.length, 'options');
+      devLog('[Countries] Populated countryCode selector with', countryCodeSelect.options.length, 'options');
       // Add event listener to update flag when selection changes
       countryCodeSelect.addEventListener('change', () => {
         updateCountryFlagIcon(countryCodeSelect);
       });
     } else {
-      console.warn('[Countries] countryCode selector not found in DOM');
+      devWarn('[Countries] countryCode selector not found in DOM');
     }
     
     if (parentCountryCodeSelect) {
       populateCountrySelector(parentCountryCodeSelect, sortedCountries);
-      console.log('[Countries] Populated parentCountryCode selector with', parentCountryCodeSelect.options.length, 'options');
+      devLog('[Countries] Populated parentCountryCode selector with', parentCountryCodeSelect.options.length, 'options');
       // Add event listener to update flag when selection changes
       parentCountryCodeSelect.addEventListener('change', () => {
         updateCountryFlagIcon(parentCountryCodeSelect);
       });
     } else {
-      console.warn('[Countries] parentCountryCode selector not found in DOM');
+      devWarn('[Countries] parentCountryCode selector not found in DOM');
     }
     
-    console.log('[Countries] Country selectors populated successfully');
+    devLog('[Countries] Country selectors populated successfully');
   } catch (error) {
-    console.warn('[Countries] Error loading countries from API:', error);
+    devWarn('[Countries] Error loading countries from API:', error);
     // Fallback to default +45 - selectors already have this option
   }
 }
@@ -4659,10 +4684,10 @@ function init() {
   loadGymsFromAPI();
   
   // Load countries from API and populate country code selectors
-  loadCountriesFromAPI();
-  
-  // Load countries from API and populate country code selectors
-  loadCountriesFromAPI();
+  // Use setTimeout to ensure DOM is fully ready
+  setTimeout(() => {
+    loadCountriesFromAPI();
+  }, 100);
   
   // Restore location button active state if location exists
   const locationBtn = document.getElementById('findNearestGym');
@@ -13638,6 +13663,21 @@ function showStep(stepNumber) {
     const mainContent = document.getElementById('mainContent');
     if (mainContent) {
       mainContent.style.marginTop = '';
+    }
+  }
+  
+  // If showing step 4, ensure country selectors are populated
+  if (stepNumber === 4) {
+    // Ensure countries are loaded (in case they weren't loaded on init)
+    const countryCodeSelect = document.getElementById('countryCode');
+    const parentCountryCodeSelect = document.getElementById('parentCountryCode');
+    if (countryCodeSelect && countryCodeSelect.options.length <= 1) {
+      // Only one option (the default +45), so countries haven't been loaded yet
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isDevelopment) {
+        console.log('[Step 4] Country selectors not populated, loading countries...');
+      }
+      loadCountriesFromAPI();
     }
   }
   

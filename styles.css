@@ -6055,7 +6055,7 @@ main {
     }
     
     .main {
-        padding: 24px 16px 0 16px; /* Remove bottom padding so content reaches edge */
+        padding: 24px 2px 0 2px; /* Remove bottom padding so content reaches edge */
         max-width: 100vw;
         overflow-x: hidden;
         display: flex;
