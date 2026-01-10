@@ -73,12 +73,13 @@
     transform: translate(-50%, -50%);
     background: var(--color-surface-dark);
     color: var(--color-text-secondary);
-    border-radius: 16px;
-    border: 2px solid var(--color-item-border);
-    width: min(1000px, 94vw);
-    max-height: 84vh;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    width: min(1200px, 96vw);
+    max-height: 90vh;
     overflow: hidden;
-    box-shadow: 0 22px 70px rgba(0,0,0,0.55);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     display: flex;
     flex-direction: column;
   }
@@ -88,39 +89,45 @@
     justify-content: center; 
     align-items: center; 
     position: relative; 
-    padding: 20px 24px 12px; 
-    border-bottom: 1px solid var(--color-item-border); 
+    padding: 24px 32px 20px; 
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(180deg, 
+      rgba(255, 255, 255, 0.02) 0%, 
+      transparent 100%);
   }
   .addons-title { 
     margin: 0; 
     text-align: center; 
-    font-size: var(--font-size-xl); 
-    letter-spacing: .2px; 
+    font-size: var(--font-size-2xl); 
+    letter-spacing: -0.5px; 
     font-weight: 700; 
-    color: var(--color-text-secondary); 
+    color: var(--color-text-white);
+    line-height: 1.2;
   }
   .addons-close { 
     position: absolute; 
-    right: 12px; 
+    right: 16px; 
     top: 50%; 
     transform: translateY(-50%); 
-    font-size: var(--font-size-2xl); 
-    line-height: 24px; 
-    background: transparent; 
-    border: none; 
-    color: var(--color-text-secondary); 
+    font-size: 28px; 
+    line-height: 1; 
+    background: rgba(255, 255, 255, 0.05); 
+    border: 1px solid rgba(255, 255, 255, 0.1); 
+    color: var(--color-text-white); 
     cursor: pointer; 
-    width: 32px; 
-    height: 32px; 
+    width: 36px; 
+    height: 36px; 
     display: flex; 
     align-items: center; 
     justify-content: center; 
-    border-radius: 6px; 
-    transition: all .2s; 
+    border-radius: 8px; 
+    transition: all 0.2s ease; 
   }
   .addons-close:hover { 
-    background: var(--color-item-border); 
-    color: var(--color-brand-accent); 
+    background: rgba(255, 255, 255, 0.1); 
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--color-text-white);
+    transform: translateY(-50%) scale(1.05);
   }
   
   .addons-content { 
@@ -143,41 +150,90 @@
   
   .addons-grid { 
     display: grid; 
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
-    gap: 16px; 
-    padding: 16px 24px; 
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+    gap: 20px; 
+    padding: 24px 32px; 
     overflow-y: auto; 
     flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+  
+  .addons-grid::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .addons-grid::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .addons-grid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+  }
+  
+  .addons-grid::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
   }
   
   /* Addon Card Styles for Modal */
   .addons-grid .addon-card {
-    background: var(--color-surface-dark);
+    background: rgba(255, 255, 255, 0.03);
     color: var(--color-text-secondary);
-    border-radius: 12px;
-    border: 2px solid var(--color-item-border);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    position: relative;
+    overflow: hidden;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    transition: all 0.2s;
-    position: relative;
+    gap: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+  }
+  
+  .addons-grid .addon-card .addon-image,
+  .addon-card .addon-image {
+    width: 100%;
+    height: 240px;
+    object-fit: cover;
+    border-radius: 16px 16px 0 0;
+    margin: 0;
+    display: none;
+    background: linear-gradient(135deg, 
+      rgba(255, 255, 255, 0.05) 0%, 
+      rgba(255, 255, 255, 0.02) 100%);
+  }
+  
+  .addons-grid .addon-card .addon-image:not([src]),
+  .addon-card .addon-image:not([src]),
+  .addons-grid .addon-card .addon-image[src=""],
+  .addon-card .addon-image[src=""] {
+    display: none;
+  }
+  
+  .addons-grid .addon-card .addon-image[src]:not([src=""]),
+  .addon-card .addon-image[src]:not([src=""]) {
+    display: block;
   }
   
   .addons-grid .addon-card:hover {
-    border-color: var(--color-brand-accent);
-    border: 2px solid var(--color-brand-accent);
-    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    transform: translateY(-4px);
   }
   
   .addons-grid .addon-card .plan-info {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
-    align-items: stretch;
+    align-items: flex-start;
     gap: 16px;
-    min-height: 100%;
+    padding: 20px;
+    flex: 1;
   }
 
   .addons-grid .addon-card .plan-content-left {
@@ -185,18 +241,17 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     align-items: flex-start;
-    justify-content: space-between;
-    min-height: 100%;
+    justify-content: flex-start;
   }
   
   .addons-grid .addon-card .plan-type {
-    color: var(--color-text-secondary);
-    font-weight: 700;
-    font-size: var(--font-size-md);
+    color: var(--color-text-white);
+    font-weight: 600;
+    font-size: var(--font-size-lg);
     margin: 0;
-    line-height: 1.4;
+    line-height: 1.3;
   }
   
   .addons-grid .addon-card .plan-content-right {
@@ -205,7 +260,7 @@
     flex-direction: column;
     align-items: flex-end;
     justify-content: flex-start;
-    gap: 4px;
+    gap: 6px;
     align-self: flex-start;
   }
   
@@ -220,13 +275,14 @@
   .addons-grid .addon-card .plan-price .price-amount {
     color: var(--color-brand-accent);
     font-size: var(--font-size-2xl);
-    line-height: 28px;
+    line-height: 1.2;
     font-weight: 700;
   }
   
   .addons-grid .addon-card .plan-price .price-unit {
     color: var(--color-text-muted);
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
   }
   
   .addons-grid .addon-card .plan-description {
@@ -242,14 +298,16 @@
   .addons-grid .addon-card .plan-meta {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
+    padding: 0 20px 20px;
     flex: 1;
   }
   
   .addons-grid .addon-card .plan-original {
-    font-size: var(--font-size-base);
-    color: var(--color-text-subtle);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
     text-decoration: line-through;
+    opacity: 0.7;
   }
   
   .addons-grid .addon-card .plan-features {
@@ -259,10 +317,10 @@
   }
   
   .addons-grid .addon-card .plan-features li {
-    margin: 4px 0;
+    margin: 6px 0;
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
-    line-height: 18px;
+    line-height: 1.5;
     position: relative;
     padding-left: 20px;
   }
@@ -307,39 +365,47 @@
   /* Addon Modal Check Circle Styling */
   .addons-grid .addon-card .check-circle {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 24px;
-    height: 24px;
-    border: 2px solid var(--color-item-border);
+    top: 16px;
+    right: 16px;
+    width: 28px;
+    height: 28px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 50%;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
     z-index: 10;
   }
   
+  .addons-grid .addon-card:hover .check-circle {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.6);
+  }
+  
   .addons-grid .addon-card.selected .check-circle {
-    background: var(--color-success);
-    border-color: var(--color-success);
+    background: var(--color-brand-accent);
+    border-color: var(--color-brand-accent);
+    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.4);
   }
   
   .addons-grid .addon-card .check-circle::after {
     content: '✓';
-    color: var(--color-button-primary);
-    font-size: var(--font-size-base);
+    color: white;
+    font-size: 16px;
     font-weight: bold;
     opacity: 0;
-    transform: scale(0.5);
-    transition: all 0.2s ease;
+    transform: scale(0.5) rotate(-90deg);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
   .addons-grid .addon-card.selected .check-circle::after {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) rotate(0deg);
   }
   
   /* Override inherited borders for selected addon cards */
@@ -351,18 +417,19 @@
     display: flex; 
     justify-content: space-between; 
     align-items: center; 
-    gap: 12px; 
-    padding: 16px 24px; 
-    background: var(--color-surface-dark); 
-    border-top: 1px solid var(--color-item-border); 
+    gap: 16px; 
+    padding: 20px 32px; 
+    background: rgba(255, 255, 255, 0.02);
+    border-top: 1px solid rgba(255, 255, 255, 0.1); 
     flex-shrink: 0;
   }
   
   .addons-hint { 
-    opacity: .75; 
+    opacity: 0.8; 
     font-size: var(--font-size-sm); 
-    line-height: 18px; 
-    color: var(--color-text-muted); 
+    line-height: 1.5; 
+    color: var(--color-text-muted);
+    flex: 1;
   }
   
   .addons-actions .addons-actions-right { 
@@ -372,32 +439,37 @@
   }
   
   .addons-action-btn { 
-    padding: 10px 16px; 
+    padding: 12px 24px; 
     border-radius: 10px; 
     cursor: pointer; 
     font-size: var(--font-size-base); 
     font-weight: 600; 
-    transition: all .2s; 
-    min-width: 100px;
+    transition: all 0.2s ease; 
+    min-width: 120px;
+    letter-spacing: 0.3px;
   }
   
   .addons-action-btn.addons-skip { 
-    border: 1px solid var(--color-item-border); 
-    background: transparent; 
-    color: var(--color-text-secondary); 
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    background: rgba(255, 255, 255, 0.05); 
+    color: var(--color-text-white); 
   }
   .addons-action-btn.addons-skip:hover { 
-    background: var(--color-item-border); 
-    border-color: var(--color-brand-accent); 
+    background: rgba(255, 255, 255, 0.1); 
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
   }
   
   .addons-action-btn.addons-continue { 
     border: none; 
     background: var(--color-brand-accent); 
     color: var(--color-button-primary); 
+    box-shadow: 0 4px 12px rgba(244, 1, 245, 0.3);
   }
   .addons-action-btn.addons-continue:hover { 
     background: var(--color-brand-accent-hover); 
+    box-shadow: 0 6px 16px rgba(244, 1, 245, 0.4);
+    transform: translateY(-1px);
   }
   
   @media (max-width: 768px) {
@@ -4621,34 +4693,47 @@ body {
 
 /* Cart Items */
 .cart-items {
-    margin-bottom: 20px;
+    margin: 0;
+    padding: 0 0 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+}
+
+.cart-items::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 255, 255, 0.12) 20%, 
+        rgba(255, 255, 255, 0.12) 80%, 
+        transparent 100%);
 }
 
 .cart-item {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    padding: 12px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.cart-item:first-child {
-    padding-top: 0;
-}
-
-.cart-item:last-child {
+    padding: 0;
     border-bottom: none;
-    padding-bottom: 0;
+    min-height: 24px;
 }
 
 /* Cart and Purchase Items - Shared Styles */
 .item-name {
-    color: var(--color-text-secondary);
+    color: var(--color-text-white);
     font-size: var(--font-size-base);
-    font-weight: 700;
+    font-weight: 600;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    line-height: 1.4;
+    flex: 1;
 }
 
 .item-name:has(.home-gym-info) {
@@ -4656,9 +4741,121 @@ body {
 }
 
 .item-price {
-    color: white;
-    font-weight: 500;
+    color: var(--color-text-white);
+    font-weight: 400;
     font-size: var(--font-size-base);
+    white-space: nowrap;
+    margin-left: 16px;
+    text-align: right;
+}
+
+/* Cart Addons */
+.cart-addons {
+    margin: 0;
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px; /* Matches payment-overview gap for consistency */
+    position: relative;
+}
+
+.cart-addons:empty {
+    display: none;
+}
+
+.cart-addons::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 255, 255, 0.12) 20%, 
+        rgba(255, 255, 255, 0.12) 80%, 
+        transparent 100%);
+}
+
+.cart-addons .cart-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0;
+    border-bottom: none;
+    min-height: 24px;
+}
+
+.cart-addons .item-name {
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    display: flex;
+    flex-direction: row;
+    gap: 0;
+    line-height: 1.4;
+    flex: 1;
+}
+
+.cart-addons .item-price {
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 300;
+    white-space: nowrap;
+    margin-left: 16px;
+    text-align: right;
+}
+
+/* Cart Total */
+.cart-total {
+    margin-top: 0;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, 
+        rgba(255, 255, 255, 0.05) 0%, 
+        rgba(255, 255, 255, 0.03) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    position: relative;
+    overflow: hidden;
+}
+
+.cart-total::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 255, 255, 0.2) 50%, 
+        transparent 100%);
+}
+
+.cart-total-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.cart-total-label {
+    color: var(--color-text-white);
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    line-height: 1.2;
+}
+
+.cart-total-amount {
+    color: var(--color-text-white);
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    white-space: nowrap;
+    letter-spacing: -0.5px;
 }
 
 /* Home Gym Info */
@@ -4770,10 +4967,26 @@ body {
 
 /* Payment Overview */
 .payment-overview {
-    margin: 16px 0;
+    margin: 0;
+    padding: 16px 0;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px; /* Same gap as cart-addons for consistency */
+    position: relative;
+}
+
+.payment-overview::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 255, 255, 0.12) 20%, 
+        rgba(255, 255, 255, 0.12) 80%, 
+        transparent 100%);
 }
 
 .payment-overview-item {
@@ -4781,6 +4994,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 0;
+    min-height: 24px;
 }
 
 .payment-overview-paynow {
@@ -4793,7 +5007,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    gap: 8px;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 .payment-overview-paynow-row .payment-label {
@@ -4817,6 +5032,8 @@ body {
     color: var(--color-text-white);
     font-size: var(--font-size-base);
     font-weight: 500;
+    line-height: 1.4;
+    flex-shrink: 0;
 }
 
 .payment-label-period {
@@ -4832,6 +5049,9 @@ body {
     color: var(--color-text-white);
     font-size: var(--font-size-base);
     font-weight: 300;
+    white-space: nowrap;
+    text-align: right;
+    margin-left: auto;
 }
 
 .payment-period {

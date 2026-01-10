@@ -2796,6 +2796,8 @@ async function loadProductsFromAPI() {
       ? valueCardsResponse
       : (valueCardsResponse.data || valueCardsResponse.items || []);
 
+    // Store raw products before filtering (for boost product detection)
+    state.allRawProducts = [...subscriptions, ...valueCards];
 
     // Filter out products that shouldn't be displayed according to OpenAPI documentation
     // Reference: docs/brp-api3-openapi.yaml - SubscriptionProductOut schema (line ~14970)
@@ -2992,6 +2994,8 @@ async function loadProductsFromAPI() {
     state.dayPassSubscriptions = dayPassSubscriptions;
     state.valueCards = valueCards;
 
+    // Load boost products (products with "boostProduct" label) for boost modal
+    loadBoostProducts();
 
     // Re-render the membership plans with API data
     renderProductsFromAPI();
@@ -3249,6 +3253,86 @@ async function loadSubscriptionAdditions(productId) {
   } catch (error) {
     console.error('Failed to load subscription additions:', error);
     state.subscriptionAdditions = [];
+  }
+}
+
+// Load products with "boostProduct" label for boost modal
+async function loadBoostProducts() {
+  if (!state.selectedBusinessUnit) {
+    console.warn('[Boost Products] Cannot load boost products: No business unit selected');
+    state.boostProducts = [];
+    return;
+  }
+
+  const boostProducts = [];
+  
+  try {
+    // Try to fetch all products from the general products endpoint (may not exist)
+    try {
+      const allProducts = await businessUnitsAPI.getProducts(state.selectedBusinessUnit);
+      
+      // Filter products that have "boostProduct" label (case-insensitive)
+      const apiBoostProducts = allProducts.filter(product => {
+        if (!product.productLabels || !Array.isArray(product.productLabels)) {
+          return false;
+        }
+        return product.productLabels.some(
+          label => label.name && label.name.toLowerCase() === 'boostproduct'
+        );
+      });
+
+      boostProducts.push(...apiBoostProducts);
+    } catch (apiError) {
+      // Endpoint doesn't exist - that's okay, we'll check already-loaded products
+    }
+    
+    // Check ALL products (both filtered and raw) for boostProduct label
+    // We check raw products because boost products might be filtered out if they don't have "Public" label
+    const allLoadedProducts = [
+      ...state.campaignSubscriptions,
+      ...state.subscriptions,
+      ...state.dayPassSubscriptions,
+      ...state.valueCards,
+      ...(state.allRawProducts || []) // Also check raw products before filtering
+    ];
+    
+    // Remove duplicates by ID
+    const uniqueProducts = [];
+    const seenIds = new Set();
+    for (const product of allLoadedProducts) {
+      if (product && product.id && !seenIds.has(product.id)) {
+        seenIds.add(product.id);
+        uniqueProducts.push(product);
+      }
+    }
+    
+    const loadedBoostProducts = uniqueProducts.filter(product => {
+      if (!product.productLabels || !Array.isArray(product.productLabels)) {
+        return false;
+      }
+      
+      return product.productLabels.some(
+        label => label.name && label.name.toLowerCase() === 'boostproduct'
+      );
+    });
+    
+    // Merge with already loaded boost products (avoid duplicates by ID)
+    const existingIds = new Set(boostProducts.map(p => p.id));
+    const newBoostProducts = loadedBoostProducts.filter(p => !existingIds.has(p.id));
+    
+    if (newBoostProducts.length > 0) {
+      boostProducts.push(...newBoostProducts);
+    }
+    
+    state.boostProducts = boostProducts;
+    
+    if (boostProducts.length === 0) {
+      console.warn('[Boost Products] No products with "boostProduct" label found.');
+    }
+    
+  } catch (error) {
+    console.error('[Boost Products] Failed to load boost products:', error);
+    state.boostProducts = [];
   }
 }
 
@@ -4289,6 +4373,7 @@ const state = {
   selectedGymName: null, // Store selected gym name for display
   currentAuthMode: null, // Track current auth mode (login/create)
   membershipPlanId: null,
+  selectedProduct: null, // Store full product object for label checking
   valueCardQuantities: new Map(),
   addonIds: new Set(),
   totals: {
@@ -4296,6 +4381,7 @@ const state = {
     membershipMonthly: 0,
     discountAmount: 0, // Discount amount applied
     subtotal: 0, // Subtotal before discount
+    payNowAmount: 0, // Pay now amount (from payment overview)
   },
   cartItems: [],
   billingPeriod: '',
@@ -4323,6 +4409,8 @@ const state = {
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
   subscriptionAdditions: [], // Fetched add-ons for selected membership
+  boostProducts: [], // Products with "boostProduct" label for boost modal
+  allRawProducts: [], // All products before filtering (for boost product detection)
   selectedProductType: null, // 'membership' or 'punch-card'
   selectedProductId: null, // The actual product ID from API
   selectedAddonIds: [], // Array of selected add-on product IDs
@@ -4527,7 +4615,7 @@ function populateAddonsModal() {
       card.style.cursor = 'pointer';
       card.innerHTML = `
         <div style="font-weight:600">${addon.name}</div>
-        <div>${currencyFormatter.format(addon.price.discounted)}</div>
+        <div>${numberFormatter.format(addon.price.discounted)} kr</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
       `;
       
@@ -4552,13 +4640,80 @@ function populateAddonsModal() {
     const checkCircle = card.querySelector('[data-action="toggle-addon"]');
     if (checkCircle) checkCircle.dataset.addonId = addon.id;
     const nameEl = card.querySelector('[data-element="name"]');
+    const imageEl = card.querySelector('[data-element="image"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
     const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
     if (nameEl) nameEl.textContent = addon.name;
-    if (originalPriceEl) originalPriceEl.textContent = currencyFormatter.format(addon.price.original);
-    if (discountedPriceEl) discountedPriceEl.textContent = currencyFormatter.format(addon.price.discounted);
+    
+    // Extract and display product image
+    if (imageEl) {
+      // Check if addon has assets (from API product) or imageUrl (from hardcoded)
+      let imageUrl = null;
+      if (addon.assets && Array.isArray(addon.assets) && addon.assets.length > 0) {
+        console.log('[Addons Modal] Addon assets:', addon.name, addon.assets);
+        // Look for MAIN or CENTERED asset type
+        const mainAsset = addon.assets.find(asset => 
+          asset.type === 'MAIN' || asset.type === 'CENTERED'
+        ) || addon.assets[0]; // Fallback to first asset if no MAIN/CENTERED
+        
+        // AssetOut has contentUrl field (per OpenAPI spec)
+        // Use contentUrl if available, otherwise fall back to constructing from reference
+        imageUrl = mainAsset?.contentUrl || mainAsset?.url || null;
+        
+        // If no contentUrl, construct from reference ID
+        if (!imageUrl && mainAsset?.reference) {
+          // Construct asset URL from reference ID
+          const referenceId = mainAsset.reference;
+          const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const isNetlify = window.location.hostname.includes('netlify.app');
+          const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
+                                   window.location.hostname.includes('join.boulders.dk') ||
+                                   window.location.hostname === 'boulders.dk';
+          
+          if (isDevelopment) {
+            imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
+          } else if (isNetlify) {
+            imageUrl = `/.netlify/functions/api-proxy?path=/api/assets/${referenceId}`;
+          } else if (isCloudflarePages) {
+            imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
+          } else {
+            imageUrl = `https://api-join.boulders.dk/api/assets/${referenceId}`;
+          }
+          console.log('[Addons Modal] Constructed asset URL from reference:', referenceId, '->', imageUrl);
+        }
+      } else if (addon.imageUrl) {
+        imageUrl = addon.imageUrl;
+      }
+      
+      console.log('[Addons Modal] Image URL for', addon.name, ':', imageUrl);
+      
+      if (imageUrl) {
+        imageEl.src = imageUrl;
+        imageEl.alt = addon.name || 'Addon image';
+        imageEl.removeAttribute('style'); // Remove inline style that hides it
+        imageEl.style.display = 'block';
+        imageEl.style.visibility = 'visible';
+        imageEl.style.opacity = '1';
+        imageEl.style.width = '100%';
+        imageEl.style.height = '200px';
+        imageEl.style.objectFit = 'cover';
+        imageEl.style.borderRadius = '8px';
+        imageEl.style.marginBottom = '12px';
+        imageEl.classList.add('addon-image');
+        console.log('[Addons Modal] Image set for', addon.name, '- src:', imageEl.src);
+        console.log('[Addons Modal] Image computed display:', window.getComputedStyle(imageEl).display);
+      } else {
+        imageEl.style.display = 'none';
+        console.log('[Addons Modal] No image URL found for', addon.name);
+      }
+    } else {
+      console.log('[Addons Modal] Image element not found for', addon.name);
+    }
+    
+    if (originalPriceEl) originalPriceEl.textContent = numberFormatter.format(addon.price.original);
+    if (discountedPriceEl) discountedPriceEl.textContent = numberFormatter.format(addon.price.discounted);
     if (descriptionEl) descriptionEl.textContent = addon.description;
     if (featuresEl) {
       featuresEl.innerHTML = '';
@@ -4586,6 +4741,11 @@ function populateAddonsModal() {
 
 function showAddonsModal() {
   ensureAddonsModal();
+  // Reset title for regular addons modal
+  const title = addonsModal.querySelector('.addons-title');
+  if (title) {
+    title.textContent = 'Add to your membership';
+  }
   populateAddonsModal();
   updateAddonActionButton();
   
@@ -4621,13 +4781,240 @@ function proceedAfterAddons() {
   setTimeout(scrollToTop, 200);
 }
 
+// Populate boost modal with products that have "boostProduct" label
+function populateBoostModal() {
+  ensureAddonsModal();
+  const grid = addonsModal.querySelector('[data-modal-addons-grid]');
+  const title = addonsModal.querySelector('.addons-title');
+  
+  if (!grid) {
+    console.error('[Boost Modal] Grid element not found!');
+    return;
+  }
+  
+  // Update title for boost modal
+  if (title) {
+    title.textContent = 'Boost your membership';
+  }
+  
+  grid.innerHTML = '';
+  
+  // Use products with "boostProduct" label
+  const boostProducts = state.boostProducts || [];
+  
+  if (boostProducts.length === 0) {
+    // No boost products available
+    const emptyMsg = document.createElement('div');
+    emptyMsg.className = 'addons-empty';
+    emptyMsg.textContent = 'No boost products available.';
+    emptyMsg.style.textAlign = 'center';
+    emptyMsg.style.padding = '2rem';
+    emptyMsg.style.color = 'var(--color-text-secondary, #6b7280)';
+    grid.appendChild(emptyMsg);
+    return;
+  }
+  
+  // Render each boost product
+  boostProducts.forEach((product) => {
+    if (!templates.addon) {
+      // Fallback simple card if template missing
+      const card = document.createElement('div');
+      card.className = 'plan-card addon-card';
+      card.style.cursor = 'pointer';
+      
+      // Extract price from product structure (similar to renderSubscriptionCard)
+      const priceInCents = product.priceWithInterval?.price?.amount || 
+                           product.price?.amount || 
+                           product.amount || 
+                           0;
+      const price = priceInCents > 0 ? priceInCents / 100 : 0;
+      const currency = product.priceWithInterval?.price?.currency || 
+                       product.price?.currency || 
+                       product.currency || 
+                       'DKK';
+      
+      card.innerHTML = `
+        <div style="font-weight:600">${product.name || 'Boost Product'}</div>
+        <div>${price > 0 ? numberFormatter.format(price) + ' kr' : '—'}</div>
+        <div class="check-circle" data-action="toggle-addon" data-addon-id="${product.id}"></div>
+      `;
+      
+      // Make entire card clickable
+      card.addEventListener('click', (e) => {
+        const checkCircle = card.querySelector('.check-circle');
+        if (e.target === checkCircle || checkCircle.contains(e.target)) {
+          return;
+        }
+        if (product.id) toggleAddon(product.id, checkCircle);
+      });
+      
+      // Ensure card is visible
+      card.style.opacity = '1';
+      card.style.visibility = 'visible';
+      
+      grid.appendChild(card);
+      return;
+    }
+    
+    // Use existing add-on template
+    const card = templates.addon.content.firstElementChild.cloneNode(true);
+    const checkCircle = card.querySelector('[data-action="toggle-addon"]');
+    if (checkCircle) checkCircle.dataset.addonId = product.id;
+    
+    const nameEl = card.querySelector('[data-element="name"]');
+    const imageEl = card.querySelector('[data-element="image"]');
+    const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
+    const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
+    const descriptionEl = card.querySelector('[data-element="description"]');
+    const featuresEl = card.querySelector('[data-element="features"]');
+    
+    if (nameEl) nameEl.textContent = product.name || 'Boost Product';
+    
+    // Extract and display product image
+    if (imageEl) {
+      let imageUrl = null;
+      
+      if (product.assets && Array.isArray(product.assets) && product.assets.length > 0) {
+        console.log('[Boost Modal] Product assets:', product.name, product.assets);
+        // Look for MAIN or CENTERED asset type
+        const mainAsset = product.assets.find(asset => 
+          asset.type === 'MAIN' || asset.type === 'CENTERED'
+        ) || product.assets[0]; // Fallback to first asset if no MAIN/CENTERED
+        
+        console.log('[Boost Modal] Selected asset full object:', JSON.stringify(mainAsset, null, 2));
+        console.log('[Boost Modal] Asset contentUrl:', mainAsset?.contentUrl);
+        console.log('[Boost Modal] Asset url:', mainAsset?.url);
+        console.log('[Boost Modal] Asset reference:', mainAsset?.reference);
+        
+        // AssetOut has contentUrl field (per OpenAPI spec)
+        // Use contentUrl if available, otherwise fall back to constructing from reference
+        imageUrl = mainAsset?.contentUrl || mainAsset?.url || null;
+        
+        // If no contentUrl, construct from reference ID
+        if (!imageUrl && mainAsset?.reference) {
+          // Construct asset URL from reference ID
+          const referenceId = mainAsset.reference;
+          const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const isNetlify = window.location.hostname.includes('netlify.app');
+          const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
+                                   window.location.hostname.includes('join.boulders.dk') ||
+                                   window.location.hostname === 'boulders.dk';
+          
+          if (isDevelopment) {
+            imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
+          } else if (isNetlify) {
+            imageUrl = `/.netlify/functions/api-proxy?path=/api/assets/${referenceId}`;
+          } else if (isCloudflarePages) {
+            imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
+          } else {
+            imageUrl = `https://api-join.boulders.dk/api/assets/${referenceId}`;
+          }
+          console.log('[Boost Modal] Constructed asset URL from reference:', referenceId, '->', imageUrl);
+        }
+      }
+      
+      console.log('[Boost Modal] Image URL for', product.name, ':', imageUrl);
+      
+      if (imageUrl) {
+        imageEl.src = imageUrl;
+        imageEl.alt = product.name || 'Product image';
+        imageEl.style.display = 'block';
+        imageEl.classList.add('addon-image');
+        console.log('[Boost Modal] Image set for', product.name);
+      } else {
+        imageEl.style.display = 'none';
+        console.log('[Boost Modal] No image URL found for', product.name);
+      }
+    }
+    
+    // Extract price from product structure (similar to renderSubscriptionCard)
+    const priceInCents = product.priceWithInterval?.price?.amount || 
+                         product.price?.amount || 
+                         product.amount || 
+                         0;
+    const price = priceInCents > 0 ? priceInCents / 100 : 0;
+    const originalPrice = product.originalPrice ? product.originalPrice / 100 : null;
+    
+    if (originalPriceEl && originalPrice && originalPrice > price) {
+      originalPriceEl.textContent = numberFormatter.format(originalPrice);
+      originalPriceEl.style.display = '';
+    } else if (originalPriceEl) {
+      originalPriceEl.style.display = 'none';
+    }
+    
+    if (discountedPriceEl) {
+      // Always show price, including "0 kr" for free items
+      discountedPriceEl.textContent = numberFormatter.format(price);
+    }
+    
+    if (descriptionEl) {
+      // Get description similar to renderSubscriptionCard
+      const description = product.imageBanner?.text || product.description || product.productNumber || '';
+      descriptionEl.textContent = description;
+    }
+    
+    if (featuresEl && product.features && Array.isArray(product.features)) {
+      featuresEl.innerHTML = '';
+      product.features.forEach((feature) => {
+        const li = document.createElement('li');
+        li.textContent = feature;
+        featuresEl.appendChild(li);
+      });
+    } else if (featuresEl) {
+      featuresEl.innerHTML = '';
+    }
+    
+    // Make entire card clickable
+    card.style.cursor = 'pointer';
+    
+    // Ensure card is visible (fix opacity: 0 issue)
+    card.style.opacity = '1';
+    card.style.visibility = 'visible';
+    
+    card.addEventListener('click', (e) => {
+      if (e.target === checkCircle || checkCircle.contains(e.target)) {
+        return;
+      }
+      if (product.id) toggleAddon(product.id, checkCircle);
+    });
+    
+    grid.appendChild(card);
+  });
+}
+
+// Show boost modal (uses same modal infrastructure as addons)
+async function showBoostModal() {
+  ensureAddonsModal();
+  
+  // Load boost products if not already loaded
+  if (!state.boostProducts || state.boostProducts.length === 0) {
+    await loadBoostProducts();
+  }
+  
+  populateBoostModal();
+  updateAddonActionButton();
+  
+  // Show modal with subtle animation
+  addonsModal.style.display = 'block';
+  addonsModal.style.opacity = '0';
+  addonsModal.style.transform = 'scale(0.95)';
+  document.body.style.overflow = 'hidden';
+  
+  // Trigger animation after a brief moment
+  requestAnimationFrame(() => {
+    addonsModal.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    addonsModal.style.opacity = '1';
+    addonsModal.style.transform = 'scale(1)';
+  });
+}
+
 // Expose a small API to set the image dynamically if desired
 // Usage: window.setAddonsUpsellImage('https://.../image.jpg')
 // Image API removed
 
-// Hide Boost from the step indicator permanently and toggle Boost step panel by selection
+// Hide Boost from the step indicator permanently - Boost is now a modal, not a step
 function applyConditionalSteps() {
-  // 1) Hide Boost in the step indicator entirely (never shown)
+  // 1) Hide Boost in the step indicator entirely (never shown - it's a modal now)
   const boostStep = Array.from(document.querySelectorAll('.step .step-label'))
     .find((label) => label.textContent.trim() === 'Boost')?.closest('.step');
   if (boostStep) {
@@ -4644,7 +5031,7 @@ function applyConditionalSteps() {
     }
   }
 
-  // 2) Always hide Boost/Add-ons page (step 3) - disabled for now
+  // 2) Always hide Boost/Add-ons page (step 3) - it's now a modal
   const boostPanel = document.getElementById('step-3');
   if (boostPanel) {
     boostPanel.style.display = 'none'; // Always hidden
@@ -5386,6 +5773,7 @@ function cacheDom() {
   DOM.valueCardContinueBtn = document.querySelector('[data-action="continue-value-cards"]');
   DOM.valueCardEntryLabel = document.querySelector('[data-entry-label]');
   DOM.cartItems = document.querySelector('[data-component="cart-items"]');
+  DOM.cartAddons = document.querySelector('[data-component="cart-addons"]');
   DOM.paymentOverview = document.querySelector('.payment-overview');
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
@@ -7978,8 +8366,8 @@ function renderAddons() {
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
 
     if (nameEl) nameEl.textContent = addon.name;
-    if (originalPriceEl) originalPriceEl.textContent = currencyFormatter.format(addon.price.original);
-    if (discountedPriceEl) discountedPriceEl.textContent = currencyFormatter.format(addon.price.discounted);
+    if (originalPriceEl) originalPriceEl.textContent = numberFormatter.format(addon.price.original);
+    if (discountedPriceEl) discountedPriceEl.textContent = numberFormatter.format(addon.price.discounted);
     if (descriptionEl) descriptionEl.textContent = addon.description;
     if (featuresEl) {
       featuresEl.innerHTML = '';
@@ -8047,6 +8435,33 @@ function handleCategoryToggle(category) {
   }
 }
 
+// Check if a product has a boost label that should trigger the boost modal
+function hasBoostLabel(product) {
+  if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+    return false;
+  }
+  
+  // Check for "Boost" label (case-insensitive)
+  return product.productLabels.some(
+    label => label.name && label.name.toLowerCase() === 'boost'
+  );
+}
+
+// Find product object by ID from state
+function findProductById(productId) {
+  if (!productId) return null;
+  
+  // Search in all product arrays
+  const allProducts = [
+    ...state.campaignSubscriptions,
+    ...state.subscriptions,
+    ...state.dayPassSubscriptions,
+    ...state.valueCards
+  ];
+  
+  return allProducts.find(p => p.id === parseInt(productId, 10) || String(p.id) === String(productId));
+}
+
 function handlePlanSelection(selectedCard) {
   // Remove selected class from all plan cards in the same category
   const category = selectedCard.closest('.category-item').dataset.category;
@@ -8068,6 +8483,10 @@ function handlePlanSelection(selectedCard) {
   state.selectedProductId = productId; // Store API product ID
   state.selectedProductType = isMembership ? 'membership' : 'punch-card';
   
+  // Store full product object for label checking
+  const product = findProductById(productId);
+  state.selectedProduct = product;
+  
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
   
   // Step 5: If membership is selected, fetch add-ons immediately
@@ -8088,10 +8507,18 @@ function handlePlanSelection(selectedCard) {
   // Update cart to reflect selection
   updateCartSummary();
   
-  // Auto-advance to next step after a short delay
-  setTimeout(() => {
-    nextStep();
-  }, 500);
+  // Check if product has boost label - if so, show modal instead of auto-advancing
+  if (product && hasBoostLabel(product)) {
+    // Show boost modal with subscription additions
+    setTimeout(() => {
+      showBoostModal();
+    }, 300);
+  } else {
+    // Auto-advance to next step after a short delay
+    setTimeout(() => {
+      nextStep();
+    }, 500);
+  }
 }
 
 function setupNewAccessStep() {
@@ -8245,6 +8672,11 @@ function setupNewAccessStep() {
       const productId = card.dataset.productId || planId; // Use API product ID if available
       state.membershipPlanId = planId; // Keep for backward compatibility
       state.selectedProductId = productId; // Store API product ID
+      
+      // Store full product object for label checking
+      const product = findProductById(productId);
+      state.selectedProduct = product;
+      
       // Determine product type based on category
       if (category === 'campaign' || category === 'membership' || category === '15daypass') {
         state.selectedProductType = 'membership'; // All are subscription products
@@ -8330,15 +8762,20 @@ function setupNewAccessStep() {
             pendingNavigationTimeouts.membership = null;
           }
           
-          // Reset card animation and auto-advance to next step
+          // Reset card animation and check for boost label
           pendingNavigationTimeouts.membership = setTimeout(() => {
             // Clear timeout reference before navigation
             pendingNavigationTimeouts.membership = null;
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
-            // Only navigate if we're still on step 2 (prevent stale state navigation)
+            // Only proceed if we're still on step 2 (prevent stale state navigation)
             if (state.currentStep === 2) {
-              nextStep();
+              // Check if product has boost label - if so, show modal instead of advancing
+              if (product && hasBoostLabel(product)) {
+                showBoostModal();
+              } else {
+                nextStep();
+              }
             }
           }, 500);
         }
@@ -8675,15 +9112,18 @@ function selectMembershipPlan(planId) {
 }
 
 function toggleAddon(addonId, checkCircle) {
-  if (state.addonIds.has(addonId)) {
-    state.addonIds.delete(addonId);
+  // Normalize addonId to string for consistent storage
+  const normalizedId = String(addonId);
+  
+  if (state.addonIds.has(normalizedId)) {
+    state.addonIds.delete(normalizedId);
   } else {
-    state.addonIds.add(addonId);
+    state.addonIds.add(normalizedId);
   }
 
   const card = checkCircle.closest('.plan-card');
   if (card) {
-    const isSelected = state.addonIds.has(addonId);
+    const isSelected = state.addonIds.has(normalizedId);
     card.classList.toggle('selected', isSelected);
     centerPlanCard(card);
   }
@@ -9880,15 +10320,19 @@ function updateCartSummary() {
     });
   }
 
-  // Handle add-ons (if any were selected - currently disabled but keeping for future)
+  // Handle add-ons and boost products
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
-    if (!addon) return;
+    if (!addon) {
+      console.warn(`[Cart] Addon not found: ${addonId}`);
+      return;
+    }
     items.push({
       id: addon.id,
       name: addon.name,
       amount: addon.price.discounted,
       type: 'addon',
+      productId: addon.productId || addonId, // Store product ID for order creation
     });
   });
 
@@ -9901,6 +10345,7 @@ function updateCartSummary() {
   state.totals.cartTotal = Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0));
 
   renderCartItems();
+  renderCartAddons();
   renderCartTotal();
   
   // If we're on step 4 and have order data, ensure payment overview is updated
@@ -9954,7 +10399,7 @@ function updateCartTotals() {
     }
   });
   
-  // Add add-ons
+  // Add add-ons and boost products
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
@@ -9963,6 +10408,7 @@ function updateCartTotals() {
       name: addon.name,
       amount: addon.price.discounted,
       type: 'addon',
+      productId: addon.productId || addonId, // Store product ID for order creation
     });
   });
 
@@ -9982,7 +10428,10 @@ function renderCartItems() {
   if (!templates.cartItem || !DOM.cartItems) return;
   DOM.cartItems.innerHTML = '';
 
-  if (!state.cartItems.length) {
+  // Filter to only membership items
+  const membershipItems = state.cartItems.filter(item => item.type === 'membership');
+
+  if (!membershipItems.length) {
     // Only show empty message if there's no gym selected either
     if (!state.selectedGymId && !state.selectedBusinessUnit) {
       const empty = document.createElement('div');
@@ -10069,14 +10518,14 @@ function renderCartItems() {
     );
   }
 
-  state.cartItems.forEach((item, index) => {
+  membershipItems.forEach((item, index) => {
     const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
     const nameEl = cartItem.querySelector('[data-element="name"]');
     const priceEl = cartItem.querySelector('[data-element="price"]');
 
     if (nameEl) {
       // For membership items with imageBanner text, display name and banner text separately
-      if (item.type === 'membership' && item.imageBannerText) {
+      if (item.imageBannerText) {
         // Clear any existing content
         nameEl.innerHTML = '';
         
@@ -10119,52 +10568,109 @@ function renderCartItems() {
     
     // Hide price for membership items (price already shown in Monthly fee section)
     if (priceEl) {
-      if (item.type === 'membership') {
-        priceEl.style.display = 'none';
-      } else {
-        // Calculate discounted price for this item
-        let displayPrice = item.amount;
-        let originalPrice = item.amount;
-        
-        // If discount is applied, calculate discounted price proportionally
-        if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
-          // Calculate discount ratio
-          const discountRatio = state.totals.discountAmount / state.totals.subtotal;
-          // Apply discount proportionally to this item
-          const itemDiscount = item.amount * discountRatio;
-          displayPrice = Math.max(0, item.amount - itemDiscount);
-          
-          // If discount is 100% or more, show 0
-          if (state.totals.discountAmount >= state.totals.subtotal) {
-            displayPrice = 0;
-          }
-        }
-        
-        // Display price - show discounted price if different from original
-        if (displayPrice !== originalPrice && state.discountApplied) {
-          // Show original price with strikethrough and discounted price
-          priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${numberFormatter.format(originalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${numberFormatter.format(displayPrice)} kr</span>`;
-        } else {
-          priceEl.textContent = displayPrice ? numberFormatter.format(displayPrice) + ' kr' : '';
-        }
-      }
+      priceEl.style.display = 'none';
     }
 
     DOM.cartItems.appendChild(cartItem);
   });
 }
 
+function renderCartAddons() {
+  if (!templates.cartItem || !DOM.cartAddons) return;
+  DOM.cartAddons.innerHTML = '';
+
+  // Filter to only non-membership items (addons, boost products, etc.)
+  const addonItems = state.cartItems.filter(item => item.type !== 'membership');
+
+  if (!addonItems.length) {
+    DOM.cartAddons.style.display = 'none';
+    return;
+  }
+
+  DOM.cartAddons.style.display = 'block';
+
+  addonItems.forEach((item) => {
+    const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
+    const nameEl = cartItem.querySelector('[data-element="name"]');
+    const priceEl = cartItem.querySelector('[data-element="price"]');
+
+    if (nameEl) {
+      nameEl.textContent = item.name;
+    }
+    
+    if (priceEl) {
+      // Calculate discounted price for this item
+      let displayPrice = item.amount;
+      let originalPrice = item.amount;
+      
+      // If discount is applied, calculate discounted price proportionally
+      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
+        // Calculate discount ratio
+        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
+        // Apply discount proportionally to this item
+        const itemDiscount = item.amount * discountRatio;
+        displayPrice = Math.max(0, item.amount - itemDiscount);
+        
+        // If discount is 100% or more, show 0
+        if (state.totals.discountAmount >= state.totals.subtotal) {
+          displayPrice = 0;
+        }
+      }
+      
+      // Display price - show discounted price if different from original
+      if (displayPrice !== originalPrice && state.discountApplied) {
+        // Show original price with strikethrough and discounted price
+        priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${numberFormatter.format(originalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${numberFormatter.format(displayPrice)} kr</span>`;
+      } else {
+        // Always show price, including "0 kr" for free items
+        priceEl.textContent = numberFormatter.format(displayPrice) + ' kr';
+      }
+    }
+
+    DOM.cartAddons.appendChild(cartItem);
+  });
+}
+
 function renderCartTotal() {
-  // Cart total is no longer displayed - payment overview shows calculated prices instead
-  // Just update payment overview which shows the correct calculated prices
-  
-  // Update payment overview (shows "Betales nu" and "Månedlig betaling herefter")
+  // Update payment overview first to calculate payNowAmount
   updatePaymentOverview();
+  
+  // Update cart total display
+  const cartTotalEl = document.querySelector('[data-summary-field="cart-total"]');
+  const cartTotalContainer = document.querySelector('.cart-total');
+  
+  if (cartTotalEl) {
+    // Calculate total as: Pay now amount + addon items
+    // Get addon items total (non-membership items)
+    const addonItems = state.cartItems.filter(item => item.type !== 'membership');
+    const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
+    
+    // Get "Pay now" amount from state (calculated by updatePaymentOverview)
+    const payNowAmount = state.totals.payNowAmount || 0;
+    
+    // Total = Pay now + Addons
+    let total = payNowAmount + addonTotal;
+    
+    // Apply discount if applicable (discount should be applied to the total)
+    if (state.discountApplied && state.totals.discountAmount > 0) {
+      total = Math.max(0, total - state.totals.discountAmount);
+    }
+    
+    // Use numberFormatter to avoid duplication (currencyFormatter already includes "kr.")
+    // Format: "569,00 kr" (no dot, consistent with cart items)
+    cartTotalEl.textContent = numberFormatter.format(total) + ' kr';
+  }
+  
+  // Show/hide cart total container based on whether there are items
+  if (cartTotalContainer) {
+    const hasItems = state.cartItems && state.cartItems.length > 0;
+    // Only show if there are non-membership items (membership price is shown in payment overview)
+    const hasNonMembershipItems = state.cartItems && state.cartItems.some(item => item.type !== 'membership');
+    cartTotalContainer.style.display = hasNonMembershipItems ? 'block' : 'none';
+  }
   
   // Update discount display if discount is applied
   updateDiscountDisplay();
-  
-  console.log('[Cart] Updated cart display (subtotal:', state.totals.subtotal, 'discount:', state.totals.discountAmount, ')');
 }
 
 /**
@@ -10569,6 +11075,9 @@ function updatePaymentOverview() {
   if (!billingPeriodText) {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
+  
+  // Store payNowAmount in state for use in cart total calculation
+  state.totals.payNowAmount = payNowAmount;
   
   if (DOM.payNow) {
     const amountText = currencyFormatter.format(payNowAmount);
@@ -12033,8 +12542,17 @@ async function handleCheckout() {
       if (state.addonIds && state.addonIds.size > 0) {
         for (const addonId of state.addonIds) {
           try {
-            await orderAPI.addArticleItem(state.orderId, addonId);
-            console.log(`[checkout] Add-on added: ${addonId}`);
+            // Get the addon to find the actual product ID (for boost products from API)
+            const addon = findAddon(addonId);
+            // Use productId if available (for API products), otherwise use addonId
+            const productId = addon?.productId || addonId;
+            // Convert to number if it's a numeric string
+            const numericProductId = typeof productId === 'string' && /^\d+$/.test(productId) 
+              ? parseInt(productId, 10) 
+              : productId;
+            
+            await orderAPI.addArticleItem(state.orderId, numericProductId);
+            console.log(`[checkout] Add-on added: ${addonId} (product ID: ${numericProductId})`);
           } catch (error) {
             console.error(`[checkout] Failed to add add-on ${addonId}:`, error);
             // Don't throw - payment link is already generated, just log the error
@@ -13442,14 +13960,10 @@ function nextStep(fromStep) {
   
   // advance to next visible panel (skip any hidden ones)
   let target = currentStep + 1;
-  // Add-ons step (step 3) is disabled - always skip it
+  // Add-ons step (step 3) is now a modal - always skip it
   if (target === 3) {
     target = 4; // Skip directly to step 4
   }
-  // Ensure membership goes to Boost (step 3) right after Access (step 2) - DISABLED
-  // if (state.currentStep === 2 && isMembershipSelected()) {
-  //   target = 3;
-  // }
   
   // If we're going from step 2 to step 4 (skipping step 3), don't check for hidden panels
   // Step 4 should always be shown when coming from step 2
@@ -13459,7 +13973,7 @@ function nextStep(fromStep) {
     while (target <= TOTAL_STEPS) {
       const panel = DOM.stepPanels[target - 1];
       if (!panel) break; // Panel doesn't exist
-      // Skip step 3 check since step 3 is always hidden
+      // Skip step 3 check since step 3 is now a modal
       if (target === 3) {
         target = 4;
         continue;
@@ -13473,12 +13987,12 @@ function nextStep(fromStep) {
       if (target === 3) {
         target = 4;
       }
-      // CRITICAL: Never skip to step 5 (success page) unless explicitly navigating from step 4
-      // This prevents accidental navigation to success page
-      if (target >= TOTAL_STEPS && currentStep !== 4) {
-        console.warn('[Navigation] Prevented navigation to success page from step', currentStep);
-        target = Math.min(currentStep + 1, 4); // Cap at step 4
-        break;
+    // CRITICAL: Never skip to step 5 (success page) unless explicitly navigating from step 4
+    // This prevents accidental navigation to success page
+    if (target >= TOTAL_STEPS && currentStep !== 4) {
+      console.warn('[Navigation] Prevented navigation to success page from step', currentStep);
+      target = Math.min(currentStep + 1, 4); // Cap at step 4
+      break;
       }
     }
   }
@@ -13590,7 +14104,7 @@ function prevStep() {
   
   // go back to previous visible panel (skip any hidden ones)
   let target = state.currentStep - 1;
-  // Add-ons step (step 3) is disabled - always skip it
+  // Add-ons step (step 3) is now a modal - always skip it
   if (target === 3) {
     target = 2; // Go back to step 2 instead
   }
@@ -13668,10 +14182,8 @@ function showStep(stepNumber) {
       panel.style.visibility = 'visible';
       panel.style.opacity = '1';
     } else {
-      // Only hide if not already hidden by other logic (like step 3)
-      if (panel.id !== 'step-3') {
-        panel.style.display = 'none';
-      }
+      // Hide panel if not currently active
+      panel.style.display = 'none';
     }
   });
   
@@ -13775,7 +14287,7 @@ function updateStepIndicator() {
   // Map state.currentStep to indicator step index
   // Step 1 → indicator 0 (Home Gym)
   // Step 2 → indicator 1 (Access)
-  // Step 3 → skipped (Boost is hidden)
+  // Step 3 → skipped (Boost is now a modal)
   // Step 4 → indicator 2 (Send)
   // Step 5 → hide indicator (handled above)
   let visibleCurrentIndex = -1;
@@ -14162,7 +14674,69 @@ function findValueCard(id) {
 }
 
 function findAddon(id) {
-  return ADDONS.find((addon) => addon.id === id) ?? null;
+  // First check hardcoded ADDONS array
+  const hardcodedAddon = ADDONS.find((addon) => addon.id === id || String(addon.id) === String(id));
+  if (hardcodedAddon) return hardcodedAddon;
+  
+  // Then check boost products from API
+  if (state.boostProducts && Array.isArray(state.boostProducts)) {
+    const boostProduct = state.boostProducts.find((product) => 
+      product.id === parseInt(id, 10) || 
+      String(product.id) === String(id) ||
+      product.id === id
+    );
+    
+    if (boostProduct) {
+      // Convert boost product to addon format
+      const priceInCents = boostProduct.priceWithInterval?.price?.amount || 
+                           boostProduct.price?.amount || 
+                           boostProduct.amount || 
+                           0;
+      const price = priceInCents > 0 ? priceInCents / 100 : 0;
+      
+      return {
+        id: String(boostProduct.id), // Keep as string for consistency
+        name: boostProduct.name || 'Boost Product',
+        price: {
+          original: price,
+          discounted: price
+        },
+        description: boostProduct.description || boostProduct.imageBanner?.text || '',
+        features: boostProduct.features || [],
+        productId: boostProduct.id, // Store numeric product ID for order creation
+        assets: boostProduct.assets // Preserve assets for image display
+      };
+    }
+  }
+  
+  // Also check subscription additions (from API)
+  if (state.subscriptionAdditions && Array.isArray(state.subscriptionAdditions)) {
+    const addition = state.subscriptionAdditions.find((product) => 
+      product.id === parseInt(id, 10) || 
+      String(product.id) === String(id) ||
+      product.id === id
+    );
+    
+    if (addition) {
+      const priceInCents = addition.price?.amount || addition.amount || 0;
+      const price = priceInCents > 0 ? priceInCents / 100 : 0;
+      
+      return {
+        id: String(addition.id),
+        name: addition.name || 'Add-on',
+        price: {
+          original: price,
+          discounted: price
+        },
+        description: addition.description || '',
+        features: addition.features || [],
+        productId: addition.id,
+        assets: addition.assets // Preserve assets for image display
+      };
+    }
+  }
+  
+  return null;
 }
 
 function showToast(message, type = 'info') {
