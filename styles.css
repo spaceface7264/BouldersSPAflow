@@ -630,12 +630,18 @@ body > * {
     overflow-x: hidden;
 }
 
+/* Ensure header can use sticky positioning */
+body > .header {
+    overflow-x: visible;
+}
+
 body {
     background-color: #1a1a1a;
     background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
     width: 100%;
     max-width: 100vw;
     overflow-x: hidden;
+    overflow-y: auto;
     background-size: cover;
     background-position: center center;
     background-repeat: no-repeat;
@@ -643,11 +649,8 @@ body {
     min-height: 100vh; /* Ensures body is at least viewport height */
     display: flex;
     flex-direction: column;
-    display: flex;
-    flex-direction: column;
     color: white;
     font-family: 'Inter', system-ui, sans-serif;
-    overflow-x: hidden;
     /* Remove height: 100% to allow natural growth beyond viewport */
     /* Ensure fixed background works across all browsers */
     -webkit-background-attachment: fixed;
@@ -663,91 +666,82 @@ body {
 
 .header {
     width: 100%;
-    background: transparent;
-    position: relative;
-    z-index: 10;
-    margin-bottom: 32px;
+    background: rgba(0, 0, 0, 0.02);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    margin-bottom: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .header-container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 20px;
+    box-sizing: border-box;
 }
 
 .header-content {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    padding: 20px 0;
-    min-height: 80px;
-    gap: 12px;
-}
-
-/* Header Text Above Logo */
-.header-text {
-    font-size: var(--font-size-2xl);
-    font-weight: 700;
-    color: white;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin: 0;
-    text-align: center;
+    padding: 16px 0;
+    min-height: 56px;
+    gap: 0;
+    width: 100%;
+    position: relative;
 }
 
 /* Logo Section */
 .logo-section {
     display: flex;
     align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    margin: 0;
+    padding: 0;
 }
 
 .logo-image {
-    height: 50px;
+    height: 32px;
     width: auto;
     object-fit: contain;
     display: block;
+    opacity: 0.95;
+    transition: opacity 0.2s ease;
+}
+
+.logo-image:hover {
+    opacity: 1;
 }
 
 .logo-fallback {
     display: none;
     align-items: center;
     justify-content: center;
-    font-size: var(--font-size-xl);
-    font-weight: 700;
-    color: white;
-    background: var(--color-brand-accent);
-    border-radius: 8px;
-    padding: 12px 16px;
-    height: 50px;
-    min-width: 120px;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    background: transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    height: 32px;
+    min-width: 90px;
+    letter-spacing: 0.5px;
 }
 
 /* Language Switcher */
 .language-switcher {
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    gap: 8px;
-    align-items: center;
+    display: none !important;
 }
 
 .language-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-    color: white;
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
+    display: none !important;
 }
 
 .language-btn:hover {
@@ -777,67 +771,99 @@ body {
     }
     
     .header-content {
-        padding: 16px 0;
-        min-height: 60px;
-    }
-    
-    .logo-image {
-        height: 40px;
-    }
-    
-    .logo-fallback {
-        height: 40px;
-        font-size: var(--font-size-lg);
-        padding: 8px 12px;
-        min-width: 100px;
-    }
-    
-    .header-text {
-        font-size: var(--font-size-m);
-        letter-spacing: 1px;
-    }
-    
-    .language-switcher {
-        right: 16px;
-        gap: 6px;
-    }
-    
-    .language-btn {
-        padding: 5px 10px;
-        font-size: var(--font-size-xs);
-    }
-    
-    .language-flag {
-        font-size: 14px;
-    }
-}
-
-@media (max-width: 480px) {
-    .header-content {
         padding: 12px 0;
         min-height: 50px;
     }
     
     .logo-image {
-        height: 24px;
-        
+        height: 32px;
     }
     
     .logo-fallback {
-        height: 35px;
+        height: 32px;
         font-size: var(--font-size-base);
         padding: 6px 10px;
-        min-width: 80px;
+        min-width: 90px;
     }
     
-    .header-text {
-        font-size: var(--font-size-lg);
-        letter-spacing: 1px;
+    .main {
+        padding: 0px 12px 0 12px; /* Match mobile padding pattern */
+        padding-top: calc(48px + 0px); /* Minimal space for fixed header on tablet */
     }
     
-    .language-switcher {
-        right: 12px;
-        gap: 4px;
+    .step-indicator {
+        margin-top: 48px; /* Add space for fixed header on tablet */
+        margin-bottom: 0;
+    }
+    
+    /* Remove top margin when on step 2 */
+    .step-indicator.step-2-active {
+        margin-top: 0 !important;
+    }
+    
+    .selected-gym-display {
+        margin-top: calc(48px + 8px);
+        margin-bottom: 0; /* No bottom margin - step indicator handles spacing */
+        padding: 0 16px;
+    }
+    
+    .step-content {
+        margin-top: 0;
+    }
+    
+    .step-panel-content {
+        margin-bottom: 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header-container {
+        padding: 0 16px;
+    }
+    
+    .header-content {
+        padding: 10px 0;
+        min-height: 44px;
+    }
+    
+    .logo-image {
+        height: 26px;
+    }
+    
+    .logo-fallback {
+        height: 26px;
+        font-size: 13px;
+        padding: 4px 8px;
+        min-width: 70px;
+    }
+    
+    .main {
+        padding: 0px 8px 0 8px; /* Match mobile padding pattern */
+        padding-top: calc(44px + 0px); /* Minimal space for fixed header on mobile */
+    }
+    
+    .step-indicator {
+        margin-top: 44px; /* Add space for fixed header on mobile */
+        margin-bottom: 0;
+    }
+    
+    /* Remove top margin when on step 2 */
+    .step-indicator.step-2-active {
+        margin-top: 0 !important;
+    }
+    
+    .selected-gym-display {
+        margin-top: calc(44px + 4px);
+        margin-bottom: 0; /* No bottom margin - step indicator handles spacing */
+        padding: 0 16px;
+    }
+    
+    .step-content {
+        margin-top: 0;
+    }
+    
+    .step-panel-content {
+        margin-bottom: 20px;
     }
     
     .language-btn {
@@ -857,15 +883,33 @@ body {
 
 .step-indicator {
     background-color: transparent;
-    padding: 8px 0; /* Add padding to prevent clipping of animated rings */
+    padding: 4px 0; /* Reduced padding to prevent clipping of animated rings */
     overflow: visible; /* Ensure animations aren't clipped */
+    margin-top: 56px; /* Add space for fixed header */
+    margin-bottom: 0; /* Remove bottom margin */
+}
+
+/* Remove top margin when on step 2 (selected gym display is visible) */
+.step-indicator.step-2-active {
+    margin-top: 0 !important; /* No top margin - container handles spacing */
+}
+
+/* Remove top margin when on step 2 (selected gym display is visible) */
+.step-indicator.step-2-active {
+    margin-top: 0;
 }
 
 .step-indicator-container {
     max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 16px;
+    margin: 24px auto;
+    padding: 0 20px;
     overflow: visible; /* Ensure animations aren't clipped */
+    box-sizing: border-box;
+}
+
+/* Remove top margin from container when on step 2 */
+.step-indicator.step-2-active .step-indicator-container {
+    margin-top: 0 !important;
 }
 
 .step-indicator-content {
@@ -875,23 +919,27 @@ body {
     gap: 8px;
     overflow: visible; /* Ensure animations aren't clipped */
     padding: 8px 0; /* Add vertical padding for animated rings */
+    width: 100%;
+    position: relative;
 }
 
 .selected-gym-display {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    margin-top: 12px;
-    padding: 8px 16px;
+    gap: 0;
+    margin-top: calc(56px + 8px); /* Space for fixed header + small gap */
+    margin-bottom: 0; /* No bottom margin - step indicator handles spacing */
+    padding: 0;
     font-size: var(--font-size-sm);
     position: relative;
     z-index: 10; /* Ensure it's above other elements */
-}
-
-.selected-gym-label {
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 500;
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 20px;
+    box-sizing: border-box;
 }
 
 .selected-gym-link {
@@ -1036,6 +1084,9 @@ body {
     font-weight: 500;
     color: var(--color-text-secondary);
     transition: color 0.3s ease;
+    text-align: center;
+    min-width: 0; /* Allow flex shrinking */
+    white-space: nowrap; /* Prevent text wrapping */
 }
 
 .step.active .step-label {
@@ -1080,18 +1131,18 @@ body {
 }
 
 .main {
-    max-width: 1200px;
+    max-width: 800px;
     margin: 0 auto;
-    padding: 24px 22px;
+    padding: 0px 16px 0 16px; /* Match mobile padding pattern */
+    padding-top: calc(12px + 0px); /* Minimal space for fixed header */
     text-align: center;
     width: 100%;
-    max-width: 100vw;
     overflow-x: hidden;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     flex: 1;
-    min-height: 100vh; /* Ensure footer requires scrolling */
+    min-height: 0;
 }
 
 .main-title {
@@ -1104,21 +1155,22 @@ body {
 
 .main-subtitle {
     font-size: var(--font-size-lg);
-    padding-bottom: 20px;
+    padding-bottom: 12px;
+    margin-top: 0;
     color: var(--color-text-white);
 }
 
 .secondary-subtitle {
     font-size: var(--font-size-base);
-    padding-bottom: 20px;
+    padding-bottom: 12px;
     color: var(--color-text-secondary);
-    margin-top: -10px;
+    margin-top: 0;
     line-height: 1.4;
 }
 
 /* Step Content Styles */
 .step-content {
-    margin-top: 50px;
+    margin-top: 0; /* Remove top margin since main already has padding */
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -1141,10 +1193,12 @@ body {
 }
 
 .step-panel-content {
-    max-width: 600px;
+    max-width: 100%;
     margin: 0 auto;
-    margin-bottom: 24px;
+    margin-bottom: 32px;
+    margin-top: 0;
     text-align: center;
+    padding: 0;
 }
 
 /* Step 4 (Send/Info) needs full width for two-column layout */
@@ -1290,6 +1344,10 @@ body {
 .search-wrapper {
     position: relative;
     margin-bottom: 32px;
+    width: 80%;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .search-icon {
@@ -6589,6 +6647,10 @@ main {
 }
 
 @media (max-width: 767px) {
+    .step-indicator-container {
+        padding: 0 16px;
+    }
+    
     .step-indicator-content {
         gap: 4px;
     }
@@ -6635,7 +6697,7 @@ main {
     }
     
     .main {
-        padding: 24px 2px 0 2px; /* Remove bottom padding so content reaches edge */
+        padding: 12px 2px 0 2px; /* Remove bottom padding so content reaches edge */
         max-width: 100vw;
         overflow-x: hidden;
         display: flex;

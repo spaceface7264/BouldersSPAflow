@@ -4,6 +4,37 @@ const currencyFormatter = new Intl.NumberFormat('da-DK', {
   currency: 'DKK',
 });
 
+/**
+ * Rounds amount to the nearest half krone (0.00 or 0.50)
+ * Formula: floor((amount * 2) + 0.5) / 2
+ * @param {number} amount - Amount to round
+ * @returns {number} Rounded amount ending in .00 or .50
+ */
+function roundToHalfKrone(amount) {
+  if (typeof amount !== 'number' || isNaN(amount)) return 0;
+  return Math.floor((amount * 2) + 0.5) / 2;
+}
+
+/**
+ * Formats a price with rounding to half krone, ensuring it ends in .00 or .50
+ * @param {number} amount - Amount to format
+ * @returns {string} Formatted price string
+ */
+function formatPriceHalfKrone(amount) {
+  const rounded = roundToHalfKrone(amount);
+  return numberFormatter.format(rounded);
+}
+
+/**
+ * Formats a currency amount with rounding to half krone
+ * @param {number} amount - Amount to format
+ * @returns {string} Formatted currency string
+ */
+function formatCurrencyHalfKrone(amount) {
+  const rounded = roundToHalfKrone(amount);
+  return currencyFormatter.format(rounded);
+}
+
 const MEMBERSHIP_PLANS = [
   {
     id: 'membership-student',
@@ -2295,6 +2326,8 @@ class OrderAPI {
             discountAmount = discountAmount / 100;
             console.log('[Discount] Converted from cents:', discountAmount);
           }
+          // Round to half krone
+          discountAmount = roundToHalfKrone(discountAmount);
         } else if (typeof couponDiscount === 'number') {
           discountAmount = couponDiscount;
           
@@ -2304,6 +2337,8 @@ class OrderAPI {
             discountAmount = discountAmount / 100;
             console.log('[Discount] Converted from cents:', discountAmount);
           }
+          // Round to half krone
+          discountAmount = roundToHalfKrone(discountAmount);
         }
       }
       
@@ -2320,7 +2355,7 @@ class OrderAPI {
           const newTotalDKK = newTotal > 10000 ? newTotal / 100 : newTotal;
           
           if (newTotalDKK < subtotal && subtotal > 0) {
-            discountAmount = subtotal - newTotalDKK;
+            discountAmount = roundToHalfKrone(subtotal - newTotalDKK);
             console.log('[Discount] Calculated from price difference:', discountAmount, '(subtotal:', subtotal, 'new total:', newTotalDKK, ')');
           }
         }
@@ -3065,7 +3100,7 @@ function renderProductsFromAPI() {
         </div>
         <div class="plan-content-right">
           <div class="plan-price">
-            <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
+            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">${priceUnit}</span>
           </div>
         </div>
@@ -3188,7 +3223,7 @@ function renderProductsFromAPI() {
             </div>
             <div class="plan-content-right">
               <div class="plan-price">
-                <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
+                <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
                 <span class="price-unit">kr</span>
               </div>
             </div>
@@ -4615,7 +4650,7 @@ function populateAddonsModal() {
       card.style.cursor = 'pointer';
       card.innerHTML = `
         <div style="font-weight:600">${addon.name}</div>
-        <div>${numberFormatter.format(addon.price.discounted)} kr</div>
+        <div>${formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted))} kr</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
       `;
       
@@ -4712,8 +4747,8 @@ function populateAddonsModal() {
       console.log('[Addons Modal] Image element not found for', addon.name);
     }
     
-    if (originalPriceEl) originalPriceEl.textContent = numberFormatter.format(addon.price.original);
-    if (discountedPriceEl) discountedPriceEl.textContent = numberFormatter.format(addon.price.discounted);
+    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
+    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
     if (descriptionEl) descriptionEl.textContent = addon.description;
     if (featuresEl) {
       featuresEl.innerHTML = '';
@@ -4835,7 +4870,7 @@ function populateBoostModal() {
       
       card.innerHTML = `
         <div style="font-weight:600">${product.name || 'Boost Product'}</div>
-        <div>${price > 0 ? numberFormatter.format(price) + ' kr' : '—'}</div>
+        <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr' : '—'}</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${product.id}"></div>
       `;
       
@@ -4936,7 +4971,7 @@ function populateBoostModal() {
     const originalPrice = product.originalPrice ? product.originalPrice / 100 : null;
     
     if (originalPriceEl && originalPrice && originalPrice > price) {
-      originalPriceEl.textContent = numberFormatter.format(originalPrice);
+      originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
       originalPriceEl.style.display = '';
     } else if (originalPriceEl) {
       originalPriceEl.style.display = 'none';
@@ -4944,7 +4979,7 @@ function populateBoostModal() {
     
     if (discountedPriceEl) {
       // Always show price, including "0 kr" for free items
-      discountedPriceEl.textContent = numberFormatter.format(price);
+      discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(price));
     }
     
     if (descriptionEl) {
@@ -7902,7 +7937,7 @@ function renderMembershipPlans() {
     const buttonEl = card.querySelector('[data-action="select-membership"]');
 
     if (nameEl) nameEl.textContent = plan.name;
-    if (priceValueEl) priceValueEl.textContent = numberFormatter.format(plan.price);
+    if (priceValueEl) priceValueEl.textContent = formatPriceHalfKrone(roundToHalfKrone(plan.price));
     if (priceSuffixEl) priceSuffixEl.textContent = ` ${plan.priceSuffix}`;
     if (descriptionEl) descriptionEl.textContent = plan.description;
     if (featuresEl) {
@@ -8298,7 +8333,7 @@ function renderValueCards() {
     const incrementBtn = card.querySelector('[data-action="increment-quantity"]');
 
     if (nameEl) nameEl.textContent = plan.name;
-    if (priceValueEl) priceValueEl.textContent = numberFormatter.format(plan.price);
+    if (priceValueEl) priceValueEl.textContent = formatPriceHalfKrone(roundToHalfKrone(plan.price));
     if (priceSuffixEl) priceSuffixEl.textContent = ` ${plan.priceSuffix}`;
     if (descriptionEl) descriptionEl.textContent = plan.description;
     if (featuresEl) {
@@ -8311,7 +8346,7 @@ function renderValueCards() {
     }
 
     if (quantityValueEl) quantityValueEl.textContent = plan.min;
-    if (quantityTotalEl) quantityTotalEl.textContent = numberFormatter.format(plan.min * plan.price);
+    if (quantityTotalEl) quantityTotalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(plan.min * plan.price));
 
     if (selector) {
       selector.dataset.planId = plan.id;
@@ -8352,8 +8387,8 @@ function renderAddons() {
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
 
     if (nameEl) nameEl.textContent = addon.name;
-    if (originalPriceEl) originalPriceEl.textContent = numberFormatter.format(addon.price.original);
-    if (discountedPriceEl) discountedPriceEl.textContent = numberFormatter.format(addon.price.discounted);
+    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
+    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
     if (descriptionEl) descriptionEl.textContent = addon.description;
     if (featuresEl) {
       featuresEl.innerHTML = '';
@@ -9273,7 +9308,7 @@ function syncValueCardUI(planId) {
   const total = plan.price * quantity;
 
   if (valueEl) valueEl.textContent = quantity;
-  if (totalEl) totalEl.textContent = numberFormatter.format(total);
+  if (totalEl) totalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(total));
   if (selector) selector.dataset.current = String(quantity);
 
   if (decrementBtn) decrementBtn.disabled = quantity <= (plan.min ?? 0);
@@ -9912,7 +9947,7 @@ async function handleApplyDiscount() {
       // Success - apply discount
       state.discountCode = discountCode;
       state.discountApplied = true;
-      state.totals.discountAmount = discountAmount;
+      state.totals.discountAmount = roundToHalfKrone(discountAmount);
       
       // CRITICAL: Update fullOrder with discounted prices from API response
       // This ensures payment overview shows the discounted prices
@@ -9957,7 +9992,7 @@ async function handleApplyDiscount() {
         if (el.hasAttribute('data-summary-field') && 
             (el.getAttribute('data-summary-field') === 'cart-total' || 
              el.getAttribute('data-summary-field') === 'order-total')) {
-          const expectedTotal = currencyFormatter.format(state.totals.cartTotal);
+          const expectedTotal = formatCurrencyHalfKrone(state.totals.cartTotal);
           el.textContent = expectedTotal;
         }
         // Highlight the new price
@@ -10316,7 +10351,7 @@ function updateCartSummary() {
         items.push({
           id: valueCard.id,
           name: `${valueCard.name || 'Punch Card'} ×${quantity}`,
-          amount: price * quantity,
+          amount: roundToHalfKrone(price * quantity),
           type: 'value-card',
           quantity: quantity,
           productId: valueCard.id, // Store API product ID for order creation
@@ -10335,7 +10370,7 @@ function updateCartSummary() {
     items.push({
       id: addon.id,
       name: addon.name,
-      amount: addon.price.discounted,
+      amount: roundToHalfKrone(addon.price.discounted),
       type: 'addon',
       productId: addon.productId || addonId, // Store product ID for order creation
     });
@@ -10347,11 +10382,11 @@ function updateCartSummary() {
   
   state.cartItems = items;
   
-  // Calculate subtotal (before discount)
-  state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+  // Calculate subtotal (before discount) - round to half krone
+  state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   
-  // Calculate cart total (subtotal - discount)
-  state.totals.cartTotal = Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0));
+  // Calculate cart total (subtotal - discount) - round to half krone
+  state.totals.cartTotal = roundToHalfKrone(Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0)));
 
   // Track add_to_cart if items were added (not just updated)
   if (newCartItemCount > previousCartItemCount && window.GTM && window.GTM.trackAddToCart) {
@@ -10396,12 +10431,12 @@ function updateCartTotals() {
   if (state.membershipPlanId) {
     const plan = findMembershipPlan(state.membershipPlanId);
     if (plan) {
-      items.push({
-        id: plan.id,
-        name: plan.name,
-        amount: plan.price,
-        type: 'membership',
-      });
+    items.push({
+      id: plan.id,
+      name: plan.name,
+      amount: roundToHalfKrone(plan.price),
+      type: 'membership',
+    });
     }
   }
   
@@ -10413,7 +10448,7 @@ function updateCartTotals() {
         items.push({
           id: plan.id,
           name: plan.name,
-          amount: plan.price * quantity,
+          amount: roundToHalfKrone(plan.price * quantity),
           type: 'value-card',
           quantity,
         });
@@ -10428,7 +10463,7 @@ function updateCartTotals() {
     items.push({
       id: addon.id,
       name: addon.name,
-      amount: addon.price.discounted,
+      amount: roundToHalfKrone(addon.price.discounted),
       type: 'addon',
       productId: addon.productId || addonId, // Store product ID for order creation
     });
@@ -10436,11 +10471,11 @@ function updateCartTotals() {
 
   state.cartItems = items;
   
-  // Calculate subtotal (before discount)
-  state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+  // Calculate subtotal (before discount) - round to half krone
+  state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   
-  // Calculate cart total (subtotal - discount)
-  state.totals.cartTotal = Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0));
+  // Calculate cart total (subtotal - discount) - round to half krone
+  state.totals.cartTotal = roundToHalfKrone(Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0)));
 
   renderCartItems();
   renderCartTotal();
@@ -10639,13 +10674,17 @@ function renderCartAddons() {
         }
       }
       
+      // Round prices to half krone
+      const roundedOriginalPrice = roundToHalfKrone(originalPrice);
+      const roundedDisplayPrice = roundToHalfKrone(displayPrice);
+      
       // Display price - show discounted price if different from original
-      if (displayPrice !== originalPrice && state.discountApplied) {
+      if (roundedDisplayPrice !== roundedOriginalPrice && state.discountApplied) {
         // Show original price with strikethrough and discounted price
-        priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${numberFormatter.format(originalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${numberFormatter.format(displayPrice)} kr</span>`;
+        priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr</span>`;
       } else {
         // Always show price, including "0 kr" for free items
-        priceEl.textContent = numberFormatter.format(displayPrice) + ' kr';
+        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr';
       }
     }
 
@@ -10670,17 +10709,18 @@ function renderCartTotal() {
     // Get "Pay now" amount from state (calculated by updatePaymentOverview)
     const payNowAmount = state.totals.payNowAmount || 0;
     
-    // Total = Pay now + Addons
-    let total = payNowAmount + addonTotal;
+    // Total = Pay now + Addons (both already rounded to half krone)
+    let total = (state.totals.payNowAmount || 0) + addonTotal;
     
     // Apply discount if applicable (discount should be applied to the total)
     if (state.discountApplied && state.totals.discountAmount > 0) {
       total = Math.max(0, total - state.totals.discountAmount);
     }
     
-    // Use numberFormatter to avoid duplication (currencyFormatter already includes "kr.")
-    // Format: "569,00 kr" (no dot, consistent with cart items)
-    cartTotalEl.textContent = numberFormatter.format(total) + ' kr';
+    // Round total to half krone and format
+    // Format: "569,00 kr" or "569,50 kr" (no dot, consistent with cart items)
+    const roundedTotal = roundToHalfKrone(total);
+    cartTotalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr';
   }
   
   // Show/hide cart total container based on whether there are items
@@ -11098,11 +11138,11 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
-  // Store payNowAmount in state for use in cart total calculation
-  state.totals.payNowAmount = payNowAmount;
+  // Round payNowAmount to half krone and store in state for use in cart total calculation
+  state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
   
   if (DOM.payNow) {
-    const amountText = currencyFormatter.format(payNowAmount);
+    const amountText = formatCurrencyHalfKrone(state.totals.payNowAmount);
     DOM.payNow.textContent = amountText;
     
     // Add period after "Pay now" label but before amount
@@ -11171,7 +11211,8 @@ function updatePaymentOverview() {
         monthlyPaymentItem.style.display = '';
       }
       if (monthlyPaymentAmount > 0) {
-        DOM.monthlyPayment.textContent = `${currencyFormatter.format(monthlyPaymentAmount)}/md`;
+        const roundedMonthly = roundToHalfKrone(monthlyPaymentAmount);
+        DOM.monthlyPayment.textContent = `${formatCurrencyHalfKrone(roundedMonthly)}/md`;
       } else {
         DOM.monthlyPayment.textContent = '—';
       }
@@ -11225,7 +11266,7 @@ function updateDiscountDisplay() {
         const addon = findAddon(addonId);
         if (addon) items.push({ amount: addon.price.discounted });
       });
-      state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+      state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
     }
     
     if (!discountDisplay) {
@@ -12124,7 +12165,7 @@ async function handleCheckout() {
               if (discountAmount > 0) {
                 state.discountCode = discountCodeToApply;
                 state.discountApplied = true;
-                state.totals.discountAmount = discountAmount;
+                state.totals.discountAmount = roundToHalfKrone(discountAmount);
                 updateCartSummary(); // Use API-based cart update function
                 console.log('[checkout] ✅ Coupon applied before payment link:', discountCodeToApply, 'Amount:', discountAmount);
                 
@@ -12810,7 +12851,7 @@ async function handleCheckout() {
               // Success - apply discount
               state.discountCode = discountCodeToApply;
               state.discountApplied = true;
-              state.totals.discountAmount = discountAmount;
+              state.totals.discountAmount = roundToHalfKrone(discountAmount);
               
               console.log('[checkout] Updating cart totals with discount:', discountAmount);
               console.log('[checkout] Subtotal:', state.totals.subtotal, 'Discount:', discountAmount, 'Final Total:', state.totals.subtotal - discountAmount);
@@ -13705,13 +13746,13 @@ function renderConfirmationView() {
       day: 'numeric',
     }).format(state.order.date);
   }
-  if (orderTotal) orderTotal.textContent = currencyFormatter.format(state.order.total);
+  if (orderTotal) orderTotal.textContent = formatCurrencyHalfKrone(roundToHalfKrone(state.order.total));
   if (memberName) memberName.textContent = state.order.memberName || '—';
   if (membershipNumber) membershipNumber.textContent = state.order.membershipNumber;
   if (membershipType) membershipType.textContent = state.order.membershipType;
   if (primaryGym) primaryGym.textContent = state.order.primaryGym;
   if (membershipPrice) {
-    membershipPrice.textContent = `${currencyFormatter.format(state.order.membershipPrice)}/month`;
+    membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(state.order.membershipPrice))}/month`;
   }
 
   if (templates.confirmationItem && DOM.confirmationItems) {
@@ -13721,7 +13762,7 @@ function renderConfirmationView() {
       const nameEl = node.querySelector('[data-element="name"]');
       const priceEl = node.querySelector('[data-element="price"]');
       if (nameEl) nameEl.textContent = item.name;
-      if (priceEl) priceEl.textContent = currencyFormatter.format(item.amount);
+      if (priceEl) priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(item.amount));
       DOM.confirmationItems.appendChild(node);
     });
   }
@@ -14338,6 +14379,13 @@ function updateStepIndicator() {
     stepIndicator.classList.add('hidden');
   } else {
     stepIndicator.classList.remove('hidden');
+  }
+  
+  // Add class when on step 2 to remove top margin (selected gym display is visible)
+  if (state.currentStep === 2) {
+    stepIndicator.classList.add('step-2-active');
+  } else {
+    stepIndicator.classList.remove('step-2-active');
   }
 
   // Map state.currentStep to indicator step index
