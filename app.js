@@ -4,6 +4,37 @@ const currencyFormatter = new Intl.NumberFormat('da-DK', {
   currency: 'DKK',
 });
 
+/**
+ * Rounds amount to the nearest half krone (0.00 or 0.50)
+ * Formula: floor((amount * 2) + 0.5) / 2
+ * @param {number} amount - Amount to round
+ * @returns {number} Rounded amount ending in .00 or .50
+ */
+function roundToHalfKrone(amount) {
+  if (typeof amount !== 'number' || isNaN(amount)) return 0;
+  return Math.floor((amount * 2) + 0.5) / 2;
+}
+
+/**
+ * Formats a price with rounding to half krone, ensuring it ends in .00 or .50
+ * @param {number} amount - Amount to format
+ * @returns {string} Formatted price string
+ */
+function formatPriceHalfKrone(amount) {
+  const rounded = roundToHalfKrone(amount);
+  return numberFormatter.format(rounded);
+}
+
+/**
+ * Formats a currency amount with rounding to half krone
+ * @param {number} amount - Amount to format
+ * @returns {string} Formatted currency string
+ */
+function formatCurrencyHalfKrone(amount) {
+  const rounded = roundToHalfKrone(amount);
+  return currencyFormatter.format(rounded);
+}
+
 const MEMBERSHIP_PLANS = [
   {
     id: 'membership-student',
@@ -2298,6 +2329,8 @@ class OrderAPI {
             discountAmount = discountAmount / 100;
             console.log('[Discount] Converted from cents:', discountAmount);
           }
+          // Round to half krone
+          discountAmount = roundToHalfKrone(discountAmount);
         } else if (typeof couponDiscount === 'number') {
           discountAmount = couponDiscount;
           
@@ -2307,6 +2340,8 @@ class OrderAPI {
             discountAmount = discountAmount / 100;
             console.log('[Discount] Converted from cents:', discountAmount);
           }
+          // Round to half krone
+          discountAmount = roundToHalfKrone(discountAmount);
         }
       }
       
@@ -2323,7 +2358,7 @@ class OrderAPI {
           const newTotalDKK = newTotal > 10000 ? newTotal / 100 : newTotal;
           
           if (newTotalDKK < subtotal && subtotal > 0) {
-            discountAmount = subtotal - newTotalDKK;
+            discountAmount = roundToHalfKrone(subtotal - newTotalDKK);
             console.log('[Discount] Calculated from price difference:', discountAmount, '(subtotal:', subtotal, 'new total:', newTotalDKK, ')');
           }
         }
@@ -3064,7 +3099,7 @@ function renderProductsFromAPI() {
         </div>
         <div class="plan-content-right">
           <div class="plan-price">
-            <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
+            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">${priceUnit}</span>
           </div>
         </div>
@@ -3187,7 +3222,7 @@ function renderProductsFromAPI() {
             </div>
             <div class="plan-content-right">
               <div class="plan-price">
-                <span class="price-amount">${price > 0 ? numberFormatter.format(price) : '—'}</span>
+                <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
                 <span class="price-unit">kr</span>
               </div>
             </div>
@@ -4533,7 +4568,7 @@ function populateAddonsModal() {
       card.style.cursor = 'pointer';
       card.innerHTML = `
         <div style="font-weight:600">${addon.name}</div>
-        <div>${currencyFormatter.format(addon.price.discounted)}</div>
+        <div>${formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted))} kr</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
       `;
       
@@ -4563,8 +4598,73 @@ function populateAddonsModal() {
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
     if (nameEl) nameEl.textContent = addon.name;
-    if (originalPriceEl) originalPriceEl.textContent = currencyFormatter.format(addon.price.original);
-    if (discountedPriceEl) discountedPriceEl.textContent = currencyFormatter.format(addon.price.discounted);
+    // Extract and display product image
+    if (imageEl) {
+      // Check if addon has assets (from API product) or imageUrl (from hardcoded)
+      let imageUrl = null;
+      if (addon.assets && Array.isArray(addon.assets) && addon.assets.length > 0) {
+        console.log('[Addons Modal] Addon assets:', addon.name, addon.assets);
+        // Look for MAIN or CENTERED asset type
+        const mainAsset = addon.assets.find(asset => 
+          asset.type === 'MAIN' || asset.type === 'CENTERED'
+        ) || addon.assets[0]; // Fallback to first asset if no MAIN/CENTERED
+        
+        // AssetOut has contentUrl field (per OpenAPI spec)
+        // Use contentUrl if available, otherwise fall back to constructing from reference
+        imageUrl = mainAsset?.contentUrl || mainAsset?.url || null;
+        
+        // If no contentUrl, construct from reference ID
+        if (!imageUrl && mainAsset?.reference) {
+          // Construct asset URL from reference ID
+          const referenceId = mainAsset.reference;
+          const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const isNetlify = window.location.hostname.includes('netlify.app');
+          const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
+                                   window.location.hostname.includes('join.boulders.dk') ||
+                                   window.location.hostname === 'boulders.dk';
+          
+          if (isDevelopment) {
+            imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
+          } else if (isNetlify) {
+            imageUrl = `/.netlify/functions/api-proxy?path=/api/assets/${referenceId}`;
+          } else if (isCloudflarePages) {
+            imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
+          } else {
+            imageUrl = `https://api-join.boulders.dk/api/assets/${referenceId}`;
+          }
+          console.log('[Addons Modal] Constructed asset URL from reference:', referenceId, '->', imageUrl);
+        }
+      } else if (addon.imageUrl) {
+        imageUrl = addon.imageUrl;
+      }
+      
+      console.log('[Addons Modal] Image URL for', addon.name, ':', imageUrl);
+      
+      if (imageUrl) {
+        imageEl.src = imageUrl;
+        imageEl.alt = addon.name || 'Addon image';
+        imageEl.removeAttribute('style'); // Remove inline style that hides it
+        imageEl.style.display = 'block';
+        imageEl.style.visibility = 'visible';
+        imageEl.style.opacity = '1';
+        imageEl.style.width = '100%';
+        imageEl.style.height = '200px';
+        imageEl.style.objectFit = 'cover';
+        imageEl.style.borderRadius = '8px';
+        imageEl.style.marginBottom = '12px';
+        imageEl.classList.add('addon-image');
+        console.log('[Addons Modal] Image set for', addon.name, '- src:', imageEl.src);
+        console.log('[Addons Modal] Image computed display:', window.getComputedStyle(imageEl).display);
+      } else {
+        imageEl.style.display = 'none';
+        console.log('[Addons Modal] No image URL found for', addon.name);
+      }
+    } else {
+      console.log('[Addons Modal] Image element not found for', addon.name);
+    }
+    
+    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
+    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
     if (descriptionEl) descriptionEl.textContent = addon.description;
     if (featuresEl) {
       featuresEl.innerHTML = '';
@@ -4627,6 +4727,234 @@ function proceedAfterAddons() {
   setTimeout(scrollToTop, 200);
 }
 
+// Populate boost modal with products that have "boostProduct" label
+function populateBoostModal() {
+  ensureAddonsModal();
+  const grid = addonsModal.querySelector('[data-modal-addons-grid]');
+  const title = addonsModal.querySelector('.addons-title');
+  
+  if (!grid) {
+    console.error('[Boost Modal] Grid element not found!');
+    return;
+  }
+  
+  // Update title for boost modal
+  if (title) {
+    title.textContent = 'Boost your membership';
+  }
+  
+  grid.innerHTML = '';
+  
+  // Use products with "boostProduct" label
+  const boostProducts = state.boostProducts || [];
+  
+  if (boostProducts.length === 0) {
+    // No boost products available
+    const emptyMsg = document.createElement('div');
+    emptyMsg.className = 'addons-empty';
+    emptyMsg.textContent = 'No boost products available.';
+    emptyMsg.style.textAlign = 'center';
+    emptyMsg.style.padding = '2rem';
+    emptyMsg.style.color = 'var(--color-text-secondary, #6b7280)';
+    grid.appendChild(emptyMsg);
+    return;
+  }
+  
+  // Render each boost product
+  boostProducts.forEach((product) => {
+    if (!templates.addon) {
+      // Fallback simple card if template missing
+      const card = document.createElement('div');
+      card.className = 'plan-card addon-card';
+      card.style.cursor = 'pointer';
+      
+      // Extract price from product structure (similar to renderSubscriptionCard)
+      const priceInCents = product.priceWithInterval?.price?.amount || 
+                           product.price?.amount || 
+                           product.amount || 
+                           0;
+      const price = priceInCents > 0 ? priceInCents / 100 : 0;
+      const currency = product.priceWithInterval?.price?.currency || 
+                       product.price?.currency || 
+                       product.currency || 
+                       'DKK';
+      
+      card.innerHTML = `
+        <div style="font-weight:600">${product.name || 'Boost Product'}</div>
+        <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr' : '—'}</div>
+        <div class="check-circle" data-action="toggle-addon" data-addon-id="${product.id}"></div>
+      `;
+      
+      // Make entire card clickable
+      card.addEventListener('click', (e) => {
+        const checkCircle = card.querySelector('.check-circle');
+        if (e.target === checkCircle || checkCircle.contains(e.target)) {
+          return;
+        }
+        if (product.id) toggleAddon(product.id, checkCircle);
+      });
+      
+      // Ensure card is visible
+      card.style.opacity = '1';
+      card.style.visibility = 'visible';
+      
+      grid.appendChild(card);
+      return;
+    }
+    
+    // Use existing add-on template
+    const card = templates.addon.content.firstElementChild.cloneNode(true);
+    const checkCircle = card.querySelector('[data-action="toggle-addon"]');
+    if (checkCircle) checkCircle.dataset.addonId = product.id;
+    
+    const nameEl = card.querySelector('[data-element="name"]');
+    const imageEl = card.querySelector('[data-element="image"]');
+    const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
+    const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
+    const descriptionEl = card.querySelector('[data-element="description"]');
+    const featuresEl = card.querySelector('[data-element="features"]');
+    
+    if (nameEl) nameEl.textContent = product.name || 'Boost Product';
+    
+    // Extract and display product image
+    if (imageEl) {
+      let imageUrl = null;
+      
+      if (product.assets && Array.isArray(product.assets) && product.assets.length > 0) {
+        console.log('[Boost Modal] Product assets:', product.name, product.assets);
+        // Look for MAIN or CENTERED asset type
+        const mainAsset = product.assets.find(asset => 
+          asset.type === 'MAIN' || asset.type === 'CENTERED'
+        ) || product.assets[0]; // Fallback to first asset if no MAIN/CENTERED
+        
+        console.log('[Boost Modal] Selected asset full object:', JSON.stringify(mainAsset, null, 2));
+        console.log('[Boost Modal] Asset contentUrl:', mainAsset?.contentUrl);
+        console.log('[Boost Modal] Asset url:', mainAsset?.url);
+        console.log('[Boost Modal] Asset reference:', mainAsset?.reference);
+        
+        // AssetOut has contentUrl field (per OpenAPI spec)
+        // Use contentUrl if available, otherwise fall back to constructing from reference
+        imageUrl = mainAsset?.contentUrl || mainAsset?.url || null;
+        
+        // If no contentUrl, construct from reference ID
+        if (!imageUrl && mainAsset?.reference) {
+          // Construct asset URL from reference ID
+          const referenceId = mainAsset.reference;
+          const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          const isNetlify = window.location.hostname.includes('netlify.app');
+          const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
+                                   window.location.hostname.includes('join.boulders.dk') ||
+                                   window.location.hostname === 'boulders.dk';
+          
+          if (isDevelopment) {
+            imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
+          } else if (isNetlify) {
+            imageUrl = `/.netlify/functions/api-proxy?path=/api/assets/${referenceId}`;
+          } else if (isCloudflarePages) {
+            imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
+          } else {
+            imageUrl = `https://api-join.boulders.dk/api/assets/${referenceId}`;
+          }
+          console.log('[Boost Modal] Constructed asset URL from reference:', referenceId, '->', imageUrl);
+        }
+      }
+      
+      console.log('[Boost Modal] Image URL for', product.name, ':', imageUrl);
+      
+      if (imageUrl) {
+        imageEl.src = imageUrl;
+        imageEl.alt = product.name || 'Product image';
+        imageEl.style.display = 'block';
+        imageEl.classList.add('addon-image');
+        console.log('[Boost Modal] Image set for', product.name);
+      } else {
+        imageEl.style.display = 'none';
+        console.log('[Boost Modal] No image URL found for', product.name);
+      }
+    }
+    
+    // Extract price from product structure (similar to renderSubscriptionCard)
+    const priceInCents = product.priceWithInterval?.price?.amount || 
+                         product.price?.amount || 
+                         product.amount || 
+                         0;
+    const price = priceInCents > 0 ? priceInCents / 100 : 0;
+    const originalPrice = product.originalPrice ? product.originalPrice / 100 : null;
+    
+    if (originalPriceEl && originalPrice && originalPrice > price) {
+      originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
+      originalPriceEl.style.display = '';
+    } else if (originalPriceEl) {
+      originalPriceEl.style.display = 'none';
+    }
+    
+    if (discountedPriceEl) {
+      // Always show price, including "0 kr" for free items
+      discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(price));
+    }
+    
+    if (descriptionEl) {
+      // Get description similar to renderSubscriptionCard
+      const description = product.imageBanner?.text || product.description || product.productNumber || '';
+      descriptionEl.textContent = description;
+    }
+    
+    if (featuresEl && product.features && Array.isArray(product.features)) {
+      featuresEl.innerHTML = '';
+      product.features.forEach((feature) => {
+        const li = document.createElement('li');
+        li.textContent = feature;
+        featuresEl.appendChild(li);
+      });
+    } else if (featuresEl) {
+      featuresEl.innerHTML = '';
+    }
+    
+    // Make entire card clickable
+    card.style.cursor = 'pointer';
+    
+    // Ensure card is visible (fix opacity: 0 issue)
+    card.style.opacity = '1';
+    card.style.visibility = 'visible';
+    
+    card.addEventListener('click', (e) => {
+      if (e.target === checkCircle || checkCircle.contains(e.target)) {
+        return;
+      }
+      if (product.id) toggleAddon(product.id, checkCircle);
+    });
+    
+    grid.appendChild(card);
+  });
+}
+
+// Show boost modal (uses same modal infrastructure as addons)
+async function showBoostModal() {
+  ensureAddonsModal();
+  
+  // Load boost products if not already loaded
+  if (!state.boostProducts || state.boostProducts.length === 0) {
+    await loadBoostProducts();
+  }
+  
+  populateBoostModal();
+  updateAddonActionButton();
+  
+  // Show modal with subtle animation
+  addonsModal.style.display = 'block';
+  addonsModal.style.opacity = '0';
+  addonsModal.style.transform = 'scale(0.95)';
+  document.body.style.overflow = 'hidden';
+  
+  // Trigger animation after a brief moment
+  requestAnimationFrame(() => {
+    addonsModal.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    addonsModal.style.opacity = '1';
+    addonsModal.style.transform = 'scale(1)';
+  });
+}
+
+>>>>>>> 44ca2a6 (Implement half krone rounding for all displayed amounts)
 // Expose a small API to set the image dynamically if desired
 // Usage: window.setAddonsUpsellImage('https://.../image.jpg')
 // Image API removed
@@ -7583,7 +7911,7 @@ function renderMembershipPlans() {
     const buttonEl = card.querySelector('[data-action="select-membership"]');
 
     if (nameEl) nameEl.textContent = plan.name;
-    if (priceValueEl) priceValueEl.textContent = numberFormatter.format(plan.price);
+    if (priceValueEl) priceValueEl.textContent = formatPriceHalfKrone(roundToHalfKrone(plan.price));
     if (priceSuffixEl) priceSuffixEl.textContent = ` ${plan.priceSuffix}`;
     if (descriptionEl) descriptionEl.textContent = plan.description;
     if (featuresEl) {
@@ -7979,7 +8307,7 @@ function renderValueCards() {
     const incrementBtn = card.querySelector('[data-action="increment-quantity"]');
 
     if (nameEl) nameEl.textContent = plan.name;
-    if (priceValueEl) priceValueEl.textContent = numberFormatter.format(plan.price);
+    if (priceValueEl) priceValueEl.textContent = formatPriceHalfKrone(roundToHalfKrone(plan.price));
     if (priceSuffixEl) priceSuffixEl.textContent = ` ${plan.priceSuffix}`;
     if (descriptionEl) descriptionEl.textContent = plan.description;
     if (featuresEl) {
@@ -7992,7 +8320,7 @@ function renderValueCards() {
     }
 
     if (quantityValueEl) quantityValueEl.textContent = plan.min;
-    if (quantityTotalEl) quantityTotalEl.textContent = numberFormatter.format(plan.min * plan.price);
+    if (quantityTotalEl) quantityTotalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(plan.min * plan.price));
 
     if (selector) {
       selector.dataset.planId = plan.id;
@@ -8033,8 +8361,8 @@ function renderAddons() {
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
 
     if (nameEl) nameEl.textContent = addon.name;
-    if (originalPriceEl) originalPriceEl.textContent = currencyFormatter.format(addon.price.original);
-    if (discountedPriceEl) discountedPriceEl.textContent = currencyFormatter.format(addon.price.discounted);
+    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
+    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
     if (descriptionEl) descriptionEl.textContent = addon.description;
     if (featuresEl) {
       featuresEl.innerHTML = '';
@@ -8883,7 +9211,7 @@ function syncValueCardUI(planId) {
   const total = plan.price * quantity;
 
   if (valueEl) valueEl.textContent = quantity;
-  if (totalEl) totalEl.textContent = numberFormatter.format(total);
+  if (totalEl) totalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(total));
   if (selector) selector.dataset.current = String(quantity);
 
   if (decrementBtn) decrementBtn.disabled = quantity <= (plan.min ?? 0);
@@ -9522,7 +9850,7 @@ async function handleApplyDiscount() {
       // Success - apply discount
       state.discountCode = discountCode;
       state.discountApplied = true;
-      state.totals.discountAmount = discountAmount;
+      state.totals.discountAmount = roundToHalfKrone(discountAmount);
       
       // CRITICAL: Update fullOrder with discounted prices from API response
       // This ensures payment overview shows the discounted prices
@@ -9567,7 +9895,7 @@ async function handleApplyDiscount() {
         if (el.hasAttribute('data-summary-field') && 
             (el.getAttribute('data-summary-field') === 'cart-total' || 
              el.getAttribute('data-summary-field') === 'order-total')) {
-          const expectedTotal = currencyFormatter.format(state.totals.cartTotal);
+          const expectedTotal = formatCurrencyHalfKrone(state.totals.cartTotal);
           el.textContent = expectedTotal;
         }
         // Highlight the new price
@@ -9926,7 +10254,7 @@ function updateCartSummary() {
         items.push({
           id: valueCard.id,
           name: `${valueCard.name || 'Punch Card'} ×${quantity}`,
-          amount: price * quantity,
+          amount: roundToHalfKrone(price * quantity),
           type: 'value-card',
           quantity: quantity,
           productId: valueCard.id, // Store API product ID for order creation
@@ -9942,18 +10270,18 @@ function updateCartSummary() {
     items.push({
       id: addon.id,
       name: addon.name,
-      amount: addon.price.discounted,
+      amount: roundToHalfKrone(addon.price.discounted),
       type: 'addon',
     });
   });
 
   state.cartItems = items;
   
-  // Calculate subtotal (before discount)
-  state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+  // Calculate subtotal (before discount) - round to half krone
+  state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   
-  // Calculate cart total (subtotal - discount)
-  state.totals.cartTotal = Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0));
+  // Calculate cart total (subtotal - discount) - round to half krone
+  state.totals.cartTotal = roundToHalfKrone(Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0)));
 
   renderCartItems();
   renderCartTotal();
@@ -9984,12 +10312,12 @@ function updateCartTotals() {
   if (state.membershipPlanId) {
     const plan = findMembershipPlan(state.membershipPlanId);
     if (plan) {
-      items.push({
-        id: plan.id,
-        name: plan.name,
-        amount: plan.price,
-        type: 'membership',
-      });
+    items.push({
+      id: plan.id,
+      name: plan.name,
+      amount: roundToHalfKrone(plan.price),
+      type: 'membership',
+    });
     }
   }
   
@@ -10001,7 +10329,7 @@ function updateCartTotals() {
         items.push({
           id: plan.id,
           name: plan.name,
-          amount: plan.price * quantity,
+          amount: roundToHalfKrone(plan.price * quantity),
           type: 'value-card',
           quantity,
         });
@@ -10016,18 +10344,18 @@ function updateCartTotals() {
     items.push({
       id: addon.id,
       name: addon.name,
-      amount: addon.price.discounted,
+      amount: roundToHalfKrone(addon.price.discounted),
       type: 'addon',
     });
   });
 
   state.cartItems = items;
   
-  // Calculate subtotal (before discount)
-  state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+  // Calculate subtotal (before discount) - round to half krone
+  state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   
-  // Calculate cart total (subtotal - discount)
-  state.totals.cartTotal = Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0));
+  // Calculate cart total (subtotal - discount) - round to half krone
+  state.totals.cartTotal = roundToHalfKrone(Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0)));
 
   renderCartItems();
   renderCartTotal();
@@ -10209,12 +10537,108 @@ function renderCartItems() {
   });
 }
 
+function renderCartAddons() {
+  if (!templates.cartItem || !DOM.cartAddons) return;
+  DOM.cartAddons.innerHTML = '';
+
+  // Filter to only non-membership items (addons, boost products, etc.)
+  const addonItems = state.cartItems.filter(item => item.type !== 'membership');
+
+  if (!addonItems.length) {
+    DOM.cartAddons.style.display = 'none';
+    return;
+  }
+
+  DOM.cartAddons.style.display = 'block';
+
+  addonItems.forEach((item) => {
+    const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
+    const nameEl = cartItem.querySelector('[data-element="name"]');
+    const priceEl = cartItem.querySelector('[data-element="price"]');
+
+    if (nameEl) {
+      nameEl.textContent = item.name;
+    }
+    
+    if (priceEl) {
+      // Calculate discounted price for this item
+      let displayPrice = item.amount;
+      let originalPrice = item.amount;
+      
+      // If discount is applied, calculate discounted price proportionally
+      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
+        // Calculate discount ratio
+        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
+        // Apply discount proportionally to this item
+        const itemDiscount = item.amount * discountRatio;
+        displayPrice = Math.max(0, item.amount - itemDiscount);
+        
+        // If discount is 100% or more, show 0
+        if (state.totals.discountAmount >= state.totals.subtotal) {
+          displayPrice = 0;
+        }
+      }
+      
+      // Round prices to half krone
+      const roundedOriginalPrice = roundToHalfKrone(originalPrice);
+      const roundedDisplayPrice = roundToHalfKrone(displayPrice);
+      
+      // Display price - show discounted price if different from original
+      if (roundedDisplayPrice !== roundedOriginalPrice && state.discountApplied) {
+        // Show original price with strikethrough and discounted price
+        priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr</span>`;
+      } else {
+        // Always show price, including "0 kr" for free items
+        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr';
+      }
+    }
+
+    DOM.cartAddons.appendChild(cartItem);
+  });
+}
+
+>>>>>>> 44ca2a6 (Implement half krone rounding for all displayed amounts)
 function renderCartTotal() {
   // Cart total is no longer displayed - payment overview shows calculated prices instead
   // Just update payment overview which shows the correct calculated prices
   
   // Update payment overview (shows "Betales nu" and "Månedlig betaling herefter")
   updatePaymentOverview();
+  
+  // Update cart total display
+  const cartTotalEl = document.querySelector('[data-summary-field="cart-total"]');
+  const cartTotalContainer = document.querySelector('.cart-total');
+  
+  if (cartTotalEl) {
+    // Calculate total as: Pay now amount + addon items
+    // Get addon items total (non-membership items)
+    const addonItems = state.cartItems.filter(item => item.type !== 'membership');
+    const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
+    
+    // Get "Pay now" amount from state (calculated by updatePaymentOverview)
+    const payNowAmount = state.totals.payNowAmount || 0;
+    
+    // Total = Pay now + Addons (both already rounded to half krone)
+    let total = (state.totals.payNowAmount || 0) + addonTotal;
+    
+    // Apply discount if applicable (discount should be applied to the total)
+    if (state.discountApplied && state.totals.discountAmount > 0) {
+      total = Math.max(0, total - state.totals.discountAmount);
+    }
+    
+    // Round total to half krone and format
+    // Format: "569,00 kr" or "569,50 kr" (no dot, consistent with cart items)
+    const roundedTotal = roundToHalfKrone(total);
+    cartTotalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr';
+  }
+  
+  // Show/hide cart total container based on whether there are items
+  if (cartTotalContainer) {
+    const hasItems = state.cartItems && state.cartItems.length > 0;
+    // Only show if there are non-membership items (membership price is shown in payment overview)
+    const hasNonMembershipItems = state.cartItems && state.cartItems.some(item => item.type !== 'membership');
+    cartTotalContainer.style.display = hasNonMembershipItems ? 'block' : 'none';
+  }
   
   // Update discount display if discount is applied
   updateDiscountDisplay();
@@ -10625,8 +11049,11 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
+  // Round payNowAmount to half krone and store in state for use in cart total calculation
+  state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
+  
   if (DOM.payNow) {
-    const amountText = currencyFormatter.format(payNowAmount);
+    const amountText = formatCurrencyHalfKrone(state.totals.payNowAmount);
     DOM.payNow.textContent = amountText;
     
     // Add period after "Pay now" label but before amount
@@ -10695,7 +11122,8 @@ function updatePaymentOverview() {
         monthlyPaymentItem.style.display = '';
       }
       if (monthlyPaymentAmount > 0) {
-        DOM.monthlyPayment.textContent = `${currencyFormatter.format(monthlyPaymentAmount)}/md`;
+        const roundedMonthly = roundToHalfKrone(monthlyPaymentAmount);
+        DOM.monthlyPayment.textContent = `${formatCurrencyHalfKrone(roundedMonthly)}/md`;
       } else {
         DOM.monthlyPayment.textContent = '—';
       }
@@ -10749,7 +11177,7 @@ function updateDiscountDisplay() {
         const addon = findAddon(addonId);
         if (addon) items.push({ amount: addon.price.discounted });
       });
-      state.totals.subtotal = items.reduce((total, item) => total + item.amount, 0);
+      state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
     }
     
     if (!discountDisplay) {
@@ -11639,7 +12067,7 @@ async function handleCheckout() {
               if (discountAmount > 0) {
                 state.discountCode = discountCodeToApply;
                 state.discountApplied = true;
-                state.totals.discountAmount = discountAmount;
+                state.totals.discountAmount = roundToHalfKrone(discountAmount);
                 updateCartSummary(); // Use API-based cart update function
                 console.log('[checkout] ✅ Coupon applied before payment link:', discountCodeToApply, 'Amount:', discountAmount);
                 
@@ -12316,7 +12744,7 @@ async function handleCheckout() {
               // Success - apply discount
               state.discountCode = discountCodeToApply;
               state.discountApplied = true;
-              state.totals.discountAmount = discountAmount;
+              state.totals.discountAmount = roundToHalfKrone(discountAmount);
               
               console.log('[checkout] Updating cart totals with discount:', discountAmount);
               console.log('[checkout] Subtotal:', state.totals.subtotal, 'Discount:', discountAmount, 'Final Total:', state.totals.subtotal - discountAmount);
@@ -13827,13 +14255,13 @@ function renderConfirmationView() {
       day: 'numeric',
     }).format(state.order.date);
   }
-  if (orderTotal) orderTotal.textContent = currencyFormatter.format(state.order.total);
+  if (orderTotal) orderTotal.textContent = formatCurrencyHalfKrone(roundToHalfKrone(state.order.total));
   if (memberName) memberName.textContent = state.order.memberName || '—';
   if (membershipNumber) membershipNumber.textContent = state.order.membershipNumber;
   if (membershipType) membershipType.textContent = state.order.membershipType;
   if (primaryGym) primaryGym.textContent = state.order.primaryGym;
   if (membershipPrice) {
-    membershipPrice.textContent = `${currencyFormatter.format(state.order.membershipPrice)}/month`;
+    membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(state.order.membershipPrice))}/month`;
   }
 
   if (templates.confirmationItem && DOM.confirmationItems) {
@@ -13843,7 +14271,7 @@ function renderConfirmationView() {
       const nameEl = node.querySelector('[data-element="name"]');
       const priceEl = node.querySelector('[data-element="price"]');
       if (nameEl) nameEl.textContent = item.name;
-      if (priceEl) priceEl.textContent = currencyFormatter.format(item.amount);
+      if (priceEl) priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(item.amount));
       DOM.confirmationItems.appendChild(node);
     });
   }
@@ -14559,6 +14987,13 @@ function updateStepIndicator() {
     stepIndicator.classList.add('hidden');
   } else {
     stepIndicator.classList.remove('hidden');
+  }
+  
+  // Add class when on step 2 to remove top margin (selected gym display is visible)
+  if (state.currentStep === 2) {
+    stepIndicator.classList.add('step-2-active');
+  } else {
+    stepIndicator.classList.remove('step-2-active');
   }
 
   // Map state.currentStep to indicator step index
