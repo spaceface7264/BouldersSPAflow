@@ -13825,7 +13825,18 @@ function updateStepIndicator() {
   });
 
   indicatorConnectors.forEach((connector, index) => {
-    connector.classList.toggle('completed', index < visibleCurrentIndex);
+    const wasCompleted = connector.classList.contains('completed');
+    const isNowCompleted = index < visibleCurrentIndex;
+    
+    connector.classList.toggle('completed', isNowCompleted);
+    
+    // Trigger animation when connector becomes completed
+    if (!wasCompleted && isNowCompleted) {
+      connector.classList.add('animating');
+      setTimeout(() => {
+        connector.classList.remove('animating');
+      }, 600);
+    }
   });
   
   // Update selected gym display (show only on step 2)
