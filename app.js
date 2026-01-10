@@ -5247,6 +5247,27 @@ const translations = {
     'cart.consent.marketing': 'Jeg vil gerne modtage marketing-e-mails. Læs vores <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datapolitik</a>.',
     'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
+    'faq.title': 'Ofte Stillede Spørgsmål',
+    'faq.q1.question': 'Hvordan bliver jeg medlem?',
+    'faq.q1.answer': 'Du kan tilmelde dig online her på siden eller personligt i en af vores klatrehaller. Vælg din hjemmehal, vælg adgangstype, og følg vejledningen.',
+    'faq.q2.question': 'Hvad er betingelserne for medlemskab?',
+    'faq.q2.answer': 'Medlemskab er et løbende abonnement med automatisk fornyelse, indtil det opsiges.<br><br><strong>Opsigelse:</strong> Indeværende måned + én fuld måned. Medlemskabet ophører den sidste dag i måneden, hvor opsigelsesperioden udløber.<br><br>Ingen binding – kun opsigelsesperioden.',
+    'faq.q3.question': 'Kan jeg skifte min hjemmehal?',
+    'faq.q3.answer': 'Ja, du kan altid skifte din hjemmehal via din online medlemsprofil. Din hjemmehal er primært til kortudlevering – du har adgang til alle haller uanset hvilken hjemmehal du vælger.',
+    'faq.q4.question': 'Hvilke adgangstyper findes der?',
+    'faq.q4.answer': 'Vi tilbyder <strong>medlemskab</strong> (ubegrænset adgang), <strong>15-dages pas</strong> (tidsbegrænset adgang), og <strong>klippekort</strong> (10 klip, delbart fysisk kort).<br><br>Medlemskab anbefales, hvis du klatrer mindst én gang om måneden.',
+    'faq.q5.question': 'Hvordan opsiger jeg mit medlemskab?',
+    'faq.q5.answer': 'Opsigelse foregår via din online medlemsprofil eller ved e-mail til <strong>medlem@boulders.dk</strong>.',
+    'faq.q6.question': 'Skal jeg booke tid for at klatre?',
+    'faq.q6.answer': 'Nej, du skal ikke booke tid! Kom når det passer dig og bliv så længe du vil. Kun grupper på mere end 10 personer skal aftale på forhånd.',
+    'faq.q7.question': 'Hvad skal jeg have med?',
+    'faq.q7.answer': 'Træningstøj, så du kan bevæge dig frit. En varm overtrøje og hjemmesko til pauser er også en god idé.<br><br><strong>Al klatring skal ske i klatresko.</strong> Du kan leje eller købe klatresko i receptionen.',
+    'faq.q8.question': 'Kan jeg tage mine børn med?',
+    'faq.q8.answer': 'Ja! Børn op til 4 år kommer gratis ind og får gratis klatresko, når de er i følge med en klatrende voksen.<br><br><strong>Alle børn op til 12 år skal have en voksen med, når de klatrer.</strong>',
+    'faq.q9.question': 'Hvad betaler jeg for i dag?',
+    'faq.q9.answer': 'Du betaler <strong>nu</strong> et forholdsmæssigt beløb for de resterende dage i den nuværende måned. Herefter betaler du den fulde månedlige pris hver måned, indtil du opsiger dit medlemskab.<br><br>Eksempel: Hvis du tilmelder dig den 15. i måneden, betaler du for de resterende ~16 dage i dag, og derefter den fulde månedlige pris fra næste måned.',
+    'faq.q10.question': 'Hvornår kan jeg begynde at klatre?',
+    'faq.q10.answer': 'Efter betaling er gennemført, kan du begynde at klatre med det samme! Du modtager en bekræftelsesmail med dine medlemskabsdetaljer. Hent dit medlemskort i din hjemmehal ved første besøg.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
@@ -5307,6 +5328,27 @@ const translations = {
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
+    'faq.title': 'Frequently Asked Questions',
+    'faq.q1.question': 'How do I become a member?',
+    'faq.q1.answer': 'You can sign up online right here on this page or in person at one of our climbing gyms. Select your home gym, choose your access type, and follow the steps.',
+    'faq.q2.question': 'What are the membership terms?',
+    'faq.q2.answer': 'Membership is an ongoing subscription with automatic renewal until cancelled.<br><br><strong>Cancellation:</strong> Current month + one full month. Membership ends on the last day of the month when the cancellation period expires.<br><br>No binding period – only the cancellation notice period.',
+    'faq.q3.question': 'Can I change my home gym?',
+    'faq.q3.answer': 'Yes, you can always change your home gym via your online member profile. Your home gym is primarily for card pickup – you have access to all gyms regardless of which home gym you choose.',
+    'faq.q4.question': 'What access types are available?',
+    'faq.q4.answer': 'We offer <strong>membership</strong> (unlimited access), <strong>15-day pass</strong> (time-limited access), and <strong>punch card</strong> (10 entries, shareable physical card).<br><br>Membership is recommended if you climb at least once a month.',
+    'faq.q5.question': 'How do I cancel my membership?',
+    'faq.q5.answer': 'Cancellation must be done via your online member profile or by email to <strong>medlem@boulders.dk</strong>.',
+    'faq.q6.question': 'Do I need to book a time to climb?',
+    'faq.q6.answer': 'No, you don\'t need to book a time! Come when it suits you and stay as long as you want. Only groups of more than 10 people need to make an appointment in advance.',
+    'faq.q7.question': 'What should I bring?',
+    'faq.q7.answer': 'Training clothes so you can move freely. A warm sweater and indoor shoes for breaks are also a good idea.<br><br><strong>All climbing must be done in climbing shoes.</strong> You can rent or buy climbing shoes at reception.',
+    'faq.q8.question': 'Can I bring my children?',
+    'faq.q8.answer': 'Yes! Children up to 4 years old come in for free and get free climbing shoes when accompanied by a climbing adult.<br><br><strong>All children up to 12 years old must have an adult with them when climbing.</strong>',
+    'faq.q9.question': 'What do I pay today?',
+    'faq.q9.answer': 'You pay <strong>now</strong> a prorated amount for the remaining days in the current month. Thereafter, you pay the full monthly price each month until you cancel your membership.<br><br>Example: If you sign up on the 15th of the month, you pay for the remaining ~16 days today, and then the full monthly price from next month.',
+    'faq.q10.question': 'When can I start climbing?',
+    'faq.q10.answer': 'After payment is completed, you can start climbing immediately! You\'ll receive a confirmation email with your membership details. Pick up your membership card at your home gym on your first visit.',
   },
 };
 
@@ -5360,8 +5402,8 @@ function updatePageTranslations() {
           element.textContent = translation;
         }
       } else {
-        // Handle HTML content for elements that may contain links (like consent text)
-        if (translation.includes('<a') || translation.includes('<span')) {
+        // Handle HTML content for elements that may contain links or formatting (like consent text, FAQ answers)
+        if (translation.includes('<a') || translation.includes('<span') || translation.includes('<br') || key.includes('faq')) {
           element.innerHTML = translation;
         } else {
           element.textContent = translation;
@@ -5926,6 +5968,38 @@ function cacheDom() {
   refreshLoginUI();
 }
 
+/**
+ * Initialize FAQ accordion functionality
+ */
+function initFAQ() {
+  const faqQuestions = document.querySelectorAll('.faq-question');
+  
+  faqQuestions.forEach(question => {
+    question.addEventListener('click', () => {
+      const faqItem = question.closest('.faq-item');
+      const isExpanded = question.getAttribute('aria-expanded') === 'true';
+      
+      // Close all other FAQ items
+      faqQuestions.forEach(otherQuestion => {
+        if (otherQuestion !== question) {
+          const otherItem = otherQuestion.closest('.faq-item');
+          otherQuestion.setAttribute('aria-expanded', 'false');
+          otherItem?.classList.remove('active');
+        }
+      });
+      
+      // Toggle current FAQ item
+      if (isExpanded) {
+        question.setAttribute('aria-expanded', 'false');
+        faqItem?.classList.remove('active');
+      } else {
+        question.setAttribute('aria-expanded', 'true');
+        faqItem?.classList.add('active');
+      }
+    });
+  });
+}
+
 function cacheTemplates() {
   templates.membership = document.getElementById('membership-plan-template');
   templates.valueCard = document.getElementById('value-card-template');
@@ -6028,6 +6102,9 @@ function setupEventListeners() {
       }
     });
   }
+  
+  // Initialize FAQ accordion functionality
+  initFAQ();
   
   // Close modal on Escape key
   document.addEventListener('keydown', (e) => {

@@ -5764,6 +5764,201 @@ main {
     flex-direction: column;
 }
 
+/* FAQ Section */
+.faq-section {
+    background: rgba(26, 26, 26, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 48px 0;
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    margin-right: calc(-50vw + 50%);
+    margin-top: 0;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.faq-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        180deg,
+        rgba(244, 1, 245, 0.03) 0%,
+        rgba(244, 1, 245, 0.01) 50%,
+        transparent 100%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+
+.faq-container {
+    position: relative;
+    z-index: 1;
+}
+
+.faq-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.faq-title {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--color-text-white);
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.faq-item {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.faq-item:hover {
+    border-color: rgba(244, 1, 245, 0.4);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 12px rgba(244, 1, 245, 0.15);
+}
+
+.faq-item.active {
+    border-color: rgba(244, 1, 245, 0.5);
+    background: rgba(244, 1, 245, 0.05);
+    box-shadow: 0 4px 16px rgba(244, 1, 245, 0.2);
+}
+
+.faq-question {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.faq-question:hover {
+    color: #f0f;
+}
+
+.faq-question-text {
+    flex: 1;
+    padding-right: 16px;
+}
+
+.faq-icon {
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+    color: var(--color-text-secondary);
+}
+
+.faq-question[aria-expanded="true"] .faq-icon {
+    transform: rotate(180deg);
+    color: #f0f;
+}
+
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 24px;
+}
+
+.faq-item.active .faq-answer {
+    max-height: 500px;
+    padding: 0 24px 20px 24px;
+}
+
+.faq-answer p {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-base);
+    line-height: 1.7;
+    margin: 0 0 12px 0;
+}
+
+.faq-answer p:last-child {
+    margin-bottom: 0;
+}
+
+.faq-answer ul,
+.faq-answer ol {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-base);
+    line-height: 1.7;
+    margin: 12px 0;
+    padding-left: 24px;
+}
+
+.faq-answer li {
+    margin-bottom: 8px;
+    line-height: 1.6;
+}
+
+.faq-answer li:last-child {
+    margin-bottom: 0;
+}
+
+.faq-answer strong {
+    color: var(--color-text-white);
+    font-weight: 600;
+}
+
+/* Mobile FAQ Styles */
+@media (max-width: 767px) {
+    .faq-section {
+        padding: 32px 0;
+    }
+    
+    .faq-container {
+        padding: 0 16px;
+    }
+    
+    .faq-title {
+        font-size: var(--font-size-xl);
+        margin-bottom: 24px;
+    }
+    
+    .faq-question {
+        padding: 16px 20px;
+        font-size: var(--font-size-sm);
+    }
+    
+    .faq-answer {
+        padding: 0 20px;
+    }
+    
+    .faq-item.active .faq-answer {
+        padding: 0 20px 16px 20px;
+    }
+    
+    .faq-answer p {
+        font-size: var(--font-size-sm);
+    }
+}
+
 /* Global Footer - scrolls naturally into view */
 .global-footer {
     background: var(--color-surface-dark);
