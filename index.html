@@ -13,8 +13,30 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
+    
+    <!-- Google Tag Manager -->
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      // GTM Container ID - Web container for boulders.dk
+      window.GTM_CONTAINER_ID = window.GTM_CONTAINER_ID || 'GTM-KHB92N9P';
+    </script>
+    <script>
+      (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+      new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+      j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+      'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+      })(window,document,'script','dataLayer',window.GTM_CONTAINER_ID);
+    </script>
+    <!-- End Google Tag Manager -->
 </head>
 <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KHB92N9P"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    
+    <!-- GTM Utilities -->
+    <script type="module" src="./gtm-utils.js"></script>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-spinner">
@@ -276,7 +298,7 @@
                                             <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path>
                                         </svg>
                                     </button>
-                                    <div class="login-status" data-login-status style="display: none;">
+                                    <div class="login-status" data-login-status style="display: none;" role="region" aria-label="User account information">
                                         <div class="login-status-content">
                                             <div class="login-status-profile">
                                                 <div class="login-status-header">
@@ -305,7 +327,7 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                            <button type="button" class="login-btn" data-action="logout">Log out</button>
+                                            <button type="button" class="login-btn" data-action="logout" aria-label="Log out of your account">Log out</button>
                                         </div>
                                     </div>
 
@@ -563,6 +585,7 @@
                                 <!-- Add-on Card Template for modal and in-page rendering -->
                                 <template id="addon-card-template">
                                     <div class="plan-card addon-card" data-plan-id>
+                                        <img class="addon-image" data-element="image" src="" alt="" style="display: none;">
                                         <div class="plan-info">
                                             <div class="plan-content-left">
                                                 <div class="plan-type" data-element="name">Add-on</div>
@@ -586,6 +609,7 @@
                                     </div>
                                 </template>
 
+                                <!-- Cart Items (Membership only) -->
                                 <div class="cart-items" data-component="cart-items"></div>
                                 
                                 <!-- Payment Overview -->
@@ -601,6 +625,17 @@
                                             <span class="payment-amount" data-summary-field="pay-now">0,00 kr.</span>
                                         </div>
                                         <div class="payment-overview-bound-until" data-summary-field="payment-bound-until" style="display: none;"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Addon Items -->
+                                <div class="cart-addons" data-component="cart-addons" style="display: none;"></div>
+                                
+                                <!-- Cart Total -->
+                                <div class="cart-total" style="display: none;">
+                                    <div class="cart-total-row">
+                                        <span class="cart-total-label" data-i18n-key="cart.total">Total:</span>
+                                        <span class="cart-total-amount" data-summary-field="cart-total">0,00 kr.</span>
                                     </div>
                                 </div>
                                 
