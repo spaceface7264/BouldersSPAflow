@@ -4767,9 +4767,103 @@ body {
     align-items: start;
 }
 
+@media (min-width: 768px) {
+    /* Enlarge step indicators for tablet and desktop - make them more primary UI */
+    .step-indicator-content {
+        gap: 14px;
+        padding: 10px 0;
+    }
+    
+    .step {
+        gap: 10px;
+        padding: 10px;
+    }
+    
+    .step-circle {
+        width: 48px;
+        height: 48px;
+        font-size: var(--font-size-base);
+        border-width: 2px;
+    }
+    
+    .step-circle.active {
+        border-width: 2px;
+        box-shadow: 0 0 25px rgba(244, 1, 245, 0.6),
+                   inset 0 0 18px rgba(244, 1, 245, 0.15);
+    }
+    
+    .step-circle.active::before {
+        inset: -4px;
+        padding: 2px;
+        filter: drop-shadow(0 0 10px rgba(244, 1, 245, 0.9));
+    }
+    
+    .step-circle .checkmark {
+        width: 20px;
+        height: 20px;
+    }
+    
+    .step-label {
+        font-size: var(--font-size-base);
+        font-weight: 600;
+    }
+    
+    .step-connector {
+        width: 50px;
+        height: 2px;
+        margin: 0 10px;
+    }
+    
+    .step-circle.inactive {
+        border-width: 2px;
+    }
+}
+
 @media (min-width: 1024px) {
     .info-layout {
         grid-template-columns: minmax(500px, 600px) minmax(350px, 400px);
+    }
+    
+    /* Further enlarge step indicators for desktop */
+    .step-indicator-content {
+        gap: 16px;
+        padding: 12px 0;
+    }
+    
+    .step {
+        gap: 12px;
+        padding: 12px;
+    }
+    
+    .step-circle {
+        width: 56px;
+        height: 56px;
+        font-size: var(--font-size-lg);
+    }
+    
+    .step-circle.active {
+        box-shadow: 0 0 30px rgba(244, 1, 245, 0.6),
+                   inset 0 0 20px rgba(244, 1, 245, 0.15);
+    }
+    
+    .step-circle.active::before {
+        inset: -4px;
+        padding: 2px;
+        filter: drop-shadow(0 0 12px rgba(244, 1, 245, 0.9));
+    }
+    
+    .step-circle .checkmark {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .step-label {
+        font-size: var(--font-size-lg);
+    }
+    
+    .step-connector {
+        width: 60px;
+        margin: 0 12px;
     }
 }
 
@@ -6651,28 +6745,55 @@ main {
         padding: 0 16px;
     }
     
+    /* Enlarge step indicators for mobile - make them more primary UI */
     .step-indicator-content {
-        gap: 4px;
+        gap: 8px;
+        padding: 8px 0;
     }
 
     .step {
-        gap: 4px;
+        gap: 6px;
+        padding: 6px;
     }
 
     .step-circle {
-        width: 32px;
-        height: 32px;
-        font-size: var(--font-size-sm);
+        width: 40px;
+        height: 40px;
+        font-size: var(--font-size-base);
+        border-width: 2px;
+    }
+    
+    .step-circle.active {
+        border-width: 2px;
+        box-shadow: 0 0 20px rgba(244, 1, 245, 0.6),
+                   inset 0 0 15px rgba(244, 1, 245, 0.15);
+    }
+    
+    .step-circle.active::before {
+        inset: -4px;
+        padding: 2px;
+        filter: drop-shadow(0 0 8px rgba(244, 1, 245, 0.9));
+    }
+    
+    .step-circle .checkmark {
+        width: 18px;
+        height: 18px;
     }
 
     .step-label {
-        font-size: var(--font-size-xs);
+        font-size: var(--font-size-sm);
+        font-weight: 600;
         text-align: center;
     }
 
     .step-connector {
-        width: 20px;
-        margin: 0 4px;
+        width: 30px;
+        height: 2px;
+        margin: 0 6px;
+    }
+    
+    .step-circle.inactive {
+        border-width: 2px;
     }
 
     .step-content {
