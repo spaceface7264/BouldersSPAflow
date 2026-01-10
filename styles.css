@@ -10,8 +10,8 @@
   .addons-overlay.is-open { display: flex; align-items: center; justify-content: center; }
   body.modal-open { overflow: hidden; }
   
-/* Loading Overlay */
-.loading-overlay {
+  /* Loading Overlay */
+  .loading-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -44,20 +44,32 @@
 }
 
 .spinner {
-    width: 48px;
-    height: 48px;
-    border: 3px solid rgba(244, 1, 245, 0.15);
-    border-top: 3px solid #F401F5;
-    border-right: 3px solid rgba(244, 1, 245, 0.15);
-    border-bottom: 3px solid rgba(244, 1, 245, 0.15);
-    border-left: 3px solid rgba(244, 1, 245, 0.15);
+    width: 64px;
+    height: 64px;
+    border: 4px solid rgba(244, 1, 245, 0.2);
+    border-top: 4px solid #F401F5;
     border-radius: 50%;
-    animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    animation: loading-spinner-spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
     will-change: transform;
     box-sizing: border-box;
+    filter: drop-shadow(0 0 20px rgba(244, 1, 245, 0.4));
 }
 
-@keyframes spin {
+.loading-text {
+    color: #F401F5;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+@keyframes loading-spinner-spin {
     0% {
         transform: rotate(0deg);
     }
@@ -1259,8 +1271,17 @@ body {
     border: 2px solid rgba(244, 1, 245, 0.3);
     border-top: 2px solid #F401F5;
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: location-spinner-spin 0.8s linear infinite;
     display: block;
+}
+
+@keyframes location-spinner-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .search-input:focus {
@@ -1969,7 +1990,7 @@ body {
     display: flex;
     align-items: stretch;
     justify-content: flex-start;
-    padding: 16px 20px;
+    padding: 16px 20px 24px 20px; /* Added bottom padding */
     position: relative;
     min-height: 100px; /* Ensure minimum height to fill card */
     opacity: 0;
@@ -2037,7 +2058,7 @@ body {
 }
 
 .plan-card:last-child {
-    padding-bottom: 24px; /* Extra bottom padding for last card */
+    padding-bottom: 32px; /* Extra bottom padding for last card */
 }
 
 /* No products available message */
@@ -2203,7 +2224,7 @@ body {
     .plan-card {
         min-height: auto; /* Allow cards to expand to fit content */
         height: auto;
-        padding: 16px 18px;
+        padding: 16px 18px 24px 18px; /* Added bottom padding */
     }
 
     .check-circle {
@@ -2238,8 +2259,12 @@ body {
     }
 
     .plan-card {
-        padding: 14px 16px;
+        padding: 14px 16px 20px 16px; /* Added bottom padding */
         min-height: 70px;
+    }
+    
+    .plan-card:last-child {
+        padding-bottom: 24px; /* Extra bottom padding for last card on mobile */
     }
 
     .plan-info {
@@ -2307,8 +2332,12 @@ body {
 
 
     .plan-card {
-        padding: 16px 20px;
+        padding: 16px 20px 24px 20px; /* Added bottom padding */
         min-height: 100px;
+    }
+    
+    .plan-card:last-child {
+        padding-bottom: 32px; /* Extra bottom padding for last card on larger screens */
     }
 
     .plan-info {
@@ -3402,11 +3431,16 @@ body {
     border: 2px solid #f0f;
     border-top-color: transparent;
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: quantity-spinner-spin 1s linear infinite;
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
+@keyframes quantity-spinner-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }
 .total-price {
     font-size: var(--font-size-lg);
@@ -3478,17 +3512,24 @@ body {
 
 .login-status {
     margin-bottom: 24px;
-    padding: 20px;
-    background-color: #111827;
-    border: 1px solid #374151;
-    border-radius: 12px;
+    padding: 24px;
+    background: linear-gradient(135deg, #1F2937 0%, #111827 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
     position: relative;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.login-status:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .login-status-content {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
 }
 
 .login-status-profile {
@@ -3497,46 +3538,66 @@ body {
 
 .login-status-header {
     margin-bottom: 0;
-    padding-bottom: 16px;
+    padding-bottom: 0px;
+    border-bottom: none;
 }
 
 .login-status-label {
-    margin: 0 0 16px 0;
-    font-size: var(--font-size-sm);
+    margin: 0 0 20px 0;
+    font-size: var(--font-size-xs);
     color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
 }
 
 .profile-info-grid {
     display: flex;
     flex-direction: column;
     gap: 0;
+    margin-top: 4px;
 }
 
 .profile-info-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    gap: 16px;
+    align-items: flex-start;
+    gap: 20px;
     font-size: var(--font-size-sm);
-    padding: 12px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    transition: background-color 0.2s ease;
+}
+
+.profile-info-row:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+    margin: 0 -8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    border-radius: 6px;
 }
 
 .profile-info-row:last-child {
-    border-bottom: none;
+    border-bottom: none !important;
     padding-bottom: 0;
+}
+
+.profile-info-row[data-auth-phone-row] {
+    border-bottom: none !important;
 }
 
 .profile-info-row:first-child {
     padding-top: 0;
+    border-bottom: none !important;
 }
 
 .profile-info-label {
     color: #9CA3AF;
     font-weight: 500;
     flex-shrink: 0;
-    min-width: 120px;
-    padding-right: 8px;
+    min-width: 140px;
+    padding-right: 12px;
+    line-height: 1.5;
 }
 
 .profile-info-value {
@@ -3544,41 +3605,75 @@ body {
     text-align: right;
     flex: 1;
     word-break: break-word;
-    padding-left: 8px;
+    padding-left: 12px;
+    line-height: 1.5;
+    min-height: 1.5em;
+    transition: opacity 0.2s ease;
+}
+
+/* Style for empty values */
+.profile-info-value-empty {
+    opacity: 0.5;
+    font-style: italic;
+    color: #6B7280;
 }
 
 .profile-info-row[data-auth-name-row] {
     padding-top: 0;
-    padding-bottom: 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    padding-bottom: 20px;
+    border-bottom: none;
+    margin-bottom: 4px;
+}
+
+.profile-info-row[data-auth-name-row]:hover {
+    background-color: transparent;
+    margin: 0;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.profile-info-row[data-auth-name-row] .profile-info-label {
+    font-size: var(--font-size-sm);
+    color: #D1D5DB;
+    font-weight: 600;
 }
 
 .profile-info-row[data-auth-name-row] .profile-info-value {
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-lg);
     font-weight: 600;
     color: #FFFFFF;
+    opacity: 1;
+    font-style: normal;
 }
 
 .login-status .login-btn {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: 20px;
+    right: 20px;
     width: auto;
     min-width: auto;
-    padding: 6px 12px;
+    padding: 8px 16px;
     font-size: var(--font-size-xs);
-    font-weight: 500;
+    font-weight: 600;
     background-color: transparent;
     color: #9CA3AF;
-    border: 1px solid #374151;
-    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
     transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .login-status .login-btn:hover {
-    background-color: rgba(244, 1, 245, 0.1);
+    background-color: rgba(244, 1, 245, 0.15);
     color: #F401F5;
     border-color: #F401F5;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.2);
+}
+
+.login-status .login-btn:active {
+    transform: translateY(0);
 }
 
 .buyer-section {
@@ -3744,11 +3839,17 @@ body {
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-top-color: white;
     border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+    animation: login-spin 0.6s linear infinite;
+    will-change: transform;
 }
 
-@keyframes spin {
-    to { transform: translate(-50%, -50%) rotate(360deg); }
+@keyframes login-spin {
+    from {
+        transform: translate(-50%, -50%) rotate(0deg);
+    }
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
 }
 
 /* Save Account Button */
@@ -4222,13 +4323,16 @@ body {
     border-bottom: 3px solid rgba(244, 1, 245, 0.15);
     border-left: 3px solid rgba(244, 1, 245, 0.15);
     border-radius: 50%;
-    animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+    animation: terms-modal-spinner-spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
     margin-bottom: 16px;
     box-sizing: border-box;
     will-change: transform;
 }
 
-@keyframes spin {
+@keyframes terms-modal-spinner-spin {
+    from {
+        transform: rotate(0deg);
+    }
     to {
         transform: rotate(360deg);
     }
@@ -6469,6 +6573,53 @@ main {
         height: auto !important;
         min-height: auto !important;
         align-items: stretch;
+        padding-bottom: 24px !important; /* Ensure bottom padding on mobile */
+    }
+    
+    .plan-card:last-child {
+        padding-bottom: 32px !important; /* Extra bottom padding for last card on mobile */
+    }
+    
+    /* Mobile login-status refinements */
+    .login-status {
+        padding: 20px 16px;
+        margin-bottom: 20px;
+    }
+    
+    .login-status-header {
+        padding-bottom: 16px;
+    }
+    
+    .login-status-label {
+        font-size: var(--font-size-xs);
+        margin-bottom: 16px;
+    }
+    
+    .profile-info-row {
+        padding: 12px 0;
+        gap: 16px;
+    }
+    
+    .profile-info-label {
+        min-width: 100px;
+        font-size: var(--font-size-xs);
+        padding-right: 8px;
+    }
+    
+    .profile-info-value {
+        font-size: var(--font-size-xs);
+        padding-left: 8px;
+    }
+    
+    .profile-info-row[data-auth-name-row] .profile-info-value {
+        font-size: var(--font-size-base);
+    }
+    
+    .login-status .login-btn {
+        top: 16px;
+        right: 16px;
+        padding: 6px 12px;
+        font-size: var(--font-size-xs);
     }
 
     .plan-options {

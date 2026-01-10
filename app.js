@@ -7211,104 +7211,90 @@ function refreshLoginUI() {
     DOM.loginStatus.style.display = authenticated ? 'block' : 'none';
   }
   
-  // Update name display (order: 1)
-  if (DOM.loginStatusName && DOM.loginStatusNameRow) {
-    if (nameDisplay) {
-      DOM.loginStatusName.textContent = nameDisplay;
-      DOM.loginStatusNameRow.style.display = 'flex';
-    } else {
-      DOM.loginStatusNameRow.style.display = 'none';
-    }
-  }
-  
-  // Update date of birth display (order: 2)
-  if (DOM.loginStatusDob && DOM.loginStatusDobRow) {
-    let dobDisplay = null;
-    const dobSource = customer?.dateOfBirth || customer?.birthDate || formCustomer?.dateOfBirth;
-    if (dobSource) {
-      if (typeof dobSource === 'string') {
-        // Format date string if needed (YYYY-MM-DD to DD/MM/YYYY)
-        const dateMatch = dobSource.match(/(\d{4})-(\d{2})-(\d{2})/);
-        if (dateMatch) {
-          dobDisplay = `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
-        } else {
-          dobDisplay = dobSource;
-        }
-      } else if (dobSource.year && dobSource.month && dobSource.day) {
-        dobDisplay = `${String(dobSource.day).padStart(2, '0')}/${String(dobSource.month).padStart(2, '0')}/${dobSource.year}`;
-      }
-    }
-    if (dobDisplay) {
-      DOM.loginStatusDob.textContent = dobDisplay;
-      DOM.loginStatusDobRow.style.display = 'flex';
-    } else {
-      DOM.loginStatusDobRow.style.display = 'none';
-    }
-  }
-  
-  // Update email display (order: 3)
-  if (DOM.loginStatusEmail && DOM.loginStatusEmailRow) {
-    if (emailDisplay && emailDisplay !== 'Account') {
-      DOM.loginStatusEmail.textContent = emailDisplay;
-      DOM.loginStatusEmailRow.style.display = 'flex';
-    } else {
-      DOM.loginStatusEmailRow.style.display = 'none';
-    }
-  }
-  
-  // Update address display (order: 4)
-  if (DOM.loginStatusAddress && DOM.loginStatusAddressRow) {
-    let addressParts = [];
-    const addressSource = customer?.address || customer?.shippingAddress || formCustomer?.address;
-    const postalCodeSource = customer?.postalCode || customer?.shippingAddress?.postalCode || formCustomer?.address?.postalCode;
-    const citySource = customer?.city || customer?.shippingAddress?.city || formCustomer?.address?.city;
+  // Helper function to update a profile field with empty state handling
+  const updateProfileField = (element, rowElement, value, isAuthenticated) => {
+    if (!element || !rowElement) return;
     
-    if (addressSource) {
-      if (typeof addressSource === 'string') {
-        addressParts.push(addressSource);
-      } else if (addressSource.street) {
-        addressParts.push(addressSource.street);
-      }
-    }
-    if (postalCodeSource) {
-      addressParts.push(postalCodeSource);
-    }
-    if (citySource) {
-      addressParts.push(citySource);
-    }
-    const addressDisplay = addressParts.length > 0 ? addressParts.join(', ') : null;
-    if (addressDisplay) {
-      DOM.loginStatusAddress.textContent = addressDisplay;
-      DOM.loginStatusAddressRow.style.display = 'flex';
-    } else {
-      DOM.loginStatusAddressRow.style.display = 'none';
-    }
-  }
-  
-  // Update phone number display (order: 5)
-  if (DOM.loginStatusPhone && DOM.loginStatusPhoneRow) {
-    let phoneDisplay = null;
-    const phoneSource = customer?.mobilePhone || customer?.phone || formCustomer?.phone;
-    const phoneCountryCodeSource = customer?.phoneCountryCode || formCustomer?.phone?.countryCode;
+    const isEmpty = !value || value === '-' || value.trim() === '';
+    element.textContent = value || '-';
     
-    if (phoneSource) {
-      if (typeof phoneSource === 'string') {
-        phoneDisplay = phoneSource;
-      } else if (phoneSource.number) {
-        const countryCode = phoneSource.countryCode || phoneCountryCodeSource || '';
-        phoneDisplay = countryCode ? `${countryCode} ${phoneSource.number}` : phoneSource.number;
-      }
-    } else if (formCustomer?.phoneNumber && formCustomer?.countryCode) {
-      phoneDisplay = `${formCustomer.countryCode} ${formCustomer.phoneNumber}`;
+    // Add/remove empty state class for styling
+    if (isEmpty) {
+      element.classList.add('profile-info-value-empty');
+    } else {
+      element.classList.remove('profile-info-value-empty');
     }
     
-    if (phoneDisplay) {
-      DOM.loginStatusPhone.textContent = phoneDisplay;
-      DOM.loginStatusPhoneRow.style.display = 'flex';
+    if (isAuthenticated) {
+      rowElement.style.display = 'flex';
     } else {
-      DOM.loginStatusPhoneRow.style.display = 'none';
+      rowElement.style.display = 'none';
+    }
+  };
+  
+  // Update name display (order: 1) - always show label, even if empty
+  updateProfileField(DOM.loginStatusName, DOM.loginStatusNameRow, nameDisplay, authenticated);
+  
+  // Update date of birth display (order: 2) - always show label, even if empty
+  let dobDisplay = null;
+  const dobSource = customer?.dateOfBirth || customer?.birthDate || formCustomer?.dateOfBirth;
+  if (dobSource) {
+    if (typeof dobSource === 'string') {
+      // Format date string if needed (YYYY-MM-DD to DD/MM/YYYY)
+      const dateMatch = dobSource.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateMatch) {
+        dobDisplay = `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
+      } else {
+        dobDisplay = dobSource;
+      }
+    } else if (dobSource.year && dobSource.month && dobSource.day) {
+      dobDisplay = `${String(dobSource.day).padStart(2, '0')}/${String(dobSource.month).padStart(2, '0')}/${dobSource.year}`;
     }
   }
+  updateProfileField(DOM.loginStatusDob, DOM.loginStatusDobRow, dobDisplay, authenticated);
+  
+  // Update email display (order: 3) - always show label, even if empty
+  const emailValue = (emailDisplay && emailDisplay !== 'Account') ? emailDisplay : null;
+  updateProfileField(DOM.loginStatusEmail, DOM.loginStatusEmailRow, emailValue, authenticated);
+  
+  // Update address display (order: 4) - always show label, even if empty
+  let addressParts = [];
+  const addressSource = customer?.address || customer?.shippingAddress || formCustomer?.address;
+  const postalCodeSource = customer?.postalCode || customer?.shippingAddress?.postalCode || formCustomer?.address?.postalCode;
+  const citySource = customer?.city || customer?.shippingAddress?.city || formCustomer?.address?.city;
+  
+  if (addressSource) {
+    if (typeof addressSource === 'string') {
+      addressParts.push(addressSource);
+    } else if (addressSource.street) {
+      addressParts.push(addressSource.street);
+    }
+  }
+  if (postalCodeSource) {
+    addressParts.push(postalCodeSource);
+  }
+  if (citySource) {
+    addressParts.push(citySource);
+  }
+  const addressDisplay = addressParts.length > 0 ? addressParts.join(', ') : null;
+  updateProfileField(DOM.loginStatusAddress, DOM.loginStatusAddressRow, addressDisplay, authenticated);
+  
+  // Update phone number display (order: 5) - always show label, even if empty
+  let phoneDisplay = null;
+  const phoneSource = customer?.mobilePhone || customer?.phone || formCustomer?.phone;
+  const phoneCountryCodeSource = customer?.phoneCountryCode || formCustomer?.phone?.countryCode;
+  
+  if (phoneSource) {
+    if (typeof phoneSource === 'string') {
+      phoneDisplay = phoneSource;
+    } else if (phoneSource.number) {
+      const countryCode = phoneSource.countryCode || phoneCountryCodeSource || '';
+      phoneDisplay = countryCode ? `${countryCode} ${phoneSource.number}` : phoneSource.number;
+    }
+  } else if (formCustomer?.phoneNumber && formCustomer?.countryCode) {
+    phoneDisplay = `${formCustomer.countryCode} ${formCustomer.phoneNumber}`;
+  }
+  updateProfileField(DOM.loginStatusPhone, DOM.loginStatusPhoneRow, phoneDisplay, authenticated);
   
   if (DOM.loginFormContainer) {
     DOM.loginFormContainer.style.display = authenticated ? 'none' : '';
