@@ -17,22 +17,50 @@ function roundToHalfKrone(amount) {
 
 /**
  * Formats a price with rounding to half krone, ensuring it ends in .00 or .50
+ * If ends in .00, display whole number only (e.g., "10" not "10,00")
+ * If ends in .50, keep decimal (e.g., "10,50")
  * @param {number} amount - Amount to format
  * @returns {string} Formatted price string
  */
 function formatPriceHalfKrone(amount) {
   const rounded = roundToHalfKrone(amount);
-  return numberFormatter.format(rounded);
+  // Check if rounded amount is a whole number (.00)
+  if (rounded % 1 === 0) {
+    // Display as whole number without decimals
+    return numberFormatter.format(Math.floor(rounded));
+  } else {
+    // Display with .50 decimal - ensure it shows two decimals
+    const formatter = new Intl.NumberFormat('da-DK', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    return formatter.format(rounded);
+  }
 }
 
 /**
  * Formats a currency amount with rounding to half krone
+ * If ends in .00, display whole number only (e.g., "10 kr" not "10,00 kr")
+ * If ends in .50, keep decimal (e.g., "10,50 kr")
  * @param {number} amount - Amount to format
  * @returns {string} Formatted currency string
  */
 function formatCurrencyHalfKrone(amount) {
   const rounded = roundToHalfKrone(amount);
-  return currencyFormatter.format(rounded);
+  // Check if rounded amount is a whole number (.00)
+  if (rounded % 1 === 0) {
+    // Format as whole number without decimals
+    const wholeNumber = Math.floor(rounded);
+    return numberFormatter.format(wholeNumber) + ' kr';
+  } else {
+    // Format with .50 decimal - ensure it shows two decimals
+    // Use numberFormatter with minimumFractionDigits to ensure .50 is shown
+    const formatter = new Intl.NumberFormat('da-DK', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    return formatter.format(rounded) + ' kr';
+  }
 }
 
 const MEMBERSHIP_PLANS = [
