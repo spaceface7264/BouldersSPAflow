@@ -2,7 +2,8 @@
 .addons-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
     z-index: 1000;
     display: none;
     isolation: isolate;
@@ -83,15 +84,18 @@
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    background: var(--color-surface-dark);
+    background: linear-gradient(135deg, 
+      rgba(26, 26, 26, 0.98) 0%, 
+      rgba(20, 20, 20, 0.98) 100%);
     color: var(--color-text-secondary);
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    border: 1px solid rgba(244, 1, 245, 0.15);
     width: min(1200px, 96vw);
     max-height: 90vh;
     overflow: hidden;
-    box-shadow: 0 24px 80px rgba(0,0,0,0.6),
-                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    box-shadow: 0 32px 96px rgba(0, 0, 0, 0.8),
+                0 0 0 1px rgba(244, 1, 245, 0.1) inset,
+                0 0 60px rgba(244, 1, 245, 0.1);
     display: flex;
     flex-direction: column;
   }
@@ -101,10 +105,11 @@
     justify-content: center; 
     align-items: center; 
     position: relative; 
-    padding: 24px 32px 20px; 
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 28px 32px 24px; 
+    border-bottom: 1px solid rgba(244, 1, 245, 0.2);
     background: linear-gradient(180deg, 
-      rgba(255, 255, 255, 0.02) 0%, 
+      rgba(244, 1, 245, 0.08) 0%, 
+      rgba(244, 1, 245, 0.02) 50%,
       transparent 100%);
   }
   .addons-title { 
@@ -113,33 +118,35 @@
     font-size: var(--font-size-2xl); 
     letter-spacing: -0.5px; 
     font-weight: 700; 
-    color: var(--color-text-white);
+    color: #FFFFFF;
+    text-shadow: 0 0 20px rgba(244, 1, 245, 0.3);
     line-height: 1.2;
   }
   .addons-close { 
     position: absolute; 
-    right: 16px; 
+    right: 20px; 
     top: 50%; 
     transform: translateY(-50%); 
-    font-size: 28px; 
+    font-size: 24px; 
     line-height: 1; 
-    background: rgba(255, 255, 255, 0.05); 
-    border: 1px solid rgba(255, 255, 255, 0.1); 
-    color: var(--color-text-white); 
+    background: rgba(244, 1, 245, 0.1); 
+    border: 1px solid rgba(244, 1, 245, 0.2); 
+    color: #FFFFFF; 
     cursor: pointer; 
-    width: 36px; 
-    height: 36px; 
+    width: 40px; 
+    height: 40px; 
     display: flex; 
     align-items: center; 
     justify-content: center; 
-    border-radius: 8px; 
-    transition: all 0.2s ease; 
+    border-radius: 10px; 
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
   }
   .addons-close:hover { 
-    background: rgba(255, 255, 255, 0.1); 
-    border-color: rgba(255, 255, 255, 0.2);
-    color: var(--color-text-white);
-    transform: translateY(-50%) scale(1.05);
+    background: rgba(244, 1, 245, 0.2); 
+    border-color: rgba(244, 1, 245, 0.4);
+    color: #FFFFFF;
+    transform: translateY(-50%) scale(1.08);
+    box-shadow: 0 0 16px rgba(244, 1, 245, 0.4);
   }
   
   .addons-content { 
@@ -168,7 +175,7 @@
     overflow-y: auto; 
     flex: 1;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    scrollbar-color: rgba(244, 1, 245, 0.4) transparent;
   }
   
   .addons-grid::-webkit-scrollbar {
@@ -180,22 +187,24 @@
   }
   
   .addons-grid::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(244, 1, 245, 0.3);
     border-radius: 4px;
   }
   
   .addons-grid::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(244, 1, 245, 0.5);
   }
   
   /* Addon Card Styles for Modal */
   .addons-grid .addon-card {
-    background: rgba(255, 255, 255, 0.03);
+    background: linear-gradient(135deg, 
+      rgba(255, 255, 255, 0.05) 0%, 
+      rgba(255, 255, 255, 0.02) 100%);
     color: var(--color-text-secondary);
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15),
-                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    border-radius: 18px;
+    border: 1px solid rgba(244, 1, 245, 0.15);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2),
+                0 0 0 1px rgba(244, 1, 245, 0.05) inset;
     position: relative;
     overflow: hidden;
     padding: 0;
@@ -232,10 +241,14 @@
   }
   
   .addons-grid .addon-card:hover {
-    border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25),
-                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
-    transform: translateY(-4px);
+    border-color: rgba(244, 1, 245, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(244, 1, 245, 0.15) inset,
+                0 0 24px rgba(244, 1, 245, 0.15);
+    transform: translateY(-6px);
+    background: linear-gradient(135deg, 
+      rgba(255, 255, 255, 0.08) 0%, 
+      rgba(255, 255, 255, 0.04) 100%);
   }
   
   .addons-grid .addon-card .plan-info {
@@ -259,11 +272,12 @@
   }
   
   .addons-grid .addon-card .plan-type {
-    color: var(--color-text-white);
+    color: #FFFFFF;
     font-weight: 600;
     font-size: var(--font-size-lg);
     margin: 0;
     line-height: 1.3;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
   
   .addons-grid .addon-card .plan-content-right {
@@ -285,10 +299,11 @@
   }
   
   .addons-grid .addon-card .plan-price .price-amount {
-    color: var(--color-brand-accent);
+    color: #F0F;
     font-size: var(--font-size-2xl);
     line-height: 1.2;
     font-weight: 700;
+    text-shadow: 0 0 12px rgba(244, 1, 245, 0.4);
   }
   
   .addons-grid .addon-card .plan-price .price-unit {
@@ -298,7 +313,7 @@
   }
   
   .addons-grid .addon-card .plan-description {
-    color: var(--color-text-muted);
+    color: rgba(255, 255, 255, 0.7);
     font-size: var(--font-size-sm);
     line-height: 1.5;
     margin: 0;
@@ -331,7 +346,7 @@
   .addons-grid .addon-card .plan-features li {
     margin: 6px 0;
     font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
+    color: rgba(255, 255, 255, 0.75);
     line-height: 1.5;
     position: relative;
     padding-left: 20px;
@@ -341,9 +356,10 @@
     content: "✓";
     position: absolute;
     left: 0;
-    color: var(--color-brand-accent);
+    color: #F0F;
     font-weight: bold;
     font-size: var(--font-size-sm);
+    text-shadow: 0 0 8px rgba(244, 1, 245, 0.5);
   }
   
   .addons-grid .addon-card .plan-actions {
@@ -379,12 +395,12 @@
     position: absolute;
     top: 16px;
     right: 16px;
-    width: 28px;
-    height: 28px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    width: 32px;
+    height: 32px;
+    border: 2px solid rgba(244, 1, 245, 0.4);
     border-radius: 50%;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(12px);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -395,14 +411,16 @@
   }
   
   .addons-grid .addon-card:hover .check-circle {
-    border-color: rgba(255, 255, 255, 0.5);
-    background: rgba(0, 0, 0, 0.6);
+    border-color: rgba(244, 1, 245, 0.6);
+    background: rgba(0, 0, 0, 0.7);
+    box-shadow: 0 0 12px rgba(244, 1, 245, 0.3);
   }
   
   .addons-grid .addon-card.selected .check-circle {
-    background: var(--color-brand-accent);
-    border-color: var(--color-brand-accent);
-    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.4);
+    background: #F0F;
+    border-color: #F0F;
+    box-shadow: 0 0 20px rgba(244, 1, 245, 0.6),
+                inset 0 0 12px rgba(255, 255, 255, 0.2);
   }
   
   .addons-grid .addon-card .check-circle::after {
@@ -422,7 +440,13 @@
   
   /* Override inherited borders for selected addon cards */
   .addons-grid .addon-card.selected {
-    border: 2px solid var(--color-brand-accent);
+    border: 2px solid #F0F;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(244, 1, 245, 0.2) inset,
+                0 0 32px rgba(244, 1, 245, 0.25);
+    background: linear-gradient(135deg, 
+      rgba(244, 1, 245, 0.1) 0%, 
+      rgba(255, 255, 255, 0.05) 100%);
   }
   
   .addons-actions { 
@@ -430,17 +454,19 @@
     justify-content: space-between; 
     align-items: center; 
     gap: 16px; 
-    padding: 20px 32px; 
-    background: rgba(255, 255, 255, 0.02);
-    border-top: 1px solid rgba(255, 255, 255, 0.1); 
+    padding: 24px 32px; 
+    background: linear-gradient(180deg, 
+      transparent 0%,
+      rgba(244, 1, 245, 0.05) 100%);
+    border-top: 1px solid rgba(244, 1, 245, 0.2); 
     flex-shrink: 0;
   }
   
   .addons-hint { 
-    opacity: 0.8; 
+    opacity: 0.85; 
     font-size: var(--font-size-sm); 
     line-height: 1.5; 
-    color: var(--color-text-muted);
+    color: rgba(255, 255, 255, 0.75);
     flex: 1;
   }
   
@@ -462,26 +488,29 @@
   }
   
   .addons-action-btn.addons-skip { 
-    border: 1px solid rgba(255, 255, 255, 0.2); 
-    background: rgba(255, 255, 255, 0.05); 
-    color: var(--color-text-white); 
+    border: 1px solid rgba(244, 1, 245, 0.3); 
+    background: rgba(244, 1, 245, 0.08); 
+    color: #FFFFFF; 
   }
   .addons-action-btn.addons-skip:hover { 
-    background: rgba(255, 255, 255, 0.1); 
-    border-color: rgba(255, 255, 255, 0.3);
-    transform: translateY(-1px);
+    background: rgba(244, 1, 245, 0.15); 
+    border-color: rgba(244, 1, 245, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(244, 1, 245, 0.2);
   }
   
   .addons-action-btn.addons-continue { 
     border: none; 
-    background: var(--color-brand-accent); 
-    color: var(--color-button-primary); 
-    box-shadow: 0 4px 12px rgba(244, 1, 245, 0.3);
+    background: linear-gradient(135deg, #F0F 0%, #E608E6 100%); 
+    color: #FFFFFF; 
+    box-shadow: 0 4px 16px rgba(244, 1, 245, 0.4),
+                0 0 24px rgba(244, 1, 245, 0.2);
   }
   .addons-action-btn.addons-continue:hover { 
-    background: var(--color-brand-accent-hover); 
-    box-shadow: 0 6px 16px rgba(244, 1, 245, 0.4);
-    transform: translateY(-1px);
+    background: linear-gradient(135deg, #E608E6 0%, #D007D0 100%); 
+    box-shadow: 0 6px 20px rgba(244, 1, 245, 0.5),
+                0 0 32px rgba(244, 1, 245, 0.3);
+    transform: translateY(-2px);
   }
   
   @media (max-width: 768px) {
@@ -928,35 +957,48 @@ body {
 }
 
 .step-circle.active {
-    background-color: transparent;
+    background-color: rgba(0, 0, 0, 0.4);
     border: 2px solid #f0f;
     color: white;
+    position: relative;
+    overflow: visible;
+    box-shadow: 0 0 20px rgba(244, 1, 245, 0.5),
+               inset 0 0 15px rgba(244, 1, 245, 0.1);
 }
 
 .step-circle.active::before {
     content: '';
     position: absolute;
-    width: 40px;
-    height: 40px;
+    inset: -4px;
     border-radius: 50%;
-    border: 2px solid transparent;
-    border-top-color: #f0f;
-    border-right-color: #f0f;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    animation: electric-spin 1.5s linear infinite, pulse-glow 2s ease-in-out infinite;
-    filter: drop-shadow(0 0 8px rgba(244, 1, 245, 0.6));
-    pointer-events: none;
+    padding: 2px;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 40%,
+        #f0f 50%,
+        transparent 60%,
+        transparent 100%
+    );
+    -webkit-mask: 
+        linear-gradient(#fff 0 0) content-box, 
+        linear-gradient(#fff 0 0);
+    mask: 
+        linear-gradient(#fff 0 0) content-box, 
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: border-beam 1.5s linear infinite;
+    filter: drop-shadow(0 0 8px rgba(244, 1, 245, 0.8));
+}
+
+@keyframes border-beam {
+    to { transform: rotate(360deg); }
 }
 
 @keyframes electric-spin {
-    from { 
-        transform: translate(-50%, -50%) rotate(0deg); 
-    }
-    to { 
-        transform: translate(-50%, -50%) rotate(360deg); 
-    }
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 @keyframes pulse-glow {

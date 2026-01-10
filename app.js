@@ -8475,6 +8475,25 @@ function handlePlanSelection(selectedCard) {
   
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
   
+  // GTM: Track select_item event
+  if (product && window.GTM && window.GTM.trackSelectItem) {
+    try {
+      const productPrice = product.price?.amount ? product.price.amount / 100 : 
+                          product.amount ? product.amount / 100 : 
+                          product.price || 0;
+      const productData = {
+        id: productId,
+        name: product.name || selectedCard.querySelector('.plan-type')?.textContent || 'Unknown Product',
+        amount: productPrice,
+        type: isMembership ? 'membership' : 'punch-card',
+        quantity: 1
+      };
+      window.GTM.trackSelectItem(productData, category, category);
+    } catch (error) {
+      console.warn('[GTM] Error tracking select_item:', error);
+    }
+  }
+  
   // Step 5: If membership is selected, fetch add-ons immediately
   if (isMembership && productId) {
     loadSubscriptionAdditions(productId);
@@ -10322,6 +10341,10 @@ function updateCartSummary() {
     });
   });
 
+  // GTM: Track add_to_cart event when items are added
+  const previousCartItemCount = state.cartItems?.length || 0;
+  const newCartItemCount = items.length;
+  
   state.cartItems = items;
   
   // Calculate subtotal (before discount)
@@ -10329,6 +10352,19 @@ function updateCartSummary() {
   
   // Calculate cart total (subtotal - discount)
   state.totals.cartTotal = Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0));
+
+  // Track add_to_cart if items were added (not just updated)
+  if (newCartItemCount > previousCartItemCount && window.GTM && window.GTM.trackAddToCart) {
+    try {
+      // Only track newly added items
+      const newItems = items.slice(previousCartItemCount);
+      if (newItems.length > 0) {
+        window.GTM.trackAddToCart(newItems, state.totals.cartTotal, 'DKK');
+      }
+    } catch (error) {
+      console.warn('[GTM] Error tracking add_to_cart:', error);
+    }
+  }
 
   renderCartItems();
   renderCartAddons();
@@ -11541,6 +11577,15 @@ async function handleCheckout() {
   
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
+
+  // GTM: Track begin_checkout event
+  if (window.GTM && window.GTM.trackBeginCheckout && state.cartItems && state.cartItems.length > 0) {
+    try {
+      window.GTM.trackBeginCheckout(state.cartItems, state.totals.cartTotal, 'DKK');
+    } catch (error) {
+      console.warn('[GTM] Error tracking begin_checkout:', error);
+    }
+  }
 
   if (!state.paymentMethod) {
     showToast('Choose a payment method to continue.', 'error');
@@ -13530,6 +13575,31 @@ async function loadOrderForConfirmation(orderId) {
     
     // Update payment overview with order data
     updatePaymentOverview();
+    
+    // GTM: Track purchase event when payment is confirmed
+    if (window.GTM && window.GTM.trackPurchase && state.cartItems && state.cartItems.length > 0) {
+      try {
+        // Get order total - prefer from order object, fallback to cart total
+        const purchaseValue = orderTotal || 
+                             (order?.price?.total?.amount ? order.price.total.amount / 100 : 0) ||
+                             (order?.price?.total ? order.price.total / 100 : 0) ||
+                             state.totals.cartTotal || 0;
+        
+        // Get transaction ID
+        const transactionId = order?.number || order?.id || orderId;
+        
+        window.GTM.trackPurchase(
+          transactionId,
+          state.cartItems,
+          purchaseValue,
+          0, // tax
+          0, // shipping
+          'DKK'
+        );
+      } catch (error) {
+        console.warn('[GTM] Error tracking purchase:', error);
+      }
+    }
     
     // Only render confirmation view if payment is confirmed
     renderConfirmationView();
