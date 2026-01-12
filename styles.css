@@ -807,6 +807,8 @@ body {
     overflow: visible; /* Ensure animations aren't clipped */
     padding: 8px 0; /* Add vertical padding for animated rings */
     width: 100%;
+    max-width: 600px; /* Prevent indicator from getting too wide */
+    margin: 0 auto; /* Center the indicator */
     position: relative;
 }
 
@@ -872,9 +874,14 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: flex-start;
     gap: 8px;
     padding: 8px; /* Add padding to prevent clipping of animated rings */
     overflow: visible; /* Ensure animations aren't clipped */
+    min-width: 0; /* Allow flex shrinking */
+    max-width: 120px; /* Prevent steps from getting too wide */
+    flex: 0 0 auto; /* Don't grow or shrink */
+    box-sizing: border-box;
 }
 
 .step-circle {
@@ -889,6 +896,8 @@ body {
     transition: all 0.3s ease;
     position: relative;
     overflow: visible; /* Ensure pseudo-elements aren't clipped */
+    flex-shrink: 0; /* Prevent circle from shrinking */
+    margin: 0 auto; /* Center the circle */
 }
 
 .step-circle.active {
@@ -898,28 +907,16 @@ body {
 }
 
 .step-circle.active::before {
-    content: '';
-    position: absolute;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 2px solid transparent;
-    border-top-color: #f0f;
-    border-right-color: #f0f;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    animation: electric-spin 1.5s linear infinite, pulse-glow 2s ease-in-out infinite;
-    filter: drop-shadow(0 0 8px rgba(244, 1, 245, 0.6));
-    pointer-events: none;
+    /* Border animation removed for now */
+    display: none;
 }
 
 @keyframes electric-spin {
     from { 
-        transform: translate(-50%, -50%) rotate(0deg); 
+        transform: rotate(0deg);
     }
     to { 
-        transform: translate(-50%, -50%) rotate(360deg); 
+        transform: rotate(360deg);
     }
 }
 
@@ -961,6 +958,9 @@ body {
     text-align: center;
     min-width: 0; /* Allow flex shrinking */
     white-space: nowrap; /* Prevent text wrapping */
+    width: 100%; /* Take full width of step container */
+    display: block; /* Ensure it's a block element for proper centering */
+    margin: 0; /* Remove any default margins */
 }
 
 .step.active .step-label {
@@ -1077,8 +1077,11 @@ body {
 
 /* Step 4 (Send/Info) needs full width for two-column layout */
 #step-4 .step-panel-content {
-    max-width: 1200px;
+    max-width: 1400px; /* Increased to match info-layout */
+    width: 100%;
     text-align: left;
+    box-sizing: border-box;
+    padding: 0 20px; /* Add horizontal padding */
 }
 
 /* Center titles and subtitles in step 4 to match other steps */
@@ -3416,9 +3419,9 @@ body {
 
 .info-form-section {
     min-width: 0;
-    margin: 0 22px;
-    max-width: calc(100% - 44px);
-    overflow-x: hidden;
+    max-width: 100%;
+    overflow-x: visible; /* Allow content to be visible */
+    box-sizing: border-box;
 }
 
 /* Dark mode support - removed for light theme only */
@@ -4543,10 +4546,13 @@ body {
     gap: 40px;
     margin-top: 20px;
     justify-content: center;
-    max-width: 1200px;
+    max-width: 1400px; /* Increased from 1200px to accommodate content */
+    width: 100%;
     margin-left: auto;
     margin-right: auto;
     align-items: start;
+    box-sizing: border-box;
+    padding: 0 20px; /* Add horizontal padding to prevent edge cutoff */
 }
 
 @media (min-width: 768px) {
@@ -4602,8 +4608,99 @@ body {
 }
 
 @media (min-width: 1024px) {
+    .main {
+        max-width: 1400px; /* Increase main container width to match info-layout */
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+    
     .info-layout {
-        grid-template-columns: minmax(500px, 600px) minmax(350px, 400px);
+        grid-template-columns: minmax(500px, 650px) minmax(380px, 450px); /* Increased right column width */
+        gap: 48px; /* Slightly larger gap for better spacing */
+        padding: 0 24px; /* More padding on desktop */
+        max-width: 1400px; /* Match main container */
+    }
+    
+    .info-form-section {
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: visible;
+        margin: 0;
+    }
+    
+    .order-summary-section {
+        min-width: 0; /* Allow flex shrinking */
+        max-width: 100%;
+        overflow-x: visible;
+    }
+    
+    .order-summary {
+        min-width: 0; /* Allow flex shrinking */
+        max-width: 100%;
+        overflow-x: visible;
+        word-wrap: break-word;
+        box-sizing: border-box;
+        padding: 24px; /* Ensure consistent padding */
+    }
+    
+    /* Ensure all text in order summary can wrap */
+    .order-summary * {
+        max-width: 100%;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    .order-summary .item-name,
+    .order-summary .item-price,
+    .order-summary .payment-label,
+    .order-summary .consent-text,
+    .order-summary .payment-description {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
+    }
+    
+    /* Ensure discount code input doesn't overflow */
+    .order-summary input[type="text"],
+    .order-summary .discount-input-container,
+    .order-summary .discount-form {
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .order-summary .discount-form {
+        flex-wrap: nowrap; /* Keep input and button on same line */
+    }
+    
+    .order-summary .apply-discount-btn {
+        flex-shrink: 0; /* Don't shrink the button */
+        min-width: auto;
+    }
+    
+    /* Ensure payment description text wraps */
+    .order-summary p,
+    .order-summary .payment-description,
+    .payment-methods p {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
+        max-width: 100%;
+        box-sizing: border-box;
+        white-space: normal; /* Allow text to wrap */
+    }
+    
+    /* Override inline styles that might prevent wrapping */
+    .order-summary p[style],
+    .payment-methods p[style] {
+        max-width: 100% !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+    
+    #step-4 .step-panel-content {
+        max-width: 1400px;
+        padding: 0 20px;
+        overflow-x: visible;
     }
     
     /* Further enlarge step indicators for desktop */
@@ -4795,7 +4892,11 @@ body {
     padding: 24px;
     position: sticky;
     top: 20px;
-   
+    min-width: 0; /* Allow flex shrinking */
+    max-width: 100%;
+    overflow-x: visible;
+    word-wrap: break-word;
+    box-sizing: border-box;
 }
 
 .summary-header {
@@ -4842,6 +4943,8 @@ body {
     justify-content: space-between;
     padding: 12px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    min-width: 0; /* Allow flex shrinking */
+    gap: 12px; /* Add gap between name and price */
 }
 
 .cart-item:first-child {
@@ -4871,6 +4974,9 @@ body {
     color: white;
     font-weight: 500;
     font-size: var(--font-size-base);
+    white-space: nowrap; /* Prevent price from wrapping */
+    flex-shrink: 0; /* Don't shrink the price */
+    text-align: right;
 }
 
 /* Home Gym Info */
@@ -4976,9 +5082,7 @@ body {
     font-weight: 600;
 }
 
-.cart-item {
-    position: relative;
-}
+/* Removed duplicate cart-item definition - using the one above */
 
 /* Payment Overview */
 .payment-overview {
@@ -5101,16 +5205,22 @@ body {
     margin-top: 12px;
     display: flex;
     gap: 8px;
+    min-width: 0; /* Allow flex shrinking */
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .discount-input {
     flex: 1;
+    min-width: 0; /* Allow input to shrink */
     padding: 8px 12px;
     background-color: #374151;
     border: 1px solid #4B5563;
     border-radius: 6px;
     color: white;
     font-size: var(--font-size-base);
+    box-sizing: border-box;
+    max-width: 100%;
 }
 
 .discount-input:focus {
@@ -5299,6 +5409,9 @@ body {
     flex: 1;
     min-width: 0;
     word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    line-height: 1.5;
 }
 
 .consent-checkbox a {
@@ -5315,6 +5428,17 @@ body {
 /* Payment Methods */
 .payment-methods {
     margin-bottom: 24px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: visible;
+}
+
+.payment-methods p {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .payment-title {
@@ -5322,6 +5446,8 @@ body {
     font-weight: bold;
     margin-bottom: 16px;
     color: white;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .payment-option {
