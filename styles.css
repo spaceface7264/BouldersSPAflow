@@ -5566,6 +5566,17 @@ main {
     line-height: 1.6;
 }
 
+/* Hide confirmation sections when payment fails or is pending */
+.step-panel[data-payment-failed="true"] .confirmation-layout,
+.step-panel[data-payment-pending="true"] .confirmation-layout,
+.step-panel[data-payment-failed="true"] .confirmation-left,
+.step-panel[data-payment-pending="true"] .confirmation-left,
+.step-panel[data-payment-failed="true"] .confirmation-right,
+.step-panel[data-payment-pending="true"] .confirmation-right {
+  display: none !important;
+  visibility: hidden !important;
+}
+
 .confirmation-layout {
     display: grid;
     grid-template-columns: 1fr 1fr;

@@ -2139,7 +2139,10 @@ class OrderAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Step 7] Get order error (${response.status}):`, errorText);
-        throw new Error(`Get order failed: ${response.status} - ${errorText}`);
+        const error = new Error(`Get order failed: ${response.status} - ${errorText}`);
+        // Store status code on error object for easier detection
+        error.status = response.status;
+        throw error;
       }
       
       const data = await response.json();
@@ -4304,6 +4307,9 @@ const state = {
   fullOrder: null, // Full order object from API (includes subscriptionItems, price, etc.) - used for payment overview
   orderId: null, // Step 7: Created order ID
   customerId: null, // Step 6: Created customer ID (for membership ID display)
+  paymentFailed: false, // Flag to track if payment failed (prevents success page from showing)
+  paymentPending: false, // Flag to track if payment is pending (prevents success page from showing)
+  paymentConfirmed: false, // Flag to track if payment is confirmed (allows success page to show)
   authenticatedEmail: null,
   authenticatedCustomer: null, // Full customer profile data from API
   checkoutInProgress: false, // Flag to prevent duplicate checkout attempts
@@ -5302,6 +5308,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check if we're returning from payment before initializing
   const urlParams = new URLSearchParams(window.location.search);
   const paymentReturn = urlParams.get('payment');
+  const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
+  const paymentError = urlParams.get('error'); // Check for payment error
   let orderId = urlParams.get('orderId');
   let isPaymentReturnFlow = false;
   
@@ -5338,13 +5346,33 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // If returning from payment, fetch order data and show confirmation view
   if (paymentReturn === 'return' && orderId) {
-    // Move to final step to show confirmation
-    state.currentStep = TOTAL_STEPS;
-    showStep(state.currentStep);
-    updateStepIndicator();
-    updateNavigationButtons();
+    // Check if payment was cancelled or failed
+    const isPaymentCancelled = paymentStatus === 'cancelled' || paymentStatus === 'canceled' || 
+                               paymentError === 'cancelled' || paymentError === 'canceled' ||
+                               paymentReturn === 'cancel';
     
-    // Fetch order data from API to populate confirmation view
+    // TEST MODE: Force failure for testing (add ?test=fail to URL)
+    const testMode = urlParams.get('test');
+    if (testMode === 'fail') {
+      console.log('[Payment Return] TEST MODE: Simulating payment failure');
+      showPaymentFailedMessage(null, parseInt(orderId, 10), null); // Use default calm message
+      return;
+    }
+    
+    if (isPaymentCancelled) {
+      console.log('[Payment Return] Payment was cancelled - showing failure page');
+      state.currentStep = TOTAL_STEPS;
+      showStep(state.currentStep);
+      updateStepIndicator();
+      updateNavigationButtons();
+      updateMainSubtitle();
+      showPaymentFailedMessage(null, parseInt(orderId, 10), null); // Use default calm message
+      return;
+    }
+    
+    // CRITICAL: Don't show success page yet - check payment status first
+    // Fetch order data FIRST to check payment status
+    // Only show success page if payment is confirmed
     loadOrderForConfirmation(parseInt(orderId, 10));
   }
   
@@ -12729,6 +12757,11 @@ window.getOrderDiagnostics = async function(orderId) {
 
 // Load order data when returning from payment
 async function loadOrderForConfirmation(orderId) {
+  // CRITICAL: Reset payment status flags at start
+  state.paymentFailed = false;
+  state.paymentPending = false;
+  state.paymentConfirmed = false;
+  
   try {
     // Fix: Ensure orderId is numeric (handle cases where it might have path segments)
     if (typeof orderId === 'string') {
@@ -12774,8 +12807,77 @@ async function loadOrderForConfirmation(orderId) {
     }
     
     // Fetch order from API
-    const order = await orderAPI.getOrder(orderId);
-    console.log('[Payment Return] Order fetched:', order);
+    let order;
+    try {
+      order = await orderAPI.getOrder(orderId);
+      console.log('[Payment Return] Order fetched:', order);
+    } catch (fetchError) {
+      // CRITICAL: This catch block MUST handle ALL errors to prevent success page from showing
+      console.error('[Payment Return] ===== INNER CATCH BLOCK REACHED =====');
+      console.error('[Payment Return] Inner catch - fetchError:', fetchError);
+      console.error('[Payment Return] Inner catch - fetchError.message:', fetchError?.message);
+      console.error('[Payment Return] Inner catch - fetchError.status:', fetchError?.status);
+      
+      // ALWAYS show payment failed for ANY error when returning from payment
+      // This is safer than showing success page when payment actually failed
+      try {
+        const errorMessage = String(fetchError?.message || fetchError || '');
+        const errorStatus = fetchError?.status || (errorMessage.match(/401|404/) ? parseInt(errorMessage.match(/(401|404)/)?.[0]) : null);
+        const isUnauthorized = errorStatus === 401 || errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('Get order failed: 401');
+        const isNotFound = errorStatus === 404 || errorMessage.includes('404') || errorMessage.includes('Not Found') || errorMessage.includes('Get order failed: 404');
+        
+        console.log('[Payment Return] Inner catch - Error analysis:', {
+          errorMessage: errorMessage.substring(0, 200),
+          errorStatus,
+          fetchErrorStatus: fetchError?.status,
+          isUnauthorized,
+          isNotFound,
+          errorString: String(fetchError).substring(0, 200)
+        });
+        
+        // Use default calm message instead of technical details
+        console.warn('[Payment Return] ⚠️ INNER CATCH: Calling showPaymentFailedMessage');
+        showPaymentFailedMessage(null, orderId, null);
+        console.warn('[Payment Return] ✅ showPaymentFailedMessage called from inner catch - returning early');
+        return; // CRITICAL: Always return to prevent success page
+      } catch (innerError) {
+        // Even if showPaymentFailedMessage fails, don't show success page
+        console.error('[Payment Return] ❌ Error in inner catch handler:', innerError);
+        // At minimum, navigate to step 5 and show error state
+        state.paymentFailed = true;
+        state.currentStep = TOTAL_STEPS;
+        showStep(TOTAL_STEPS);
+        return;
+      }
+    }
+    
+    // CRITICAL: Check payment status IMMEDIATELY after fetch
+    // If payment is not confirmed, show pending/failed right away (don't show success first)
+    const initialLeftToPay = order.leftToPay?.amount ?? order.leftToPay ?? null;
+    const initialOrderStatus = order.orderStatus?.name || order.status;
+    const initialIsPaid = order.orderStatus?.name === 'Betalet' || order.orderStatus?.id === 2;
+    
+    console.log('[Payment Return] Initial payment check:', {
+      leftToPay: initialLeftToPay,
+      orderStatus: initialOrderStatus,
+      isPaid: initialIsPaid,
+      willShowPending: initialLeftToPay !== null && initialLeftToPay > 0 && !initialIsPaid
+    });
+    
+    // CRITICAL: Check payment status BEFORE showing any page
+    // If payment is clearly not confirmed (leftToPay > 0 and not paid), show pending immediately
+    if (initialLeftToPay !== null && initialLeftToPay > 0 && !initialIsPaid) {
+      console.warn('[Payment Return] ⚠️ Payment not confirmed on initial fetch - showing pending immediately');
+      showPaymentPendingMessage(order, orderId);
+      return; // Don't continue with success page logic
+    }
+    
+    // Payment is confirmed - navigate to step 5 and show success
+    state.currentStep = TOTAL_STEPS;
+    showStep(TOTAL_STEPS);
+    updateStepIndicator();
+    updateNavigationButtons();
+    updateMainSubtitle();
     
     // DETAILED LOGGING: Check order status and structure to diagnose membership creation issue
     const diagnosticTime = Date.now();
@@ -13006,19 +13108,34 @@ async function loadOrderForConfirmation(orderId) {
     };
     console.log('[Payment Return] Diagnostic data stored in window.lastPaymentDiagnostics');
     
-    // Check if payment is actually confirmed before showing success page
-    const isPaymentConfirmed = order.leftToPay?.amount === 0 || order.leftToPay === 0;
-    const isOrderPaid = order.orderStatus?.name === 'Betalet' || order.orderStatus?.id === 2; // Assuming 2 is "Paid" status
+    // CRITICAL: Check payment status AFTER all processing (including polling)
+    // This ensures we check the final state of the order after any updates
+    const finalOrder = order; // Use the order object which may have been updated during polling
+    const isPaymentConfirmed = finalOrder.leftToPay?.amount === 0 || finalOrder.leftToPay === 0;
+    const isOrderPaid = finalOrder.orderStatus?.name === 'Betalet' || finalOrder.orderStatus?.id === 2; // Assuming 2 is "Paid" status
+    
+    console.log('[Payment Return] Final payment check:', {
+      leftToPay: finalOrder.leftToPay?.amount || finalOrder.leftToPay,
+      orderStatus: finalOrder.orderStatus?.name,
+      isPaymentConfirmed,
+      isOrderPaid,
+      willShowSuccess: isPaymentConfirmed || isOrderPaid
+    });
     
     if (!isPaymentConfirmed && !isOrderPaid) {
       console.warn('[Payment Return] ⚠️ Payment not confirmed - showing pending message instead of success page');
-      console.warn('[Payment Return] leftToPay:', order.leftToPay?.amount || order.leftToPay);
-      console.warn('[Payment Return] orderStatus:', order.orderStatus?.name);
+      console.warn('[Payment Return] leftToPay:', finalOrder.leftToPay?.amount || finalOrder.leftToPay);
+      console.warn('[Payment Return] orderStatus:', finalOrder.orderStatus?.name);
       
       // Show payment pending message instead of success page
-      showPaymentPendingMessage(order, orderId);
+      showPaymentPendingMessage(finalOrder, orderId);
       return; // Don't show success page yet
     }
+    
+    // CRITICAL: Mark payment as confirmed to allow success page rendering
+    state.paymentConfirmed = true;
+    state.paymentFailed = false;
+    state.paymentPending = false;
     
     // Store full order object for payment overview (before building summary)
     state.fullOrder = order;
@@ -13043,40 +13160,356 @@ async function loadOrderForConfirmation(orderId) {
     // Only render confirmation view if payment is confirmed
     renderConfirmationView();
   } catch (error) {
+    console.error('[Payment Return] ===== CATCH BLOCK REACHED =====');
     console.error('[Payment Return] Failed to load order data:', error);
-    // Still try to render with whatever data we have
-    if (!state.order) {
-      // Build a minimal order summary with just the order ID
-      const payload = buildCheckoutPayload();
-      state.order = buildOrderSummary(payload, { id: orderId }, null);
+    
+    // CRITICAL: Check if error is 401 (Unauthorized) - this usually means payment was cancelled/failed
+    // 401 = Unauthorized (payment not completed, order not accessible)
+    // 404 = Not Found (order doesn't exist)
+    // Use multiple detection methods to be absolutely sure we catch 401 errors
+    const errorString = String(error || '');
+    const errorMessage = String(error?.message || errorString || '');
+    const errorStatus = error?.status || (errorMessage.match(/401|404/) ? parseInt(errorMessage.match(/(401|404)/)?.[0]) : null);
+    
+    // Multiple ways to detect 401/404 errors - check EVERYTHING
+    const has401InMessage = errorMessage.includes('401') || errorString.includes('401') || String(error).includes('401');
+    const has404InMessage = errorMessage.includes('404') || errorString.includes('404') || String(error).includes('404');
+    const isUnauthorized = errorStatus === 401 || has401InMessage || errorMessage.includes('Unauthorized') || errorString.includes('Unauthorized');
+    const isNotFound = errorStatus === 404 || has404InMessage || errorMessage.includes('Not Found') || errorString.includes('Not Found');
+    
+    console.log('[Payment Return] Error detection:', {
+      errorString: errorString.substring(0, 200),
+      errorMessage: errorMessage.substring(0, 200),
+      errorStatus,
+      has401InMessage,
+      has404InMessage,
+      isUnauthorized,
+      isNotFound,
+      errorKeys: Object.keys(error || {})
+    });
+    
+    // ALWAYS show payment failed for 401/404 errors (payment cancelled/failed)
+    // Also show failed for ANY error when returning from payment (safer than showing success)
+    if (isUnauthorized || isNotFound || has401InMessage || has404InMessage) {
+      console.warn('[Payment Return] ⚠️ DETECTED 401/404 ERROR - Calling showPaymentFailedMessage');
+        const failureReason = null; // Use default calm message instead of technical details
+      
+      // CRITICAL: Always call showPaymentFailedMessage for 401/404 errors
+      console.warn('[Payment Return] About to call showPaymentFailedMessage with:', { orderId, failureReason });
+      showPaymentFailedMessage(null, orderId, failureReason);
+      console.warn('[Payment Return] showPaymentFailedMessage called - returning early');
+      return; // Don't show success page
     }
-    // Try to fetch full order data even if payment is not confirmed
-    if (orderId && !state.fullOrder) {
-      try {
-        const fullOrder = await orderAPI.getOrder(orderId);
-        state.fullOrder = fullOrder;
-        updatePaymentOverview();
-      } catch (error) {
-        console.warn('[Payment Return] Could not fetch full order data:', error);
-      }
-    }
-    renderConfirmationView();
+    
+    // For any other error when returning from payment, also show failed (safer than showing success)
+    console.warn('[Payment Return] ⚠️ Unexpected error during payment return - showing payment failed as fallback');
+    console.warn('[Payment Return] About to call showPaymentFailedMessage (fallback)');
+      showPaymentFailedMessage(null, orderId, null); // Use default calm message
+    console.warn('[Payment Return] showPaymentFailedMessage (fallback) called');
+    
+    console.warn('[Payment Return] Error is NOT 401/404, showing pending instead');
+    
+    // For other errors, show pending (might be temporary issue)
+    console.warn('[Payment Return] ⚠️ Error fetching order - showing pending message');
+    // showPaymentPendingMessage will handle showing step 5
+    showPaymentPendingMessage(null, orderId);
+    return; // Don't show success page
   }
 }
 
+function showPaymentFailedMessage(order, orderId, reason = null) {
+  console.log('[Payment Failed] Called with:', { orderId, reason, currentStep: state.currentStep });
+  
+  // CRITICAL: Mark payment as failed FIRST to prevent success page from rendering
+  state.paymentFailed = true;
+  state.paymentConfirmed = false;
+  state.paymentPending = false;
+  
+  // CRITICAL: Clear order data to prevent success page from rendering
+  // Don't set state.order - this prevents renderConfirmationView() from being called
+  if (state.order) {
+    console.log('[Payment Failed] Clearing state.order to prevent success page');
+    state.order = null;
+  }
+  
+  // CRITICAL: Navigate to step 5 and IMMEDIATELY modify HTML before it's visible
+  console.log('[Payment Failed] Navigating to confirmation page...');
+  state.currentStep = TOTAL_STEPS;
+  
+  // Show step 5 panel
+  const step5Panel = document.getElementById('step-5');
+  if (step5Panel) {
+    // Mark step 5 panel as payment failed for CSS targeting
+    step5Panel.setAttribute('data-payment-failed', 'true');
+    // Hide all other panels first
+    DOM.stepPanels.forEach((panel, index) => {
+      if (index + 1 === TOTAL_STEPS) {
+        panel.classList.add('active');
+        panel.style.display = 'block';
+        panel.style.visibility = 'visible';
+        panel.style.opacity = '1';
+      } else {
+        panel.classList.remove('active');
+        if (panel.id !== 'step-3') {
+          panel.style.display = 'none';
+        }
+      }
+    });
+    
+    // IMMEDIATELY modify the HTML BEFORE it's visible to user
+    const successTitle = step5Panel.querySelector('.success-title');
+    const successMessage = step5Panel.querySelector('.success-message');
+    const successBadge = step5Panel.querySelector('.success-badge');
+    
+    if (successTitle) {
+      // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
+      successTitle.removeAttribute('data-i18n-key');
+      successTitle.textContent = 'Payment Couldn\'t Be Completed';
+      successTitle.style.color = '#f59e0b'; // Use amber/orange instead of red for less alarming tone
+      console.log('[Payment Failed] ✅ Title set to calm message');
+    }
+    
+    if (successMessage) {
+      // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
+      successMessage.removeAttribute('data-i18n-key');
+      const displayOrderId = orderId || order?.number || order?.id || 'N/A';
+      
+      // Determine failure reason and provide specific guidance
+      let specificGuidance = '';
+      const reasonLower = String(reason || '').toLowerCase();
+      
+      if (reasonLower.includes('cancelled') || reasonLower.includes('canceled')) {
+        specificGuidance = 'You closed the payment window before completing the transaction.';
+      } else if (reasonLower.includes('unauthorized') || reasonLower.includes('401')) {
+        specificGuidance = 'The payment session expired or was cancelled.';
+      } else if (reasonLower.includes('not found') || reasonLower.includes('404')) {
+        specificGuidance = 'The order could not be found. This may happen if the payment window was open for too long.';
+      } else {
+        specificGuidance = 'The payment process was interrupted before completion.';
+      }
+      
+      // Build clear, actionable message with status, reason, and next steps
+      successMessage.innerHTML = `
+        <div style="text-align: left; max-width: 600px; margin: 0 auto;">
+          <!-- Status Explanation -->
+          <div style="margin-bottom: 24px; padding: 16px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; border-radius: 4px;">
+            <strong style="color: #f59e0b; display: block; margin-bottom: 8px; font-size: 16px;">Status: Payment Not Completed</strong>
+            <p style="color: #d1d5db; margin: 0; line-height: 1.6;">${specificGuidance}</p>
+          </div>
+          
+          <!-- Reassurance -->
+          <div style="margin-bottom: 24px; padding: 16px; background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e; border-radius: 4px;">
+            <p style="color: #9ca3af; margin: 0; line-height: 1.8;">
+              <strong style="color: #22c55e;">✓</strong> Nothing was charged<br>
+              <strong style="color: #22c55e;">✓</strong> Your order details are saved<br>
+              <strong style="color: #22c55e;">✓</strong> No membership has been activated yet
+            </p>
+          </div>
+          
+          <!-- Actionable Steps -->
+          <div style="color: #d1d5db; line-height: 1.8;">
+            <strong style="color: #f59e0b; display: block; margin-bottom: 16px; font-size: 16px;">What you can do:</strong>
+            
+            <div style="margin-bottom: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
+              <strong style="color: #3b82f6; display: block; margin-bottom: 4px;">1. Try Again</strong>
+              <p style="color: #9ca3af; margin: 0; font-size: 14px;">Click the button below to retry payment with the same details. Your order is saved and ready.</p>
+            </div>
+            
+            <div style="margin-bottom: 16px; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
+              <strong style="color: #8b5cf6; display: block; margin-bottom: 4px;">2. Use a Different Payment Method</strong>
+              <p style="color: #9ca3af; margin: 0; font-size: 14px;">If the issue persists, try a different card or payment method. Your order will remain the same.</p>
+            </div>
+            
+            <div style="margin-bottom: 24px; padding: 12px; background: rgba(107, 114, 128, 0.1); border-radius: 4px;">
+              <strong style="color: #6b7280; display: block; margin-bottom: 4px;">3. Contact Support</strong>
+              <p style="color: #9ca3af; margin: 0; font-size: 14px;">If you continue to experience issues, our support team can help. Reference Order #${displayOrderId}</p>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px;">
+              <button id="retry-payment-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                Try Payment Again
+              </button>
+              <button id="contact-support-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: transparent; color: #9ca3af; border: 2px solid #374151; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#6b7280'; this.style.color='#d1d5db'" onmouseout="this.style.borderColor='#374151'; this.style.color='#9ca3af'">
+                Contact Support
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // Add event listeners for action buttons
+      setTimeout(() => {
+        const retryBtn = document.getElementById('retry-payment-btn');
+        const supportBtn = document.getElementById('contact-support-btn');
+        
+        if (retryBtn) {
+          retryBtn.addEventListener('click', () => {
+            console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
+            // Navigate back to step 4 (payment step) to retry
+            state.paymentFailed = false; // Reset payment failed state
+            state.currentStep = 4;
+            showStep(4);
+            updateStepIndicator();
+            updateNavigationButtons();
+            updateMainSubtitle();
+            
+            // CRITICAL: Update cart and payment overview to ensure items are displayed correctly
+            updateCartSummary();
+            
+            // If order exists, fetch full order data for payment overview
+            if (state.orderId) {
+              console.log('[Payment Retry] Fetching order data for payment overview (orderId:', state.orderId, ')');
+              orderAPI.getOrder(state.orderId)
+                .then(order => {
+                  state.fullOrder = order;
+                  updatePaymentOverview();
+                  console.log('[Payment Retry] ✅ Order data fetched, payment overview updated');
+                })
+                .catch(error => {
+                  console.warn('[Payment Retry] Could not fetch order data for payment overview:', error);
+                  // Still update payment overview with available data
+                  updatePaymentOverview();
+                });
+            } else {
+              // Update payment overview with current state data
+              updatePaymentOverview();
+            }
+            
+            scrollToTop();
+          });
+        }
+        
+        if (supportBtn) {
+          supportBtn.addEventListener('click', () => {
+            console.log('[Payment Failed] User clicked "Contact Support"');
+            // Open support email or support page
+            const supportEmail = 'support@boulders.dk';
+            const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
+            const body = encodeURIComponent(`Hello,\n\nI experienced a payment issue with Order #${displayOrderId}.\n\nCould you please help me complete my membership purchase?\n\nThank you!`);
+            window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+          });
+        }
+      }, 100);
+      successMessage.style.color = '#d1d5db';
+      successMessage.style.lineHeight = '1.6';
+      successMessage.style.whiteSpace = 'normal';
+      console.log('[Payment Failed] ✅ Message updated with clear status, reason, and actionable steps');
+    }
+    
+    if (successBadge) {
+      // Use a less alarming icon - info/warning circle instead of harsh X
+      successBadge.innerHTML = `
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      `;
+      console.log('[Payment Failed] ✅ Badge updated to calm info icon');
+    }
+    
+    // CRITICAL: Hide order details, membership details, and "What happens next?" sections
+    // These should only be shown when payment is successful
+    // Use multiple methods to ensure they stay hidden
+    const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
+    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
+    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    
+    const hideConfirmationSections = () => {
+      if (confirmationLayout) {
+        confirmationLayout.style.display = 'none';
+        confirmationLayout.style.visibility = 'hidden';
+        confirmationLayout.setAttribute('data-payment-failed', 'true');
+      }
+      if (confirmationLeft) {
+        confirmationLeft.style.display = 'none';
+        confirmationLeft.style.visibility = 'hidden';
+        confirmationLeft.setAttribute('data-payment-failed', 'true');
+      }
+      if (confirmationRight) {
+        confirmationRight.style.display = 'none';
+        confirmationRight.style.visibility = 'hidden';
+        confirmationRight.setAttribute('data-payment-failed', 'true');
+      }
+    };
+    
+    // Hide immediately
+    hideConfirmationSections();
+    console.log('[Payment Failed] ✅ Hidden confirmation sections');
+    
+    // Re-hide after a short delay in case something tries to show them
+    setTimeout(() => {
+      hideConfirmationSections();
+      console.log('[Payment Failed] ✅ Re-checked and ensured confirmation sections are hidden');
+    }, 100);
+    
+    // Also set up a MutationObserver to keep them hidden
+    if (confirmationLayout && typeof MutationObserver !== 'undefined') {
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            const target = mutation.target;
+            if (target.getAttribute('data-payment-failed') === 'true' && target.style.display !== 'none') {
+              target.style.display = 'none';
+              target.style.visibility = 'hidden';
+              console.log('[Payment Failed] 🔒 Prevented confirmation section from being shown');
+            }
+          }
+        });
+      });
+      
+      [confirmationLayout, confirmationLeft, confirmationRight].forEach((el) => {
+        if (el) {
+          observer.observe(el, { attributes: true, attributeFilter: ['style'] });
+        }
+      });
+    }
+    
+    console.log('[Payment Failed] ✅ HTML modified BEFORE showing panel');
+  }
+  
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  
+  console.log('[Payment Failed] ✅ Payment failed page displayed');
+}
+
 function showPaymentPendingMessage(order, orderId) {
+  // CRITICAL: Mark payment as pending to prevent success page from rendering
+  state.paymentPending = true;
+  state.paymentConfirmed = false;
+  state.paymentFailed = false;
+  
+  // CRITICAL: Ensure we're on step 5 (confirmation page) before modifying elements
+  // If we're not on the confirmation page yet, navigate to it first
+  if (state.currentStep !== TOTAL_STEPS) {
+    console.log('[Payment Pending] Navigating to confirmation page first...');
+    state.currentStep = TOTAL_STEPS;
+    showStep(TOTAL_STEPS);
+    updateStepIndicator();
+    updateNavigationButtons();
+    updateMainSubtitle();
+  }
+  
   // Update the confirmation page to show payment pending instead of success
   const successTitle = document.querySelector('.success-title');
   const successMessage = document.querySelector('.success-message');
   const successBadge = document.querySelector('.success-badge');
   
   if (successTitle) {
+    // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
+    successTitle.removeAttribute('data-i18n-key');
     successTitle.textContent = 'Payment Pending';
     successTitle.style.color = '#f59e0b'; // Orange/amber color
   }
   
   if (successMessage) {
-    successMessage.textContent = `Your payment is being processed. We're waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #${orderId || order?.number || order?.id || 'N/A'}`;
+    // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
+    successMessage.removeAttribute('data-i18n-key');
+    const displayOrderId = orderId || order?.number || order?.id || 'N/A';
+    successMessage.textContent = `Your payment is being processed. We're waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #${displayOrderId}`;
     successMessage.style.color = '#6b7280'; // Gray color
   }
   
@@ -13090,8 +13523,53 @@ function showPaymentPendingMessage(order, orderId) {
     `;
   }
   
+  // CRITICAL: Hide order details, membership details, and "What happens next?" sections
+  // These should only be shown when payment is confirmed
+  const step5Panel = document.getElementById('step-5');
+  if (step5Panel) {
+    // Mark step 5 panel as payment pending for CSS targeting
+    step5Panel.setAttribute('data-payment-pending', 'true');
+    const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
+    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
+    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    
+    const hideConfirmationSections = () => {
+      if (confirmationLayout) {
+        confirmationLayout.style.display = 'none';
+        confirmationLayout.style.visibility = 'hidden';
+        confirmationLayout.setAttribute('data-payment-pending', 'true');
+      }
+      if (confirmationLeft) {
+        confirmationLeft.style.display = 'none';
+        confirmationLeft.style.visibility = 'hidden';
+        confirmationLeft.setAttribute('data-payment-pending', 'true');
+      }
+      if (confirmationRight) {
+        confirmationRight.style.display = 'none';
+        confirmationRight.style.visibility = 'hidden';
+        confirmationRight.setAttribute('data-payment-pending', 'true');
+      }
+    };
+    
+    // Hide immediately
+    hideConfirmationSections();
+    console.log('[Payment Pending] ✅ Hidden confirmation sections');
+    
+    // Re-hide after a short delay in case something tries to show them
+    setTimeout(() => {
+      hideConfirmationSections();
+      console.log('[Payment Pending] ✅ Re-checked and ensured confirmation sections are hidden');
+    }, 100);
+  }
+  
   // Show a message that the page will auto-refresh
   console.log('[Payment Pending] Showing payment pending message. Page will check payment status automatically.');
+  
+  // Only start polling if we have an orderId
+  if (!orderId) {
+    console.warn('[Payment Pending] No orderId provided, cannot poll for payment status');
+    return;
+  }
   
   // Poll for payment confirmation every 5 seconds (up to 2 minutes)
   let pollCount = 0;
@@ -13116,7 +13594,8 @@ function showPaymentPendingMessage(order, orderId) {
         clearInterval(pollInterval);
         // Update message to tell user to check back later
         if (successMessage) {
-          successMessage.textContent = `Payment is still being processed. Please check back in a few minutes or contact support if you've completed payment. Order #${orderId || order?.number || order?.id || 'N/A'}`;
+          const displayOrderId = orderId || updatedOrder?.number || updatedOrder?.id || 'N/A';
+          successMessage.textContent = `Payment is still being processed. Please check back in a few minutes or contact support if you've completed payment. Order #${displayOrderId}`;
         }
       }
     } catch (error) {
@@ -13129,9 +13608,65 @@ function showPaymentPendingMessage(order, orderId) {
 }
 
 function renderConfirmationView() {
+  // CRITICAL: Don't render success page if payment failed or is pending
+  if (state.paymentFailed === true) {
+    console.warn('[Confirmation] Payment failed - not rendering success page');
+    return;
+  }
+  
+  if (state.paymentPending === true) {
+    console.warn('[Confirmation] Payment pending - not rendering success page');
+    return;
+  }
+  
   if (!state.order) {
     console.warn('[Confirmation] No order data available to render');
     return;
+  }
+  
+  // CRITICAL: Only render if payment is confirmed
+  if (state.paymentConfirmed !== true) {
+    console.warn('[Confirmation] Payment not confirmed - not rendering success page');
+    return;
+  }
+  
+  console.log('[Confirmation] ✅ Rendering success page - payment confirmed');
+
+  // CRITICAL: Show confirmation sections (order details, membership details, next steps) when payment succeeds
+  const step5Panel = document.getElementById('step-5');
+  if (step5Panel) {
+    // Remove payment failed/pending attributes to allow CSS to show sections
+    step5Panel.removeAttribute('data-payment-failed');
+    step5Panel.removeAttribute('data-payment-pending');
+    
+    const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
+    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
+    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    
+    // Remove data attributes and show sections
+    const showConfirmationSections = () => {
+      if (confirmationLayout) {
+        confirmationLayout.style.display = '';
+        confirmationLayout.style.visibility = '';
+        confirmationLayout.removeAttribute('data-payment-failed');
+        confirmationLayout.removeAttribute('data-payment-pending');
+      }
+      if (confirmationLeft) {
+        confirmationLeft.style.display = '';
+        confirmationLeft.style.visibility = '';
+        confirmationLeft.removeAttribute('data-payment-failed');
+        confirmationLeft.removeAttribute('data-payment-pending');
+      }
+      if (confirmationRight) {
+        confirmationRight.style.display = '';
+        confirmationRight.style.visibility = '';
+        confirmationRight.removeAttribute('data-payment-failed');
+        confirmationRight.removeAttribute('data-payment-pending');
+      }
+    };
+    
+    showConfirmationSections();
+    console.log('[Confirmation] ✅ Showing confirmation sections - payment confirmed');
   }
 
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
@@ -13573,18 +14108,25 @@ function nextStep(fromStep) {
   // CRITICAL: Only show success page (step 5) if there's actually a completed order
   // Never navigate to success page unless purchase is actually successful
   if (state.currentStep === TOTAL_STEPS) {
-    // Only render confirmation if we have order data
+    // CRITICAL: Check if payment is actually confirmed before showing success page
+    // Don't show success page if payment failed (401 error) or payment is pending
+    const isPaymentFailed = state.paymentFailed === true;
+    const isPaymentPending = state.paymentPending === true;
+    
+    if (isPaymentFailed || isPaymentPending) {
+      console.log('[Navigation] Payment failed or pending - not rendering success page');
+      // Don't render success page - the failed/pending message functions handle the UI
+      return;
+    }
+    
+    // Only render confirmation if we have order data AND payment is confirmed
     // This prevents showing success page when user hasn't completed purchase
-    if (state.order && state.orderId) {
+    if (state.order && state.orderId && state.paymentConfirmed !== false) {
       renderConfirmationView();
     } else {
       // If we somehow ended up on step 5 without an order, go back to step 1
-      console.warn('[Navigation] Attempted to show success page without order data. Redirecting to step 1.');
-      state.currentStep = 1;
-      showStep(1);
-      updateStepIndicator();
-      updateNavigationButtons();
-      updateMainSubtitle();
+      console.warn('[Navigation] Attempted to show success page without order data or payment not confirmed. Not rendering success page.');
+      // Don't redirect - let the payment failed/pending handlers show the appropriate message
     }
   }
 }
@@ -13672,6 +14214,7 @@ function prevStep() {
 }
 
 function showStep(stepNumber) {
+  
   DOM.stepPanels.forEach((panel, index) => {
     const isActive = index + 1 === stepNumber;
     panel.classList.toggle('active', isActive);
@@ -13699,6 +14242,18 @@ function showStep(stepNumber) {
     // Use setTimeout to ensure DOM is ready
     setTimeout(() => {
       updateSelectedGymDisplay();
+    }, 100);
+  }
+  
+  // Update cart and payment overview when showing step 4 (payment step)
+  if (stepNumber === 4) {
+    // Use setTimeout to ensure DOM is ready
+    setTimeout(() => {
+      updateCartSummary();
+      // If order exists, update payment overview
+      if (state.orderId && state.fullOrder) {
+        updatePaymentOverview();
+      }
     }, 100);
   } else {
     // When leaving step 2, reset main content margin

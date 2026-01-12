@@ -61,6 +61,10 @@ export default defineConfig(({ command }) => ({
     host: true,
     port: 5173,
     strictPort: false,
+    // Disable HMR overlay for cleaner error handling (can be re-enabled if needed)
+    hmr: {
+      overlay: true,
+    },
     // Only use HTTPS in dev mode when certificate files are present
     ...(key && cert && command === 'serve' ? {
       https: {
