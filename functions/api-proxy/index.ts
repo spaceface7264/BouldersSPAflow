@@ -22,7 +22,8 @@ export async function onRequest(context: any) {
 
   // Extract the API path from the query string
   // The function will be called as: /api-proxy?path=/api/reference/business-units
-  const apiPath = url.searchParams.get('path');
+  // The path may include query parameters: /api/ver3/customers/123/passagetries?period.start=2024-01-01&period.end=2024-01-31
+  let apiPath = url.searchParams.get('path');
   
   if (!apiPath) {
     return new Response(
@@ -37,6 +38,19 @@ export async function onRequest(context: any) {
     );
   }
 
+  // Parse the path to separate base path from query string
+  // This ensures query parameters are properly preserved
+  let basePath: string;
+  let queryString: string | null = null;
+  
+  if (apiPath.includes('?')) {
+    const parts = apiPath.split('?');
+    basePath = parts[0];
+    queryString = parts.slice(1).join('?'); // In case there are multiple ? (shouldn't happen, but be safe)
+  } else {
+    basePath = apiPath;
+  }
+
   // Build the full API URL
   // Check if path starts with /api/ver3 or /services - these use different base URL
   // According to backend team: ver3 endpoints use https://boulders.brpsystems.com/apiserver
@@ -45,24 +59,48 @@ export async function onRequest(context: any) {
   // IMPORTANT: Backend team confirmed full path is needed: /api/ver3/services/generatelink/payment
   // Do NOT remove /api/ver3 prefix - it's required
   let apiUrl: string;
-  if (apiPath.startsWith('/api/ver3/')) {
+  if (basePath.startsWith('/api/ver3/')) {
     // ver3 endpoints - use full path with /api/ver3 prefix
     // Backend confirmed: https://boulders.brpsystems.com/apiserver/api/ver3/services/generatelink/payment
-    apiUrl = `https://boulders.brpsystems.com/apiserver${apiPath}`;
+    apiUrl = `https://boulders.brpsystems.com/apiserver${basePath}`;
     console.log('[API Proxy] Using ver3 endpoint with full path:', apiUrl);
-  } else if (apiPath.startsWith('/services/')) {
+  } else if (basePath.startsWith('/services/')) {
     // Services endpoints without /api/ver3 prefix - add it
     // Final URL: https://boulders.brpsystems.com/apiserver/api/ver3/services/...
-    apiUrl = `https://boulders.brpsystems.com/apiserver/api/ver3${apiPath}`;
-  } else if (apiPath.startsWith('/ver3/')) {
+    apiUrl = `https://boulders.brpsystems.com/apiserver/api/ver3${basePath}`;
+  } else if (basePath.startsWith('/ver3/')) {
     // Path starts with /ver3/ but not /api/ver3/ - add /api prefix
-    apiUrl = `https://boulders.brpsystems.com/apiserver/api${apiPath}`;
+    apiUrl = `https://boulders.brpsystems.com/apiserver/api${basePath}`;
   } else {
     // Standard API endpoints use api-join.boulders.dk
-    apiUrl = `https://api-join.boulders.dk${apiPath}`;
+    apiUrl = `https://api-join.boulders.dk${basePath}`;
+  }
+  
+  // Append query string if present
+  if (queryString) {
+    // Validate that query string doesn't contain null values
+    if (queryString.includes('null') || queryString.includes('period.start=null') || queryString.includes('period.end=null')) {
+      console.error('[API Proxy] Query string contains null values:', queryString);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid query parameters',
+          message: 'Query string contains null values' 
+        }),
+        {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
+    }
+    apiUrl += `?${queryString}`;
   }
   
   console.log('[API Proxy] Input path:', apiPath);
+  console.log('[API Proxy] Base path:', basePath);
+  console.log('[API Proxy] Query string:', queryString);
   console.log('[API Proxy] Constructed URL:', apiUrl);
   console.log('[API Proxy] Full request will be:', request.method, apiUrl);
 

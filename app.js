@@ -1353,22 +1353,56 @@ class AuthAPI {
   // Activity: Get passage tries (check-ins)
   async getPassageTries(customerId, startDate, endDate) {
     try {
+      // Validate inputs first
+      if (!customerId) {
+        throw new Error('Customer ID is required');
+      }
+      
+      if (!startDate || startDate === null || startDate === undefined || startDate === 'null' || startDate === 'undefined') {
+        console.error('[Activity] Invalid startDate parameter:', { startDate, type: typeof startDate });
+        throw new Error('Start date is required and cannot be null');
+      }
+      
+      if (!endDate || endDate === null || endDate === undefined || endDate === 'null' || endDate === 'undefined') {
+        console.error('[Activity] Invalid endDate parameter:', { endDate, type: typeof endDate });
+        throw new Error('End date is required and cannot be null');
+      }
+      
       // Format dates as YYYY-MM-DD (Day format per API spec)
       const formatDay = (date) => {
-        if (!date) {
-          throw new Error('Date parameter is required');
+        if (!date || date === null || date === undefined || date === 'null' || date === 'undefined') {
+          throw new Error('Date parameter is required and cannot be null');
         }
+        
         if (typeof date === 'string') {
+          // Check for null string
+          if (date.trim() === 'null' || date.trim() === 'undefined' || date.trim() === '') {
+            throw new Error('Date string cannot be null, undefined, or empty');
+          }
           // Extract YYYY-MM-DD from ISO string or use as-is if already formatted
-          return date.split('T')[0];
+          const formatted = date.split('T')[0];
+          if (!formatted || formatted === 'null' || formatted === 'undefined') {
+            throw new Error('Failed to extract date from string');
+          }
+          return formatted;
         }
+        
         if (date instanceof Date) {
           if (isNaN(date.getTime())) {
-            throw new Error('Invalid date');
+            throw new Error('Invalid Date object');
           }
-          return date.toISOString().split('T')[0];
+          const formatted = date.toISOString().split('T')[0];
+          if (!formatted) {
+            throw new Error('Failed to format Date object');
+          }
+          return formatted;
         }
-        return String(date);
+        
+        const str = String(date);
+        if (str === 'null' || str === 'undefined' || str === '') {
+          throw new Error('Date cannot be converted to valid string');
+        }
+        return str;
       };
       
       const start = formatDay(startDate);
@@ -1411,28 +1445,118 @@ class AuthAPI {
       }
       
       const params = new URLSearchParams();
+      
+      // Double-check values before appending
+      console.log('[Activity] Appending to URLSearchParams:', { startParam, endParam, startType: typeof startParam, endType: typeof endParam });
+      
+      if (!startParam || startParam === 'null' || startParam === 'undefined' || startParam.trim() === '') {
+        console.error('[Activity] Cannot append invalid startParam to URLSearchParams:', startParam);
+        throw new Error(`Invalid startParam: "${startParam}"`);
+      }
+      
+      if (!endParam || endParam === 'null' || endParam === 'undefined' || endParam.trim() === '') {
+        console.error('[Activity] Cannot append invalid endParam to URLSearchParams:', endParam);
+        throw new Error(`Invalid endParam: "${endParam}"`);
+      }
+      
       params.append('period.start', startParam);
       params.append('period.end', endParam);
       
       // Verify params were set correctly
       const startParamValue = params.get('period.start');
       const endParamValue = params.get('period.end');
-      if (!startParamValue || !endParamValue || startParamValue === 'null' || endParamValue === 'null') {
+      
+      console.log('[Activity] URLSearchParams values:', { startParamValue, endParamValue, paramsString: params.toString() });
+      
+      if (!startParamValue || !endParamValue || startParamValue === 'null' || endParamValue === 'null' || startParamValue === 'undefined' || endParamValue === 'undefined') {
         console.error('[Activity] URLSearchParams returned invalid values:', { startParamValue, endParamValue, startParam, endParam });
         throw new Error(`URLSearchParams failed: start="${startParamValue}", end="${endParamValue}"`);
       }
       
+      // Log the actual values being sent
+      console.log('[Activity] Date parameters before URL construction:', {
+        startParam,
+        endParam,
+        startType: typeof startParam,
+        endType: typeof endParam,
+        paramsString: params.toString(),
+        paramsEntries: Array.from(params.entries())
+      });
+      
       let url;
+      // Build query string manually to ensure proper encoding
+      // Note: Don't encode the parameter names (period.start, period.end) - only encode values
+      const queryParts = [];
+      queryParts.push(`period.start=${encodeURIComponent(startParam)}`);
+      queryParts.push(`period.end=${encodeURIComponent(endParam)}`);
+      const queryString = queryParts.join('&');
+      
+      console.log('[Activity] Query string parts:', { 
+        startParam, 
+        endParam, 
+        encodedStart: encodeURIComponent(startParam),
+        encodedEnd: encodeURIComponent(endParam),
+        queryString,
+        startLength: startParam.length,
+        endLength: endParam.length
+      });
+      
+      // Verify query string doesn't contain null
+      if (queryString.includes('null') || queryString.includes('undefined') || 
+          startParam === 'null' || endParam === 'null' || 
+          startParam === 'undefined' || endParam === 'undefined' ||
+          !startParam || !endParam || startParam.trim() === '' || endParam.trim() === '') {
+        console.error('[Activity] Query string contains null/undefined/empty:', { queryString, startParam, endParam });
+        throw new Error('Query string contains invalid values');
+      }
+      
       if (this.useProxy) {
+        // For proxy, we need to include query params in the path
+        // Final validation before constructing proxy path
+        if (!startParam || !endParam || startParam === 'null' || endParam === 'null' || 
+            startParam === 'undefined' || endParam === 'undefined' ||
+            startParam.trim() === '' || endParam.trim() === '') {
+          console.error('[Activity] Invalid dates before proxy URL construction:', { startParam, endParam });
+          throw new Error(`Invalid date parameters for proxy: start="${startParam}", end="${endParam}"`);
+        }
+        
         let path = `/api/ver3/customers/${customerId}/passagetries`;
-        if (params.toString()) path += `?${params.toString()}`;
+        if (queryString) {
+          // Double-check query string doesn't contain null before appending
+          if (queryString.includes('null') || queryString.includes('undefined') || 
+              queryString.includes('period.start=null') || queryString.includes('period.end=null')) {
+            console.error('[Activity] Query string contains null before proxy path construction:', queryString);
+            throw new Error(`Query string contains null values: ${queryString}`);
+          }
+          path += `?${queryString}`;
+        }
         url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+        console.log('[Activity] Proxy URL constructed:', { url, path, queryString, encodedPath: encodeURIComponent(path) });
       } else if (isDevelopment) {
-        url = `/api/ver3/customers/${customerId}/passagetries`;
-        if (params.toString()) url += `?${params.toString()}`;
+        // In development, Vite proxy has issues with query params containing dots (period.start, period.end)
+        // WORKAROUND: Use direct API call to bypass Vite proxy issues
+        // This preserves the query string exactly as constructed
+        // Note: This requires CORS to be enabled on the API server for localhost
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/passagetries?${queryString}`;
+        console.log('[Activity] Development URL constructed (direct API call, bypassing Vite proxy):', { 
+          url, 
+          queryString: queryString,
+          startParam, 
+          endParam,
+          urlLength: url.length,
+          hasQueryParams: url.includes('?'),
+          note: 'Using direct API call to avoid Vite proxy issues with dots in parameter names. If you see CORS errors, the API server needs to allow localhost origins.'
+        });
       } else {
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/passagetries`;
-        if (params.toString()) url += `?${params.toString()}`;
+        // Production: direct API call
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/passagetries?${queryString}`;
+        console.log('[Activity] Production URL constructed:', { url, queryString });
+      }
+      
+      // Final validation of the URL
+      if (url.includes('null') || url.includes('undefined') || url.includes('period.start=null') || url.includes('period.end=null')) {
+        console.error('[Activity] URL contains null values:', url);
+        throw new Error(`URL contains invalid values: ${url}`);
       }
       
       const accessToken = typeof window.getAccessToken === 'function' 
@@ -1449,14 +1573,37 @@ class AuthAPI {
         'Authorization': `Bearer ${accessToken}`,
       };
       
+      console.log('[Activity] Making request:', { 
+        url, 
+        method: 'GET', 
+        hasToken: !!accessToken,
+        isDevelopment,
+        useProxy: this.useProxy,
+        urlIncludesPeriodStart: url.includes('period.start'),
+        urlIncludesPeriodEnd: url.includes('period.end')
+      });
+      
       const response = await fetch(url, {
         method: 'GET',
         headers,
       });
       
+      console.log('[Activity] Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        url: response.url
+      });
+      
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Activity] Get passage tries error (${response.status}):`, errorText);
+        console.error('[Activity] Request details:', {
+          requestUrl: url,
+          responseUrl: response.url,
+          status: response.status,
+          errorText
+        });
         throw new Error(`Get passage tries failed: ${response.status} - ${errorText}`);
       }
       
@@ -17867,33 +18014,64 @@ const ActivityUtils = {
    * Note: API counts inclusively, so to get 30 days we subtract 29 days
    */
   getDateRangeForDays(days = 30) {
-    const maxDays = Math.min(days, 30); // API limit is 30 days for passage tries
-    const end = new Date();
-    const start = new Date();
-    // Subtract (maxDays - 1) to account for inclusive counting
-    // e.g., for 30 days: Jan 11 to Dec 13 (30 days inclusive) = subtract 29
-    start.setDate(start.getDate() - (maxDays - 1));
-    
-    // Ensure dates are valid
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      console.error('[ActivityUtils] Invalid dates generated:', { start, end });
-      throw new Error('Failed to generate valid date range');
+    try {
+      const maxDays = Math.min(days, 30); // API limit is 30 days for passage tries
+      const end = new Date();
+      const start = new Date();
+      
+      // Validate initial dates
+      if (isNaN(end.getTime())) {
+        throw new Error('End date is invalid');
+      }
+      
+      // Subtract (maxDays - 1) to account for inclusive counting
+      // e.g., for 30 days: Jan 11 to Dec 13 (30 days inclusive) = subtract 29
+      start.setDate(start.getDate() - (maxDays - 1));
+      
+      // Ensure dates are valid after manipulation
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        console.error('[ActivityUtils] Invalid dates generated:', { 
+          start, 
+          end, 
+          startTime: start.getTime(), 
+          endTime: end.getTime(),
+          maxDays 
+        });
+        throw new Error('Failed to generate valid date range');
+      }
+      
+      const startStr = start.toISOString().split('T')[0];
+      const endStr = end.toISOString().split('T')[0];
+      
+      // Validate format and non-null
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!startStr || !endStr || startStr === 'null' || endStr === 'null' || startStr === 'undefined' || endStr === 'undefined') {
+        console.error('[ActivityUtils] Null/undefined date strings:', { startStr, endStr, start, end });
+        throw new Error(`Null date strings: start="${startStr}", end="${endStr}"`);
+      }
+      
+      if (!dateRegex.test(startStr) || !dateRegex.test(endStr)) {
+        console.error('[ActivityUtils] Invalid date format:', { startStr, endStr, start, end });
+        throw new Error(`Invalid date format: start="${startStr}", end="${endStr}"`);
+      }
+      
+      // Final validation - ensure strings are not empty
+      if (startStr.trim() === '' || endStr.trim() === '') {
+        console.error('[ActivityUtils] Empty date strings:', { startStr, endStr });
+        throw new Error(`Empty date strings: start="${startStr}", end="${endStr}"`);
+      }
+      
+      const result = {
+        start: startStr,
+        end: endStr
+      };
+      
+      console.log('[ActivityUtils] Generated date range:', result);
+      return result;
+    } catch (error) {
+      console.error('[ActivityUtils] Error in getDateRangeForDays:', error);
+      throw error;
     }
-    
-    const startStr = start.toISOString().split('T')[0];
-    const endStr = end.toISOString().split('T')[0];
-    
-    // Validate format
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(startStr) || !dateRegex.test(endStr)) {
-      console.error('[ActivityUtils] Invalid date format:', { startStr, endStr });
-      throw new Error(`Invalid date format: start=${startStr}, end=${endStr}`);
-    }
-    
-    return {
-      start: startStr,
-      end: endStr
-    };
   },
 
   /**
@@ -20745,43 +20923,110 @@ async function loadActivityData(forceRefresh = false) {
     const customerData = await authAPI.getCustomer(state.customerId, forceRefresh);
     
     // Get date range for last 30 days (API limit)
-    if (!ActivityUtils || typeof ActivityUtils.getDateRangeForDays !== 'function') {
-      throw new Error('ActivityUtils.getDateRangeForDays is not available');
+    let dateRange;
+    
+    if (ActivityUtils && typeof ActivityUtils.getDateRangeForDays === 'function') {
+      try {
+        dateRange = ActivityUtils.getDateRangeForDays(30);
+        console.log('[Activity] Generated date range from ActivityUtils:', dateRange);
+      } catch (dateError) {
+        console.error('[Activity] Failed to generate date range from ActivityUtils:', dateError);
+        // Fall through to manual generation
+      }
     }
     
-    let dateRange;
-    try {
-      dateRange = ActivityUtils.getDateRangeForDays(30);
-    } catch (dateError) {
-      console.error('[Activity] Failed to generate date range:', dateError);
-      throw new Error(`Failed to generate date range: ${dateError.message}`);
+    // Fallback: Generate dates manually if ActivityUtils is not available or failed
+    if (!dateRange || !dateRange.start || !dateRange.end) {
+      console.log('[Activity] Generating date range manually (fallback)');
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 29); // 30 days inclusive (today + 29 days ago = 30 days)
+      
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        console.error('[Activity] Invalid dates in manual generation:', { start, end });
+        throw new Error('Failed to generate valid date range manually');
+      }
+      
+      const startStr = start.toISOString().split('T')[0];
+      const endStr = end.toISOString().split('T')[0];
+      
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(startStr) || !dateRegex.test(endStr)) {
+        console.error('[Activity] Invalid date format in manual generation:', { startStr, endStr });
+        throw new Error(`Invalid date format: start="${startStr}", end="${endStr}"`);
+      }
+      
+      dateRange = {
+        start: startStr,
+        end: endStr
+      };
+      console.log('[Activity] Generated date range manually:', dateRange);
     }
     
     // Validate date range
     if (!dateRange || typeof dateRange !== 'object') {
-      console.error('[Activity] Invalid date range object:', dateRange);
+      console.error('[Activity] Invalid date range object:', { dateRange, type: typeof dateRange });
       throw new Error('Date range is not a valid object');
     }
     
     if (!dateRange.start || !dateRange.end) {
-      console.error('[Activity] Missing date range properties:', dateRange);
+      console.error('[Activity] Missing date range properties:', { 
+        dateRange, 
+        hasStart: !!dateRange.start, 
+        hasEnd: !!dateRange.end,
+        startValue: dateRange.start,
+        endValue: dateRange.end
+      });
       throw new Error(`Missing date range properties: start=${dateRange.start}, end=${dateRange.end}`);
     }
     
     // Ensure dates are strings in YYYY-MM-DD format
-    const startDate = String(dateRange.start).trim();
-    const endDate = String(dateRange.end).trim();
+    let startDate = String(dateRange.start).trim();
+    let endDate = String(dateRange.end).trim();
+    
+    // Check for null/undefined strings
+    if (startDate === 'null' || startDate === 'undefined' || startDate === '' || !startDate) {
+      console.error('[Activity] Start date is null/undefined:', { 
+        startDate, 
+        original: dateRange.start,
+        type: typeof dateRange.start 
+      });
+      throw new Error(`Start date is invalid: "${startDate}"`);
+    }
+    
+    if (endDate === 'null' || endDate === 'undefined' || endDate === '' || !endDate) {
+      console.error('[Activity] End date is null/undefined:', { 
+        endDate, 
+        original: dateRange.end,
+        type: typeof dateRange.end 
+      });
+      throw new Error(`End date is invalid: "${endDate}"`);
+    }
     
     // Validate date format
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
-      console.error('[Activity] Invalid date format:', { startDate, endDate, dateRange });
-      throw new Error(`Invalid date format: start=${startDate}, end=${endDate}`);
+    if (!dateRegex.test(startDate)) {
+      console.error('[Activity] Invalid start date format:', { startDate, original: dateRange.start });
+      throw new Error(`Invalid start date format: "${startDate}"`);
     }
     
-    if (startDate === 'Invalid Date' || endDate === 'Invalid Date' || startDate === 'null' || endDate === 'null') {
-      console.error('[Activity] Invalid date values:', { startDate, endDate, dateRange });
-      throw new Error(`Invalid date values: start=${startDate}, end=${endDate}`);
+    if (!dateRegex.test(endDate)) {
+      console.error('[Activity] Invalid end date format:', { endDate, original: dateRange.end });
+      throw new Error(`Invalid end date format: "${endDate}"`);
+    }
+    
+    // Final validation - ensure dates are valid Date objects
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+    
+    if (isNaN(startDateObj.getTime())) {
+      console.error('[Activity] Start date is not a valid date:', startDate);
+      throw new Error(`Start date is not valid: "${startDate}"`);
+    }
+    
+    if (isNaN(endDateObj.getTime())) {
+      console.error('[Activity] End date is not a valid date:', endDate);
+      throw new Error(`End date is not valid: "${endDate}"`);
     }
     
     // Fetch passage tries
@@ -20789,7 +21034,9 @@ async function loadActivityData(forceRefresh = false) {
       start: startDate, 
       end: endDate, 
       dateRange,
-      customerId: state.customerId 
+      customerId: state.customerId,
+      startType: typeof startDate,
+      endType: typeof endDate
     });
     
     const passageTries = await authAPI.getPassageTries(
