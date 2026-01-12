@@ -1350,6 +1350,506 @@ class AuthAPI {
     }
   }
 
+  // Activity: Get passage tries (check-ins)
+  async getPassageTries(customerId, startDate, endDate) {
+    try {
+      // Format dates as YYYY-MM-DD (Day format per API spec)
+      const formatDay = (date) => {
+        if (!date) {
+          throw new Error('Date parameter is required');
+        }
+        if (typeof date === 'string') {
+          // Extract YYYY-MM-DD from ISO string or use as-is if already formatted
+          return date.split('T')[0];
+        }
+        if (date instanceof Date) {
+          if (isNaN(date.getTime())) {
+            throw new Error('Invalid date');
+          }
+          return date.toISOString().split('T')[0];
+        }
+        return String(date);
+      };
+      
+      const start = formatDay(startDate);
+      const end = formatDay(endDate);
+      
+      // Validate dates are not empty
+      if (!start || !end || start === 'Invalid Date' || end === 'Invalid Date') {
+        throw new Error(`Invalid dates: start=${start}, end=${end}`);
+      }
+      
+      // Additional validation: ensure dates are in YYYY-MM-DD format
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(start) || !dateRegex.test(end)) {
+        throw new Error(`Dates must be in YYYY-MM-DD format: start=${start}, end=${end}`);
+      }
+      
+      // Validate date range is not more than 30 days (API limit)
+      const startDateObj = new Date(start);
+      const endDateObj = new Date(end);
+      const daysDiff = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24));
+      if (daysDiff > 30) {
+        throw new Error(`Date range exceeds API limit of 30 days: ${daysDiff} days. Please use a shorter range.`);
+      }
+      
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      // Ensure values are strings and not null/undefined
+      const startParam = String(start || '').trim();
+      const endParam = String(end || '').trim();
+      
+      if (!startParam || !endParam) {
+        throw new Error(`Invalid date parameters: start="${startParam}", end="${endParam}"`);
+      }
+      
+      // Use URLSearchParams to properly handle query parameters with dots
+      // Ensure we never pass null/undefined values
+      if (!startParam || !endParam || startParam === 'null' || endParam === 'null' || startParam === 'undefined' || endParam === 'undefined') {
+        console.error('[Activity] Invalid date parameters before URLSearchParams:', { startParam, endParam, startDate, endDate });
+        throw new Error(`Invalid date parameters: start="${startParam}", end="${endParam}"`);
+      }
+      
+      const params = new URLSearchParams();
+      params.append('period.start', startParam);
+      params.append('period.end', endParam);
+      
+      // Verify params were set correctly
+      const startParamValue = params.get('period.start');
+      const endParamValue = params.get('period.end');
+      if (!startParamValue || !endParamValue || startParamValue === 'null' || endParamValue === 'null') {
+        console.error('[Activity] URLSearchParams returned invalid values:', { startParamValue, endParamValue, startParam, endParam });
+        throw new Error(`URLSearchParams failed: start="${startParamValue}", end="${endParamValue}"`);
+      }
+      
+      let url;
+      if (this.useProxy) {
+        let path = `/api/ver3/customers/${customerId}/passagetries`;
+        if (params.toString()) path += `?${params.toString()}`;
+        url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/passagetries`;
+        if (params.toString()) url += `?${params.toString()}`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/passagetries`;
+        if (params.toString()) url += `?${params.toString()}`;
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Activity] Get passage tries error (${response.status}):`, errorText);
+        throw new Error(`Get passage tries failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[Activity] Get passage tries error:', error);
+      throw error;
+    }
+  }
+
+  // Classes & Bookings: Get group activity bookings
+  async getGroupActivityBookings(customerId, startTimePoint = null) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        let path = `/api/ver3/customers/${customerId}/bookings/groupactivities`;
+        if (startTimePoint) {
+          path += `?startTimePoint=${encodeURIComponent(startTimePoint)}`;
+        }
+        url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/bookings/groupactivities`;
+        if (startTimePoint) {
+          url += `?startTimePoint=${encodeURIComponent(startTimePoint)}`;
+        }
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/groupactivities`;
+        if (startTimePoint) {
+          url += `?startTimePoint=${encodeURIComponent(startTimePoint)}`;
+        }
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, { method: 'GET', headers });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Classes] Get group activity bookings error (${response.status}):`, errorText);
+        throw new Error(`Get group activity bookings failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[Classes] Get group activity bookings error:', error);
+      throw error;
+    }
+  }
+
+  // Classes & Bookings: Get event bookings
+  async getEventBookings(customerId, period = null) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        let path = `/api/ver3/customers/${customerId}/bookings/events`;
+        if (period) {
+          const params = new URLSearchParams();
+          if (period.start) params.append('period.start', period.start);
+          if (period.end) params.append('period.end', period.end);
+          if (params.toString()) path += `?${params.toString()}`;
+        }
+        url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/bookings/events`;
+        if (period) {
+          const params = new URLSearchParams();
+          if (period.start) params.append('period.start', period.start);
+          if (period.end) params.append('period.end', period.end);
+          if (params.toString()) url += `?${params.toString()}`;
+        }
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/events`;
+        if (period) {
+          const params = new URLSearchParams();
+          if (period.start) params.append('period.start', period.start);
+          if (period.end) params.append('period.end', period.end);
+          if (params.toString()) url += `?${params.toString()}`;
+        }
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, { method: 'GET', headers });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Classes] Get event bookings error (${response.status}):`, errorText);
+        throw new Error(`Get event bookings failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[Classes] Get event bookings error:', error);
+      throw error;
+    }
+  }
+
+  // Classes & Bookings: Get entry bookings
+  async getEntryBookings(customerId, period = null) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        let path = `/api/ver3/customers/${customerId}/bookings/entries`;
+        if (period) {
+          const params = new URLSearchParams();
+          if (period.start) params.append('period.start', period.start);
+          if (period.end) params.append('period.end', period.end);
+          if (params.toString()) path += `?${params.toString()}`;
+        }
+        url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/bookings/entries`;
+        if (period) {
+          const params = new URLSearchParams();
+          if (period.start) params.append('period.start', period.start);
+          if (period.end) params.append('period.end', period.end);
+          if (params.toString()) url += `?${params.toString()}`;
+        }
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/entries`;
+        if (period) {
+          const params = new URLSearchParams();
+          if (period.start) params.append('period.start', period.start);
+          if (period.end) params.append('period.end', period.end);
+          if (params.toString()) url += `?${params.toString()}`;
+        }
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, { method: 'GET', headers });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Classes] Get entry bookings error (${response.status}):`, errorText);
+        throw new Error(`Get entry bookings failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[Classes] Get entry bookings error:', error);
+      throw error;
+    }
+  }
+
+  // Dashboard: Get customer receipts (purchase history)
+  async getCustomerReceipts(customerId, period = null) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      const params = new URLSearchParams();
+      if (period?.start) params.append('period.start', period.start);
+      if (period?.end) params.append('period.end', period.end);
+      
+      if (this.useProxy) {
+        let path = `/api/ver3/customers/${customerId}/receipts`;
+        if (params.toString()) path += `?${params.toString()}`;
+        url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/receipts`;
+        if (params.toString()) url += `?${params.toString()}`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/receipts`;
+        if (params.toString()) url += `?${params.toString()}`;
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, { method: 'GET', headers });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Dashboard] Get receipts error (${response.status}):`, errorText);
+        throw new Error(`Get receipts failed: ${response.status} - ${errorText}`);
+      }
+      
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('[Dashboard] Failed to parse receipts response as JSON:', parseError);
+        return [];
+      }
+      
+      // Ensure we return an array
+      if (!Array.isArray(data)) {
+        if (data && typeof data === 'object' && data.receipts && Array.isArray(data.receipts)) {
+          return data.receipts;
+        }
+        return [];
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('[Dashboard] Get receipts error:', error);
+      throw error;
+    }
+  }
+
+  // Settings: Get customer card consents (saved payment methods)
+  async getCustomerCardConsents(customerId, companyId = null) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      const params = new URLSearchParams();
+      if (companyId) {
+        params.append('company', companyId);
+      }
+      
+      if (this.useProxy) {
+        const path = `/api/ver3/customers/${customerId}/consents/cards${params.toString() ? `?${params.toString()}` : ''}`;
+        url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/consents/cards`;
+        if (params.toString()) url += `?${params.toString()}`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/consents/cards`;
+        if (params.toString()) url += `?${params.toString()}`;
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, { method: 'GET', headers });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Settings] Get card consents error (${response.status}):`, errorText);
+        throw new Error(`Get card consents failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[Settings] Get card consents error:', error);
+      throw error;
+    }
+  }
+
+  // Subscription: Freeze subscription
+  async freezeSubscription(customerId, subscriptionId, freezePeriod, freezeReason = null, freezeReasonComment = null, paymentRequiredBeforeFreeze = false) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/subscriptions/${subscriptionId}/freeze`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/subscriptions/${subscriptionId}/freeze`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/subscriptions/${subscriptionId}/freeze`;
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const body = {
+        freezePeriod: freezePeriod
+      };
+      
+      if (freezeReason) body.freezeReason = parseInt(freezeReason);
+      if (freezeReasonComment) body.freezeReasonComment = freezeReasonComment;
+      if (paymentRequiredBeforeFreeze !== undefined) body.paymentRequiredBeforeFreeze = paymentRequiredBeforeFreeze;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Subscription] Freeze subscription error (${response.status}):`, errorText);
+        throw new Error(`Freeze subscription failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[Subscription] Freeze subscription error:', error);
+      throw error;
+    }
+  }
+
+  // Subscription: Cancel subscription
+  async cancelSubscription(customerId, subscriptionId) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/subscriptions/${subscriptionId}/terminate`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/subscriptions/${subscriptionId}/terminate`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/subscriptions/${subscriptionId}/terminate`;
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Subscription] Cancel subscription error (${response.status}):`, errorText);
+        throw new Error(`Cancel subscription failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('[Subscription] Cancel subscription error:', error);
+      throw error;
+    }
+  }
+
   // Step 6: Link guardian/child relationship
   async linkOtherUser(customerId, otherUserId, role = 'PAYER') {
     try {
@@ -7654,6 +8154,18 @@ function refreshLoginPageUI() {
     loginPageWrapper.style.display = authenticated ? 'none' : 'flex';
   }
   
+  // Show/hide navigation header based on authentication
+  const mainNavigation = document.getElementById('mainNavigation');
+  if (mainNavigation) {
+    mainNavigation.style.display = authenticated ? 'block' : 'none';
+    console.log('[Profile] Navigation header:', authenticated ? 'shown' : 'hidden');
+    
+    // Update navigation user info when authenticated
+    if (authenticated) {
+      updateNavigationUserInfo();
+    }
+  }
+  
   // Show/hide profile page content based on authentication
   const pageContentWrapper = document.getElementById('pageContentWrapper');
   const pageProfile = document.getElementById('pageProfile');
@@ -7707,9 +8219,210 @@ function refreshLoginPageUI() {
   }
 }
 
-// Expose refreshLoginPageUI to window
+/**
+ * Update navigation user info (name and avatar)
+ */
+function updateNavigationUserInfo() {
+  const navUserName = document.getElementById('navUserName');
+  const navUserAvatar = document.getElementById('navUserAvatar');
+  
+  if (!navUserName && !navUserAvatar) {
+    return; // Navigation not on this page
+  }
+  
+  const customer = state.authenticatedCustomer;
+  const metadata = getTokenMetadata();
+  
+  // Get display name
+  let displayName = '';
+  if (customer?.firstName && customer?.lastName) {
+    displayName = `${customer.firstName} ${customer.lastName}`;
+  } else if (customer?.firstName) {
+    displayName = customer.firstName;
+  } else if (customer?.lastName) {
+    displayName = customer.lastName;
+  } else if (state.authenticatedEmail) {
+    displayName = state.authenticatedEmail.split('@')[0];
+  } else if (metadata?.email) {
+    displayName = metadata.email.split('@')[0];
+  } else {
+    displayName = 'User';
+  }
+  
+  // Update name
+  if (navUserName) {
+    navUserName.textContent = displayName;
+  }
+  
+  // Update avatar initials
+  if (navUserAvatar) {
+    const initials = ProfileUtils?.getInitials ? ProfileUtils.getInitials(customer || {}) : 
+      (displayName ? displayName.substring(0, 2).toUpperCase() : 'U');
+    navUserAvatar.setAttribute('data-initials', initials);
+  }
+}
+
+/**
+ * Initialize navigation functionality
+ */
+function initNavigation() {
+  const mainNavigation = document.getElementById('mainNavigation');
+  if (!mainNavigation) {
+    return; // Navigation not on this page
+  }
+  
+  // Handle navigation link clicks
+  const navLinks = mainNavigation.querySelectorAll('.nav-link[data-route]');
+  navLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const route = link.getAttribute('data-route');
+      
+      // Update active state
+      navLinks.forEach(l => l.classList.remove('active'));
+      link.classList.add('active');
+      
+      // Handle route navigation
+      if (route === 'profile') {
+        // Show profile page
+        showPage('profile');
+        if (typeof loadProfileData === 'function') {
+          loadProfileData(false);
+        }
+      } else if (route === 'dashboard') {
+        showPage('dashboard');
+        if (typeof loadDashboardData === 'function') {
+          loadDashboardData(false);
+        }
+      } else if (route === 'classes') {
+        showPage('classes');
+        if (typeof loadClassesData === 'function') {
+          loadClassesData(false);
+        }
+        if (typeof initClassesTabs === 'function') {
+          initClassesTabs();
+        }
+      } else if (route === 'activity') {
+        showPage('activity');
+        if (typeof loadActivityData === 'function') {
+          loadActivityData(false);
+        }
+      }
+    });
+  });
+  
+  // Handle user dropdown
+  const navUser = document.getElementById('navUser');
+  const userDropdown = document.getElementById('userDropdown');
+  
+  if (navUser && userDropdown) {
+    navUser.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isActive = navUser.classList.contains('active');
+      
+      // Close all dropdowns
+      document.querySelectorAll('.nav-user').forEach(u => u.classList.remove('active'));
+      document.querySelectorAll('.user-dropdown').forEach(d => d.style.display = 'none');
+      
+      if (!isActive) {
+        navUser.classList.add('active');
+        userDropdown.style.display = 'block';
+      }
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!navUser.contains(e.target)) {
+        navUser.classList.remove('active');
+        userDropdown.style.display = 'none';
+      }
+    });
+    
+    // Handle dropdown item clicks
+    const dropdownItems = userDropdown.querySelectorAll('.dropdown-item');
+    dropdownItems.forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const action = item.getAttribute('data-action');
+        
+        if (action === 'nav-profile') {
+          showPage('profile');
+          navUser.classList.remove('active');
+          userDropdown.style.display = 'none';
+          if (typeof loadProfileData === 'function') {
+            loadProfileData(false);
+          }
+        } else if (action === 'nav-settings') {
+          showPage('settings');
+          navUser.classList.remove('active');
+          userDropdown.style.display = 'none';
+          if (typeof loadSettingsData === 'function') {
+            loadSettingsData(true);
+          }
+        } else if (action === 'nav-logout') {
+          if (typeof handleLogout === 'function') {
+            handleLogout();
+          } else if (window.handleLogout) {
+            window.handleLogout();
+          }
+          navUser.classList.remove('active');
+          userDropdown.style.display = 'none';
+        }
+      });
+    });
+  }
+  
+  // Set active route based on current page
+  const currentPath = window.location.pathname;
+  const currentHash = window.location.hash;
+  
+  if (currentPath.includes('profile.html') || currentHash === '#profile') {
+    const profileLink = mainNavigation.querySelector('.nav-link[data-route="profile"]');
+    if (profileLink) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      profileLink.classList.add('active');
+    }
+  }
+}
+
+/**
+ * Show a specific page section and hide others
+ */
+function showPage(pageName) {
+  const pages = ['dashboard', 'classes', 'activity', 'profile', 'settings'];
+  pages.forEach(page => {
+    const pageElement = document.getElementById(`page${page.charAt(0).toUpperCase() + page.slice(1)}`);
+    if (pageElement) {
+      pageElement.style.display = page === pageName ? 'block' : 'none';
+    }
+  });
+  
+  // Update navigation active state
+  const mainNavigation = document.getElementById('mainNavigation');
+  if (mainNavigation) {
+    const navLinks = mainNavigation.querySelectorAll('.nav-link[data-route]');
+    navLinks.forEach(link => {
+      if (link.getAttribute('data-route') === pageName) {
+        link.classList.add('active');
+      } else {
+        link.classList.remove('active');
+      }
+    });
+  }
+}
+
+// Expose functions to window
 if (typeof window !== 'undefined') {
   window.refreshLoginPageUI = refreshLoginPageUI;
+  window.initNavigation = initNavigation;
+  window.updateNavigationUserInfo = updateNavigationUserInfo;
+  window.showPage = showPage;
+  window.loadDashboardData = loadDashboardData;
+  window.loadSettingsData = loadSettingsData;
+  window.loadClassesData = loadClassesData;
+  window.loadActivityData = loadActivityData;
+  window.initSettingsHandlers = initSettingsHandlers;
+  window.initClassesTabs = initClassesTabs;
 }
 
 async function handleSaveAccount() {
@@ -16396,6 +17109,11 @@ async function loadProfileData(forceRefresh = false) {
     // Attach payment card button handlers
     initPaymentCardButtons();
     
+    // Update navigation user info
+    if (typeof updateNavigationUserInfo === 'function') {
+      updateNavigationUserInfo();
+    }
+    
     // Note: Cancel and Freeze subscription handlers are initialized in initSettingsHandlers()
     // which is called from both loadProfileData and loadSettingsData
 
@@ -16440,6 +17158,10 @@ async function loadProfileData(forceRefresh = false) {
         console.log('[Profile] Using fallback customer data from metadata');
         try {
           await ProfilePage.populateAll(fallbackCustomer);
+          // Update navigation user info
+          if (typeof updateNavigationUserInfo === 'function') {
+            updateNavigationUserInfo();
+          }
         } catch (populateError) {
           console.warn('[Profile] Could not populate with fallback data:', populateError);
         }
@@ -16455,6 +17177,10 @@ async function loadProfileData(forceRefresh = false) {
       };
       try {
         await ProfilePage.populateAll(minimalCustomer);
+        // Update navigation user info
+        if (typeof updateNavigationUserInfo === 'function') {
+          updateNavigationUserInfo();
+        }
       } catch (populateError) {
         console.warn('[Profile] Could not populate with minimal data:', populateError);
       }
@@ -16701,4 +17427,3390 @@ async function renderAllInvoices(invoices) {
     </div>
     ${invoicesHtml}
   `;
+}
+const DashboardUtils = {
+  /**
+   * Format currency amount
+   */
+  formatCurrency(amount, currency = 'DKK') {
+    if (!amount && amount !== 0) return '-';
+    // Amount is typically in cents/øre, convert to main unit
+    const mainAmount = typeof amount === 'number' && amount > 100 ? amount / 100 : amount;
+    const formatted = mainAmount.toFixed(2).replace('.', ',');
+    return `${formatted} ${currency.toLowerCase()}`;
+  },
+
+  /**
+   * Get month abbreviation (JAN, FEB, etc.)
+   */
+  getMonthAbbr(monthIndex) {
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    return months[monthIndex] || '';
+  },
+
+  /**
+   * Aggregate passage tries by month for chart
+   */
+  aggregateByMonth(passageTries) {
+    const monthlyData = {};
+    const successful = passageTries.filter(pt => {
+      const result = pt.passageTryResult?.toLowerCase() || '';
+      return result.includes('allowed') || result.includes('success') || result.includes('granted');
+    });
+
+    successful.forEach(pt => {
+      if (pt.passageTryTime) {
+        const date = new Date(pt.passageTryTime);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
+      }
+    });
+
+    return monthlyData;
+  },
+
+  /**
+   * Aggregate passage tries by week for 30-day chart
+   */
+  aggregateByWeek(passageTries) {
+    const weeklyData = {};
+    const successful = passageTries.filter(pt => {
+      const result = pt.passageTryResult?.toLowerCase() || '';
+      return result.includes('allowed') || result.includes('success') || result.includes('granted');
+    });
+
+    successful.forEach(pt => {
+      if (pt.passageTryTime) {
+        const date = new Date(pt.passageTryTime);
+        // Get week start (Monday)
+        const dayOfWeek = date.getDay();
+        const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to Monday
+        const weekStart = new Date(date);
+        weekStart.setDate(diff);
+        weekStart.setHours(0, 0, 0, 0);
+        const weekKey = weekStart.toISOString().split('T')[0];
+        weeklyData[weekKey] = (weeklyData[weekKey] || 0) + 1;
+      }
+    });
+
+    return weeklyData;
+  },
+
+  /**
+   * Get last 30 days data grouped by week for chart
+   */
+  getLast30DaysByWeek(weeklyData) {
+    const now = new Date();
+    const weeks = [];
+    
+    // Get last 4-5 weeks (30 days)
+    for (let i = 4; i >= 0; i--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - (i * 7));
+      // Adjust to Monday
+      const dayOfWeek = weekStart.getDay();
+      const diff = weekStart.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      weekStart.setDate(diff);
+      weekStart.setHours(0, 0, 0, 0);
+      
+      const weekKey = weekStart.toISOString().split('T')[0];
+      const count = weeklyData[weekKey] || 0;
+      
+      // Format week label (e.g., "Dec 16" or "This week")
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      
+      let label;
+      if (i === 0) {
+        label = 'This week';
+      } else if (i === 1) {
+        label = 'Last week';
+      } else {
+        const monthAbbr = DashboardUtils.getMonthAbbr(weekStart.getMonth());
+        label = `${monthAbbr} ${weekStart.getDate()}`;
+      }
+      
+      weeks.push({
+        weekStart: weekKey,
+        label: label,
+        count: count
+      });
+    }
+    
+    return weeks;
+  },
+
+  /**
+   * Get last 12 months data for chart
+   */
+  getLast12MonthsData(monthlyData) {
+    const now = new Date();
+    const months = [];
+    
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const count = monthlyData[monthKey] || 0;
+      months.push({
+        month: date.getMonth(),
+        monthAbbr: DashboardUtils.getMonthAbbr(date.getMonth()),
+        count: count
+      });
+    }
+    
+    return months;
+  },
+
+  /**
+   * Get product name from receipt/order item
+   */
+  getProductName(item) {
+    return item.product?.name || 
+           item.subscriptionItem?.product?.name ||
+           item.entryProduct?.name ||
+           item.groupActivityItem?.groupActivity?.name ||
+           item.eventItem?.event?.name ||
+           'Unknown Product';
+  },
+
+  /**
+   * Format receipt date as DD.MM.YYYY
+   */
+  formatReceiptDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '-';
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
+  },
+
+  /**
+   * Format price (amount in main currency unit)
+   */
+  formatPrice(amount, currency = 'DKK') {
+    if (!amount && amount !== 0) return '-';
+    // Amount should already be in main currency unit (DKK)
+    const formatted = typeof amount === 'number' ? amount.toFixed(2).replace('.', ',') : String(amount);
+    return formatted;
+  }
+};
+
+/**
+ * Classes & Bookings utilities
+ */
+const ClassesUtils = {
+  /**
+   * Format date from ISO string to DD/MM/YYYY
+   */
+  formatDate(dateString) {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return dateString;
+    }
+  },
+
+  /**
+   * Format time from ISO string to HH:MM
+   */
+  formatTime(dateString) {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    } catch (e) {
+      return '-';
+    }
+  },
+
+  /**
+   * Format time range from start and end times
+   */
+  formatTimeRange(startTime, endTime) {
+    const start = ClassesUtils.formatTime(startTime);
+    const end = ClassesUtils.formatTime(endTime);
+    return `${start} - ${end}`;
+  },
+
+  /**
+   * Check if booking is in the past
+   */
+  isPastBooking(booking) {
+    try {
+      const startTime = booking.duration?.start || booking.occasion?.start || booking.start;
+      if (!startTime) return false;
+      return new Date(startTime) < new Date();
+    } catch (e) {
+      return false;
+    }
+  },
+
+  /**
+   * Check if booking is on waiting list
+   */
+  isWaitingList(booking) {
+    return booking.waitingListPosition !== undefined && booking.waitingListPosition !== null;
+  },
+
+  /**
+   * Get booking type (groupActivity, event, entry)
+   */
+  getBookingType(booking) {
+    if (booking.groupActivity) return 'groupActivity';
+    if (booking.event) return 'event';
+    if (booking.entryProduct) return 'entry';
+    return 'unknown';
+  },
+
+  /**
+   * Get booking name
+   */
+  getBookingName(booking) {
+    if (booking.groupActivity?.name) return booking.groupActivity.name;
+    if (booking.event?.name) return booking.event.name;
+    if (booking.entryProduct?.name) return booking.entryProduct.name;
+    return 'Unknown Booking';
+  },
+
+  /**
+   * Get booking start time
+   */
+  getBookingStartTime(booking) {
+    return booking.duration?.start || booking.occasion?.start || booking.start;
+  },
+
+  /**
+   * Get booking end time
+   */
+  getBookingEndTime(booking) {
+    return booking.duration?.end || booking.occasion?.end || booking.end;
+  },
+
+  /**
+   * Get business unit name
+   */
+  getBusinessUnitName(booking) {
+    return booking.businessUnit?.name || 'Unknown Location';
+  },
+
+  /**
+   * Categorize bookings into upcoming, past, and waiting list
+   */
+  categorizeBookings(allBookings) {
+    const upcoming = [];
+    const past = [];
+    const waiting = [];
+
+    allBookings.forEach(booking => {
+      if (ClassesUtils.isWaitingList(booking)) {
+        waiting.push(booking);
+      } else if (ClassesUtils.isPastBooking(booking)) {
+        past.push(booking);
+      } else {
+        upcoming.push(booking);
+      }
+    });
+
+    // Sort by start time (upcoming: earliest first, past: most recent first)
+    const sortByStartTime = (a, b) => {
+      const timeA = new Date(ClassesUtils.getBookingStartTime(a));
+      const timeB = new Date(ClassesUtils.getBookingStartTime(b));
+      return timeA - timeB;
+    };
+
+    upcoming.sort(sortByStartTime);
+    past.sort((a, b) => sortByStartTime(b, a)); // Reverse for past
+
+    return { upcoming, past, waiting };
+  },
+
+  /**
+   * Normalize bookings from different types into unified format
+   */
+  normalizeBookings(groupActivities, events, entries) {
+    const normalized = [];
+
+    // Normalize group activities
+    (groupActivities || []).forEach(booking => {
+      // The booking ID is nested in groupActivityBooking.id (per OpenAPI spec)
+      const bookingId = booking.groupActivityBooking?.id || booking.id || booking.waitingListBooking?.id;
+      if (!bookingId) {
+        console.error('[Classes] Group activity booking missing ID:', {
+          booking,
+          hasGroupActivityBooking: !!booking.groupActivityBooking,
+          groupActivityBookingId: booking.groupActivityBooking?.id,
+          hasId: !!booking.id,
+          id: booking.id,
+          keys: Object.keys(booking)
+        });
+      }
+      normalized.push({
+        id: bookingId,
+        type: 'groupActivity',
+        name: booking.groupActivity?.name || 'Group Activity',
+        businessUnit: booking.businessUnit,
+        startTime: booking.duration?.start,
+        endTime: booking.duration?.end,
+        price: booking.price,
+        isDebited: booking.isDebited,
+        actions: booking.actions || [],
+        waitingListPosition: booking.waitingListPosition || booking.waitingListBooking?.waitingListPosition,
+        original: booking
+      });
+    });
+
+    // Normalize events
+    (events || []).forEach(booking => {
+      normalized.push({
+        id: booking.id,
+        type: 'event',
+        name: booking.event?.name || 'Event',
+        businessUnit: booking.businessUnit,
+        startTime: booking.occasion?.start,
+        endTime: booking.occasion?.end,
+        price: booking.price,
+        isDebited: booking.isDebited,
+        actions: booking.actions || [],
+        participants: booking.participants,
+        original: booking
+      });
+    });
+
+    // Normalize entries
+    (entries || []).forEach(booking => {
+      normalized.push({
+        id: booking.id,
+        type: 'entry',
+        name: booking.entryProduct?.name || 'Entry',
+        businessUnit: booking.businessUnit,
+        startTime: booking.duration?.start,
+        endTime: booking.duration?.end,
+        price: booking.price,
+        entries: booking.entries || [],
+        actions: booking.actions || [],
+        original: booking
+      });
+    });
+
+    return normalized;
+  }
+};
+
+/**
+ * Activity page utilities
+ */
+const ActivityUtils = {
+  /**
+   * Format date from ISO string to DD/MM/YYYY
+   */
+  formatDate(dateString) {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return dateString;
+    }
+  },
+
+  /**
+   * Format time from ISO string to HH:MM
+   */
+  formatTime(dateString) {
+    if (!dateString) return '-';
+    try {
+      const date = new Date(dateString);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    } catch (e) {
+      return '-';
+    }
+  },
+
+  /**
+   * Format member since date
+   */
+  formatMemberSince(dayString) {
+    if (!dayString) return '-';
+    try {
+      // Day format is YYYY-MM-DD
+      const [year, month, day] = dayString.split('-');
+      return `${day}/${month}/${year}`;
+    } catch (e) {
+      return dayString;
+    }
+  },
+
+  /**
+   * Check if passage try was successful
+   */
+  isSuccessfulPassage(passageTry) {
+    const result = passageTry?.passageTryResult?.toLowerCase() || '';
+    return result.includes('allowed') || result.includes('success') || result.includes('granted');
+  },
+
+  /**
+   * Get date range for last N days (max 30 days per API limit)
+   * Note: API counts inclusively, so to get 30 days we subtract 29 days
+   */
+  getDateRangeForDays(days = 30) {
+    const maxDays = Math.min(days, 30); // API limit is 30 days for passage tries
+    const end = new Date();
+    const start = new Date();
+    // Subtract (maxDays - 1) to account for inclusive counting
+    // e.g., for 30 days: Jan 11 to Dec 13 (30 days inclusive) = subtract 29
+    start.setDate(start.getDate() - (maxDays - 1));
+    
+    // Ensure dates are valid
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      console.error('[ActivityUtils] Invalid dates generated:', { start, end });
+      throw new Error('Failed to generate valid date range');
+    }
+    
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+    
+    // Validate format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(startStr) || !dateRegex.test(endStr)) {
+      console.error('[ActivityUtils] Invalid date format:', { startStr, endStr });
+      throw new Error(`Invalid date format: start=${startStr}, end=${endStr}`);
+    }
+    
+    return {
+      start: startStr,
+      end: endStr
+    };
+  },
+
+  /**
+   * Get date range for last N months
+   */
+  getDateRangeForMonths(months = 12) {
+    const end = new Date();
+    const start = new Date();
+    start.setMonth(start.getMonth() - months);
+    return {
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0]
+    };
+  },
+
+  /**
+   * Calculate statistics from passage tries
+   */
+  calculateStats(passageTries, customer) {
+    const successful = passageTries.filter(pt => ActivityUtils.isSuccessfulPassage(pt));
+    
+    // Total check-ins
+    const totalCheckins = successful.length;
+    
+    // Most visited gym
+    const gymCounts = {};
+    successful.forEach(pt => {
+      const gymName = pt.businessUnit?.name || 'Unknown';
+      gymCounts[gymName] = (gymCounts[gymName] || 0) + 1;
+    });
+    const mostVisitedGym = Object.keys(gymCounts).reduce((a, b) => 
+      gymCounts[a] > gymCounts[b] ? a : b, Object.keys(gymCounts)[0] || '-'
+    );
+    
+    // Top check-in time (hour)
+    const hourCounts = {};
+    successful.forEach(pt => {
+      if (pt.passageTryTime) {
+        const hour = new Date(pt.passageTryTime).getHours();
+        hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+      }
+    });
+    const topHour = Object.keys(hourCounts).reduce((a, b) => 
+      hourCounts[a] > hourCounts[b] ? a : b, Object.keys(hourCounts)[0]
+    );
+    const topCheckinTime = topHour ? `~${topHour}:00` : '-';
+    
+    // Member since
+    const memberSince = customer?.memberJoinDate 
+      ? ActivityUtils.formatMemberSince(customer.memberJoinDate)
+      : '-';
+    
+    // Loyalty tier
+    const loyaltyTier = customer?.benefitStatus?.name || '-';
+    
+    return {
+      totalCheckins,
+      mostVisitedGym: mostVisitedGym || '-',
+      topCheckinTime,
+      memberSince,
+      loyaltyTier
+    };
+  }
+};
+
+/**
+ * Empty State Utility Functions
+ */
+const EmptyStateUtils = {
+  /**
+   * Create an empty state HTML with icon, message, and optional CTA
+   * @param {Object} options - Configuration object
+   * @param {string} options.icon - Emoji or icon text
+   * @param {string} options.title - Main title text
+   * @param {string} options.message - Descriptive message
+   * @param {Object} [options.cta] - Optional CTA button
+   * @param {string} [options.cta.text] - CTA button text
+   * @param {string} [options.cta.action] - CTA button action (function name or onclick handler)
+   * @param {string} [options.className] - Additional CSS classes
+   * @returns {string} HTML string for empty state
+   */
+  createEmptyState({ icon, title, message, cta, className = '' }) {
+    const ctaHtml = cta ? `
+      <button class="empty-state-cta" ${cta.onclick ? `onclick="${cta.onclick}"` : ''} ${cta.dataAction ? `data-action="${cta.dataAction}"` : ''}>
+        ${cta.text}
+      </button>
+    ` : '';
+    
+    return `
+      <div class="empty-state ${className}">
+        <div class="empty-state-icon">${icon}</div>
+        <h3 class="empty-state-title">${title}</h3>
+        <p class="empty-state-message">${message}</p>
+        ${ctaHtml}
+      </div>
+    `;
+  }
+};
+
+/**
+ * Classes & Bookings page data population functions
+ */
+const ClassesPage = {
+  /**
+   * Render booking card
+   */
+  renderBookingCard(booking) {
+    // Ensure we have the booking ID - check both normalized and original structure
+    // Try multiple possible locations for the ID
+    const bookingId = booking.id || 
+                      booking.original?.id || 
+                      booking.bookingId ||
+                      (booking.original && booking.original.id);
+    
+    if (!bookingId) {
+      console.error('[Classes] Booking missing ID in renderBookingCard:', {
+        booking,
+        hasId: !!booking.id,
+        hasOriginal: !!booking.original,
+        originalId: booking.original?.id,
+        keys: Object.keys(booking)
+      });
+    }
+    
+    const name = ClassesUtils.getBookingName(booking.original || booking);
+    const businessUnit = ClassesUtils.getBusinessUnitName(booking.original || booking);
+    const startTime = booking.startTime || ClassesUtils.getBookingStartTime(booking.original || booking);
+    const endTime = booking.endTime || ClassesUtils.getBookingEndTime(booking.original || booking);
+    const date = ClassesUtils.formatDate(startTime);
+    const timeRange = ClassesUtils.formatTimeRange(startTime, endTime);
+    const type = booking.type || ClassesUtils.getBookingType(booking.original || booking);
+    const isWaiting = ClassesUtils.isWaitingList(booking.original || booking);
+    const waitingPosition = booking.waitingListPosition || booking.original?.waitingListPosition;
+    const actions = booking.actions || booking.original?.actions || [];
+    const isPast = ClassesUtils.isPastBooking(booking.original || booking);
+
+    // Type badge
+    const typeLabels = {
+      groupActivity: 'Class',
+      event: 'Event',
+      entry: 'Entry'
+    };
+    const typeLabel = typeLabels[type] || 'Booking';
+
+    // Actions HTML
+    // Always show cancel button for upcoming group activity bookings (not past, not waiting list)
+    // Check if booking is in upcoming section (not past) by checking startTime
+    const startTimeDate = startTime ? new Date(startTime) : null;
+    const isActuallyPast = startTimeDate ? startTimeDate < new Date() : false;
+    const canCancel = !isActuallyPast && !isWaiting && type === 'groupActivity' && bookingId;
+    const showCancel = canCancel || actions.includes('CANCEL');
+    
+    console.log('[Classes] Rendering booking card:', {
+      bookingId,
+      type,
+      isPast,
+      isActuallyPast,
+      isWaiting,
+      canCancel,
+      showCancel,
+      actions,
+      startTime,
+      startTimeDate: startTimeDate?.toISOString()
+    });
+    
+    const actionsHtml = [];
+    
+    if (showCancel && bookingId) {
+      actionsHtml.push(`<button class="booking-action-btn booking-action-cancel" data-action="cancel" data-booking-id="${bookingId}" data-booking-type="${type}">
+        <svg class="icon icon-cancel" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+        Cancel
+      </button>`);
+    } else if (showCancel && !bookingId) {
+      console.error('[Classes] Cannot render cancel button - missing booking ID:', booking);
+    }
+    
+    if (actions.includes('SHOW_QR') || (type === 'entry' && booking.entries?.length > 0)) {
+      actionsHtml.push(`<button class="booking-action-btn" data-action="show-qr" data-booking-id="${bookingId}" data-booking-type="${type}">Show QR</button>`);
+    }
+
+    return `
+      <div class="booking-card" data-booking-id="${bookingId}" data-booking-type="${type}">
+        <div class="booking-header">
+          <h3 class="booking-title">${name}</h3>
+          <span class="booking-type-badge booking-type-${type}">${typeLabel}</span>
+        </div>
+        <div class="booking-details">
+          <div class="booking-date-time">
+            <span class="booking-date">${date}</span>
+            <span class="booking-time">${timeRange}</span>
+          </div>
+          <div class="booking-location">${businessUnit}</div>
+          ${isWaiting && waitingPosition ? `<div class="waiting-list-position">Position: ${waitingPosition}</div>` : ''}
+        </div>
+        ${actionsHtml.length > 0 ? `<div class="booking-actions">${actionsHtml.join('')}</div>` : ''}
+      </div>
+    `;
+  },
+
+  /**
+   * Render bookings list
+   */
+  renderBookingsList(containerId, bookings) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (bookings.length === 0) {
+      // Determine context-specific empty state
+      let emptyStateConfig;
+      if (containerId === 'upcomingBookingsList') {
+        emptyStateConfig = {
+          icon: '📅',
+          title: 'No Upcoming Bookings',
+          message: 'You don\'t have any upcoming classes or events booked. Browse our classes and book your first session!',
+          cta: {
+            text: 'Browse Classes',
+            dataAction: 'switch-to-browse'
+          }
+        };
+      } else if (containerId === 'pastBookingsList') {
+        emptyStateConfig = {
+          icon: '📚',
+          title: 'No Past Bookings',
+          message: 'Your booking history will appear here once you attend classes or events.',
+          cta: {
+            text: 'Browse Classes',
+            dataAction: 'switch-to-browse'
+          }
+        };
+      } else if (containerId === 'waitingListBookingsList') {
+        emptyStateConfig = {
+          icon: '⏳',
+          title: 'No Waiting List Bookings',
+          message: 'You\'re not currently on any waiting lists. When you join a waiting list, it will appear here.',
+          cta: {
+            text: 'Browse Classes',
+            dataAction: 'switch-to-browse'
+          }
+        };
+      } else {
+        emptyStateConfig = {
+          icon: '📋',
+          title: 'No Bookings Found',
+          message: 'You don\'t have any bookings at the moment.',
+          cta: {
+            text: 'Browse Classes',
+            dataAction: 'switch-to-browse'
+          }
+        };
+      }
+      
+      container.innerHTML = EmptyStateUtils.createEmptyState(emptyStateConfig);
+      
+      // Attach CTA listener if present
+      const ctaButton = container.querySelector('.empty-state-cta[data-action="switch-to-browse"]');
+      if (ctaButton) {
+        ctaButton.addEventListener('click', () => {
+          const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
+          if (browseTab) browseTab.click();
+        });
+      }
+      
+      return;
+    }
+
+    container.innerHTML = bookings.map(booking => ClassesPage.renderBookingCard(booking)).join('');
+    
+    // Attach event listeners for action buttons
+    ClassesPage.attachBookingActionListeners();
+  },
+
+  /**
+   * Attach event listeners to booking action buttons
+   */
+  attachBookingActionListeners() {
+    document.querySelectorAll('.booking-action-btn[data-action="cancel"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Use currentTarget to get the button element, not the clicked child element (SVG icon)
+        const button = e.currentTarget;
+        const bookingId = button.dataset.bookingId;
+        const bookingType = button.dataset.bookingType;
+        
+        console.log('[Classes] Cancel button clicked:', { 
+          bookingId, 
+          bookingType, 
+          buttonElement: button,
+          dataset: button.dataset,
+          target: e.target,
+          currentTarget: e.currentTarget
+        });
+        
+        if (!bookingId) {
+          console.error('[Classes] Missing booking ID:', { button, dataset: button.dataset });
+          showToast('Error: Missing booking information', 'error');
+          return;
+        }
+        
+        ClassesPage.handleCancelBooking(bookingId, bookingType);
+      });
+    });
+
+    document.querySelectorAll('.booking-action-btn[data-action="show-qr"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Use currentTarget to get the button element, not the clicked child element
+        const button = e.currentTarget;
+        const bookingId = button.dataset.bookingId;
+        const bookingType = button.dataset.bookingType;
+        ClassesPage.handleShowQR(bookingId, bookingType);
+      });
+    });
+  },
+
+  /**
+   * Handle cancel booking
+   */
+  async handleCancelBooking(bookingId, bookingType) {
+    // Validate booking ID
+    if (!bookingId || bookingId === 'undefined' || bookingId === 'null') {
+      console.error('[Classes] Invalid booking ID:', bookingId);
+      showToast('Error: Invalid booking ID', 'error');
+      return;
+    }
+
+    // Convert to number if it's a string
+    const numericBookingId = typeof bookingId === 'string' ? parseInt(bookingId, 10) : bookingId;
+    if (isNaN(numericBookingId)) {
+      console.error('[Classes] Booking ID is not a valid number:', bookingId);
+      showToast('Error: Invalid booking ID format', 'error');
+      return;
+    }
+
+    // Show confirmation dialog
+    const confirmed = confirm('Are you sure you want to cancel this booking?');
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      if (!state.customerId) {
+        throw new Error('Customer ID not available');
+      }
+
+      // Find the booking card to check if it's a waiting list booking
+      const bookingCard = document.querySelector(`.booking-card[data-booking-id="${bookingId}"]`);
+      const hasWaitingListPosition = bookingCard?.querySelector('.waiting-list-position') !== null;
+      
+      // Determine API booking type: "groupActivityBooking" or "waitingListBooking"
+      // Default to groupActivityBooking unless we detect waiting list
+      const apiBookingType = hasWaitingListPosition ? 'waitingListBooking' : 'groupActivityBooking';
+
+      // Disable the cancel button while processing
+      const cancelBtn = document.querySelector(`.booking-action-btn[data-booking-id="${bookingId}"][data-action="cancel"]`);
+      if (cancelBtn) {
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'Canceling...';
+      }
+      
+      console.log('[Classes] Canceling booking:', { 
+        bookingId: numericBookingId, 
+        bookingType, 
+        apiBookingType,
+        hasWaitingListPosition,
+        customerId: state.customerId 
+      });
+
+      if (bookingType === 'groupActivity') {
+        await authAPI.cancelGroupActivityBooking(state.customerId, numericBookingId, apiBookingType);
+        showToast('Booking canceled successfully', 'success');
+        // Reload bookings to update the UI
+        await loadClassesData();
+        // Also refresh browse classes if on that tab to update availability
+        const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
+        if (browseTab?.classList.contains('active')) {
+          await loadBrowseClasses();
+        }
+      } else {
+        // TODO: Implement cancel for events and entries
+        console.log('[Classes] Cancel booking:', { bookingId, bookingType });
+        showToast('Cancellation for this booking type not yet implemented', 'info');
+        // Re-enable button if not implemented
+        if (cancelBtn) {
+          cancelBtn.disabled = false;
+          cancelBtn.innerHTML = `
+            <svg class="icon icon-cancel" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+            Cancel
+          `;
+        }
+      }
+    } catch (error) {
+      console.error('[Classes] Cancel booking error:', error);
+      const errorMessage = error.message || 'Unknown error';
+      showToast(`Failed to cancel booking: ${errorMessage}`, 'error');
+      
+      // Re-enable the cancel button on error
+      const cancelBtn = document.querySelector(`.booking-action-btn[data-booking-id="${bookingId}"][data-action="cancel"]`);
+      if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.innerHTML = `
+          <svg class="icon icon-cancel" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+          Cancel
+        `;
+      }
+    }
+  },
+
+  /**
+   * Handle show QR code
+   */
+  handleShowQR(bookingId, bookingType) {
+    // TODO: Implement QR code modal
+    console.log('[Classes] Show QR:', { bookingId, bookingType });
+    showToast('QR code display not yet implemented', 'info');
+  },
+
+  /**
+   * Render browse class card (available class to book)
+   */
+  renderBrowseClassCard(activity, type = 'groupActivity') {
+    // Handle normalized activities with _type
+    const actualType = activity._type || type;
+    const actualActivity = activity._type ? { ...activity } : activity;
+    const isAlreadyBooked = actualActivity._isAlreadyBooked || false;
+    const hasMultipleDates = actualActivity._hasMultipleDates || false;
+    const allOccurrences = actualActivity._allOccurrences || [];
+    delete actualActivity._type; // Remove _type from display
+    delete actualActivity._isAlreadyBooked; // Remove internal flag
+    delete actualActivity._hasMultipleDates; // Remove internal flag
+    delete actualActivity._allOccurrences; // Remove internal flag
+    
+    const name = actualActivity.name || 'Unknown';
+    const businessUnit = actualActivity.businessUnit?.name || 'Unknown Location';
+    const startTime = actualActivity.duration?.start || actualActivity.start;
+    const endTime = actualActivity.duration?.end || actualActivity.end;
+    const date = startTime ? ClassesUtils.formatDate(startTime) : '-';
+    const timeRange = (startTime && endTime) ? ClassesUtils.formatTimeRange(startTime, endTime) : '-';
+    
+    // Instructor information
+    const instructor = actualActivity.instructor?.name || 
+                      actualActivity.instructors?.[0]?.name ||
+                      actualActivity.instructorName || 
+                      actualActivity.instructor || 
+                      null;
+    
+    // Availability and capacity
+    // API uses 'slots' object structure (per OpenAPI spec)
+    // slots: { total, totalBookable, leftToBook, leftToBookIncDropin, reservedForDropin }
+    const slots = actualActivity.slots;
+    
+    let capacity, booked, available, isAvailable, capacityDisplay;
+    
+    if (slots && typeof slots === 'object') {
+      // Use slots structure (preferred)
+      capacity = slots.total ?? slots.totalBookable ?? null;
+      available = slots.leftToBook ?? slots.leftToBookIncDropin ?? null;
+      booked = capacity !== null && available !== null ? (capacity - available) : null;
+      
+      // If we have capacity info from slots
+      if (capacity !== null && capacity !== undefined && capacity > 0) {
+        if (available !== null && available !== undefined) {
+          isAvailable = available > 0;
+          capacityDisplay = `${booked ?? (capacity - available)}/${capacity} ${isAvailable ? `(${available} available)` : '(Full)'}`;
+        } else {
+          // Have capacity but no availability info
+          booked = booked ?? 0;
+          available = capacity - booked;
+          isAvailable = available > 0;
+          capacityDisplay = `${booked}/${capacity} ${isAvailable ? `(${available} available)` : '(Full)'}`;
+        }
+      } else {
+        // No capacity info in slots
+        capacity = null;
+        booked = null;
+        available = null;
+        isAvailable = true; // Assume available if no capacity limit
+        capacityDisplay = 'Unlimited capacity';
+      }
+    } else {
+      // Fallback to direct capacity/booked fields (legacy or alternative structure)
+      capacity = actualActivity.capacity ?? 
+                 actualActivity.maxCapacity ?? 
+                 actualActivity.maxParticipants ?? 
+                 null;
+      booked = actualActivity.booked ?? 
+               actualActivity.bookedCount ?? 
+               actualActivity.participants?.length ?? 
+               null;
+      
+      const hasCapacityLimit = capacity !== null && capacity !== undefined && capacity > 0;
+      if (hasCapacityLimit) {
+        booked = booked ?? 0;
+        available = capacity - booked;
+        isAvailable = available > 0;
+        capacityDisplay = `${booked}/${capacity} ${isAvailable ? `(${available} available)` : '(Full)'}`;
+      } else {
+        capacity = null;
+        booked = null;
+        available = null;
+        isAvailable = true;
+        capacityDisplay = booked !== null && booked > 0 ? `${booked} booked (Unlimited capacity)` : 'Unlimited capacity';
+      }
+    }
+    
+    // For events, check occasions
+    let occasionsHtml = '';
+    let hasAvailableOccasion = false;
+    if (actualType === 'event' && actualActivity.occasions && actualActivity.occasions.length > 0) {
+      occasionsHtml = actualActivity.occasions.map(occasion => {
+        const occDate = ClassesUtils.formatDate(occasion.start);
+        const occTime = ClassesUtils.formatTimeRange(occasion.start, occasion.end);
+        const occCapacity = occasion.capacity ?? 
+                            occasion.maxCapacity ?? 
+                            occasion.maxParticipants ?? 
+                            null;
+        const occBooked = occasion.booked ?? 
+                          occasion.bookedCount ?? 
+                          occasion.participants?.length ?? 
+                          0;
+        
+        const occHasCapacityLimit = occCapacity !== null && occCapacity !== undefined && occCapacity > 0;
+        const occAvailable = occHasCapacityLimit ? (occCapacity - occBooked) : null;
+        const occIsAvailable = occHasCapacityLimit ? (occAvailable > 0) : true;
+        
+        let occCapacityDisplay = '';
+        if (occHasCapacityLimit) {
+          occCapacityDisplay = `${occBooked}/${occCapacity} ${occIsAvailable ? `(${occAvailable} available)` : '(Full)'}`;
+        } else if (occCapacity === 0 || occCapacity === null || occCapacity === undefined) {
+          occCapacityDisplay = occBooked > 0 ? `${occBooked} booked (Unlimited)` : 'Unlimited';
+        } else {
+          occCapacityDisplay = occBooked > 0 ? `${occBooked} booked` : 'Available';
+        }
+        
+        if (occIsAvailable) hasAvailableOccasion = true;
+        return `
+          <div class="browse-occasion">
+            <div class="occasion-header">
+              <span class="occasion-date">${occDate}</span>
+              <span class="occasion-time">${occTime}</span>
+            </div>
+            ${occCapacityDisplay ? `<div class="occasion-capacity">${occCapacityDisplay}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    return `
+      <div class="browse-class-card" data-activity-id="${actualActivity.id}" data-activity-type="${actualType}">
+        <div class="browse-class-header">
+          <h3 class="browse-class-title">${name}</h3>
+          <span class="browse-class-type-badge browse-type-${actualType}">${actualType === 'groupActivity' ? 'Class' : 'Event'}</span>
+        </div>
+        <div class="browse-class-details">
+          <div class="browse-class-location">
+            <svg class="icon icon-location" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            ${businessUnit}
+          </div>
+          ${instructor ? `
+            <div class="browse-class-instructor">
+              <svg class="icon icon-instructor" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              Instructor: <strong>${instructor}</strong>
+            </div>
+          ` : ''}
+          ${actualType === 'groupActivity' ? `
+            ${hasMultipleDates && allOccurrences.length > 0 ? `
+              <div class="browse-class-multiple-dates">
+                <div class="browse-class-dates-header">
+                  <span class="browse-class-dates-count">${allOccurrences.length} sessions</span>
+                  ${allOccurrences.length > 0 ? `
+                    <span class="browse-class-dates-range">
+                      ${ClassesUtils.formatDate(allOccurrences[0].duration?.start || allOccurrences[0].start)} - 
+                      ${ClassesUtils.formatDate(allOccurrences[allOccurrences.length - 1].duration?.start || allOccurrences[allOccurrences.length - 1].start)}
+                    </span>
+                  ` : ''}
+                </div>
+                ${(() => {
+                  // Calculate overall capacity from first occurrence (all sessions share same capacity)
+                  const firstOcc = allOccurrences[0];
+                  const overallSlots = firstOcc.slots;
+                  const overallCapacity = overallSlots?.total ?? overallSlots?.totalBookable ?? firstOcc.capacity ?? null;
+                  const overallAvailable = overallSlots?.leftToBook ?? overallSlots?.leftToBookIncDropin ?? null;
+                  const overallBooked = overallCapacity !== null && overallAvailable !== null ? (overallCapacity - overallAvailable) : null;
+                  
+                  // Get consistent start time (all sessions should have same time)
+                  const firstStart = firstOcc.duration?.start || firstOcc.start;
+                  const startTime = firstStart ? ClassesUtils.formatTime(firstStart) : null;
+                  
+                  // Format capacity display
+                  let capacityDisplay = '';
+                  if (overallCapacity !== null && overallCapacity > 0) {
+                    const isAvailable = overallAvailable !== null ? (overallAvailable > 0) : true;
+                    capacityDisplay = `${overallBooked ?? 0}/${overallCapacity} ${isAvailable ? `(${overallAvailable ?? overallCapacity} available)` : '(Full)'}`;
+                  }
+                  
+                  return `
+                    <div class="browse-class-summary-panels">
+                      ${startTime ? `
+                        <div class="summary-panel">
+                          <span class="summary-panel-label">Start tid</span>
+                          <span class="summary-panel-value">${startTime}</span>
+                        </div>
+                      ` : ''}
+                      ${capacityDisplay ? `
+                        <div class="summary-panel">
+                          <span class="summary-panel-label">Ledig tid</span>
+                          <span class="summary-panel-value">${capacityDisplay}</span>
+                        </div>
+                      ` : ''}
+                    </div>
+                  `;
+                })()}
+                <div class="browse-class-dates-list">
+                  ${allOccurrences.map(occurrence => {
+                    const occStart = occurrence.duration?.start || occurrence.start;
+                    const occEnd = occurrence.duration?.end || occurrence.end;
+                    const occDate = occStart ? ClassesUtils.formatDate(occStart) : '-';
+                    const occTime = (occStart && occEnd) ? ClassesUtils.formatTimeRange(occStart, occEnd) : '-';
+                    const occDateObj = occStart ? new Date(occStart) : null;
+                    const dayName = occDateObj ? occDateObj.toLocaleDateString('da-DK', { weekday: 'long' }) : '';
+                    
+                    return `
+                      <div class="browse-class-date-item">
+                        <div class="date-item-header">
+                          <span class="date-item-date">${occDate}</span>
+                          ${dayName ? `<span class="date-item-day">${dayName.charAt(0).toUpperCase() + dayName.slice(1)}</span>` : ''}
+                          <span class="date-item-time">${occTime}</span>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            ` : startTime ? `
+              <div class="browse-class-date-time">
+                <span class="browse-class-date">
+                  <svg class="icon icon-date" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                  ${date}
+                </span>
+                <span class="browse-class-time">
+                  <svg class="icon icon-time" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  ${timeRange}
+                </span>
+              </div>
+            ` : ''}
+            ${!hasMultipleDates ? `
+              <div class="browse-class-capacity ${isAvailable ? 'available' : 'full'}">
+                <strong>Capacity:</strong> ${capacityDisplay}
+              </div>
+            ` : ''}
+          ` : `
+            ${occasionsHtml ? `
+              <div class="browse-class-occasions">
+                ${occasionsHtml}
+              </div>
+            ` : '<div class="browse-class-date-time"><span>No occasions available</span></div>'}
+          `}
+        </div>
+        ${hasMultipleDates ? `
+          <div class="browse-class-actions">
+            ${isAlreadyBooked ? `
+              <button class="browse-book-btn browse-book-cta browse-book-already-booked" disabled>
+                <span class="book-btn-text">✓ Already Booked</span>
+              </button>
+            ` : (allOccurrences.some(occ => {
+                const occSlots = occ.slots;
+                const occCapacity = occSlots?.total ?? occSlots?.totalBookable ?? occ.capacity ?? null;
+                const occAvailable = occSlots?.leftToBook ?? occSlots?.leftToBookIncDropin ?? null;
+                const occIsAvailable = occCapacity === null || occCapacity === 0 || (occAvailable !== null && occAvailable > 0);
+                return occIsAvailable && !occ._isAlreadyBooked;
+              })) ? `
+              <button class="browse-book-btn browse-book-cta" data-activity-id="${actualActivity.id}" data-activity-type="${actualType}" data-multi-date="true" data-all-occurrences="${JSON.stringify(allOccurrences.map(o => o.id)).replace(/"/g, '&quot;')}">
+                <span class="book-btn-text">Book All Sessions</span>
+                <span class="book-btn-icon">→</span>
+              </button>
+            ` : `
+              <button class="browse-book-btn browse-book-cta" disabled>
+                <span class="book-btn-text">Fully Booked</span>
+              </button>
+            `}
+          </div>
+        ` : isAlreadyBooked ? `
+          <div class="browse-class-actions">
+            <button class="browse-book-btn browse-book-cta browse-book-already-booked" disabled>
+              <span class="book-btn-text">✓ Already Booked</span>
+            </button>
+          </div>
+        ` : (actualType === 'groupActivity' && isAvailable) || (actualType === 'event' && hasAvailableOccasion) ? `
+          <div class="browse-class-actions">
+            <button class="browse-book-btn browse-book-cta" data-activity-id="${actualActivity.id}" data-activity-type="${actualType}">
+              <span class="book-btn-text">Book Now</span>
+              <span class="book-btn-icon">→</span>
+            </button>
+          </div>
+        ` : actualType === 'groupActivity' && !isAvailable ? `
+          <div class="browse-class-actions">
+            <button class="browse-book-btn browse-book-cta" disabled>
+              <span class="book-btn-text">Fully Booked</span>
+            </button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  },
+
+  /**
+   * Render browse results
+   */
+  renderBrowseResults(activities, type = 'groupActivity') {
+    const container = document.getElementById('browseResults');
+    if (!container) return;
+
+    if (activities.length === 0) {
+      const emptyStateConfig = {
+        icon: '🔍',
+        title: 'No Classes Found',
+        message: 'No classes match your current filters. Try adjusting your search criteria or selecting a different gym or date.',
+        cta: {
+          text: 'Clear Filters',
+          onclick: 'document.getElementById("browseSearchFilter").value = ""; document.getElementById("browseGymFilter").value = ""; document.getElementById("browseDateRangePreset").value = "thisWeek"; document.getElementById("customDateRangeContainer").style.display = "none"; document.getElementById("browseDateStart").value = ""; document.getElementById("browseDateEnd").value = ""; document.getElementById("browseTypeFilter").value = ""; loadBrowseClasses();'
+        }
+      };
+      
+      container.innerHTML = EmptyStateUtils.createEmptyState(emptyStateConfig);
+      return;
+    }
+
+    container.innerHTML = activities.map(activity => 
+      ClassesPage.renderBrowseClassCard(activity, type)
+    ).join('');
+
+    // Attach book button listeners
+    ClassesPage.attachBrowseActionListeners();
+  },
+
+  /**
+   * Attach event listeners to browse action buttons
+   */
+  attachBrowseActionListeners() {
+    // Main "Book Now" buttons (including "Book All Sessions" for multi-date classes)
+    document.querySelectorAll('.browse-book-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        // Use currentTarget to get the button element, not the clicked child element
+        const button = e.currentTarget;
+        const activityId = parseInt(button.dataset.activityId);
+        const activityType = button.dataset.activityType;
+        const isMultiDate = button.dataset.multiDate === 'true';
+        const allOccurrencesStr = button.dataset.allOccurrences;
+        let allOccurrenceIds = null;
+        
+        if (isMultiDate && allOccurrencesStr) {
+          try {
+            allOccurrenceIds = JSON.parse(allOccurrencesStr.replace(/&quot;/g, '"'));
+          } catch (err) {
+            console.error('[Classes] Failed to parse occurrence IDs:', err);
+          }
+        }
+        
+        console.log('[Classes] Book button clicked:', { 
+          activityId, 
+          activityType,
+          isMultiDate,
+          allOccurrenceIds,
+          buttonElement: button,
+          dataset: button.dataset
+        });
+        
+        if (!activityId || !activityType) {
+          console.error('[Classes] Missing activity data:', { activityId, activityType, button, dataset: button.dataset });
+          showToast('Error: Missing class information', 'error');
+          return;
+        }
+        
+        // Ensure we're booking a groupActivity, not an event
+        if (activityType !== 'groupActivity') {
+          console.warn('[Classes] Attempted to book non-groupActivity:', activityType);
+          showToast('Booking for events not yet implemented', 'info');
+          return;
+        }
+        
+        ClassesPage.handleBookClass(activityId, activityType, isMultiDate, allOccurrenceIds);
+      });
+    });
+  },
+
+  /**
+   * Handle book class
+   */
+  async handleBookClass(activityId, activityType, isMultiDate = false, allOccurrenceIds = null) {
+    if (!state.customerId) {
+      showToast('Please log in to book classes', 'error');
+      return;
+    }
+
+    // Show terms acceptance modal
+    const termsAccepted = await ClassesPage.showBookingTermsModal();
+    if (!termsAccepted) {
+      return; // User cancelled or didn't accept terms
+    }
+
+    try {
+      // Update customer profile with accepted booking terms
+      // The API checks the customer profile, not the booking request body
+      console.log('[Classes] Updating customer profile with accepted booking terms...');
+      try {
+        await authAPI.updateCustomer(state.customerId, {
+          acceptedBookingTerms: true
+        });
+        console.log('[Classes] Customer profile updated with booking terms acceptance');
+      } catch (updateError) {
+        console.warn('[Classes] Failed to update customer booking terms (may already be set):', updateError);
+        // Continue with booking attempt even if update fails
+      }
+
+      if (activityType === 'groupActivity') {
+        // For multi-date classes, book all occurrences
+        if (isMultiDate && allOccurrenceIds && allOccurrenceIds.length > 0) {
+          showToast(`Booking ${allOccurrenceIds.length} sessions...`, 'info');
+          
+          let successCount = 0;
+          let errorCount = 0;
+          const errors = [];
+          
+          // Book each occurrence sequentially
+          for (const occurrenceId of allOccurrenceIds) {
+            try {
+              const result = await authAPI.bookGroupActivity(state.customerId, occurrenceId, true);
+              if (result) {
+                successCount++;
+              }
+            } catch (err) {
+              errorCount++;
+              errors.push(err);
+              console.error(`[Classes] Failed to book occurrence ${occurrenceId}:`, err);
+            }
+          }
+          
+          if (successCount === allOccurrenceIds.length) {
+            showToast(`Successfully booked all ${successCount} sessions!`, 'success');
+            // Reload bookings and refresh browse results
+            await loadClassesData();
+            const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
+            if (browseTab?.classList.contains('active')) {
+              await loadBrowseClasses();
+            }
+          } else if (successCount > 0) {
+            showToast(`Booked ${successCount} of ${allOccurrenceIds.length} sessions. Some bookings failed.`, 'warning');
+            await loadClassesData();
+            const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
+            if (browseTab?.classList.contains('active')) {
+              await loadBrowseClasses();
+            }
+          } else {
+            // All failed - show first error
+            throw errors[0] || new Error('Failed to book sessions');
+          }
+        } else {
+          // Single date booking
+          const result = await authAPI.bookGroupActivity(state.customerId, activityId, true);
+          
+          if (result.waitingListPosition) {
+            showToast(`Added to waiting list (position ${result.waitingListPosition})`, 'success');
+          } else {
+            showToast('Class booked successfully!', 'success');
+          }
+          
+          // Reload bookings and refresh browse results
+          await loadClassesData();
+          // Refresh browse if we're on browse tab
+          const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
+          if (browseTab?.classList.contains('active')) {
+            await loadBrowseClasses();
+          }
+        }
+      } else {
+        showToast('Booking for events not yet implemented', 'info');
+      }
+    } catch (error) {
+      console.error('[Classes] Book class error:', error);
+      const errorMessage = error.message || 'Unknown error';
+      
+      // Handle specific error codes
+      if (errorMessage.includes('BOOKING_TERMS_NOT_ACCEPTED')) {
+        showToast('Please accept the booking terms to complete your booking.', 'error');
+      } else if (errorMessage === 'TOO_EARLY_TO_BOOK' && error.earliestTimepoint) {
+        // Format the earliest booking time
+        const formattedDate = ClassesUtils.formatDate(error.earliestTimepoint);
+        const formattedTime = ClassesUtils.formatTime(error.earliestTimepoint);
+        showToast(`Booking opens on ${formattedDate} at ${formattedTime}. Please try again then.`, 'error');
+      } else if (error.errorData?.errorCode === 'TOO_EARLY_TO_BOOK') {
+        const earliestTimepoint = error.errorData.earliestTimepoint;
+        if (earliestTimepoint) {
+          const formattedDate = ClassesUtils.formatDate(earliestTimepoint);
+          const formattedTime = ClassesUtils.formatTime(earliestTimepoint);
+          showToast(`Booking opens on ${formattedDate} at ${formattedTime}. Please try again then.`, 'error');
+        } else {
+          showToast('This class is not yet available for booking. Please try again later.', 'error');
+        }
+      } else if (errorMessage === 'ALREADY_BOOKED' || error.errorData?.errorCode === 'ALREADY_BOOKED') {
+        showToast('You have already booked this class.', 'info');
+        // Refresh browse results to update the UI
+        const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
+        if (browseTab?.classList.contains('active')) {
+          await loadBrowseClasses();
+        }
+      } else {
+        showToast(`Failed to book class: ${errorMessage}`, 'error');
+      }
+    }
+  },
+
+  /**
+   * Show booking terms acceptance modal
+   */
+  showBookingTermsModal() {
+    return new Promise((resolve) => {
+      // Create modal HTML
+      const modalHtml = `
+        <div id="bookingTermsModal" class="booking-terms-modal-overlay">
+          <div class="booking-terms-modal">
+            <div class="booking-terms-modal-header">
+              <h3>Booking Terms & Conditions</h3>
+              <button class="booking-terms-modal-close" data-action="close-terms-modal">×</button>
+            </div>
+            <div class="booking-terms-modal-content">
+              <p>By booking this class, you agree to:</p>
+              <ul>
+                <li>Arrive on time for your booked class</li>
+                <li>Cancel at least 2 hours before the class starts if you cannot attend</li>
+                <li>Follow the gym's rules and regulations</li>
+                <li>Accept that late cancellations may result in penalties</li>
+              </ul>
+              <p>Please read the full <a href="https://boulders.dk/en/regelst-for-medlemmer-af-boulders" target="_blank" rel="noopener noreferrer">Terms and Conditions</a>.</p>
+              <label class="booking-terms-checkbox">
+                <input type="checkbox" id="bookingTermsAccept" required>
+                <span class="booking-terms-checkmark"></span>
+                <span>I accept the booking terms and conditions</span>
+              </label>
+            </div>
+            <div class="booking-terms-modal-actions">
+              <button class="booking-terms-btn-cancel" data-action="cancel-terms-modal">Cancel</button>
+              <button class="booking-terms-btn-confirm" id="confirmBookingBtn" disabled>Confirm Booking</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Remove existing modal if any
+      const existingModal = document.getElementById('bookingTermsModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // Add modal to page
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+      const modal = document.getElementById('bookingTermsModal');
+      const checkbox = document.getElementById('bookingTermsAccept');
+      const confirmBtn = document.getElementById('confirmBookingBtn');
+      const closeBtn = document.querySelector('[data-action="close-terms-modal"]');
+      const cancelBtn = document.querySelector('[data-action="cancel-terms-modal"]');
+
+      // Enable/disable confirm button based on checkbox
+      checkbox.addEventListener('change', () => {
+        confirmBtn.disabled = !checkbox.checked;
+      });
+
+      // Handle confirm
+      confirmBtn.addEventListener('click', () => {
+        if (checkbox.checked) {
+          modal.remove();
+          resolve(true);
+        }
+      });
+
+      // Handle cancel/close
+      const closeModal = () => {
+        modal.remove();
+        resolve(false);
+      };
+
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+
+      // Focus checkbox
+      checkbox.focus();
+    });
+  },
+
+  /**
+   * Show error message
+   */
+  showError(message) {
+    const containers = ['upcomingBookingsList', 'pastBookingsList', 'waitingListBookingsList', 'browseResults'];
+    containers.forEach(id => {
+      const container = document.getElementById(id);
+      if (container) {
+        container.innerHTML = `<div class="bookings-error">${message}</div>`;
+      }
+    });
+  }
+};
+
+/**
+ * Activity page data population functions
+ */
+const ActivityPage = {
+  /**
+   * Set text content of an element by ID
+   */
+  setElementText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  },
+
+  /**
+   * Populate summary statistics
+   */
+  populateStats(stats) {
+    ActivityPage.setElementText('activityMemberSince', stats.memberSince);
+    ActivityPage.setElementText('activityTotalCheckins', stats.totalCheckins.toString());
+    ActivityPage.setElementText('activityMostVisitedGym', stats.mostVisitedGym);
+    ActivityPage.setElementText('activityTopCheckinTime', stats.topCheckinTime);
+    ActivityPage.setElementText('activityLoyaltyTier', stats.loyaltyTier);
+  },
+
+  /**
+   * Render check-in history list
+   */
+  renderHistory(passageTries) {
+    const container = document.getElementById('activityHistoryList');
+    if (!container) return;
+    
+    const successful = passageTries
+      .filter(pt => ActivityUtils.isSuccessfulPassage(pt))
+      .sort((a, b) => {
+        const dateA = new Date(a.passageTryTime);
+        const dateB = new Date(b.passageTryTime);
+        return dateB - dateA; // Most recent first
+      });
+    
+    if (successful.length === 0) {
+      container.innerHTML = '<div class="activity-empty">No check-in history available</div>';
+      return;
+    }
+    
+    container.innerHTML = successful.map(pt => {
+      const date = ActivityUtils.formatDate(pt.passageTryTime);
+      const time = ActivityUtils.formatTime(pt.passageTryTime);
+      const location = pt.businessUnit?.name || 'Unknown location';
+      
+      return `
+        <div class="activity-history-item">
+          <div class="activity-history-date">
+            <span class="activity-history-day">${date}</span>
+            <span class="activity-history-time">${time}</span>
+          </div>
+          <div class="activity-history-location">${location}</div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  /**
+   * Show error message
+   */
+  showError(message) {
+    const container = document.getElementById('activityHistoryList');
+    if (container) {
+      container.innerHTML = `<div class="activity-error">${message}</div>`;
+    }
+  }
+};
+
+/**
+ * Dashboard page data population functions
+ */
+const DashboardPage = {
+  /**
+   * Set text content of an element by ID
+   */
+  setElementText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value || '-';
+  },
+
+  /**
+   * Populate welcome message
+   */
+  populateWelcome(customer) {
+    const firstName = customer?.firstName || '';
+    const displayName = firstName || customer?.lastName || 'User';
+    DashboardPage.setElementText('dashboardUserName', displayName);
+  },
+
+  /**
+   * Populate My Info card
+   */
+  populateMyInfo(customer) {
+    const firstName = customer?.firstName || '';
+    const lastName = customer?.lastName || '';
+    const fullName = firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName || '-';
+    DashboardPage.setElementText('dashboardName', fullName);
+    DashboardPage.setElementText('dashboardEmail', customer?.email || '-');
+    
+    // Format phone number
+    const phone = customer?.phone;
+    let phoneDisplay = '-';
+    if (phone) {
+      if (typeof phone === 'string') {
+        phoneDisplay = phone;
+      } else if (phone.countryCode && phone.number) {
+        phoneDisplay = `${phone.countryCode} ${phone.number}`;
+      } else if (phone.number) {
+        phoneDisplay = phone.number;
+      }
+    }
+    DashboardPage.setElementText('dashboardPhone', phoneDisplay);
+  },
+
+  /**
+   * Populate My Membership card
+   */
+  populateMyMembership(customer, subscriptions) {
+    // Try to get from subscriptions first
+    if (subscriptions && subscriptions.length > 0) {
+      const activeSubscription = subscriptions.find(sub => !sub.endDate || new Date(sub.endDate) > new Date()) || subscriptions[0];
+      DashboardPage.setElementText('dashboardMembershipType', activeSubscription.product?.name || '-');
+      DashboardPage.setElementText('dashboardMembershipLocation', activeSubscription.businessUnit?.name || '-');
+    } else if (customer) {
+      // Fallback to customer data
+      const membershipType = customer.memberClubs?.[0]?.membershipType || '-';
+      const location = customer.primaryGym || 
+                      customer.businessUnit?.name || 
+                      customer.memberClubs?.[0]?.name || '-';
+      DashboardPage.setElementText('dashboardMembershipType', membershipType);
+      DashboardPage.setElementText('dashboardMembershipLocation', location);
+    } else {
+      DashboardPage.setElementText('dashboardMembershipType', '-');
+      DashboardPage.setElementText('dashboardMembershipLocation', '-');
+    }
+  },
+
+  /**
+   * Render activity chart with stats
+   */
+  renderActivityChart(passageTries) {
+    const container = document.getElementById('activityChart');
+    if (!container) return;
+
+    // Filter successful passage tries
+    const successful = passageTries.filter(pt => {
+      const result = pt.passageTryResult?.toLowerCase() || '';
+      return result.includes('allowed') || result.includes('success') || result.includes('granted');
+    });
+
+    const totalVisits = successful.length;
+    
+    if (totalVisits === 0) {
+      container.innerHTML = `
+        <div class="dashboard-activity-empty">
+          <div class="dashboard-activity-empty-icon">📊</div>
+          <p class="dashboard-activity-empty-text">No visits in the last 30 days</p>
+          <p class="dashboard-activity-empty-subtext">Your activity will appear here once you start visiting</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Aggregate by week for 30-day view
+    const weeklyData = DashboardUtils.aggregateByWeek(passageTries);
+    const chartData = DashboardUtils.getLast30DaysByWeek(weeklyData);
+    
+    // Calculate stats
+    const weeksWithData = chartData.filter(w => w.count > 0).length;
+    const avgPerWeek = weeksWithData > 0 ? (totalVisits / weeksWithData).toFixed(1) : 0;
+    const maxCount = Math.max(...chartData.map(d => d.count), 1);
+    
+    // Get most active week
+    const mostActiveWeek = chartData.reduce((max, week) => week.count > max.count ? week : max, chartData[0]);
+
+    // Render stats and chart
+    const chartHtml = `
+      <div class="dashboard-activity-stats">
+        <div class="dashboard-activity-stat">
+          <div class="dashboard-activity-stat-value">${totalVisits}</div>
+          <div class="dashboard-activity-stat-label">Total visits</div>
+        </div>
+        <div class="dashboard-activity-stat">
+          <div class="dashboard-activity-stat-value">${avgPerWeek}</div>
+          <div class="dashboard-activity-stat-label">Avg per week</div>
+        </div>
+        <div class="dashboard-activity-stat">
+          <div class="dashboard-activity-stat-value">${mostActiveWeek.count}</div>
+          <div class="dashboard-activity-stat-label">Best week</div>
+        </div>
+      </div>
+      <div class="dashboard-chart-bars">
+        ${chartData.map(data => {
+          const height = maxCount > 0 ? (data.count / maxCount) * 100 : 0;
+          return `
+            <div class="dashboard-chart-bar-container">
+              <div class="dashboard-chart-bar" style="height: ${height}%" title="${data.count} visit${data.count !== 1 ? 's' : ''}">
+                <span class="dashboard-chart-bar-value">${data.count > 0 ? data.count : ''}</span>
+              </div>
+              <span class="dashboard-chart-bar-label">${data.label}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+    
+    container.innerHTML = chartHtml;
+  },
+
+  /**
+   * Render upcoming classes (first 3-5)
+   */
+  renderUpcomingClasses(bookings) {
+    const container = document.getElementById('dashboardUpcomingClasses');
+    if (!container) return;
+
+    const upcoming = bookings
+      .filter(b => !ClassesUtils.isPastBooking(b.original || b))
+      .sort((a, b) => {
+        const timeA = new Date(ClassesUtils.getBookingStartTime(a.original || a));
+        const timeB = new Date(ClassesUtils.getBookingStartTime(b.original || b));
+        return timeA - timeB;
+      })
+      .slice(0, 5); // Show max 5
+
+    if (upcoming.length === 0) {
+      container.innerHTML = '<div class="dashboard-empty">No upcoming classes</div>';
+      return;
+    }
+
+    container.innerHTML = upcoming.map(booking => {
+      const name = ClassesUtils.getBookingName(booking.original || booking);
+      const location = ClassesUtils.getBusinessUnitName(booking.original || booking);
+      const startTime = booking.startTime || ClassesUtils.getBookingStartTime(booking.original || booking);
+      const endTime = booking.endTime || ClassesUtils.getBookingEndTime(booking.original || booking);
+      const date = ClassesUtils.formatDate(startTime);
+      const timeRange = ClassesUtils.formatTimeRange(startTime, endTime);
+
+      return `
+        <div class="dashboard-class-item">
+          <div class="dashboard-class-name">${name}</div>
+          <div class="dashboard-class-location">${location}</div>
+          <div class="dashboard-class-date">${date} ${timeRange}</div>
+        </div>
+      `;
+    }).join('');
+  },
+
+  /**
+   * Populate loyalty program card
+   */
+  populateLoyalty(customer) {
+    const benefitStatus = customer?.benefitStatus;
+    if (!benefitStatus) {
+      DashboardPage.setElementText('dashboardLoyaltyTier', '-');
+      DashboardPage.setElementText('dashboardLoyaltyLevel', '');
+      document.getElementById('dashboardLoyaltyBenefits').innerHTML = '<div class="dashboard-empty">No loyalty information</div>';
+      return;
+    }
+
+    const tierName = benefitStatus.name || '-';
+    const tierId = benefitStatus.id || 0;
+    const tierLevel = tierId > 0 ? `Tier ${tierId} of 4` : '';
+
+    DashboardPage.setElementText('dashboardLoyaltyTier', tierName);
+    DashboardPage.setElementText('dashboardLoyaltyLevel', tierLevel);
+
+    // Benefits are typically hardcoded based on tier, but we can try to display tier info
+    const benefitsContainer = document.getElementById('dashboardLoyaltyBenefits');
+    if (benefitsContainer) {
+      // For now, just show tier info. Benefits would need to be mapped from tier level
+      benefitsContainer.innerHTML = `
+        <div class="dashboard-loyalty-benefit-item">
+          <span class="dashboard-loyalty-benefit-check">✓</span>
+          <span>Active ${tierName} member</span>
+        </div>
+      `;
+    }
+  },
+
+  /**
+   * Render purchase history
+   */
+  async renderPurchaseHistory(receiptRefs) {
+    const container = document.getElementById('dashboardPurchases');
+    if (!container) return;
+
+    if (!receiptRefs || receiptRefs.length === 0) {
+      container.innerHTML = '<div class="dashboard-empty">No purchase history</div>';
+      return;
+    }
+
+    // Show loading state
+    container.innerHTML = '<div class="dashboard-loading">Loading purchase details...</div>';
+
+    try {
+      // Fetch full receipt details (limit to first 20 for performance)
+      const receiptsToFetch = receiptRefs.slice(0, 20);
+      const receiptPromises = receiptsToFetch.map(async (ref) => {
+        try {
+          const fullReceipt = await authAPI.getReceiptDetails(state.customerId, ref.id);
+          return { ...ref, ...fullReceipt };
+        } catch (err) {
+          console.warn(`[Dashboard] Could not fetch receipt ${ref.id}:`, err);
+          // Return reference object as fallback with available data
+          return ref;
+        }
+      });
+
+      const receipts = await Promise.all(receiptPromises);
+      
+      // Sort by date (most recent first)
+      const sorted = receipts
+        .filter(r => r) // Remove any null/undefined
+        .sort((a, b) => {
+          const dateA = new Date(a.created || 0);
+          const dateB = new Date(b.created || 0);
+          return dateB - dateA;
+        });
+
+      if (sorted.length === 0) {
+        container.innerHTML = '<div class="dashboard-empty">No purchase history</div>';
+        return;
+      }
+
+      // Build table HTML
+      const tableHtml = `
+        <div class="purchases-table-container">
+          <div class="purchases-table-header">
+            <h2 class="purchases-table-title">Previous purchases</h2>
+          </div>
+          <div class="purchases-table-wrapper">
+            <table class="purchases-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Product</th>
+                  <th>Facility</th>
+                  <th class="purchases-price">Price incl.</th>
+                  <th>Receipt</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${sorted.map(receipt => {
+                  // Format date as DD.MM.YYYY
+                  const date = receipt.created 
+                    ? DashboardUtils.formatReceiptDate(receipt.created) 
+                    : '-';
+                  
+                  // Get facility name
+                  const facility = receipt.sellerDetails?.businessUnit?.name || 
+                                   receipt.businessUnit?.name || 
+                                   '-';
+                  
+                  // Get receipt number
+                  const receiptNumber = receipt.number || receipt.id || '-';
+                  
+                  // Get price incl. VAT (amount is total paid, already includes VAT)
+                  let priceIncl = '-';
+                  if (receipt.amount?.amount) {
+                    // Amount is in øre (cents), convert to DKK
+                    const priceInMain = receipt.amount.amount / 100;
+                    priceIncl = DashboardUtils.formatPrice(priceInMain);
+                  }
+                  
+                  // Process items - show each item as a row
+                  const items = receipt.items || [];
+                  
+                  // If no items, show receipt as single row
+                  if (items.length === 0) {
+                    return `
+                      <tr>
+                        <td>${date}</td>
+                        <td>Purchase</td>
+                        <td>${facility}</td>
+                        <td class="purchases-price">${priceIncl}</td>
+                        <td>${receiptNumber}</td>
+                      </tr>
+                    `;
+                  }
+                  
+                  // Show each item as a separate row
+                  return items.map((item, itemIndex) => {
+                    // Get product name
+                    let productName = item.description || '-';
+                    if (item.product?.name) {
+                      const quantity = item.quantity || '1';
+                      productName = `${quantity}x ${item.product.name}`;
+                    } else if (item.description) {
+                      const quantity = item.quantity || '1';
+                      productName = `${quantity}x ${item.description}`;
+                    }
+                    
+                    // Truncate long product names
+                    if (productName.length > 40) {
+                      productName = productName.substring(0, 37) + '...';
+                    }
+                    
+                    // Show date and facility only in first row if multiple items
+                    const displayDate = itemIndex === 0 ? date : '';
+                    const displayFacility = itemIndex === 0 ? facility : '';
+                    const displayReceipt = itemIndex === 0 ? receiptNumber : '';
+                    
+                    // Use item price if available, otherwise use receipt total divided by items
+                    let itemPriceIncl = '-';
+                    if (item.price?.amount) {
+                      const itemPriceMain = item.price.amount / 100;
+                      itemPriceIncl = DashboardUtils.formatPrice(itemPriceMain);
+                    } else if (receipt.amount?.amount && items.length > 0) {
+                      // Distribute receipt total across items
+                      const totalPriceMain = receipt.amount.amount / 100;
+                      const itemPriceMain = totalPriceMain / items.length;
+                      itemPriceIncl = DashboardUtils.formatPrice(itemPriceMain);
+                    } else if (itemIndex === 0 && receipt.amount?.amount) {
+                      // Single item or first item - use receipt total
+                      const totalPriceMain = receipt.amount.amount / 100;
+                      itemPriceIncl = DashboardUtils.formatPrice(totalPriceMain);
+                    }
+
+                    return `
+                      <tr>
+                        <td>${displayDate}</td>
+                        <td>${productName}</td>
+                        <td>${displayFacility}</td>
+                        <td class="purchases-price">${itemPriceIncl}</td>
+                        <td>${displayReceipt}</td>
+                      </tr>
+                    `;
+                  }).join('');
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = tableHtml;
+    } catch (error) {
+      console.error('[Dashboard] Error rendering purchase history:', error);
+      container.innerHTML = '<div class="dashboard-error">Failed to load purchase history</div>';
+    }
+  },
+
+  /**
+   * Show error message
+   */
+  showError(message) {
+    const containers = ['activityChart', 'dashboardUpcomingClasses', 'dashboardPurchases'];
+    containers.forEach(id => {
+      const container = document.getElementById(id);
+      if (container) {
+        container.innerHTML = `<div class="dashboard-error">${message}</div>`;
+      }
+    });
+  }
+};
+
+/**
+ * Load and populate dashboard data from API
+ */
+async function loadDashboardData(forceRefresh = false) {
+  console.log('[Dashboard] loadDashboardData called', {
+    isAuthenticated: isUserAuthenticated(),
+    customerId: state.customerId,
+    hasAccessToken: typeof window.getAccessToken === 'function' && !!window.getAccessToken(),
+    forceRefresh
+  });
+
+  if (!isUserAuthenticated()) {
+    console.warn('[Dashboard] Cannot load dashboard: user not authenticated');
+    DashboardPage.showError('Please log in to view your dashboard.');
+    return;
+  }
+
+  if (!state.customerId) {
+    console.warn('[Dashboard] Cannot load dashboard: no customer ID available');
+    const metadata = getTokenMetadata();
+    const customerIdFromMetadata = metadata?.username || metadata?.userName;
+
+    if (customerIdFromMetadata) {
+      console.log('[Dashboard] Found customer ID in metadata, using it:', customerIdFromMetadata);
+      state.customerId = String(customerIdFromMetadata);
+    } else {
+      DashboardPage.showError('Unable to load dashboard: Customer ID not found.');
+      return;
+    }
+  }
+
+  try {
+    // Fetch customer data
+    const customerData = await authAPI.getCustomer(state.customerId, forceRefresh);
+    console.log('[Dashboard] Customer data for receipts:', {
+      customerId: state.customerId,
+      memberJoinDate: customerData?.memberJoinDate,
+      customerNumber: customerData?.customerNumber
+    });
+    
+    // Populate basic info cards
+    DashboardPage.populateWelcome(customerData);
+    DashboardPage.populateMyInfo(customerData);
+
+    // Fetch subscriptions for membership info
+    let subscriptions = [];
+    try {
+      subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+    } catch (err) {
+      console.warn('[Dashboard] Could not fetch subscriptions:', err);
+    }
+    DashboardPage.populateMyMembership(customerData, subscriptions);
+
+    // Populate loyalty program
+    DashboardPage.populateLoyalty(customerData);
+
+    // Fetch passage tries for activity chart (last 30 days - API limit)
+    if (!ActivityUtils || typeof ActivityUtils.getDateRangeForDays !== 'function') {
+      console.warn('[Dashboard] ActivityUtils.getDateRangeForDays not available, skipping activity chart');
+      DashboardPage.showError('Could not load activity data');
+    } else {
+      const dateRange = ActivityUtils.getDateRangeForDays(30);
+      let passageTries = [];
+      try {
+        // Ensure dates are valid strings before passing
+        if (!dateRange || !dateRange.start || !dateRange.end) {
+          throw new Error(`Invalid date range: start=${dateRange?.start}, end=${dateRange?.end}`);
+        }
+        
+        // Ensure dates are strings
+        const startDate = String(dateRange.start).trim();
+        const endDate = String(dateRange.end).trim();
+        
+        if (!startDate || !endDate || startDate === 'Invalid Date' || endDate === 'Invalid Date') {
+          throw new Error(`Invalid date values: start=${startDate}, end=${endDate}`);
+        }
+        
+          passageTries = await authAPI.getPassageTries(state.customerId, startDate, endDate);
+        DashboardPage.renderActivityChart(passageTries);
+      } catch (err) {
+        console.warn('[Dashboard] Could not fetch passage tries:', err);
+        DashboardPage.showError('Could not load activity data');
+      }
+    }
+
+    // Fetch upcoming bookings (first 5)
+    const now = new Date();
+    const future = new Date();
+    future.setMonth(future.getMonth() + 3);
+    const period = {
+      start: now.toISOString(),
+      end: future.toISOString()
+    };
+
+    let upcomingBookings = [];
+    try {
+      const [groupActivities, events] = await Promise.all([
+        authAPI.getGroupActivityBookings(state.customerId).catch(() => []),
+        authAPI.getEventBookings(state.customerId, period).catch(() => [])
+      ]);
+      upcomingBookings = ClassesUtils.normalizeBookings(groupActivities, events, []);
+      DashboardPage.renderUpcomingClasses(upcomingBookings);
+    } catch (err) {
+      console.warn('[Dashboard] Could not fetch upcoming classes:', err);
+      DashboardPage.showError('Could not load upcoming classes');
+    }
+
+    // Fetch purchase history (receipts)
+    try {
+      // Receipts API defaults to last 365 days if no period specified
+      // Uses Day format (YYYY-MM-DD) for period parameters
+      const today = new Date();
+      const endDate = new Date(today);
+      endDate.setHours(23, 59, 59, 999); // End of today
+      const startDate = new Date(today);
+      startDate.setDate(startDate.getDate() - 364); // 365 days inclusive (today - 364 days = 365 days total)
+      startDate.setHours(0, 0, 0, 0); // Start of day
+      
+      // Format as YYYY-MM-DD (Day format)
+      const receiptsDateRange = {
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0]
+      };
+      
+      console.log('[Dashboard] Fetching receipts with date range:', {
+        dateRange: receiptsDateRange,
+        today: today.toISOString().split('T')[0],
+        todayFull: today.toISOString(),
+        startDate: startDate.toISOString().split('T')[0],
+        startDateFull: startDate.toISOString(),
+        endDate: endDate.toISOString().split('T')[0],
+        endDateFull: endDate.toISOString(),
+        daysDiff: Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24))
+      });
+      
+      // Try with date range first
+      let receipts = await authAPI.getCustomerReceipts(state.customerId, receiptsDateRange);
+      console.log('[Dashboard] Receipts with date range:', {
+        count: receipts?.length || 0,
+        isArray: Array.isArray(receipts),
+        receipts: receipts
+      });
+      
+      // If no receipts with date range, try without date range (use API default)
+      if (!receipts || receipts.length === 0) {
+        console.log('[Dashboard] No receipts with date range, trying without date range (API default)...');
+        receipts = await authAPI.getCustomerReceipts(state.customerId, null);
+        console.log('[Dashboard] Receipts without date range:', {
+          count: receipts?.length || 0,
+          isArray: Array.isArray(receipts),
+          receipts: receipts
+        });
+      }
+      
+      // If still no receipts, try with a wider date range (last 5 years)
+      if (!receipts || receipts.length === 0) {
+        console.log('[Dashboard] No receipts found, trying with wider date range (5 years)...');
+        const wideStartDate = new Date(today);
+        wideStartDate.setFullYear(wideStartDate.getFullYear() - 5);
+        const wideDateRange = {
+          start: wideStartDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0]
+        };
+        console.log('[Dashboard] Wide date range:', wideDateRange);
+        receipts = await authAPI.getCustomerReceipts(state.customerId, wideDateRange);
+        console.log('[Dashboard] Receipts with wide date range:', {
+          count: receipts?.length || 0,
+          dateRange: wideDateRange,
+          receipts: receipts
+        });
+      }
+      
+      // If still no receipts, try with an even wider range (last 10 years) or from member join date
+      if (!receipts || receipts.length === 0 && customerData?.memberJoinDate) {
+        console.log('[Dashboard] No receipts found, trying from member join date...');
+        const memberJoinDate = new Date(customerData.memberJoinDate);
+        const memberDateRange = {
+          start: memberJoinDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0]
+        };
+        console.log('[Dashboard] Member join date range:', memberDateRange);
+        receipts = await authAPI.getCustomerReceipts(state.customerId, memberDateRange);
+        console.log('[Dashboard] Receipts from member join date:', {
+          count: receipts?.length || 0,
+          dateRange: memberDateRange,
+          receipts: receipts
+        });
+      }
+      
+      if (!receipts || receipts.length === 0) {
+        console.warn('[Dashboard] No receipts found after all attempts');
+        const container = document.getElementById('dashboardPurchases');
+        if (container) {
+          container.innerHTML = '<div class="dashboard-empty">No purchase history found</div>';
+        }
+      } else {
+        console.log('[Dashboard] Rendering purchase history with', receipts.length, 'receipts');
+        await DashboardPage.renderPurchaseHistory(receipts);
+      }
+    } catch (err) {
+      console.error('[Dashboard] Could not fetch purchase history:', err);
+      const container = document.getElementById('dashboardPurchases');
+      if (container) {
+        container.innerHTML = `<div class="dashboard-error">Could not load purchase history: ${err.message || 'Unknown error'}</div>`;
+      }
+    }
+
+    console.log('[Dashboard] Dashboard populated successfully');
+  } catch (error) {
+    console.error('[Dashboard] Error loading dashboard data:', error);
+    DashboardPage.showError(`Failed to load dashboard: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Settings page data population functions
+ */
+const SettingsPage = {
+  /**
+   * Populate settings page with customer data
+   */
+  populateSettings(customer) {
+    // Email
+    SettingsPage.setElementText('settingsEmail', customer?.email || '-');
+    
+    // Phone - check both mobilePhone (API field) and phone (legacy)
+    const phone = customer?.mobilePhone || customer?.phone;
+    let phoneDisplay = '-';
+    if (phone) {
+      if (typeof phone === 'string') {
+        phoneDisplay = phone;
+      } else if (phone.countryCode && phone.number) {
+        // Format: countryCode can be with or without +, and might be a number
+        const countryCodeStr = String(phone.countryCode);
+        const countryCode = countryCodeStr.startsWith('+') ? countryCodeStr : `+${countryCodeStr}`;
+        phoneDisplay = `${countryCode} ${phone.number}`;
+      } else if (phone.number) {
+        phoneDisplay = phone.number;
+      }
+    }
+    SettingsPage.setElementText('settingsPhone', phoneDisplay);
+    
+    // Marketing preferences
+    const emailMarketing = document.getElementById('settingsEmailMarketing');
+    const smsMarketing = document.getElementById('settingsSmsMarketing');
+    const mailMarketing = document.getElementById('settingsMailMarketing');
+    
+    if (emailMarketing) {
+      emailMarketing.checked = customer?.allowMassSendEmail || false;
+    }
+    if (smsMarketing) {
+      smsMarketing.checked = customer?.allowMassSendSms || false;
+    }
+    if (mailMarketing) {
+      mailMarketing.checked = customer?.allowMassSendMail || false;
+    }
+  },
+
+  /**
+   * Render saved payment methods (card consents)
+   */
+  async renderPaymentMethods(cardConsents) {
+    const container = document.getElementById('settingsPaymentMethods');
+    if (!container) return;
+
+    if (!cardConsents || cardConsents.length === 0) {
+      container.innerHTML = '<div class="settings-empty">No saved payment methods</div>';
+      return;
+    }
+
+    // Format each payment method
+    const paymentMethodsHtml = cardConsents.map(consent => {
+      // Format card number (already masked from API)
+      const cardNumber = consent.cardNumber || '-';
+      
+      // Get card type/network
+      const cardType = consent.issuingNetwork || 'Card';
+      
+      // Format expiry date (expirationDay is in Day format: YYYY-MM-DD)
+      let expiryDate = '-';
+      if (consent.expirationDay) {
+        const date = new Date(consent.expirationDay);
+        if (!isNaN(date.getTime())) {
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          expiryDate = `${day}.${month}.${year}`;
+        }
+      }
+      
+      // Get company name
+      const companyName = consent.company?.name || consent.businessUnit?.companyNameForInvoice || 'Boulders ApS';
+      
+      // Determine status (Active if expiry date is in the future)
+      const isActive = consent.expirationDay ? new Date(consent.expirationDay) > new Date() : true;
+      const statusText = isActive ? 'Active' : 'Expired';
+      const statusClass = isActive ? 'payment-status-active' : 'payment-status-expired';
+
+      return `
+        <div class="payment-method-card">
+          <div class="payment-method-header">
+            <div class="payment-method-type">RCP mandate</div>
+            <div class="payment-method-number">${cardNumber}</div>
+          </div>
+          <div class="payment-method-status">
+            <span class="payment-status-badge ${statusClass}">${statusText}</span>
+          </div>
+          <div class="payment-method-details">
+            <span class="payment-method-provider">${companyName}</span>
+            ${expiryDate !== '-' ? `<span class="payment-method-separator">•</span><span class="payment-method-expiry">Expires: ${expiryDate}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = paymentMethodsHtml;
+  },
+
+  /**
+   * Render invoices
+   */
+  async renderInvoices(invoices) {
+    const container = document.getElementById('settingsInvoices');
+    if (!container) return;
+
+    if (!invoices || invoices.length === 0) {
+      container.innerHTML = '<div class="settings-empty">No invoices</div>';
+      return;
+    }
+
+    // Sort by date (most recent first)
+    const sorted = invoices
+      .filter(inv => inv)
+      .sort((a, b) => {
+        const dateA = new Date(a.dueDate || a.created || 0);
+        const dateB = new Date(b.dueDate || b.created || 0);
+        return dateB - dateA;
+      });
+
+    // Format each invoice
+    const invoicesHtml = sorted.map(invoice => {
+      // Format invoice number
+      const invoiceNumber = invoice.number || invoice.id || '-';
+      const fullInvoiceNumber = invoice.prefix ? `${invoice.prefix}${invoiceNumber}` : invoiceNumber;
+      
+      // Format date (dueDate is Day format YYYY-MM-DD, created is TimePoint)
+      let invoiceDate = '-';
+      const dateToFormat = invoice.dueDate || invoice.created;
+      if (dateToFormat) {
+        const date = new Date(dateToFormat);
+        if (!isNaN(date.getTime())) {
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          invoiceDate = `${day}.${month}.${year}`;
+        }
+      }
+      
+      // Format amount (use totalAmount or rest)
+      let amount = '-';
+      const amountObj = invoice.totalAmount || invoice.rest;
+      if (amountObj?.amount) {
+        const amountMain = amountObj.amount / 100; // Convert from øre to DKK
+        amount = DashboardUtils.formatPrice(amountMain) + ' kr';
+      }
+      
+      // Get invoice type
+      const invoiceType = invoice.type || 'REGULAR';
+      const typeLabels = {
+        'DIRECT_DEBIT': 'Direct Debit',
+        'REGULAR': 'Invoice',
+        'INTERNAL': 'Internal',
+        'RCP': 'Recurring Payment',
+        'EXTERNAL': 'External',
+        'UNKNOWN': 'Invoice'
+      };
+      const typeLabel = typeLabels[invoiceType] || 'Invoice';
+      
+      // Determine status based on state or rest amount
+      let statusText = 'Pending';
+      let statusClass = 'invoice-status-pending';
+      
+      if (invoice.state) {
+        const stateLabels = {
+          'STATE_DONE': 'Paid',
+          'STATE_SENT': 'Sent',
+          'STATE_REMINDER': 'Reminder',
+          'STATE_REMINDER_SERVICE': 'Reminder',
+          'STATE_DEBT_COLLECTION': 'Collection',
+          'STATE_EXPORTED': 'Exported',
+          'STATE_PENDING_SEND': 'Pending',
+          'STATE_NOT_SENT': 'Not Sent',
+          'STATE_SENT_PENDING_RESPONSE': 'Pending',
+          'STATE_UNKNOWN': 'Unknown'
+        };
+        statusText = stateLabels[invoice.state] || 'Pending';
+        
+        if (invoice.state === 'STATE_DONE') {
+          statusClass = 'invoice-status-paid';
+        } else if (invoice.state.includes('REMINDER') || invoice.state === 'STATE_DEBT_COLLECTION') {
+          statusClass = 'invoice-status-overdue';
+        }
+      } else if (invoice.rest?.amount === 0 || !invoice.rest) {
+        statusText = 'Paid';
+        statusClass = 'invoice-status-paid';
+      }
+      
+      // Get business unit/company name
+      const businessName = invoice.businessUnit?.name || invoice.company?.name || '-';
+
+      return `
+        <div class="invoice-card">
+          <div class="invoice-header">
+            <div class="invoice-number">${fullInvoiceNumber}</div>
+            <span class="invoice-status-badge ${statusClass}">${statusText}</span>
+          </div>
+          <div class="invoice-details">
+            <div class="invoice-info-row">
+              <span class="invoice-label">Type:</span>
+              <span class="invoice-value">${typeLabel}</span>
+            </div>
+            <div class="invoice-info-row">
+              <span class="invoice-label">Due Date:</span>
+              <span class="invoice-value">${invoiceDate}</span>
+            </div>
+            ${businessName !== '-' ? `
+            <div class="invoice-info-row">
+              <span class="invoice-label">Facility:</span>
+              <span class="invoice-value">${businessName}</span>
+            </div>
+            ` : ''}
+            <div class="invoice-info-row invoice-amount-row">
+              <span class="invoice-label">Amount:</span>
+              <span class="invoice-amount">${amount}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = invoicesHtml;
+  },
+
+  /**
+   * Set text content of an element by ID
+   */
+  setElementText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value || '-';
+  },
+
+  /**
+   * Show success message
+   */
+  showSuccess(message) {
+    const container = document.querySelector('.settings-page-container');
+    if (!container) return;
+    
+    // Remove existing success message
+    const existing = container.querySelector('.settings-success');
+    if (existing) existing.remove();
+    
+    const successDiv = document.createElement('div');
+    successDiv.className = 'settings-success';
+    successDiv.textContent = message;
+    container.insertBefore(successDiv, container.firstChild);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => successDiv.remove(), 5000);
+  },
+
+  /**
+   * Show error message
+   */
+  showError(message) {
+    const container = document.querySelector('.settings-page-container');
+    if (!container) return;
+    
+    // Remove existing error message
+    const existing = container.querySelector('.settings-error');
+    if (existing) existing.remove();
+    
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'settings-error';
+    errorDiv.textContent = message;
+    container.insertBefore(errorDiv, container.firstChild);
+  }
+};
+
+/**
+ * Load and populate settings data
+ */
+async function loadSettingsData(forceRefresh = true) {
+  console.log('[Settings] loadSettingsData called', { forceRefresh });
+
+  if (!isUserAuthenticated()) {
+    console.warn('[Settings] Cannot load settings: user not authenticated');
+    SettingsPage.showError('Please log in to view settings.');
+    return;
+  }
+
+  if (!state.customerId) {
+    console.warn('[Settings] Cannot load settings: no customer ID available');
+    const metadata = getTokenMetadata();
+    const customerIdFromMetadata = metadata?.username || metadata?.userName;
+    
+    if (customerIdFromMetadata) {
+      state.customerId = String(customerIdFromMetadata);
+    } else {
+      SettingsPage.showError('Unable to load settings: Customer ID not found.');
+      return;
+    }
+  }
+
+  try {
+    // Always force refresh in settings to show latest backend changes
+    const customerData = await authAPI.getCustomer(state.customerId, forceRefresh);
+    SettingsPage.populateSettings(customerData);
+    
+    // Fetch and render payment methods
+    try {
+      const cardConsents = await authAPI.getCustomerCardConsents(state.customerId);
+      await SettingsPage.renderPaymentMethods(cardConsents);
+    } catch (err) {
+      console.warn('[Settings] Could not fetch payment methods:', err);
+      const container = document.getElementById('settingsPaymentMethods');
+      if (container) {
+        container.innerHTML = '<div class="settings-empty">Could not load payment methods</div>';
+      }
+    }
+    
+    // Fetch and render invoices (last 365 days)
+    // Note: Invoices API expects TimePoint format (ISO 8601) for period parameters
+    try {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 364); // 365 days inclusive
+      const invoicesPeriod = {
+        start: start.toISOString(), // TimePoint format (ISO 8601)
+        end: end.toISOString() // TimePoint format (ISO 8601)
+      };
+      
+      const invoices = await authAPI.getCustomerInvoices(state.customerId, invoicesPeriod);
+      await SettingsPage.renderInvoices(invoices);
+    } catch (err) {
+      console.warn('[Settings] Could not fetch invoices:', err);
+      const container = document.getElementById('settingsInvoices');
+      if (container) {
+        container.innerHTML = '<div class="settings-empty">Could not load invoices</div>';
+      }
+    }
+    
+    // Initialize event handlers
+    initSettingsHandlers();
+    
+    console.log('[Settings] Settings page loaded successfully');
+  } catch (error) {
+    console.error('[Settings] Error loading settings data:', error);
+    SettingsPage.showError(`Failed to load settings: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Initialize settings page event handlers
+ */
+function initSettingsHandlers() {
+  // Email edit
+  const editEmailBtn = document.getElementById('editEmailBtn');
+  const emailInput = document.getElementById('emailInput');
+  const emailEditForm = document.getElementById('emailEditForm');
+  const saveEmailBtn = document.getElementById('saveEmailBtn');
+  const cancelEmailBtn = document.getElementById('cancelEmailBtn');
+  
+  if (editEmailBtn && emailInput && emailEditForm) {
+    editEmailBtn.addEventListener('click', () => {
+      emailInput.value = document.getElementById('settingsEmail').textContent;
+      emailEditForm.style.display = 'block';
+      editEmailBtn.style.display = 'none';
+    });
+    
+    if (saveEmailBtn) {
+      saveEmailBtn.addEventListener('click', async () => {
+        const newEmail = emailInput.value.trim();
+        if (!newEmail || !newEmail.includes('@')) {
+          SettingsPage.showError('Please enter a valid email address');
+          return;
+        }
+        
+        try {
+          await authAPI.updateCustomer(state.customerId, { email: newEmail });
+          SettingsPage.setElementText('settingsEmail', newEmail);
+          emailEditForm.style.display = 'none';
+          editEmailBtn.style.display = 'block';
+          SettingsPage.showSuccess('Email updated successfully');
+          
+          // Refresh customer data
+          const customerData = await authAPI.getCustomer(state.customerId, true);
+          SettingsPage.populateSettings(customerData);
+        } catch (error) {
+          console.error('[Settings] Error updating email:', error);
+          SettingsPage.showError(`Failed to update email: ${error.message || 'Unknown error'}`);
+        }
+      });
+    }
+    
+    if (cancelEmailBtn) {
+      cancelEmailBtn.addEventListener('click', () => {
+        emailEditForm.style.display = 'none';
+        editEmailBtn.style.display = 'block';
+        emailInput.value = '';
+      });
+    }
+  }
+
+  // Phone edit
+  const editPhoneBtn = document.getElementById('editPhoneBtn');
+  const phoneInput = document.getElementById('phoneInput');
+  const phoneEditForm = document.getElementById('phoneEditForm');
+  const savePhoneBtn = document.getElementById('savePhoneBtn');
+  const cancelPhoneBtn = document.getElementById('cancelPhoneBtn');
+  
+  if (editPhoneBtn && phoneInput && phoneEditForm) {
+    editPhoneBtn.addEventListener('click', () => {
+      phoneInput.value = document.getElementById('settingsPhone').textContent;
+      phoneEditForm.style.display = 'block';
+      editPhoneBtn.style.display = 'none';
+    });
+    
+    if (savePhoneBtn) {
+      savePhoneBtn.addEventListener('click', async () => {
+        const newPhone = phoneInput.value.trim();
+        if (!newPhone) {
+          SettingsPage.showError('Please enter a phone number');
+          return;
+        }
+        
+        try {
+          // Format phone number according to API spec
+          // PhoneNumberIn requires: number (required), countryCode (optional, with or without +)
+          const phoneData = {
+            countryCode: '45', // API accepts with or without +, using without for consistency
+            number: newPhone.replace(/\s+/g, '').replace(/^\+45/, '') // Remove +45 prefix if present
+          };
+          
+          // Prepare update payload - API may require businessUnit or other fields
+          const updatePayload = {
+            mobilePhone: phoneData
+          };
+          
+          // Include businessUnit if available (some APIs require it)
+          if (state.selectedBusinessUnit) {
+            updatePayload.businessUnit = state.selectedBusinessUnit;
+          }
+          
+          console.log('[Settings] Updating phone with payload:', updatePayload);
+          await authAPI.updateCustomer(state.customerId, updatePayload);
+          
+          // Refresh customer data to get updated phone from API
+          const customerData = await authAPI.getCustomer(state.customerId, true);
+          console.log('[Settings] Refreshed customer data after update:', customerData);
+          SettingsPage.populateSettings(customerData);
+          
+          phoneEditForm.style.display = 'none';
+          editPhoneBtn.style.display = 'block';
+          SettingsPage.showSuccess('Phone number updated successfully');
+        } catch (error) {
+          console.error('[Settings] Error updating phone:', error);
+          SettingsPage.showError(`Failed to update phone: ${error.message || 'Unknown error'}`);
+        }
+      });
+    }
+    
+    if (cancelPhoneBtn) {
+      cancelPhoneBtn.addEventListener('click', () => {
+        phoneEditForm.style.display = 'none';
+        editPhoneBtn.style.display = 'block';
+        phoneInput.value = '';
+      });
+    }
+  }
+
+  // Password change modal
+  const changePasswordBtn = document.getElementById('changePasswordBtn');
+  const passwordModal = document.getElementById('passwordModal');
+  const closePasswordModal = document.getElementById('closePasswordModal');
+  const cancelPasswordBtn = document.getElementById('cancelPasswordBtn');
+  const savePasswordBtn = document.getElementById('savePasswordBtn');
+  const oldPasswordInput = document.getElementById('oldPasswordInput');
+  const newPasswordInput = document.getElementById('newPasswordInput');
+  const confirmPasswordInput = document.getElementById('confirmPasswordInput');
+  const passwordFormError = document.getElementById('passwordFormError');
+  
+  if (changePasswordBtn && passwordModal) {
+    changePasswordBtn.addEventListener('click', () => {
+      passwordModal.style.display = 'flex';
+      oldPasswordInput.value = '';
+      newPasswordInput.value = '';
+      confirmPasswordInput.value = '';
+      passwordFormError.style.display = 'none';
+    });
+  }
+  
+  const closePasswordModalFunc = () => {
+    passwordModal.style.display = 'none';
+    oldPasswordInput.value = '';
+    newPasswordInput.value = '';
+    confirmPasswordInput.value = '';
+    passwordFormError.style.display = 'none';
+  };
+  
+  if (closePasswordModal) {
+    closePasswordModal.addEventListener('click', closePasswordModalFunc);
+  }
+  
+  if (cancelPasswordBtn) {
+    cancelPasswordBtn.addEventListener('click', closePasswordModalFunc);
+  }
+  
+  if (savePasswordBtn) {
+    savePasswordBtn.addEventListener('click', async () => {
+      const oldPassword = oldPasswordInput.value;
+      const newPassword = newPasswordInput.value;
+      const confirmPassword = confirmPasswordInput.value;
+      
+      // Validation
+      if (!oldPassword || !newPassword || !confirmPassword) {
+        passwordFormError.textContent = 'Please fill in all fields';
+        passwordFormError.style.display = 'block';
+        return;
+      }
+      
+      if (newPassword !== confirmPassword) {
+        passwordFormError.textContent = 'New passwords do not match';
+        passwordFormError.style.display = 'block';
+        return;
+      }
+      
+      if (newPassword.length < 6) {
+        passwordFormError.textContent = 'Password must be at least 6 characters';
+        passwordFormError.style.display = 'block';
+        return;
+      }
+      
+      try {
+        await authAPI.updateCustomer(state.customerId, {
+          oldPassword: oldPassword,
+          password: newPassword
+        });
+        
+        SettingsPage.showSuccess('Password changed successfully');
+        closePasswordModalFunc();
+      } catch (error) {
+        console.error('[Settings] Error changing password:', error);
+        passwordFormError.textContent = error.message || 'Failed to change password. Please check your current password.';
+        passwordFormError.style.display = 'block';
+      }
+    });
+  }
+
+  // Marketing preferences toggles
+  const emailMarketingToggle = document.getElementById('settingsEmailMarketing');
+  const smsMarketingToggle = document.getElementById('settingsSmsMarketing');
+  const mailMarketingToggle = document.getElementById('settingsMailMarketing');
+  
+  if (emailMarketingToggle) {
+    emailMarketingToggle.addEventListener('change', async (e) => {
+      try {
+        await authAPI.updateCustomer(state.customerId, {
+          allowMassSendEmail: e.target.checked
+        });
+        SettingsPage.showSuccess('Email marketing preference updated');
+      } catch (error) {
+        console.error('[Settings] Error updating email marketing:', error);
+        e.target.checked = !e.target.checked; // Revert toggle
+        SettingsPage.showError('Failed to update email marketing preference');
+      }
+    });
+  }
+  
+  if (smsMarketingToggle) {
+    smsMarketingToggle.addEventListener('change', async (e) => {
+      try {
+        await authAPI.updateCustomer(state.customerId, {
+          allowMassSendSms: e.target.checked
+        });
+        SettingsPage.showSuccess('SMS marketing preference updated');
+      } catch (error) {
+        console.error('[Settings] Error updating SMS marketing:', error);
+        e.target.checked = !e.target.checked; // Revert toggle
+        SettingsPage.showError('Failed to update SMS marketing preference');
+      }
+    });
+  }
+  
+  if (mailMarketingToggle) {
+    mailMarketingToggle.addEventListener('change', async (e) => {
+      try {
+        await authAPI.updateCustomer(state.customerId, {
+          allowMassSendMail: e.target.checked
+        });
+        SettingsPage.showSuccess('Mail marketing preference updated');
+      } catch (error) {
+        console.error('[Settings] Error updating mail marketing:', error);
+        e.target.checked = !e.target.checked; // Revert toggle
+        SettingsPage.showError('Failed to update mail marketing preference');
+      }
+    });
+  }
+
+  // Freeze Subscription buttons (Profile and Settings)
+  const freezeSubscriptionBtn = document.getElementById('freezeSubscriptionBtn');
+  const freezeSubscriptionSettingsBtn = document.getElementById('freezeSubscriptionSettingsBtn');
+  
+  // Step 1: Duration Selection Modal
+  const freezeSubscriptionModal = document.getElementById('freezeSubscriptionModal');
+  const closeFreezeSubscriptionModal = document.getElementById('closeFreezeSubscriptionModal');
+  const stayMembershipBtn = document.getElementById('stayMembershipBtn');
+  const proceedFreezeBtn = document.getElementById('proceedFreezeBtn');
+  const freezeDurationSelect = document.getElementById('freezeDurationSelect');
+  const freezeSubscriptionError = document.getElementById('freezeSubscriptionError');
+  
+  // Step 2: Payment & Terms Modal
+  const freezeSubscriptionModalStep2 = document.getElementById('freezeSubscriptionModalStep2');
+  const closeFreezeSubscriptionModalStep2 = document.getElementById('closeFreezeSubscriptionModalStep2');
+  const stayMembershipBtnStep2 = document.getElementById('stayMembershipBtnStep2');
+  const proceedFreezeBtnStep2 = document.getElementById('proceedFreezeBtnStep2');
+  const freezeAcceptTerms = document.getElementById('freezeAcceptTerms');
+  const freezeSubscriptionErrorStep2 = document.getElementById('freezeSubscriptionErrorStep2');
+  
+  // Step 3: Success & Feedback Modal
+  const freezeSubscriptionModalStep3 = document.getElementById('freezeSubscriptionModalStep3');
+  const closeFreezeSubscriptionModalStep3 = document.getElementById('closeFreezeSubscriptionModalStep3');
+  const sendFreezeFeedbackBtn = document.getElementById('sendFreezeFeedbackBtn');
+  const freezeFeedbackOptions = document.getElementById('freezeFeedbackOptions');
+  const freezeSubscriptionErrorStep3 = document.getElementById('freezeSubscriptionErrorStep3');
+  
+  // Store freeze data between steps
+  let freezeData = {
+    duration: null,
+    subscriptionId: null
+  };
+  
+  const closeAllFreezeModals = () => {
+    if (freezeSubscriptionModal) freezeSubscriptionModal.style.display = 'none';
+    if (freezeSubscriptionModalStep2) freezeSubscriptionModalStep2.style.display = 'none';
+    if (freezeSubscriptionModalStep3) freezeSubscriptionModalStep3.style.display = 'none';
+    freezeData = { duration: null, subscriptionId: null };
+  };
+  
+  if (freezeSubscriptionBtn) {
+    freezeSubscriptionBtn.addEventListener('click', openFreezeSubscriptionModal);
+    freezeSubscriptionBtn.dataset.initialized = 'true';
+  }
+  
+  if (freezeSubscriptionSettingsBtn) {
+    freezeSubscriptionSettingsBtn.addEventListener('click', openFreezeSubscriptionModal);
+  }
+  
+  // Step 1 handlers
+  if (closeFreezeSubscriptionModal) {
+    closeFreezeSubscriptionModal.addEventListener('click', closeAllFreezeModals);
+  }
+  
+  if (stayMembershipBtn) {
+    stayMembershipBtn.addEventListener('click', closeAllFreezeModals);
+  }
+  
+  // Update date preview when duration changes
+  const updateFreezeDatePreview = () => {
+    const freezeDatePreview = document.getElementById('freezeDatePreview');
+    if (!freezeDatePreview || !freezeDurationSelect) return;
+    
+    const duration = freezeDurationSelect.value ? parseInt(freezeDurationSelect.value) : 1;
+    if (duration < 1 || duration > 3) return;
+    
+    // Calculate dates
+    const today = new Date();
+    const nextBillingCycle = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const freezeEnd = new Date(nextBillingCycle);
+    freezeEnd.setMonth(freezeEnd.getMonth() + duration);
+    freezeEnd.setDate(0); // Last day of the month
+    
+    const startDateStr = nextBillingCycle.toISOString().split('T')[0];
+    const endDateStr = freezeEnd.toISOString().split('T')[0];
+    
+    // Format dates for display
+    const startFormatted = new Date(startDateStr).toLocaleDateString('da-DK', { year: 'numeric', month: 'long', day: 'numeric' });
+    const endFormatted = new Date(endDateStr).toLocaleDateString('da-DK', { year: 'numeric', month: 'long', day: 'numeric' });
+    
+    freezeDatePreview.textContent = `Freeze period: ${startFormatted} - ${endFormatted}`;
+  };
+  
+  if (freezeDurationSelect) {
+    freezeDurationSelect.addEventListener('change', updateFreezeDatePreview);
+    // Initial preview
+    updateFreezeDatePreview();
+  }
+  
+  if (proceedFreezeBtn) {
+    proceedFreezeBtn.addEventListener('click', async () => {
+      if (!state.customerId) {
+        if (freezeSubscriptionError) {
+          freezeSubscriptionError.textContent = 'Unable to freeze: Customer ID not found';
+          freezeSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      const duration = freezeDurationSelect?.value ? parseInt(freezeDurationSelect.value) : 1;
+      
+      if (duration < 1 || duration > 3) {
+        if (freezeSubscriptionError) {
+          freezeSubscriptionError.textContent = 'Please select a valid duration (1-3 months)';
+          freezeSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      try {
+        // Fetch active subscription
+        const subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+        const activeSubscription = subscriptions?.find(sub => !sub.endDate || new Date(sub.endDate) > new Date());
+        
+        if (!activeSubscription) {
+          if (freezeSubscriptionError) {
+            freezeSubscriptionError.textContent = 'No active subscription found';
+            freezeSubscriptionError.style.display = 'block';
+          }
+          return;
+        }
+        
+        freezeData.duration = duration;
+        freezeData.subscriptionId = activeSubscription.id;
+        
+        // Move to step 2
+        if (freezeSubscriptionModal) freezeSubscriptionModal.style.display = 'none';
+        if (freezeSubscriptionModalStep2) {
+          freezeSubscriptionModalStep2.style.display = 'flex';
+          if (freezeAcceptTerms) freezeAcceptTerms.checked = false;
+          if (freezeSubscriptionErrorStep2) freezeSubscriptionErrorStep2.style.display = 'none';
+        }
+      } catch (error) {
+        console.error('[Settings] Error fetching subscription:', error);
+        if (freezeSubscriptionError) {
+          freezeSubscriptionError.textContent = 'Failed to load subscription data. Please try again.';
+          freezeSubscriptionError.style.display = 'block';
+        }
+      }
+    });
+  }
+  
+  // Step 2 handlers
+  if (closeFreezeSubscriptionModalStep2) {
+    closeFreezeSubscriptionModalStep2.addEventListener('click', closeAllFreezeModals);
+  }
+  
+  if (stayMembershipBtnStep2) {
+    stayMembershipBtnStep2.addEventListener('click', closeAllFreezeModals);
+  }
+  
+  if (proceedFreezeBtnStep2) {
+    proceedFreezeBtnStep2.addEventListener('click', async () => {
+      if (!freezeAcceptTerms?.checked) {
+        if (freezeSubscriptionErrorStep2) {
+          freezeSubscriptionErrorStep2.textContent = 'Please accept the terms & conditions to proceed';
+          freezeSubscriptionErrorStep2.style.display = 'block';
+        }
+        return;
+      }
+      
+      if (!freezeData.duration || !freezeData.subscriptionId) {
+        if (freezeSubscriptionErrorStep2) {
+          freezeSubscriptionErrorStep2.textContent = 'Missing freeze data. Please start over.';
+          freezeSubscriptionErrorStep2.style.display = 'block';
+        }
+        return;
+      }
+      
+      try {
+        // Calculate freeze period dates (API requires DayRange with start and end dates)
+        // API spec: freezePeriod is a DayRange object with start (Day) and end (Day) properties
+        // Start: First day of next billing cycle (next month)
+        // End: Last day of the month after the selected duration
+        const today = new Date();
+        const nextBillingCycle = new Date(today.getFullYear(), today.getMonth() + 1, 1); // First day of next month
+        
+        // Calculate end date: start date + duration months, then get last day of that month
+        // Example: If start is Feb 1 and duration is 1 month, end should be Feb 28/29
+        const freezeEnd = new Date(nextBillingCycle);
+        freezeEnd.setMonth(freezeEnd.getMonth() + parseInt(freezeData.duration));
+        freezeEnd.setDate(0); // Set to last day of previous month (which is the last day of the freeze period)
+        
+        // Format dates as YYYY-MM-DD (Day format per API spec: "YYYY-MM-DD")
+        const freezePeriod = {
+          start: nextBillingCycle.toISOString().split('T')[0],
+          end: freezeEnd.toISOString().split('T')[0]
+        };
+        
+        console.log('[Freeze] Calculated freeze period from duration:', {
+          duration: freezeData.duration,
+          durationText: `${freezeData.duration} month(s)`,
+          start: freezePeriod.start,
+          end: freezePeriod.end,
+          startDate: nextBillingCycle.toISOString(),
+          endDate: freezeEnd.toISOString()
+        });
+        
+        // Disable button during request
+        proceedFreezeBtnStep2.disabled = true;
+        proceedFreezeBtnStep2.textContent = 'Processing...';
+        
+        await authAPI.freezeSubscription(
+          state.customerId,
+          freezeData.subscriptionId,
+          freezePeriod,
+          null, // freezeReason - will be collected in step 3
+          null, // freezeReasonComment
+          false // paymentRequiredBeforeFreeze
+        );
+        
+        // Move to step 3 (success & feedback)
+        if (freezeSubscriptionModalStep2) freezeSubscriptionModalStep2.style.display = 'none';
+        if (freezeSubscriptionModalStep3) {
+          freezeSubscriptionModalStep3.style.display = 'flex';
+          // Reset feedback selection
+          const options = freezeFeedbackOptions?.querySelectorAll('.freeze-feedback-option');
+          options?.forEach(opt => opt.classList.remove('selected'));
+          if (freezeSubscriptionErrorStep3) freezeSubscriptionErrorStep3.style.display = 'none';
+        }
+        
+        proceedFreezeBtnStep2.disabled = false;
+        proceedFreezeBtnStep2.textContent = 'Proceed';
+        
+        // Refresh customer data
+        if (typeof loadProfileData === 'function') {
+          await loadProfileData(true);
+        }
+        if (typeof loadSettingsData === 'function') {
+          await loadSettingsData();
+        }
+      } catch (error) {
+        console.error('[Settings] Error in freeze subscription:', error);
+        if (freezeSubscriptionErrorStep2) {
+          freezeSubscriptionErrorStep2.textContent = error.message || 'Failed to freeze subscription. Please try again.';
+          freezeSubscriptionErrorStep2.style.display = 'block';
+        }
+        proceedFreezeBtnStep2.disabled = false;
+        proceedFreezeBtnStep2.textContent = 'Proceed';
+      }
+    });
+  }
+
+  // Step 3 handlers (success & feedback)
+  if (closeFreezeSubscriptionModalStep3) {
+    closeFreezeSubscriptionModalStep3.addEventListener('click', closeAllFreezeModals);
+  }
+
+  if (sendFreezeFeedbackBtn) {
+    sendFreezeFeedbackBtn.addEventListener('click', () => {
+      const selectedOption = freezeFeedbackOptions?.querySelector('.freeze-feedback-option.selected');
+      const feedbackReason = selectedOption?.dataset.reason || null;
+      
+      // Close modal
+      closeAllFreezeModals();
+      
+      // Show success message
+      SettingsPage.showSuccess('Subscription frozen successfully');
+    });
+  }
+
+  // Cancel Subscription buttons (Profile and Settings)
+  const cancelSubscriptionBtn = document.getElementById('cancelSubscriptionBtn');
+  const cancelSubscriptionSettingsBtn = document.getElementById('cancelSubscriptionSettingsBtn');
+  
+  const cancelSubscriptionModal = document.getElementById('cancelSubscriptionModal');
+  const closeCancelSubscriptionModal = document.getElementById('closeCancelSubscriptionModal');
+  const stayMembershipCancelBtn = document.getElementById('stayMembershipCancelBtn');
+  const proceedCancelBtn = document.getElementById('proceedCancelBtn');
+  const cancelSubscriptionError = document.getElementById('cancelSubscriptionError');
+  
+  const openCancelSubscriptionModal = async () => {
+    if (!state.customerId) {
+      if (cancelSubscriptionError) {
+        cancelSubscriptionError.textContent = 'Unable to cancel: Customer ID not found';
+        cancelSubscriptionError.style.display = 'block';
+      }
+      return;
+    }
+    
+    try {
+      const subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+      const activeSubscription = subscriptions?.find(sub => !sub.endDate || new Date(sub.endDate) > new Date());
+      
+      if (!activeSubscription) {
+        if (cancelSubscriptionError) {
+          cancelSubscriptionError.textContent = 'No active subscription found';
+          cancelSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      if (cancelSubscriptionModal) {
+        cancelSubscriptionModal.style.display = 'flex';
+        if (cancelSubscriptionError) cancelSubscriptionError.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('[Settings] Error fetching subscription:', error);
+      if (cancelSubscriptionError) {
+        cancelSubscriptionError.textContent = 'Failed to load subscription data. Please try again.';
+        cancelSubscriptionError.style.display = 'block';
+      }
+    }
+  };
+  
+  if (cancelSubscriptionBtn) {
+    cancelSubscriptionBtn.addEventListener('click', openCancelSubscriptionModal);
+  }
+  
+  if (cancelSubscriptionSettingsBtn) {
+    cancelSubscriptionSettingsBtn.addEventListener('click', openCancelSubscriptionModal);
+  }
+  
+  if (closeCancelSubscriptionModal) {
+    closeCancelSubscriptionModal.addEventListener('click', () => {
+      if (cancelSubscriptionModal) cancelSubscriptionModal.style.display = 'none';
+    });
+  }
+  
+  if (stayMembershipCancelBtn) {
+    stayMembershipCancelBtn.addEventListener('click', () => {
+      if (cancelSubscriptionModal) cancelSubscriptionModal.style.display = 'none';
+    });
+  }
+  
+  if (proceedCancelBtn) {
+    proceedCancelBtn.addEventListener('click', async () => {
+      if (!state.customerId) {
+        if (cancelSubscriptionError) {
+          cancelSubscriptionError.textContent = 'Unable to cancel: Customer ID not found';
+          cancelSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      try {
+        const subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+        const activeSubscription = subscriptions?.find(sub => !sub.endDate || new Date(sub.endDate) > new Date());
+        
+        if (!activeSubscription) {
+          if (cancelSubscriptionError) {
+            cancelSubscriptionError.textContent = 'No active subscription found';
+            cancelSubscriptionError.style.display = 'block';
+          }
+          return;
+        }
+        
+        proceedCancelBtn.disabled = true;
+        proceedCancelBtn.textContent = 'Processing...';
+        
+        await authAPI.cancelSubscription(state.customerId, activeSubscription.id);
+        
+        if (cancelSubscriptionModal) cancelSubscriptionModal.style.display = 'none';
+        SettingsPage.showSuccess('Subscription cancelled successfully');
+        
+        // Refresh customer data
+        if (typeof loadProfileData === 'function') {
+          await loadProfileData(true);
+        }
+        if (typeof loadSettingsData === 'function') {
+          await loadSettingsData();
+        }
+        
+        proceedCancelBtn.disabled = false;
+        proceedCancelBtn.textContent = 'Proceed';
+      } catch (error) {
+        console.error('[Settings] Error cancelling subscription:', error);
+        if (cancelSubscriptionError) {
+          cancelSubscriptionError.textContent = error.message || 'Failed to cancel subscription. Please try again.';
+          cancelSubscriptionError.style.display = 'block';
+        }
+        proceedCancelBtn.disabled = false;
+        proceedCancelBtn.textContent = 'Proceed';
+      }
+    });
+  }
+}
+
+/**
+ * Load and populate classes & bookings data
+ */
+async function loadClassesData(forceRefresh = false) {
+  console.log('[Classes] loadClassesData called', {
+    isAuthenticated: isUserAuthenticated(),
+    customerId: state.customerId,
+    hasAccessToken: typeof window.getAccessToken === 'function' && !!window.getAccessToken(),
+    forceRefresh
+  });
+
+  if (!isUserAuthenticated()) {
+    console.warn('[Classes] Cannot load bookings: user not authenticated');
+    ClassesPage.showError('Please log in to view your bookings.');
+    return;
+  }
+
+  if (!state.customerId) {
+    console.warn('[Classes] Cannot load bookings: no customer ID available');
+    const metadata = getTokenMetadata();
+    const customerIdFromMetadata = metadata?.username || metadata?.userName;
+
+    if (customerIdFromMetadata) {
+      console.log('[Classes] Found customer ID in metadata, using it:', customerIdFromMetadata);
+      state.customerId = String(customerIdFromMetadata);
+    } else {
+      ClassesPage.showError('Unable to load bookings: Customer ID not found. Please try logging in again.');
+      return;
+    }
+  }
+
+  try {
+    // Get date range for next 12 months (for entry bookings)
+    const now = new Date();
+    const future = new Date();
+    future.setMonth(future.getMonth() + 12);
+    const period = {
+      start: now.toISOString(),
+      end: future.toISOString()
+    };
+
+    // Fetch all booking types in parallel
+    console.log('[Classes] Fetching all bookings...');
+    const [groupActivities, events, entries] = await Promise.all([
+      authAPI.getGroupActivityBookings(state.customerId).catch(err => {
+        console.warn('[Classes] Failed to fetch group activities:', err);
+        return [];
+      }),
+      authAPI.getEventBookings(state.customerId, period).catch(err => {
+        console.warn('[Classes] Failed to fetch events:', err);
+        return [];
+      }),
+      authAPI.getEntryBookings(state.customerId, period).catch(err => {
+        console.warn('[Classes] Failed to fetch entries:', err);
+        return [];
+      })
+    ]);
+
+    // Normalize and categorize bookings
+    const allBookings = ClassesUtils.normalizeBookings(groupActivities, events, entries);
+    const { upcoming, past, waiting } = ClassesUtils.categorizeBookings(allBookings);
+
+    console.log('[Classes] Bookings categorized:', {
+      upcoming: upcoming.length,
+      past: past.length,
+      waiting: waiting.length,
+      total: allBookings.length
+    });
+
+    // Render each section
+    ClassesPage.renderBookingsList('upcomingBookingsList', upcoming);
+    ClassesPage.renderBookingsList('pastBookingsList', past);
+    ClassesPage.renderBookingsList('waitingListBookingsList', waiting);
+
+    console.log('[Classes] Classes page populated successfully');
+  } catch (error) {
+    console.error('[Classes] Error loading bookings data:', error);
+    ClassesPage.showError(`Failed to load bookings: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Initialize classes page tabs
+ */
+function initClassesTabs() {
+  // Main tabs (My Bookings / Browse Classes)
+  const mainTabs = document.querySelectorAll('.booking-tab');
+  const mainSections = document.querySelectorAll('.bookings-section[id$="Section"], .bookings-section[id^="browse"]');
+
+  mainTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetTab = tab.dataset.tab;
+
+      // Update active main tab
+      mainTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      // Show/hide main sections
+      mainSections.forEach(section => {
+        if (targetTab === 'myBookings' && section.id === 'myBookingsSection') {
+          section.style.display = 'block';
+          section.classList.add('active');
+        } else if (targetTab === 'browse' && section.id === 'browseClasses') {
+          section.style.display = 'block';
+          section.classList.add('active');
+        } else {
+          section.style.display = 'none';
+          section.classList.remove('active');
+        }
+      });
+    });
+  });
+
+  // Sub-tabs (Upcoming / Past / Waiting List)
+  const subTabs = document.querySelectorAll('.booking-sub-tab');
+  const subSections = document.querySelectorAll('.bookings-sub-section');
+
+  subTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const targetSubTab = tab.dataset.subTab;
+
+      // Update active sub-tab
+      subTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      // Show/hide sub-sections
+      subSections.forEach(section => {
+        if (section.id === `${targetSubTab}Bookings` || 
+            (targetSubTab === 'waiting' && section.id === 'waitingListBookings')) {
+          section.style.display = 'block';
+          section.classList.add('active');
+        } else {
+          section.style.display = 'none';
+          section.classList.remove('active');
+        }
+      });
+    });
+  });
+}
+
+/**
+ * Load and populate activity data from API
+ */
+async function loadActivityData(forceRefresh = false) {
+  console.log('[Activity] loadActivityData called', {
+    isAuthenticated: isUserAuthenticated(),
+    customerId: state.customerId,
+    hasAccessToken: typeof window.getAccessToken === 'function' && !!window.getAccessToken(),
+    forceRefresh
+  });
+
+  if (!isUserAuthenticated()) {
+    console.warn('[Activity] Cannot load activity: user not authenticated');
+    ActivityPage.showError('Please log in to view your activity.');
+    return;
+  }
+
+  if (!state.customerId) {
+    console.warn('[Activity] Cannot load activity: no customer ID available');
+    const metadata = getTokenMetadata();
+    const customerIdFromMetadata = metadata?.username || metadata?.userName;
+
+    if (customerIdFromMetadata) {
+      console.log('[Activity] Found customer ID in metadata, using it:', customerIdFromMetadata);
+      state.customerId = String(customerIdFromMetadata);
+    } else {
+      ActivityPage.showError('Unable to load activity: Customer ID not found. Please try logging in again.');
+      return;
+    }
+  }
+
+  try {
+    // Get customer data for member since and loyalty tier
+    const customerData = await authAPI.getCustomer(state.customerId, forceRefresh);
+    
+    // Get date range for last 30 days (API limit)
+    if (!ActivityUtils || typeof ActivityUtils.getDateRangeForDays !== 'function') {
+      throw new Error('ActivityUtils.getDateRangeForDays is not available');
+    }
+    
+    let dateRange;
+    try {
+      dateRange = ActivityUtils.getDateRangeForDays(30);
+    } catch (dateError) {
+      console.error('[Activity] Failed to generate date range:', dateError);
+      throw new Error(`Failed to generate date range: ${dateError.message}`);
+    }
+    
+    // Validate date range
+    if (!dateRange || typeof dateRange !== 'object') {
+      console.error('[Activity] Invalid date range object:', dateRange);
+      throw new Error('Date range is not a valid object');
+    }
+    
+    if (!dateRange.start || !dateRange.end) {
+      console.error('[Activity] Missing date range properties:', dateRange);
+      throw new Error(`Missing date range properties: start=${dateRange.start}, end=${dateRange.end}`);
+    }
+    
+    // Ensure dates are strings in YYYY-MM-DD format
+    const startDate = String(dateRange.start).trim();
+    const endDate = String(dateRange.end).trim();
+    
+    // Validate date format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+      console.error('[Activity] Invalid date format:', { startDate, endDate, dateRange });
+      throw new Error(`Invalid date format: start=${startDate}, end=${endDate}`);
+    }
+    
+    if (startDate === 'Invalid Date' || endDate === 'Invalid Date' || startDate === 'null' || endDate === 'null') {
+      console.error('[Activity] Invalid date values:', { startDate, endDate, dateRange });
+      throw new Error(`Invalid date values: start=${startDate}, end=${endDate}`);
+    }
+    
+    // Fetch passage tries
+    console.log('[Activity] Fetching passage tries for period:', { 
+      start: startDate, 
+      end: endDate, 
+      dateRange,
+      customerId: state.customerId 
+    });
+    
+    const passageTries = await authAPI.getPassageTries(
+      state.customerId,
+      startDate,
+      endDate
+    );
+    
+    // Calculate statistics
+    const stats = ActivityUtils.calculateStats(passageTries, customerData);
+    
+    // Populate UI
+    ActivityPage.populateStats(stats);
+    ActivityPage.renderHistory(passageTries);
+    
+    console.log('[Activity] Activity page populated successfully', {
+      totalCheckins: stats.totalCheckins,
+      passageTriesCount: passageTries.length
+    });
+  } catch (error) {
+    console.error('[Activity] Error loading activity data:', error);
+    ActivityPage.showError(`Failed to load activity data: ${error.message || 'Unknown error'}`);
+  }
 }

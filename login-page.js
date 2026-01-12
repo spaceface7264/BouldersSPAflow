@@ -24,7 +24,7 @@ export function initLoginPage() {
     if (typeof window.state !== 'undefined' && typeof window.authAPI !== 'undefined') {
       clearInterval(checkAppReady);
       initializeLoginPage(DOM);
-      // Initialize navigation if on login page
+      // Initialize navigation
       if (typeof window.initNavigation === 'function') {
         window.initNavigation();
       }
