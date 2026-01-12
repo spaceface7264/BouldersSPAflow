@@ -1205,18 +1205,55 @@ class AuthAPI {
   }
 
   // Step 6: Get customer profile
-  async getCustomer(customerId) {
+  async getCustomer(customerId, forceRefresh = false) {
+    // Check cache first (5 minute TTL)
+    const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
+    
+    if (!forceRefresh && 
+        state.authenticatedCustomer && 
+        state.authenticatedCustomerTimestamp &&
+        (now - state.authenticatedCustomerTimestamp) < CACHE_TTL &&
+        state.customerId === customerId) {
+      console.log('[Step 6] Using cached customer data');
+      return state.authenticatedCustomer;
+    }
+
+    // Prevent concurrent requests
+    if (state.customerDataLoading) {
+      console.log('[Step 6] Customer data already loading, waiting...');
+      // Wait for existing request to complete (max 10 seconds)
+      const startTime = Date.now();
+      while (state.customerDataLoading && (Date.now() - startTime) < 10000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      // If we have data now, return it
+      if (state.authenticatedCustomer && state.customerId === customerId) {
+        return state.authenticatedCustomer;
+      }
+    }
+
     try {
+      // Set loading flag
+      state.customerDataLoading = true;
+
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
       let url;
       if (this.useProxy) {
+        // Use proxy with path parameter (Cloudflare/Netlify)
         url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}`;
+      } else if (isDevelopment) {
+        // In development, use Vite proxy (relative URL)
+        // Vite proxy forwards /api/* to the correct API server
+        url = `/api/ver3/customers/${customerId}`;
       } else {
-        // In development, use direct API endpoint (same as fallback)
-        // This avoids Vite proxy issues with /api/ver3 paths
-        url = `https://api-join.boulders.dk/api/ver3/customers/${customerId}`;
+        // Direct API call - ver3 endpoints use boulders.brpsystems.com/apiserver
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}`;
       }
       
       console.log('[Step 6] Fetching customer profile:', url);
+      console.log('[Step 6] Proxy settings:', { useProxy: this.useProxy, baseUrl: this.baseUrl, isDevelopment });
       
       const accessToken = typeof window.getAccessToken === 'function' 
         ? window.getAccessToken() 
@@ -1245,8 +1282,21 @@ class AuthAPI {
       
       const data = await response.json();
       console.log('[Step 6] Get customer response:', data);
+      console.log('[Step 6] Customer data details:', {
+        id: data?.id,
+        email: data?.email,
+        firstName: data?.firstName,
+        lastName: data?.lastName
+      });
+      
+      // Cache the result
+      state.authenticatedCustomer = data;
+      state.authenticatedCustomerTimestamp = Date.now();
+      state.customerDataLoading = false;
+      
       return data;
     } catch (error) {
+      state.customerDataLoading = false;
       console.error('[Step 6] Get customer error:', error);
       throw error;
     }
@@ -1346,11 +1396,17 @@ class AuthAPI {
   // Get customer subscriptions
   async getCustomerSubscriptions(customerId) {
     try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
       let url;
       if (this.useProxy) {
         url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/subscriptions`;
+      } else if (isDevelopment) {
+        // In development, use Vite proxy (relative URL)
+        url = `/api/ver3/customers/${customerId}/subscriptions`;
       } else {
-        url = `https://api-join.boulders.dk/api/ver3/customers/${customerId}/subscriptions`;
+        // Direct API call - ver3 endpoints use boulders.brpsystems.com/apiserver
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/subscriptions`;
       }
       
       console.log('[AuthAPI] Fetching customer subscriptions:', url);
@@ -1392,9 +1448,9 @@ class AuthAPI {
   // Get customer invoices
   async getCustomerInvoices(customerId, period = null) {
     try {
-      let url;
-      const queryParams = [];
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       
+      const queryParams = [];
       if (period?.start) {
         queryParams.push(`start=${encodeURIComponent(period.start)}`);
       }
@@ -1404,10 +1460,15 @@ class AuthAPI {
       
       const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
       
+      let url;
       if (this.useProxy) {
         url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/invoices${queryString}`;
+      } else if (isDevelopment) {
+        // In development, use Vite proxy (relative URL)
+        url = `/api/ver3/customers/${customerId}/invoices${queryString}`;
       } else {
-        url = `https://api-join.boulders.dk/api/ver3/customers/${customerId}/invoices${queryString}`;
+        // Direct API call - ver3 endpoints use boulders.brpsystems.com/apiserver
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/invoices${queryString}`;
       }
       
       console.log('[AuthAPI] Fetching customer invoices:', url);
@@ -4461,6 +4522,8 @@ const state = {
   paymentConfirmed: false, // Flag to track if payment is confirmed (allows success page to show)
   authenticatedEmail: null,
   authenticatedCustomer: null, // Full customer profile data from API
+  authenticatedCustomerTimestamp: null, // Timestamp when customer data was last fetched (for caching)
+  customerDataLoading: false, // Flag to prevent concurrent customer data requests
   checkoutInProgress: false, // Flag to prevent duplicate checkout attempts
   loginInProgress: false, // Prevent duplicate login submissions
   paymentMethod: null,
