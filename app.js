@@ -1726,6 +1726,175 @@ class AuthAPI {
     }
   }
 
+  // Classes & Bookings: Get available group activities (for browsing)
+  // Uses business unit endpoint instead of app endpoint (app ID was causing issues)
+  async getGroupActivities(filters = {}) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      // Get business units to fetch from
+      const businessUnits = state.businessUnits || [];
+      if (businessUnits.length === 0) {
+        console.warn('[Classes] No business units available, cannot fetch group activities');
+        return [];
+      }
+      
+      // If a specific business unit is filtered, only fetch from that one
+      // Otherwise, fetch from all business units and combine results
+      const businessUnitsToFetch = filters.businessUnit 
+        ? businessUnits.filter(bu => String(bu.id) === String(filters.businessUnit))
+        : businessUnits;
+      
+      if (businessUnitsToFetch.length === 0) {
+        console.warn('[Classes] No matching business units found for filter');
+        return [];
+      }
+      
+      // Build query parameters (same for all requests)
+      const params = new URLSearchParams();
+      
+      // Date range (period.start and period.end)
+      if (filters.periodStart) {
+        params.append('period.start', filters.periodStart);
+      }
+      if (filters.periodEnd) {
+        params.append('period.end', filters.periodEnd);
+      }
+      
+      // Customer ID (for personalized results)
+      if (filters.customerId) {
+        params.append('customer', filters.customerId);
+      }
+      
+      const queryString = params.toString();
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+      };
+      
+      // Add auth header if we have a token (needed when customer filter is used)
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+      
+      // Fetch from all selected business units in parallel
+      const fetchPromises = businessUnitsToFetch.map(async (businessUnit) => {
+        let url;
+        if (this.useProxy) {
+          let path = `/api/ver3/businessunits/${businessUnit.id}/groupactivities`;
+          if (queryString) {
+            path += `?${queryString}`;
+          }
+          url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+        } else if (isDevelopment) {
+          url = `/api/ver3/businessunits/${businessUnit.id}/groupactivities`;
+          if (queryString) {
+            url += `?${queryString}`;
+          }
+        } else {
+          url = `https://boulders.brpsystems.com/apiserver/api/ver3/businessunits/${businessUnit.id}/groupactivities`;
+          if (queryString) {
+            url += `?${queryString}`;
+          }
+        }
+        
+        try {
+          console.log('[Classes] Fetching group activities from business unit:', { businessUnitId: businessUnit.id, businessUnitName: businessUnit.name, url });
+          
+          const response = await fetch(url, { method: 'GET', headers });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.warn(`[Classes] Get group activities error for business unit ${businessUnit.id} (${response.status}):`, errorText);
+            return []; // Return empty array on error, don't fail entire request
+          }
+          
+          const data = await response.json();
+          // Add business unit info to each activity for filtering/display
+          return (data || []).map(activity => ({
+            ...activity,
+            _businessUnitId: businessUnit.id,
+            _businessUnitName: businessUnit.name
+          }));
+        } catch (error) {
+          console.warn(`[Classes] Error fetching from business unit ${businessUnit.id}:`, error);
+          return []; // Return empty array on error
+        }
+      });
+      
+      // Wait for all requests and combine results
+      const resultsArrays = await Promise.all(fetchPromises);
+      const allActivities = resultsArrays.flat();
+      
+      console.log('[Classes] Get group activities response:', { 
+        total: allActivities.length, 
+        fromBusinessUnits: businessUnitsToFetch.length,
+        businessUnitIds: businessUnitsToFetch.map(bu => bu.id)
+      });
+      
+      return allActivities;
+    } catch (error) {
+      console.error('[Classes] Get group activities error:', error);
+      throw error;
+    }
+  }
+
+  // Classes & Bookings: Book a group activity
+  async bookGroupActivity(customerId, groupActivityId, allowWaitingList = true) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/bookings/groupactivities`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/bookings/groupactivities`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/groupactivities`;
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const body = {
+        groupActivity: groupActivityId,
+        allowWaitingList: allowWaitingList
+      };
+      
+      console.log('[Classes] Booking group activity:', { url, body });
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Classes] Book group activity error (${response.status}):`, errorText);
+        throw new Error(`Book group activity failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Classes] Book group activity response:', data);
+      return data;
+    } catch (error) {
+      console.error('[Classes] Book group activity error:', error);
+      throw error;
+    }
+  }
+
   // Classes & Bookings: Get entry bookings
   async getEntryBookings(customerId, period = null) {
     try {
@@ -1782,6 +1951,70 @@ class AuthAPI {
       return data;
     } catch (error) {
       console.error('[Classes] Get entry bookings error:', error);
+      throw error;
+    }
+  }
+
+  // Classes & Bookings: Cancel group activity booking
+  async cancelGroupActivityBooking(customerId, bookingId, bookingType = 'groupActivityBooking', tryToRefund = false, allowLateCancellationWithNoShow = false) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (tryToRefund) {
+        params.append('tryToRefund', 'true');
+      }
+      if (allowLateCancellationWithNoShow) {
+        params.append('allowLateCancellationWithNoShow', 'true');
+      }
+      const queryString = params.toString();
+      
+      let url;
+      if (this.useProxy) {
+        let path = `/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}/${bookingType}`;
+        if (queryString) {
+          path += `?${queryString}`;
+        }
+        url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}/${bookingType}`;
+        if (queryString) {
+          url += `?${queryString}`;
+        }
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}/${bookingType}`;
+        if (queryString) {
+          url += `?${queryString}`;
+        }
+      }
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': 'da-DK',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      console.log('[Classes] Canceling group activity booking:', { url, bookingId, bookingType });
+      
+      const response = await fetch(url, { method: 'DELETE', headers });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Classes] Cancel group activity booking error (${response.status}):`, errorText);
+        throw new Error(`Cancel booking failed: ${response.status} - ${errorText}`);
+      }
+      
+      // 204 No Content is success for DELETE
+      console.log('[Classes] Booking canceled successfully');
+      return true;
+    } catch (error) {
+      console.error('[Classes] Cancel group activity booking error:', error);
       throw error;
     }
   }
@@ -4479,6 +4712,11 @@ async function loadGymsFromAPI() {
     
     // Store gyms for distance calculation
     gymsWithDistances = gyms;
+    
+    // Also store in state for use in classes filters
+    if (state) {
+      state.businessUnits = gyms;
+    }
     
     // Update selected gym display if we're on step 2
     if (state.currentStep === 2) {
@@ -8443,6 +8681,14 @@ function initNavigation() {
         }
       } else if (route === 'classes') {
         showPage('classes');
+        // Initialize classes page when navigated to
+        if (typeof initClassesTabs === 'function') {
+          initClassesTabs();
+        }
+        // Load classes data
+        if (typeof loadClassesData === 'function') {
+          loadClassesData();
+        }
         if (typeof loadClassesData === 'function') {
           loadClassesData(false);
         }
@@ -18275,6 +18521,120 @@ const ClassesPage = {
   },
 
   /**
+   * Render grouped booking card (for multiple dates of same class)
+   */
+  renderGroupedBookingCard(bookings) {
+    if (bookings.length === 0) return '';
+    
+    // Sort by date
+    bookings.sort((a, b) => {
+      const timeA = new Date(a.startTime || ClassesUtils.getBookingStartTime(a.original || a));
+      const timeB = new Date(b.startTime || ClassesUtils.getBookingStartTime(b.original || b));
+      return timeA - timeB;
+    });
+    
+    const firstBooking = bookings[0];
+    const name = ClassesUtils.getBookingName(firstBooking.original || firstBooking);
+    const businessUnit = ClassesUtils.getBusinessUnitName(firstBooking.original || firstBooking);
+    const type = firstBooking.type || ClassesUtils.getBookingType(firstBooking.original || firstBooking);
+    const isWaiting = ClassesUtils.isWaitingList(firstBooking.original || firstBooking);
+    
+    // Get instructor from first booking
+    const instructor = firstBooking.original?.groupActivity?.instructors?.[0]?.name || 
+                      firstBooking.original?.groupActivity?.instructor?.name ||
+                      null;
+    
+    // Type badge
+    const typeLabels = {
+      groupActivity: 'Class',
+      event: 'Event',
+      entry: 'Entry'
+    };
+    const typeLabel = typeLabels[type] || 'Booking';
+    
+    // Check if all bookings can be cancelled (all must be upcoming and not waiting)
+    const canCancelAll = bookings.every(booking => {
+      const bookingId = booking.id || booking.original?.id;
+      const startTime = booking.startTime || ClassesUtils.getBookingStartTime(booking.original || booking);
+      const startTimeDate = startTime ? new Date(startTime) : null;
+      const isActuallyPast = startTimeDate ? startTimeDate < new Date() : false;
+      return !isActuallyPast && !isWaiting && type === 'groupActivity' && bookingId;
+    });
+    
+    // Get consistent time (all sessions should have same time)
+    const firstStartTime = bookings[0].startTime || ClassesUtils.getBookingStartTime(bookings[0].original || bookings[0]);
+    const firstEndTime = bookings[0].endTime || ClassesUtils.getBookingEndTime(bookings[0].original || bookings[0]);
+    const timeRange = (firstStartTime && firstEndTime) ? ClassesUtils.formatTimeRange(firstStartTime, firstEndTime) : '-';
+    
+    return `
+      <div class="booking-card booking-card-grouped" data-booking-type="${type}">
+        <div class="booking-header">
+          <h3 class="booking-title">${name}</h3>
+          <span class="booking-type-badge booking-type-${type}">${typeLabel}</span>
+        </div>
+        <div class="booking-details">
+          <div class="booking-location">${businessUnit}</div>
+          ${instructor ? `<div class="booking-instructor">Instructor: ${instructor}</div>` : ''}
+          <div class="booking-multiple-dates">
+            <div class="booking-dates-header">
+              <span class="booking-dates-count">${bookings.length} sessions</span>
+              ${bookings.length > 0 ? `
+                <span class="booking-dates-range">
+                  ${ClassesUtils.formatDate(bookings[0].startTime || ClassesUtils.getBookingStartTime(bookings[0].original || bookings[0]))} - 
+                  ${ClassesUtils.formatDate(bookings[bookings.length - 1].startTime || ClassesUtils.getBookingStartTime(bookings[bookings.length - 1].original || bookings[bookings.length - 1]))}
+                </span>
+              ` : ''}
+            </div>
+            ${timeRange !== '-' ? `
+              <div class="booking-summary-panels">
+                <div class="summary-panel">
+                  <span class="summary-panel-label">Start tid</span>
+                  <span class="summary-panel-value">${ClassesUtils.formatTime(firstStartTime)}</span>
+                </div>
+              </div>
+            ` : ''}
+            <div class="booking-dates-list">
+              ${bookings.map(booking => {
+                const bookingId = booking.id || booking.original?.id;
+                const startTime = booking.startTime || ClassesUtils.getBookingStartTime(booking.original || booking);
+                const endTime = booking.endTime || ClassesUtils.getBookingEndTime(booking.original || booking);
+                const date = ClassesUtils.formatDate(startTime);
+                const time = (startTime && endTime) ? ClassesUtils.formatTimeRange(startTime, endTime) : '-';
+                const dateObj = startTime ? new Date(startTime) : null;
+                const dayName = dateObj ? dateObj.toLocaleDateString('da-DK', { weekday: 'long' }) : '';
+                
+                return `
+                  <div class="booking-date-item" data-booking-id="${bookingId}">
+                    <div class="date-item-header">
+                      <span class="date-item-date">${date}</span>
+                      ${dayName ? `<span class="date-item-day">${dayName.charAt(0).toUpperCase() + dayName.slice(1)}</span>` : ''}
+                      <span class="date-item-time">${time}</span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+        ${canCancelAll ? `
+          <div class="booking-actions">
+            <button class="booking-action-btn booking-action-cancel booking-action-cancel-all" 
+                    data-action="cancel-all" 
+                    data-booking-ids="${bookings.map(b => b.id || b.original?.id).filter(Boolean).join(',')}" 
+                    data-booking-type="${type}">
+              <svg class="icon icon-cancel" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+              Cancel All Sessions
+            </button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  },
+
+  /**
    * Render bookings list
    */
   renderBookingsList(containerId, bookings) {
@@ -18340,7 +18700,44 @@ const ClassesPage = {
       return;
     }
 
-    container.innerHTML = bookings.map(booking => ClassesPage.renderBookingCard(booking)).join('');
+    // Group bookings by name + business unit + instructor + time pattern
+    const bookingsByGroup = new Map();
+    
+    bookings.forEach(booking => {
+      const name = ClassesUtils.getBookingName(booking.original || booking);
+      const businessUnitId = booking.original?.businessUnit?.id || booking.businessUnit?.id || 'unknown';
+      
+      // Get instructor from booking
+      const instructor = booking.original?.groupActivity?.instructors?.[0]?.name || 
+                        booking.original?.groupActivity?.instructor?.name ||
+                        booking.original?.event?.instructors?.[0]?.name ||
+                        'no-instructor';
+      
+      // Get time pattern (hour:minute) to distinguish different time slots
+      const startTime = booking.startTime || ClassesUtils.getBookingStartTime(booking.original || booking);
+      const timePattern = startTime ? new Date(startTime).toTimeString().substring(0, 5) : 'no-time';
+      
+      // Create grouping key: name + business unit + instructor + time
+      const key = `${name}_bu_${businessUnitId}_inst_${instructor}_time_${timePattern}`;
+      
+      if (!bookingsByGroup.has(key)) {
+        bookingsByGroup.set(key, []);
+      }
+      bookingsByGroup.get(key).push(booking);
+    });
+    
+    // Render grouped or individual bookings
+    const html = Array.from(bookingsByGroup.values()).map(group => {
+      if (group.length > 1) {
+        // Multiple bookings of same class - render grouped card
+        return ClassesPage.renderGroupedBookingCard(group);
+      } else {
+        // Single booking - render individual card
+        return ClassesPage.renderBookingCard(group[0]);
+      }
+    }).join('');
+    
+    container.innerHTML = html;
     
     // Attach event listeners for action buttons
     ClassesPage.attachBookingActionListeners();
@@ -18350,6 +18747,7 @@ const ClassesPage = {
    * Attach event listeners to booking action buttons
    */
   attachBookingActionListeners() {
+    // Handle individual cancel buttons
     document.querySelectorAll('.booking-action-btn[data-action="cancel"]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         // Use currentTarget to get the button element, not the clicked child element (SVG icon)
@@ -18375,6 +18773,74 @@ const ClassesPage = {
         ClassesPage.handleCancelBooking(bookingId, bookingType);
       });
     });
+    
+    // Handle "Cancel All Sessions" button for grouped bookings
+    document.querySelectorAll('.booking-action-btn[data-action="cancel-all"]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const button = e.currentTarget;
+        const bookingIdsStr = button.dataset.bookingIds;
+        const bookingType = button.dataset.bookingType;
+        
+        if (!bookingIdsStr) {
+          console.error('[Classes] Missing booking IDs for cancel all:', { button, dataset: button.dataset });
+          showToast('Error: Missing booking information', 'error');
+          return;
+        }
+        
+        const bookingIds = bookingIdsStr.split(',').filter(Boolean);
+        
+        if (bookingIds.length === 0) {
+          showToast('Error: No bookings to cancel', 'error');
+          return;
+        }
+        
+        // Confirm cancellation
+        const confirmed = confirm(`Are you sure you want to cancel all ${bookingIds.length} session(s)?`);
+        if (!confirmed) {
+          return;
+        }
+        
+        // Disable button during cancellation
+        button.disabled = true;
+        button.textContent = 'Cancelling...';
+        
+        try {
+          // Cancel all bookings sequentially
+          let successCount = 0;
+          let failCount = 0;
+          
+          for (const bookingId of bookingIds) {
+            try {
+              await ClassesPage.handleCancelBooking(bookingId, bookingType, false, true); // false = no confirmation, true = skip reload
+              successCount++;
+            } catch (err) {
+              console.error(`[Classes] Failed to cancel booking ${bookingId}:`, err);
+              failCount++;
+            }
+          }
+          
+          // Reload bookings data after all cancellations
+          await loadClassesData();
+          
+          if (failCount === 0) {
+            showToast(`Successfully cancelled ${successCount} session(s)`, 'success');
+          } else {
+            showToast(`Cancelled ${successCount} session(s), ${failCount} failed`, 'warning');
+          }
+        } catch (error) {
+          console.error('[Classes] Error cancelling all bookings:', error);
+          showToast('Error cancelling bookings', 'error');
+          button.disabled = false;
+          button.innerHTML = `
+            <svg class="icon icon-cancel" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+            Cancel All Sessions
+          `;
+        }
+      });
+    });
 
     document.querySelectorAll('.booking-action-btn[data-action="show-qr"]').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -18390,7 +18856,7 @@ const ClassesPage = {
   /**
    * Handle cancel booking
    */
-  async handleCancelBooking(bookingId, bookingType) {
+  async handleCancelBooking(bookingId, bookingType, showConfirmation = true, skipReload = false) {
     // Validate booking ID
     if (!bookingId || bookingId === 'undefined' || bookingId === 'null') {
       console.error('[Classes] Invalid booking ID:', bookingId);
@@ -18406,10 +18872,12 @@ const ClassesPage = {
       return;
     }
 
-    // Show confirmation dialog
-    const confirmed = confirm('Are you sure you want to cancel this booking?');
-    if (!confirmed) {
-      return;
+    // Show confirmation dialog (unless called from cancel-all which handles its own confirmation)
+    if (showConfirmation) {
+      const confirmed = confirm('Are you sure you want to cancel this booking?');
+      if (!confirmed) {
+        return;
+      }
     }
 
     try {
@@ -18442,13 +18910,16 @@ const ClassesPage = {
 
       if (bookingType === 'groupActivity') {
         await authAPI.cancelGroupActivityBooking(state.customerId, numericBookingId, apiBookingType);
-        showToast('Booking canceled successfully', 'success');
-        // Reload bookings to update the UI
-        await loadClassesData();
-        // Also refresh browse classes if on that tab to update availability
-        const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
-        if (browseTab?.classList.contains('active')) {
-          await loadBrowseClasses();
+        
+        if (!skipReload) {
+          showToast('Booking canceled successfully', 'success');
+          // Reload bookings to update the UI
+          await loadClassesData();
+          // Also refresh browse classes if on that tab to update availability
+          const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
+          if (browseTab?.classList.contains('active')) {
+            await loadBrowseClasses();
+          }
         }
       } else {
         // TODO: Implement cancel for events and entries
@@ -20829,6 +21300,575 @@ async function loadClassesData(forceRefresh = false) {
 }
 
 /**
+ * Load and display browse classes with filters
+ */
+async function loadBrowseClasses() {
+  console.log('[Classes] Loading browse classes...');
+  
+  const resultsContainer = document.getElementById('browseResults');
+  if (!resultsContainer) {
+    console.error('[Classes] Browse results container not found');
+    return;
+  }
+  
+  // Show loading state
+  resultsContainer.innerHTML = '<div class="bookings-loading">Loading classes...</div>';
+  
+  try {
+    // Get filter values
+    const searchFilter = document.getElementById('browseSearchFilter')?.value?.trim() || '';
+    const gymFilter = document.getElementById('browseGymFilter')?.value || '';
+    const dateRangePreset = document.getElementById('browseDateRangePreset')?.value || 'thisWeek';
+    const dateStart = document.getElementById('browseDateStart')?.value || '';
+    const dateEnd = document.getElementById('browseDateEnd')?.value || '';
+    const typeFilter = document.getElementById('browseTypeFilter')?.value || '';
+    
+    // Calculate date range based on preset
+    const now = new Date();
+    let periodStart, periodEnd;
+    
+    if (dateRangePreset === 'custom' && dateStart && dateEnd) {
+      // Custom date range
+      periodStart = new Date(dateStart + 'T00:00:00').toISOString();
+      periodEnd = new Date(dateEnd + 'T23:59:59').toISOString();
+    } else {
+      // Preset date ranges
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      switch (dateRangePreset) {
+        case 'today':
+          periodStart = new Date(startOfDay).toISOString();
+          periodEnd = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1).toISOString();
+          break;
+        case 'tomorrow':
+          const tomorrow = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+          periodStart = tomorrow.toISOString();
+          periodEnd = new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000 - 1).toISOString();
+          break;
+        case 'thisWeek':
+          const dayOfWeek = now.getDay();
+          const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          const weekStart = new Date(startOfDay.getTime() - daysToMonday * 24 * 60 * 60 * 1000);
+          periodStart = weekStart.toISOString();
+          // Extend to 4 weeks to capture all occurrences of recurring classes (will make multiple API calls)
+          periodEnd = new Date(weekStart.getTime() + 28 * 24 * 60 * 60 * 1000 - 1).toISOString();
+          break;
+        case 'nextWeek':
+          const nextWeekStart = new Date(startOfDay.getTime() + (7 - now.getDay() + 1) * 24 * 60 * 60 * 1000);
+          periodStart = nextWeekStart.toISOString();
+          // Extend to 4 weeks to capture all occurrences of recurring classes (will make multiple API calls)
+          periodEnd = new Date(nextWeekStart.getTime() + 28 * 24 * 60 * 60 * 1000 - 1).toISOString();
+          break;
+        case 'thisMonth':
+          periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+          periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+          break;
+        case 'nextMonth':
+          periodStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+          periodEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59).toISOString();
+          break;
+        default:
+          // Default to this week
+          const defaultDayOfWeek = now.getDay();
+          const defaultDaysToMonday = defaultDayOfWeek === 0 ? 6 : defaultDayOfWeek - 1;
+          const defaultWeekStart = new Date(startOfDay.getTime() - defaultDaysToMonday * 24 * 60 * 60 * 1000);
+          periodStart = defaultWeekStart.toISOString();
+          // Extend to 4 weeks to capture all occurrences of recurring classes (will make multiple API calls)
+          periodEnd = new Date(defaultWeekStart.getTime() + 28 * 24 * 60 * 60 * 1000 - 1).toISOString();
+      }
+    }
+    
+    // Build base filters object
+    const baseFilters = {
+      customerId: state.customerId || undefined,
+    };
+    
+    // Add business unit filter if selected
+    if (gymFilter) {
+      baseFilters.businessUnit = gymFilter;
+    }
+    
+    // Since API is limited to 14 days per call, make multiple calls if needed
+    // to capture all occurrences of recurring classes
+    const allActivities = [];
+    const daysPerCall = 14;
+    const totalDays = Math.ceil((new Date(periodEnd) - new Date(periodStart)) / (24 * 60 * 60 * 1000));
+    
+    console.log('[Classes] Date range calculation:', {
+      periodStart,
+      periodEnd,
+      totalDays,
+      needsMultipleCalls: totalDays > daysPerCall
+    });
+    
+    if (totalDays <= daysPerCall) {
+      // Single call is enough
+      const filters = {
+        ...baseFilters,
+        periodStart,
+        periodEnd,
+      };
+      console.log('[Classes] Fetching classes with filters (single call):', filters);
+      const activities = await authAPI.getGroupActivities(filters);
+      console.log(`[Classes] Single call returned ${activities.length} activities`);
+      allActivities.push(...activities);
+    } else {
+      // Need multiple calls - split into 14-day chunks
+      console.log(`[Classes] Date range (${totalDays} days) exceeds API limit (${daysPerCall} days), making multiple calls...`);
+      
+      let currentStart = new Date(periodStart);
+      const endDate = new Date(periodEnd);
+      let callNumber = 1;
+      
+      while (currentStart < endDate) {
+        const currentEnd = new Date(Math.min(
+          currentStart.getTime() + (daysPerCall - 1) * 24 * 60 * 60 * 1000,
+          endDate.getTime()
+        ));
+        
+        const filters = {
+          ...baseFilters,
+          periodStart: currentStart.toISOString(),
+          periodEnd: currentEnd.toISOString(),
+        };
+        
+        console.log(`[Classes] Call ${callNumber}: Fetching classes for period: ${currentStart.toISOString()} to ${currentEnd.toISOString()}`);
+        const activities = await authAPI.getGroupActivities(filters);
+        console.log(`[Classes] Call ${callNumber} returned ${activities.length} activities`);
+        allActivities.push(...activities);
+        
+        // Move to next period (start from the day after currentEnd)
+        currentStart = new Date(currentEnd.getTime() + 24 * 60 * 60 * 1000);
+        callNumber++;
+      }
+    }
+    
+    // Deduplicate activities by ID (in case of overlapping date ranges)
+    const activitiesMap = new Map();
+    allActivities.forEach(activity => {
+      if (!activitiesMap.has(activity.id)) {
+        activitiesMap.set(activity.id, activity);
+      } else {
+        console.log(`[Classes] Duplicate activity ID ${activity.id} (${activity.name}) - skipping`);
+      }
+    });
+    const activities = Array.from(activitiesMap.values());
+    
+    console.log('[Classes] Raw activities from API (after deduplication):', {
+      totalBeforeDedup: allActivities.length,
+      totalAfterDedup: activities.length,
+      byName: activities.reduce((acc, a) => {
+        const name = a.name || 'Unknown';
+        acc[name] = (acc[name] || 0) + 1;
+        return acc;
+      }, {}),
+      sample: activities.slice(0, 5).map(a => ({
+        id: a.id,
+        name: a.name,
+        productId: a.groupActivityProduct?.id,
+        instructor: a.instructors?.[0]?.name || 'none',
+        date: a.duration?.start || a.start,
+        businessUnit: a.businessUnit?.name || a._businessUnitName
+      }))
+    });
+    
+    // Get user's existing bookings to mark "already booked" classes
+    let existingBookings = [];
+    if (state.customerId) {
+      try {
+        const bookings = await authAPI.getGroupActivityBookings(state.customerId);
+        existingBookings = bookings || [];
+      } catch (err) {
+        console.warn('[Classes] Failed to fetch existing bookings for comparison:', err);
+      }
+    }
+    
+    // Group activities by product ID + business unit + time pattern + weekday (matching backend logic)
+    // Backend groups by: product + business unit + start time pattern + weekday (NOT by instructor)
+    const activitiesByGroup = new Map();
+    
+    activities.forEach(activity => {
+      const productId = activity.groupActivityProduct?.id || activity.groupActivityProductId;
+      const businessUnitId = activity.businessUnit?.id || activity._businessUnitId;
+      
+      // Get time pattern (hour:minute) to distinguish different time slots of same class
+      const startTime = activity.duration?.start || activity.start;
+      const timePattern = startTime ? new Date(startTime).toTimeString().substring(0, 5) : 'no-time';
+      
+      // Get weekday (0 = Sunday, 1 = Monday, etc.) to distinguish different days of week
+      const weekday = startTime ? new Date(startTime).getDay() : null;
+      const weekdayStr = weekday !== null ? `_wd_${weekday}` : '';
+      
+      // Create grouping key: product + business unit + time + weekday (matching backend)
+      const key = productId 
+        ? `product_${productId}_bu_${businessUnitId}_time_${timePattern}${weekdayStr}`
+        : `name_${activity.name}_bu_${businessUnitId}_time_${timePattern}${weekdayStr}`;
+      
+      if (!activitiesByGroup.has(key)) {
+        activitiesByGroup.set(key, []);
+      }
+      activitiesByGroup.get(key).push(activity);
+    });
+    
+    // For groups where first occurrence is within filter, fetch ALL occurrences
+    const filterStart = new Date(periodStart);
+    const filterEnd = new Date(periodEnd);
+    const groupsNeedingFullFetch = [];
+    
+    activitiesByGroup.forEach((occurrences, key) => {
+      // Sort by date
+      occurrences.sort((a, b) => {
+        const timeA = new Date(a.duration?.start || a.start || 0);
+        const timeB = new Date(b.duration?.start || b.start || 0);
+        return timeA - timeB;
+      });
+      
+      const firstOccurrence = occurrences[0];
+      const firstStartTime = firstOccurrence.duration?.start || firstOccurrence.start;
+      
+      if (firstStartTime) {
+        const firstDate = new Date(firstStartTime);
+        // Normalize dates to start of day for comparison (ignore time components)
+        const firstDateOnly = new Date(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate());
+        const filterStartOnly = new Date(filterStart.getFullYear(), filterStart.getMonth(), filterStart.getDate());
+        const filterEndOnly = new Date(filterEnd.getFullYear(), filterEnd.getMonth(), filterEnd.getDate());
+        
+        // If first occurrence is within filter range, we need to fetch all occurrences
+        const isWithinFilter = firstDateOnly >= filterStartOnly && firstDateOnly <= filterEndOnly;
+        
+        console.log(`[Classes] Checking if group needs full fetch:`, {
+          key,
+          firstDate: firstDateOnly.toISOString().split('T')[0],
+          filterStart: filterStartOnly.toISOString().split('T')[0],
+          filterEnd: filterEndOnly.toISOString().split('T')[0],
+          isWithinFilter,
+          currentOccurrences: occurrences.length
+        });
+        
+        if (isWithinFilter) {
+          const productId = firstOccurrence.groupActivityProduct?.id || firstOccurrence.groupActivityProductId;
+          const businessUnitId = firstOccurrence.businessUnit?.id || firstOccurrence._businessUnitId;
+          const keyParts = key.split('_time_');
+          const timePattern = keyParts[1]?.split('_wd_')[0] || keyParts[1];
+          const weekday = keyParts[1]?.includes('_wd_') ? parseInt(keyParts[1].split('_wd_')[1]) : null;
+          
+          if (productId) {
+            groupsNeedingFullFetch.push({
+              key,
+              productId,
+              businessUnitId,
+              timePattern,
+              weekday
+            });
+            console.log(`[Classes] Added group to full fetch list:`, {
+              key,
+              productId,
+              businessUnitId,
+              timePattern,
+              weekday,
+              currentCount: occurrences.length
+            });
+          }
+        }
+      }
+    });
+    
+    // Fetch all occurrences for groups that need it
+    if (groupsNeedingFullFetch.length > 0) {
+      console.log(`[Classes] Fetching all occurrences for ${groupsNeedingFullFetch.length} groups that start within filter range...`);
+      
+      const fullFetchPromises = groupsNeedingFullFetch.map(async ({ productId, businessUnitId, timePattern, weekday, key }) => {
+        try {
+          // Fetch all occurrences for this product using multiple 14-day API calls
+          // (API limit is 14 days per request, so we need to chunk it)
+          const now = new Date();
+          const wideEnd = new Date(now);
+          wideEnd.setMonth(wideEnd.getMonth() + 6); // 6 months ahead
+          
+          const daysPerCall = 14;
+          const allOccurrences = [];
+          let currentStart = new Date(now);
+          
+          console.log(`[Classes] Fetching all occurrences for product ${productId}, business unit ${businessUnitId}, time ${timePattern}, weekday ${weekday} (using multiple 14-day calls)`);
+          
+          while (currentStart < wideEnd) {
+            const currentEnd = new Date(Math.min(
+              currentStart.getTime() + (daysPerCall - 1) * 24 * 60 * 60 * 1000,
+              wideEnd.getTime()
+            ));
+            
+            const wideFilters = {
+              ...baseFilters,
+              periodStart: currentStart.toISOString(),
+              periodEnd: currentEnd.toISOString(),
+            };
+            
+            if (businessUnitId) {
+              wideFilters.businessUnit = businessUnitId;
+            }
+            
+            try {
+              const chunkOccurrences = await authAPI.getGroupActivities(wideFilters);
+              allOccurrences.push(...chunkOccurrences);
+            } catch (error) {
+              console.warn(`[Classes] Failed to fetch chunk for product ${productId} (${currentStart.toISOString()} to ${currentEnd.toISOString()}):`, error);
+              // Continue with next chunk even if this one fails
+            }
+            
+            // Move to next period
+            currentStart = new Date(currentEnd.getTime() + 24 * 60 * 60 * 1000);
+          }
+          
+          // Deduplicate by ID
+          const occurrencesMap = new Map();
+          allOccurrences.forEach(occ => {
+            if (!occurrencesMap.has(occ.id)) {
+              occurrencesMap.set(occ.id, occ);
+            }
+          });
+          const deduplicatedOccurrences = Array.from(occurrencesMap.values());
+          
+          // Filter to only this product, business unit, time pattern, and weekday
+          const productOccurrences = deduplicatedOccurrences.filter(occ => {
+            const occProductId = occ.groupActivityProduct?.id || occ.groupActivityProductId;
+            const occBusinessUnitId = occ.businessUnit?.id || occ._businessUnitId;
+            const occStartTime = occ.duration?.start || occ.start;
+            const occTimePattern = occStartTime ? new Date(occStartTime).toTimeString().substring(0, 5) : 'no-time';
+            const occWeekday = occStartTime ? new Date(occStartTime).getDay() : null;
+            
+            const matchesProduct = occProductId === productId;
+            const matchesBusinessUnit = occBusinessUnitId === businessUnitId;
+            const matchesTime = occTimePattern === timePattern;
+            const matchesWeekday = weekday === null || occWeekday === weekday;
+            
+            return matchesProduct && matchesBusinessUnit && matchesTime && matchesWeekday;
+          });
+          
+          console.log(`[Classes] Found ${productOccurrences.length} occurrences for product ${productId} after filtering`);
+          
+          return { key, occurrences: productOccurrences };
+        } catch (error) {
+          console.warn(`[Classes] Failed to fetch all occurrences for product ${productId}:`, error);
+          return { key, occurrences: null };
+        }
+      });
+      
+      const fullFetchResults = await Promise.all(fullFetchPromises);
+      
+      // Replace occurrences in groups that were successfully fetched
+      fullFetchResults.forEach(({ key, occurrences }) => {
+        if (occurrences && occurrences.length > 0) {
+          // Sort by date
+          occurrences.sort((a, b) => {
+            const timeA = new Date(a.duration?.start || a.start || 0);
+            const timeB = new Date(b.duration?.start || b.start || 0);
+            return timeA - timeB;
+          });
+          
+          // Log the dates we found
+          const dates = occurrences.map(o => {
+            const start = o.duration?.start || o.start;
+            return start ? new Date(start).toISOString().split('T')[0] : null;
+          }).filter(Boolean);
+          
+          console.log(`[Classes] Updated group ${key} with ${occurrences.length} total occurrences:`, dates);
+          
+          // Replace the group's occurrences with the full set
+          activitiesByGroup.set(key, occurrences);
+        } else if (occurrences === null) {
+          console.warn(`[Classes] Failed to fetch occurrences for group ${key}, keeping original ${activitiesByGroup.get(key)?.length || 0} occurrences`);
+        } else {
+          console.warn(`[Classes] No occurrences found for group ${key} in full fetch, keeping original ${activitiesByGroup.get(key)?.length || 0} occurrences`);
+        }
+      });
+    }
+    
+    // Log all groupings for debugging
+    console.log('[Classes] Activity grouping (matching backend logic - product + business unit + time + weekday):', {
+      totalActivities: activities.length,
+      totalGroups: activitiesByGroup.size,
+      groupsNeedingFullFetch: groupsNeedingFullFetch.length,
+      groups: Array.from(activitiesByGroup.entries()).map(([key, occs]) => {
+        const dates = occs.map(o => {
+          const start = o.duration?.start || o.start;
+          return start ? new Date(start).toISOString().split('T')[0] : null;
+        }).filter(Boolean).sort();
+        
+        return {
+          key,
+          count: occs.length,
+          name: occs[0].name,
+          productId: occs[0].groupActivityProduct?.id,
+          businessUnit: occs[0].businessUnit?.name || occs[0]._businessUnitName,
+          instructors: occs.map(o => o.instructors?.[0]?.name || 'none').filter((v, i, a) => a.indexOf(v) === i), // All unique instructors
+          dates: dates,
+          dateRange: dates.length > 0 ? `${dates[0]} to ${dates[dates.length - 1]}` : 'no dates'
+        };
+      })
+    });
+    
+    // Specifically check for Introhold classes
+    const introholdClasses = Array.from(activitiesByGroup.entries())
+      .filter(([key, occs]) => occs[0].name?.toLowerCase().includes('introhold'));
+    
+    if (introholdClasses.length > 0) {
+      console.log('[Classes] Introhold classes found:', introholdClasses.map(([key, occs]) => ({
+        instructors: occs.map(o => o.instructors?.[0]?.name || 'none').filter((v, i, a) => a.indexOf(v) === i), // All unique instructors in group
+        count: occs.length,
+        dates: occs.map(o => {
+          const start = o.duration?.start || o.start;
+          return start ? new Date(start).toISOString().split('T')[0] : null;
+        }).filter(Boolean).sort()
+      })));
+    }
+    
+    // Process grouped activities
+    let processedActivities = [];
+    
+    activitiesByGroup.forEach((occurrences, key) => {
+      // Sort occurrences by start time
+      occurrences.sort((a, b) => {
+        const timeA = new Date(a.duration?.start || a.start || 0);
+        const timeB = new Date(b.duration?.start || b.start || 0);
+        return timeA - timeB;
+      });
+      
+      // Use the first occurrence as the "main" activity for display
+      const mainActivity = occurrences[0];
+      
+      // Check if any occurrence is already booked
+      const isAlreadyBooked = existingBookings.some(booking => {
+        const bookingActivityId = booking.groupActivity?.id || booking.groupActivityId;
+        return occurrences.some(occ => occ.id === bookingActivityId);
+      });
+      
+      // Check for multiple dates (occurrences)
+      const hasMultipleDates = occurrences.length > 1;
+      
+      // Create the processed activity with all occurrences
+      processedActivities.push({
+        ...mainActivity,
+        _type: 'groupActivity',
+        _isAlreadyBooked: isAlreadyBooked,
+        _hasMultipleDates: hasMultipleDates,
+        _allOccurrences: occurrences // All occurrences of this class
+      });
+    });
+    
+    // Apply search filter
+    if (searchFilter) {
+      const searchLower = searchFilter.toLowerCase();
+      processedActivities = processedActivities.filter(activity => {
+        const name = (activity.name || '').toLowerCase();
+        const instructor = (activity.instructor?.name || activity.instructors?.[0]?.name || '').toLowerCase();
+        return name.includes(searchLower) || instructor.includes(searchLower);
+      });
+    }
+    
+    // Apply type filter (if we add events later)
+    if (typeFilter && typeFilter !== 'groupActivity') {
+      // For now, only group activities are supported
+      processedActivities = [];
+    }
+    
+    console.log('[Classes] Processed activities:', {
+      total: processedActivities.length,
+      alreadyBooked: processedActivities.filter(a => a._isAlreadyBooked).length
+    });
+    
+    // Render results
+    ClassesPage.renderBrowseResults(processedActivities, 'groupActivity');
+    
+  } catch (error) {
+    console.error('[Classes] Error loading browse classes:', error);
+    const resultsContainer = document.getElementById('browseResults');
+    if (resultsContainer) {
+      resultsContainer.innerHTML = `<div class="bookings-error">Failed to load classes: ${error.message || 'Unknown error'}</div>`;
+    }
+  }
+}
+
+/**
+ * Initialize browse classes filters
+ */
+async function initBrowseClassesFilters() {
+  // Date range preset change handler
+  const dateRangePreset = document.getElementById('browseDateRangePreset');
+  const customDateRangeContainer = document.getElementById('customDateRangeContainer');
+  
+  if (dateRangePreset && customDateRangeContainer) {
+    dateRangePreset.addEventListener('change', (e) => {
+      if (e.target.value === 'custom') {
+        customDateRangeContainer.style.display = 'flex';
+      } else {
+        customDateRangeContainer.style.display = 'none';
+      }
+    });
+  }
+  
+  // Apply filters button
+  const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+  if (applyFiltersBtn) {
+    applyFiltersBtn.addEventListener('click', () => {
+      loadBrowseClasses();
+    });
+  }
+  
+  // Search filter - debounced search on input
+  const searchFilter = document.getElementById('browseSearchFilter');
+  if (searchFilter) {
+    let searchTimeout;
+    searchFilter.addEventListener('input', (e) => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        loadBrowseClasses();
+      }, 500); // Wait 500ms after user stops typing
+    });
+  }
+  
+  // Populate gym filter dropdown
+  const gymFilter = document.getElementById('browseGymFilter');
+  if (gymFilter) {
+    // Try to get business units from state, or fetch them if not available
+    let businessUnits = state.businessUnits || gymsWithDistances || [];
+    
+    // If still no business units, try to fetch them
+    if (businessUnits.length === 0 && typeof businessUnitsAPI !== 'undefined') {
+      try {
+        console.log('[Classes] Fetching business units for filter dropdown...');
+        const response = await businessUnitsAPI.getBusinessUnits();
+        businessUnits = Array.isArray(response) ? response : (response.data || response.items || []);
+        // Store in state for future use
+        if (state) {
+          state.businessUnits = businessUnits;
+        }
+        console.log('[Classes] Fetched', businessUnits.length, 'business units for filter');
+      } catch (err) {
+        console.warn('[Classes] Failed to fetch business units for filter:', err);
+      }
+    }
+    
+    if (businessUnits.length > 0) {
+      // Clear existing options except "All Gyms"
+      gymFilter.innerHTML = '<option value="">All Gyms</option>';
+      
+      // Add gym options
+      businessUnits.forEach(gym => {
+        const option = document.createElement('option');
+        option.value = gym.id;
+        option.textContent = gym.name;
+        gymFilter.appendChild(option);
+      });
+      
+      console.log('[Classes] Populated gym filter with', businessUnits.length, 'gyms');
+    } else {
+      console.warn('[Classes] No business units available for gym filter');
+      gymFilter.innerHTML = '<option value="">No gyms available</option>';
+    }
+  }
+}
+
+/**
  * Initialize classes page tabs
  */
 function initClassesTabs() {
@@ -20852,6 +21892,10 @@ function initClassesTabs() {
         } else if (targetTab === 'browse' && section.id === 'browseClasses') {
           section.style.display = 'block';
           section.classList.add('active');
+          // Load browse classes when browse tab is activated
+          if (typeof loadBrowseClasses === 'function') {
+            loadBrowseClasses();
+          }
         } else {
           section.style.display = 'none';
           section.classList.remove('active');
@@ -20884,6 +21928,11 @@ function initClassesTabs() {
         }
       });
     });
+  });
+  
+  // Initialize browse classes filters (async - may need to fetch business units)
+  initBrowseClassesFilters().catch(err => {
+    console.error('[Classes] Error initializing browse filters:', err);
   });
 }
 

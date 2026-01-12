@@ -8000,6 +8000,82 @@ main {
     flex-wrap: wrap;
 }
 
+/* Grouped booking card styles (multiple dates) */
+.booking-card-grouped .booking-multiple-dates {
+    margin-top: 12px;
+}
+
+.booking-dates-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.booking-dates-count {
+    font-weight: 600;
+    color: #FFFFFF;
+    font-size: 14px;
+}
+
+.booking-dates-range {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.booking-summary-panels {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.booking-dates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.booking-date-item {
+    padding: 12px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+}
+
+.booking-instructor {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+    margin-top: 4px;
+}
+
+.date-item-cancel-btn {
+    margin-top: 8px;
+    padding: 6px 12px;
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #F87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.date-item-cancel-btn:hover {
+    background-color: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.5);
+    transform: translateY(-1px);
+}
+
 .booking-action-btn {
     background-color: rgba(255, 255, 255, 0.1);
     color: #FFFFFF;
