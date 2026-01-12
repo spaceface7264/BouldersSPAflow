@@ -12495,6 +12495,9 @@ function buildOrderSummary(payload, order = null, customer = null) {
   }
 
   // Use real data if available, otherwise use TBD placeholders
+  // IMPORTANT: Use order.number if available (this is the display number shown in emails/receipts)
+  // Fall back to order.id if number doesn't exist (for backwards compatibility)
+  const orderNumber = order?.number || order?.id || order?.orderId || state.orderId || 'TBD-ORDER-ID';
   const orderId = order?.id || order?.orderId || state.orderId || 'TBD-ORDER-ID';
   // Extract membership ID from customer response - check both direct and nested data structure
   const membershipId = customer?.data?.id || 
@@ -12520,7 +12523,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
   const primaryGymValue = customer?.primaryGym || customer?.primary_gym || payload.customer?.primaryGym;
   
   return {
-    number: orderId,
+    number: orderNumber,
     date: order?.createdAt ? new Date(order.createdAt) : (order?.created ? new Date(order.created) : now),
     items: [...state.cartItems],
     total: order?.total || order?.totalAmount || state.totals.cartTotal,
@@ -13020,9 +13023,19 @@ async function loadOrderForConfirmation(orderId) {
     // Store full order object for payment overview (before building summary)
     state.fullOrder = order;
     
+    // Log order number fields to verify correct number is used
+    console.log('[Payment Return] Order number fields:', {
+      'order.id': order.id,
+      'order.number': order.number,
+      'order.orderId': order.orderId,
+      'state.orderId': state.orderId,
+      'Will use for display': order.number || order.id || order.orderId || state.orderId
+    });
+    
     // Build order summary with fetched data (for confirmation view)
     state.order = buildOrderSummary(payload, { ...order, total: orderTotal, totalAmount: orderTotal }, customer || storedCustomer);
     console.log('[Payment Return] Order summary built:', state.order);
+    console.log('[Payment Return] Order number in summary:', state.order.number);
     
     // Update payment overview with order data
     updatePaymentOverview();
