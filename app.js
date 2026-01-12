@@ -1342,6 +1342,109 @@ class AuthAPI {
       throw error;
     }
   }
+
+  // Get customer subscriptions
+  async getCustomerSubscriptions(customerId) {
+    try {
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/subscriptions`;
+      } else {
+        url = `https://api-join.boulders.dk/api/ver3/customers/${customerId}/subscriptions`;
+      }
+      
+      console.log('[AuthAPI] Fetching customer subscriptions:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[AuthAPI] Get subscriptions error (${response.status}):`, errorText);
+        throw new Error(`Get subscriptions failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[AuthAPI] Get subscriptions response:', data);
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('[AuthAPI] Get subscriptions error:', error);
+      throw error;
+    }
+  }
+
+  // Get customer invoices
+  async getCustomerInvoices(customerId, period = null) {
+    try {
+      let url;
+      const queryParams = [];
+      
+      if (period?.start) {
+        queryParams.push(`start=${encodeURIComponent(period.start)}`);
+      }
+      if (period?.end) {
+        queryParams.push(`end=${encodeURIComponent(period.end)}`);
+      }
+      
+      const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+      
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/invoices${queryString}`;
+      } else {
+        url = `https://api-join.boulders.dk/api/ver3/customers/${customerId}/invoices${queryString}`;
+      }
+      
+      console.log('[AuthAPI] Fetching customer invoices:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[AuthAPI] Get invoices error (${response.status}):`, errorText);
+        throw new Error(`Get invoices failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[AuthAPI] Get invoices response:', data);
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('[AuthAPI] Get invoices error:', error);
+      throw error;
+    }
+  }
 }
 
 // Step 6: Token Management Functions
@@ -2658,6 +2761,11 @@ const authAPI = new AuthAPI();
 const orderAPI = new OrderAPI();
 const paymentAPI = new PaymentAPI();
 
+// Expose authAPI to window for login-page.js
+if (typeof window !== 'undefined') {
+  window.authAPI = authAPI;
+}
+
 // Step 6: Token validation on app reload
 // Keep tokens fresh by calling POST /api/auth/validate when app reloads with saved credentials
 async function validateTokensOnLoad() {
@@ -3742,6 +3850,12 @@ async function loadGymsFromAPI() {
       console.log('[Load Gyms] No user location available, displaying gyms in original order');
     }
     
+    // If gym list doesn't exist (e.g., on profile page), return early
+    if (!gymList) {
+      console.log('[Load Gyms] Gym list not found in DOM, skipping gym rendering');
+      return;
+    }
+    
     // Store existing gym items and their positions for animation
     const existingItems = Array.from(gymList.querySelectorAll('.gym-item'));
     const existingPositions = new Map();
@@ -4373,6 +4487,11 @@ const state = {
   subscriptionAttachedOrderId: null, // Tracks which order already has the membership attached
 };
 
+// Expose state to window for login-page.js
+if (typeof window !== 'undefined') {
+  window.state = state;
+}
+
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
@@ -4380,6 +4499,11 @@ let loginCooldownUntil = 0;
 
 function isUserAuthenticated() {
   return typeof window.getAccessToken === 'function' && Boolean(window.getAccessToken());
+}
+
+// Expose isUserAuthenticated immediately after definition
+if (typeof window !== 'undefined') {
+  window.isUserAuthenticated = isUserAuthenticated;
 }
 
 function getTokenMetadata() {
@@ -4430,6 +4554,11 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
     .catch(error => {
       console.warn('[Auth] Could not ensure order after auth sync:', error);
     });
+}
+
+// Expose syncAuthenticatedCustomerState to window for login-page.js
+if (typeof window !== 'undefined') {
+  window.syncAuthenticatedCustomerState = syncAuthenticatedCustomerState;
 }
 
 const DOM = {};
@@ -7361,6 +7490,165 @@ function refreshLoginUI() {
   }
 }
 
+/**
+ * Refresh login page UI (for profile.html)
+ * Updates login status and form visibility based on authentication state
+ */
+function refreshLoginPageUI() {
+  const loginStatusPage = document.querySelector('[data-login-status]');
+  const loginFormContainerPage = document.querySelector('[data-login-form-container-page]');
+  const loginPageWrapper = document.getElementById('loginPageWrapper');
+  
+  if (!loginStatusPage && !loginFormContainerPage) {
+    // Not on profile page, return early
+    return;
+  }
+  
+  const authenticated = isUserAuthenticated();
+  const metadata = getTokenMetadata();
+  const customer = state.authenticatedCustomer;
+  
+  // Determine display values
+  const emailDisplay = state.authenticatedEmail || customer?.email || metadata?.email || metadata?.username || '';
+  
+  // Get display name
+  let nameDisplay = '';
+  if (customer?.firstName && customer?.lastName) {
+    nameDisplay = `${customer.firstName} ${customer.lastName}`;
+  } else if (customer?.firstName) {
+    nameDisplay = customer.firstName;
+  } else if (customer?.lastName) {
+    nameDisplay = customer.lastName;
+  } else if (emailDisplay) {
+    nameDisplay = emailDisplay.split('@')[0];
+  }
+  
+  // Update login status section
+  if (loginStatusPage) {
+    loginStatusPage.style.display = authenticated ? 'block' : 'none';
+    
+    // Update name
+    const nameElement = document.querySelector('[data-auth-name-page]');
+    if (nameElement) {
+      nameElement.textContent = nameDisplay || '-';
+    }
+    
+    // Update email
+    const emailElement = document.querySelector('[data-auth-email-page]');
+    if (emailElement) {
+      emailElement.textContent = emailDisplay || '-';
+    }
+    
+    // Update other profile details if available
+    if (customer) {
+      const dobElement = document.querySelector('[data-auth-dob-page]');
+      if (dobElement && customer.birthDate) {
+        const dob = customer.birthDate || customer.dateOfBirth;
+        if (dob) {
+          const dobValue = dobElement.querySelector('.profile-detail-value');
+          if (dobValue) {
+            dobValue.textContent = ProfileUtils?.formatDate ? ProfileUtils.formatDate(dob) : dob;
+          }
+          dobElement.style.display = 'block';
+        }
+      }
+      
+      const addressElement = document.querySelector('[data-auth-address-page]');
+      if (addressElement && customer.shippingAddress) {
+        const address = customer.shippingAddress || customer.billingAddress;
+        if (address) {
+          const addressValue = addressElement.querySelector('.profile-detail-value');
+          if (addressValue) {
+            const addressParts = [
+              address.street,
+              address.postalCode && address.city ? `${address.postalCode} ${address.city}` : address.city || address.postalCode
+            ].filter(Boolean);
+            addressValue.textContent = addressParts.join(', ') || '-';
+          }
+          addressElement.style.display = 'block';
+        }
+      }
+      
+      const phoneElement = document.querySelector('[data-auth-phone-page]');
+      if (phoneElement && customer.mobilePhone) {
+        const phoneValue = phoneElement.querySelector('.profile-detail-value');
+        if (phoneValue) {
+          phoneValue.textContent = ProfileUtils?.formatPhone ? ProfileUtils.formatPhone(customer.mobilePhone) : 
+            (customer.mobilePhone?.number || customer.mobilePhone || '-');
+        }
+        phoneElement.style.display = 'block';
+      }
+    }
+  }
+  
+  // Update login form container visibility
+  if (loginFormContainerPage) {
+    loginFormContainerPage.style.display = authenticated ? 'none' : 'block';
+  }
+  
+  // Update wrapper visibility
+  if (loginPageWrapper) {
+    loginPageWrapper.style.display = authenticated ? 'none' : 'flex';
+  }
+  
+  // Show/hide profile page content based on authentication
+  const pageContentWrapper = document.getElementById('pageContentWrapper');
+  const pageProfile = document.getElementById('pageProfile');
+  
+  if (authenticated) {
+    // Show page content wrapper and profile page
+    if (pageContentWrapper) {
+      pageContentWrapper.style.display = 'block';
+      console.log('[Profile] Showing pageContentWrapper');
+    } else {
+      console.warn('[Profile] pageContentWrapper not found');
+    }
+    if (pageProfile) {
+      pageProfile.style.display = 'block';
+      console.log('[Profile] Showing pageProfile');
+      
+      // Always try to load profile data when authenticated
+      // This will handle both initial load and refresh scenarios
+      const loadProfileDataFn = window.loadProfileData;
+      if (typeof loadProfileDataFn === 'function') {
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+          loadProfileDataFn(false); // false = don't force refresh
+        }, 200);
+      } else if (state.authenticatedCustomer && typeof ProfilePage !== 'undefined' && ProfilePage.populateAll) {
+        // If customer data already exists, populate immediately
+        setTimeout(() => {
+          ProfilePage.populateAll(state.authenticatedCustomer);
+        }, 100);
+      } else {
+        console.warn('[Profile] loadProfileData function not available');
+      }
+    } else {
+      console.warn('[Profile] pageProfile element not found');
+    }
+  } else {
+    // Hide page content when not authenticated
+    if (pageContentWrapper) {
+      pageContentWrapper.style.display = 'none';
+    }
+    if (pageProfile) {
+      pageProfile.style.display = 'none';
+    }
+  }
+  
+  // Update body class for styling
+  if (authenticated) {
+    document.body.classList.add('authenticated');
+  } else {
+    document.body.classList.remove('authenticated');
+  }
+}
+
+// Expose refreshLoginPageUI to window
+if (typeof window !== 'undefined') {
+  window.refreshLoginPageUI = refreshLoginPageUI;
+}
+
 async function handleSaveAccount() {
   const saveBtn = document.querySelector('[data-action="save-account"]');
   const messageDiv = document.getElementById('saveAccountMessage');
@@ -8765,6 +9053,11 @@ function initAuthModeToggle() {
   const loginSection = document.querySelector('[data-auth-section="login"]');
   const createSection = document.querySelector('[data-auth-section="create"]');
   
+  // If elements don't exist (e.g., on profile page), return early
+  if (!loginSection && !createSection) {
+    return;
+  }
+  
   // Set initial state - if user is logged in, select login tab, otherwise create account
   const isAuthenticated = isUserAuthenticated();
   
@@ -8806,6 +9099,11 @@ function switchAuthMode(mode, email = null) {
   const createSection = document.querySelector('[data-auth-section="create"]');
   const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
   
+  // If elements don't exist (e.g., on profile page), return early
+  if (!loginSection && !createSection) {
+    return;
+  }
+  
   // Store current mode
   state.currentAuthMode = mode;
   
@@ -8846,8 +9144,8 @@ function switchAuthMode(mode, email = null) {
   
   // Show/hide sections with fade
   if (mode === 'login') {
-    createSection.style.display = 'none';
-    loginSection.style.display = 'block';
+    if (createSection) createSection.style.display = 'none';
+    if (loginSection) loginSection.style.display = 'block';
     
     // If email is provided, populate the login email field
     if (email && DOM.loginEmail) {
@@ -8860,8 +9158,8 @@ function switchAuthMode(mode, email = null) {
       }, 100);
     }
   } else {
-    loginSection.style.display = 'none';
-    createSection.style.display = 'block';
+    if (loginSection) loginSection.style.display = 'none';
+    if (createSection) createSection.style.display = 'block';
     // Clear any error states when switching to create account mode
     clearErrorStates();
     // Check button state when switching to create account mode
@@ -15480,4 +15778,864 @@ function showToast(message, type = 'info') {
   setTimeout(() => {
     toast.remove();
   }, 4000);
+}
+
+// Expose functions to window for login-page.js (after function definitions)
+if (typeof window !== 'undefined') {
+  window.showToast = showToast;
+  window.getErrorMessage = getErrorMessage;
+  window.handleLogout = handleLogout;
+  
+  // getUserDisplayName helper function
+  window.getUserDisplayName = function() {
+    const customer = state.authenticatedCustomer;
+    if (customer?.firstName && customer?.lastName) {
+      return `${customer.firstName} ${customer.lastName}`;
+    } else if (customer?.firstName) {
+      return customer.firstName;
+    } else if (customer?.lastName) {
+      return customer.lastName;
+    } else if (state.authenticatedEmail) {
+      return state.authenticatedEmail.split('@')[0];
+    }
+    return '';
+  };
+  
+  // populateProfileEditForm helper function (if it exists, otherwise no-op)
+  window.populateProfileEditForm = function() {
+    // This function may be defined elsewhere or can be a no-op for now
+    // Profile edit form population can be handled by login-page.js itself
+    console.log('[Profile] populateProfileEditForm called');
+  };
+}
+
+/**
+ * Profile page utilities
+ */
+const ProfileUtils = {
+  /**
+   * Safely get nested object values by path
+   */
+  getValue(obj, path, defaultValue = '-') {
+    const keys = path.split('.');
+    let value = obj;
+    for (const key of keys) {
+      if (value && typeof value === 'object' && key in value) {
+        value = value[key];
+      } else {
+        return defaultValue;
+      }
+    }
+    return value !== null && value !== undefined ? value : defaultValue;
+  },
+
+  /**
+   * Format date value to DD/MM/YYYY format
+   */
+  formatDate(dateValue) {
+    if (!dateValue) return '-';
+    if (typeof dateValue === 'string') {
+      const dateMatch = dateValue.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (dateMatch) {
+        return `${dateMatch[3]}/${dateMatch[2]}/${dateMatch[1]}`;
+      }
+      return dateValue;
+    }
+    if (dateValue.year && dateValue.month && dateValue.day) {
+      return `${String(dateValue.day).padStart(2, '0')}/${String(dateValue.month).padStart(2, '0')}/${dateValue.year}`;
+    }
+    return '-';
+  },
+
+  /**
+   * Format phone number for display
+   */
+  formatPhone(phone) {
+    if (!phone) return '-';
+    if (typeof phone === 'string') return phone;
+    if (phone.countryCode && phone.number) {
+      return `+${phone.countryCode} ${phone.number}`;
+    }
+    return phone.number || '-';
+  },
+
+  /**
+   * Format price with currency
+   */
+  formatPrice(price, currency = 'kr') {
+    if (!price && price !== 0) return '-';
+    const formattedPrice = typeof price === 'number' ? price.toFixed(2).replace('.', ',') : price;
+    // If currency is DKK or kr, use kr, otherwise use currency code
+    const currencyDisplay = (currency === 'DKK' || currency === 'kr') ? 'kr' : currency;
+    return `${formattedPrice} ${currencyDisplay}/md.`;
+  },
+
+  /**
+   * Generate initials from customer name
+   */
+  getInitials(customer) {
+    const firstName = customer?.firstName || '';
+    const lastName = customer?.lastName || '';
+    const email = customer?.email || state.authenticatedEmail || '';
+    
+    if (firstName && lastName) {
+      return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
+    } else if (firstName) {
+      return firstName.charAt(0).toUpperCase();
+    } else if (lastName) {
+      return lastName.charAt(0).toUpperCase();
+    } else if (email) {
+      return email.charAt(0).toUpperCase();
+    }
+    return 'U';
+  },
+
+  /**
+   * Generate placeholder avatar SVG data URI with initials (circular)
+   */
+  generatePlaceholderAvatar(initials) {
+    const size = 64;
+    const gradientId = 'gradient-' + Math.random().toString(36).substr(2, 9);
+    
+    const svg = `
+      <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#F401F5;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#8B5CF6;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <circle cx="${size/2}" cy="${size/2}" r="${size/2}" fill="url(#${gradientId})"/>
+        <text x="50%" y="50%" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="600" fill="white" text-anchor="middle" dominant-baseline="central">${initials}</text>
+      </svg>
+    `.trim();
+    
+    return 'data:image/svg+xml;base64,' + btoa(svg);
+  }
+};
+
+/**
+ * Profile page data population functions
+ */
+const ProfilePage = {
+  /**
+   * Set text content of an element by ID
+   */
+  setElementText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value;
+  },
+
+  /**
+   * Populate "My Profile" card
+   */
+  populateProfileCard(customer) {
+    ProfilePage.setElementText('profileFirstName', ProfileUtils.getValue(customer, 'firstName'));
+    ProfilePage.setElementText('profileLastName', ProfileUtils.getValue(customer, 'lastName'));
+    ProfilePage.setElementText('profileMemberId', customer.id ? `#${customer.id}` : '-');
+    ProfilePage.setElementText('profileCustomerNumber', customer.customerNumber || '-');
+    
+    // Extract primary gym - try multiple sources
+    let primaryGym = '-';
+    if (customer.businessUnit?.name) {
+      primaryGym = customer.businessUnit.name;
+    } else if (customer.businessUnit?.id) {
+      // If we only have ID, try to get name from subscriptions
+      primaryGym = `Business Unit ${customer.businessUnit.id}`;
+    }
+    
+    // Log for debugging
+    if (primaryGym === '-') {
+      console.warn('[Profile] Primary gym not found in customer data:', {
+        businessUnit: customer.businessUnit,
+        customerId: customer.id
+      });
+    }
+    
+    ProfilePage.setElementText('profilePrimaryGym', primaryGym);
+    
+    const birthdate = customer.birthDate || customer.dateOfBirth;
+    ProfilePage.setElementText('profileBirthdate', ProfileUtils.formatDate(birthdate));
+    
+    const gender = customer.sex || customer.gender;
+    ProfilePage.setElementText('profileGender', gender || '-');
+    
+    const hasStudentId = customer.benefitStatus?.student || 
+                         customer.memberClubs?.some(mc => mc.membershipType?.toLowerCase().includes('student')) ||
+                         false;
+    ProfilePage.setElementText('profileStudentId', hasStudentId ? 'Yes' : 'No');
+
+    // Profile avatar - fetch from API endpoint with placeholder fallback
+    // Endpoint: GET /api/ver3/customers/{customer}/profileimages
+    // For <img> tags, access token must be in query string, not Authorization header
+    const profileImage = document.getElementById('profileImage');
+    if (!profileImage) return;
+    
+    // Generate placeholder avatar with initials
+    const initials = ProfileUtils.getInitials(customer);
+    const placeholderAvatar = ProfileUtils.generatePlaceholderAvatar(initials);
+    
+    // Set placeholder as initial src (will be replaced if real image loads)
+    profileImage.src = placeholderAvatar;
+    profileImage.style.display = 'block';
+    
+    // Try to load real profile image if customer ID and access token are available
+    if (customer.id) {
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (accessToken) {
+        const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        let imageUrl;
+        if (isDevelopment) {
+          // Use Vite proxy in development
+          imageUrl = `/api/ver3/customers/${customer.id}/profileimages?access_token=${encodeURIComponent(accessToken)}`;
+        } else {
+          // In production, use direct API URL (or proxy if configured)
+          imageUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customer.id}/profileimages?access_token=${encodeURIComponent(accessToken)}`;
+        }
+        
+        // Create a new image to test if the profile image exists
+        const testImage = new Image();
+        testImage.onload = () => {
+          // Profile image exists, use it
+          profileImage.src = imageUrl;
+          console.log('[Profile] Profile image loaded successfully');
+        };
+        testImage.onerror = () => {
+          // Profile image doesn't exist, keep placeholder
+          console.log('[Profile] Profile image not available, using placeholder avatar');
+          // Placeholder is already set, no need to change
+        };
+        
+        // Start loading the test image
+        testImage.src = imageUrl;
+      } else {
+        // No access token, use placeholder
+        console.log('[Profile] No access token, using placeholder avatar');
+      }
+    } else {
+      // No customer ID, use placeholder
+      console.log('[Profile] No customer ID, using placeholder avatar');
+    }
+  },
+
+  /**
+   * Populate "My Membership" card
+   */
+  async populateMembershipCard(customer, subscriptions = []) {
+    // If subscriptions not provided, fetch them
+    if (subscriptions.length === 0) {
+      try {
+        subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+        console.log('[Profile] Fetched subscriptions for membership card:', subscriptions);
+      } catch (err) {
+        console.warn('[Profile] Could not fetch subscriptions for membership card:', err);
+      }
+    }
+    
+    // Find active subscription (not terminated and not expired)
+    const activeSubscription = subscriptions.find(sub => {
+      if (sub.statuses?.some(s => s.code === 'TERMINATED')) return false;
+      if (sub.expirationDay) {
+        const expirationDate = new Date(sub.expirationDay);
+        return expirationDate > new Date();
+      }
+      return true;
+    }) || subscriptions[0]; // Fallback to first subscription if none found
+    
+    console.log('[Profile] Active subscription for membership card:', activeSubscription);
+    
+    // Membership type: Use subscriptionProduct.name from subscription
+    const membershipType = activeSubscription?.subscriptionProduct?.name || '-';
+    ProfilePage.setElementText('profileMembershipType', membershipType);
+    
+    // Active since: Use subscription.start (Day format: YYYY-MM-DD)
+    const activeSince = activeSubscription?.start || customer.memberJoinDate || '-';
+    ProfilePage.setElementText('profileActiveSince', ProfileUtils.formatDate(activeSince));
+    
+    // Price: Use subscription.price.amount (in øre) and convert to DKK
+    let priceDisplay = '-';
+    if (activeSubscription?.price?.amount !== undefined) {
+      const priceInMain = activeSubscription.price.amount / 100; // Convert øre to DKK
+      const currency = activeSubscription.price.currency || 'DKK';
+      priceDisplay = ProfileUtils.formatPrice(priceInMain, currency);
+    }
+    ProfilePage.setElementText('profileMembershipPrice', priceDisplay);
+    
+    // Get primary gym from subscription businessUnit, customer businessUnit, or fallback
+    let primaryGym = '-';
+    if (activeSubscription?.businessUnit?.name) {
+      primaryGym = activeSubscription.businessUnit.name;
+    } else if (customer.businessUnit?.name) {
+      primaryGym = customer.businessUnit.name;
+    }
+    
+    if (primaryGym === '-') {
+      console.warn('[Profile] Primary gym not found for membership card:', {
+        activeSubscription: activeSubscription,
+        customerBusinessUnit: customer.businessUnit,
+        subscriptions: subscriptions
+      });
+    }
+    
+    ProfilePage.setElementText('profileMembershipGym', primaryGym);
+    
+    // Bloc Life Loyalty Tier: Leave blank as requested
+    ProfilePage.setElementText('profileLoyaltyTier', '');
+  },
+
+  /**
+   * Populate "Contact Info" card
+   */
+  populateContactCard(customer) {
+    // Use mobilePhone from API (PhoneNumberOut object with countryCode and number)
+    const phoneNumber = customer.mobilePhone || customer.phone;
+    ProfilePage.setElementText('profilePhone', ProfileUtils.formatPhone(phoneNumber));
+    ProfilePage.setElementText('profileEmail', customer.email || state.authenticatedEmail || '-');
+    
+    // Use shippingAddress or billingAddress from API (AddressOut object)
+    const address = customer.shippingAddress || customer.billingAddress || customer.address;
+    if (address) {
+      ProfilePage.setElementText('profileStreet', address.street || '-');
+      
+      // postalCode is an integer, country is CountryOutRef object with name property
+      const postalCodeStr = address.postalCode ? String(address.postalCode) : '';
+      const city = postalCodeStr && address.city 
+        ? `${postalCodeStr} ${address.city}`
+        : address.city || postalCodeStr || '-';
+      ProfilePage.setElementText('profileCity', city);
+      
+      // Extract country name from CountryOutRef object
+      const countryName = address.country?.name || address.country?.alpha2 || address.country || '-';
+      ProfilePage.setElementText('profileCountry', countryName);
+      
+      console.log('[Profile] Address data:', {
+        street: address.street,
+        city: address.city,
+        postalCode: address.postalCode,
+        country: address.country,
+        countryName: countryName,
+        fullAddress: address
+      });
+    } else {
+      console.warn('[Profile] No address found in customer data:', {
+        shippingAddress: customer.shippingAddress,
+        billingAddress: customer.billingAddress,
+        address: customer.address
+      });
+      ProfilePage.setElementText('profileStreet', '-');
+      ProfilePage.setElementText('profileCity', '-');
+      ProfilePage.setElementText('profileCountry', '-');
+    }
+  },
+
+  /**
+   * Populate "Consents" card
+   */
+  populateConsentsCard(customer) {
+    const consentTerms = document.getElementById('consentTerms');
+    const consentEmailMarketing = document.getElementById('consentEmailMarketing');
+    const consentPushNotifications = document.getElementById('consentPushNotifications');
+    
+    if (consentTerms) {
+      consentTerms.checked = customer.acceptedRegistrationTerms || customer.acceptedBookingTerms || false;
+    }
+    
+    if (consentEmailMarketing) {
+      consentEmailMarketing.checked = customer.allowMassSendEmail || 
+                                      customer.consents?.some(c => c.type === 'emailMarketing') ||
+                                      false;
+    }
+    
+    if (consentPushNotifications) {
+      consentPushNotifications.checked = customer.consents?.some(c => c.type === 'pushNotifications') || false;
+    }
+  },
+
+  /**
+   * Populate "Payment" card
+   */
+  async populatePaymentCard(customer, subscriptions = null) {
+    // Fetch subscriptions if not provided
+    let activeSubscriptions = subscriptions;
+    if (!activeSubscriptions && customer?.id) {
+      try {
+        activeSubscriptions = await authAPI.getCustomerSubscriptions(customer.id);
+      } catch (err) {
+        console.warn('[Profile] Could not fetch subscriptions for payment card:', err);
+      }
+    }
+
+    // Get payment method from subscription paymentOption
+    let paymentMethod = '-';
+    if (activeSubscriptions && activeSubscriptions.length > 0) {
+      const activeSubscription = activeSubscriptions.find(sub => !sub.endDate || new Date(sub.endDate) > new Date()) || activeSubscriptions[0];
+      paymentMethod = activeSubscription.paymentOption?.name || 
+                     activeSubscription.debitMethod || 
+                     '-';
+    } else if (customer?.subscriptions?.[0]?.paymentOption?.name) {
+      paymentMethod = customer.subscriptions[0].paymentOption.name;
+    }
+    
+    ProfilePage.setElementText('profilePaymentMethod', paymentMethod || '-');
+    
+    // Calculate next billing date from debitedUntil or find next invoice
+    let nextBilling = null;
+    if (activeSubscriptions && activeSubscriptions.length > 0) {
+      const activeSubscription = activeSubscriptions.find(sub => !sub.endDate || new Date(sub.endDate) > new Date()) || activeSubscriptions[0];
+      
+      // Next billing is typically debitedUntil + 1 day (or next month for monthly subscriptions)
+      if (activeSubscription.debitedUntil) {
+        const debitedDate = new Date(activeSubscription.debitedUntil);
+        // Add 1 day for next billing (or could be monthly, but we'll use +1 day as approximation)
+        debitedDate.setDate(debitedDate.getDate() + 1);
+        nextBilling = debitedDate.toISOString().split('T')[0];
+      }
+    }
+    
+    // If no next billing from subscription, try to get from invoices
+    if (!nextBilling && customer?.id) {
+      try {
+        const invoices = await authAPI.getCustomerInvoices(customer.id, {
+          start: new Date().toISOString().split('T')[0],
+          end: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // Next 90 days
+        });
+        
+        if (invoices && invoices.length > 0) {
+          // Find next unpaid invoice
+          const nextInvoice = invoices
+            .filter(inv => !inv.paid && inv.dueDate)
+            .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))[0];
+          
+          if (nextInvoice?.dueDate) {
+            nextBilling = nextInvoice.dueDate;
+          }
+        }
+      } catch (err) {
+        console.warn('[Profile] Could not fetch invoices for next billing date:', err);
+      }
+    }
+    
+    ProfilePage.setElementText('profileNextBilling', ProfileUtils.formatDate(nextBilling));
+  },
+
+  /**
+   * Populate all profile page cards with customer data
+   */
+  async populateAll(customer) {
+    if (!customer) {
+      console.warn('[Profile] No customer data to populate');
+      return;
+    }
+
+    // Fetch subscriptions once - used for both profile card and membership card
+    let subscriptions = [];
+    try {
+      subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+      // If customer doesn't have businessUnit but subscription does, use it
+      if (!customer.businessUnit && subscriptions.length > 0) {
+        const activeSubscription = subscriptions.find(sub => !sub.endDate || new Date(sub.endDate) > new Date());
+        if (activeSubscription?.businessUnit) {
+          customer.businessUnit = activeSubscription.businessUnit;
+          console.log('[Profile] Using business unit from subscription:', customer.businessUnit);
+        }
+      }
+    } catch (err) {
+      console.warn('[Profile] Could not fetch subscriptions:', err);
+    }
+
+    ProfilePage.populateProfileCard(customer);
+    await ProfilePage.populateMembershipCard(customer, subscriptions);
+    ProfilePage.populateContactCard(customer);
+    ProfilePage.populateConsentsCard(customer);
+    
+    // Payment card needs async call for subscriptions/invoices
+    await ProfilePage.populatePaymentCard(customer);
+
+    console.log('[Profile] Profile page populated successfully');
+  },
+
+  /**
+   * Show error message on profile page
+   */
+  showError(message) {
+    const profilePage = document.getElementById('pageProfile');
+    if (!profilePage) return;
+
+    // Remove any existing error messages
+    const existingErrors = profilePage.querySelectorAll('.profile-error');
+    existingErrors.forEach(err => err.remove());
+
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'profile-error';
+    errorDiv.style.cssText = 'padding: 20px; background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #F87171; margin-bottom: 24px;';
+    errorDiv.textContent = message;
+    
+    const container = profilePage.querySelector('.profile-page-container');
+    if (container) {
+      // Insert at the beginning, but after the header if it exists
+      const header = container.querySelector('.profile-page-header');
+      if (header && header.nextSibling) {
+        container.insertBefore(errorDiv, header.nextSibling);
+      } else {
+        container.insertBefore(errorDiv, container.firstChild);
+      }
+    }
+  }
+};
+
+/**
+ * Load and populate profile data from API
+ */
+async function loadProfileData(forceRefresh = false) {
+  console.log('[Profile] loadProfileData called', {
+    isAuthenticated: isUserAuthenticated(),
+    customerId: state.customerId,
+    hasAccessToken: typeof window.getAccessToken === 'function' && !!window.getAccessToken(),
+    forceRefresh
+  });
+
+  if (!isUserAuthenticated()) {
+    console.warn('[Profile] Cannot load profile: user not authenticated');
+    ProfilePage.showError('Please log in to view your profile.');
+    return;
+  }
+
+  if (!state.customerId) {
+    console.warn('[Profile] Cannot load profile: no customer ID available');
+    console.log('[Profile] State:', {
+      customerId: state.customerId,
+      authenticatedEmail: state.authenticatedEmail,
+      metadata: getTokenMetadata()
+    });
+    
+    // Try to get customer ID from token metadata
+    const metadata = getTokenMetadata();
+    const customerIdFromMetadata = metadata?.username || metadata?.userName;
+    
+    if (customerIdFromMetadata) {
+      console.log('[Profile] Found customer ID in metadata, using it:', customerIdFromMetadata);
+      state.customerId = String(customerIdFromMetadata);
+    } else {
+      ProfilePage.showError('Unable to load profile: Customer ID not found. Please try logging in again.');
+      return;
+    }
+  }
+
+  try {
+    console.log('[Profile] Fetching customer data for ID:', state.customerId);
+    // getCustomer() now handles caching and deduplication internally
+    const customerData = await authAPI.getCustomer(state.customerId, forceRefresh);
+
+    console.log('[Profile] Customer data received:', customerData);
+    // Populate profile page with data
+    await ProfilePage.populateAll(customerData);
+
+    // Attach payment card button handlers
+    initPaymentCardButtons();
+    
+    // Note: Cancel and Freeze subscription handlers are initialized in initSettingsHandlers()
+    // which is called from both loadProfileData and loadSettingsData
+
+    console.log('[Profile] Profile data loaded successfully');
+  } catch (error) {
+    console.error('[Profile] Error loading profile data:', error);
+    console.error('[Profile] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      customerId: state.customerId
+    });
+    
+    // Show error but don't prevent page from displaying
+    // Extract a user-friendly error message
+    let errorMessage = 'Failed to load profile data.';
+    if (error.message) {
+      // Check if it's a 404 error
+      if (error.message.includes('404') || error.message.includes('Not Found')) {
+        errorMessage = 'Profile not found. Please ensure your account is set up correctly.';
+      } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
+        errorMessage = 'You do not have permission to view this profile.';
+      } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+        errorMessage = 'Your session has expired. Please log in again.';
+      } else {
+        errorMessage = `Failed to load profile data: ${error.message.split(' - ')[0]}`;
+      }
+    }
+    
+    ProfilePage.showError(errorMessage);
+    
+    // Still try to populate with whatever data we have (from metadata)
+    // This ensures the page structure is visible even if API fails
+    const metadata = getTokenMetadata();
+    if (metadata) {
+      const fallbackCustomer = {
+        id: state.customerId || metadata.username,
+        email: state.authenticatedEmail || metadata.email,
+        firstName: metadata.firstName,
+        lastName: metadata.lastName
+      };
+      if (fallbackCustomer.id || fallbackCustomer.email) {
+        console.log('[Profile] Using fallback customer data from metadata');
+        try {
+          await ProfilePage.populateAll(fallbackCustomer);
+        } catch (populateError) {
+          console.warn('[Profile] Could not populate with fallback data:', populateError);
+        }
+      }
+    } else {
+      // Even without metadata, ensure page structure is visible
+      // Populate with minimal data so the page shows
+      const minimalCustomer = {
+        id: state.customerId || 'Unknown',
+        email: state.authenticatedEmail || 'Unknown',
+        firstName: '',
+        lastName: ''
+      };
+      try {
+        await ProfilePage.populateAll(minimalCustomer);
+      } catch (populateError) {
+        console.warn('[Profile] Could not populate with minimal data:', populateError);
+      }
+    }
+  }
+}
+
+// Expose loadProfileData to window for profile page
+if (typeof window !== 'undefined') {
+  window.loadProfileData = loadProfileData;
+}
+
+/**
+ * Initialize payment card button handlers
+ */
+function initPaymentCardButtons() {
+  const allInvoicesBtn = document.getElementById('allInvoicesBtn');
+  const updatePaymentBtn = document.getElementById('updatePaymentBtn');
+
+  if (allInvoicesBtn) {
+    // Remove existing listeners to avoid duplicates
+    const newBtn = allInvoicesBtn.cloneNode(true);
+    allInvoicesBtn.parentNode.replaceChild(newBtn, allInvoicesBtn);
+    
+    newBtn.addEventListener('click', async () => {
+      console.log('[Profile] All invoices button clicked');
+      await openAllInvoicesModal();
+    });
+  }
+  
+  // Close button for all invoices modal
+  const closeAllInvoicesModal = document.getElementById('closeAllInvoicesModal');
+  if (closeAllInvoicesModal) {
+    closeAllInvoicesModal.addEventListener('click', () => {
+      const modal = document.getElementById('allInvoicesModal');
+      if (modal) modal.style.display = 'none';
+    });
+  }
+  
+  // Close modal when clicking outside
+  const allInvoicesModal = document.getElementById('allInvoicesModal');
+  if (allInvoicesModal) {
+    allInvoicesModal.addEventListener('click', (e) => {
+      if (e.target === allInvoicesModal) {
+        allInvoicesModal.style.display = 'none';
+      }
+    });
+  }
+
+  if (updatePaymentBtn) {
+    // Remove existing listeners to avoid duplicates
+    const newBtn = updatePaymentBtn.cloneNode(true);
+    updatePaymentBtn.parentNode.replaceChild(newBtn, updatePaymentBtn);
+    
+    newBtn.addEventListener('click', async () => {
+      console.log('[Profile] Update payment method button clicked');
+      // TODO: Navigate to payment method update page or show modal
+      // For now, show alert with message
+      alert('Update payment method page coming soon! This will allow you to change your payment method.');
+    });
+  }
+}
+
+/**
+ * Open all invoices modal and load invoices
+ */
+async function openAllInvoicesModal() {
+  const modal = document.getElementById('allInvoicesModal');
+  const container = document.getElementById('allInvoicesContainer');
+  
+  if (!modal || !container) {
+    console.error('[Profile] All invoices modal elements not found');
+    return;
+  }
+  
+  // Show modal
+  modal.style.display = 'flex';
+  container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255, 255, 255, 0.7);">Loading invoices...</div>';
+  
+  try {
+    if (!state.customerId) {
+      throw new Error('No customer ID available');
+    }
+    
+    // Fetch all invoices (no date restrictions, get all available)
+    // Use a wide date range to get all invoices (e.g., last 10 years)
+    // Note: Invoices API expects TimePoint format (ISO 8601) for period parameters
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - 10);
+    
+    const period = {
+      start: startDate.toISOString(), // TimePoint format (ISO 8601)
+      end: endDate.toISOString() // TimePoint format (ISO 8601)
+    };
+    
+    console.log('[Profile] Fetching all invoices with period:', period);
+    const invoices = await authAPI.getCustomerInvoices(state.customerId, period);
+    console.log('[Profile] All invoices received:', invoices?.length || 0, 'invoices');
+    
+    // Render invoices in modal
+    await renderAllInvoices(invoices);
+    
+  } catch (error) {
+    console.error('[Profile] Error fetching invoices:', error);
+    container.innerHTML = `
+      <div style="text-align: center; padding: 40px; color: rgba(255, 100, 100, 0.8);">
+        <p>Failed to load invoices</p>
+        <p style="font-size: 14px; margin-top: 8px; color: rgba(255, 255, 255, 0.6);">${error.message || 'Unknown error'}</p>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Render all invoices in the modal
+ */
+async function renderAllInvoices(invoices) {
+  const container = document.getElementById('allInvoicesContainer');
+  if (!container) return;
+  
+  if (!invoices || invoices.length === 0) {
+    container.innerHTML = '<div class="settings-empty" style="padding: 40px; text-align: center;">No invoices found</div>';
+    return;
+  }
+  
+  // Sort by date (most recent first)
+  const sorted = invoices
+    .filter(inv => inv)
+    .sort((a, b) => {
+      const dateA = new Date(a.dueDate || a.created || 0);
+      const dateB = new Date(b.dueDate || b.created || 0);
+      return dateB - dateA;
+    });
+  
+  // Use the same rendering logic as SettingsPage.renderInvoices
+  const invoicesHtml = sorted.map(invoice => {
+    // Format invoice number
+    const invoiceNumber = invoice.number || invoice.id || '-';
+    const fullInvoiceNumber = invoice.prefix ? `${invoice.prefix}${invoiceNumber}` : invoiceNumber;
+    
+    // Format date (dueDate is Day format YYYY-MM-DD, created is TimePoint)
+    let invoiceDate = '-';
+    const dateToFormat = invoice.dueDate || invoice.created;
+    if (dateToFormat) {
+      const date = new Date(dateToFormat);
+      if (!isNaN(date.getTime())) {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        invoiceDate = `${day}.${month}.${year}`;
+      }
+    }
+    
+    // Format amount (use totalAmount or rest)
+    let amount = '-';
+    const amountObj = invoice.totalAmount || invoice.rest;
+    if (amountObj?.amount) {
+      const amountMain = amountObj.amount / 100; // Convert from øre to DKK
+      // Use ProfileUtils.formatPrice if available, otherwise format manually
+      if (typeof ProfileUtils !== 'undefined' && ProfileUtils.formatPrice) {
+        amount = ProfileUtils.formatPrice(amountMain).replace('/md.', '') + ' kr';
+      } else {
+        amount = amountMain.toFixed(2).replace('.', ',') + ' kr';
+      }
+    }
+    
+    // Get invoice type
+    const invoiceType = invoice.type || 'REGULAR';
+    const typeLabels = {
+      'DIRECT_DEBIT': 'Direct Debit',
+      'REGULAR': 'Invoice',
+      'INTERNAL': 'Internal',
+      'RCP': 'Recurring Payment',
+      'EXTERNAL': 'External',
+      'UNKNOWN': 'Invoice'
+    };
+    const typeLabel = typeLabels[invoiceType] || 'Invoice';
+    
+    // Determine status based on state or rest amount
+    let statusText = 'Pending';
+    let statusClass = 'invoice-status-pending';
+    
+    if (invoice.state) {
+      const stateLabels = {
+        'STATE_DONE': 'Paid',
+        'STATE_SENT': 'Sent',
+        'STATE_REMINDER': 'Reminder',
+        'STATE_REMINDER_SERVICE': 'Reminder',
+        'STATE_DEBT_COLLECTION': 'Collection',
+        'STATE_EXPORTED': 'Exported',
+        'STATE_PENDING_SEND': 'Pending',
+        'STATE_NOT_SENT': 'Not Sent',
+        'STATE_SENT_PENDING_RESPONSE': 'Pending',
+        'STATE_UNKNOWN': 'Unknown'
+      };
+      statusText = stateLabels[invoice.state] || 'Pending';
+      
+      if (invoice.state === 'STATE_DONE') {
+        statusClass = 'invoice-status-paid';
+      } else if (invoice.state.includes('REMINDER') || invoice.state === 'STATE_DEBT_COLLECTION') {
+        statusClass = 'invoice-status-overdue';
+      }
+    } else if (invoice.rest?.amount === 0 || !invoice.rest) {
+      statusText = 'Paid';
+      statusClass = 'invoice-status-paid';
+    }
+    
+    const businessName = invoice.businessUnit?.name || invoice.company?.name || '-';
+    
+    return `
+      <div class="invoice-card">
+        <div class="invoice-header">
+          <div class="invoice-number">${fullInvoiceNumber}</div>
+          <span class="invoice-status-badge ${statusClass}">${statusText}</span>
+        </div>
+        <div class="invoice-details">
+          <div class="invoice-info-row">
+            <span class="invoice-label">Type:</span>
+            <span class="invoice-value">${typeLabel}</span>
+          </div>
+          <div class="invoice-info-row">
+            <span class="invoice-label">Due Date:</span>
+            <span class="invoice-value">${invoiceDate}</span>
+          </div>
+          ${businessName !== '-' ? `
+          <div class="invoice-info-row">
+            <span class="invoice-label">Facility:</span>
+            <span class="invoice-value">${businessName}</span>
+          </div>
+          ` : ''}
+          <div class="invoice-info-row invoice-amount-row">
+            <span class="invoice-label">Amount:</span>
+            <span class="invoice-amount">${amount}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  container.innerHTML = `
+    <div style="margin-bottom: 20px; color: rgba(255, 255, 255, 0.7); font-size: 14px;">
+      Showing ${sorted.length} invoice${sorted.length !== 1 ? 's' : ''}
+    </div>
+    ${invoicesHtml}
+  `;
 }
