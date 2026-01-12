@@ -13276,6 +13276,49 @@ async function loadOrderForConfirmation(orderId) {
 function showPaymentFailedMessage(order, orderId, reason = null) {
   console.log('[Payment Failed] Called with:', { orderId, reason, currentStep: state.currentStep });
   
+  // CRITICAL: Restore cart and state from sessionStorage BEFORE showing failure page
+  // This ensures cart is populated when user clicks "Try Payment Again"
+  try {
+    const orderData = sessionStorage.getItem('boulders_checkout_order');
+    if (orderData) {
+      const storedOrder = JSON.parse(orderData);
+      console.log('[Payment Failed] Restoring cart and state from sessionStorage:', storedOrder);
+      
+      // Restore cart items and state
+      if (storedOrder.cartItems) {
+        state.cartItems = storedOrder.cartItems;
+        console.log('[Payment Failed] ✅ Restored cart items:', state.cartItems.length, 'items');
+      }
+      if (storedOrder.totals) {
+        state.totals = { ...state.totals, ...storedOrder.totals };
+        console.log('[Payment Failed] ✅ Restored totals:', state.totals);
+      }
+      if (storedOrder.membershipPlanId) {
+        state.membershipPlanId = storedOrder.membershipPlanId;
+        console.log('[Payment Failed] ✅ Restored membershipPlanId:', state.membershipPlanId);
+        
+        // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
+        // This ensures updateCartSummary() can rebuild cart correctly
+        if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
+          const productId = storedOrder.membershipPlanId.replace('membership-', '');
+          state.selectedProductId = parseInt(productId, 10) || productId;
+          state.selectedProductType = 'membership';
+          console.log('[Payment Failed] ✅ Derived selectedProductId:', state.selectedProductId, 'selectedProductType:', state.selectedProductType);
+        }
+      }
+      if (storedOrder.selectedBusinessUnit) {
+        state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+        console.log('[Payment Failed] ✅ Restored selectedBusinessUnit:', state.selectedBusinessUnit);
+      }
+      if (storedOrder.orderId) {
+        state.orderId = storedOrder.orderId;
+        console.log('[Payment Failed] ✅ Restored orderId:', state.orderId);
+      }
+    }
+  } catch (e) {
+    console.warn('[Payment Failed] Could not restore cart from sessionStorage:', e);
+  }
+  
   // CRITICAL: Mark payment as failed FIRST to prevent success page from rendering
   state.paymentFailed = true;
   state.paymentConfirmed = false;
@@ -13418,6 +13461,46 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
             updateStepIndicator();
             updateNavigationButtons();
             updateMainSubtitle();
+            
+            // CRITICAL: Restore cart and state from sessionStorage if not already restored
+            try {
+              const orderData = sessionStorage.getItem('boulders_checkout_order');
+              if (orderData) {
+                const storedOrder = JSON.parse(orderData);
+                console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
+                
+                if (storedOrder.cartItems && (!state.cartItems || state.cartItems.length === 0)) {
+                  state.cartItems = storedOrder.cartItems;
+                  console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
+                }
+                if (storedOrder.totals) {
+                  state.totals = { ...state.totals, ...storedOrder.totals };
+                  console.log('[Payment Retry] ✅ Restored totals');
+                }
+                if (storedOrder.membershipPlanId && !state.membershipPlanId) {
+                  state.membershipPlanId = storedOrder.membershipPlanId;
+                  console.log('[Payment Retry] ✅ Restored membershipPlanId');
+                  
+                  // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
+                  if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
+                    const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                    state.selectedProductId = parseInt(productId, 10) || productId;
+                    state.selectedProductType = 'membership';
+                    console.log('[Payment Retry] ✅ Derived selectedProductId:', state.selectedProductId);
+                  }
+                }
+                if (storedOrder.selectedBusinessUnit && !state.selectedBusinessUnit) {
+                  state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+                  console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
+                }
+                if (storedOrder.orderId && !state.orderId) {
+                  state.orderId = storedOrder.orderId;
+                  console.log('[Payment Retry] ✅ Restored orderId');
+                }
+              }
+            } catch (e) {
+              console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
+            }
             
             // CRITICAL: Update cart and payment overview to ensure items are displayed correctly
             updateCartSummary();
@@ -14307,6 +14390,46 @@ function showStep(stepNumber) {
     // Use setTimeout to ensure DOM is ready
     setTimeout(() => {
       updateSelectedGymDisplay();
+      
+      // CRITICAL: Restore selectedBusinessUnit from sessionStorage if missing
+      if (!state.selectedBusinessUnit) {
+        try {
+          const orderData = sessionStorage.getItem('boulders_checkout_order');
+          if (orderData) {
+            const storedOrder = JSON.parse(orderData);
+            if (storedOrder.selectedBusinessUnit) {
+              state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+              console.log('[showStep] Step 2 - Restored selectedBusinessUnit from sessionStorage:', state.selectedBusinessUnit);
+            }
+          }
+        } catch (e) {
+          console.warn('[showStep] Could not restore selectedBusinessUnit:', e);
+        }
+      }
+      
+      // CRITICAL: Load products if business unit is selected but products aren't loaded
+      if (state.selectedBusinessUnit) {
+        const hasAnyProducts = (state.subscriptions?.length || 0) > 0 || 
+                               (state.dayPassSubscriptions?.length || 0) > 0 || 
+                               (state.valueCards?.length || 0) > 0;
+        if (!hasAnyProducts) {
+          console.log('[showStep] Step 2 shown - loading products for business unit:', state.selectedBusinessUnit);
+          loadProductsFromAPI()
+            .then(() => {
+              console.log('[showStep] ✅ Products loaded, rendering...');
+              renderProductsFromAPI();
+            })
+            .catch(error => {
+              console.error('[showStep] ❌ Failed to load products:', error);
+            });
+        } else {
+          // Products already loaded, just render them
+          console.log('[showStep] Products already loaded, rendering...');
+          renderProductsFromAPI();
+        }
+      } else {
+        console.warn('[showStep] Step 2 shown but no business unit selected - cannot load products');
+      }
     }, 100);
   }
   
@@ -14314,6 +14437,39 @@ function showStep(stepNumber) {
   if (stepNumber === 4) {
     // Use setTimeout to ensure DOM is ready
     setTimeout(() => {
+      // CRITICAL: Restore cart from sessionStorage if empty
+      if ((!state.cartItems || state.cartItems.length === 0) && state.orderId) {
+        try {
+          const orderData = sessionStorage.getItem('boulders_checkout_order');
+          if (orderData) {
+            const storedOrder = JSON.parse(orderData);
+            if (storedOrder.cartItems) {
+              state.cartItems = storedOrder.cartItems;
+              console.log('[showStep] Step 4 - Restored cart items from sessionStorage:', state.cartItems.length, 'items');
+            }
+            if (storedOrder.totals) {
+              state.totals = { ...state.totals, ...storedOrder.totals };
+            }
+            if (storedOrder.membershipPlanId && !state.membershipPlanId) {
+              state.membershipPlanId = storedOrder.membershipPlanId;
+              
+              // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
+              if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
+                const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                state.selectedProductId = parseInt(productId, 10) || productId;
+                state.selectedProductType = 'membership';
+                console.log('[showStep] Step 4 - Derived selectedProductId:', state.selectedProductId);
+              }
+            }
+            if (storedOrder.selectedBusinessUnit && !state.selectedBusinessUnit) {
+              state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+            }
+          }
+        } catch (e) {
+          console.warn('[showStep] Could not restore cart from sessionStorage:', e);
+        }
+      }
+      
       updateCartSummary();
       // If order exists, update payment overview
       if (state.orderId && state.fullOrder) {
