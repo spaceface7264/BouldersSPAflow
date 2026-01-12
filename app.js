@@ -4954,7 +4954,6 @@ async function showBoostModal() {
   });
 }
 
->>>>>>> 44ca2a6 (Implement half krone rounding for all displayed amounts)
 // Expose a small API to set the image dynamically if desired
 // Usage: window.setAddonsUpsellImage('https://.../image.jpg')
 // Image API removed
@@ -10597,7 +10596,6 @@ function renderCartAddons() {
   });
 }
 
->>>>>>> 44ca2a6 (Implement half krone rounding for all displayed amounts)
 function renderCartTotal() {
   // Cart total is no longer displayed - payment overview shows calculated prices instead
   // Just update payment overview which shows the correct calculated prices
