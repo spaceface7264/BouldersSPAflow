@@ -1659,6 +1659,19 @@ class AuthAPI {
       }
       
       const data = await response.json();
+      
+      // Log booking structure for debugging
+      if (Array.isArray(data) && data.length > 0) {
+        console.log('[Classes] Sample booking structure from API:', {
+          total: data.length,
+          sample: data[0],
+          sampleType: data[0].type,
+          hasGroupActivityBooking: !!data[0].groupActivityBooking,
+          hasWaitingListBooking: !!data[0].waitingListBooking,
+          keys: Object.keys(data[0])
+        });
+      }
+      
       return data;
     } catch (error) {
       console.error('[Classes] Get group activity bookings error:', error);
@@ -1960,7 +1973,11 @@ class AuthAPI {
     try {
       const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       
-      // Build query parameters
+      // Build query parameters for tryToRefund and allowLateCancellationWithNoShow
+      // Note: OpenAPI spec shows bookingType as "in: path" (required) but the endpoint path definition
+      // doesn't include {bookingType}. This appears to be an error in the spec.
+      // Based on the spec saying bookingType is "in: path" and required, we'll include it in the path.
+      // tryToRefund and allowLateCancellationWithNoShow are marked as "in: path" in spec but should be query params
       const params = new URLSearchParams();
       if (tryToRefund) {
         params.append('tryToRefund', 'true');
@@ -1970,6 +1987,9 @@ class AuthAPI {
       }
       const queryString = params.toString();
       
+      // Endpoint path includes bookingType as path parameter (per spec: bookingType is "in: path" and required)
+      // The actual endpoint should be: /api/ver3/customers/{customer}/bookings/groupactivities/{id}/{bookingType}
+      // even though the OpenAPI path definition shows just {id}
       let url;
       if (this.useProxy) {
         let path = `/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}/${bookingType}`;
@@ -1978,10 +1998,21 @@ class AuthAPI {
         }
         url = `${this.baseUrl}?path=${encodeURIComponent(path)}`;
       } else if (isDevelopment) {
-        url = `/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}/${bookingType}`;
+        // In development, Vite proxy has issues with DELETE requests and complex paths
+        // WORKAROUND: Use direct API call to bypass Vite proxy issues
+        // This ensures DELETE requests work correctly
+        // Note: This requires CORS to be enabled on the API server for localhost
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}/${bookingType}`;
         if (queryString) {
           url += `?${queryString}`;
         }
+        console.log('[Classes] Development URL constructed (direct API call, bypassing Vite proxy):', { 
+          url, 
+          queryString: queryString,
+          bookingId,
+          bookingType,
+          note: 'Using direct API call with bookingType in path. If you see CORS errors, the API server needs to allow localhost origins.'
+        });
       } else {
         url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}/${bookingType}`;
         if (queryString) {
@@ -2000,9 +2031,46 @@ class AuthAPI {
         'Authorization': `Bearer ${accessToken}`,
       };
       
-      console.log('[Classes] Canceling group activity booking:', { url, bookingId, bookingType });
+      console.log('[Classes] Canceling group activity booking:', { 
+        url, 
+        bookingId, 
+        bookingType,
+        customerId,
+        tryToRefund,
+        allowLateCancellationWithNoShow,
+        queryString
+      });
       
-      const response = await fetch(url, { method: 'DELETE', headers });
+      // Try alternative endpoint format if first attempt fails
+      // Some APIs use just the ID without bookingType in path
+      let response = await fetch(url, { method: 'DELETE', headers });
+      
+      // If 404, try alternative format: bookingType as query parameter instead of path
+      if (!response.ok && response.status === 404) {
+        console.log('[Classes] First attempt failed with 404, trying alternative endpoint format (bookingType as query param)');
+        const altParams = new URLSearchParams();
+        altParams.append('bookingType', bookingType);
+        if (tryToRefund) {
+          altParams.append('tryToRefund', 'true');
+        }
+        if (allowLateCancellationWithNoShow) {
+          altParams.append('allowLateCancellationWithNoShow', 'true');
+        }
+        const altQueryString = altParams.toString();
+        
+        let altUrl;
+        if (isDevelopment) {
+          altUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}?${altQueryString}`;
+        } else if (this.useProxy) {
+          const altPath = `/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}?${altQueryString}`;
+          altUrl = `${this.baseUrl}?path=${encodeURIComponent(altPath)}`;
+        } else {
+          altUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/bookings/groupactivities/${bookingId}?${altQueryString}`;
+        }
+        
+        console.log('[Classes] Trying alternative URL:', { altUrl, altQueryString });
+        response = await fetch(altUrl, { method: 'DELETE', headers });
+      }
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -18134,18 +18202,37 @@ const ClassesUtils = {
 
     // Normalize group activities
     (groupActivities || []).forEach(booking => {
-      // The booking ID is nested in groupActivityBooking.id (per OpenAPI spec)
-      const bookingId = booking.groupActivityBooking?.id || booking.id || booking.waitingListBooking?.id;
+      // Determine booking type and extract correct ID
+      // API returns either groupActivityBooking or waitingListBooking objects
+      const isWaitingList = !!booking.waitingListBooking;
+      const isGroupActivity = !!booking.groupActivityBooking;
+      
+      // Extract ID from the correct nested object
+      const bookingId = isWaitingList ? booking.waitingListBooking?.id :
+                       isGroupActivity ? booking.groupActivityBooking?.id :
+                       booking.id;
+      
+      // Determine API booking type for cancellation
+      const apiBookingType = booking.type === 'waitingListBooking' ? 'waitingListBooking' :
+                            booking.type === 'groupActivityBooking' ? 'groupActivityBooking' :
+                            isWaitingList ? 'waitingListBooking' :
+                            isGroupActivity ? 'groupActivityBooking' :
+                            'groupActivityBooking';
+      
       if (!bookingId) {
         console.error('[Classes] Group activity booking missing ID:', {
           booking,
           hasGroupActivityBooking: !!booking.groupActivityBooking,
           groupActivityBookingId: booking.groupActivityBooking?.id,
+          hasWaitingListBooking: !!booking.waitingListBooking,
+          waitingListBookingId: booking.waitingListBooking?.id,
           hasId: !!booking.id,
           id: booking.id,
+          type: booking.type,
           keys: Object.keys(booking)
         });
       }
+      
       normalized.push({
         id: bookingId,
         type: 'groupActivity',
@@ -18157,7 +18244,8 @@ const ClassesUtils = {
         isDebited: booking.isDebited,
         actions: booking.actions || [],
         waitingListPosition: booking.waitingListPosition || booking.waitingListBooking?.waitingListPosition,
-        original: booking
+        original: booking,
+        _apiBookingType: apiBookingType // Store API booking type for cancellation
       });
     });
 
@@ -18485,8 +18573,30 @@ const ClassesPage = {
     
     const actionsHtml = [];
     
+    // Determine API booking type from booking data
+    // First check if we stored it during normalization (most reliable)
+    let apiBookingType = booking._apiBookingType;
+    
+    if (!apiBookingType) {
+      // Fallback: determine from original booking structure
+      const originalBooking = booking.original || booking;
+      apiBookingType = originalBooking.type === 'waitingListBooking' ? 'waitingListBooking' :
+                      originalBooking.type === 'groupActivityBooking' ? 'groupActivityBooking' :
+                      originalBooking.waitingListBooking ? 'waitingListBooking' : 
+                      originalBooking.groupActivityBooking ? 'groupActivityBooking' :
+                      'groupActivityBooking';
+      
+      console.warn('[Classes] API booking type not stored in normalized booking, determined from original:', {
+        bookingId: booking.id,
+        determinedType: apiBookingType,
+        originalType: originalBooking.type,
+        hasGroupActivityBooking: !!originalBooking.groupActivityBooking,
+        hasWaitingListBooking: !!originalBooking.waitingListBooking
+      });
+    }
+    
     if (showCancel && bookingId) {
-      actionsHtml.push(`<button class="booking-action-btn booking-action-cancel" data-action="cancel" data-booking-id="${bookingId}" data-booking-type="${type}">
+      actionsHtml.push(`<button class="booking-action-btn booking-action-cancel" data-action="cancel" data-booking-id="${bookingId}" data-booking-type="${type}" data-api-booking-type="${apiBookingType}">
         <svg class="icon icon-cancel" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="18" y1="6" x2="6" y2="18"></line>
           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -18621,7 +18731,18 @@ const ClassesPage = {
             <button class="booking-action-btn booking-action-cancel booking-action-cancel-all" 
                     data-action="cancel-all" 
                     data-booking-ids="${bookings.map(b => b.id || b.original?.id).filter(Boolean).join(',')}" 
-                    data-booking-type="${type}">
+                    data-booking-type="${type}"
+                    data-booking-data="${encodeURIComponent(JSON.stringify(bookings.map(b => {
+                      const orig = b.original || b;
+                      return {
+                        id: b.id || orig.id,
+                        apiBookingType: orig.type === 'waitingListBooking' ? 'waitingListBooking' :
+                                       orig.type === 'groupActivityBooking' ? 'groupActivityBooking' :
+                                       orig.waitingListBooking ? 'waitingListBooking' : 
+                                       orig.groupActivityBooking ? 'groupActivityBooking' :
+                                       'groupActivityBooking'
+                      };
+                    })))}">
               <svg class="icon icon-cancel" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -18788,6 +18909,22 @@ const ClassesPage = {
         }
         
         const bookingIds = bookingIdsStr.split(',').filter(Boolean);
+        const bookingDataStr = button.dataset.bookingData;
+        
+        // Parse booking data to get API booking types
+        let bookingDataMap = new Map();
+        if (bookingDataStr) {
+          try {
+            const bookingData = JSON.parse(decodeURIComponent(bookingDataStr));
+            bookingData.forEach(b => {
+              if (b.id) {
+                bookingDataMap.set(String(b.id), b.apiBookingType || 'groupActivityBooking');
+              }
+            });
+          } catch (err) {
+            console.warn('[Classes] Failed to parse booking data, will use default booking type:', err);
+          }
+        }
         
         if (bookingIds.length === 0) {
           showToast('Error: No bookings to cancel', 'error');
@@ -18811,7 +18948,21 @@ const ClassesPage = {
           
           for (const bookingId of bookingIds) {
             try {
-              await ClassesPage.handleCancelBooking(bookingId, bookingType, false, true); // false = no confirmation, true = skip reload
+              // Get the API booking type for this specific booking
+              const apiBookingType = bookingDataMap.get(String(bookingId)) || 'groupActivityBooking';
+              
+              // Temporarily set the API booking type in the button's dataset so handleCancelBooking can use it
+              const tempButton = document.createElement('button');
+              tempButton.dataset.apiBookingType = apiBookingType;
+              
+              // We need to pass the API booking type to handleCancelBooking
+              // Since handleCancelBooking reads from the button, we'll create a temporary approach
+              // Store it in a way that handleCancelBooking can access
+              const originalHandleCancel = ClassesPage.handleCancelBooking;
+              
+              // Call with the correct API booking type by temporarily modifying the function
+              // Actually, let's modify handleCancelBooking to accept the API booking type as a parameter
+              await ClassesPage.handleCancelBooking(bookingId, bookingType, false, true, apiBookingType);
               successCount++;
             } catch (err) {
               console.error(`[Classes] Failed to cancel booking ${bookingId}:`, err);
@@ -18856,7 +19007,7 @@ const ClassesPage = {
   /**
    * Handle cancel booking
    */
-  async handleCancelBooking(bookingId, bookingType, showConfirmation = true, skipReload = false) {
+  async handleCancelBooking(bookingId, bookingType, showConfirmation = true, skipReload = false, apiBookingTypeOverride = null) {
     // Validate booking ID
     if (!bookingId || bookingId === 'undefined' || bookingId === 'null') {
       console.error('[Classes] Invalid booking ID:', bookingId);
@@ -18885,13 +19036,25 @@ const ClassesPage = {
         throw new Error('Customer ID not available');
       }
 
-      // Find the booking card to check if it's a waiting list booking
-      const bookingCard = document.querySelector(`.booking-card[data-booking-id="${bookingId}"]`);
-      const hasWaitingListPosition = bookingCard?.querySelector('.waiting-list-position') !== null;
+      // Use override if provided (from cancel-all), otherwise get from button data attribute
+      let apiBookingType = apiBookingTypeOverride;
       
-      // Determine API booking type: "groupActivityBooking" or "waitingListBooking"
-      // Default to groupActivityBooking unless we detect waiting list
-      const apiBookingType = hasWaitingListPosition ? 'waitingListBooking' : 'groupActivityBooking';
+      if (!apiBookingType) {
+        // Find the booking card to get the API booking type from data attribute
+        const bookingCard = document.querySelector(`.booking-card[data-booking-id="${bookingId}"]`);
+        const cancelButton = document.querySelector(`.booking-action-btn[data-booking-id="${bookingId}"][data-action="cancel"]`);
+        
+        // Get API booking type from button data attribute (set during rendering from actual booking data)
+        apiBookingType = cancelButton?.dataset?.apiBookingType;
+        
+        if (!apiBookingType) {
+          // Fallback: check if it's in waiting list section or has waiting list position
+          const hasWaitingListPosition = bookingCard?.querySelector('.waiting-list-position') !== null;
+          const isInWaitingList = bookingCard?.closest('#waitingListBookingsList') !== null;
+          apiBookingType = (hasWaitingListPosition || isInWaitingList) ? 'waitingListBooking' : 'groupActivityBooking';
+          console.warn(`[Classes] API booking type not found in data attribute for booking ${bookingId}, using fallback: ${apiBookingType}`);
+        }
+      }
 
       // Disable the cancel button while processing
       const cancelBtn = document.querySelector(`.booking-action-btn[data-booking-id="${bookingId}"][data-action="cancel"]`);
@@ -18904,7 +19067,6 @@ const ClassesPage = {
         bookingId: numericBookingId, 
         bookingType, 
         apiBookingType,
-        hasWaitingListPosition,
         customerId: state.customerId 
       });
 
