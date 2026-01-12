@@ -18988,6 +18988,9 @@ const ClassesPage = {
     const date = startTime ? ClassesUtils.formatDate(startTime) : '-';
     const timeRange = (startTime && endTime) ? ClassesUtils.formatTimeRange(startTime, endTime) : '-';
     
+    // Check if this is a Social Sessions class (drop-in, no booking required)
+    const isSocialSessions = name.toLowerCase().includes('social sessions');
+    
     // Instructor information
     const instructor = actualActivity.instructor?.name || 
                       actualActivity.instructors?.[0]?.name ||
@@ -19227,6 +19230,10 @@ const ClassesPage = {
               <button class="browse-book-btn browse-book-cta browse-book-already-booked" disabled>
                 <span class="book-btn-text">✓ Already Booked</span>
               </button>
+            ` : isSocialSessions ? `
+              <button class="browse-book-btn browse-book-cta browse-book-dropin" disabled>
+                <span class="book-btn-text">No Booking - Drop In!</span>
+              </button>
             ` : (allOccurrences.some(occ => {
                 const occSlots = occ.slots;
                 const occCapacity = occSlots?.total ?? occSlots?.totalBookable ?? occ.capacity ?? null;
@@ -19248,6 +19255,12 @@ const ClassesPage = {
           <div class="browse-class-actions">
             <button class="browse-book-btn browse-book-cta browse-book-already-booked" disabled>
               <span class="book-btn-text">✓ Already Booked</span>
+            </button>
+          </div>
+        ` : isSocialSessions ? `
+          <div class="browse-class-actions">
+            <button class="browse-book-btn browse-book-cta browse-book-dropin" disabled>
+              <span class="book-btn-text">No Booking - Drop In!</span>
             </button>
           </div>
         ` : (actualType === 'groupActivity' && isAvailable) || (actualType === 'event' && hasAvailableOccasion) ? `
@@ -21511,6 +21524,7 @@ async function loadBrowseClasses() {
     });
     
     // For groups where first occurrence is within filter, fetch ALL occurrences
+    // EXCEPT for "Social Sessions" classes which are isolated sessions (don't group all occurrences)
     const filterStart = new Date(periodStart);
     const filterEnd = new Date(periodEnd);
     const groupsNeedingFullFetch = [];
@@ -21526,6 +21540,10 @@ async function loadBrowseClasses() {
       const firstOccurrence = occurrences[0];
       const firstStartTime = firstOccurrence.duration?.start || firstOccurrence.start;
       
+      // Check if this is a "Social Sessions" class (isolated sessions, don't fetch all occurrences)
+      const className = firstOccurrence.name || '';
+      const isSocialSessions = className.toLowerCase().includes('social sessions');
+      
       if (firstStartTime) {
         const firstDate = new Date(firstStartTime);
         // Normalize dates to start of day for comparison (ignore time components)
@@ -21534,18 +21552,22 @@ async function loadBrowseClasses() {
         const filterEndOnly = new Date(filterEnd.getFullYear(), filterEnd.getMonth(), filterEnd.getDate());
         
         // If first occurrence is within filter range, we need to fetch all occurrences
+        // BUT skip this for Social Sessions (they are isolated sessions)
         const isWithinFilter = firstDateOnly >= filterStartOnly && firstDateOnly <= filterEndOnly;
         
         console.log(`[Classes] Checking if group needs full fetch:`, {
           key,
+          className,
+          isSocialSessions,
           firstDate: firstDateOnly.toISOString().split('T')[0],
           filterStart: filterStartOnly.toISOString().split('T')[0],
           filterEnd: filterEndOnly.toISOString().split('T')[0],
           isWithinFilter,
-          currentOccurrences: occurrences.length
+          currentOccurrences: occurrences.length,
+          willSkip: isSocialSessions
         });
         
-        if (isWithinFilter) {
+        if (isWithinFilter && !isSocialSessions) {
           const productId = firstOccurrence.groupActivityProduct?.id || firstOccurrence.groupActivityProductId;
           const businessUnitId = firstOccurrence.businessUnit?.id || firstOccurrence._businessUnitId;
           const keyParts = key.split('_time_');
@@ -21569,6 +21591,8 @@ async function loadBrowseClasses() {
               currentCount: occurrences.length
             });
           }
+        } else if (isSocialSessions) {
+          console.log(`[Classes] Skipping full fetch for Social Sessions class "${className}" (isolated sessions)`);
         }
       }
     });

@@ -8712,6 +8712,20 @@ main {
     box-shadow: none;
 }
 
+.browse-book-btn.browse-book-dropin {
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: #60A5FA;
+    cursor: default;
+}
+
+.browse-book-btn.browse-book-dropin:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.5);
+    transform: none;
+    box-shadow: none;
+}
+
 .book-btn-text {
     flex: 1;
 }
