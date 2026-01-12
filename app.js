@@ -1896,7 +1896,25 @@ class AuthAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Classes] Book group activity error (${response.status}):`, errorText);
-        throw new Error(`Book group activity failed: ${response.status} - ${errorText}`);
+        
+        // Try to parse error JSON to extract structured error data
+        let errorData = null;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          // If parsing fails, errorText is not JSON
+        }
+        
+        // Create error object with parsed data
+        const error = new Error(`Book group activity failed: ${response.status} - ${errorText}`);
+        error.status = response.status;
+        error.errorText = errorText;
+        if (errorData) {
+          error.errorData = errorData;
+          error.errorCode = errorData.errorCode;
+          error.earliestTimepoint = errorData.earliestTimepoint;
+        }
+        throw error;
       }
       
       const data = await response.json();
@@ -19619,24 +19637,92 @@ const ClassesPage = {
       console.error('[Classes] Book class error:', error);
       const errorMessage = error.message || 'Unknown error';
       
+      // Try to extract error data from error message if not already parsed
+      let errorData = error.errorData;
+      if (!errorData && error.errorText) {
+        try {
+          errorData = JSON.parse(error.errorText);
+        } catch (e) {
+          // Try to extract JSON from error message string
+          const jsonMatch = errorMessage.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              errorData = JSON.parse(jsonMatch[0]);
+            } catch (e2) {
+              // Parsing failed, continue with other error handling
+            }
+          }
+        }
+      }
+      
       // Handle specific error codes
       if (errorMessage.includes('BOOKING_TERMS_NOT_ACCEPTED')) {
         showToast('Please accept the booking terms to complete your booking.', 'error');
-      } else if (errorMessage === 'TOO_EARLY_TO_BOOK' && error.earliestTimepoint) {
-        // Format the earliest booking time
-        const formattedDate = ClassesUtils.formatDate(error.earliestTimepoint);
-        const formattedTime = ClassesUtils.formatTime(error.earliestTimepoint);
-        showToast(`Booking opens on ${formattedDate} at ${formattedTime}. Please try again then.`, 'error');
-      } else if (error.errorData?.errorCode === 'TOO_EARLY_TO_BOOK') {
-        const earliestTimepoint = error.errorData.earliestTimepoint;
+      } else if (error.errorCode === 'TOO_EARLY_TO_BOOK' || errorData?.errorCode === 'TOO_EARLY_TO_BOOK') {
+        const earliestTimepoint = error.earliestTimepoint || errorData?.earliestTimepoint;
         if (earliestTimepoint) {
-          const formattedDate = ClassesUtils.formatDate(earliestTimepoint);
-          const formattedTime = ClassesUtils.formatTime(earliestTimepoint);
-          showToast(`Booking opens on ${formattedDate} at ${formattedTime}. Please try again then.`, 'error');
+          // Check if booking should actually be open (compare with current time)
+          const now = new Date();
+          const earliestDate = new Date(earliestTimepoint);
+          const timeUntilBooking = earliestDate - now;
+          const minutesUntilBooking = Math.floor(timeUntilBooking / (1000 * 60));
+          
+          console.log('[Classes] TOO_EARLY_TO_BOOK error details:', {
+            earliestTimepoint,
+            earliestDate: earliestDate.toISOString(),
+            currentTime: now.toISOString(),
+            timeUntilBooking: `${minutesUntilBooking} minutes`,
+            shouldBeOpen: timeUntilBooking <= 0,
+            timezoneOffset: now.getTimezoneOffset()
+          });
+          
+          // If booking should already be open (earliestTimepoint is in the past), show a different message
+          if (timeUntilBooking <= 0) {
+            console.warn('[Classes] Booking should be open but API says it\'s too early. Possible timezone mismatch.');
+            showToast('Booking should be open now. Please try refreshing the page or contact support if the issue persists.', 'error');
+          } else {
+            // Format the earliest booking time in user's local timezone
+            const earliestDate = new Date(earliestTimepoint);
+            const formattedDate = ClassesUtils.formatDate(earliestTimepoint);
+            const formattedTime = ClassesUtils.formatTime(earliestTimepoint);
+            const hoursUntilBooking = Math.floor(minutesUntilBooking / 60);
+            const daysUntilBooking = Math.floor(hoursUntilBooking / 24);
+            
+            // Show a more helpful message with time remaining
+            let timeMessage = '';
+            if (daysUntilBooking > 0) {
+              timeMessage = `in ${daysUntilBooking} day${daysUntilBooking > 1 ? 's' : ''}`;
+            } else if (hoursUntilBooking > 0) {
+              timeMessage = `in ${hoursUntilBooking} hour${hoursUntilBooking > 1 ? 's' : ''}`;
+            } else {
+              timeMessage = `in ${minutesUntilBooking} minute${minutesUntilBooking > 1 ? 's' : ''}`;
+            }
+            
+            showToast(`Booking opens ${timeMessage} (${formattedDate} at ${formattedTime}). Please try again then.`, 'error');
+          }
         } else {
           showToast('This class is not yet available for booking. Please try again later.', 'error');
         }
-      } else if (errorMessage === 'ALREADY_BOOKED' || error.errorData?.errorCode === 'ALREADY_BOOKED') {
+      } else if (errorMessage.includes('TOO_EARLY_TO_BOOK')) {
+        // Fallback: try to extract earliestTimepoint from error message
+        const jsonMatch = errorMessage.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed.earliestTimepoint) {
+              const formattedDate = ClassesUtils.formatDate(parsed.earliestTimepoint);
+              const formattedTime = ClassesUtils.formatTime(parsed.earliestTimepoint);
+              showToast(`Booking opens on ${formattedDate} at ${formattedTime}. Please try again then.`, 'error');
+            } else {
+              showToast('This class is not yet available for booking. Please try again later.', 'error');
+            }
+          } catch (e) {
+            showToast('This class is not yet available for booking. Please try again later.', 'error');
+          }
+        } else {
+          showToast('This class is not yet available for booking. Please try again later.', 'error');
+        }
+      } else if (errorMessage.includes('ALREADY_BOOKED') || errorData?.errorCode === 'ALREADY_BOOKED') {
         showToast('You have already booked this class.', 'info');
         // Refresh browse results to update the UI
         const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
@@ -19644,7 +19730,13 @@ const ClassesPage = {
           await loadBrowseClasses();
         }
       } else {
-        showToast(`Failed to book class: ${errorMessage}`, 'error');
+        // Show a cleaner error message (remove the raw JSON if present)
+        let displayMessage = errorMessage;
+        if (displayMessage.includes(' - {') && errorData) {
+          // Replace the JSON part with a user-friendly message
+          displayMessage = `Failed to book class: ${errorData.errorCode || 'Unknown error'}`;
+        }
+        showToast(displayMessage, 'error');
       }
     }
   },
