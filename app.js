@@ -5309,7 +5309,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
-  const paymentError = urlParams.get('error'); // Check for payment error
+  const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
   let orderId = urlParams.get('orderId');
   let isPaymentReturnFlow = false;
   
@@ -5347,9 +5347,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // If returning from payment, fetch order data and show confirmation view
   if (paymentReturn === 'return' && orderId) {
     // Check if payment was cancelled or failed
+    // paymentError can be 'cancelled', 'canceled', or a numeric error code (e.g., '205')
+    const hasPaymentError = paymentError !== null && paymentError !== undefined;
     const isPaymentCancelled = paymentStatus === 'cancelled' || paymentStatus === 'canceled' || 
                                paymentError === 'cancelled' || paymentError === 'canceled' ||
-                               paymentReturn === 'cancel';
+                               paymentReturn === 'cancel' ||
+                               hasPaymentError; // Any error code indicates payment failure
     
     // TEST MODE: Force failure for testing (add ?test=fail to URL)
     const testMode = urlParams.get('test');
@@ -5360,13 +5363,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     if (isPaymentCancelled) {
-      console.log('[Payment Return] Payment was cancelled - showing failure page');
+      console.log('[Payment Return] Payment was cancelled or failed - showing failure page');
+      console.log('[Payment Return] Error details:', { paymentStatus, paymentError, hasPaymentError });
+      
+      // Determine failure reason based on error code
+      let failureReason = null;
+      if (paymentError) {
+        // Map common error codes to user-friendly messages
+        const errorCode = parseInt(paymentError, 10);
+        if (!isNaN(errorCode)) {
+          switch (errorCode) {
+            case 205:
+              failureReason = 'Payment was declined by your bank or card issuer.';
+              break;
+            case 401:
+            case 403:
+              failureReason = 'Payment authorization failed. Please try again or use a different payment method.';
+              break;
+            default:
+              failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
+          }
+        } else if (paymentError.toLowerCase().includes('cancel')) {
+          failureReason = 'Payment was cancelled before completion.';
+        }
+      }
+      
       state.currentStep = TOTAL_STEPS;
       showStep(state.currentStep);
       updateStepIndicator();
       updateNavigationButtons();
       updateMainSubtitle();
-      showPaymentFailedMessage(null, parseInt(orderId, 10), null); // Use default calm message
+      showPaymentFailedMessage(null, parseInt(orderId, 10), failureReason);
       return;
     }
     
@@ -12757,7 +12784,42 @@ window.getOrderDiagnostics = async function(orderId) {
 
 // Load order data when returning from payment
 async function loadOrderForConfirmation(orderId) {
-  // CRITICAL: Reset payment status flags at start
+  // CRITICAL: Check for URL error parameters FIRST (before resetting flags)
+  // If there's an error code in URL, payment definitely failed
+  const urlParams = new URLSearchParams(window.location.search);
+  const paymentError = urlParams.get('error');
+  const paymentStatus = urlParams.get('status');
+  
+  if (paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled') {
+    console.warn('[Payment Return] ⚠️ Error detected in URL parameters - payment failed');
+    console.warn('[Payment Return] Error details:', { paymentError, paymentStatus });
+    
+    // Determine failure reason based on error code
+    let failureReason = null;
+    if (paymentError) {
+      const errorCode = parseInt(paymentError, 10);
+      if (!isNaN(errorCode)) {
+        switch (errorCode) {
+          case 205:
+            failureReason = 'Payment was declined by your bank or card issuer.';
+            break;
+          case 401:
+          case 403:
+            failureReason = 'Payment authorization failed. Please try again or use a different payment method.';
+            break;
+          default:
+            failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
+        }
+      } else if (paymentError.toLowerCase().includes('cancel')) {
+        failureReason = 'Payment was cancelled before completion.';
+      }
+    }
+    
+    showPaymentFailedMessage(null, orderId, failureReason);
+    return; // Don't fetch order or show pending
+  }
+  
+  // CRITICAL: Reset payment status flags at start (only if no URL error)
   state.paymentFailed = false;
   state.paymentPending = false;
   state.paymentConfirmed = false;
@@ -13202,18 +13264,12 @@ async function loadOrderForConfirmation(orderId) {
     }
     
     // For any other error when returning from payment, also show failed (safer than showing success)
+    // This handles cases where error doesn't match 401/404 patterns but still indicates failure
     console.warn('[Payment Return] ⚠️ Unexpected error during payment return - showing payment failed as fallback');
     console.warn('[Payment Return] About to call showPaymentFailedMessage (fallback)');
-      showPaymentFailedMessage(null, orderId, null); // Use default calm message
-    console.warn('[Payment Return] showPaymentFailedMessage (fallback) called');
-    
-    console.warn('[Payment Return] Error is NOT 401/404, showing pending instead');
-    
-    // For other errors, show pending (might be temporary issue)
-    console.warn('[Payment Return] ⚠️ Error fetching order - showing pending message');
-    // showPaymentPendingMessage will handle showing step 5
-    showPaymentPendingMessage(null, orderId);
-    return; // Don't show success page
+    showPaymentFailedMessage(null, orderId, null); // Use default calm message
+    console.warn('[Payment Return] showPaymentFailedMessage (fallback) called - returning early');
+    return; // Don't show success page or pending message
   }
 }
 
@@ -13276,16 +13332,25 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
       
       // Determine failure reason and provide specific guidance
       let specificGuidance = '';
-      const reasonLower = String(reason || '').toLowerCase();
       
-      if (reasonLower.includes('cancelled') || reasonLower.includes('canceled')) {
-        specificGuidance = 'You closed the payment window before completing the transaction.';
-      } else if (reasonLower.includes('unauthorized') || reasonLower.includes('401')) {
-        specificGuidance = 'The payment session expired or was cancelled.';
-      } else if (reasonLower.includes('not found') || reasonLower.includes('404')) {
-        specificGuidance = 'The order could not be found. This may happen if the payment window was open for too long.';
+      // If a specific reason was provided (e.g., from URL error code), use it directly
+      if (reason && reason.trim() && !reason.toLowerCase().includes('payment was not completed')) {
+        specificGuidance = reason;
       } else {
-        specificGuidance = 'The payment process was interrupted before completion.';
+        // Otherwise, try to infer from reason string patterns
+        const reasonLower = String(reason || '').toLowerCase();
+        
+        if (reasonLower.includes('declined') || reasonLower.includes('bank') || reasonLower.includes('card issuer')) {
+          specificGuidance = 'Payment was declined by your bank or card issuer.';
+        } else if (reasonLower.includes('cancelled') || reasonLower.includes('canceled')) {
+          specificGuidance = 'You closed the payment window before completing the transaction.';
+        } else if (reasonLower.includes('unauthorized') || reasonLower.includes('401') || reasonLower.includes('authorization failed')) {
+          specificGuidance = 'The payment session expired or was cancelled.';
+        } else if (reasonLower.includes('not found') || reasonLower.includes('404')) {
+          specificGuidance = 'The order could not be found. This may happen if the payment window was open for too long.';
+        } else {
+          specificGuidance = 'The payment process was interrupted before completion.';
+        }
       }
       
       // Build clear, actionable message with status, reason, and next steps
