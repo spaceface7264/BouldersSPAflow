@@ -1312,9 +1312,9 @@ class AuthAPI {
       
       let url;
       if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/customers/${customerId}`;
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}`;
       } else {
-        url = `${this.baseUrl}/api/customers/${customerId}`;
+        url = `${this.baseUrl}/api/ver3/customers/${customerId}`;
       }
       
       console.log('[Step 6] Updating customer:', url);
@@ -1341,8 +1341,20 @@ class AuthAPI {
         throw new Error(`Update customer failed: ${response.status} - ${errorText}`);
       }
       
-      const data = await response.json();
-      console.log('[Step 6] Update customer response:', data);
+      // API may return 200 with no body, or JSON response
+      let data = null;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+          console.log('[Step 6] Update customer response:', data);
+        } catch (parseError) {
+          console.warn('[Step 6] Could not parse JSON response, may be empty:', parseError);
+        }
+      } else {
+        console.log('[Step 6] Update customer response: 200 OK (no body)');
+      }
+      
       return data;
     } catch (error) {
       console.error('[Step 6] Update customer error:', error);
@@ -17722,9 +17734,8 @@ const ProfilePage = {
     }
     
     if (consentEmailMarketing) {
-      consentEmailMarketing.checked = customer.allowMassSendEmail || 
-                                      customer.consents?.some(c => c.type === 'emailMarketing') ||
-                                      false;
+      // Use same logic as settings page for consistency
+      consentEmailMarketing.checked = customer.allowMassSendEmail || false;
     }
     
     if (consentPushNotifications) {
@@ -21219,6 +21230,14 @@ async function loadSettingsData(forceRefresh = true) {
     // Check subscription status and show/hide subscription actions
     await updateSubscriptionActionsVisibility();
     
+    // Clear listener flags from toggles to allow re-initialization
+    const emailToggle = document.getElementById('settingsEmailMarketing');
+    const smsToggle = document.getElementById('settingsSmsMarketing');
+    const mailToggle = document.getElementById('settingsMailMarketing');
+    if (emailToggle) emailToggle.dataset.listenerAttached = 'false';
+    if (smsToggle) smsToggle.dataset.listenerAttached = 'false';
+    if (mailToggle) mailToggle.dataset.listenerAttached = 'false';
+    
     // Initialize event handlers
     initSettingsHandlers();
     
@@ -21540,50 +21559,61 @@ function initSettingsHandlers() {
   const smsMarketingToggle = document.getElementById('settingsSmsMarketing');
   const mailMarketingToggle = document.getElementById('settingsMailMarketing');
   
-  if (emailMarketingToggle) {
-    emailMarketingToggle.addEventListener('change', async (e) => {
+  // Helper function to handle marketing toggle updates
+  const handleMarketingToggle = (toggle, field, fieldName) => {
+    if (!toggle) return;
+    
+    // Check if listener already attached
+    if (toggle.dataset.listenerAttached === 'true') {
+      console.log(`[Settings] Listener already attached to ${fieldName} toggle`);
+      return;
+    }
+    
+    toggle.addEventListener('change', async (e) => {
+      const newValue = e.target.checked;
+      const originalValue = !newValue; // Store original for revert
+      
       try {
-        await authAPI.updateCustomer(state.customerId, {
-          allowMassSendEmail: e.target.checked
+        console.log(`[Settings] Updating ${fieldName}:`, newValue);
+        const response = await authAPI.updateCustomer(state.customerId, {
+          [field]: newValue
         });
-        SettingsPage.showSuccess('Email marketing preference updated');
+        
+        console.log(`[Settings] ${fieldName} update response:`, response);
+        
+        // Refresh customer data to get updated values
+        try {
+          const updatedCustomer = await authAPI.getCustomer(state.customerId, true);
+          
+          // Update settings page with fresh data
+          SettingsPage.populateSettings(updatedCustomer);
+          
+          // Update profile page if it's loaded
+          if (typeof ProfilePage.populateConsentsCard === 'function') {
+            ProfilePage.populateConsentsCard(updatedCustomer);
+          }
+          
+          SettingsPage.showSuccess(`${fieldName} preference updated`);
+        } catch (refreshError) {
+          console.warn(`[Settings] Could not refresh customer data after ${fieldName} update:`, refreshError);
+          // Still show success since the update worked
+          SettingsPage.showSuccess(`${fieldName} preference updated`);
+        }
       } catch (error) {
-        console.error('[Settings] Error updating email marketing:', error);
-        e.target.checked = !e.target.checked; // Revert toggle
-        SettingsPage.showError('Failed to update email marketing preference');
+        console.error(`[Settings] Error updating ${fieldName}:`, error);
+        // Revert toggle to original state
+        e.target.checked = originalValue;
+        SettingsPage.showError(`Failed to update ${fieldName} preference: ${error.message || 'Unknown error'}`);
       }
     });
-  }
+    
+    // Mark as having listener attached
+    toggle.dataset.listenerAttached = 'true';
+  };
   
-  if (smsMarketingToggle) {
-    smsMarketingToggle.addEventListener('change', async (e) => {
-      try {
-        await authAPI.updateCustomer(state.customerId, {
-          allowMassSendSms: e.target.checked
-        });
-        SettingsPage.showSuccess('SMS marketing preference updated');
-      } catch (error) {
-        console.error('[Settings] Error updating SMS marketing:', error);
-        e.target.checked = !e.target.checked; // Revert toggle
-        SettingsPage.showError('Failed to update SMS marketing preference');
-      }
-    });
-  }
-  
-  if (mailMarketingToggle) {
-    mailMarketingToggle.addEventListener('change', async (e) => {
-      try {
-        await authAPI.updateCustomer(state.customerId, {
-          allowMassSendMail: e.target.checked
-        });
-        SettingsPage.showSuccess('Mail marketing preference updated');
-      } catch (error) {
-        console.error('[Settings] Error updating mail marketing:', error);
-        e.target.checked = !e.target.checked; // Revert toggle
-        SettingsPage.showError('Failed to update mail marketing preference');
-      }
-    });
-  }
+  handleMarketingToggle(emailMarketingToggle, 'allowMassSendEmail', 'Email marketing');
+  handleMarketingToggle(smsMarketingToggle, 'allowMassSendSms', 'SMS marketing');
+  handleMarketingToggle(mailMarketingToggle, 'allowMassSendMail', 'Mail marketing');
 
   // Manage Membership button (Profile page)
   const manageMembershipBtn = document.getElementById('manageMembershipBtn');
