@@ -9508,13 +9508,37 @@ function handleLogout() {
     window.clearTokens();
   }
   
-  // Refresh UI to show logged out state
+  // Refresh UI to show logged out state (immediate feedback before refresh)
   refreshLoginUI();
   
-  // Switch to create account mode when logging out
+  // Refresh profile page UI (hides profile content, shows login form)
+  if (typeof refreshLoginPageUI === 'function') {
+    refreshLoginPageUI();
+  }
+  
+  // Update navigation after logout
+  if (typeof window.updateNavigation === 'function') {
+    window.updateNavigation();
+  }
+  
+  // Switch to create account mode when logging out (for signup flow)
   switchAuthMode('create');
   
   showToast('You have been logged out.', 'info');
+  
+  // Best Practice UX: Page refresh for completely clean state
+  // Small delay to allow toast to be visible briefly
+  setTimeout(() => {
+    const currentPath = window.location.pathname;
+    
+    // For profile page, refresh to show login form
+    if (currentPath.includes('profile.html')) {
+      window.location.href = './profile.html';
+    } else {
+      // For other pages, refresh current page
+      window.location.reload();
+    }
+  }, 1000); // 1 second delay to show logout toast
 }
 
 function renderCatalog() {

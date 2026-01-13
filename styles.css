@@ -5786,7 +5786,7 @@ main {
     padding: 12px 16px;
     border-radius: 8px;
     font-size: var(--font-size-base);
-    z-index: 1000;
+    z-index: 10001;
     animation: slideInRight 0.3s ease-out;
 }
 
