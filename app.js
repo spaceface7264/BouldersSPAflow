@@ -17492,7 +17492,6 @@ const ProfilePage = {
   populateProfileCard(customer) {
     ProfilePage.setElementText('profileFirstName', ProfileUtils.getValue(customer, 'firstName'));
     ProfilePage.setElementText('profileLastName', ProfileUtils.getValue(customer, 'lastName'));
-    ProfilePage.setElementText('profileMemberId', customer.id ? `#${customer.id}` : '-');
     ProfilePage.setElementText('profileCustomerNumber', customer.customerNumber || '-');
     
     // Extract primary gym - try multiple sources
@@ -17652,6 +17651,9 @@ const ProfilePage = {
       }
       
       ProfilePage.setElementText('profileMembershipGym', primaryGym);
+      
+      // Member ID: Display customer ID in membership card
+      ProfilePage.setElementText('profileMemberId', customer.id ? `#${customer.id}` : '-');
       
       // Bound until: Display if subscription is in a binding period
       const boundUntilRow = document.getElementById('profileBoundUntilRow');
