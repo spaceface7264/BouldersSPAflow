@@ -5037,6 +5037,15 @@ function init() {
     locationBtn.classList.add('active');
   }
   
+  // Initialize cookie banner
+  initCookieBanner();
+  
+  // Check if consent already exists and load GTM if consented
+  const existingConsent = getCookieConsent();
+  if (existingConsent) {
+    loadGTMIfConsented();
+  }
+  
   // Auto-trigger geolocation on page load (if supported)
   // This will automatically find nearest gyms when the page loads
   if (locationBtn && isGeolocationAvailable() && !userLocation) {
@@ -5136,6 +5145,12 @@ const translations = {
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
     'footer.terms.title': 'Vilkår og Betingelser', 'footer.terms.all': 'Vilkår og Betingelser', 'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab', 'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
     'footer.policies.title': 'Politikker', 'footer.policies.privacy': 'Privatlivspolitik', 'footer.policies.cookie': 'Cookiepolitik', 'footer.rights': 'Alle rettigheder forbeholdes', 'footer.copyright': '© 2026 Boulders. Alle rettigheder forbeholdes.',
+    'cookie.banner.title': 'Vi bruger cookies', 'cookie.banner.description': 'Vi bruger cookies til at forbedre din browsingoplevelse, analysere trafik på sitet og personalisere indhold. Ved at klikke på "Accepter alle" giver du samtykke til vores brug af cookies. Du kan administrere dine præferencer eller læse mere i vores <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookiepolitik</a>.', 'cookie.banner.accept': 'Accepter alle', 'cookie.banner.reject': 'Afvis alle', 'cookie.banner.settings': 'Tilpas',
+    'cookie.settings.title': 'Cookie-indstillinger', 'cookie.settings.description': 'Administrer dine cookie-præferencer. Du kan aktivere eller deaktivere forskellige typer cookies nedenfor. Essentielle cookies kan ikke deaktiveres, da de er nødvendige for, at hjemmesiden fungerer.', 'cookie.settings.save': 'Gem præferencer', 'cookie.settings.button': 'Cookie-indstillinger',
+    'cookie.category.essential.title': 'Essentielle Cookies', 'cookie.category.essential.desc': 'Disse cookies er nødvendige for, at hjemmesiden fungerer og kan ikke deaktiveres.',
+    'cookie.category.analytics.title': 'Analyse Cookies', 'cookie.category.analytics.desc': 'Disse cookies hjælper os med at forstå, hvordan besøgende interagerer med vores hjemmeside ved at indsamle og rapportere information anonymt.',
+    'cookie.category.marketing.title': 'Marketing Cookies', 'cookie.category.marketing.desc': 'Disse cookies bruges til at levere annoncer og spore kampagneeffektivitet.',
+    'cookie.category.functional.title': 'Funktionelle Cookies', 'cookie.category.functional.desc': 'Disse cookies muliggør forbedret funktionalitet og personalisering, såsom at huske dine præferencer.',
     'addons.intro': 'Forbedre din klatreoplevelse med vores add-on produkter.',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
@@ -5186,6 +5201,12 @@ const translations = {
     'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
     'footer.terms.title': 'Terms and Conditions', 'footer.terms.all': 'Terms and Conditions', 'footer.terms.membership': 'Terms and Conditions for Membership', 'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
     'footer.policies.title': 'Policies', 'footer.policies.privacy': 'Privacy Policy', 'footer.policies.cookie': 'Cookie Policy', 'footer.rights': 'All rights reserved', 'footer.copyright': '© 2026 Boulders. All rights reserved.',
+    'cookie.banner.title': 'We use cookies', 'cookie.banner.description': 'We use cookies to enhance your browsing experience, analyze site traffic, and personalize content. By clicking "Accept All", you consent to our use of cookies. You can manage your preferences or learn more in our <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie Policy</a>.', 'cookie.banner.accept': 'Accept All', 'cookie.banner.reject': 'Reject All', 'cookie.banner.settings': 'Customize',
+    'cookie.settings.title': 'Cookie Preferences', 'cookie.settings.description': 'Manage your cookie preferences. You can enable or disable different types of cookies below. Essential cookies cannot be disabled as they are necessary for the website to function.', 'cookie.settings.save': 'Save Preferences', 'cookie.settings.button': 'Cookie Settings',
+    'cookie.category.essential.title': 'Essential Cookies', 'cookie.category.essential.desc': 'These cookies are necessary for the website to function and cannot be disabled.',
+    'cookie.category.analytics.title': 'Analytics Cookies', 'cookie.category.analytics.desc': 'These cookies help us understand how visitors interact with our website by collecting and reporting information anonymously.',
+    'cookie.category.marketing.title': 'Marketing Cookies', 'cookie.category.marketing.desc': 'These cookies are used to deliver advertisements and track campaign effectiveness.',
+    'cookie.category.functional.title': 'Functional Cookies', 'cookie.category.functional.desc': 'These cookies enable enhanced functionality and personalization, such as remembering your preferences.',
     'addons.intro': 'Enhance your climbing experience with our add-on products.',
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
@@ -5261,6 +5282,9 @@ function updatePageTranslations() {
       element.placeholder = translation;
     }
   });
+  
+  // Update cookie banner translations (needs special handling for HTML content)
+  updateCookieBannerTranslations();
   
   // Update step labels
   const stepLabels = document.querySelectorAll('.step-label');
@@ -5631,6 +5655,9 @@ function initLanguageSwitcher() {
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize language switcher (must be early to set language before API calls)
   initLanguageSwitcher();
+  
+  // Set up cookie settings button (ensure it works even if footer loads late)
+  setupCookieSettingsButton();
   
   // Check if we're returning from payment before initializing
   const urlParams = new URLSearchParams(window.location.search);
@@ -15480,4 +15507,440 @@ function showToast(message, type = 'info') {
   setTimeout(() => {
     toast.remove();
   }, 4000);
+}
+
+// Cookie Consent Management (GDPR Compliant)
+const COOKIE_CONSENT_KEY = 'boulders_cookie_consent';
+const COOKIE_CONSENT_EXPIRY_DAYS = 365;
+
+// Cookie categories
+const COOKIE_CATEGORIES = {
+  essential: 'essential',
+  analytics: 'analytics',
+  marketing: 'marketing',
+  functional: 'functional'
+};
+
+function getCookieConsent() {
+  try {
+    const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
+    if (!consent) return null;
+    
+    const consentData = JSON.parse(consent);
+    // Check if consent has expired (older than 1 year)
+    const consentDate = new Date(consentData.timestamp);
+    const expiryDate = new Date(consentDate);
+    expiryDate.setDate(expiryDate.getDate() + COOKIE_CONSENT_EXPIRY_DAYS);
+    
+    if (new Date() > expiryDate) {
+      localStorage.removeItem(COOKIE_CONSENT_KEY);
+      return null;
+    }
+    
+    return consentData;
+  } catch (e) {
+    console.warn('[Cookie Consent] Error reading consent:', e);
+    return null;
+  }
+}
+
+function setCookieConsent(accepted, categories = null) {
+  try {
+    // If categories provided, use granular consent
+    // If accepted is boolean and no categories, use simple accept/reject
+    let consentData;
+    
+    if (categories !== null && typeof categories === 'object') {
+      // Granular consent
+      consentData = {
+        accepted: true, // User has made a choice
+        categories: {
+          essential: true, // Always true
+          analytics: categories.analytics || false,
+          marketing: categories.marketing || false,
+          functional: categories.functional || false
+        },
+        timestamp: new Date().toISOString(),
+        version: '2.0',
+        granular: true
+      };
+    } else {
+      // Simple accept/reject all
+      consentData = {
+        accepted: accepted,
+        categories: accepted ? {
+          essential: true,
+          analytics: accepted,
+          marketing: accepted,
+          functional: accepted
+        } : {
+          essential: true,
+          analytics: false,
+          marketing: false,
+          functional: false
+        },
+        timestamp: new Date().toISOString(),
+        version: '2.0',
+        granular: false
+      };
+    }
+    
+    localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify(consentData));
+    
+    // Load or unload tracking scripts based on consent
+    const hasAnalytics = consentData.categories?.analytics || false;
+    const hasMarketing = consentData.categories?.marketing || false;
+    
+    if (hasAnalytics || hasMarketing) {
+      loadGTMIfConsented();
+    } else {
+      unloadGTM();
+    }
+    
+    // Dispatch custom event for other scripts to listen to
+    window.dispatchEvent(new CustomEvent('cookieConsentChanged', {
+      detail: consentData
+    }));
+    
+    console.log('[Cookie Consent] Consent saved:', consentData);
+  } catch (e) {
+    console.error('[Cookie Consent] Error saving consent:', e);
+  }
+}
+
+function getCookieCategoryConsent(category) {
+  const consent = getCookieConsent();
+  if (!consent) return false;
+  
+  // Essential cookies are always true
+  if (category === COOKIE_CATEGORIES.essential) return true;
+  
+  return consent.categories?.[category] || false;
+}
+
+// Load Google Tag Manager conditionally based on consent
+function loadGTMIfConsented() {
+  // Check if GTM is already loaded
+  if (window.GTM_LOADED) return;
+  
+  // Check consent for analytics or marketing (GTM typically uses both)
+  const consent = getCookieConsent();
+  if (!consent) return;
+  
+  const hasAnalytics = getCookieCategoryConsent(COOKIE_CATEGORIES.analytics);
+  const hasMarketing = getCookieCategoryConsent(COOKIE_CATEGORIES.marketing);
+  
+  // Only load GTM if user consented to analytics or marketing
+  if (hasAnalytics || hasMarketing) {
+    const containerId = window.GTM_CONTAINER_ID || 'GTM-KHB92N9P';
+    
+    // Load GTM script
+    (function(w,d,s,l,i){
+      if (w[l] && w[l].length > 0 && w[l][0].event === 'gtm.js') {
+        // Already initialized, just load the script
+        var f=d.getElementsByTagName(s)[0],
+        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+        j.async=true;
+        j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
+        f.parentNode.insertBefore(j,f);
+      } else {
+        // Initialize and load
+        w[l]=w[l]||[];
+        w[l].push({'gtm.start': new Date().getTime(), event:'gtm.js'});
+        var f=d.getElementsByTagName(s)[0],
+        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+        j.async=true;
+        j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
+        f.parentNode.insertBefore(j,f);
+      }
+    })(window,document,'script','dataLayer',containerId);
+    
+    // Show noscript iframe
+    const noscript = document.getElementById('gtmNoscript');
+    if (noscript) {
+      noscript.style.display = 'block';
+    }
+    
+    window.GTM_LOADED = true;
+    console.log('[Cookie Consent] GTM loaded with consent for analytics:', hasAnalytics, 'marketing:', hasMarketing);
+  }
+}
+
+// Unload GTM if consent is withdrawn
+function unloadGTM() {
+  // Remove GTM script
+  const gtmScript = document.querySelector('script[src*="googletagmanager.com/gtm.js"]');
+  if (gtmScript) {
+    gtmScript.remove();
+  }
+  
+  // Hide noscript iframe
+  const noscript = document.getElementById('gtmNoscript');
+  if (noscript) {
+    noscript.style.display = 'none';
+  }
+  
+  // Clear dataLayer (optional - you may want to keep it for essential tracking)
+  // window.dataLayer = [];
+  
+  window.GTM_LOADED = false;
+  console.log('[Cookie Consent] GTM unloaded');
+}
+
+function showCookieBanner() {
+  const banner = document.getElementById('cookieBanner');
+  if (!banner) return;
+  
+  // Update translations
+  updateCookieBannerTranslations();
+  
+  // Show banner with animation
+  banner.style.display = 'block';
+  // Use requestAnimationFrame to ensure display is set before adding class
+  requestAnimationFrame(() => {
+    banner.classList.add('show');
+  });
+}
+
+function hideCookieBanner() {
+  const banner = document.getElementById('cookieBanner');
+  if (!banner) return;
+  
+  banner.classList.remove('show');
+  // Wait for animation to complete before hiding
+  setTimeout(() => {
+    banner.style.display = 'none';
+  }, 300);
+}
+
+function updateCookieBannerTranslations() {
+  const banner = document.getElementById('cookieBanner');
+  if (!banner) return;
+  
+  const title = banner.querySelector('.cookie-banner-title');
+  const description = banner.querySelector('.cookie-banner-description');
+  const acceptBtn = document.getElementById('cookieBannerAccept');
+  const rejectBtn = document.getElementById('cookieBannerReject');
+  const settingsBtn = document.getElementById('cookieBannerSettings');
+  const settingsButton = document.getElementById('cookieSettingsButton');
+  
+  if (title) {
+    title.textContent = t('cookie.banner.title');
+  }
+  
+  if (description) {
+    const descriptionText = t('cookie.banner.description');
+    // Parse HTML from translation (for the link)
+    description.innerHTML = descriptionText;
+    // Re-attach event listener to the link
+    const link = description.querySelector('.cookie-banner-link');
+    if (link) {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        openTermsModal('cookie');
+      });
+    }
+  }
+  
+  if (acceptBtn) {
+    acceptBtn.textContent = t('cookie.banner.accept');
+  }
+  
+  if (rejectBtn) {
+    rejectBtn.textContent = t('cookie.banner.reject');
+  }
+  
+  if (settingsBtn) {
+    settingsBtn.textContent = t('cookie.banner.settings');
+  }
+  
+  // Update settings panel translations
+  const settingsPanel = document.getElementById('cookieSettingsPanel');
+  if (settingsPanel) {
+    const settingsTitle = settingsPanel.querySelector('.cookie-settings-title');
+    const settingsDesc = settingsPanel.querySelector('.cookie-settings-description');
+    const saveBtn = document.getElementById('cookieSettingsSave');
+    
+    if (settingsTitle) {
+      settingsTitle.textContent = t('cookie.settings.title');
+    }
+    
+    if (settingsDesc) {
+      settingsDesc.textContent = t('cookie.settings.description');
+    }
+    
+    if (saveBtn) {
+      saveBtn.textContent = t('cookie.settings.save');
+    }
+    
+    // Update category translations
+    const categories = settingsPanel.querySelectorAll('.cookie-category');
+    categories.forEach(category => {
+      const titleEl = category.querySelector('.cookie-category-title');
+      const descEl = category.querySelector('.cookie-category-desc');
+      const checkbox = category.querySelector('input[type="checkbox"]');
+      
+      if (titleEl && checkbox) {
+        const categoryKey = checkbox.id.replace('cookie', '').toLowerCase();
+        titleEl.textContent = t(`cookie.category.${categoryKey}.title`);
+        if (descEl) {
+          descEl.textContent = t(`cookie.category.${categoryKey}.desc`);
+        }
+      }
+    });
+  }
+  
+  if (settingsButton) {
+    const span = settingsButton.querySelector('span');
+    if (span) {
+      span.textContent = t('cookie.settings.button');
+    }
+  }
+}
+
+function showCookieSettings() {
+  const banner = document.getElementById('cookieBanner');
+  const settingsPanel = document.getElementById('cookieSettingsPanel');
+  if (!banner || !settingsPanel) return;
+  
+  // Load current consent preferences
+  const consent = getCookieConsent();
+  if (consent && consent.categories) {
+    const analyticsCheckbox = document.getElementById('cookieAnalytics');
+    const marketingCheckbox = document.getElementById('cookieMarketing');
+    const functionalCheckbox = document.getElementById('cookieFunctional');
+    
+    if (analyticsCheckbox) analyticsCheckbox.checked = consent.categories.analytics || false;
+    if (marketingCheckbox) marketingCheckbox.checked = consent.categories.marketing || false;
+    if (functionalCheckbox) functionalCheckbox.checked = consent.categories.functional || false;
+  }
+  
+  // Show banner if hidden
+  if (!banner.classList.contains('show')) {
+    showCookieBanner();
+  }
+  
+  // Show settings panel
+  settingsPanel.style.display = 'block';
+  // Scroll settings panel into view
+  setTimeout(() => {
+    settingsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 100);
+}
+
+function hideCookieSettings() {
+  const settingsPanel = document.getElementById('cookieSettingsPanel');
+  if (settingsPanel) {
+    settingsPanel.style.display = 'none';
+  }
+}
+
+function setupCookieSettingsButton() {
+  const settingsButton = document.getElementById('cookieSettingsButton');
+  
+  if (settingsButton) {
+    // Remove any existing listeners by cloning (prevents duplicates)
+    const newButton = settingsButton.cloneNode(true);
+    if (settingsButton.parentNode) {
+      settingsButton.parentNode.replaceChild(newButton, settingsButton);
+    }
+    
+    newButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[Cookie Settings] Footer button clicked');
+      showCookieBanner();
+      // Small delay to ensure banner is visible before showing settings
+      setTimeout(() => {
+        showCookieSettings();
+      }, 100);
+    });
+    
+    console.log('[Cookie Settings] Footer button listener attached');
+  } else {
+    // Button might not be loaded yet, try again after a short delay
+    setTimeout(() => {
+      const retryButton = document.getElementById('cookieSettingsButton');
+      if (retryButton) {
+        setupCookieSettingsButton();
+      } else {
+        console.warn('[Cookie Settings] Footer button not found after retry');
+      }
+    }, 500);
+  }
+}
+
+function initCookieBanner() {
+  const banner = document.getElementById('cookieBanner');
+  if (!banner) return;
+  
+  // Always set up event listeners (even if consent exists, user should be able to change settings)
+  const acceptBtn = document.getElementById('cookieBannerAccept');
+  const rejectBtn = document.getElementById('cookieBannerReject');
+  const settingsBtn = document.getElementById('cookieBannerSettings');
+  const settingsCloseBtn = document.getElementById('cookieSettingsClose');
+  const settingsSaveBtn = document.getElementById('cookieSettingsSave');
+  const settingsButton = document.getElementById('cookieSettingsButton');
+  
+  if (acceptBtn) {
+    acceptBtn.addEventListener('click', () => {
+      setCookieConsent(true);
+      hideCookieSettings();
+      hideCookieBanner();
+    });
+  }
+  
+  if (rejectBtn) {
+    rejectBtn.addEventListener('click', () => {
+      setCookieConsent(false);
+      hideCookieSettings();
+      hideCookieBanner();
+    });
+  }
+  
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      showCookieSettings();
+    });
+  }
+  
+  if (settingsCloseBtn) {
+    settingsCloseBtn.addEventListener('click', () => {
+      hideCookieSettings();
+    });
+  }
+  
+  if (settingsSaveBtn) {
+    settingsSaveBtn.addEventListener('click', () => {
+      const analyticsCheckbox = document.getElementById('cookieAnalytics');
+      const marketingCheckbox = document.getElementById('cookieMarketing');
+      const functionalCheckbox = document.getElementById('cookieFunctional');
+      
+      const categories = {
+        analytics: analyticsCheckbox ? analyticsCheckbox.checked : false,
+        marketing: marketingCheckbox ? marketingCheckbox.checked : false,
+        functional: functionalCheckbox ? functionalCheckbox.checked : false
+      };
+      
+      setCookieConsent(true, categories);
+      hideCookieSettings();
+      hideCookieBanner();
+    });
+  }
+  
+  // Cookie settings button (always visible in footer) - ALWAYS set up listener
+  setupCookieSettingsButton();
+  
+  // Check if consent has already been given
+  const consent = getCookieConsent();
+  if (consent) {
+    // Consent already given, don't show banner on load
+    // But settings button should still be available (listener already set up above)
+    return;
+  }
+  
+  // Show banner after a short delay to let page load
+  setTimeout(() => {
+    showCookieBanner();
+  }, 1000);
 }

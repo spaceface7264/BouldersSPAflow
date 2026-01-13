@@ -8,13 +8,44 @@
 window.dataLayer = window.dataLayer || [];
 
 /**
- * Push an event to the DataLayer
+ * Check if tracking is allowed based on cookie consent
+ * @param {string} category - Cookie category (analytics, marketing, etc.)
+ * @returns {boolean} Whether tracking is allowed
+ */
+function isTrackingAllowed(category = 'analytics') {
+  // Check if consent functions are available
+  if (typeof getCookieCategoryConsent === 'function') {
+    return getCookieCategoryConsent(category);
+  }
+  
+  // Fallback: check localStorage directly
+  try {
+    const consent = localStorage.getItem('boulders_cookie_consent');
+    if (!consent) return false;
+    
+    const consentData = JSON.parse(consent);
+    if (category === 'essential') return true;
+    return consentData.categories?.[category] || false;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Push an event to the DataLayer (only if consent is given)
  * @param {string} eventName - The name of the event
  * @param {object} eventData - The event data object
+ * @param {string} category - Cookie category required for this event (default: 'analytics')
  */
-function pushToDataLayer(eventName, eventData = {}) {
+function pushToDataLayer(eventName, eventData = {}, category = 'analytics') {
   if (!eventName) {
     console.warn('[GTM] Event name is required');
+    return;
+  }
+
+  // Check consent before pushing
+  if (!isTrackingAllowed(category)) {
+    console.log('[GTM] Event blocked - no consent for', category, ':', eventName);
     return;
   }
 
@@ -81,7 +112,7 @@ function trackSelectItem(product, itemListId = null, itemListName = null) {
     ecommerceData.ecommerce.items[0].item_list_name = itemListName;
   }
 
-  pushToDataLayer('select_item', ecommerceData);
+  pushToDataLayer('select_item', ecommerceData, 'analytics');
 }
 
 /**
@@ -105,7 +136,7 @@ function trackAddToCart(items = [], value = 0, currency = 'DKK') {
       value: formatPrice(value),
       items: formattedItems
     }
-  });
+  }, 'analytics');
 }
 
 /**
@@ -129,7 +160,7 @@ function trackBeginCheckout(items = [], value = 0, currency = 'DKK') {
       value: formatPrice(value),
       items: formattedItems
     }
-  });
+  }, 'analytics');
 }
 
 /**
@@ -164,7 +195,7 @@ function trackPurchase(transactionId, items = [], value = 0, tax = 0, shipping =
       currency: currency,
       items: formattedItems
     }
-  });
+  }, 'analytics');
 }
 
 // Export functions for use in other scripts
@@ -188,5 +219,6 @@ window.GTM = {
   trackBeginCheckout,
   trackPurchase,
   formatProductForGA4,
-  formatPrice
+  formatPrice,
+  isTrackingAllowed
 };
