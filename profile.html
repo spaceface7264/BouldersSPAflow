@@ -609,7 +609,17 @@
                         </div>
                         <div class="dashboard-chart-container">
                             <div class="dashboard-chart" id="activityChart">
-                                <div class="dashboard-loading">Loading activity data...</div>
+                                <div class="dashboard-loading">
+                                    <div class="dashboard-skeleton-chart">
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 60%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 80%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 45%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 90%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 70%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 55%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 85%;"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -652,7 +662,24 @@
                     <div class="dashboard-card dashboard-card-large">
                         <h2 class="dashboard-card-title">My upcoming classes</h2>
                         <div class="dashboard-classes-list" id="dashboardUpcomingClasses">
-                            <div class="dashboard-loading">Loading classes...</div>
+                            <div class="dashboard-loading">
+                                <div class="dashboard-skeleton-list">
+                                    <div class="skeleton-list-item">
+                                        <div class="skeleton skeleton-avatar"></div>
+                                        <div style="flex: 1;">
+                                            <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                            <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="skeleton-list-item">
+                                        <div class="skeleton skeleton-avatar"></div>
+                                        <div style="flex: 1;">
+                                            <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                            <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -665,7 +692,13 @@
                                 <span class="dashboard-loyalty-tier-level" id="dashboardLoyaltyLevel">-</span>
                             </div>
                             <div class="dashboard-loyalty-benefits" id="dashboardLoyaltyBenefits">
-                                <div class="dashboard-loading">Loading benefits...</div>
+                                <div class="dashboard-loading">
+                                    <div class="dashboard-skeleton-list">
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 60%;"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -673,7 +706,24 @@
                     <!-- Purchase History Card -->
                     <div class="dashboard-card dashboard-card-full-width">
                         <div id="dashboardPurchases">
-                            <div class="dashboard-loading">Loading purchase history...</div>
+                            <div class="dashboard-loading">
+                                <div class="dashboard-skeleton-list">
+                                    <div class="skeleton-list-item">
+                                        <div style="flex: 1;">
+                                            <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+                                            <div class="skeleton skeleton-text" style="width: 40%;"></div>
+                                        </div>
+                                        <div class="skeleton skeleton-badge"></div>
+                                    </div>
+                                    <div class="skeleton-list-item">
+                                        <div style="flex: 1;">
+                                            <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+                                            <div class="skeleton skeleton-text" style="width: 40%;"></div>
+                                        </div>
+                                        <div class="skeleton skeleton-badge"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -716,21 +766,52 @@
                     <!-- Upcoming Bookings -->
                     <div class="bookings-sub-section active" id="upcomingBookings">
                         <div class="bookings-list" id="upcomingBookingsList">
-                            <div class="bookings-loading">Loading bookings...</div>
+                            <div class="bookings-loading">
+                                <div class="bookings-skeleton-list">
+                                    <div class="bookings-skeleton-card">
+                                        <div class="skeleton skeleton-title"></div>
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 60%; margin-top: 12px;"></div>
+                                    </div>
+                                    <div class="bookings-skeleton-card">
+                                        <div class="skeleton skeleton-title"></div>
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 60%; margin-top: 12px;"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Past Bookings -->
                     <div class="bookings-sub-section" id="pastBookings" style="display: none;">
                         <div class="bookings-list" id="pastBookingsList">
-                            <div class="bookings-loading">Loading bookings...</div>
+                            <div class="bookings-loading">
+                                <div class="bookings-skeleton-list">
+                                    <div class="bookings-skeleton-card">
+                                        <div class="skeleton skeleton-title"></div>
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Waiting List -->
                     <div class="bookings-sub-section" id="waitingListBookings" style="display: none;">
                         <div class="bookings-list" id="waitingListBookingsList">
-                            <div class="bookings-loading">Loading bookings...</div>
+                            <div class="bookings-loading">
+                                <div class="bookings-skeleton-list">
+                                    <div class="bookings-skeleton-card">
+                                        <div class="skeleton skeleton-title"></div>
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -826,7 +907,31 @@
                 <div class="activity-history-section">
                     <h2 class="activity-section-title">Check-in History</h2>
                     <div class="activity-history-list" id="activityHistoryList">
-                        <div class="activity-loading">Loading activity data...</div>
+                        <div class="activity-loading">
+                            <div class="activity-skeleton-list">
+                                <div class="activity-skeleton-item">
+                                    <div class="skeleton activity-skeleton-icon"></div>
+                                    <div class="activity-skeleton-content">
+                                        <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                    </div>
+                                </div>
+                                <div class="activity-skeleton-item">
+                                    <div class="skeleton activity-skeleton-icon"></div>
+                                    <div class="activity-skeleton-content">
+                                        <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                    </div>
+                                </div>
+                                <div class="activity-skeleton-item">
+                                    <div class="skeleton activity-skeleton-icon"></div>
+                                    <div class="activity-skeleton-content">
+                                        <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -914,6 +1019,14 @@
                                     <span class="profile-detail-label">Primary gym:</span>
                                     <span class="profile-detail-value" id="profileMembershipGym">-</span>
                                 </div>
+                                <div class="profile-detail-row" id="profileBoundUntilRow" style="display: none;">
+                                    <span class="profile-detail-label">Bound until:</span>
+                                    <span class="profile-detail-value" id="profileBoundUntil">-</span>
+                                </div>
+                                <div class="profile-detail-row" id="profileCardConsentRow" style="display: none;">
+                                    <span class="profile-detail-label">Card consent:</span>
+                                    <span class="profile-detail-value" id="profileCardConsentStatus">-</span>
+                                </div>
                                 <div class="profile-detail-row">
                                     <span class="profile-detail-label">Contract status:</span>
                                     <span class="profile-detail-value" id="profileContractStatus">-</span>
@@ -924,6 +1037,29 @@
                                     <span class="profile-detail-value" id="profileLoyaltyTier"></span>
                                 </div>
                                 <button class="profile-action-btn" id="manageMembershipBtn">Manage membership</button>
+                            </div>
+                            <!-- Warning/CTA for missing card consent (hidden by default) -->
+                            <div id="cardConsentWarning" style="display: none;">
+                                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 16px; margin-top: 20px;">
+                                    <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #EF4444; flex-shrink: 0; margin-top: 2px;">
+                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                        </svg>
+                                        <div style="flex: 1;">
+                                            <p style="color: #FFFFFF; margin: 0 0 8px 0; font-weight: 500; font-size: 15px;">
+                                                Card consent required
+                                            </p>
+                                            <p style="color: rgba(255, 255, 255, 0.8); margin: 0; font-size: 14px; line-height: 1.5;">
+                                                Your membership requires a valid card consent (Kort Sammentykke) for recurring payments. Please register your payment card to continue your membership.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button class="profile-action-btn" id="registerCardConsentBtn" style="width: 100%; margin-top: 12px;">
+                                        Register payment card
+                                    </button>
+                                </div>
                             </div>
                             <!-- CTA for users without subscription (hidden by default) -->
                             <div id="membershipCTA" style="display: none;">
@@ -998,8 +1134,8 @@
                         </div>
                     </div>
 
-                    <!-- Payment Card -->
-                    <div class="profile-card">
+                    <!-- Payment Card (hidden - only shown in Settings) -->
+                    <div class="profile-card" style="display: none;">
                         <h2 class="profile-card-title">Payment</h2>
                         <div class="profile-card-content">
                             <div class="profile-detail-row">
@@ -1079,9 +1215,35 @@
 
                 <!-- Saved Payment Methods Section -->
                 <div class="settings-section">
-                    <h2 class="settings-section-title">Saved payment methods</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 class="settings-section-title" style="margin: 0;">Saved payment methods</h2>
+                        <button class="settings-action-btn" id="settingsRegisterCardConsentBtn" style="display: none;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Register payment card
+                        </button>
+                    </div>
                     <div id="settingsPaymentMethods">
-                        <div class="settings-loading">Loading payment methods...</div>
+                        <div class="settings-loading">
+                            <div class="settings-skeleton-list">
+                                <div class="settings-skeleton-item">
+                                    <div class="settings-skeleton-item-content">
+                                        <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 40%;"></div>
+                                    </div>
+                                    <div class="skeleton settings-skeleton-item-action"></div>
+                                </div>
+                                <div class="settings-skeleton-item">
+                                    <div class="settings-skeleton-item-content">
+                                        <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 40%;"></div>
+                                    </div>
+                                    <div class="skeleton settings-skeleton-item-action"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1089,7 +1251,24 @@
                 <div class="settings-section">
                     <h2 class="settings-section-title">Invoices</h2>
                     <div id="settingsInvoices">
-                        <div class="settings-loading">Loading invoices...</div>
+                        <div class="settings-loading">
+                            <div class="settings-skeleton-list">
+                                <div class="settings-skeleton-item">
+                                    <div class="settings-skeleton-item-content">
+                                        <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 30%;"></div>
+                                    </div>
+                                    <div class="skeleton skeleton-badge"></div>
+                                </div>
+                                <div class="settings-skeleton-item">
+                                    <div class="settings-skeleton-item-content">
+                                        <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 30%;"></div>
+                                    </div>
+                                    <div class="skeleton skeleton-badge"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

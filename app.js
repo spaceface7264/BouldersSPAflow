@@ -2231,6 +2231,62 @@ class AuthAPI {
     }
   }
 
+  // Generate link to register card consent
+  async generateRegisterCardConsentLink(customerId, businessUnitId, returnUrl) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/services/generatelink/registercardconsent`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/services/generatelink/registercardconsent`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/services/generatelink/registercardconsent`;
+      }
+      
+      console.log('[AuthAPI] Generating card consent registration link:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const payload = {
+        businessUnit: businessUnitId,
+        customer: customerId,
+        returnUrl: returnUrl
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[AuthAPI] Generate card consent link error (${response.status}):`, errorText);
+        throw new Error(`Generate card consent link failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[AuthAPI] Card consent registration link response:', data);
+      
+      // Response structure: { url: "..." }
+      return data.url || data.data?.url;
+    } catch (error) {
+      console.error('[AuthAPI] Generate card consent link error:', error);
+      throw error;
+    }
+  }
+
   // Subscription: Freeze subscription
   async freezeSubscription(customerId, subscriptionId, freezePeriod, freezeReason = null, freezeReasonComment = null, paymentRequiredBeforeFreeze = false) {
     try {
@@ -17597,6 +17653,133 @@ const ProfilePage = {
       
       ProfilePage.setElementText('profileMembershipGym', primaryGym);
       
+      // Bound until: Display if subscription is in a binding period
+      const boundUntilRow = document.getElementById('profileBoundUntilRow');
+      const boundUntilElement = document.getElementById('profileBoundUntil');
+      if (boundUntilRow && boundUntilElement) {
+        // Check if subscription has boundUntil date and if it's in the future
+        if (activeSubscription.boundUntil) {
+          const boundUntilDate = new Date(activeSubscription.boundUntil);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0); // Reset time for accurate date comparison
+          boundUntilDate.setHours(0, 0, 0, 0);
+          
+          // Only show if boundUntil is in the future (user is still in binding period)
+          if (boundUntilDate > today) {
+            boundUntilRow.style.display = 'flex';
+            boundUntilElement.textContent = ProfileUtils.formatDate(activeSubscription.boundUntil);
+            console.log('[Profile] Subscription is in binding period until:', activeSubscription.boundUntil);
+          } else {
+            boundUntilRow.style.display = 'none';
+            console.log('[Profile] Subscription binding period has ended:', activeSubscription.boundUntil);
+          }
+        } else {
+          boundUntilRow.style.display = 'none';
+          console.log('[Profile] No binding period for subscription');
+        }
+      }
+      
+      // Card consent status: Check subscription statuses for missing card consent
+      const cardConsentRow = document.getElementById('profileCardConsentRow');
+      const cardConsentStatusElement = document.getElementById('profileCardConsentStatus');
+      if (cardConsentRow && cardConsentStatusElement) {
+        // Check for missing card consent statuses
+        const hasMissingCardConsent = activeSubscription.statuses?.some(
+          s => s.code === 'MISSING_CARDCONSENT' || s.code === 'MISSING_VALID_CARDCONSENT'
+        );
+        
+        // Check if CREATE_CARDCONSENT action is available
+        const canCreateCardConsent = activeSubscription.actions?.includes('CREATE_CARDCONSENT');
+        
+        if (hasMissingCardConsent || canCreateCardConsent) {
+          // Card consent is missing or can be created - show warning/CTA
+          cardConsentRow.style.display = 'flex';
+          if (hasMissingCardConsent) {
+            cardConsentStatusElement.textContent = 'Missing';
+            cardConsentStatusElement.style.color = '#EF4444'; // Red color for missing status
+          } else {
+            cardConsentStatusElement.textContent = 'Can be created';
+            cardConsentStatusElement.style.color = '#F59E0B'; // Amber color for action available
+          }
+          cardConsentStatusElement.style.fontWeight = '500';
+          
+          // Show warning/CTA banner
+          const cardConsentWarning = document.getElementById('cardConsentWarning');
+          if (cardConsentWarning) {
+            cardConsentWarning.style.display = 'block';
+            
+            // Set up button handler for registering card consent
+            const registerCardConsentBtn = document.getElementById('registerCardConsentBtn');
+            if (registerCardConsentBtn && !registerCardConsentBtn.dataset.handlerAttached) {
+              registerCardConsentBtn.addEventListener('click', async () => {
+                try {
+                  registerCardConsentBtn.disabled = true;
+                  registerCardConsentBtn.textContent = 'Loading...';
+                  
+                  // Get business unit from subscription or customer
+                  const businessUnitId = activeSubscription.businessUnit?.id || 
+                                         customer.businessUnit?.id || 
+                                         state.selectedBusinessUnit;
+                  
+                  if (!businessUnitId) {
+                    throw new Error('Business unit ID is required to register card consent');
+                  }
+                  
+                  // Generate return URL (current page)
+                  const returnUrl = window.location.href.split('?')[0];
+                  
+                  console.log('[Profile] Generating card consent registration link:', {
+                    customerId: state.customerId,
+                    businessUnitId,
+                    returnUrl
+                  });
+                  
+                  // Generate the registration link
+                  const registrationUrl = await authAPI.generateRegisterCardConsentLink(
+                    state.customerId,
+                    businessUnitId,
+                    returnUrl
+                  );
+                  
+                  if (registrationUrl) {
+                    console.log('[Profile] Card consent registration URL generated, redirecting...');
+                    // Redirect to payment provider to register card consent
+                    window.location.href = registrationUrl;
+                  } else {
+                    throw new Error('No registration URL returned from API');
+                  }
+                } catch (error) {
+                  console.error('[Profile] Error generating card consent registration link:', error);
+                  registerCardConsentBtn.disabled = false;
+                  registerCardConsentBtn.textContent = 'Register payment card';
+                  showToast('Failed to generate registration link. Please try again.', 'error');
+                }
+              });
+              
+              registerCardConsentBtn.dataset.handlerAttached = 'true';
+            }
+          }
+          
+          console.log('[Profile] ⚠️ Card consent is missing or can be created for subscription:', {
+            subscriptionId: activeSubscription.id,
+            hasMissingCardConsent,
+            canCreateCardConsent,
+            statuses: activeSubscription.statuses?.filter(s => 
+              s.code === 'MISSING_CARDCONSENT' || s.code === 'MISSING_VALID_CARDCONSENT'
+            ),
+            actions: activeSubscription.actions
+          });
+        } else {
+          // Card consent exists and is valid - hide the row and warning
+          cardConsentRow.style.display = 'none';
+          const cardConsentWarning = document.getElementById('cardConsentWarning');
+          if (cardConsentWarning) {
+            cardConsentWarning.style.display = 'none';
+          }
+          console.log('[Profile] ✅ Card consent is active for subscription:', activeSubscription.id);
+        }
+      }
+      
       // Contract status: Check subscription statuses for contract signing status
       const contractStatusElement = document.getElementById('profileContractStatus');
       const hasContractNotSigned = activeSubscription.statuses?.some(
@@ -18076,7 +18259,26 @@ async function openAllInvoicesModal() {
   
   // Show modal
   modal.style.display = 'flex';
-  container.innerHTML = '<div style="text-align: center; padding: 40px; color: rgba(255, 255, 255, 0.7);">Loading invoices...</div>';
+  container.innerHTML = `
+    <div class="settings-loading">
+      <div class="settings-skeleton-list">
+        <div class="settings-skeleton-item">
+          <div class="settings-skeleton-item-content">
+            <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 8px;"></div>
+            <div class="skeleton skeleton-text" style="width: 30%;"></div>
+          </div>
+          <div class="skeleton skeleton-badge"></div>
+        </div>
+        <div class="settings-skeleton-item">
+          <div class="settings-skeleton-item-content">
+            <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 8px;"></div>
+            <div class="skeleton skeleton-text" style="width: 30%;"></div>
+          </div>
+          <div class="skeleton skeleton-badge"></div>
+        </div>
+      </div>
+    </div>
+  `;
   
   try {
     if (!state.customerId) {
@@ -20473,7 +20675,26 @@ const DashboardPage = {
     }
 
     // Show loading state
-    container.innerHTML = '<div class="dashboard-loading">Loading purchase details...</div>';
+    container.innerHTML = `
+      <div class="dashboard-loading">
+        <div class="dashboard-skeleton-list">
+          <div class="skeleton-list-item">
+            <div style="flex: 1;">
+              <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+              <div class="skeleton skeleton-text" style="width: 40%;"></div>
+            </div>
+            <div class="skeleton skeleton-badge"></div>
+          </div>
+          <div class="skeleton-list-item">
+            <div style="flex: 1;">
+              <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+              <div class="skeleton skeleton-text" style="width: 40%;"></div>
+            </div>
+            <div class="skeleton skeleton-badge"></div>
+          </div>
+        </div>
+      </div>
+    `;
 
     try {
       // Fetch full receipt details (limit to first 20 for performance)
@@ -21198,11 +21419,128 @@ async function loadSettingsData(forceRefresh = true) {
     try {
       const cardConsents = await authAPI.getCustomerCardConsents(state.customerId);
       await SettingsPage.renderPaymentMethods(cardConsents);
+      
+      // Check if user needs to register card consent (no active card consents or all expired)
+      const hasActiveCardConsent = cardConsents && cardConsents.some(consent => {
+        if (!consent.expirationDay) return true; // No expiration = active
+        return new Date(consent.expirationDay) > new Date();
+      });
+      
+      // Show register button if no active card consent
+      const registerCardConsentBtn = document.getElementById('settingsRegisterCardConsentBtn');
+      if (registerCardConsentBtn) {
+        if (!hasActiveCardConsent) {
+          registerCardConsentBtn.style.display = 'flex';
+          
+          // Set up button handler if not already attached
+          if (!registerCardConsentBtn.dataset.handlerAttached) {
+            registerCardConsentBtn.addEventListener('click', async () => {
+              try {
+                registerCardConsentBtn.disabled = true;
+                registerCardConsentBtn.innerHTML = '<span>Loading...</span>';
+                
+                // Get business unit from customer or state
+                const businessUnitId = customerData.businessUnit?.id || state.selectedBusinessUnit;
+                
+                if (!businessUnitId) {
+                  throw new Error('Business unit ID is required to register card consent');
+                }
+                
+                // Generate return URL (current page)
+                const returnUrl = window.location.href.split('?')[0];
+                
+                console.log('[Settings] Generating card consent registration link:', {
+                  customerId: state.customerId,
+                  businessUnitId,
+                  returnUrl
+                });
+                
+                // Generate the registration link
+                const registrationUrl = await authAPI.generateRegisterCardConsentLink(
+                  state.customerId,
+                  businessUnitId,
+                  returnUrl
+                );
+                
+                if (registrationUrl) {
+                  console.log('[Settings] Card consent registration URL generated, redirecting...');
+                  // Redirect to payment provider to register card consent
+                  window.location.href = registrationUrl;
+                } else {
+                  throw new Error('No registration URL returned from API');
+                }
+              } catch (error) {
+                console.error('[Settings] Error generating card consent registration link:', error);
+                registerCardConsentBtn.disabled = false;
+                registerCardConsentBtn.innerHTML = `
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  Register payment card
+                `;
+                SettingsPage.showError('Failed to generate registration link. Please try again.');
+              }
+            });
+            
+            registerCardConsentBtn.dataset.handlerAttached = 'true';
+          }
+        } else {
+          registerCardConsentBtn.style.display = 'none';
+        }
+      }
     } catch (err) {
       console.warn('[Settings] Could not fetch payment methods:', err);
       const container = document.getElementById('settingsPaymentMethods');
       if (container) {
         container.innerHTML = '<div class="settings-empty">Could not load payment methods</div>';
+      }
+      
+      // Show register button even if fetch failed (user might need to register)
+      const registerCardConsentBtn = document.getElementById('settingsRegisterCardConsentBtn');
+      if (registerCardConsentBtn) {
+        registerCardConsentBtn.style.display = 'flex';
+        
+        // Set up button handler if not already attached
+        if (!registerCardConsentBtn.dataset.handlerAttached) {
+          registerCardConsentBtn.addEventListener('click', async () => {
+            try {
+              registerCardConsentBtn.disabled = true;
+              registerCardConsentBtn.innerHTML = '<span>Loading...</span>';
+              
+              const businessUnitId = customerData.businessUnit?.id || state.selectedBusinessUnit;
+              if (!businessUnitId) {
+                throw new Error('Business unit ID is required to register card consent');
+              }
+              
+              const returnUrl = window.location.href.split('?')[0];
+              const registrationUrl = await authAPI.generateRegisterCardConsentLink(
+                state.customerId,
+                businessUnitId,
+                returnUrl
+              );
+              
+              if (registrationUrl) {
+                window.location.href = registrationUrl;
+              } else {
+                throw new Error('No registration URL returned from API');
+              }
+            } catch (error) {
+              console.error('[Settings] Error generating card consent registration link:', error);
+              registerCardConsentBtn.disabled = false;
+              registerCardConsentBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Register payment card
+              `;
+              SettingsPage.showError('Failed to generate registration link. Please try again.');
+            }
+          });
+          
+          registerCardConsentBtn.dataset.handlerAttached = 'true';
+        }
       }
     }
     
@@ -22145,7 +22483,24 @@ async function loadBrowseClasses() {
   }
   
   // Show loading state
-  resultsContainer.innerHTML = '<div class="bookings-loading">Loading classes...</div>';
+  resultsContainer.innerHTML = `
+    <div class="bookings-loading">
+      <div class="bookings-skeleton-list">
+        <div class="bookings-skeleton-card">
+          <div class="skeleton skeleton-title"></div>
+          <div class="skeleton skeleton-text"></div>
+          <div class="skeleton skeleton-text" style="width: 80%;"></div>
+          <div class="skeleton skeleton-text" style="width: 60%; margin-top: 12px;"></div>
+        </div>
+        <div class="bookings-skeleton-card">
+          <div class="skeleton skeleton-title"></div>
+          <div class="skeleton skeleton-text"></div>
+          <div class="skeleton skeleton-text" style="width: 80%;"></div>
+          <div class="skeleton skeleton-text" style="width: 60%; margin-top: 12px;"></div>
+        </div>
+      </div>
+    </div>
+  `;
   
   try {
     // Get filter values
