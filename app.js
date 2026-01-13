@@ -20674,8 +20674,19 @@ const SettingsPage = {
       // Get card type/network
       const cardType = consent.issuingNetwork || 'Card';
       
+      // Detect card brand from card number if available
+      let cardBrand = 'Card';
+      if (cardNumber && cardNumber !== '-') {
+        const firstDigit = cardNumber.replace(/\s/g, '').charAt(0);
+        if (firstDigit === '4') cardBrand = 'Visa';
+        else if (firstDigit === '5' || firstDigit === '2') cardBrand = 'Mastercard';
+        else if (firstDigit === '3') cardBrand = 'Amex';
+      }
+      
       // Format expiry date (expirationDay is in Day format: YYYY-MM-DD)
       let expiryDate = '-';
+      let expiryMonth = '';
+      let expiryYear = '';
       if (consent.expirationDay) {
         const date = new Date(consent.expirationDay);
         if (!isNaN(date.getTime())) {
@@ -20683,6 +20694,8 @@ const SettingsPage = {
           const month = String(date.getMonth() + 1).padStart(2, '0');
           const year = date.getFullYear();
           expiryDate = `${day}.${month}.${year}`;
+          expiryMonth = month;
+          expiryYear = String(year).slice(-2);
         }
       }
       
@@ -20695,17 +20708,42 @@ const SettingsPage = {
       const statusClass = isActive ? 'payment-status-active' : 'payment-status-expired';
 
       return `
-        <div class="payment-method-card">
+        <div class="payment-method-card" data-card-type="${cardBrand.toLowerCase()}">
           <div class="payment-method-header">
-            <div class="payment-method-type">RCP mandate</div>
+            <div class="payment-method-type-badge">
+              <svg class="payment-method-type-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                <line x1="1" y1="10" x2="23" y2="10"></line>
+              </svg>
+              <span class="payment-method-type">RCP Mandate</span>
+            </div>
             <div class="payment-method-number">${cardNumber}</div>
           </div>
-          <div class="payment-method-status">
-            <span class="payment-status-badge ${statusClass}">${statusText}</span>
-          </div>
-          <div class="payment-method-details">
-            <span class="payment-method-provider">${companyName}</span>
-            ${expiryDate !== '-' ? `<span class="payment-method-separator">•</span><span class="payment-method-expiry">Expires: ${expiryDate}</span>` : ''}
+          <div class="payment-method-body">
+            <div class="payment-method-status">
+              <span class="payment-status-badge ${statusClass}">
+                <span class="payment-status-dot"></span>
+                ${statusText}
+              </span>
+            </div>
+            <div class="payment-method-details">
+              <div class="payment-method-detail-item">
+                <span class="payment-detail-label">Provider:</span>
+                <span class="payment-detail-value">${companyName}</span>
+              </div>
+              ${expiryDate !== '-' ? `
+              <div class="payment-method-detail-item">
+                <span class="payment-detail-label">Expires:</span>
+                <span class="payment-detail-value">${expiryMonth}/${expiryYear}</span>
+              </div>
+              ` : ''}
+              ${cardType !== 'Card' ? `
+              <div class="payment-method-detail-item">
+                <span class="payment-detail-label">Network:</span>
+                <span class="payment-detail-value">${cardType}</span>
+              </div>
+              ` : ''}
+            </div>
           </div>
         </div>
       `;
@@ -21263,25 +21301,7 @@ function initSettingsHandlers() {
     freezeData = { duration: null, subscriptionId: null };
   };
   
-  if (freezeSubscriptionBtn) {
-    freezeSubscriptionBtn.addEventListener('click', openFreezeSubscriptionModal);
-    freezeSubscriptionBtn.dataset.initialized = 'true';
-  }
-  
-  if (freezeSubscriptionSettingsBtn) {
-    freezeSubscriptionSettingsBtn.addEventListener('click', openFreezeSubscriptionModal);
-  }
-  
-  // Step 1 handlers
-  if (closeFreezeSubscriptionModal) {
-    closeFreezeSubscriptionModal.addEventListener('click', closeAllFreezeModals);
-  }
-  
-  if (stayMembershipBtn) {
-    stayMembershipBtn.addEventListener('click', closeAllFreezeModals);
-  }
-  
-  // Update date preview when duration changes
+  // Update date preview when duration changes (defined before openFreezeSubscriptionModal uses it)
   const updateFreezeDatePreview = () => {
     const freezeDatePreview = document.getElementById('freezeDatePreview');
     if (!freezeDatePreview || !freezeDurationSelect) return;
@@ -21305,6 +21325,64 @@ function initSettingsHandlers() {
     
     freezeDatePreview.textContent = `Freeze period: ${startFormatted} - ${endFormatted}`;
   };
+  
+  // Function to open freeze subscription modal
+  const openFreezeSubscriptionModal = async () => {
+    try {
+      if (!state.customerId) {
+        if (freezeSubscriptionError) {
+          freezeSubscriptionError.textContent = 'Unable to freeze: Customer ID not found';
+          freezeSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      // Fetch active subscription to verify it exists
+      const subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+      const activeSubscription = subscriptions?.find(sub => !sub.endDate || new Date(sub.endDate) > new Date());
+      
+      if (!activeSubscription) {
+        if (freezeSubscriptionError) {
+          freezeSubscriptionError.textContent = 'No active subscription found';
+          freezeSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      // Show the modal
+      if (freezeSubscriptionModal) {
+        freezeSubscriptionModal.style.display = 'flex';
+        if (freezeSubscriptionError) freezeSubscriptionError.style.display = 'none';
+        // Reset form
+        if (freezeDurationSelect) freezeDurationSelect.value = '1';
+        updateFreezeDatePreview();
+      }
+    } catch (error) {
+      console.error('[Settings] Error opening freeze modal:', error);
+      if (freezeSubscriptionError) {
+        freezeSubscriptionError.textContent = 'Failed to load subscription data. Please try again.';
+        freezeSubscriptionError.style.display = 'block';
+      }
+    }
+  };
+  
+  if (freezeSubscriptionBtn) {
+    freezeSubscriptionBtn.addEventListener('click', openFreezeSubscriptionModal);
+    freezeSubscriptionBtn.dataset.initialized = 'true';
+  }
+  
+  if (freezeSubscriptionSettingsBtn) {
+    freezeSubscriptionSettingsBtn.addEventListener('click', openFreezeSubscriptionModal);
+  }
+  
+  // Step 1 handlers
+  if (closeFreezeSubscriptionModal) {
+    closeFreezeSubscriptionModal.addEventListener('click', closeAllFreezeModals);
+  }
+  
+  if (stayMembershipBtn) {
+    stayMembershipBtn.addEventListener('click', closeAllFreezeModals);
+  }
   
   if (freezeDurationSelect) {
     freezeDurationSelect.addEventListener('change', updateFreezeDatePreview);
