@@ -10781,7 +10781,7 @@ function showSkipConfirmation() {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 2000;
+    z-index: 10001;
   `;
   
   const confirmationDialog = document.createElement('div');

@@ -3,7 +3,7 @@
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
+    z-index: 10001;
     display: none;
     isolation: isolate;
   }
@@ -25,7 +25,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: 10002;
     opacity: 1;
     transition: opacity 0.3s ease-out;
 }
@@ -3874,7 +3874,7 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.7);
-    z-index: 2000;
+    z-index: 10001;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3954,7 +3954,7 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.85);
-    z-index: 2000;
+    z-index: 10001;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -8783,7 +8783,7 @@ main {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
+    z-index: 10001;
     padding: 20px;
 }
 
