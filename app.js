@@ -17689,8 +17689,10 @@ async function loadProfileData(forceRefresh = false) {
       updateNavigationUserInfo();
     }
     
-    // Note: Cancel and Freeze subscription handlers are initialized in initSettingsHandlers()
-    // which is called from both loadProfileData and loadSettingsData
+    // Initialize settings handlers (includes freeze/cancel subscription buttons)
+    if (typeof initSettingsHandlers === 'function') {
+      initSettingsHandlers();
+    }
 
     console.log('[Profile] Profile data loaded successfully');
   } catch (error) {
@@ -21201,6 +21203,24 @@ function initSettingsHandlers() {
         SettingsPage.showError('Failed to update mail marketing preference');
       }
     });
+  }
+
+  // Manage Membership button (Profile page)
+  const manageMembershipBtn = document.getElementById('manageMembershipBtn');
+  if (manageMembershipBtn) {
+    manageMembershipBtn.addEventListener('click', () => {
+      // Navigate to settings page where membership can be managed
+      if (typeof showPage === 'function') {
+        showPage('settings');
+        // Load settings data to show membership management options
+        if (typeof loadSettingsData === 'function') {
+          loadSettingsData(true);
+        }
+      } else {
+        console.warn('[Settings] showPage function not available');
+      }
+    });
+    manageMembershipBtn.dataset.initialized = 'true';
   }
 
   // Freeze Subscription buttons (Profile and Settings)
