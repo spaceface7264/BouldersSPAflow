@@ -877,30 +877,40 @@
                     <div class="profile-card">
                         <h2 class="profile-card-title">My membership</h2>
                         <div class="profile-card-content">
-                            <div class="profile-detail-row">
-                                <span class="profile-detail-label">Membership type (subscription):</span>
-                                <span class="profile-detail-value" id="profileMembershipType">-</span>
+                            <!-- Membership details (shown when user has subscription) -->
+                            <div id="membershipDetails">
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Membership type (subscription):</span>
+                                    <span class="profile-detail-value" id="profileMembershipType">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Active since:</span>
+                                    <span class="profile-detail-value" id="profileActiveSince">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Price:</span>
+                                    <span class="profile-detail-value" id="profileMembershipPrice">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Primary gym:</span>
+                                    <span class="profile-detail-value" id="profileMembershipGym">-</span>
+                                </div>
+                                <!-- Bloc Life Loyalty tier: Hidden as requested -->
+                                <div class="profile-detail-row" style="display: none;">
+                                    <span class="profile-detail-label">Bloc Life Loyalty tier:</span>
+                                    <span class="profile-detail-value" id="profileLoyaltyTier"></span>
+                                </div>
+                                <button class="profile-action-btn" id="manageMembershipBtn">Manage membership</button>
                             </div>
-                            <div class="profile-detail-row">
-                                <span class="profile-detail-label">Active since:</span>
-                                <span class="profile-detail-value" id="profileActiveSince">-</span>
+                            <!-- CTA for users without subscription (hidden by default) -->
+                            <div id="membershipCTA" style="display: none;">
+                                <p style="color: var(--color-text-secondary); margin-bottom: 24px; line-height: 1.6;">
+                                    You don't have an active membership yet. Sign up now to get access to all Boulders gyms and exclusive benefits!
+                                </p>
+                                <a href="./index.html" class="profile-action-btn" style="text-decoration: none; display: inline-block; text-align: center;">
+                                    Sign up for membership
+                                </a>
                             </div>
-                            <div class="profile-detail-row">
-                                <span class="profile-detail-label">Price:</span>
-                                <span class="profile-detail-value" id="profileMembershipPrice">-</span>
-                            </div>
-                            <div class="profile-detail-row">
-                                <span class="profile-detail-label">Primary gym:</span>
-                                <span class="profile-detail-value" id="profileMembershipGym">-</span>
-                            </div>
-                            <!-- Bloc Life Loyalty tier: Hidden as requested -->
-                            <div class="profile-detail-row" style="display: none;">
-                                <span class="profile-detail-label">Bloc Life Loyalty tier:</span>
-                                <span class="profile-detail-value" id="profileLoyaltyTier"></span>
-                            </div>
-                            <button class="profile-action-btn" id="manageMembershipBtn">Manage membership</button>
-                            <button class="profile-action-btn" id="freezeSubscriptionBtn">Freeze Membership</button>
-                            <button class="profile-action-btn profile-action-btn-danger" id="cancelSubscriptionBtn">Cancel Subscription</button>
                         </div>
                     </div>
 
@@ -1105,16 +1115,19 @@
                 <div class="settings-section">
                     <h2 class="settings-section-title">Account Actions</h2>
                     
-                    <div class="settings-item">
-                        <button class="settings-action-btn" id="freezeSubscriptionSettingsBtn">
-                            Freeze Membership
-                        </button>
-                    </div>
-                    
-                    <div class="settings-item">
-                        <button class="settings-action-btn settings-action-btn-danger" id="cancelSubscriptionSettingsBtn">
-                            Cancel Subscription
-                        </button>
+                    <!-- Subscription actions (shown only when user has active subscription) -->
+                    <div id="subscriptionActions">
+                        <div class="settings-item">
+                            <button class="settings-action-btn" id="freezeSubscriptionSettingsBtn">
+                                Freeze Membership
+                            </button>
+                        </div>
+                        
+                        <div class="settings-item">
+                            <button class="settings-action-btn settings-action-btn-danger" id="cancelSubscriptionSettingsBtn">
+                                Cancel Subscription
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="settings-item">

@@ -17415,47 +17415,66 @@ const ProfilePage = {
         return expirationDate > new Date();
       }
       return true;
-    }) || subscriptions[0]; // Fallback to first subscription if none found
+    });
     
     console.log('[Profile] Active subscription for membership card:', activeSubscription);
     
-    // Membership type: Use subscriptionProduct.name from subscription
-    const membershipType = activeSubscription?.subscriptionProduct?.name || '-';
-    ProfilePage.setElementText('profileMembershipType', membershipType);
+    // Get DOM elements for showing/hiding sections
+    const membershipDetails = document.getElementById('membershipDetails');
+    const membershipCTA = document.getElementById('membershipCTA');
     
-    // Active since: Use subscription.start (Day format: YYYY-MM-DD)
-    const activeSince = activeSubscription?.start || customer.memberJoinDate || '-';
-    ProfilePage.setElementText('profileActiveSince', ProfileUtils.formatDate(activeSince));
+    // Check if user has an active subscription
+    const hasActiveSubscription = !!activeSubscription && 
+      activeSubscription.subscriptionProduct?.name && 
+      activeSubscription.subscriptionProduct.name !== '-';
     
-    // Price: Use subscription.price.amount (in øre) and convert to DKK
-    let priceDisplay = '-';
-    if (activeSubscription?.price?.amount !== undefined) {
-      const priceInMain = activeSubscription.price.amount / 100; // Convert øre to DKK
-      const currency = activeSubscription.price.currency || 'DKK';
-      priceDisplay = ProfileUtils.formatPrice(priceInMain, currency);
+    if (hasActiveSubscription) {
+      // Show membership details, hide CTA
+      if (membershipDetails) membershipDetails.style.display = 'block';
+      if (membershipCTA) membershipCTA.style.display = 'none';
+      
+      // Membership type: Use subscriptionProduct.name from subscription
+      const membershipType = activeSubscription.subscriptionProduct.name;
+      ProfilePage.setElementText('profileMembershipType', membershipType);
+      
+      // Active since: Use subscription.start (Day format: YYYY-MM-DD)
+      const activeSince = activeSubscription.start || customer.memberJoinDate || '-';
+      ProfilePage.setElementText('profileActiveSince', ProfileUtils.formatDate(activeSince));
+      
+      // Price: Use subscription.price.amount (in øre) and convert to DKK
+      let priceDisplay = '-';
+      if (activeSubscription.price?.amount !== undefined) {
+        const priceInMain = activeSubscription.price.amount / 100; // Convert øre to DKK
+        const currency = activeSubscription.price.currency || 'DKK';
+        priceDisplay = ProfileUtils.formatPrice(priceInMain, currency);
+      }
+      ProfilePage.setElementText('profileMembershipPrice', priceDisplay);
+      
+      // Get primary gym from subscription businessUnit, customer businessUnit, or fallback
+      let primaryGym = '-';
+      if (activeSubscription.businessUnit?.name) {
+        primaryGym = activeSubscription.businessUnit.name;
+      } else if (customer.businessUnit?.name) {
+        primaryGym = customer.businessUnit.name;
+      }
+      
+      if (primaryGym === '-') {
+        console.warn('[Profile] Primary gym not found for membership card:', {
+          activeSubscription: activeSubscription,
+          customerBusinessUnit: customer.businessUnit,
+          subscriptions: subscriptions
+        });
+      }
+      
+      ProfilePage.setElementText('profileMembershipGym', primaryGym);
+      
+      // Bloc Life Loyalty Tier: Leave blank as requested
+      ProfilePage.setElementText('profileLoyaltyTier', '');
+    } else {
+      // Hide membership details, show CTA
+      if (membershipDetails) membershipDetails.style.display = 'none';
+      if (membershipCTA) membershipCTA.style.display = 'block';
     }
-    ProfilePage.setElementText('profileMembershipPrice', priceDisplay);
-    
-    // Get primary gym from subscription businessUnit, customer businessUnit, or fallback
-    let primaryGym = '-';
-    if (activeSubscription?.businessUnit?.name) {
-      primaryGym = activeSubscription.businessUnit.name;
-    } else if (customer.businessUnit?.name) {
-      primaryGym = customer.businessUnit.name;
-    }
-    
-    if (primaryGym === '-') {
-      console.warn('[Profile] Primary gym not found for membership card:', {
-        activeSubscription: activeSubscription,
-        customerBusinessUnit: customer.businessUnit,
-        subscriptions: subscriptions
-      });
-    }
-    
-    ProfilePage.setElementText('profileMembershipGym', primaryGym);
-    
-    // Bloc Life Loyalty Tier: Leave blank as requested
-    ProfilePage.setElementText('profileLoyaltyTier', '');
   },
 
   /**
@@ -21010,6 +21029,9 @@ async function loadSettingsData(forceRefresh = true) {
       }
     }
     
+    // Check subscription status and show/hide subscription actions
+    await updateSubscriptionActionsVisibility();
+    
     // Initialize event handlers
     initSettingsHandlers();
     
@@ -21017,6 +21039,58 @@ async function loadSettingsData(forceRefresh = true) {
   } catch (error) {
     console.error('[Settings] Error loading settings data:', error);
     SettingsPage.showError(`Failed to load settings: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Update visibility of subscription actions (Freeze/Cancel) based on active subscription
+ */
+async function updateSubscriptionActionsVisibility() {
+  const subscriptionActions = document.getElementById('subscriptionActions');
+  if (!subscriptionActions) {
+    return;
+  }
+
+  if (!state.customerId) {
+    // Hide if no customer ID
+    subscriptionActions.style.display = 'none';
+    return;
+  }
+
+  try {
+    // Fetch subscriptions
+    const subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+    
+    // Find active subscription (not terminated and not expired)
+    const activeSubscription = subscriptions.find(sub => {
+      if (sub.statuses?.some(s => s.code === 'TERMINATED')) return false;
+      if (sub.expirationDay) {
+        const expirationDate = new Date(sub.expirationDay);
+        return expirationDate > new Date();
+      }
+      return true;
+    });
+    
+    // Check if user has an active subscription
+    const hasActiveSubscription = !!activeSubscription && 
+      activeSubscription.subscriptionProduct?.name && 
+      activeSubscription.subscriptionProduct.name !== '-';
+    
+    // Show/hide subscription actions based on subscription status
+    if (hasActiveSubscription) {
+      subscriptionActions.style.display = 'block';
+    } else {
+      subscriptionActions.style.display = 'none';
+    }
+    
+    console.log('[Settings] Subscription actions visibility updated:', {
+      hasActiveSubscription,
+      subscriptionActionsVisible: hasActiveSubscription
+    });
+  } catch (err) {
+    console.warn('[Settings] Could not check subscription status:', err);
+    // Hide on error to be safe
+    subscriptionActions.style.display = 'none';
   }
 }
 
