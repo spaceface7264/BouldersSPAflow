@@ -12522,6 +12522,16 @@ async function handleCheckout() {
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
           
+          // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
+          const isProductNotAllowed = error.isProductNotAllowed || 
+                                      (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
+          
+          if (isProductNotAllowed) {
+            // Show friendly message that this is a restriction, not an error
+            showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
+            throw error; // Re-throw to stop checkout flow
+          }
+          
           // Check if this is a payment link generation error due to backend pricing bug
           const isPaymentLinkError = error.message && error.message.includes('Generate Payment Link Card failed');
           const is403Error = error.message && error.message.includes('403');
