@@ -622,34 +622,7 @@ body {
     letter-spacing: 0.5px;
 }
 
-/* Language Switcher */
-.language-switcher {
-    display: none !important;
-}
-
-.language-btn {
-    display: none !important;
-}
-
-.language-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.3);
-}
-
-.language-btn.active {
-    background: rgba(244, 1, 245, 0.2);
-    border-color: #F401F5;
-    color: #F401F5;
-}
-
-.language-flag {
-    font-size: 16px;
-    line-height: 1;
-}
-
-.language-name {
-    font-weight: 600;
-}
+/* Language Switcher - Styles are defined later in the file (around line 5625) */
 
 /* Mobile Header Styles */
 @media (max-width: 768px) {
@@ -5684,13 +5657,21 @@ main {
     margin: 0 auto;
     padding: 12px 20px 0;
     border-top: 1px solid var(--color-item-border);
-    text-align: center;
+}
+
+.footer-bottom-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
 }
 
 .footer-bottom p {
     color: var(--color-text-subtle);
     font-size: var(--font-size-xs);
     margin: 0;
+    text-align: left;
 }
 
 .footer-bottom p a {
@@ -5702,6 +5683,49 @@ main {
 .footer-bottom p a:hover {
     color: var(--color-brand-accent);
     text-decoration: underline;
+}
+
+/* Language Switcher in Footer */
+.footer-bottom .language-switcher {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.footer-bottom .language-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background-color: transparent;
+    border: 1px solid var(--color-item-border);
+    border-radius: 6px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.footer-bottom .language-btn:hover {
+    border-color: var(--color-brand-accent);
+    color: var(--color-brand-accent);
+    background-color: rgba(244, 1, 245, 0.1);
+}
+
+.footer-bottom .language-btn.active {
+    border-color: var(--color-brand-accent);
+    color: var(--color-brand-accent);
+    background-color: rgba(244, 1, 245, 0.15);
+}
+
+.footer-bottom .language-flag {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.footer-bottom .language-name {
+    font-weight: 600;
+    font-size: var(--font-size-xs);
 }
 /* Mobile Footer - Best Practice */
 @media (max-width: 768px) {
@@ -5742,6 +5766,17 @@ main {
     
     .footer-bottom {
         padding: 12px 20px 0;
+    }
+    
+    .footer-bottom-content {
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        text-align: center;
+    }
+    
+    .footer-bottom p {
+        text-align: center;
     }
 }
 
