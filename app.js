@@ -11330,6 +11330,8 @@ function persistOrderSnapshot(orderId) {
       cartItems: state.cartItems || [],
       totals: state.totals,
       selectedBusinessUnit: state.selectedBusinessUnit,
+      selectedProductType: state.selectedProductType, // Store product type for restoration
+      selectedProductId: state.selectedProductId, // Store product ID for restoration
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -12009,6 +12011,8 @@ async function handleCheckout() {
           cartItems: state.cartItems || [],
           totals: state.totals,
           selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
+          selectedProductType: state.selectedProductType, // Store product type for restoration
+          selectedProductId: state.selectedProductId, // Store product ID for restoration
         }));
       } catch (e) {
         console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -13855,34 +13859,78 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
       if (storedOrder.cartItems) {
         state.cartItems = storedOrder.cartItems;
         console.log('[Payment Failed] ✅ Restored cart items:', state.cartItems.length, 'items');
+        
+        // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
+        // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
+        const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
+        if (punchCardItems.length > 0) {
+          console.log('[Payment Failed] Found punch card items, rebuilding valueCardQuantities');
+          state.valueCardQuantities.clear();
+          punchCardItems.forEach(item => {
+            // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
+            const planId = storedOrder.membershipPlanId || 
+                          (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
+            const quantity = item.quantity || 1;
+            state.valueCardQuantities.set(planId, quantity);
+            console.log('[Payment Failed] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
+          });
+        }
       }
       if (storedOrder.totals) {
         state.totals = { ...state.totals, ...storedOrder.totals };
         console.log('[Payment Failed] ✅ Restored totals:', state.totals);
       }
+      
+      // Restore selectedProductType and selectedProductId if available
+      if (storedOrder.selectedProductType) {
+        state.selectedProductType = storedOrder.selectedProductType;
+        console.log('[Payment Failed] ✅ Restored selectedProductType:', state.selectedProductType);
+      }
+      if (storedOrder.selectedProductId) {
+        state.selectedProductId = storedOrder.selectedProductId;
+        console.log('[Payment Failed] ✅ Restored selectedProductId:', state.selectedProductId);
+      }
+      
       if (storedOrder.membershipPlanId) {
         state.membershipPlanId = storedOrder.membershipPlanId;
         console.log('[Payment Failed] ✅ Restored membershipPlanId:', state.membershipPlanId);
         
-        // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
-        // This ensures updateCartSummary() can rebuild cart correctly
-        // Handle all formats: campaign-, membership-, 15daypass-
-        if (typeof storedOrder.membershipPlanId === 'string') {
-          if (storedOrder.membershipPlanId.startsWith('campaign-')) {
-            const productId = storedOrder.membershipPlanId.replace('campaign-', '');
-            state.selectedProductId = parseInt(productId, 10) || productId;
-            state.selectedProductType = 'membership';
-            console.log('[Payment Failed] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
-          } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
-            const productId = storedOrder.membershipPlanId.replace('membership-', '');
-            state.selectedProductId = parseInt(productId, 10) || productId;
-            state.selectedProductType = 'membership';
-            console.log('[Payment Failed] ✅ Derived selectedProductId from membership:', state.selectedProductId);
-          } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
-            const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
-            state.selectedProductId = parseInt(productId, 10) || productId;
-            state.selectedProductType = 'membership';
-            console.log('[Payment Failed] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+        // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
+        // Handle all formats: campaign-, membership-, 15daypass-, punch-
+        if (!state.selectedProductType || !state.selectedProductId) {
+          if (typeof storedOrder.membershipPlanId === 'string') {
+            if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+              const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+              state.selectedProductId = parseInt(productId, 10) || productId;
+              state.selectedProductType = 'membership';
+              console.log('[Payment Failed] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
+            } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+              const productId = storedOrder.membershipPlanId.replace('membership-', '');
+              state.selectedProductId = parseInt(productId, 10) || productId;
+              state.selectedProductType = 'membership';
+              console.log('[Payment Failed] ✅ Derived selectedProductId from membership:', state.selectedProductId);
+            } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+              const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+              state.selectedProductId = parseInt(productId, 10) || productId;
+              state.selectedProductType = 'membership';
+              console.log('[Payment Failed] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+            } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
+                       storedOrder.membershipPlanId === 'adult-punch' || 
+                       storedOrder.membershipPlanId === 'junior-punch') {
+              // For punch cards, extract productId from membershipPlanId
+              if (storedOrder.membershipPlanId.startsWith('punch-')) {
+                const productId = storedOrder.membershipPlanId.replace('punch-', '');
+                state.selectedProductId = parseInt(productId, 10) || productId;
+              } else {
+                // For adult-punch/junior-punch, we need to find the productId from cart items
+                const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
+                if (punchCardItem) {
+                  state.selectedProductId = punchCardItem.productId || punchCardItem.id;
+                }
+              }
+              state.selectedProductType = 'punch-card';
+              console.log('[Payment Failed] ✅ Derived selectedProductId from punch card:', state.selectedProductId);
+            }
           }
         }
       }
@@ -14047,33 +14095,79 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
                 if (storedOrder.cartItems) {
                   state.cartItems = storedOrder.cartItems;
                   console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
+                  
+                  // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
+                  // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
+                  const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
+                  if (punchCardItems.length > 0) {
+                    console.log('[Payment Retry] Found punch card items, rebuilding valueCardQuantities');
+                    state.valueCardQuantities.clear();
+                    punchCardItems.forEach(item => {
+                      // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
+                      // If membershipPlanId exists, use it; otherwise construct from productId
+                      const planId = storedOrder.membershipPlanId || 
+                                    (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
+                      const quantity = item.quantity || 1;
+                      state.valueCardQuantities.set(planId, quantity);
+                      console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
+                    });
+                  }
                 }
                 if (storedOrder.totals) {
                   state.totals = { ...state.totals, ...storedOrder.totals };
                   console.log('[Payment Retry] ✅ Restored totals');
                 }
+                
+                // Restore selectedProductType and selectedProductId if available
+                if (storedOrder.selectedProductType) {
+                  state.selectedProductType = storedOrder.selectedProductType;
+                  console.log('[Payment Retry] ✅ Restored selectedProductType:', state.selectedProductType);
+                }
+                if (storedOrder.selectedProductId) {
+                  state.selectedProductId = storedOrder.selectedProductId;
+                  console.log('[Payment Retry] ✅ Restored selectedProductId:', state.selectedProductId);
+                }
+                
                 if (storedOrder.membershipPlanId) {
                   state.membershipPlanId = storedOrder.membershipPlanId;
                   console.log('[Payment Retry] ✅ Restored membershipPlanId:', state.membershipPlanId);
                   
-                  // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
-                  // Handle all formats: campaign-, membership-, 15daypass-
-                  if (typeof storedOrder.membershipPlanId === 'string') {
-                    if (storedOrder.membershipPlanId.startsWith('campaign-')) {
-                      const productId = storedOrder.membershipPlanId.replace('campaign-', '');
-                      state.selectedProductId = parseInt(productId, 10) || productId;
-                      state.selectedProductType = 'membership';
-                      console.log('[Payment Retry] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
-                    } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
-                      const productId = storedOrder.membershipPlanId.replace('membership-', '');
-                      state.selectedProductId = parseInt(productId, 10) || productId;
-                      state.selectedProductType = 'membership';
-                      console.log('[Payment Retry] ✅ Derived selectedProductId from membership:', state.selectedProductId);
-                    } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
-                      const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
-                      state.selectedProductId = parseInt(productId, 10) || productId;
-                      state.selectedProductType = 'membership';
-                      console.log('[Payment Retry] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+                  // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
+                  // Handle all formats: campaign-, membership-, 15daypass-, punch-
+                  if (!state.selectedProductType || !state.selectedProductId) {
+                    if (typeof storedOrder.membershipPlanId === 'string') {
+                      if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+                        const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                        state.selectedProductId = parseInt(productId, 10) || productId;
+                        state.selectedProductType = 'membership';
+                        console.log('[Payment Retry] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
+                      } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+                        const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                        state.selectedProductId = parseInt(productId, 10) || productId;
+                        state.selectedProductType = 'membership';
+                        console.log('[Payment Retry] ✅ Derived selectedProductId from membership:', state.selectedProductId);
+                      } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+                        const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+                        state.selectedProductId = parseInt(productId, 10) || productId;
+                        state.selectedProductType = 'membership';
+                        console.log('[Payment Retry] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+                      } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
+                                 storedOrder.membershipPlanId === 'adult-punch' || 
+                                 storedOrder.membershipPlanId === 'junior-punch') {
+                        // For punch cards, extract productId from membershipPlanId
+                        if (storedOrder.membershipPlanId.startsWith('punch-')) {
+                          const productId = storedOrder.membershipPlanId.replace('punch-', '');
+                          state.selectedProductId = parseInt(productId, 10) || productId;
+                        } else {
+                          // For adult-punch/junior-punch, we need to find the productId from cart items
+                          const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
+                          if (punchCardItem) {
+                            state.selectedProductId = punchCardItem.productId || punchCardItem.id;
+                          }
+                        }
+                        state.selectedProductType = 'punch-card';
+                        console.log('[Payment Retry] ✅ Derived selectedProductId from punch card:', state.selectedProductId);
+                      }
                     }
                   }
                 }
@@ -15045,31 +15139,76 @@ function showStep(stepNumber) {
             if (storedOrder.cartItems) {
               state.cartItems = storedOrder.cartItems;
               console.log('[showStep] Step 4 - Restored cart items from sessionStorage:', state.cartItems.length, 'items');
+              
+              // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
+              // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
+              const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
+              if (punchCardItems.length > 0) {
+                console.log('[showStep] Step 4 - Found punch card items, rebuilding valueCardQuantities');
+                state.valueCardQuantities.clear();
+                punchCardItems.forEach(item => {
+                  // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
+                  const planId = storedOrder.membershipPlanId || 
+                                (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
+                  const quantity = item.quantity || 1;
+                  state.valueCardQuantities.set(planId, quantity);
+                  console.log('[showStep] Step 4 - Rebuilt valueCardQuantities:', planId, '=', quantity);
+                });
+              }
             }
             if (storedOrder.totals) {
               state.totals = { ...state.totals, ...storedOrder.totals };
             }
+            
+            // Restore selectedProductType and selectedProductId if available
+            if (storedOrder.selectedProductType) {
+              state.selectedProductType = storedOrder.selectedProductType;
+              console.log('[showStep] Step 4 - Restored selectedProductType:', state.selectedProductType);
+            }
+            if (storedOrder.selectedProductId) {
+              state.selectedProductId = storedOrder.selectedProductId;
+              console.log('[showStep] Step 4 - Restored selectedProductId:', state.selectedProductId);
+            }
+            
             if (storedOrder.membershipPlanId && !state.membershipPlanId) {
               state.membershipPlanId = storedOrder.membershipPlanId;
               
-              // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
-              // Handle all formats: campaign-, membership-, 15daypass-
-              if (typeof storedOrder.membershipPlanId === 'string') {
-                if (storedOrder.membershipPlanId.startsWith('campaign-')) {
-                  const productId = storedOrder.membershipPlanId.replace('campaign-', '');
-                  state.selectedProductId = parseInt(productId, 10) || productId;
-                  state.selectedProductType = 'membership';
-                  console.log('[showStep] Step 4 - Derived selectedProductId from campaign:', state.selectedProductId);
-                } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
-                  const productId = storedOrder.membershipPlanId.replace('membership-', '');
-                  state.selectedProductId = parseInt(productId, 10) || productId;
-                  state.selectedProductType = 'membership';
-                  console.log('[showStep] Step 4 - Derived selectedProductId from membership:', state.selectedProductId);
-                } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
-                  const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
-                  state.selectedProductId = parseInt(productId, 10) || productId;
-                  state.selectedProductType = 'membership';
-                  console.log('[showStep] Step 4 - Derived selectedProductId from 15daypass:', state.selectedProductId);
+              // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
+              // Handle all formats: campaign-, membership-, 15daypass-, punch-
+              if (!state.selectedProductType || !state.selectedProductId) {
+                if (typeof storedOrder.membershipPlanId === 'string') {
+                  if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+                    const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                    state.selectedProductId = parseInt(productId, 10) || productId;
+                    state.selectedProductType = 'membership';
+                    console.log('[showStep] Step 4 - Derived selectedProductId from campaign:', state.selectedProductId);
+                  } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+                    const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                    state.selectedProductId = parseInt(productId, 10) || productId;
+                    state.selectedProductType = 'membership';
+                    console.log('[showStep] Step 4 - Derived selectedProductId from membership:', state.selectedProductId);
+                  } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+                    const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+                    state.selectedProductId = parseInt(productId, 10) || productId;
+                    state.selectedProductType = 'membership';
+                    console.log('[showStep] Step 4 - Derived selectedProductId from 15daypass:', state.selectedProductId);
+                  } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
+                             storedOrder.membershipPlanId === 'adult-punch' || 
+                             storedOrder.membershipPlanId === 'junior-punch') {
+                    // For punch cards, extract productId from membershipPlanId
+                    if (storedOrder.membershipPlanId.startsWith('punch-')) {
+                      const productId = storedOrder.membershipPlanId.replace('punch-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                    } else {
+                      // For adult-punch/junior-punch, we need to find the productId from cart items
+                      const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
+                      if (punchCardItem) {
+                        state.selectedProductId = punchCardItem.productId || punchCardItem.id;
+                      }
+                    }
+                    state.selectedProductType = 'punch-card';
+                    console.log('[showStep] Step 4 - Derived selectedProductId from punch card:', state.selectedProductId);
+                  }
                 }
               }
             }
