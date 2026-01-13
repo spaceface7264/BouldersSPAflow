@@ -1734,6 +1734,28 @@ class OrderAPI {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Step 7] Add subscription item error (${response.status}):`, errorText);
+        
+        // Check for PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
+        let errorData = null;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          // Not JSON, continue with text error
+        }
+        
+        const errorCode = errorData?.errorCode || errorData?.code;
+        if (errorCode === 'PRODUCT_NOT_ALLOWED') {
+          const productId = errorData?.id || subscriptionProductId;
+          console.warn(`[Step 7] ⚠️ Product ${productId} is not allowed for this customer (campaign eligibility restriction)`);
+          
+          // Create a custom error that can be identified in catch blocks
+          const restrictionError = new Error(`PRODUCT_NOT_ALLOWED: This offer is not available for your account due to campaign restrictions.`);
+          restrictionError.isProductNotAllowed = true;
+          restrictionError.productId = productId;
+          restrictionError.originalError = errorText;
+          throw restrictionError;
+        }
+        
         throw new Error(`Add subscription item failed: ${response.status} - ${errorText}`);
       }
       
@@ -12880,7 +12902,19 @@ async function handleCheckout() {
       }
     } catch (error) {
       console.error('[checkout] Failed to add items or generate payment link:', error);
-      showToast(getErrorMessage(error, 'Adding items'), 'error');
+      
+      // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
+      const isProductNotAllowed = error.isProductNotAllowed || 
+                                  (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
+      
+      if (isProductNotAllowed) {
+        // Show friendly message that this is a restriction, not an error
+        showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
+      } else {
+        // Show error message for actual errors
+        showToast(getErrorMessage(error, 'Adding items'), 'error');
+      }
+      
       setCheckoutLoadingState(false);
       return;
     }
