@@ -8634,6 +8634,16 @@ function refreshLoginPageUI() {
     // Update navigation user info when authenticated
     if (authenticated) {
       updateNavigationUserInfo();
+      
+      // Initialize navigation (including dropdown) when shown
+      // Use setTimeout to ensure DOM is ready
+      setTimeout(() => {
+        if (typeof window.initNavigation === 'function') {
+          window.initNavigation();
+        } else if (typeof initNavigation === 'function') {
+          initNavigation();
+        }
+      }, 50);
     }
   }
   
@@ -8742,6 +8752,12 @@ function initNavigation() {
     return; // Navigation not on this page
   }
   
+  // Prevent multiple initializations
+  if (mainNavigation.dataset.initialized === 'true') {
+    return; // Already initialized
+  }
+  mainNavigation.dataset.initialized = 'true';
+  
   // Handle navigation link clicks
   const navLinks = mainNavigation.querySelectorAll('.nav-link[data-route]');
   navLinks.forEach(link => {
@@ -8794,26 +8810,103 @@ function initNavigation() {
   const navUser = document.getElementById('navUser');
   const userDropdown = document.getElementById('userDropdown');
   
+  // Function to position dropdown relative to nav-user button
+  function positionDropdown() {
+    if (!navUser || !userDropdown || userDropdown.style.display === 'none') {
+      return;
+    }
+    
+    const navUserRect = navUser.getBoundingClientRect();
+    const dropdownHeight = userDropdown.offsetHeight || 200; // Estimate if not yet rendered
+    const viewportHeight = window.innerHeight;
+    const spacing = 10; // Space between button and dropdown
+    
+    // Position dropdown below the nav-user button
+    let top = navUserRect.bottom + spacing;
+    let right = window.innerWidth - navUserRect.right;
+    
+    // If dropdown would go off-screen at bottom, position it above instead
+    if (top + dropdownHeight > viewportHeight && navUserRect.top > dropdownHeight) {
+      top = navUserRect.top - dropdownHeight - spacing;
+    }
+    
+    // Ensure dropdown doesn't go off-screen on the right
+    const dropdownWidth = userDropdown.offsetWidth || 200;
+    if (right < 0) {
+      right = 10; // Minimum margin from right edge
+    }
+    
+    userDropdown.style.top = `${top}px`;
+    userDropdown.style.right = `${right}px`;
+  }
+  
   if (navUser && userDropdown) {
+    // Track if dropdown is appended to body (scoped outside event handlers)
+    let isAppendedToBody = false;
+    
+    // Helper function to move dropdown back to original position
+    const moveDropdownBack = () => {
+      if (isAppendedToBody && userDropdown.parentElement === document.body) {
+        const navUserParent = navUser.parentElement;
+        if (navUserParent) {
+          navUserParent.appendChild(userDropdown);
+          isAppendedToBody = false;
+        }
+      }
+    };
+    
     navUser.addEventListener('click', (e) => {
       e.stopPropagation();
       const isActive = navUser.classList.contains('active');
       
       // Close all dropdowns
       document.querySelectorAll('.nav-user').forEach(u => u.classList.remove('active'));
-      document.querySelectorAll('.user-dropdown').forEach(d => d.style.display = 'none');
+      document.querySelectorAll('.user-dropdown').forEach(d => {
+        d.style.display = 'none';
+      });
       
       if (!isActive) {
         navUser.classList.add('active');
+        
+        // Move dropdown to body to escape any stacking context issues
+        if (userDropdown.parentElement !== document.body) {
+          document.body.appendChild(userDropdown);
+          isAppendedToBody = true;
+        }
+        
         userDropdown.style.display = 'block';
+        
+        // Position dropdown after showing it
+        // Use requestAnimationFrame to ensure it's rendered first
+        requestAnimationFrame(() => {
+          positionDropdown();
+        });
+      } else {
+        // Move dropdown back to original position when closing
+        moveDropdownBack();
       }
     });
     
+    // Reposition dropdown on scroll and resize
+    let resizeTimer;
+    const handleReposition = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (userDropdown.style.display === 'block') {
+          positionDropdown();
+        }
+      }, 100);
+    };
+    
+    window.addEventListener('scroll', handleReposition, true);
+    window.addEventListener('resize', handleReposition);
+    
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
-      if (!navUser.contains(e.target)) {
+      if (!navUser.contains(e.target) && !userDropdown.contains(e.target)) {
         navUser.classList.remove('active');
         userDropdown.style.display = 'none';
+        moveDropdownBack();
       }
     });
     
@@ -8823,6 +8916,9 @@ function initNavigation() {
       item.addEventListener('click', (e) => {
         e.preventDefault();
         const action = item.getAttribute('data-action');
+        
+        // Move dropdown back to original position before closing
+        moveDropdownBack();
         
         if (action === 'nav-profile') {
           showPage('profile');

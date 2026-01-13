@@ -1505,6 +1505,14 @@
         import { initLoginPage } from './login-page.js';
         document.addEventListener('DOMContentLoaded', () => {
             initLoginPage();
+            
+            // Initialize navigation (including dropdown) when DOM is ready
+            // Wait a bit to ensure app.js has loaded and exposed initNavigation
+            setTimeout(() => {
+                if (typeof window.initNavigation === 'function') {
+                    window.initNavigation();
+                }
+            }, 100);
         });
     </script>
 
