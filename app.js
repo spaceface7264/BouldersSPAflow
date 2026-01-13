@@ -13866,11 +13866,24 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
         
         // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
         // This ensures updateCartSummary() can rebuild cart correctly
-        if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
-          const productId = storedOrder.membershipPlanId.replace('membership-', '');
-          state.selectedProductId = parseInt(productId, 10) || productId;
-          state.selectedProductType = 'membership';
-          console.log('[Payment Failed] ✅ Derived selectedProductId:', state.selectedProductId, 'selectedProductType:', state.selectedProductType);
+        // Handle all formats: campaign-, membership-, 15daypass-
+        if (typeof storedOrder.membershipPlanId === 'string') {
+          if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+            const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+            state.selectedProductId = parseInt(productId, 10) || productId;
+            state.selectedProductType = 'membership';
+            console.log('[Payment Failed] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
+          } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+            const productId = storedOrder.membershipPlanId.replace('membership-', '');
+            state.selectedProductId = parseInt(productId, 10) || productId;
+            state.selectedProductType = 'membership';
+            console.log('[Payment Failed] ✅ Derived selectedProductId from membership:', state.selectedProductId);
+          } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+            const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+            state.selectedProductId = parseInt(productId, 10) || productId;
+            state.selectedProductType = 'membership';
+            console.log('[Payment Failed] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+          }
         }
       }
       if (storedOrder.selectedBusinessUnit) {
@@ -14021,22 +14034,17 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
         if (retryBtn) {
           retryBtn.addEventListener('click', () => {
             console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
-            // Navigate back to step 4 (payment step) to retry
-            state.paymentFailed = false; // Reset payment failed state
-            state.currentStep = 4;
-            showStep(4);
-            updateStepIndicator();
-            updateNavigationButtons();
-            updateMainSubtitle();
             
-            // CRITICAL: Restore cart and state from sessionStorage if not already restored
+            // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
+            // This ensures cart is populated when showStep(4) runs
             try {
               const orderData = sessionStorage.getItem('boulders_checkout_order');
               if (orderData) {
                 const storedOrder = JSON.parse(orderData);
                 console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
                 
-                if (storedOrder.cartItems && (!state.cartItems || state.cartItems.length === 0)) {
+                // Always restore cart items (force restore, don't check if empty)
+                if (storedOrder.cartItems) {
                   state.cartItems = storedOrder.cartItems;
                   console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
                 }
@@ -14044,23 +14052,36 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
                   state.totals = { ...state.totals, ...storedOrder.totals };
                   console.log('[Payment Retry] ✅ Restored totals');
                 }
-                if (storedOrder.membershipPlanId && !state.membershipPlanId) {
+                if (storedOrder.membershipPlanId) {
                   state.membershipPlanId = storedOrder.membershipPlanId;
-                  console.log('[Payment Retry] ✅ Restored membershipPlanId');
+                  console.log('[Payment Retry] ✅ Restored membershipPlanId:', state.membershipPlanId);
                   
                   // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
-                  if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
-                    const productId = storedOrder.membershipPlanId.replace('membership-', '');
-                    state.selectedProductId = parseInt(productId, 10) || productId;
-                    state.selectedProductType = 'membership';
-                    console.log('[Payment Retry] ✅ Derived selectedProductId:', state.selectedProductId);
+                  // Handle all formats: campaign-, membership-, 15daypass-
+                  if (typeof storedOrder.membershipPlanId === 'string') {
+                    if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+                      const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+                      const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from membership:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+                      const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+                    }
                   }
                 }
-                if (storedOrder.selectedBusinessUnit && !state.selectedBusinessUnit) {
+                if (storedOrder.selectedBusinessUnit) {
                   state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
                   console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
                 }
-                if (storedOrder.orderId && !state.orderId) {
+                if (storedOrder.orderId) {
                   state.orderId = storedOrder.orderId;
                   console.log('[Payment Retry] ✅ Restored orderId');
                 }
@@ -14069,27 +14090,38 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
               console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
             }
             
-            // CRITICAL: Update cart and payment overview to ensure items are displayed correctly
-            updateCartSummary();
+            // Reset payment failed state and navigate to step 4
+            state.paymentFailed = false;
+            state.currentStep = 4;
+            showStep(4);
+            updateStepIndicator();
+            updateNavigationButtons();
+            updateMainSubtitle();
             
-            // If order exists, fetch full order data for payment overview
-            if (state.orderId) {
-              console.log('[Payment Retry] Fetching order data for payment overview (orderId:', state.orderId, ')');
-              orderAPI.getOrder(state.orderId)
-                .then(order => {
-                  state.fullOrder = order;
-                  updatePaymentOverview();
-                  console.log('[Payment Retry] ✅ Order data fetched, payment overview updated');
-                })
-                .catch(error => {
-                  console.warn('[Payment Retry] Could not fetch order data for payment overview:', error);
-                  // Still update payment overview with available data
-                  updatePaymentOverview();
-                });
-            } else {
-              // Update payment overview with current state data
-              updatePaymentOverview();
-            }
+            // CRITICAL: Update cart and payment overview after DOM is ready
+            // Use setTimeout to ensure showStep(4) has finished rendering
+            setTimeout(() => {
+              updateCartSummary();
+              
+              // If order exists, fetch full order data for payment overview
+              if (state.orderId) {
+                console.log('[Payment Retry] Fetching order data for payment overview (orderId:', state.orderId, ')');
+                orderAPI.getOrder(state.orderId)
+                  .then(order => {
+                    state.fullOrder = order;
+                    updatePaymentOverview();
+                    console.log('[Payment Retry] ✅ Order data fetched, payment overview updated');
+                  })
+                  .catch(error => {
+                    console.warn('[Payment Retry] Could not fetch order data for payment overview:', error);
+                    // Still update payment overview with available data
+                    updatePaymentOverview();
+                  });
+              } else {
+                // Update payment overview with current state data
+                updatePaymentOverview();
+              }
+            }, 100);
             
             scrollToTop();
           });
@@ -15021,11 +15053,24 @@ function showStep(stepNumber) {
               state.membershipPlanId = storedOrder.membershipPlanId;
               
               // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
-              if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
-                const productId = storedOrder.membershipPlanId.replace('membership-', '');
-                state.selectedProductId = parseInt(productId, 10) || productId;
-                state.selectedProductType = 'membership';
-                console.log('[showStep] Step 4 - Derived selectedProductId:', state.selectedProductId);
+              // Handle all formats: campaign-, membership-, 15daypass-
+              if (typeof storedOrder.membershipPlanId === 'string') {
+                if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+                  const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                  state.selectedProductId = parseInt(productId, 10) || productId;
+                  state.selectedProductType = 'membership';
+                  console.log('[showStep] Step 4 - Derived selectedProductId from campaign:', state.selectedProductId);
+                } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+                  const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                  state.selectedProductId = parseInt(productId, 10) || productId;
+                  state.selectedProductType = 'membership';
+                  console.log('[showStep] Step 4 - Derived selectedProductId from membership:', state.selectedProductId);
+                } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+                  const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+                  state.selectedProductId = parseInt(productId, 10) || productId;
+                  state.selectedProductType = 'membership';
+                  console.log('[showStep] Step 4 - Derived selectedProductId from 15daypass:', state.selectedProductId);
+                }
               }
             }
             if (storedOrder.selectedBusinessUnit && !state.selectedBusinessUnit) {
