@@ -7034,6 +7034,92 @@ main {
     }
     
 }
+/* Contract Signing Banner */
+.contract-signing-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background: linear-gradient(135deg, rgba(244, 1, 245, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+    border-bottom: 2px solid #F401F5;
+    z-index: 10002;
+    padding: 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.contract-banner-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.contract-banner-message {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    color: #FFFFFF;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+.contract-banner-message svg {
+    color: #F401F5;
+    flex-shrink: 0;
+}
+
+.contract-banner-cta {
+    padding: 10px 24px;
+    background-color: #F401F5;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.contract-banner-cta:hover {
+    background-color: #D401D5;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(244, 1, 245, 0.4);
+}
+
+.contract-banner-cta:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+    .contract-banner-content {
+        padding: 12px 20px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+    
+    .contract-banner-message {
+        font-size: 14px;
+    }
+    
+    .contract-banner-cta {
+        width: 100%;
+        text-align: center;
+        padding: 12px 24px;
+    }
+}
+
 .main-navigation {
     width: 100%;
     background-color: rgba(0, 0, 0, 0.4);
@@ -7043,6 +7129,7 @@ main {
     top: 0;
     z-index: 9999;
     padding: 0;
+    transition: top 0.3s ease;
 }
 
 .nav-container {

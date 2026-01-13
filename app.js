@@ -2411,6 +2411,123 @@ class AuthAPI {
     }
   }
 
+  // Get customer signature cases (for contract documents)
+  async getCustomerSignatureCases(customerId) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/signaturecases`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/signaturecases`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/signaturecases`;
+      }
+      
+      console.log('[AuthAPI] Fetching customer signature cases:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[AuthAPI] Get signature cases error (${response.status}):`, errorText);
+        throw new Error(`Get signature cases failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[AuthAPI] Get signature cases response:', data);
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('[AuthAPI] Get signature cases error:', error);
+      throw error;
+    }
+  }
+
+  // Create signature case for subscription (to get contract document URL)
+  async createSignatureCase(customerId, subscriptionId, redirectUrl = null) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/signaturecases`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/signaturecases`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/signaturecases`;
+      }
+      
+      console.log('[AuthAPI] Creating signature case:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      // Build redirect URL if not provided
+      if (!redirectUrl) {
+        const currentUrl = window.location.href;
+        redirectUrl = currentUrl.split('?')[0]; // Remove query params
+      }
+      
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const payload = {
+        subscription: subscriptionId,
+        redirectUrl: redirectUrl,
+      };
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      
+      if (!response.ok) {
+        // 204 means subscription doesn't require a signature case
+        if (response.status === 204) {
+          console.log('[AuthAPI] Subscription does not require a signature case');
+          return null;
+        }
+        const errorText = await response.text();
+        console.error(`[AuthAPI] Create signature case error (${response.status}):`, errorText);
+        throw new Error(`Create signature case failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[AuthAPI] Create signature case response:', data);
+      return data;
+    } catch (error) {
+      console.error('[AuthAPI] Create signature case error:', error);
+      throw error;
+    }
+  }
+
   // Get customer invoices
   async getCustomerInvoices(customerId, period = null) {
     try {
@@ -17468,6 +17585,76 @@ const ProfilePage = {
       
       ProfilePage.setElementText('profileMembershipGym', primaryGym);
       
+      // Contract status: Check subscription statuses for contract signing status
+      const contractStatusElement = document.getElementById('profileContractStatus');
+      const hasContractNotSigned = activeSubscription.statuses?.some(
+        s => s.code === 'CONTRACT_NOT_SIGNED' || s.code === 'CONTRACT_NOT_SIGNED_PAYYER'
+      );
+      
+      let contractUrl = null;
+      
+      if (hasContractNotSigned) {
+        // Contract not signed - fetch or create signature case to get document URL
+        try {
+          // First, try to get existing signature cases for this subscription
+          const signatureCases = await authAPI.getCustomerSignatureCases(state.customerId);
+          const subscriptionSignatureCase = signatureCases.find(
+            sc => sc.subscription === activeSubscription.id && !sc.signed
+          );
+          
+          if (subscriptionSignatureCase && subscriptionSignatureCase.documentUrl) {
+            // Use existing signature case document URL
+            contractUrl = subscriptionSignatureCase.documentUrl;
+            console.log('[Profile] Found existing signature case with document URL:', contractUrl);
+          } else {
+            // Create new signature case to get document URL
+            try {
+              const redirectUrl = window.location.href.split('?')[0]; // Current page without query params
+              const newSignatureCase = await authAPI.createSignatureCase(
+                state.customerId,
+                activeSubscription.id,
+                redirectUrl
+              );
+              
+              if (newSignatureCase && newSignatureCase.documentUrl) {
+                contractUrl = newSignatureCase.documentUrl;
+                console.log('[Profile] Created signature case with document URL:', contractUrl);
+              }
+            } catch (createError) {
+              console.warn('[Profile] Could not create signature case:', createError);
+              // If creation fails (e.g., 204 - doesn't require signature case), fall back to terms page
+              contractUrl = 'https://boulders.dk/terms';
+            }
+          }
+        } catch (error) {
+          console.error('[Profile] Error fetching contract document:', error);
+          contractUrl = 'https://boulders.dk/terms'; // Fallback
+        }
+        
+        // Update contract status in membership card
+        if (contractStatusElement) {
+          if (contractUrl) {
+            contractStatusElement.innerHTML = `<a href="${contractUrl}" target="_blank" rel="noopener noreferrer" style="color: #F401F5; text-decoration: underline; cursor: pointer;">Not signed</a>`;
+          } else {
+            contractStatusElement.textContent = 'Not signed';
+            contractStatusElement.style.color = '#EF4444';
+          }
+        }
+        
+        // Show contract signing banner
+        await updateContractBanner(true, contractUrl);
+      } else {
+        // Contract is signed (or status not present, assume signed)
+        if (contractStatusElement) {
+          contractStatusElement.textContent = 'Signed';
+          contractStatusElement.style.color = '#10B981'; // Green color for signed status
+          contractStatusElement.style.fontWeight = '500';
+        }
+        
+        // Hide contract signing banner
+        await updateContractBanner(false);
+      }
+      
       // Bloc Life Loyalty Tier: Leave blank as requested
       ProfilePage.setElementText('profileLoyaltyTier', '');
     } else {
@@ -21039,6 +21226,63 @@ async function loadSettingsData(forceRefresh = true) {
   } catch (error) {
     console.error('[Settings] Error loading settings data:', error);
     SettingsPage.showError(`Failed to load settings: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Update contract signing banner visibility and CTA link
+ */
+async function updateContractBanner(show, contractUrl = null) {
+  const banner = document.getElementById('contractSigningBanner');
+  const bannerCTA = document.getElementById('contractBannerCTA');
+  const mainNavigation = document.getElementById('mainNavigation');
+  const pageContentWrapper = document.getElementById('pageContentWrapper');
+  
+  if (!banner) {
+    return;
+  }
+  
+  if (show && contractUrl) {
+    // Show banner and update CTA link
+    banner.style.display = 'block';
+    if (bannerCTA) {
+      bannerCTA.href = contractUrl;
+    }
+    
+    // Add class to body to adjust layout
+    document.body.classList.add('has-contract-banner');
+    
+    // Calculate banner height and adjust header position
+    // Use setTimeout to ensure banner is rendered before calculating height
+    setTimeout(() => {
+      const bannerHeight = banner.offsetHeight || 70; // Fallback to ~70px
+      
+      // Adjust header to appear below banner
+      if (mainNavigation) {
+        mainNavigation.style.top = `${bannerHeight}px`;
+      }
+      
+      // Add padding to page content to prevent overlap
+      if (pageContentWrapper) {
+        pageContentWrapper.style.paddingTop = `${bannerHeight}px`;
+      }
+    }, 0);
+    
+    console.log('[Profile] Contract banner shown with URL:', contractUrl);
+  } else {
+    // Hide banner
+    banner.style.display = 'none';
+    document.body.classList.remove('has-contract-banner');
+    
+    // Reset header and content positions
+    if (mainNavigation) {
+      mainNavigation.style.top = '0';
+    }
+    if (pageContentWrapper) {
+      pageContentWrapper.style.paddingTop = '0';
+    }
+    
+    console.log('[Profile] Contract banner hidden');
   }
 }
 
