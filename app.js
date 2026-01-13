@@ -22002,7 +22002,7 @@ function initSettingsHandlers() {
   
   // Store freeze data between steps
   let freezeData = {
-    duration: null,
+    freezePeriod: { start: null, end: null },
     subscriptionId: null
   };
   
@@ -22010,32 +22010,50 @@ function initSettingsHandlers() {
     if (freezeSubscriptionModal) freezeSubscriptionModal.style.display = 'none';
     if (freezeSubscriptionModalStep2) freezeSubscriptionModalStep2.style.display = 'none';
     if (freezeSubscriptionModalStep3) freezeSubscriptionModalStep3.style.display = 'none';
-    freezeData = { duration: null, subscriptionId: null };
+    freezeData = { freezePeriod: { start: null, end: null }, subscriptionId: null };
   };
   
-  // Update date preview when duration changes (defined before openFreezeSubscriptionModal uses it)
+  // Update date preview when dates change
   const updateFreezeDatePreview = () => {
     const freezeDatePreview = document.getElementById('freezeDatePreview');
-    if (!freezeDatePreview || !freezeDurationSelect) return;
+    const freezeStartDate = document.getElementById('freezeStartDate');
+    const freezeEndDate = document.getElementById('freezeEndDate');
     
-    const duration = freezeDurationSelect.value ? parseInt(freezeDurationSelect.value) : 1;
-    if (duration < 1 || duration > 3) return;
+    if (!freezeDatePreview || !freezeStartDate || !freezeEndDate) return;
     
-    // Calculate dates
-    const today = new Date();
-    const nextBillingCycle = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-    const freezeEnd = new Date(nextBillingCycle);
-    freezeEnd.setMonth(freezeEnd.getMonth() + duration);
-    freezeEnd.setDate(0); // Last day of the month
+    const startDate = freezeStartDate.value;
+    const endDate = freezeEndDate.value;
     
-    const startDateStr = nextBillingCycle.toISOString().split('T')[0];
-    const endDateStr = freezeEnd.toISOString().split('T')[0];
+    if (!startDate || !endDate) {
+      freezeDatePreview.textContent = 'Please select both start and end dates';
+      freezeDatePreview.style.color = 'rgba(255, 255, 255, 0.6)';
+      return;
+    }
+    
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+    
+    if (endDateObj < startDateObj) {
+      freezeDatePreview.textContent = 'End date must be after start date';
+      freezeDatePreview.style.color = 'rgba(239, 68, 68, 0.9)';
+      return;
+    }
+    
+    // Calculate duration in months
+    const monthsDiff = (endDateObj.getFullYear() - startDateObj.getFullYear()) * 12 + 
+                       (endDateObj.getMonth() - startDateObj.getMonth());
     
     // Format dates for display
-    const startFormatted = new Date(startDateStr).toLocaleDateString('da-DK', { year: 'numeric', month: 'long', day: 'numeric' });
-    const endFormatted = new Date(endDateStr).toLocaleDateString('da-DK', { year: 'numeric', month: 'long', day: 'numeric' });
+    const startFormatted = startDateObj.toLocaleDateString('da-DK', { year: 'numeric', month: 'long', day: 'numeric' });
+    const endFormatted = endDateObj.toLocaleDateString('da-DK', { year: 'numeric', month: 'long', day: 'numeric' });
     
-    freezeDatePreview.textContent = `Freeze period: ${startFormatted} - ${endFormatted}`;
+    if (monthsDiff < 1 || monthsDiff > 3) {
+      freezeDatePreview.innerHTML = `Freeze period: ${startFormatted} - ${endFormatted}<br><span style="color: rgba(239, 68, 68, 0.9); font-size: 12px;">⚠️ Freeze period must be between 1 and 3 months</span>`;
+      freezeDatePreview.style.color = 'rgba(255, 255, 255, 0.9)';
+    } else {
+      freezeDatePreview.textContent = `Freeze period: ${startFormatted} - ${endFormatted}`;
+      freezeDatePreview.style.color = 'rgba(255, 255, 255, 0.9)';
+    }
   };
   
   // Function to open freeze subscription modal
@@ -22065,8 +22083,26 @@ function initSettingsHandlers() {
       if (freezeSubscriptionModal) {
         freezeSubscriptionModal.style.display = 'flex';
         if (freezeSubscriptionError) freezeSubscriptionError.style.display = 'none';
-        // Reset form
-        if (freezeDurationSelect) freezeDurationSelect.value = '1';
+        
+        // Reset form and set default dates (next billing cycle + 1 month)
+        const freezeStartDate = document.getElementById('freezeStartDate');
+        const freezeEndDate = document.getElementById('freezeEndDate');
+        
+        if (freezeStartDate && freezeEndDate) {
+          const today = new Date();
+          const nextBillingCycle = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+          const defaultEnd = new Date(nextBillingCycle);
+          defaultEnd.setMonth(defaultEnd.getMonth() + 1);
+          defaultEnd.setDate(0); // Last day of the month
+          
+          freezeStartDate.value = nextBillingCycle.toISOString().split('T')[0];
+          freezeEndDate.value = defaultEnd.toISOString().split('T')[0];
+          
+          // Set minimum date to today
+          freezeStartDate.min = today.toISOString().split('T')[0];
+          freezeEndDate.min = today.toISOString().split('T')[0];
+        }
+        
         updateFreezeDatePreview();
       }
     } catch (error) {
@@ -22096,10 +22132,25 @@ function initSettingsHandlers() {
     stayMembershipBtn.addEventListener('click', closeAllFreezeModals);
   }
   
-  if (freezeDurationSelect) {
-    freezeDurationSelect.addEventListener('change', updateFreezeDatePreview);
-    // Initial preview
-    updateFreezeDatePreview();
+  // Add event listeners for date inputs
+  const freezeStartDate = document.getElementById('freezeStartDate');
+  const freezeEndDate = document.getElementById('freezeEndDate');
+  
+  if (freezeStartDate) {
+    freezeStartDate.addEventListener('change', () => {
+      // Update end date minimum to be at least start date
+      if (freezeEndDate && freezeStartDate.value) {
+        freezeEndDate.min = freezeStartDate.value;
+        if (freezeEndDate.value && freezeEndDate.value < freezeStartDate.value) {
+          freezeEndDate.value = freezeStartDate.value;
+        }
+      }
+      updateFreezeDatePreview();
+    });
+  }
+  
+  if (freezeEndDate) {
+    freezeEndDate.addEventListener('change', updateFreezeDatePreview);
   }
   
   if (proceedFreezeBtn) {
@@ -22112,11 +22163,47 @@ function initSettingsHandlers() {
         return;
       }
       
-      const duration = freezeDurationSelect?.value ? parseInt(freezeDurationSelect.value) : 1;
+      const freezeStartDateInput = document.getElementById('freezeStartDate');
+      const freezeEndDateInput = document.getElementById('freezeEndDate');
       
-      if (duration < 1 || duration > 3) {
+      if (!freezeStartDateInput || !freezeEndDateInput || !freezeStartDateInput.value || !freezeEndDateInput.value) {
         if (freezeSubscriptionError) {
-          freezeSubscriptionError.textContent = 'Please select a valid duration (1-3 months)';
+          freezeSubscriptionError.textContent = 'Please select both start and end dates';
+          freezeSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      const startDate = new Date(freezeStartDateInput.value);
+      const endDate = new Date(freezeEndDateInput.value);
+      
+      // Validate dates
+      if (endDate < startDate) {
+        if (freezeSubscriptionError) {
+          freezeSubscriptionError.textContent = 'End date must be after start date';
+          freezeSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      // Calculate duration in months
+      const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                         (endDate.getMonth() - startDate.getMonth());
+      
+      if (monthsDiff < 1 || monthsDiff > 3) {
+        if (freezeSubscriptionError) {
+          freezeSubscriptionError.textContent = 'Freeze period must be between 1 and 3 months';
+          freezeSubscriptionError.style.display = 'block';
+        }
+        return;
+      }
+      
+      // Validate start date is not in the past
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (startDate < today) {
+        if (freezeSubscriptionError) {
+          freezeSubscriptionError.textContent = 'Start date cannot be in the past';
           freezeSubscriptionError.style.display = 'block';
         }
         return;
@@ -22135,7 +22222,11 @@ function initSettingsHandlers() {
           return;
         }
         
-        freezeData.duration = duration;
+        // Store freeze period as date strings in YYYY-MM-DD format
+        freezeData.freezePeriod = {
+          start: freezeStartDateInput.value,
+          end: freezeEndDateInput.value
+        };
         freezeData.subscriptionId = activeSubscription.id;
         
         // Move to step 2
@@ -22174,7 +22265,7 @@ function initSettingsHandlers() {
         return;
       }
       
-      if (!freezeData.duration || !freezeData.subscriptionId) {
+      if (!freezeData.freezePeriod || !freezeData.freezePeriod.start || !freezeData.freezePeriod.end || !freezeData.subscriptionId) {
         if (freezeSubscriptionErrorStep2) {
           freezeSubscriptionErrorStep2.textContent = 'Missing freeze data. Please start over.';
           freezeSubscriptionErrorStep2.style.display = 'block';
@@ -22183,32 +22274,17 @@ function initSettingsHandlers() {
       }
       
       try {
-        // Calculate freeze period dates (API requires DayRange with start and end dates)
+        // Use the date range directly from user selection
         // API spec: freezePeriod is a DayRange object with start (Day) and end (Day) properties
-        // Start: First day of next billing cycle (next month)
-        // End: Last day of the month after the selected duration
-        const today = new Date();
-        const nextBillingCycle = new Date(today.getFullYear(), today.getMonth() + 1, 1); // First day of next month
-        
-        // Calculate end date: start date + duration months, then get last day of that month
-        // Example: If start is Feb 1 and duration is 1 month, end should be Feb 28/29
-        const freezeEnd = new Date(nextBillingCycle);
-        freezeEnd.setMonth(freezeEnd.getMonth() + parseInt(freezeData.duration));
-        freezeEnd.setDate(0); // Set to last day of previous month (which is the last day of the freeze period)
-        
-        // Format dates as YYYY-MM-DD (Day format per API spec: "YYYY-MM-DD")
+        // Dates are already in YYYY-MM-DD format from the date inputs
         const freezePeriod = {
-          start: nextBillingCycle.toISOString().split('T')[0],
-          end: freezeEnd.toISOString().split('T')[0]
+          start: freezeData.freezePeriod.start,
+          end: freezeData.freezePeriod.end
         };
         
-        console.log('[Freeze] Calculated freeze period from duration:', {
-          duration: freezeData.duration,
-          durationText: `${freezeData.duration} month(s)`,
+        console.log('[Freeze] Using freeze period from date range:', {
           start: freezePeriod.start,
-          end: freezePeriod.end,
-          startDate: nextBillingCycle.toISOString(),
-          endDate: freezeEnd.toISOString()
+          end: freezePeriod.end
         });
         
         // Disable button during request

@@ -1358,16 +1358,18 @@
                             </p>
                         </div>
                         <div class="settings-form-group">
-                            <label class="settings-form-label">Choose how long you want to put your membership on hold:</label>
-                            <div class="freeze-duration-container">
-                                <select class="settings-input freeze-duration-select" id="freezeDurationSelect">
-                                    <option value="1">1 month</option>
-                                    <option value="2">2 months</option>
-                                    <option value="3">3 months</option>
-                                </select>
-                                <span class="freeze-duration-note">starting from the next billing cycle</span>
+                            <label class="settings-form-label">Choose the freeze period:</label>
+                            <div class="freeze-date-range-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                                <div class="date-input-group" style="display: flex; flex-direction: column; gap: 6px;">
+                                    <label class="settings-form-label" style="font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.8);">Start Date</label>
+                                    <input type="date" class="settings-input" id="freezeStartDate" style="width: 100%;" />
+                                </div>
+                                <div class="date-input-group" style="display: flex; flex-direction: column; gap: 6px;">
+                                    <label class="settings-form-label" style="font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.8);">End Date</label>
+                                    <input type="date" class="settings-input" id="freezeEndDate" style="width: 100%;" />
+                                </div>
                             </div>
-                            <div class="freeze-date-preview" id="freezeDatePreview"></div>
+                            <div class="freeze-date-preview" id="freezeDatePreview" style="margin-top: 12px; padding: 12px; background-color: rgba(244, 1, 245, 0.1); border: 1px solid rgba(244, 1, 245, 0.2); border-radius: 8px; color: rgba(255, 255, 255, 0.9); font-size: 14px;"></div>
                         </div>
                         <div class="settings-form-error" id="freezeSubscriptionError" style="display: none;"></div>
                     </div>
