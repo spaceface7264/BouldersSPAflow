@@ -12566,6 +12566,48 @@ function renderConfirmationView() {
     productLabels: state.fullOrder?.subscriptionItems?.[0]?.product?.productLabels
   });
 
+  // Update success message based on product type
+  const successMessage = document.querySelector('.success-message');
+  if (successMessage) {
+    if (productType === 'membership') {
+      successMessage.textContent = 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.';
+    } else if (productType === '15daypass') {
+      successMessage.textContent = 'Din 15-dages pas er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.';
+    } else if (productType === 'punch-card') {
+      successMessage.textContent = 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.';
+    } else {
+      // Fallback to generic message
+      successMessage.textContent = 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.';
+    }
+  }
+
+  // Update "What happens next?" steps based on product type
+  const nextStep1 = document.getElementById('nextStep1');
+  const nextStep2 = document.getElementById('nextStep2');
+  const nextStep3 = document.getElementById('nextStep3');
+  
+  if (nextStep1) {
+    // First step is always the same (email confirmation)
+    nextStep1.textContent = 'E-mail bekræftelse sendt til din indbakke';
+  }
+  
+  if (nextStep2 && nextStep3) {
+    if (productType === 'membership') {
+      nextStep2.textContent = 'Medlemskabsaktivering og automatisk fornyelse';
+      nextStep3.textContent = 'Hent dit medlemskabskort i centeret';
+    } else if (productType === '15daypass') {
+      nextStep2.textContent = 'Dit pas er aktivt og klar til brug';
+      nextStep3.textContent = 'Besøg centeret for at begynde at bruge dit pas';
+    } else if (productType === 'punch-card') {
+      nextStep2.textContent = 'Dit klippekort er klar til brug';
+      nextStep3.textContent = 'Besøg centeret for at begynde at bruge dine klip';
+    } else {
+      // Fallback to membership steps
+      nextStep2.textContent = 'Medlemskabsaktivering og automatisk fornyelse';
+      nextStep3.textContent = 'Hent dit medlemskabskort i centeret';
+    }
+  }
+
   // Hide all sections first - use !important to override any CSS
   const membershipSection = document.getElementById('confirmationMembershipSection');
   const dayPassSection = document.getElementById('confirmation15DayPassSection');
