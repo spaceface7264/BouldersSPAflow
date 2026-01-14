@@ -4422,6 +4422,9 @@ const state = {
   referenceData: {}, // Cached reference/lookup data (countries, regions, currencies, etc.)
   referenceDataLoaded: false, // Flag to track if reference data has been loaded
   subscriptionAttachedOrderId: null, // Tracks which order already has the membership attached
+  // Test mode for success page
+  testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
+  testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
 };
 
 let orderCreationPromise = null;
