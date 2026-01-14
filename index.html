@@ -746,10 +746,113 @@
                                     <span class="total-label">Total:</span>
                                     <span class="total-amount" data-summary-field="order-total">0,00 kr</span>
                                 </div>
+                                
+                                <button class="receipt-btn" id="showDetailedReceiptBtn" data-action="show-detailed-receipt" style="margin-top: 20px;">
+                                    Vis detaljeret kvittering
+                                </button>
                             </div>
                             
-                            <!-- Membership Details Card -->
-                            <div class="confirmation-card">
+                            <!-- Detailed Receipt Modal -->
+                            <div class="receipt-modal" id="detailedReceiptModal" style="display: none;">
+                                <div class="receipt-modal-content">
+                                    <div class="receipt-header">
+                                        <div class="receipt-header-left">
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                                <polyline points="10 9 9 9 8 9"></polyline>
+                                            </svg>
+                                            <h2>Ordrebekræftelse</h2>
+                                        </div>
+                                        <div class="receipt-header-right">
+                                            <span class="receipt-order-number">Ordre <span id="receiptOrderNumber">—</span></span>
+                                            <span class="receipt-date" id="receiptDate">—</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="receipt-body">
+                                        <div class="receipt-section">
+                                            <div class="receipt-columns">
+                                                <div class="receipt-column">
+                                                    <h3>Ordreoversigt</h3>
+                                                    <div class="receipt-row">
+                                                        <span>Subtotal:</span>
+                                                        <span id="receiptSubtotal">—</span>
+                                                    </div>
+                                                    <div class="receipt-row">
+                                                        <span>Rabat:</span>
+                                                        <span id="receiptDiscount">—</span>
+                                                    </div>
+                                                    <div class="receipt-row receipt-total">
+                                                        <span>TOTALT:</span>
+                                                        <span id="receiptTotal">—</span>
+                                                    </div>
+                                                    <div class="receipt-vat">
+                                                        inklusiv moms (25%): <span id="receiptVat">—</span>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="receipt-column">
+                                                    <h3>Betalinger</h3>
+                                                    <div class="receipt-row">
+                                                        <span>Betalingsmetode:</span>
+                                                        <span id="receiptPaymentMethod">—</span>
+                                                    </div>
+                                                    <div class="receipt-row">
+                                                        <span>Betalt beløb:</span>
+                                                        <span id="receiptAmountPaid">—</span>
+                                                    </div>
+                                                    <div class="receipt-row">
+                                                        <span>Transaktions-id:</span>
+                                                        <span id="receiptTransactionId">—</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="receipt-section">
+                                            <div class="receipt-columns">
+                                                <div class="receipt-column">
+                                                    <h3>Sælgers oplysninger</h3>
+                                                    <div class="receipt-info" id="receiptSellerInfo">
+                                                        <div><strong>Sælgerens navn:</strong> <span id="receiptSellerName">—</span></div>
+                                                        <div><strong>Adresse:</strong> <span id="receiptSellerAddress">—</span></div>
+                                                        <div><strong>CVR-nummer:</strong> <span id="receiptSellerCVR">—</span></div>
+                                                        <div><strong>Telefon:</strong> <span id="receiptSellerPhone">—</span></div>
+                                                        <div><strong>E-mail:</strong> <span id="receiptSellerEmail">—</span></div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="receipt-column">
+                                                    <h3>Kundens informationer</h3>
+                                                    <div class="receipt-info" id="receiptCustomerInfo">
+                                                        <div><strong>Kundens navn:</strong> <span id="receiptCustomerName">—</span></div>
+                                                        <div><strong>Adresse:</strong> <span id="receiptCustomerAddress">—</span></div>
+                                                        <div><strong>Telefon:</strong> <span id="receiptCustomerPhone">—</span></div>
+                                                        <div><strong>E-mail:</strong> <span id="receiptCustomerEmail">—</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="receipt-section">
+                                            <h3>Købte værdikort</h3>
+                                            <div class="receipt-items" id="receiptItems">
+                                                <!-- Items will be populated here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="receipt-footer">
+                                        <button class="receipt-close-btn" id="closeReceiptBtn" data-action="close-detailed-receipt">LUK</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Membership Details Card (for regular memberships) -->
+                            <div class="confirmation-card" id="confirmationMembershipSection" style="display: none;">
                                 <h3 class="card-title" data-i18n-key="cart.membershipDetails">Membership Details</h3>
                                 <div class="membership-info">
                                     <div class="membership-item">
@@ -776,26 +879,69 @@
                                 
                                 <button class="login-btn" data-action="open-login">Log in</button>
                             </div>
+                            
+                            <!-- 15 Day Pass Details Card -->
+                            <div class="confirmation-card" id="confirmation15DayPassSection" style="display: none;">
+                                <h3 class="card-title">15 Day Pass Details</h3>
+                                <div class="membership-info">
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
+                                        <span class="membership-value" data-summary-field="member-name">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label">Pass Type:</span>
+                                        <span class="membership-value" data-summary-field="pass-type">15 Day Pass</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label">Primary Gym:</span>
+                                        <span class="membership-value" data-summary-field="primary-gym">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label">Valid From:</span>
+                                        <span class="membership-value" data-summary-field="pass-start-date">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label">Valid Until:</span>
+                                        <span class="membership-value" data-summary-field="pass-end-date">—</span>
+                                    </div>
+                                </div>
+                                
+                                <button class="login-btn" data-action="open-login">Log in</button>
+                            </div>
+                            
+                            <!-- Punch Card Details Card -->
+                            <div class="confirmation-card" id="confirmationPunchCardSection" style="display: none;">
+                                <h3 class="card-title">Punch Card Details</h3>
+                                <div class="membership-info">
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
+                                        <span class="membership-value" data-summary-field="member-name">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label">Card Type:</span>
+                                        <span class="membership-value" data-summary-field="punch-card-type">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label">Quantity:</span>
+                                        <span class="membership-value" data-summary-field="punch-card-quantity">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label">Remaining Sessions:</span>
+                                        <span class="membership-value" data-summary-field="punch-card-sessions">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label">Valid Until:</span>
+                                        <span class="membership-value" data-summary-field="punch-card-expiry">—</span>
+                                    </div>
+                                </div>
+                                
+                                <button class="login-btn" data-action="open-login">Log in</button>
+                            </div>
                         </div>
                         
                         <!-- Right Column - Referral Promo & Next Steps -->
                         <div class="confirmation-right">
                             <!-- Referral Promo Box -->
-                            <div class="referral-promo">
-                                <h3 class="promo-title">Sharing is Caring!</h3>
-                                <p class="promo-text">Refer a friend and you both get 50% off your next month!</p>
-                                <button class="referral-btn" data-action="copy-referral">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                                        <circle cx="8.5" cy="7" r="4"/>
-                                        <path d="M20 8v6"/>
-                                        <path d="M23 11h-6"/>
-                                    </svg>
-                                    Refer a Friend
-                                </button>
-                                <a href="#" class="terms-link" data-action="open-terms" data-terms-type="terms">Read all terms here</a>
-                            </div>
-                            
                             <!-- Next Steps -->
                         <div class="next-steps">
                                 <h3 class="steps-title">What happens next?</h3>
@@ -807,7 +953,7 @@
                                                 <path d="M22 6L12 13 2 6"/>
                                             </svg>
                                         </div>
-                                        <span>Email confirmation sent to your inbox</span>
+                                        <span id="nextStep1">Email confirmation sent to your inbox</span>
                                     </li>
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -816,7 +962,7 @@
                                                 <path d="M22 4L12 14.01l-3-3"/>
                                             </svg>
                                         </div>
-                                        <span data-i18n-key="cart.membershipActivation">Membership activation & auto-renewal setup</span>
+                                        <span id="nextStep2">Membership activation & auto-renewal setup</span>
                                     </li>
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -826,7 +972,7 @@
                                                 <path d="M12 22.08V12"/>
                                             </svg>
                                         </div>
-                                        <span>Pick up your membership card at the gym</span>
+                                        <span id="nextStep3">Pick up your membership card at the gym</span>
                                     </li>
                             </ul>
                         </div>
