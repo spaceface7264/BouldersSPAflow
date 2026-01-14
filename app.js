@@ -15074,44 +15074,131 @@ function renderConfirmationView() {
 
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
-  if (orderNumber) orderNumber.textContent = state.order.number;
+  // Priority: Use API data (state.fullOrder) when available, fallback to state.order
+  const apiOrder = state.fullOrder;
+  const orderData = apiOrder || state.order;
+  
+  // Order number - from API order.number or fallback
+  if (orderNumber) {
+    const number = apiOrder?.number || apiOrder?.id || state.order?.number || state.orderId || '—';
+    orderNumber.textContent = number;
+  }
+  
+  // Order date - from API order.createdAt/created or fallback
   if (orderDate) {
+    const date = apiOrder?.createdAt ? new Date(apiOrder.createdAt) : 
+                 apiOrder?.created ? new Date(apiOrder.created) :
+                 state.order?.date ? new Date(state.order.date) : new Date();
     orderDate.textContent = new Intl.DateTimeFormat('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
-    }).format(state.order.date);
+    }).format(date);
   }
-  if (orderTotal) orderTotal.textContent = currencyFormatter.format(state.order.total);
+  
+  // Order total - from API order.price.amount or fallback
+  if (orderTotal) {
+    let total = 0;
+    if (apiOrder?.price?.amount) {
+      const amount = apiOrder.price.amount;
+      total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.total) {
+      total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
+    } else {
+      total = state.order?.total || 0;
+    }
+    orderTotal.textContent = currencyFormatter.format(total);
+  }
+  
+  // Member name - from API order.customer or fallback
   if (memberName) {
-    memberName.textContent = state.order.memberName || '—';
+    let name = '—';
+    if (apiOrder?.customer) {
+      const customer = apiOrder.customer;
+      name = customer.fullName || 
+            (customer.firstName && customer.lastName ? `${customer.firstName} ${customer.lastName}` : null) ||
+            customer.name || '—';
+    } else {
+      name = state.order?.memberName || '—';
+    }
+    memberName.textContent = name;
     // Also update in other sections
     const dayPassMemberName = document.querySelector('#confirmation15DayPassSection [data-summary-field="member-name"]');
     const punchCardMemberName = document.querySelector('#confirmationPunchCardSection [data-summary-field="member-name"]');
-    if (dayPassMemberName) dayPassMemberName.textContent = state.order.memberName || '—';
-    if (punchCardMemberName) punchCardMemberName.textContent = state.order.memberName || '—';
+    if (dayPassMemberName) dayPassMemberName.textContent = name;
+    if (punchCardMemberName) punchCardMemberName.textContent = name;
   }
   
-  // Membership-specific fields
-  if (membershipNumber) membershipNumber.textContent = state.order.membershipNumber;
-  if (membershipType) membershipType.textContent = state.order.membershipType;
+  // Membership-specific fields - from API subscriptionItems[0].subscription or fallback
+  if (membershipNumber) {
+    let membershipId = '—';
+    if (apiOrder?.subscriptionItems?.[0]?.subscription?.id) {
+      membershipId = apiOrder.subscriptionItems[0].subscription.id.toString();
+    } else if (apiOrder?.customer?.id) {
+      membershipId = apiOrder.customer.id.toString();
+    } else {
+      membershipId = state.order?.membershipNumber || '—';
+    }
+    membershipNumber.textContent = membershipId;
+  }
+  
+  if (membershipType) {
+    let type = '—';
+    if (apiOrder?.subscriptionItems?.[0]?.product?.name) {
+      type = apiOrder.subscriptionItems[0].product.name;
+    } else {
+      type = state.order?.membershipType || '—';
+    }
+    membershipType.textContent = type;
+  }
+  
   if (primaryGym) {
-    primaryGym.textContent = state.order.primaryGym;
+    let gym = '—';
+    if (apiOrder?.customer?.primaryGym) {
+      gym = resolveGymLabel(apiOrder.customer.primaryGym);
+    } else if (apiOrder?.businessUnit?.name) {
+      gym = apiOrder.businessUnit.name;
+    } else {
+      gym = state.order?.primaryGym || '—';
+    }
+    primaryGym.textContent = gym;
     // Also update in other sections
     const dayPassGym = document.querySelector('#confirmation15DayPassSection [data-summary-field="primary-gym"]');
-    if (dayPassGym) dayPassGym.textContent = state.order.primaryGym;
-  }
-  if (membershipPrice) {
-    membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(state.order.membershipPrice))}/month`;
+    if (dayPassGym) dayPassGym.textContent = gym;
   }
   
-  // 15 Day Pass specific fields
+  if (membershipPrice) {
+    let price = 0;
+    if (apiOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].payRecurring.price.amount;
+      price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.subscriptionItems?.[0]?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].price.amount;
+      price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else {
+      price = state.order?.membershipPrice || 0;
+    }
+    membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(price))}/month`;
+  }
+  
+  // 15 Day Pass specific fields - from API subscriptionItems[0] or fallback
   if (productType === '15daypass') {
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
     const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
     
+    // Get start date from API subscription startDate or order date
+    let startDate = new Date();
+    if (apiOrder?.subscriptionItems?.[0]?.subscription?.startDate) {
+      startDate = new Date(apiOrder.subscriptionItems[0].subscription.startDate);
+    } else if (apiOrder?.createdAt) {
+      startDate = new Date(apiOrder.createdAt);
+    } else if (apiOrder?.created) {
+      startDate = new Date(apiOrder.created);
+    } else if (state.order?.date) {
+      startDate = new Date(state.order.date);
+    }
+    
     if (passStartDate) {
-      const startDate = state.order.date || new Date();
       passStartDate.textContent = new Intl.DateTimeFormat('da-DK', {
         year: 'numeric',
         month: 'long',
@@ -15120,9 +15207,13 @@ function renderConfirmationView() {
     }
     
     if (passEndDate) {
-      const startDate = state.order.date || new Date();
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 15);
+      // Get end date from API subscription endDate or calculate (start + 15 days)
+      let endDate = new Date(startDate);
+      if (apiOrder?.subscriptionItems?.[0]?.subscription?.endDate) {
+        endDate = new Date(apiOrder.subscriptionItems[0].subscription.endDate);
+      } else {
+        endDate.setDate(endDate.getDate() + 15);
+      }
       passEndDate.textContent = new Intl.DateTimeFormat('da-DK', {
         year: 'numeric',
         month: 'long',
@@ -15143,19 +15234,19 @@ function createPurchaseItemElement() {
   return item;
 }
 
-  // Punch Card specific fields
+  // Punch Card specific fields - from API valueCardItems[0] or fallback
   if (productType === 'punch-card') {
     const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
     const punchCardQuantity = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-quantity"]');
     const punchCardSessions = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-sessions"]');
     const punchCardExpiry = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-expiry"]');
     
-    // Get punch card data from order or state
-    const valueCardItem = state.fullOrder?.valueCardItems?.[0];
+    // Priority: Use API valueCardItems data
+    const valueCardItem = apiOrder?.valueCardItems?.[0];
     const cartItem = state.cartItems?.find(item => item.type === 'value-card' || item.type === 'punch-card');
     
     if (punchCardType) {
-      const cardName = valueCardItem?.product?.name || cartItem?.name?.replace(/ ×\d+$/, '') || 'Punch Card';
+      const cardName = valueCardItem?.product?.name || cartItem?.name?.replace(/ ×\d+$/, '') || 'Klippekort';
       punchCardType.textContent = cardName;
     }
     
@@ -15167,14 +15258,24 @@ function createPurchaseItemElement() {
     if (punchCardSessions) {
       // Calculate total sessions (quantity * sessions per card)
       const quantity = valueCardItem?.quantity || cartItem?.quantity || 1;
-      const sessionsPerCard = valueCardItem?.valueCard?.numberOfPassages || 10; // Default 10
+      const sessionsPerCard = valueCardItem?.valueCard?.numberOfPassages || 
+                             valueCardItem?.product?.numberOfPassages ||
+                             10; // Default 10
       punchCardSessions.textContent = (quantity * sessionsPerCard).toString();
     }
     
     if (punchCardExpiry) {
-      const purchaseDate = state.order.date || new Date();
-      const expiryDate = new Date(purchaseDate);
-      expiryDate.setMonth(expiryDate.getMonth() + 6); // 6 months validity
+      // Get expiry from API valueCard validUntil or calculate (purchase + 6 months)
+      let expiryDate = new Date();
+      if (valueCardItem?.valueCard?.validUntil) {
+        expiryDate = new Date(valueCardItem.valueCard.validUntil);
+      } else {
+        const purchaseDate = apiOrder?.createdAt ? new Date(apiOrder.createdAt) :
+                            apiOrder?.created ? new Date(apiOrder.created) :
+                            state.order?.date ? new Date(state.order.date) : new Date();
+        expiryDate = new Date(purchaseDate);
+        expiryDate.setMonth(expiryDate.getMonth() + 6); // 6 months validity
+      }
       punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
         year: 'numeric',
         month: 'long',
