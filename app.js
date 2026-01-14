@@ -15244,7 +15244,6 @@ function createPurchaseItemElement() {
   if (productType === 'punch-card') {
     const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
     const punchCardQuantity = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-quantity"]');
-    const punchCardSessions = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-sessions"]');
     const punchCardExpiry = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-expiry"]');
     
     // Use API valueCardItems data - aggregate if multiple cards
@@ -15272,23 +15271,6 @@ function createPurchaseItemElement() {
     
     if (punchCardQuantity) {
       punchCardQuantity.textContent = totalQuantity > 0 ? totalQuantity.toString() : '—';
-    }
-    
-    if (punchCardSessions) {
-      // Calculate total sessions from all cards
-      let totalSessions = 0;
-      let hasSessionData = false;
-      
-      valueCardItems.forEach(item => {
-        const quantity = item.quantity || 1;
-        const sessionsPerCard = item.valueCard?.numberOfPassages || item.product?.numberOfPassages;
-        if (sessionsPerCard) {
-          totalSessions += quantity * sessionsPerCard;
-          hasSessionData = true;
-        }
-      });
-      
-      punchCardSessions.textContent = hasSessionData ? totalSessions.toString() : '—';
     }
     
     if (punchCardExpiry) {
@@ -15575,25 +15557,47 @@ async function showDetailedReceipt() {
   }
   if (receiptAmountPaid) receiptAmountPaid.textContent = currencyFormatter.format(totalDKK);
   if (receiptTransactionId) {
-    // Try to get transaction ID from order
-    const transactionId = order.transactionId || order.payment?.transactionId || order.payment?.id || '—';
+    // Try to get transaction ID from order - check multiple possible fields
+    const transactionId = order.externalId || 
+                         order.transactionId || 
+                         order.payment?.transactionId || 
+                         order.payment?.id ||
+                         order.paymentTransactions?.[0]?.transactionId ||
+                         order.paymentTransactions?.[0]?.id ||
+                         '—';
     receiptTransactionId.textContent = transactionId;
   }
   
-  // Populate customer information
+  // Populate customer information - fetch full customer details if we only have a reference
   const receiptCustomerName = document.getElementById('receiptCustomerName');
   const receiptCustomerAddress = document.getElementById('receiptCustomerAddress');
   const receiptCustomerPhone = document.getElementById('receiptCustomerPhone');
   const receiptCustomerEmail = document.getElementById('receiptCustomerEmail');
   
+  // Get customer - prefer full customer object, fallback to order.customer reference
+  let customer = order.customer || state.customer || state.authenticatedCustomer;
+  
+  // If we only have customer ID (reference), fetch full customer details
+  if (customer?.id && !customer.email && !customer.shippingAddress && !customer.billingAddress && !customer.mobilePhone) {
+    try {
+      const fullCustomer = await authAPI.getCustomer(customer.id);
+      customer = fullCustomer;
+      console.log('[Receipt] Fetched full customer details for receipt');
+    } catch (error) {
+      console.warn('[Receipt] Could not fetch full customer details:', error);
+      // Continue with reference customer
+    }
+  }
+  
   if (receiptCustomerName) {
-    const customer = order.customer || state.customer;
-    const name = customer?.fullName || (customer?.firstName && customer?.lastName ? `${customer.firstName} ${customer.lastName}` : null) || state.order?.memberName || '—';
+    const name = customer?.fullName || 
+                (customer?.firstName && customer?.lastName ? `${customer.firstName} ${customer.lastName}` : null) || 
+                state.order?.memberName || 
+                '—';
     receiptCustomerName.textContent = name;
   }
   
   if (receiptCustomerAddress) {
-    const customer = order.customer || state.customer;
     // Use shippingAddress or billingAddress per CustomerOut schema (AddressOut)
     const addressObj = customer?.shippingAddress || customer?.billingAddress;
     if (addressObj) {
@@ -15613,7 +15617,6 @@ async function showDetailedReceipt() {
   }
   
   if (receiptCustomerPhone) {
-    const customer = order.customer || state.customer;
     // Use mobilePhone per CustomerOut schema (PhoneNumberOut)
     if (customer?.mobilePhone) {
       const countryCode = customer.mobilePhone.countryCode ? `+${customer.mobilePhone.countryCode}` : '';
@@ -15626,7 +15629,6 @@ async function showDetailedReceipt() {
   }
   
   if (receiptCustomerEmail) {
-    const customer = order.customer || state.customer;
     receiptCustomerEmail.textContent = customer?.email || '—';
   }
   
