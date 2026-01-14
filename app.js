@@ -15165,16 +15165,69 @@ function renderConfirmationView() {
     }
   }
 
+  // Populate product details from full order (subscriptionItems/valueCardItems) or fallback to state.order.items
   if (templates.confirmationItem && DOM.confirmationItems) {
     DOM.confirmationItems.innerHTML = '';
-    state.order.items.forEach((item) => {
-      const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
-      const nameEl = node.querySelector('[data-element="name"]');
-      const priceEl = node.querySelector('[data-element="price"]');
-      if (nameEl) nameEl.textContent = item.name;
-      if (priceEl) priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(item.amount));
-      DOM.confirmationItems.appendChild(node);
-    });
+    
+    // Priority 1: Use fullOrder data (from API) for detailed product information
+    if (state.fullOrder) {
+      // Add subscription items (memberships, 15-day passes)
+      if (state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
+        state.fullOrder.subscriptionItems.forEach(item => {
+          const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
+          const nameEl = node.querySelector('[data-element="name"]');
+          const priceEl = node.querySelector('[data-element="price"]');
+          
+          if (nameEl) {
+            const productName = item.product?.name || 'Medlemskab';
+            nameEl.textContent = productName;
+          }
+          
+          if (priceEl) {
+            // Per SubscriptionItemOut: price.amount is total price for all quantity
+            const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+            priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemTotal));
+          }
+          
+          DOM.confirmationItems.appendChild(node);
+        });
+      }
+      
+      // Add value card items (punch cards)
+      if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
+        state.fullOrder.valueCardItems.forEach(item => {
+          const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
+          const nameEl = node.querySelector('[data-element="name"]');
+          const priceEl = node.querySelector('[data-element="price"]');
+          
+          if (nameEl) {
+            const productName = item.product?.name || 'Klippekort';
+            const cardNumber = item.valueCard?.number || '';
+            nameEl.textContent = cardNumber ? `${productName} (${cardNumber})` : productName;
+          }
+          
+          if (priceEl) {
+            // Per ValueCardItemOut: price.amount is total price for all quantity
+            const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+            priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemTotal));
+          }
+          
+          DOM.confirmationItems.appendChild(node);
+        });
+      }
+    }
+    
+    // Priority 2: Fallback to state.order.items if fullOrder not available
+    if ((!state.fullOrder || (!state.fullOrder.subscriptionItems?.length && !state.fullOrder.valueCardItems?.length)) && state.order?.items) {
+      state.order.items.forEach((item) => {
+        const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
+        const nameEl = node.querySelector('[data-element="name"]');
+        const priceEl = node.querySelector('[data-element="price"]');
+        if (nameEl) nameEl.textContent = item.name;
+        if (priceEl) priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(item.amount));
+        DOM.confirmationItems.appendChild(node);
+      });
+    }
   }
 }
 
