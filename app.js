@@ -16087,37 +16087,40 @@ function nextStep(fromStep) {
         // Set product type for test mode
         if (productType === 'punch-card') {
           state.selectedProductType = 'punch-card';
-          // Mock value card items
+          // Mock value card items with price
           state.fullOrder = {
             valueCardItems: [{
               quantity: 2,
-              product: { name: 'Punch Card', productLabels: [] },
-              valueCard: { numberOfPassages: 10 }
+              product: { name: 'Klippekort', productLabels: [] },
+              valueCard: { number: '12345', numberOfPassages: 10 },
+              price: { amount: 46900 } // 469.00 DKK in cents
             }]
           };
         } else if (productType === '15daypass') {
           state.selectedProductType = 'membership';
           state.membershipPlanId = '15daypass-123';
-          // Mock subscription items with 15 day pass label
+          // Mock subscription items with 15 day pass label and price
           state.fullOrder = {
             subscriptionItems: [{
               product: {
                 name: '15 Day Pass',
                 productLabels: [{ name: '15 Day Pass' }]
-              }
+              },
+              price: { amount: 46900 } // 469.00 DKK in cents
             }]
           };
         } else {
           // Default to membership
           state.selectedProductType = 'membership';
           state.membershipPlanId = 'membership-123';
-          // Mock subscription items
+          // Mock subscription items with price
           state.fullOrder = {
             subscriptionItems: [{
               product: {
                 name: 'Medlemskab',
                 productLabels: [{ name: 'Public' }]
-              }
+              },
+              price: { amount: 46900 } // 469.00 DKK in cents
             }]
           };
         }
