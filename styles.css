@@ -6157,6 +6157,7 @@ main {
     padding: 40px;
     position: relative;
     color: #1a1a1a;
+    margin-top: 56px; /* Respect header height on desktop */
 }
 
 .receipt-header {
@@ -6317,6 +6318,7 @@ main {
     .receipt-modal-content {
         padding: 24px;
         max-height: 95vh;
+        margin-top: 48px; /* Respect header height on tablet */
     }
     
     .receipt-header {
@@ -6339,6 +6341,11 @@ main {
     }
 }
 
+@media (max-width: 480px) {
+    .receipt-modal-content {
+        margin-top: 44px; /* Respect header height on mobile */
+    }
+}
 
 /* Next Steps */
 .next-steps {
