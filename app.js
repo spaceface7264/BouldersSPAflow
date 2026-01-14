@@ -5794,6 +5794,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set product type for test mode - ensure state is set correctly
     state.testMode = true;
     state.testProductType = productType;
+    state.paymentConfirmed = true; // Set payment confirmed for test mode
+    state.paymentFailed = false;
+    state.paymentPending = false;
     
     // Set product type for test mode
     if (productType === 'punch-card') {
@@ -14916,13 +14919,13 @@ function determineProductTypeFromOrder() {
 }
 
 function renderConfirmationView() {
-  // CRITICAL: Don't render success page if payment failed or is pending
-  if (state.paymentFailed === true) {
+  // CRITICAL: Don't render success page if payment failed or is pending (unless in test mode)
+  if (!state.testMode && state.paymentFailed === true) {
     console.warn('[Confirmation] Payment failed - not rendering success page');
     return;
   }
   
-  if (state.paymentPending === true) {
+  if (!state.testMode && state.paymentPending === true) {
     console.warn('[Confirmation] Payment pending - not rendering success page');
     return;
   }
@@ -14932,13 +14935,13 @@ function renderConfirmationView() {
     return;
   }
   
-  // CRITICAL: Only render if payment is confirmed
-  if (state.paymentConfirmed !== true) {
+  // CRITICAL: Only render if payment is confirmed OR we're in test mode
+  if (!state.testMode && state.paymentConfirmed !== true) {
     console.warn('[Confirmation] Payment not confirmed - not rendering success page');
     return;
   }
   
-  console.log('[Confirmation] ✅ Rendering success page - payment confirmed');
+  console.log('[Confirmation] ✅ Rendering success page - payment confirmed' + (state.testMode ? ' (test mode)' : ''));
 
   // CRITICAL: Show confirmation sections (order details, membership details, next steps) when payment succeeds
   const step5Panel = document.getElementById('step-5');
@@ -16077,6 +16080,9 @@ function nextStep(fromStep) {
         // Set product type for test mode - ensure state is set correctly
         state.testMode = true;
         state.testProductType = productType;
+        state.paymentConfirmed = true; // Set payment confirmed for test mode
+        state.paymentFailed = false;
+        state.paymentPending = false;
         
         // Set product type for test mode
         if (productType === 'punch-card') {
