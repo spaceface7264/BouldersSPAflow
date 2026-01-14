@@ -9633,11 +9633,38 @@ main {
     cursor: pointer;
     transition: all 0.2s ease;
     width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
 }
 
 .settings-action-btn:hover {
     background-color: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.settings-action-btn-header {
+    width: auto;
+    min-width: 180px;
+    padding: 10px 20px;
+    white-space: nowrap;
+}
+
+.settings-section-header-with-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.settings-section-header-with-action .settings-section-title {
+    margin: 0;
+    flex: 1;
+    min-width: 200px;
 }
 
 .settings-action-btn-danger {
@@ -9962,6 +9989,20 @@ main {
     .settings-cancel-btn,
     .settings-action-btn {
         width: 100%;
+    }
+    
+    .settings-action-btn-header {
+        width: 100%;
+        min-width: unset;
+    }
+    
+    .settings-section-header-with-action {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .settings-section-header-with-action .settings-section-title {
+        min-width: unset;
     }
 }
 
