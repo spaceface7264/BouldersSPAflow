@@ -4794,9 +4794,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize language switcher (must be early to set language before API calls)
   initLanguageSwitcher();
   
-  // Check if we're returning from payment before initializing
+  // Check URL parameters for test mode and payment return
   const urlParams = new URLSearchParams(window.location.search);
+  const testSuccess = urlParams.get('testSuccess') === 'true';
+  const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
   const paymentReturn = urlParams.get('payment');
+  
+  if (testSuccess) {
+    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType);
+    // Store test mode in state
+    state.testMode = true;
+    state.testProductType = testProductType;
+  }
   let orderId = urlParams.get('orderId');
   let isPaymentReturnFlow = false;
   
@@ -4830,6 +4839,95 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   init();
+  
+  // If in test mode, navigate directly to success page
+  if (testSuccess) {
+    console.log('[Test Mode] Navigating to success page for testing');
+    state.currentStep = TOTAL_STEPS;
+    
+    // Set up test mode data immediately
+    const productType = testProductType;
+    console.log('[Test Mode] Creating mock order data for testing:', productType);
+    
+    // Create mock order data for testing
+    state.order = {
+      number: 'TEST-12345',
+      date: new Date(),
+      items: [
+        { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
+      ],
+      total: 469,
+      memberName: 'Test User',
+      membershipNumber: 'TEST-12345',
+      membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card',
+      primaryGym: 'Boulders Aarhus Nord',
+      membershipPrice: 469,
+    };
+    state.orderId = 'TEST-12345';
+    
+    // Set product type for test mode - ensure state is set correctly
+    state.testMode = true;
+    state.testProductType = productType;
+    
+    // Set product type for test mode
+    if (productType === 'punch-card') {
+      state.selectedProductType = 'punch-card';
+      // Mock value card items
+      state.fullOrder = {
+        valueCardItems: [{
+          quantity: 2,
+          product: { name: 'Punch Card', productLabels: [] },
+          valueCard: { numberOfPassages: 10 }
+        }]
+      };
+    } else if (productType === '15daypass') {
+      state.selectedProductType = 'membership';
+      state.membershipPlanId = '15daypass-123';
+      // Mock subscription items with 15 day pass label
+      state.fullOrder = {
+        subscriptionItems: [{
+          product: {
+            name: '15 Day Pass',
+            productLabels: [{ name: '15 Day Pass' }]
+          }
+        }]
+      };
+    } else {
+      // Default to membership
+      state.selectedProductType = 'membership';
+      state.membershipPlanId = 'membership-123';
+      // Mock subscription items
+      state.fullOrder = {
+        subscriptionItems: [{
+          product: {
+            name: 'Medlemskab',
+            productLabels: [{ name: 'Public' }]
+          }
+        }]
+      };
+    }
+    
+    console.log('[Test Mode] Mock data created:', {
+      productType: productType,
+      selectedProductType: state.selectedProductType,
+      membershipPlanId: state.membershipPlanId,
+      hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+      hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
+    });
+    
+    // Show step and render confirmation
+    showStep(TOTAL_STEPS);
+    updateStepIndicator();
+    updateNavigationButtons();
+    updateMainSubtitle();
+    
+    // Render confirmation view after a short delay to ensure DOM is ready
+    setTimeout(() => {
+      renderConfirmationView();
+    }, 100);
+    
+    return; // Skip payment return flow
+  }
   
   // If returning from payment, fetch order data and show confirmation view
   if (paymentReturn === 'return' && orderId) {
@@ -5170,8 +5268,22 @@ function setupEventListeners() {
       if (DOM.dataPolicyModal && DOM.dataPolicyModal.style.display !== 'none') {
         closeDataPolicyModal();
       }
+      const receiptModal = document.getElementById('detailedReceiptModal');
+      if (receiptModal && receiptModal.style.display !== 'none') {
+        closeDetailedReceipt();
+      }
     }
   });
+  
+  // Close receipt modal when clicking outside
+  const receiptModal = document.getElementById('detailedReceiptModal');
+  if (receiptModal) {
+    receiptModal.addEventListener('click', (e) => {
+      if (e.target === receiptModal) {
+        closeDetailedReceipt();
+      }
+    });
+  }
 }
 
 function setLoginLoadingState(isLoading) {
@@ -8025,6 +8137,14 @@ function handleGlobalClick(event) {
     }
     case 'copy-referral': {
       handleReferralCopy();
+      break;
+    }
+    case 'show-detailed-receipt': {
+      showDetailedReceipt();
+      break;
+    }
+    case 'close-detailed-receipt': {
+      closeDetailedReceipt();
       break;
     }
     case 'open-login': {
@@ -11720,6 +11840,28 @@ function buildOrderSummary(payload, order = null, customer = null) {
   // Build primary gym label - check multiple sources
   const primaryGymValue = customer?.primaryGym || customer?.primary_gym || payload.customer?.primaryGym;
   
+  // Determine product type for the order summary
+  let productType = 'membership'; // default
+  if (state.selectedProductType === 'punch-card') {
+    productType = 'punch-card';
+  } else if (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-')) {
+    productType = '15daypass';
+  } else if (membershipPlanId) {
+    // Check if it's a 15 day pass by checking product labels
+    const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+    const numericId = membershipPlanId.replace(/^(campaign|membership|15daypass)-/, '');
+    const productId = parseInt(numericId, 10);
+    const foundProduct = allSubscriptions.find(sub => 
+      sub.id === productId || 
+      String(sub.id) === numericId
+    );
+    if (foundProduct?.productLabels?.some(label => 
+      label.name && label.name.toLowerCase() === '15 day pass'
+    )) {
+      productType = '15daypass';
+    }
+  }
+  
   return {
     number: orderId,
     date: order?.createdAt ? new Date(order.createdAt) : (order?.created ? new Date(order.created) : now),
@@ -11730,6 +11872,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
     membershipType: membership?.name ?? '—',
     primaryGym: resolveGymLabel(primaryGymValue),
     membershipPrice: state.totals.membershipMonthly,
+    productType: productType, // Store product type in order summary
   };
 }
 
@@ -12316,10 +12459,146 @@ function showPaymentPendingMessage(order, orderId) {
   }, 5000); // Check every 5 seconds
 }
 
+/**
+ * Determine product type from order data
+ * Returns: 'membership', '15daypass', or 'punch-card'
+ */
+function determineProductTypeFromOrder() {
+  // Priority 1: Check test mode product type (if in test mode)
+  if (state.testMode && state.testProductType) {
+    console.log('[Product Type] Using test mode product type:', state.testProductType);
+    return state.testProductType;
+  }
+  
+  // Priority 2: Check full order data first (from API)
+  if (state.fullOrder) {
+    // Check for value card items (punch cards)
+    if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
+      console.log('[Product Type] Detected punch-card from valueCardItems');
+      return 'punch-card';
+    }
+    
+    // Check subscription items
+    if (state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
+      const subscriptionItem = state.fullOrder.subscriptionItems[0];
+      const product = subscriptionItem?.product;
+      
+      // Check product labels to determine if it's a 15 day pass
+      if (product?.productLabels && Array.isArray(product.productLabels)) {
+        const has15DayPassLabel = product.productLabels.some(
+          label => label.name && label.name.toLowerCase() === '15 day pass'
+        );
+        if (has15DayPassLabel) {
+          console.log('[Product Type] Detected 15daypass from productLabels');
+          return '15daypass';
+        }
+      }
+      
+      // Check product name for 15 day pass
+      if (product?.name) {
+        const nameLower = product.name.toLowerCase();
+        if (nameLower.includes('15 day') || nameLower.includes('15 dage')) {
+          console.log('[Product Type] Detected 15daypass from product name');
+          return '15daypass';
+        }
+      }
+      
+      // Default to membership if it's a subscription item
+      console.log('[Product Type] Detected membership from subscriptionItems');
+      return 'membership';
+    }
+  }
+  
+  // Priority 3: Fall back to state.selectedProductType
+  if (state.selectedProductType === 'punch-card') {
+    console.log('[Product Type] Detected punch-card from selectedProductType');
+    return 'punch-card';
+  }
+  
+  // Priority 4: Check membershipPlanId format
+  if (state.membershipPlanId) {
+    if (String(state.membershipPlanId).startsWith('15daypass-')) {
+      console.log('[Product Type] Detected 15daypass from membershipPlanId');
+      return '15daypass';
+    }
+    if (String(state.membershipPlanId).startsWith('punch-')) {
+      console.log('[Product Type] Detected punch-card from membershipPlanId');
+      return 'punch-card';
+    }
+    // Default to membership for campaign, membership, etc.
+    console.log('[Product Type] Detected membership from membershipPlanId');
+    return 'membership';
+  }
+  
+  // Priority 5: Check cart items
+  if (state.cartItems && state.cartItems.length > 0) {
+    const firstItem = state.cartItems[0];
+    if (firstItem.type === 'value-card' || firstItem.type === 'punch-card') {
+      console.log('[Product Type] Detected punch-card from cartItems');
+      return 'punch-card';
+    }
+    if (firstItem.name && (firstItem.name.toLowerCase().includes('15 day') || firstItem.name.toLowerCase().includes('15 dage'))) {
+      console.log('[Product Type] Detected 15daypass from cartItems');
+      return '15daypass';
+    }
+  }
+  
+  // Default to membership
+  console.log('[Product Type] Defaulting to membership');
+  return 'membership';
+}
+
 function renderConfirmationView() {
   if (!state.order) {
     console.warn('[Confirmation] No order data available to render');
     return;
+  }
+
+  // Determine product type
+  const productType = determineProductTypeFromOrder();
+  console.log('[Confirmation] Product type determined:', productType);
+  console.log('[Confirmation] State for debugging:', {
+    selectedProductType: state.selectedProductType,
+    membershipPlanId: state.membershipPlanId,
+    hasFullOrder: !!state.fullOrder,
+    hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+    hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length),
+    productLabels: state.fullOrder?.subscriptionItems?.[0]?.product?.productLabels
+  });
+
+  // Hide all sections first - use !important to override any CSS
+  const membershipSection = document.getElementById('confirmationMembershipSection');
+  const dayPassSection = document.getElementById('confirmation15DayPassSection');
+  const punchCardSection = document.getElementById('confirmationPunchCardSection');
+  
+  if (membershipSection) {
+    membershipSection.style.display = 'none';
+    membershipSection.style.setProperty('display', 'none', 'important');
+  }
+  if (dayPassSection) {
+    dayPassSection.style.display = 'none';
+    dayPassSection.style.setProperty('display', 'none', 'important');
+  }
+  if (punchCardSection) {
+    punchCardSection.style.display = 'none';
+    punchCardSection.style.setProperty('display', 'none', 'important');
+  }
+
+  // Show appropriate section based on product type - only ONE section should be visible
+  if (productType === 'membership' && membershipSection) {
+    console.log('[Confirmation] Showing membership section');
+    membershipSection.style.display = 'block';
+    membershipSection.style.setProperty('display', 'block', 'important');
+  } else if (productType === '15daypass' && dayPassSection) {
+    console.log('[Confirmation] Showing 15 day pass section');
+    dayPassSection.style.display = 'block';
+    dayPassSection.style.setProperty('display', 'block', 'important');
+  } else if (productType === 'punch-card' && punchCardSection) {
+    console.log('[Confirmation] Showing punch card section');
+    punchCardSection.style.display = 'block';
+    punchCardSection.style.setProperty('display', 'block', 'important');
+  } else {
+    console.warn('[Confirmation] Unknown product type or section not found:', productType);
   }
 
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
@@ -12333,12 +12612,92 @@ function renderConfirmationView() {
     }).format(state.order.date);
   }
   if (orderTotal) orderTotal.textContent = currencyFormatter.format(state.order.total);
-  if (memberName) memberName.textContent = state.order.memberName || '—';
+  if (memberName) {
+    memberName.textContent = state.order.memberName || '—';
+    // Also update in other sections
+    const dayPassMemberName = document.querySelector('#confirmation15DayPassSection [data-summary-field="member-name"]');
+    const punchCardMemberName = document.querySelector('#confirmationPunchCardSection [data-summary-field="member-name"]');
+    if (dayPassMemberName) dayPassMemberName.textContent = state.order.memberName || '—';
+    if (punchCardMemberName) punchCardMemberName.textContent = state.order.memberName || '—';
+  }
+  
+  // Membership-specific fields
   if (membershipNumber) membershipNumber.textContent = state.order.membershipNumber;
   if (membershipType) membershipType.textContent = state.order.membershipType;
-  if (primaryGym) primaryGym.textContent = state.order.primaryGym;
+  if (primaryGym) {
+    primaryGym.textContent = state.order.primaryGym;
+    // Also update in other sections
+    const dayPassGym = document.querySelector('#confirmation15DayPassSection [data-summary-field="primary-gym"]');
+    if (dayPassGym) dayPassGym.textContent = state.order.primaryGym;
+  }
   if (membershipPrice) {
     membershipPrice.textContent = `${currencyFormatter.format(state.order.membershipPrice)}/month`;
+  }
+  
+  // 15 Day Pass specific fields
+  if (productType === '15daypass') {
+    const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
+    const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
+    
+    if (passStartDate) {
+      const startDate = state.order.date || new Date();
+      passStartDate.textContent = new Intl.DateTimeFormat('da-DK', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(startDate);
+    }
+    
+    if (passEndDate) {
+      const startDate = state.order.date || new Date();
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 15);
+      passEndDate.textContent = new Intl.DateTimeFormat('da-DK', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(endDate);
+    }
+  }
+  
+  // Punch Card specific fields
+  if (productType === 'punch-card') {
+    const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
+    const punchCardQuantity = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-quantity"]');
+    const punchCardSessions = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-sessions"]');
+    const punchCardExpiry = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-expiry"]');
+    
+    // Get punch card data from order or state
+    const valueCardItem = state.fullOrder?.valueCardItems?.[0];
+    const cartItem = state.cartItems?.find(item => item.type === 'value-card' || item.type === 'punch-card');
+    
+    if (punchCardType) {
+      const cardName = valueCardItem?.product?.name || cartItem?.name?.replace(/ ×\d+$/, '') || 'Punch Card';
+      punchCardType.textContent = cardName;
+    }
+    
+    if (punchCardQuantity) {
+      const quantity = valueCardItem?.quantity || cartItem?.quantity || 1;
+      punchCardQuantity.textContent = quantity.toString();
+    }
+    
+    if (punchCardSessions) {
+      // Calculate total sessions (quantity * sessions per card)
+      const quantity = valueCardItem?.quantity || cartItem?.quantity || 1;
+      const sessionsPerCard = valueCardItem?.valueCard?.numberOfPassages || 10; // Default 10
+      punchCardSessions.textContent = (quantity * sessionsPerCard).toString();
+    }
+    
+    if (punchCardExpiry) {
+      const purchaseDate = state.order.date || new Date();
+      const expiryDate = new Date(purchaseDate);
+      expiryDate.setMonth(expiryDate.getMonth() + 6); // 6 months validity
+      punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(expiryDate);
+    }
   }
 
   if (templates.confirmationItem && DOM.confirmationItems) {
@@ -12351,6 +12710,283 @@ function renderConfirmationView() {
       if (priceEl) priceEl.textContent = currencyFormatter.format(item.amount);
       DOM.confirmationItems.appendChild(node);
     });
+  }
+}
+
+async function showDetailedReceipt() {
+  if (!state.fullOrder && !state.order) {
+    console.warn('[Receipt] No order data available');
+    return;
+  }
+  
+  const modal = document.getElementById('detailedReceiptModal');
+  if (!modal) return;
+  
+  const order = state.fullOrder || state.order;
+  
+  // Fetch business unit details for seller information
+  let businessUnit = null;
+  if (order.businessUnit?.id || state.selectedBusinessUnit) {
+    const businessUnitId = order.businessUnit?.id || state.selectedBusinessUnit;
+    try {
+      // Try to get from cached gymsWithDistances first (already loaded)
+      if (gymsWithDistances && Array.isArray(gymsWithDistances)) {
+        businessUnit = gymsWithDistances.find(bu => bu.id === businessUnitId || bu.id === parseInt(businessUnitId, 10));
+      }
+      
+      // If not found, try state.gyms (from loadGymsFromAPI)
+      if (!businessUnit && state.gyms && Array.isArray(state.gyms)) {
+        businessUnit = state.gyms.find(bu => bu.id === businessUnitId || bu.id === parseInt(businessUnitId, 10));
+      }
+      
+      // If still not found, fetch from API
+      if (!businessUnit) {
+        const businessUnitsAPI = new BusinessUnitsAPI();
+        const allBusinessUnits = await businessUnitsAPI.getBusinessUnits();
+        businessUnit = allBusinessUnits.find(bu => bu.id === businessUnitId || bu.id === parseInt(businessUnitId, 10));
+      }
+    } catch (error) {
+      console.warn('[Receipt] Could not fetch business unit details:', error);
+    }
+  }
+  
+  // Populate receipt header
+  const receiptOrderNumber = document.getElementById('receiptOrderNumber');
+  const receiptDate = document.getElementById('receiptDate');
+  if (receiptOrderNumber) {
+    receiptOrderNumber.textContent = order.number || order.id || '—';
+  }
+  if (receiptDate) {
+    const orderDate = order.createdAt ? new Date(order.createdAt) : (order.created ? new Date(order.created) : (order.date || new Date()));
+    receiptDate.textContent = new Intl.DateTimeFormat('da-DK', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(orderDate);
+  }
+  
+  // Calculate totals - use API data structure per OrderOut schema
+  const totalAmount = order.price?.amount || order.total || order.totalAmount || 0;
+  const totalDKK = typeof totalAmount === 'object' ? (totalAmount.amount || totalAmount) / 100 : totalAmount / 100;
+  
+  // Use vatSums from API (per OrderOut.vatSums) instead of calculating
+  let vatAmount = 0;
+  if (order.vatSums && Array.isArray(order.vatSums) && order.vatSums.length > 0) {
+    // Sum all VAT amounts from vatSums array
+    vatAmount = order.vatSums.reduce((sum, vat) => {
+      const vatValue = vat.amount ? (typeof vat.amount === 'object' ? vat.amount.amount / 100 : vat.amount / 100) : 0;
+      return sum + vatValue;
+    }, 0);
+  } else {
+    // Fallback: calculate 25% VAT if vatSums not available
+    vatAmount = totalDKK * 0.25;
+  }
+  
+  const subtotal = totalDKK - vatAmount;
+  const discount = order.couponDiscount?.amount ? (typeof order.couponDiscount.amount === 'object' ? order.couponDiscount.amount.amount / 100 : order.couponDiscount.amount / 100) : 0;
+  
+  // Populate order overview
+  const receiptSubtotal = document.getElementById('receiptSubtotal');
+  const receiptDiscount = document.getElementById('receiptDiscount');
+  const receiptTotal = document.getElementById('receiptTotal');
+  const receiptVat = document.getElementById('receiptVat');
+  
+  if (receiptSubtotal) receiptSubtotal.textContent = currencyFormatter.format(subtotal);
+  if (receiptDiscount) receiptDiscount.textContent = discount > 0 ? `-${currencyFormatter.format(discount)}` : '0,00 kr';
+  if (receiptTotal) receiptTotal.textContent = currencyFormatter.format(totalDKK);
+  if (receiptVat) receiptVat.textContent = currencyFormatter.format(vatAmount);
+  
+  // Populate payment details
+  const receiptPaymentMethod = document.getElementById('receiptPaymentMethod');
+  const receiptAmountPaid = document.getElementById('receiptAmountPaid');
+  const receiptTransactionId = document.getElementById('receiptTransactionId');
+  
+  if (receiptPaymentMethod) {
+    // Try to get payment method from order
+    const paymentMethod = order.paymentMethod || order.payment?.method || 'Kortbetaling';
+    receiptPaymentMethod.textContent = paymentMethod;
+  }
+  if (receiptAmountPaid) receiptAmountPaid.textContent = currencyFormatter.format(totalDKK);
+  if (receiptTransactionId) {
+    // Try to get transaction ID from order
+    const transactionId = order.transactionId || order.payment?.transactionId || order.payment?.id || '—';
+    receiptTransactionId.textContent = transactionId;
+  }
+  
+  // Populate customer information
+  const receiptCustomerName = document.getElementById('receiptCustomerName');
+  const receiptCustomerAddress = document.getElementById('receiptCustomerAddress');
+  const receiptCustomerPhone = document.getElementById('receiptCustomerPhone');
+  const receiptCustomerEmail = document.getElementById('receiptCustomerEmail');
+  
+  if (receiptCustomerName) {
+    const customer = order.customer || state.customer;
+    const name = customer?.fullName || (customer?.firstName && customer?.lastName ? `${customer.firstName} ${customer.lastName}` : null) || state.order?.memberName || '—';
+    receiptCustomerName.textContent = name;
+  }
+  
+  if (receiptCustomerAddress) {
+    const customer = order.customer || state.customer;
+    // Use shippingAddress or billingAddress per CustomerOut schema (AddressOut)
+    const addressObj = customer?.shippingAddress || customer?.billingAddress;
+    if (addressObj) {
+      const street = addressObj.street || '';
+      const postalCode = addressObj.postalCode || '';
+      const city = addressObj.city || '';
+      const country = addressObj.country?.name || '';
+      const address = `${street} ${postalCode}${city ? ', ' + city : ''}${country ? ' ' + country : ''}`.trim();
+      receiptCustomerAddress.textContent = address || '—';
+    } else {
+      // Fallback for old structure
+      const address = customer?.address ? 
+        `${customer.address.street || ''} ${customer.address.streetNumber || ''} ${customer.address.postalCode || ''}, ${customer.address.city || ''}`.trim() :
+        (customer?.addressLine1 ? `${customer.addressLine1} ${customer.postalCode || ''}, ${customer.city || ''}`.trim() : '—');
+      receiptCustomerAddress.textContent = address || '—';
+    }
+  }
+  
+  if (receiptCustomerPhone) {
+    const customer = order.customer || state.customer;
+    // Use mobilePhone per CustomerOut schema (PhoneNumberOut)
+    if (customer?.mobilePhone) {
+      const countryCode = customer.mobilePhone.countryCode ? `+${customer.mobilePhone.countryCode}` : '';
+      const number = customer.mobilePhone.number || '';
+      receiptCustomerPhone.textContent = countryCode && number ? `${countryCode} ${number}` : number || '—';
+    } else {
+      // Fallback
+      receiptCustomerPhone.textContent = customer?.phone || customer?.phoneNumber || '—';
+    }
+  }
+  
+  if (receiptCustomerEmail) {
+    const customer = order.customer || state.customer;
+    receiptCustomerEmail.textContent = customer?.email || '—';
+  }
+  
+  // Populate seller information from business unit
+  const receiptSellerName = document.getElementById('receiptSellerName');
+  const receiptSellerAddress = document.getElementById('receiptSellerAddress');
+  const receiptSellerCVR = document.getElementById('receiptSellerCVR');
+  const receiptSellerPhone = document.getElementById('receiptSellerPhone');
+  const receiptSellerEmail = document.getElementById('receiptSellerEmail');
+  
+  if (businessUnit) {
+    // Per BusinessUnitOut schema: companyNameForInvoice, address, company
+    if (receiptSellerName) {
+      receiptSellerName.textContent = businessUnit.companyNameForInvoice || businessUnit.company?.name || businessUnit.name || 'Boulders ApS';
+    }
+    
+    if (receiptSellerAddress && businessUnit.address) {
+      // Per AddressOut schema: street, city, postalCode, country
+      const street = businessUnit.address.street || '';
+      const postalCode = businessUnit.address.postalCode || '';
+      const city = businessUnit.address.city || '';
+      const country = businessUnit.address.country?.name || '';
+      const address = `${street} ${postalCode}${city ? ', ' + city : ''}${country ? ' ' + country : ''}`.trim();
+      receiptSellerAddress.textContent = address || '—';
+    } else if (receiptSellerAddress) {
+      receiptSellerAddress.textContent = '—';
+    }
+    
+    // CVR, Phone, Email might not be in BusinessUnitOut schema - check if available
+    if (receiptSellerCVR) {
+      // CVR might be in company object or business unit settings - not in schema, so use fallback
+      receiptSellerCVR.textContent = businessUnit.cvr || businessUnit.company?.cvr || '32777651'; // Fallback to known value
+    }
+    
+    if (receiptSellerPhone) {
+      receiptSellerPhone.textContent = businessUnit.phone || businessUnit.contactPhone || '+45 72100019'; // Fallback
+    }
+    
+    if (receiptSellerEmail) {
+      receiptSellerEmail.textContent = businessUnit.email || businessUnit.contactEmail || 'medlem@boulders.dk'; // Fallback
+    }
+  } else {
+    // Fallback to hardcoded values if business unit not available
+    if (receiptSellerName) receiptSellerName.textContent = 'Boulders ApS';
+    if (receiptSellerAddress) receiptSellerAddress.textContent = 'Boulders ApS Amager, Landevej 233 2770, København Denmark';
+    if (receiptSellerCVR) receiptSellerCVR.textContent = '32777651';
+    if (receiptSellerPhone) receiptSellerPhone.textContent = '+45 72100019';
+    if (receiptSellerEmail) receiptSellerEmail.textContent = 'medlem@boulders.dk';
+  }
+  
+  // Populate purchased items
+  const receiptItems = document.getElementById('receiptItems');
+  if (receiptItems) {
+    receiptItems.innerHTML = '';
+    
+    // Add header row
+    const headerRow = document.createElement('div');
+    headerRow.className = 'receipt-item receipt-item-header';
+    headerRow.innerHTML = `
+      <div>Navn</div>
+      <div>Antal</div>
+      <div>TOTALT</div>
+    `;
+    receiptItems.appendChild(headerRow);
+    
+    // Add items from order - per OrderOut schema
+    if (order.valueCardItems && order.valueCardItems.length > 0) {
+      // Per ValueCardItemOut schema: price is total for all quantity, quantity is amount of cards
+      order.valueCardItems.forEach(item => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'receipt-item';
+        const itemName = item.product?.name || 'Klippekort';
+        const itemQuantity = item.quantity || 1;
+        // Per ValueCardItemOut: price.amount is total price for all quantity (not per unit)
+        const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+        // Per ValueCardOutRef schema: valueCard.number is the card number
+        const itemId = item.valueCard?.number || item.product?.productNumber || '';
+        
+        itemRow.innerHTML = `
+          <div>${itemName}${itemId ? ` (${itemId})` : ''}</div>
+          <div>${itemQuantity}</div>
+          <div>${currencyFormatter.format(itemTotal)}</div>
+        `;
+        receiptItems.appendChild(itemRow);
+      });
+    } else if (order.subscriptionItems && order.subscriptionItems.length > 0) {
+      // Per SubscriptionItemOut schema: price is total for all quantity, quantity is amount of subscriptions
+      order.subscriptionItems.forEach(item => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'receipt-item';
+        const itemName = item.product?.name || 'Medlemskab';
+        const itemQuantity = item.quantity || 1;
+        // Per SubscriptionItemOut: price.amount is total price for all quantity
+        const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+        
+        itemRow.innerHTML = `
+          <div>${itemName}</div>
+          <div>${itemQuantity}</div>
+          <div>${currencyFormatter.format(itemTotal)}</div>
+        `;
+        receiptItems.appendChild(itemRow);
+      });
+    } else if (state.order?.items && state.order.items.length > 0) {
+      // Fallback to state.order.items
+      state.order.items.forEach(item => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'receipt-item';
+        itemRow.innerHTML = `
+          <div>${item.name || 'Item'}</div>
+          <div>${item.quantity || 1}</div>
+          <div>${currencyFormatter.format(item.amount || 0)}</div>
+        `;
+        receiptItems.appendChild(itemRow);
+      });
+    }
+  }
+  
+  // Show modal
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden'; // Prevent background scrolling
+}
+
+function closeDetailedReceipt() {
+  const modal = document.getElementById('detailedReceiptModal');
+  if (modal) {
+    modal.style.display = 'none';
+    document.body.style.overflow = ''; // Restore scrolling
   }
 }
 
@@ -12756,14 +13392,90 @@ function nextStep(fromStep) {
 
   // CRITICAL: Only show success page (step 5) if there's actually a completed order
   // Never navigate to success page unless purchase is actually successful
+  // EXCEPTION: Allow test mode via URL parameter ?testSuccess=true
   if (state.currentStep === TOTAL_STEPS) {
-    // Only render confirmation if we have order data
-    // This prevents showing success page when user hasn't completed purchase
-    if (state.order && state.orderId) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const testMode = urlParams.get('testSuccess') === 'true';
+    const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
+    
+    // Only render confirmation if we have order data OR we're in test mode
+    if ((state.order && state.orderId) || testMode) {
+      if (testMode) {
+        // Use test product type from state if available, otherwise from URL
+        const productType = state.testProductType || testProductType;
+        console.log('[Test Mode] Creating mock order data for testing:', productType);
+        
+        // Create mock order data for testing
+        state.order = {
+          number: 'TEST-12345',
+          date: new Date(),
+          items: [
+            { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
+          ],
+          total: 469,
+          memberName: 'Test User',
+          membershipNumber: 'TEST-12345',
+          membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card',
+          primaryGym: 'Boulders Aarhus Nord',
+          membershipPrice: 469,
+        };
+        state.orderId = 'TEST-12345';
+        
+        // Set product type for test mode - ensure state is set correctly
+        state.testMode = true;
+        state.testProductType = productType;
+        
+        // Set product type for test mode
+        if (productType === 'punch-card') {
+          state.selectedProductType = 'punch-card';
+          // Mock value card items
+          state.fullOrder = {
+            valueCardItems: [{
+              quantity: 2,
+              product: { name: 'Punch Card', productLabels: [] },
+              valueCard: { numberOfPassages: 10 }
+            }]
+          };
+        } else if (productType === '15daypass') {
+          state.selectedProductType = 'membership';
+          state.membershipPlanId = '15daypass-123';
+          // Mock subscription items with 15 day pass label
+          state.fullOrder = {
+            subscriptionItems: [{
+              product: {
+                name: '15 Day Pass',
+                productLabels: [{ name: '15 Day Pass' }]
+              }
+            }]
+          };
+        } else {
+          // Default to membership
+          state.selectedProductType = 'membership';
+          state.membershipPlanId = 'membership-123';
+          // Mock subscription items
+          state.fullOrder = {
+            subscriptionItems: [{
+              product: {
+                name: 'Medlemskab',
+                productLabels: [{ name: 'Public' }]
+              }
+            }]
+          };
+        }
+        
+        console.log('[Test Mode] Mock data created:', {
+          productType: productType,
+          selectedProductType: state.selectedProductType,
+          membershipPlanId: state.membershipPlanId,
+          hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+          hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
+        });
+      }
       renderConfirmationView();
     } else {
       // If we somehow ended up on step 5 without an order, go back to step 1
       console.warn('[Navigation] Attempted to show success page without order data. Redirecting to step 1.');
+      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|15daypass|punch-card to URL');
       state.currentStep = 1;
       showStep(1);
       updateStepIndicator();
@@ -12871,6 +13583,18 @@ function showStep(stepNumber) {
       }
     }
   });
+  
+  // Remove flex and margin from step-content when step 5 (success page) is active
+  const stepContent = document.querySelector('.step-content');
+  if (stepContent) {
+    if (stepNumber === TOTAL_STEPS) {
+      stepContent.style.marginTop = '0';
+      stepContent.style.flex = 'none'; // Prevent container from expanding
+    } else {
+      stepContent.style.marginTop = ''; // Reset to CSS default (50px)
+      stepContent.style.flex = ''; // Reset to CSS default (flex: 1)
+    }
+  }
   
   // Update selected gym display when showing step 2
   if (stepNumber === 2) {
