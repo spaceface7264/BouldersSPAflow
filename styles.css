@@ -1132,7 +1132,7 @@ body {
 #step-5 .step-panel-content {
     max-width: 1200px;
     text-align: left;
-    margin-top: 56px; /* Respect header height on desktop */
+    margin-top: 120px; /* Respect header height on desktop */
     padding-top: 0;
 }
 
