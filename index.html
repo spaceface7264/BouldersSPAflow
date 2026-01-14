@@ -49,6 +49,13 @@
                     <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
                     <div class="logo-fallback">BOULDERS</div>
                 </div>
+                <!-- Auth Indicator Section -->
+                <div class="header-auth-indicator" id="headerAuthIndicator" style="display: none;">
+                    <span class="header-auth-text">
+                        Logged in as: <span class="header-auth-email" id="headerAuthEmail">-</span>
+                    </span>
+                    <button type="button" class="header-logout-btn" id="headerLogoutBtn" data-action="logout">Log out</button>
+                </div>
             </div>
         </div>
     </header>

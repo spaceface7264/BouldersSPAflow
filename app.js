@@ -979,6 +979,14 @@ class AuthAPI {
           expiresIn: expiresIn,
         };
         window.saveTokens(newAccessToken, newRefreshToken, newExpiresAt, metadata);
+        
+        // Update header auth indicator after token refresh
+        refreshHeaderAuthIndicator();
+        
+        // Dispatch event to notify React components
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('auth-state-changed'));
+        }
       }
       
       return tokenPayload;
@@ -1445,6 +1453,17 @@ class AuthAPI {
     }
 
     writeLoginSessionCookie(tokenData);
+    
+    // Update header auth indicator when tokens are saved
+    // Use setTimeout to ensure DOM is ready (in case this is called during page load)
+    setTimeout(() => {
+      refreshHeaderAuthIndicator();
+    }, 0);
+    
+    // Dispatch event to notify React components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('auth-state-changed'));
+    }
   };
 
   // Step 6: getAccessToken - Get access token from session store/cookie
@@ -1523,6 +1542,14 @@ class AuthAPI {
     }
 
     clearLoginSessionCookie();
+    
+    // Update header auth indicator when tokens are cleared
+    refreshHeaderAuthIndicator();
+    
+    // Dispatch event to notify React components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('auth-state-changed'));
+    }
   };
 
   // Check if token is expired
@@ -2706,6 +2733,7 @@ async function validateTokensOnLoad() {
       try {
         await authAPI.refreshToken();
         console.log('[Step 6] Token refreshed successfully');
+        // Header auth indicator will be updated by refreshToken() function
       } catch (error) {
         console.error('[Step 6] Token refresh failed, clearing session:', error);
         window.clearTokens();
@@ -2737,6 +2765,7 @@ async function validateTokensOnLoad() {
       try {
         await authAPI.refreshToken();
         console.log('[Step 6] Token refreshed after validation failure');
+        // Header auth indicator will be updated by refreshToken() function
       } catch (refreshError) {
         const refreshRateLimited = isRateLimitError(refreshError);
         if (refreshRateLimited) {
@@ -4441,6 +4470,11 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
   } else {
     refreshLoginUI();
   }
+  
+  // Dispatch event to notify React components of auth state change
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth-state-changed'));
+  }
   autoEnsureOrderIfReady('auth-state-sync')
     .then(() => {
       // Order should now be created and subscription attached
@@ -5781,9 +5815,26 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Step 6: Validate tokens on app load
   validateTokensOnLoad();
-
+  
   // Restore authenticated state from stored tokens (if available)
   syncAuthenticatedCustomerState();
+  
+  // Initialize header auth indicator after state sync
+  // Use setTimeout to ensure syncAuthenticatedCustomerState completes first
+  setTimeout(() => {
+    refreshHeaderAuthIndicator();
+  }, 100);
+  
+  // Listen for storage events (cross-tab synchronization)
+  // If tokens are saved/cleared in another tab, update the header
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'boulders_auth_tokens') {
+      // Tokens were changed in another tab
+      setTimeout(() => {
+        refreshHeaderAuthIndicator();
+      }, 100);
+    }
+  });
 });
 
 
@@ -6190,14 +6241,29 @@ async function handleLoginSubmit(event) {
         
         // Refresh UI again to show profile data
         refreshLoginUI();
+        
+        // Dispatch event to notify React components
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('auth-state-changed'));
+        }
       } else {
         showToast(`Logged in as ${email}.`, 'success');
+      }
+      
+      // Dispatch event to notify React components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth-state-changed'));
       }
     } catch (profileError) {
       console.warn('[login] Could not fetch customer profile:', profileError);
       // Continue even if profile fetch fails - refresh UI with whatever data we have
       showToast(`Logged in as ${email}.`, 'success');
       refreshLoginUI();
+      
+      // Dispatch event to notify React components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth-state-changed'));
+      }
     }
     
     try {
@@ -7206,7 +7272,45 @@ async function handleForgotPasswordSubmit(event) {
   }
 }
 
+function refreshHeaderAuthIndicator() {
+  const headerContent = document.getElementById('headerContent');
+  const headerAuthIndicator = document.getElementById('headerAuthIndicator');
+  const headerAuthEmail = document.getElementById('headerAuthEmail');
+  const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+  
+  if (!headerAuthIndicator) return;
+  
+  const authenticated = isUserAuthenticated();
+  
+  // Always show the header (logo should always be visible)
+  if (headerContent) {
+    headerContent.style.display = 'block';
+  }
+  
+  if (!authenticated) {
+    // Hide auth indicator when not authenticated, but keep header visible
+    headerAuthIndicator.style.display = 'none';
+    return;
+  }
+  
+  // Get email from various sources
+  const metadata = getTokenMetadata();
+  const customer = state.authenticatedCustomer;
+  const emailDisplay = state.authenticatedEmail || customer?.email || metadata?.email || metadata?.username || 'User';
+  
+  // Update email display
+  if (headerAuthEmail) {
+    headerAuthEmail.textContent = emailDisplay;
+  }
+  
+  // Show the indicator
+  headerAuthIndicator.style.display = 'flex';
+}
+
 function refreshLoginUI() {
+  // Update header auth indicator first
+  refreshHeaderAuthIndicator();
+  
   if (!DOM.loginStatus && !DOM.loginFormContainer) {
     return;
   }
@@ -7908,6 +8012,123 @@ function checkSaveAccountButtonState() {
   }
 }
 
+function showLogoutConfirmation() {
+  // Create confirmation modal
+  const confirmationOverlay = document.createElement('div');
+  confirmationOverlay.className = 'logout-confirmation-overlay';
+  confirmationOverlay.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    backdrop-filter: blur(4px);
+  `;
+  
+  const confirmationDialog = document.createElement('div');
+  confirmationDialog.className = 'logout-confirmation-dialog';
+  confirmationDialog.style.cssText = `
+    background: rgba(31, 41, 55, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  `;
+  
+  confirmationDialog.innerHTML = `
+    <h3 style="margin: 0 0 16px 0; color: #FFFFFF; font-size: 18px; font-weight: 600;">Log out?</h3>
+    <p style="margin: 0 0 24px 0; color: rgba(255, 255, 255, 0.7); line-height: 1.5; font-size: 14px;">
+      Are you sure you want to log out? You'll need to log in again to continue.
+    </p>
+    <div style="display: flex; gap: 12px; justify-content: center;">
+      <button class="logout-confirmation-btn logout-confirmation-cancel" style="
+        padding: 10px 20px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 14px;
+        transition: all 0.2s ease;
+      ">Cancel</button>
+      <button class="logout-confirmation-btn logout-confirmation-confirm" style="
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        background: rgba(239, 68, 68, 0.2);
+        border: 1px solid rgba(239, 68, 68, 0.4);
+        color: #F87171;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        transition: all 0.2s ease;
+      ">Log out</button>
+    </div>
+  `;
+  
+  confirmationOverlay.appendChild(confirmationDialog);
+  document.body.appendChild(confirmationOverlay);
+  
+  // Add hover effects
+  const cancelBtn = confirmationOverlay.querySelector('.logout-confirmation-cancel');
+  const confirmBtn = confirmationOverlay.querySelector('.logout-confirmation-confirm');
+  
+  if (cancelBtn) {
+    cancelBtn.addEventListener('mouseenter', () => {
+      cancelBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+      cancelBtn.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+    });
+    cancelBtn.addEventListener('mouseleave', () => {
+      cancelBtn.style.background = 'transparent';
+      cancelBtn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+    });
+  }
+  
+  if (confirmBtn) {
+    confirmBtn.addEventListener('mouseenter', () => {
+      confirmBtn.style.background = 'rgba(239, 68, 68, 0.3)';
+      confirmBtn.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+    });
+    confirmBtn.addEventListener('mouseleave', () => {
+      confirmBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+      confirmBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+    });
+  }
+  
+  // Add event listeners
+  cancelBtn?.addEventListener('click', () => {
+    document.body.removeChild(confirmationOverlay);
+  });
+  
+  confirmBtn?.addEventListener('click', () => {
+    document.body.removeChild(confirmationOverlay);
+    handleLogout();
+  });
+  
+  // Close on overlay click
+  confirmationOverlay.addEventListener('click', (e) => {
+    if (e.target === confirmationOverlay) {
+      document.body.removeChild(confirmationOverlay);
+    }
+  });
+  
+  // Close on Escape key
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
+      document.body.removeChild(confirmationOverlay);
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  document.addEventListener('keydown', handleEscape);
+}
+
 function handleLogout() {
   // Clear customer profile data
   state.authenticatedCustomer = null;
@@ -7925,6 +8146,11 @@ function handleLogout() {
   switchAuthMode('create');
   
   showToast('You have been logged out.', 'info');
+  
+  // Dispatch event to notify React components
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth-state-changed'));
+  }
 }
 
 function renderCatalog() {
@@ -9039,7 +9265,7 @@ function handleGlobalClick(event) {
     }
     case 'logout': {
       event.preventDefault();
-      handleLogout();
+      showLogoutConfirmation();
       break;
     }
     case 'save-account': {
@@ -11836,6 +12062,11 @@ async function handleCheckout() {
             syncAuthenticatedCustomerState(metadata.username, metadata.email);
             hasTokens = true;
             console.log('[checkout] ✅ Tokens saved from customer creation response');
+            
+            // Dispatch event to notify React components
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('auth-state-changed'));
+            }
           }
         } else if (customer?.data?.accessToken && customer?.data?.refreshToken) {
           // Check if tokens are nested in data object
@@ -11849,6 +12080,11 @@ async function handleCheckout() {
             syncAuthenticatedCustomerState(metadata.username, metadata.email);
             hasTokens = true;
             console.log('[checkout] ✅ Tokens saved from customer creation response (nested in data)');
+            
+            // Dispatch event to notify React components
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('auth-state-changed'));
+            }
           }
         }
         

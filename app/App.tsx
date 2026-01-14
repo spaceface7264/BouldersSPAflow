@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SignupRoutes } from '../features/signup/routes';
 import { Stepper } from '../shared/ui';
 import { useSignupStore } from '../features/signup/state';
+import { AuthIndicator } from '../features/signup/components/AuthIndicator';
 import '../shared/styles/tokens.css';
 
 // Create a client
@@ -63,6 +64,9 @@ const AppContent: React.FC = () => {
                 <h1 className="text-2xl font-bold">BOULDERS</h1>
                 <p className="text-gray-300 text-sm">Join Your Bouldering Network</p>
               </div>
+            </div>
+            <div className="flex items-center">
+              <AuthIndicator />
             </div>
           </div>
         </div>
