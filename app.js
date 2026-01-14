@@ -15447,16 +15447,33 @@ async function showDetailedReceipt() {
     document.body.appendChild(modal);
   }
   
+  // Prevent background scrolling - save current scroll position
+  const scrollY = window.scrollY;
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${scrollY}px`;
+  document.body.style.width = '100%';
+  document.body.style.overflow = 'hidden';
+  
   // Show modal
   modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden'; // Prevent background scrolling
 }
 
 function closeDetailedReceipt() {
   const modal = document.getElementById('detailedReceiptModal');
   if (modal) {
     modal.style.display = 'none';
-    document.body.style.overflow = ''; // Restore scrolling
+    
+    // Restore background scrolling - restore scroll position
+    const scrollY = document.body.style.top;
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+    
+    // Restore scroll position
+    if (scrollY) {
+      window.scrollTo(0, parseInt(scrollY || '0') * -1);
+    }
   }
 }
 
