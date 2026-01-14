@@ -2066,9 +2066,8 @@ body {
     justify-content: flex-start;
     padding: 20px 24px; /* Increased padding for comfortable spacing */
     position: relative;
-    min-height: 100px; /* Minimum height for consistency */
-    height: auto; /* Allow card to expand to fit all content */
-    overflow: visible; /* Ensure content is not clipped */
+    height: 100%; /* Fill container height */
+    min-height: auto; /* Allow content to determine minimum height */
     opacity: 0;
     transform: translateY(15px) scale(0.95);
 }
@@ -2184,11 +2183,11 @@ body {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
-    align-items: flex-start; /* Changed from stretch to flex-start for better content flow */
+    align-items: stretch;
     gap: 20px; /* Increased gap for better spacing */
     padding-right: 0;
     min-height: 100%;
-    overflow: visible; /* Ensure content is not clipped */
+    height: 100%;
 }
 
 .plan-content-left {
@@ -2196,11 +2195,10 @@ body {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px; /* Increased gap for better spacing */
+    gap: 6px;
     align-items: flex-start;
-    justify-content: flex-start; /* Changed from space-between to allow natural flow */
+    justify-content: space-between;
     min-height: 100%;
-    overflow: visible; /* Ensure content is not clipped */
 }
 
 .plan-type {
@@ -2246,16 +2244,14 @@ body {
 .plan-description {
     font-size: var(--font-size-base);
     color: var(--color-text-muted);
-    line-height: 1.6; /* Increased line-height for better readability */
+    line-height: 1.5;
     white-space: normal; /* Allow wrapping, but preserve <br> tags */
-    word-wrap: break-word; /* Ensure long words wrap */
-    overflow-wrap: break-word; /* Additional wrapping support */
     margin: 0;
     text-align: left;
     align-self: flex-start;
     width: 100%;
-    overflow: visible; /* Ensure text is not clipped */
-    flex-shrink: 1; /* Allow description to shrink if needed */
+    word-wrap: break-word; /* Ensure long words wrap */
+    overflow-wrap: break-word; /* Additional word wrapping support */
 }
 
 .plan-card .check-circle {
@@ -2304,10 +2300,15 @@ body {
     }
     
     .plan-card {
-        min-height: 100px; /* Minimum height for consistency */
-        height: auto; /* Allow cards to expand to fit content */
-        padding: 20px 22px; /* Increased padding for comfortable spacing */
-        overflow: visible; /* Ensure content is not clipped */
+        min-height: auto; /* Allow cards to expand to fit content */
+        height: auto; /* Allow content to determine height naturally */
+        padding: 20px 20px 50px 20px; /* Increased padding with extra bottom for check-circle */
+    }
+    
+    .plan-description {
+        line-height: 1.6; /* Better line height for readability */
+        word-wrap: break-word; /* Ensure long words wrap */
+        overflow-wrap: break-word; /* Additional word wrapping support */
     }
 
     .check-circle {
@@ -2342,21 +2343,26 @@ body {
     }
 
     .plan-card {
-        padding: 18px 20px; /* Increased padding for comfortable spacing */
-        min-height: 100px; /* Minimum height for consistency */
-        height: auto; /* Allow card to expand to fit all content */
-        overflow: visible; /* Ensure content is not clipped */
+        padding: 20px 18px 50px 18px; /* Increased padding with extra bottom for check-circle */
+        height: auto; /* Allow content to determine height naturally */
+        min-height: auto; /* Allow content to determine minimum height */
     }
 
     .plan-info {
         gap: 16px; /* Increased gap for better spacing */
         padding-right: 0;
-        align-items: flex-start; /* Better content flow on small screens */
-        overflow: visible; /* Ensure content is not clipped */
+        height: auto; /* Allow content to determine height */
     }
 
     .plan-content-left {
-        gap: 4px;
+        gap: 6px; /* Slightly increased gap for better spacing */
+        min-height: auto; /* Allow content to determine height */
+    }
+    
+    .plan-description {
+        line-height: 1.6; /* Better line height for readability */
+        word-wrap: break-word; /* Ensure long words wrap */
+        overflow-wrap: break-word; /* Additional word wrapping support */
     }
 
     .plan-content-right {
@@ -2364,11 +2370,11 @@ body {
     }
 
     .plan-card .check-circle {
-        bottom: 14px;
-        right: 16px;
+        bottom: 18px; /* Increased from 14px for better spacing */
+        right: 18px; /* Match horizontal padding */
         width: 24px;
         height: 24px;
-        margin: 0 0 4px 0; /* Add bottom margin */
+        margin: 0;
     }
 
     .plan-type {
@@ -2416,24 +2422,21 @@ body {
 
     .plan-card {
         padding: 20px 24px; /* Increased padding for comfortable spacing */
-        min-height: 100px; /* Minimum height for consistency */
-        height: auto; /* Allow card to expand to fit all content */
-        overflow: visible; /* Ensure content is not clipped */
+        height: 100%;
+        min-height: auto;
     }
 
     .plan-info {
         padding-right: 0;
         gap: 20px; /* Increased gap for better spacing */
-        align-items: flex-start; /* Better content flow */
+        align-items: stretch;
         min-height: 100%;
-        overflow: visible; /* Ensure content is not clipped */
+        height: 100%;
     }
 
     .plan-content-left {
-        justify-content: flex-start; /* Changed from space-between for better content flow */
-        gap: 8px; /* Consistent gap */
+        justify-content: space-between;
         min-height: 100%;
-        overflow: visible; /* Ensure content is not clipped */
     }
 
     .plan-card .check-circle {
@@ -7168,11 +7171,10 @@ main {
     
     /* Ensure plan cards expand to fit content on mobile */
     .plan-card {
-        min-height: 100px !important; /* Minimum height for consistency */
-        height: auto !important; /* Allow card to expand to fit all content */
+        height: 100% !important; /* Fill container height */
+        min-height: auto !important;
         align-items: stretch;
         padding: 20px 22px; /* Comfortable padding for mobile */
-        overflow: visible !important; /* Ensure content is not clipped */
     }
 
     .plan-options {
@@ -7205,10 +7207,8 @@ main {
         min-width: 280px;
         scroll-snap-align: center;
         margin: 0;
-        min-height: 100px; /* Minimum height for consistency */
-        height: auto; /* Allow card to expand to fit all content */
+        height: 100%; /* Fill container height */
         padding: 20px 22px; /* Comfortable padding for mobile carousel */
-        overflow: visible; /* Ensure content is not clipped */
     }
 
     .plan-options.is-centered {
