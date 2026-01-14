@@ -723,6 +723,11 @@ body {
     .step-panel-content {
         margin-bottom: 24px;
     }
+    
+    /* Step 5 - Respect header height on tablet */
+    #step-5 .step-panel-content {
+        margin-top: 48px; /* Match tablet header height */
+    }
 }
 
 @media (max-width: 480px) {
@@ -773,6 +778,11 @@ body {
     
     .step-panel-content {
         margin-bottom: 20px;
+    }
+    
+    /* Step 5 - Respect header height on mobile */
+    #step-5 .step-panel-content {
+        margin-top: 44px; /* Match mobile header height */
     }
     
     .language-btn {
@@ -1122,7 +1132,7 @@ body {
 #step-5 .step-panel-content {
     max-width: 1200px;
     text-align: left;
-    margin-top: 0;
+    margin-top: 56px; /* Respect header height on desktop */
     padding-top: 0;
 }
 
