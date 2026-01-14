@@ -15125,6 +15125,18 @@ function renderConfirmationView() {
     }
   }
   
+// Helper function to create purchase item element if template not available
+function createPurchaseItemElement() {
+  const item = document.createElement('div');
+  item.className = 'purchase-item';
+  item.setAttribute('data-confirmation-item', '');
+  item.innerHTML = `
+    <span class="item-name" data-element="name"></span>
+    <span class="item-price" data-element="price"></span>
+  `;
+  return item;
+}
+
   // Punch Card specific fields
   if (productType === 'punch-card') {
     const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
@@ -15166,18 +15178,31 @@ function renderConfirmationView() {
   }
 
   // Populate product details from full order (subscriptionItems/valueCardItems) or fallback to state.order.items
-  if (templates.confirmationItem && DOM.confirmationItems) {
+  if (DOM.confirmationItems) {
     DOM.confirmationItems.innerHTML = '';
     let hasItems = false;
+    
+    console.log('[Confirmation] Populating product details:', {
+      hasTemplate: !!templates.confirmationItem,
+      hasFullOrder: !!state.fullOrder,
+      hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length),
+      hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+      hasOrderItems: !!(state.order?.items?.length),
+      hasCartItems: !!(state.cartItems?.length),
+      selectedProductId: state.selectedProductId,
+      membershipPlanId: state.membershipPlanId
+    });
     
     // Priority 1: Use fullOrder data (from API) for detailed product information
     if (state.fullOrder) {
       // Add subscription items (memberships, 15-day passes)
       if (state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
         state.fullOrder.subscriptionItems.forEach(item => {
-          const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
-          const nameEl = node.querySelector('[data-element="name"]');
-          const priceEl = node.querySelector('[data-element="price"]');
+          const node = templates.confirmationItem 
+            ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+            : createPurchaseItemElement();
+          const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+          const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
           
           if (nameEl) {
             const productName = item.product?.name || 'Medlemskab';
@@ -15198,9 +15223,11 @@ function renderConfirmationView() {
       // Add value card items (punch cards)
       if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
         state.fullOrder.valueCardItems.forEach(item => {
-          const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
-          const nameEl = node.querySelector('[data-element="name"]');
-          const priceEl = node.querySelector('[data-element="price"]');
+          const node = templates.confirmationItem 
+            ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+            : createPurchaseItemElement();
+          const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+          const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
           
           if (nameEl) {
             const productName = item.product?.name || 'Klippekort';
@@ -15223,9 +15250,11 @@ function renderConfirmationView() {
     // Priority 2: Fallback to state.order.items if fullOrder not available or has no items
     if (!hasItems && state.order?.items && state.order.items.length > 0) {
       state.order.items.forEach((item) => {
-        const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
-        const nameEl = node.querySelector('[data-element="name"]');
-        const priceEl = node.querySelector('[data-element="price"]');
+        const node = templates.confirmationItem 
+          ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+          : createPurchaseItemElement();
+        const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+        const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
         if (nameEl) nameEl.textContent = item.name;
         if (priceEl) priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(item.amount));
         DOM.confirmationItems.appendChild(node);
@@ -15236,9 +15265,11 @@ function renderConfirmationView() {
     // Priority 3: Fallback to state.cartItems if order.items is empty
     if (!hasItems && state.cartItems && state.cartItems.length > 0) {
       state.cartItems.forEach((item) => {
-        const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
-        const nameEl = node.querySelector('[data-element="name"]');
-        const priceEl = node.querySelector('[data-element="price"]');
+        const node = templates.confirmationItem 
+          ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+          : createPurchaseItemElement();
+        const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+        const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
         if (nameEl) {
           // Remove quantity suffix if present (e.g., " ×2")
           const itemName = item.name?.replace(/\s×\d+$/, '') || item.name || 'Item';
@@ -15255,9 +15286,11 @@ function renderConfirmationView() {
     
     // Priority 4: Build from selected product if nothing else is available
     if (!hasItems && (state.selectedProductId || state.membershipPlanId)) {
-      const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
-      const nameEl = node.querySelector('[data-element="name"]');
-      const priceEl = node.querySelector('[data-element="price"]');
+      const node = templates.confirmationItem 
+        ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+        : createPurchaseItemElement();
+      const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+      const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
       
       if (nameEl) {
         // Try to find product name from available product lists
