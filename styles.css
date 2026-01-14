@@ -941,33 +941,26 @@ body {
 .step-circle.active::before {
     content: '';
     position: absolute;
-    inset: -2px;
+    inset: -3px;
     border-radius: 50%;
-    padding: 2px;
     background: conic-gradient(
         from 0deg,
         transparent 0deg,
-        transparent 90deg,
-        #f0f 90deg,
-        #f0f 180deg,
-        transparent 180deg,
-        transparent 270deg,
-        #f0f 270deg,
+        rgba(244, 1, 245, 0.1) 90deg,
+        rgba(244, 1, 245, 0.3) 180deg,
+        rgba(244, 1, 245, 0.6) 270deg,
+        #f0f 350deg,
         #f0f 360deg
     );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    animation: border-beam 3s linear infinite;
+    animation: spin 1.5s linear infinite;
+    z-index: -1;
+    filter: blur(4px) brightness(1.5);
     pointer-events: none;
 }
 
-@keyframes border-beam {
-    0% {
-        transform: rotate(0deg);
-    }
-    100% {
-        transform: rotate(360deg);
+@keyframes spin {
+    100% { 
+        transform: rotate(360deg); 
     }
 }
 
