@@ -15074,52 +15074,52 @@ function renderConfirmationView() {
 
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
-  // Priority: Use API data (state.fullOrder) when available, fallback to state.order
+  // Use API data only - no fallbacks to state.order or calculated values
   const apiOrder = state.fullOrder;
-  const orderData = apiOrder || state.order;
   
-  // Order number - from API order.number or fallback
+  // Order number - from API only
   if (orderNumber) {
-    const number = apiOrder?.number || apiOrder?.id || state.order?.number || state.orderId || '—';
+    const number = apiOrder?.number || apiOrder?.id || '—';
     orderNumber.textContent = number;
   }
   
-  // Order date - from API order.createdAt/created or fallback
+  // Order date - from API only
   if (orderDate) {
-    const date = apiOrder?.createdAt ? new Date(apiOrder.createdAt) : 
-                 apiOrder?.created ? new Date(apiOrder.created) :
-                 state.order?.date ? new Date(state.order.date) : new Date();
-    orderDate.textContent = new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(date);
+    if (apiOrder?.createdAt || apiOrder?.created) {
+      const date = apiOrder.createdAt ? new Date(apiOrder.createdAt) : new Date(apiOrder.created);
+      orderDate.textContent = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(date);
+    } else {
+      orderDate.textContent = '—';
+    }
   }
   
-  // Order total - from API order.price.amount or fallback
+  // Order total - from API only
   if (orderTotal) {
-    let total = 0;
     if (apiOrder?.price?.amount) {
       const amount = apiOrder.price.amount;
-      total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      const total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      orderTotal.textContent = currencyFormatter.format(total);
     } else if (apiOrder?.total) {
-      total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
+      const total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
+      orderTotal.textContent = currencyFormatter.format(total);
     } else {
-      total = state.order?.total || 0;
+      orderTotal.textContent = '—';
     }
-    orderTotal.textContent = currencyFormatter.format(total);
   }
   
-  // Member name - from API order.customer or fallback
+  // Member name - from API only
   if (memberName) {
     let name = '—';
     if (apiOrder?.customer) {
       const customer = apiOrder.customer;
       name = customer.fullName || 
             (customer.firstName && customer.lastName ? `${customer.firstName} ${customer.lastName}` : null) ||
-            customer.name || '—';
-    } else {
-      name = state.order?.memberName || '—';
+            customer.name ||
+            '—';
     }
     memberName.textContent = name;
     // Also update in other sections
@@ -15129,26 +15129,19 @@ function renderConfirmationView() {
     if (punchCardMemberName) punchCardMemberName.textContent = name;
   }
   
-  // Membership-specific fields - from API subscriptionItems[0].subscription or fallback
+  // Membership-specific fields - from API only
   if (membershipNumber) {
     let membershipId = '—';
     if (apiOrder?.subscriptionItems?.[0]?.subscription?.id) {
       membershipId = apiOrder.subscriptionItems[0].subscription.id.toString();
     } else if (apiOrder?.customer?.id) {
       membershipId = apiOrder.customer.id.toString();
-    } else {
-      membershipId = state.order?.membershipNumber || '—';
     }
     membershipNumber.textContent = membershipId;
   }
   
   if (membershipType) {
-    let type = '—';
-    if (apiOrder?.subscriptionItems?.[0]?.product?.name) {
-      type = apiOrder.subscriptionItems[0].product.name;
-    } else {
-      type = state.order?.membershipType || '—';
-    }
+    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || '—';
     membershipType.textContent = type;
   }
   
@@ -15158,8 +15151,6 @@ function renderConfirmationView() {
       gym = resolveGymLabel(apiOrder.customer.primaryGym);
     } else if (apiOrder?.businessUnit?.name) {
       gym = apiOrder.businessUnit.name;
-    } else {
-      gym = state.order?.primaryGym || '—';
     }
     primaryGym.textContent = gym;
     // Also update in other sections
@@ -15168,57 +15159,53 @@ function renderConfirmationView() {
   }
   
   if (membershipPrice) {
-    let price = 0;
+    let price = null;
     if (apiOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount) {
       const amount = apiOrder.subscriptionItems[0].payRecurring.price.amount;
       price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
     } else if (apiOrder?.subscriptionItems?.[0]?.price?.amount) {
       const amount = apiOrder.subscriptionItems[0].price.amount;
       price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
-    } else {
-      price = state.order?.membershipPrice || 0;
     }
-    membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(price))}/month`;
+    
+    if (price !== null) {
+      membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(price))}/month`;
+    } else {
+      membershipPrice.textContent = '—';
+    }
   }
   
-  // 15 Day Pass specific fields - from API subscriptionItems[0] or fallback
+  // 15 Day Pass specific fields - from API only
   if (productType === '15daypass') {
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
     const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
     
-    // Get start date from API subscription startDate or order date
-    let startDate = new Date();
-    if (apiOrder?.subscriptionItems?.[0]?.subscription?.startDate) {
-      startDate = new Date(apiOrder.subscriptionItems[0].subscription.startDate);
-    } else if (apiOrder?.createdAt) {
-      startDate = new Date(apiOrder.createdAt);
-    } else if (apiOrder?.created) {
-      startDate = new Date(apiOrder.created);
-    } else if (state.order?.date) {
-      startDate = new Date(state.order.date);
-    }
-    
+    // Get start date from API subscription startDate only
     if (passStartDate) {
-      passStartDate.textContent = new Intl.DateTimeFormat('da-DK', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }).format(startDate);
+      if (apiOrder?.subscriptionItems?.[0]?.subscription?.startDate) {
+        const startDate = new Date(apiOrder.subscriptionItems[0].subscription.startDate);
+        passStartDate.textContent = new Intl.DateTimeFormat('da-DK', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }).format(startDate);
+      } else {
+        passStartDate.textContent = '—';
+      }
     }
     
+    // Get end date from API subscription endDate only
     if (passEndDate) {
-      // Get end date from API subscription endDate or calculate (start + 15 days)
-      let endDate = new Date(startDate);
       if (apiOrder?.subscriptionItems?.[0]?.subscription?.endDate) {
-        endDate = new Date(apiOrder.subscriptionItems[0].subscription.endDate);
+        const endDate = new Date(apiOrder.subscriptionItems[0].subscription.endDate);
+        passEndDate.textContent = new Intl.DateTimeFormat('da-DK', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }).format(endDate);
       } else {
-        endDate.setDate(endDate.getDate() + 15);
+        passEndDate.textContent = '—';
       }
-      passEndDate.textContent = new Intl.DateTimeFormat('da-DK', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }).format(endDate);
     }
   }
   
@@ -15234,53 +15221,61 @@ function createPurchaseItemElement() {
   return item;
 }
 
-  // Punch Card specific fields - from API valueCardItems[0] or fallback
+  // Punch Card specific fields - from API only
   if (productType === 'punch-card') {
     const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
     const punchCardQuantity = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-quantity"]');
     const punchCardSessions = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-sessions"]');
     const punchCardExpiry = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-expiry"]');
     
-    // Priority: Use API valueCardItems data
+    // Use API valueCardItems data only
     const valueCardItem = apiOrder?.valueCardItems?.[0];
-    const cartItem = state.cartItems?.find(item => item.type === 'value-card' || item.type === 'punch-card');
     
     if (punchCardType) {
-      const cardName = valueCardItem?.product?.name || cartItem?.name?.replace(/ ×\d+$/, '') || 'Klippekort';
+      const cardName = valueCardItem?.product?.name || '—';
       punchCardType.textContent = cardName;
     }
     
     if (punchCardQuantity) {
-      const quantity = valueCardItem?.quantity || cartItem?.quantity || 1;
+      const quantity = valueCardItem?.quantity || '—';
       punchCardQuantity.textContent = quantity.toString();
     }
     
     if (punchCardSessions) {
-      // Calculate total sessions (quantity * sessions per card)
-      const quantity = valueCardItem?.quantity || cartItem?.quantity || 1;
-      const sessionsPerCard = valueCardItem?.valueCard?.numberOfPassages || 
-                             valueCardItem?.product?.numberOfPassages ||
-                             10; // Default 10
-      punchCardSessions.textContent = (quantity * sessionsPerCard).toString();
+      // Calculate total sessions from API data only (quantity * sessions per card)
+      if (valueCardItem?.quantity && (valueCardItem?.valueCard?.numberOfPassages || valueCardItem?.product?.numberOfPassages)) {
+        const quantity = valueCardItem.quantity;
+        const sessionsPerCard = valueCardItem.valueCard?.numberOfPassages || valueCardItem.product?.numberOfPassages;
+        punchCardSessions.textContent = (quantity * sessionsPerCard).toString();
+      } else {
+        punchCardSessions.textContent = '—';
+      }
     }
     
     if (punchCardExpiry) {
-      // Get expiry from API valueCard validUntil or calculate (purchase + 6 months)
-      let expiryDate = new Date();
-      if (valueCardItem?.valueCard?.validUntil) {
-        expiryDate = new Date(valueCardItem.valueCard.validUntil);
-      } else {
-        const purchaseDate = apiOrder?.createdAt ? new Date(apiOrder.createdAt) :
-                            apiOrder?.created ? new Date(apiOrder.created) :
-                            state.order?.date ? new Date(state.order.date) : new Date();
-        expiryDate = new Date(purchaseDate);
-        expiryDate.setMonth(expiryDate.getMonth() + 6); // 6 months validity
+      // Get expiry from API only
+      // Per OpenAPI: ValueCardItemOut has validUntil field, and ValueCardOut also has validUntil
+      let expiryDate = null;
+      
+      // Priority 1: Check valueCardItem.validUntil (direct field on the item)
+      if (valueCardItem?.validUntil) {
+        expiryDate = new Date(valueCardItem.validUntil);
       }
-      punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }).format(expiryDate);
+      // Priority 2: Check valueCard.validUntil (nested in valueCard object)
+      else if (valueCardItem?.valueCard?.validUntil) {
+        expiryDate = new Date(valueCardItem.valueCard.validUntil);
+      }
+      
+      // Display expiry date from API, or show '—' if not available
+      if (expiryDate) {
+        punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }).format(expiryDate);
+      } else {
+        punchCardExpiry.textContent = '—';
+      }
     }
   }
 
