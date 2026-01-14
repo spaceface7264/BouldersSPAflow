@@ -12936,10 +12936,15 @@ async function handleCheckout() {
       }
       
       // Add value cards (punch cards) - add FIRST if no membership, or AFTER payment link if membership exists
+      // CRITICAL: Check if punch cards are already in the order (e.g., from discount flow) to avoid duplicates
       let valueCardAddFailed = false;
       let valueCardError = null;
       
       if (state.valueCardQuantities && state.valueCardQuantities.size > 0) {
+        // Check existing valueCardItems in order to avoid duplicates
+        const existingValueCardItems = state.fullOrder?.valueCardItems || [];
+        const existingProductIds = new Set(existingValueCardItems.map(item => item.product?.id));
+        
         for (const [planId, quantity] of state.valueCardQuantities.entries()) {
           if (quantity > 0) {
             try {
@@ -12948,10 +12953,23 @@ async function handleCheckout() {
                 ? parseInt(planId.replace('punch-', ''), 10)
                 : planId;
               
-              // API doesn't accept quantity in payload - call API once per quantity
-              for (let i = 0; i < quantity; i++) {
+              // Check if this product is already in the order
+              const existingCount = existingValueCardItems.filter(item => item.product?.id === numericProductId).length;
+              const neededCount = quantity;
+              
+              if (existingCount >= neededCount) {
+                console.log(`[checkout] ⚠️ Value card ${planId} (productId: ${numericProductId}) already in order (${existingCount} items, need ${neededCount}) - skipping`);
+                continue;
+              }
+              
+              // Only add the difference
+              const toAdd = neededCount - existingCount;
+              console.log(`[checkout] Adding ${toAdd} value card(s) for ${planId} (${existingCount} already in order, need ${neededCount})`);
+              
+              // API doesn't accept quantity in payload - call API once per quantity needed
+              for (let i = 0; i < toAdd; i++) {
                 await orderAPI.addValueCardItem(state.orderId, numericProductId, 1);
-                console.log(`[checkout] ✅ Value card added: ${planId} (productId: ${numericProductId}) [${i + 1}/${quantity}]`);
+                console.log(`[checkout] ✅ Value card added: ${planId} (productId: ${numericProductId}) [${existingCount + i + 1}/${neededCount}]`);
               }
             } catch (error) {
               valueCardAddFailed = true;
@@ -15222,52 +15240,74 @@ function createPurchaseItemElement() {
 }
 
   // Punch Card specific fields - from API only
+  // Show aggregate info for all punch cards if multiple, or single card details
   if (productType === 'punch-card') {
     const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
     const punchCardQuantity = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-quantity"]');
     const punchCardSessions = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-sessions"]');
     const punchCardExpiry = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-expiry"]');
     
-    // Use API valueCardItems data only
-    const valueCardItem = apiOrder?.valueCardItems?.[0];
+    // Use API valueCardItems data - aggregate if multiple cards
+    const valueCardItems = apiOrder?.valueCardItems || [];
+    const totalQuantity = valueCardItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
     
     if (punchCardType) {
-      const cardName = valueCardItem?.product?.name || '—';
-      punchCardType.textContent = cardName;
+      // Show product name from first card, or indicate multiple types if different
+      // Remove card number from name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
+      if (valueCardItems.length > 0) {
+        let firstCardName = valueCardItems[0]?.product?.name || 'Klippekort';
+        // Remove card number in parentheses (e.g., " (400117054549)")
+        firstCardName = firstCardName.replace(/\s*\(\d+\)\s*$/, '');
+        
+        if (valueCardItems.length === 1) {
+          punchCardType.textContent = firstCardName;
+        } else {
+          // Multiple cards - show first card name with count
+          punchCardType.textContent = `${firstCardName} (${valueCardItems.length} kort)`;
+        }
+      } else {
+        punchCardType.textContent = '—';
+      }
     }
     
     if (punchCardQuantity) {
-      const quantity = valueCardItem?.quantity || '—';
-      punchCardQuantity.textContent = quantity.toString();
+      punchCardQuantity.textContent = totalQuantity > 0 ? totalQuantity.toString() : '—';
     }
     
     if (punchCardSessions) {
-      // Calculate total sessions from API data only (quantity * sessions per card)
-      if (valueCardItem?.quantity && (valueCardItem?.valueCard?.numberOfPassages || valueCardItem?.product?.numberOfPassages)) {
-        const quantity = valueCardItem.quantity;
-        const sessionsPerCard = valueCardItem.valueCard?.numberOfPassages || valueCardItem.product?.numberOfPassages;
-        punchCardSessions.textContent = (quantity * sessionsPerCard).toString();
-      } else {
-        punchCardSessions.textContent = '—';
-      }
+      // Calculate total sessions from all cards
+      let totalSessions = 0;
+      let hasSessionData = false;
+      
+      valueCardItems.forEach(item => {
+        const quantity = item.quantity || 1;
+        const sessionsPerCard = item.valueCard?.numberOfPassages || item.product?.numberOfPassages;
+        if (sessionsPerCard) {
+          totalSessions += quantity * sessionsPerCard;
+          hasSessionData = true;
+        }
+      });
+      
+      punchCardSessions.textContent = hasSessionData ? totalSessions.toString() : '—';
     }
     
     if (punchCardExpiry) {
-      // Get expiry from API only
+      // Get expiry from first card (all should have same expiry)
       // Per OpenAPI: ValueCardItemOut has validUntil field, and ValueCardOut also has validUntil
       let expiryDate = null;
+      const firstCard = valueCardItems[0];
       
       // Priority 1: Check valueCardItem.validUntil (direct field on the item)
-      if (valueCardItem?.validUntil) {
-        expiryDate = new Date(valueCardItem.validUntil);
+      if (firstCard?.validUntil) {
+        expiryDate = new Date(firstCard.validUntil);
       }
       // Priority 2: Check valueCard.validUntil (nested in valueCard object)
-      else if (valueCardItem?.valueCard?.validUntil) {
-        expiryDate = new Date(valueCardItem.valueCard.validUntil);
+      else if (firstCard?.valueCard?.validUntil) {
+        expiryDate = new Date(firstCard.valueCard.validUntil);
       }
       
       // Display expiry date from API, or show '—' if not available
-      if (expiryDate) {
+      if (expiryDate && !isNaN(expiryDate.getTime())) {
         punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
           year: 'numeric',
           month: 'long',
@@ -15332,9 +15372,10 @@ function createPurchaseItemElement() {
           const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
           
           if (nameEl) {
-            const productName = item.product?.name || 'Klippekort';
-            const cardNumber = item.valueCard?.number || '';
-            nameEl.textContent = cardNumber ? `${productName} (${cardNumber})` : productName;
+            let productName = item.product?.name || 'Klippekort';
+            // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
+            productName = productName.replace(/\s*\(\d+\)\s*$/, '');
+            nameEl.textContent = productName;
           }
           
           if (priceEl) {
@@ -15657,15 +15698,15 @@ async function showDetailedReceipt() {
       order.valueCardItems.forEach(item => {
         const itemRow = document.createElement('div');
         itemRow.className = 'receipt-item';
-        const itemName = item.product?.name || 'Klippekort';
+        let itemName = item.product?.name || 'Klippekort';
+        // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
+        itemName = itemName.replace(/\s*\(\d+\)\s*$/, '');
         const itemQuantity = item.quantity || 1;
         // Per ValueCardItemOut: price.amount is total price for all quantity (not per unit)
         const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
-        // Per ValueCardOutRef schema: valueCard.number is the card number
-        const itemId = item.valueCard?.number || item.product?.productNumber || '';
         
         itemRow.innerHTML = `
-          <div>${itemName}${itemId ? ` (${itemId})` : ''}</div>
+          <div>${itemName}</div>
           <div>${itemQuantity}</div>
           <div>${currencyFormatter.format(itemTotal)}</div>
         `;
