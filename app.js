@@ -15168,6 +15168,7 @@ function renderConfirmationView() {
   // Populate product details from full order (subscriptionItems/valueCardItems) or fallback to state.order.items
   if (templates.confirmationItem && DOM.confirmationItems) {
     DOM.confirmationItems.innerHTML = '';
+    let hasItems = false;
     
     // Priority 1: Use fullOrder data (from API) for detailed product information
     if (state.fullOrder) {
@@ -15190,6 +15191,7 @@ function renderConfirmationView() {
           }
           
           DOM.confirmationItems.appendChild(node);
+          hasItems = true;
         });
       }
       
@@ -15213,12 +15215,13 @@ function renderConfirmationView() {
           }
           
           DOM.confirmationItems.appendChild(node);
+          hasItems = true;
         });
       }
     }
     
-    // Priority 2: Fallback to state.order.items if fullOrder not available
-    if ((!state.fullOrder || (!state.fullOrder.subscriptionItems?.length && !state.fullOrder.valueCardItems?.length)) && state.order?.items) {
+    // Priority 2: Fallback to state.order.items if fullOrder not available or has no items
+    if (!hasItems && state.order?.items && state.order.items.length > 0) {
       state.order.items.forEach((item) => {
         const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
         const nameEl = node.querySelector('[data-element="name"]');
@@ -15226,6 +15229,76 @@ function renderConfirmationView() {
         if (nameEl) nameEl.textContent = item.name;
         if (priceEl) priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(item.amount));
         DOM.confirmationItems.appendChild(node);
+        hasItems = true;
+      });
+    }
+    
+    // Priority 3: Fallback to state.cartItems if order.items is empty
+    if (!hasItems && state.cartItems && state.cartItems.length > 0) {
+      state.cartItems.forEach((item) => {
+        const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
+        const nameEl = node.querySelector('[data-element="name"]');
+        const priceEl = node.querySelector('[data-element="price"]');
+        if (nameEl) {
+          // Remove quantity suffix if present (e.g., " ×2")
+          const itemName = item.name?.replace(/\s×\d+$/, '') || item.name || 'Item';
+          nameEl.textContent = itemName;
+        }
+        if (priceEl) {
+          const itemPrice = item.price || item.amount || 0;
+          priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemPrice));
+        }
+        DOM.confirmationItems.appendChild(node);
+        hasItems = true;
+      });
+    }
+    
+    // Priority 4: Build from selected product if nothing else is available
+    if (!hasItems && (state.selectedProductId || state.membershipPlanId)) {
+      const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
+      const nameEl = node.querySelector('[data-element="name"]');
+      const priceEl = node.querySelector('[data-element="price"]');
+      
+      if (nameEl) {
+        // Try to find product name from available product lists
+        const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || []), ...(state.campaignSubscriptions || [])];
+        const allValueCards = state.valueCards || [];
+        const allProducts = [...allSubscriptions, ...allValueCards];
+        
+        const productId = state.selectedProductId || state.membershipPlanId;
+        const numericId = String(productId).replace(/^(campaign|membership|15daypass|punch)-/, '');
+        const productIdNum = parseInt(numericId, 10);
+        
+        const foundProduct = allProducts.find(p => 
+          p.id === productId || 
+          p.id === productIdNum ||
+          String(p.id) === numericId
+        );
+        
+        const productName = foundProduct?.name || 
+                           (state.selectedProductType === 'punch-card' ? 'Klippekort' : 'Medlemskab');
+        nameEl.textContent = productName;
+      }
+      
+      if (priceEl) {
+        const itemPrice = state.totals?.membershipMonthly || state.totals?.cartTotal || state.order?.total || 0;
+        priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemPrice));
+      }
+      
+      DOM.confirmationItems.appendChild(node);
+      hasItems = true;
+    }
+    
+    // Log if no items were found
+    if (!hasItems) {
+      console.warn('[Confirmation] No product details available to display:', {
+        hasFullOrder: !!state.fullOrder,
+        hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length),
+        hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+        hasOrderItems: !!(state.order?.items?.length),
+        hasCartItems: !!(state.cartItems?.length),
+        selectedProductId: state.selectedProductId,
+        membershipPlanId: state.membershipPlanId
       });
     }
   }
