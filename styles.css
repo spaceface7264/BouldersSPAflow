@@ -1728,7 +1728,7 @@ body {
     
     /* Remove padding-bottom from plan-card in plans-list */
     .plans-list .plan-card {
-        padding-bottom: 0;
+        padding-bottom: 20px !important;
     }
     
     .plans-list .plan-card:last-child {
@@ -2896,7 +2896,7 @@ body {
 
     .plans-list .plan-card {
         padding: 20px;
-        padding-bottom: 0;
+        padding-bottom: 20px !important; /* Match the rule at line 1731 */
     }
 
     .price-amount {
