@@ -654,20 +654,9 @@ class ReferenceDataAPI {
       });
       
       if (!response.ok) {
-        // If 404, endpoint doesn't exist yet - try local lookup as fallback
+        // If 404, endpoint doesn't exist yet - return unavailable flag
         if (response.status === 404) {
-          console.log('[PostalCode] Address lookup endpoint not available (404) - trying local lookup...');
-          
-          // Try local lookup if available
-          if (typeof lookupCityByPostalCode === 'function') {
-            const localCity = lookupCityByPostalCode(cleanPostalCode);
-            if (localCity) {
-              console.log('[PostalCode] Found city in local lookup:', localCity);
-              return localCity;
-            }
-          }
-          
-          // If local lookup also fails, return unavailable flag
+          console.log('[PostalCode] Address lookup endpoint not available (404)');
           return { unavailable: true };
         }
         
@@ -691,21 +680,10 @@ class ReferenceDataAPI {
       return null;
     } catch (error) {
       console.error('[PostalCode] Error looking up city by postal code:', error);
-      // Network errors or CORS issues - try local lookup as fallback
+      // Network errors or CORS issues - return unavailable flag
       const errorMessage = error.message || String(error);
       if (errorMessage.includes('Failed to fetch') || errorMessage.includes('CORS') || errorMessage.includes('NetworkError')) {
-        console.log('[PostalCode] Network/CORS error - trying local lookup...');
-        
-        // Try local lookup if available
-        if (typeof lookupCityByPostalCode === 'function') {
-          const cleanPostalCode = postalCode.trim().replace(/\s+/g, '');
-          const localCity = lookupCityByPostalCode(cleanPostalCode);
-          if (localCity) {
-            console.log('[PostalCode] Found city in local lookup:', localCity);
-            return localCity;
-          }
-        }
-        
+        console.log('[PostalCode] Network/CORS error - API unavailable');
         return { unavailable: true };
       }
       return null; // Don't throw - just return null if lookup fails
