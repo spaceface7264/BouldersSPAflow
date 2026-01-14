@@ -15442,6 +15442,11 @@ async function showDetailedReceipt() {
     }
   }
   
+  // Move modal to body to escape any parent stacking contexts
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+  
   // Show modal
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden'; // Prevent background scrolling
