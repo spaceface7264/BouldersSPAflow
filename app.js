@@ -5178,8 +5178,8 @@ const translations = {
     'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By', 'form.city.placeholder': 'Auto',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Indtast din e-mail', 'form.country': 'Land', 'form.phoneNumber': 'Mobilnummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
-    'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Gem konto',
-    'form.buyer': 'Køber', 'form.createProfile': 'OPRET PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
+    'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Opret profil',
+    'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
     'form.parentDateOfBirth': 'Fødselsdato*', 'form.parentStreetAddress': 'Gade og husnummer*', 'form.parentStreetAddress.placeholder': 'Indtast gade og husnummer',
     'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By', 'form.parentCity.placeholder': 'København',
@@ -9770,10 +9770,14 @@ function setupPostalCodeAutoFill() {
         clearTimeout(postalCodeLookupTimers.customer);
       }
       
-      // Clear city field if postal code is empty
+      // Clear city field if postal code is empty and revert to readonly
       if (!postalCode || postalCode.length === 0) {
         if (DOM.city) {
           DOM.city.value = '';
+          DOM.city.setAttribute('readonly', 'readonly');
+          DOM.city.removeAttribute('placeholder');
+          DOM.city.style.opacity = '1';
+          DOM.city.style.cursor = 'default';
         }
         return;
       }
@@ -9802,32 +9806,44 @@ function setupPostalCodeAutoFill() {
                 console.log('[PostalCode] API unavailable - city field is now editable');
               }
             } else if (result && typeof result === 'string') {
-              // City found - auto-fill
+              // City found - auto-fill and set readonly
               if (DOM.city) {
                 DOM.city.value = result;
+                DOM.city.setAttribute('readonly', 'readonly');
+                DOM.city.removeAttribute('placeholder');
                 DOM.city.style.opacity = '1';
+                DOM.city.style.cursor = 'default';
                 console.log('[PostalCode] Auto-filled city:', result, 'for postal code:', postalCode);
               }
             } else {
-              // City not found - clear field but keep readonly
+              // City not found - make field editable so user can enter city manually
               if (DOM.city) {
                 DOM.city.value = '';
+                DOM.city.removeAttribute('readonly');
+                DOM.city.placeholder = 'Enter city name';
                 DOM.city.style.opacity = '1';
+                DOM.city.style.cursor = 'text';
+                console.log('[PostalCode] No city found for postal code:', postalCode, '- city field is now editable');
               }
-              console.log('[PostalCode] No city found for postal code:', postalCode);
             }
           } catch (error) {
             console.error('[PostalCode] Error looking up city:', error);
             if (DOM.city) {
               DOM.city.value = '';
+              DOM.city.setAttribute('readonly', 'readonly');
+              DOM.city.removeAttribute('placeholder');
               DOM.city.style.opacity = '1';
+              DOM.city.style.cursor = 'default';
             }
           }
         } else {
-          // Invalid format - clear city field
+          // Invalid format - clear city field and revert to readonly
           if (DOM.city) {
             DOM.city.value = '';
+            DOM.city.setAttribute('readonly', 'readonly');
+            DOM.city.removeAttribute('placeholder');
             DOM.city.style.opacity = '1';
+            DOM.city.style.cursor = 'default';
           }
         }
       }, 500);
@@ -9893,10 +9909,14 @@ function setupPostalCodeAutoFill() {
         clearTimeout(postalCodeLookupTimers.parent);
       }
       
-      // Clear city field if postal code is empty
+      // Clear city field if postal code is empty and revert to readonly
       if (!postalCode || postalCode.length === 0) {
         if (DOM.parentCity) {
           DOM.parentCity.value = '';
+          DOM.parentCity.setAttribute('readonly', 'readonly');
+          DOM.parentCity.removeAttribute('placeholder');
+          DOM.parentCity.style.opacity = '1';
+          DOM.parentCity.style.cursor = 'default';
         }
         return;
       }
@@ -9925,32 +9945,44 @@ function setupPostalCodeAutoFill() {
                 console.log('[PostalCode] API unavailable - parent city field is now editable');
               }
             } else if (result && typeof result === 'string') {
-              // City found - auto-fill
+              // City found - auto-fill and set readonly
               if (DOM.parentCity) {
                 DOM.parentCity.value = result;
+                DOM.parentCity.setAttribute('readonly', 'readonly');
+                DOM.parentCity.removeAttribute('placeholder');
                 DOM.parentCity.style.opacity = '1';
+                DOM.parentCity.style.cursor = 'default';
                 console.log('[PostalCode] Auto-filled parent city:', result, 'for postal code:', postalCode);
               }
             } else {
-              // City not found - clear field but keep readonly
+              // City not found - make field editable so user can enter city manually
               if (DOM.parentCity) {
                 DOM.parentCity.value = '';
+                DOM.parentCity.removeAttribute('readonly');
+                DOM.parentCity.placeholder = 'Enter city name';
                 DOM.parentCity.style.opacity = '1';
+                DOM.parentCity.style.cursor = 'text';
+                console.log('[PostalCode] No city found for parent postal code:', postalCode, '- city field is now editable');
               }
-              console.log('[PostalCode] No city found for parent postal code:', postalCode);
             }
           } catch (error) {
             console.error('[PostalCode] Error looking up parent city:', error);
             if (DOM.parentCity) {
               DOM.parentCity.value = '';
+              DOM.parentCity.setAttribute('readonly', 'readonly');
+              DOM.parentCity.removeAttribute('placeholder');
               DOM.parentCity.style.opacity = '1';
+              DOM.parentCity.style.cursor = 'default';
             }
           }
         } else {
-          // Invalid format - clear city field
+          // Invalid format - clear city field and revert to readonly
           if (DOM.parentCity) {
             DOM.parentCity.value = '';
+            DOM.parentCity.setAttribute('readonly', 'readonly');
+            DOM.parentCity.removeAttribute('placeholder');
             DOM.parentCity.style.opacity = '1';
+            DOM.parentCity.style.cursor = 'default';
           }
         }
       }, 500);
@@ -9986,14 +10018,23 @@ function setupPostalCodeAutoFill() {
               DOM.parentCity.style.cursor = 'text';
             }
           } else if (result && typeof result === 'string') {
-            // City found - auto-fill
+            // City found - auto-fill and set readonly
             if (DOM.parentCity) {
               DOM.parentCity.value = result;
+              DOM.parentCity.setAttribute('readonly', 'readonly');
+              DOM.parentCity.removeAttribute('placeholder');
               DOM.parentCity.style.opacity = '1';
+              DOM.parentCity.style.cursor = 'default';
             }
-          } else if (DOM.parentCity) {
-            DOM.parentCity.value = '';
-            DOM.parentCity.style.opacity = '1';
+          } else {
+            // City not found - make field editable so user can enter city manually
+            if (DOM.parentCity) {
+              DOM.parentCity.value = '';
+              DOM.parentCity.removeAttribute('readonly');
+              DOM.parentCity.placeholder = 'Enter city name';
+              DOM.parentCity.style.opacity = '1';
+              DOM.parentCity.style.cursor = 'text';
+            }
           }
         } catch (error) {
           console.error('[PostalCode] Error looking up parent city on blur:', error);
