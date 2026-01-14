@@ -2066,7 +2066,7 @@ body {
     justify-content: flex-start;
     padding: 20px 24px; /* Increased padding for comfortable spacing */
     position: relative;
-    height: 100%; /* Fill container height */
+    height: auto; /* Allow content to determine height naturally */
     min-height: auto; /* Allow content to determine minimum height */
     opacity: 0;
     transform: translateY(15px) scale(0.95);
@@ -2186,8 +2186,8 @@ body {
     align-items: stretch;
     gap: 20px; /* Increased gap for better spacing */
     padding-right: 0;
-    min-height: 100%;
-    height: 100%;
+    min-height: auto; /* Allow content to determine height */
+    height: auto; /* Allow content to determine height */
 }
 
 .plan-content-left {
@@ -2198,7 +2198,7 @@ body {
     gap: 6px;
     align-items: flex-start;
     justify-content: space-between;
-    min-height: 100%;
+    min-height: auto; /* Allow content to determine height */
 }
 
 .plan-type {
@@ -2303,6 +2303,15 @@ body {
         min-height: auto; /* Allow cards to expand to fit content */
         height: auto; /* Allow content to determine height naturally */
         padding: 20px 20px 50px 20px; /* Increased padding with extra bottom for check-circle */
+    }
+    
+    .plan-info {
+        height: auto !important; /* Override base styles */
+        min-height: auto !important;
+    }
+    
+    .plan-content-left {
+        min-height: auto !important; /* Override base styles */
     }
     
     .plan-description {
@@ -2421,8 +2430,8 @@ body {
 
 
     .plan-card {
-        padding: 20px 24px; /* Increased padding for comfortable spacing */
-        height: 100%;
+        padding: 20px 24px 50px 24px; /* Increased padding with extra bottom for check-circle */
+        height: auto; /* Allow content to determine height */
         min-height: auto;
     }
 
@@ -2430,13 +2439,13 @@ body {
         padding-right: 0;
         gap: 20px; /* Increased gap for better spacing */
         align-items: stretch;
-        min-height: 100%;
-        height: 100%;
+        min-height: auto; /* Allow content to determine height */
+        height: auto; /* Allow content to determine height */
     }
 
     .plan-content-left {
         justify-content: space-between;
-        min-height: 100%;
+        min-height: auto; /* Allow content to determine height */
     }
 
     .plan-card .check-circle {
@@ -7171,10 +7180,19 @@ main {
     
     /* Ensure plan cards expand to fit content on mobile */
     .plan-card {
-        height: 100% !important; /* Fill container height */
+        height: auto !important; /* Allow content to determine height */
         min-height: auto !important;
         align-items: stretch;
-        padding: 20px 22px; /* Comfortable padding for mobile */
+        padding: 20px 20px 50px 20px; /* Comfortable padding with extra bottom for check-circle */
+    }
+    
+    .plan-info {
+        height: auto !important; /* Allow content to determine height */
+        min-height: auto !important;
+    }
+    
+    .plan-content-left {
+        min-height: auto !important; /* Allow content to determine height */
     }
 
     .plan-options {
