@@ -15369,7 +15369,7 @@ async function showDetailedReceipt() {
   } else {
     // Fallback to hardcoded values if business unit not available
     if (receiptSellerName) receiptSellerName.textContent = 'Boulders ApS';
-    if (receiptSellerAddress) receiptSellerAddress.textContent = 'Boulders ApS Amager, Landevej 233 2770, København Denmark';
+    if (receiptSellerAddress) receiptSellerAddress.textContent = 'Graham Bells Vej 18A, 8200 Aarhus DK';
     if (receiptSellerCVR) receiptSellerCVR.textContent = '32777651';
     if (receiptSellerPhone) receiptSellerPhone.textContent = '+45 72100019';
     if (receiptSellerEmail) receiptSellerEmail.textContent = 'medlem@boulders.dk';
