@@ -2479,6 +2479,56 @@ class AuthAPI {
     }
   }
 
+  // Get customer value cards (punch cards)
+  async getCustomerValueCards(customerId) {
+    try {
+      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/valuecards`;
+      } else if (isDevelopment) {
+        url = `/api/ver3/customers/${customerId}/valuecards`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/valuecards`;
+      }
+      
+      console.log('[AuthAPI] Fetching customer value cards:', url);
+      
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+      
+      if (!accessToken) {
+        throw new Error('No access token available');
+      }
+      
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[AuthAPI] Get value cards error (${response.status}):`, errorText);
+        throw new Error(`Get value cards failed: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[AuthAPI] Get value cards response:', data);
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error('[AuthAPI] Get value cards error:', error);
+      throw error;
+    }
+  }
+
   // Get customer signature cases (for contract documents)
   async getCustomerSignatureCases(customerId) {
     try {
@@ -18027,8 +18077,146 @@ const ProfilePage = {
     
     // Payment card needs async call for subscriptions/invoices
     await ProfilePage.populatePaymentCard(customer);
+    
+    // Populate products card (memberships, 15 day passes, punch cards)
+    await ProfilePage.populateProductsCard(customer, subscriptions);
 
     console.log('[Profile] Profile page populated successfully');
+  },
+
+  /**
+   * Populate "My Products" card with subscriptions, 15 day passes, and punch cards
+   */
+  async populateProductsCard(customer, subscriptions = []) {
+    const productsCard = document.getElementById('profileProductsCard');
+    const productsList = document.getElementById('profileProductsList');
+    
+    if (!productsCard || !productsList) {
+      console.warn('[Profile] Products card elements not found');
+      return;
+    }
+    
+    try {
+      // Fetch subscriptions if not provided
+      if (subscriptions.length === 0 && state.customerId) {
+        subscriptions = await authAPI.getCustomerSubscriptions(state.customerId);
+      }
+      
+      // Fetch value cards (punch cards)
+      let valueCards = [];
+      if (state.customerId) {
+        try {
+          valueCards = await authAPI.getCustomerValueCards(state.customerId);
+          console.log('[Profile] Fetched value cards:', valueCards);
+        } catch (err) {
+          console.warn('[Profile] Could not fetch value cards:', err);
+        }
+      }
+      
+      // Filter active subscriptions (memberships and 15 day passes)
+      const activeSubscriptions = subscriptions.filter(sub => {
+        if (sub.statuses?.some(s => s.code === 'TERMINATED')) return false;
+        if (sub.expirationDay) {
+          const expirationDate = new Date(sub.expirationDay);
+          return expirationDate > new Date();
+        }
+        return true;
+      });
+      
+      // Filter active value cards (punch cards)
+      const activeValueCards = valueCards.filter(card => {
+        if (card.validUntil) {
+          const validUntilDate = new Date(card.validUntil);
+          return validUntilDate > new Date();
+        }
+        return true;
+      });
+      
+      // Check if user has any products
+      const hasProducts = activeSubscriptions.length > 0 || activeValueCards.length > 0;
+      
+      if (hasProducts) {
+        productsCard.style.display = 'block';
+        productsList.innerHTML = '';
+        
+        // Display subscriptions (memberships and 15 day passes)
+        activeSubscriptions.forEach(sub => {
+          const productItem = document.createElement('div');
+          productItem.className = 'profile-detail-row';
+          productItem.style.cssText = 'padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05);';
+          
+          const productName = sub.subscriptionProduct?.name || 'Subscription';
+          const productType = productName.toLowerCase().includes('15') || productName.toLowerCase().includes('day') 
+            ? '15 Day Pass' 
+            : 'Membership';
+          
+          productItem.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+              <div style="flex: 1;">
+                <div style="font-weight: 600; color: #FFFFFF; margin-bottom: 4px;">${productName}</div>
+                <div style="font-size: 13px; color: #9CA3AF;">${productType}</div>
+                ${sub.start ? `<div style="font-size: 12px; color: #6B7280; margin-top: 4px;">Active since: ${ProfileUtils.formatDate(sub.start)}</div>` : ''}
+              </div>
+            </div>
+          `;
+          
+          productsList.appendChild(productItem);
+        });
+        
+        // Display value cards (punch cards)
+        activeValueCards.forEach(card => {
+          const productItem = document.createElement('div');
+          productItem.className = 'profile-detail-row';
+          productItem.style.cssText = 'padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05);';
+          
+          const productName = card.valueCardProduct?.name || card.product?.name || 'Punch Card';
+          // Remove card number from name if present
+          const cleanName = productName.replace(/\s*\(\d+\)\s*$/, '');
+          
+          // Use unitsLeft directly from API (accurate remaining sessions)
+          // For UNIT type cards, unitsLeft is the number of units/sessions remaining
+          const unitsLeft = card.unitsLeft !== undefined ? card.unitsLeft : null;
+          const cardType = card.type || 'UNIT';
+          
+          // Build sessions display text
+          let sessionsText = '';
+          if (cardType === 'UNIT' && unitsLeft !== null) {
+            sessionsText = `Sessions: ${unitsLeft} remaining`;
+          } else if (cardType === 'AMOUNT' && card.amountLeft !== undefined) {
+            const amountLeftDKK = card.amountLeft / 100; // Convert from øre to DKK
+            sessionsText = `Amount: ${ProfileUtils.formatPrice(amountLeftDKK, 'DKK')} remaining`;
+          } else {
+            sessionsText = 'Sessions: —';
+          }
+          
+          productItem.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+              <div style="flex: 1;">
+                <div style="font-weight: 600; color: #FFFFFF; margin-bottom: 4px;">${cleanName}</div>
+                <div style="font-size: 13px; color: #9CA3AF;">Punch Card</div>
+                <div style="font-size: 12px; color: #6B7280; margin-top: 4px;">
+                  ${sessionsText}
+                  ${card.validUntil ? ` • Valid until: ${ProfileUtils.formatDate(card.validUntil)}` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+          
+          productsList.appendChild(productItem);
+        });
+        
+        console.log('[Profile] Products card populated:', {
+          subscriptions: activeSubscriptions.length,
+          valueCards: activeValueCards.length
+        });
+      } else {
+        // Hide products card if user has no products
+        productsCard.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('[Profile] Error populating products card:', error);
+      productsCard.style.display = 'none';
+    }
   },
 
   /**
