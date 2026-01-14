@@ -6281,6 +6281,9 @@ main {
 }
 
 .receipt-item-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 16px;
     font-weight: 600;
     color: #6b7280;
     text-transform: uppercase;
@@ -6288,6 +6291,7 @@ main {
     padding-bottom: 8px;
     border-bottom: 2px solid #e5e7eb;
     margin-bottom: 8px;
+    align-items: center;
 }
 
 .receipt-footer {
@@ -6403,12 +6407,15 @@ main {
     }
     
     .receipt-item {
-        grid-template-columns: 1fr;
-        gap: 6px;
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 12px;
         padding: 12px 0;
+        font-size: var(--font-size-sm);
     }
     
     .receipt-item-header {
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 12px;
         font-size: 10px;
         padding-bottom: 6px;
         margin-bottom: 6px;
@@ -6519,16 +6526,20 @@ main {
     }
     
     .receipt-item {
-        gap: 4px;
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 8px;
         padding: 10px 0;
         font-size: var(--font-size-xs);
     }
     
     .receipt-item > div {
         word-break: break-word; /* Prevent text overflow */
+        overflow-wrap: break-word;
     }
     
     .receipt-item-header {
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 8px;
         font-size: 9px;
         padding-bottom: 4px;
         margin-bottom: 4px;
