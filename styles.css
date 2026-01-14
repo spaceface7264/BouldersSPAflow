@@ -2064,9 +2064,10 @@ body {
     display: flex;
     align-items: stretch;
     justify-content: flex-start;
-    padding: 16px 20px;
+    padding: 20px 24px; /* Increased padding for comfortable spacing */
     position: relative;
-    min-height: 100px; /* Ensure minimum height to fill card */
+    height: 100%; /* Fill container height */
+    min-height: auto; /* Allow content to determine minimum height */
     opacity: 0;
     transform: translateY(15px) scale(0.95);
 }
@@ -2183,9 +2184,10 @@ body {
     flex-direction: row;
     justify-content: space-between;
     align-items: stretch;
-    gap: 16px;
+    gap: 20px; /* Increased gap for better spacing */
     padding-right: 0;
     min-height: 100%;
+    height: 100%;
 }
 
 .plan-content-left {
@@ -2297,8 +2299,8 @@ body {
     
     .plan-card {
         min-height: auto; /* Allow cards to expand to fit content */
-        height: auto;
-        padding: 16px 18px;
+        height: 100%; /* Fill container height */
+        padding: 20px 22px; /* Increased padding for comfortable spacing */
     }
 
     .check-circle {
@@ -2333,13 +2335,15 @@ body {
     }
 
     .plan-card {
-        padding: 14px 16px;
-        min-height: 70px;
+        padding: 18px 20px; /* Increased padding for comfortable spacing */
+        height: 100%; /* Fill container height */
+        min-height: auto; /* Allow content to determine minimum height */
     }
 
     .plan-info {
-        gap: 12px;
+        gap: 16px; /* Increased gap for better spacing */
         padding-right: 0;
+        height: 100%;
     }
 
     .plan-content-left {
@@ -2402,15 +2406,17 @@ body {
 
 
     .plan-card {
-        padding: 16px 20px;
-        min-height: 100px;
+        padding: 20px 24px; /* Increased padding for comfortable spacing */
+        height: 100%;
+        min-height: auto;
     }
 
     .plan-info {
         padding-right: 0;
-        gap: 16px;
+        gap: 20px; /* Increased gap for better spacing */
         align-items: stretch;
         min-height: 100%;
+        height: 100%;
     }
 
     .plan-content-left {
