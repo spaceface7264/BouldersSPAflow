@@ -15847,7 +15847,6 @@ function nextStep(fromStep) {
   // Never navigate to success page unless purchase is actually successful
   // EXCEPTION: Allow test mode via URL parameter ?testSuccess=true
   if (state.currentStep === TOTAL_STEPS) {
-<<<<<<< HEAD
     // Check URL parameters for test mode
     const urlParams = new URLSearchParams(window.location.search);
     const testMode = urlParams.get('testSuccess') === 'true';
