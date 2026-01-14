@@ -6064,7 +6064,7 @@ main {
 
 /* Order Total (Confirmation Page) */
 .order-total .total-label {
-    color: var(--color-text-primary);
+    color: white;
 }
 
 .order-total .total-amount {
