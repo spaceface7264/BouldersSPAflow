@@ -6159,6 +6159,8 @@ main {
     position: relative;
     color: #1a1a1a;
     margin-top: 56px; /* Respect header height on desktop */
+    display: flex;
+    flex-direction: column;
 }
 
 .receipt-header {
@@ -6168,6 +6170,12 @@ main {
     margin-bottom: 40px;
     padding-bottom: 20px;
     border-bottom: 2px solid #e5e7eb;
+    position: sticky;
+    top: 0;
+    background-color: white;
+    z-index: 10;
+    padding-top: 0;
+    margin-top: 0;
 }
 
 .receipt-header-left {
@@ -6335,6 +6343,10 @@ main {
         gap: 12px;
         margin-bottom: 24px;
         padding-bottom: 16px;
+        position: sticky;
+        top: 0;
+        background-color: white;
+        z-index: 10;
     }
     
     .receipt-header-left {
@@ -6448,6 +6460,10 @@ main {
         gap: 10px;
         margin-bottom: 20px;
         padding-bottom: 12px;
+        position: sticky;
+        top: 0;
+        background-color: white;
+        z-index: 10;
     }
     
     .receipt-header-left {
