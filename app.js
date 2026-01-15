@@ -3053,32 +3053,14 @@ async function loadGymsFromAPI() {
         locationBtn.classList.add('active');
       }
       
-    // Log first few gyms to verify sorting
-    devLog('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
-      name: g.name,
-      distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A',
-      hasCoordinates: !!(g.address?.latitude && g.address?.longitude)
-    })));
+      // Log first few gyms to verify sorting
+      devLog('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
+        name: g.name,
+        distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A',
+        hasCoordinates: !!(g.address?.latitude && g.address?.longitude)
+      })));
     } else {
       devLog('[Load Gyms] No user location available, displaying gyms in original order');
-    }
-
-    // Center the nearest gym in the first row when using 3-column layout
-    let nearestGymId = null;
-    if (userLocation) {
-      const nearestGym = gymsToDisplay.find(g => g.distance !== null && g.distance !== undefined);
-      if (nearestGym) {
-        nearestGymId = nearestGym.id;
-      }
-
-      if (nearestGymId && window.matchMedia('(min-width: 1024px)').matches) {
-        const targetIndex = 1; // center column in a 3-column grid
-        const currentIndex = gymsToDisplay.findIndex(g => g.id === nearestGymId);
-        if (currentIndex > -1 && currentIndex !== targetIndex && gymsToDisplay.length > targetIndex) {
-          const [nearestGymItem] = gymsToDisplay.splice(currentIndex, 1);
-          gymsToDisplay.splice(targetIndex, 0, nearestGymItem);
-        }
-      }
     }
     
     // Store existing gym items and their positions for animation
@@ -3104,8 +3086,8 @@ async function loadGymsFromAPI() {
       const gym = gymsToDisplay[i];
       if (gym.name && gym.address) {
         // Create and display gym item
-        // Mark as nearest based on actual nearest gym
-        const isNearest = userLocation && nearestGymId && gym.id === nearestGymId && gym.distance !== null && gym.distance !== undefined;
+        // Mark as nearest if it's the first gym AND has a valid distance
+        const isNearest = i === 0 && userLocation && gym.distance !== null && gym.distance !== undefined;
         if (isNearest) {
           devLog('[Load Gyms] Marking as nearest:', gym.name, `${gym.distance.toFixed(2)} km`);
         }
@@ -8074,6 +8056,43 @@ function handleCategoryToggle(category) {
   }
 }
 
+function getProductPriceDKK(product) {
+  if (!product) return 0;
+  if (product.price?.amount) return product.price.amount / 100;
+  if (product.amount) return product.amount / 100;
+  if (product.priceWithInterval?.price?.amount) return product.priceWithInterval.price.amount / 100;
+  if (typeof product.price === 'number') return product.price;
+  return 0;
+}
+
+function parsePriceFromCard(card) {
+  const priceEl = card?.querySelector('.price-amount');
+  if (!priceEl) return 0;
+  const text = priceEl.textContent || '';
+  const normalized = text.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+  const value = parseFloat(normalized);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function trackSelectItemEvent({ product, productId, category, type, card }) {
+  if (!window.GTM || !window.GTM.trackSelectItem) return;
+
+  const nameFromCard = card?.querySelector('.plan-type')?.textContent?.trim();
+  const productData = {
+    id: productId,
+    name: product?.name || nameFromCard || 'Unknown Product',
+    amount: product ? getProductPriceDKK(product) : parsePriceFromCard(card),
+    type: type || 'membership',
+    quantity: 1
+  };
+
+  try {
+    window.GTM.trackSelectItem(productData, category, category);
+  } catch (error) {
+    console.warn('[GTM] Error tracking select_item:', error);
+  }
+}
+
 function handlePlanSelection(selectedCard) {
   // Remove selected class from all plan cards in the same category
   const category = selectedCard.closest('.category-item').dataset.category;
@@ -8098,23 +8117,13 @@ function handlePlanSelection(selectedCard) {
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
   
   // GTM: Track select_item event
-  if (product && window.GTM && window.GTM.trackSelectItem) {
-    try {
-      const productPrice = product.price?.amount ? product.price.amount / 100 : 
-                          product.amount ? product.amount / 100 : 
-                          product.price || 0;
-      const productData = {
-        id: productId,
-        name: product.name || selectedCard.querySelector('.plan-type')?.textContent || 'Unknown Product',
-        amount: productPrice,
-        type: isMembership ? 'membership' : 'punch-card',
-        quantity: 1
-      };
-      window.GTM.trackSelectItem(productData, category, category);
-    } catch (error) {
-      console.warn('[GTM] Error tracking select_item:', error);
-    }
-  }
+  trackSelectItemEvent({
+    product,
+    productId,
+    category,
+    type: isMembership ? 'membership' : 'punch-card',
+    card: selectedCard
+  });
   
   // Step 5: If membership is selected, fetch add-ons immediately
   if (isMembership && productId) {
@@ -8297,6 +8306,23 @@ function setupNewAccessStep() {
       } else {
         state.selectedProductType = 'punch-card';
       }
+
+      // GTM: Track select_item for API-driven plan cards
+      const productPoolByCategory = {
+        campaign: state.campaignSubscriptions || [],
+        membership: state.subscriptions || [],
+        '15daypass': state.dayPassSubscriptions || [],
+        punchcard: state.valueCards || []
+      };
+      const productPool = productPoolByCategory[category] || [];
+      const selectedProduct = productPool.find((item) => String(item.id) === String(productId));
+      trackSelectItemEvent({
+        product: selectedProduct,
+        productId,
+        category,
+        type: category === 'punchcard' ? 'punch-card' : 'membership',
+        card
+      });
       
       // Step 5: If campaign, membership, or 15 Day Pass is selected, fetch add-ons immediately
       if ((category === 'campaign' || category === 'membership' || category === '15daypass') && productId) {
@@ -8722,6 +8748,20 @@ function selectMembershipPlan(planId) {
   }
   showToast(`${selectedPlan?.name ?? 'Membership'} selected.`, 'success');
   autoEnsureOrderIfReady('membership-select');
+
+  // GTM: Track select_item for legacy membership plan cards
+  if (selectedPlan) {
+    trackSelectItemEvent({
+      product: {
+        id: planId,
+        name: selectedPlan.name,
+        price: selectedPlan.price
+      },
+      productId: planId,
+      category: 'membership',
+      type: 'membership'
+    });
+  }
 }
 
 function toggleAddon(addonId, checkCircle) {
@@ -13565,7 +13605,10 @@ async function loadOrderForConfirmation(orderId) {
     updatePaymentOverview();
     
     // GTM: Track purchase event when payment is confirmed
-    if (window.GTM && window.GTM.trackPurchase && state.cartItems && state.cartItems.length > 0) {
+    const purchaseItems = (state.cartItems && state.cartItems.length > 0)
+      ? state.cartItems
+      : (storedOrder?.cartItems || []);
+    if (window.GTM && window.GTM.trackPurchase && purchaseItems.length > 0) {
       try {
         // Get order total - prefer from order object, fallback to cart total
         const purchaseValue = orderTotal || 
@@ -13578,7 +13621,7 @@ async function loadOrderForConfirmation(orderId) {
         
         window.GTM.trackPurchase(
           transactionId,
-          state.cartItems,
+          purchaseItems,
           purchaseValue,
           0, // tax
           0, // shipping
@@ -13587,6 +13630,8 @@ async function loadOrderForConfirmation(orderId) {
       } catch (error) {
         console.warn('[GTM] Error tracking purchase:', error);
       }
+    } else if (window.GTM && window.GTM.trackPurchase) {
+      console.warn('[GTM] purchase not tracked: missing cart items after payment return');
     }
     
     // Only render confirmation view if payment is confirmed

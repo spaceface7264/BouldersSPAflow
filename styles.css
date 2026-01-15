@@ -1472,23 +1472,11 @@ body {
 
 
 .gym-list {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
     padding-bottom: 0;
     position: relative;
-}
-
-@media (min-width: 768px) {
-    .gym-list {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (min-width: 1024px) {
-    .gym-list {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
 }
 
 .gym-item {
@@ -1504,7 +1492,6 @@ body {
     gap: 16px;
     opacity: 1;
     transform: translateY(0);
-    height: 100%;
 }
 
 .gym-item.reordering {

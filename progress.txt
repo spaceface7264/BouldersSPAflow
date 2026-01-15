@@ -1,0 +1,52 @@
+Project Progress Summary
+Date: 2026-01-15
+Project: Boulders Membership Checkout Flow
+
+Overall status: PRODUCTION READY
+
+Completed (client-side, Steps 1-9):
+- Production API URL locked and CORS handled via Cloudflare Pages Function proxy
+- Accept-Language da-DK header applied across API calls
+- Business unit picker and reference data loader
+- Membership and value card product loading
+- Authentication, token handling, and customer creation
+- Order creation and item management (subscriptions, value cards, articles)
+- Payment link generation and payment return handling
+- Session storage restore and payment polling
+- Logging and error handling throughout checkout
+
+Backend integration status:
+- Webhook processing is stable
+- Payments register (leftToPay reaches 0)
+- Orders update to "Betalet"
+- Subscriptions link to customers
+- Memberships are being created in BRP
+
+Open backend issues:
+- Duplicate profiles can be created with the same email and password (waiting on backend fix)
+
+Production/deployment:
+- Deployed to join.boulders.dk
+- Cloudflare Pages auto-deployments working
+- No build or linter issues reported
+
+Documentation updates:
+- Status report refreshed to reflect webhook fix and membership creation
+- Solved backend issue docs archived under docs/backend-issues/archive
+
+Tracking report:
+- GTM ecommerce events implemented: select_item, add_to_cart, begin_checkout, purchase
+- GTM utils loaded via index.html; events pushed with GA4 ecommerce schema
+- Debug guide available in docs/TRACKING_DEBUG_GUIDE.md
+- GA4/GTM verification pending using Preview mode and DebugView
+
+Remaining planned work (non-blocking):
+- Punch card setup flow
+- Analytics integration (Steps 13-17)
+- Guardian/child flows
+- End-to-end walkthrough testing (Step 11)
+
+Next steps:
+- Monitor production for payment registration and membership creation
+- Run full regression test after backend fix
+- Document backend webhook resolution details
