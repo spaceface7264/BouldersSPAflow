@@ -12005,37 +12005,55 @@ async function handleCheckout() {
             // Verify pricing is correct for subscription items
             const subscriptionItem = orderBeforePayment?.subscriptionItems?.[0];
             if (subscriptionItem) {
-              const productId = subscriptionItem?.product?.id || state.selectedProductId;
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const startDateStr = today.toISOString().split('T')[0];
-              const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+              const product = subscriptionItem?.product;
+              const productId = product?.id || state.selectedProductId;
+              const productName = product?.name || '';
+              const productLabels = product?.productLabels || product?.labels || [];
+              const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
+                label => label?.name && label.name.toLowerCase() === '15 day pass'
+              );
+              const is15DayPass =
+                state.selectedProductType === '15daypass' ||
+                has15DayPassLabel ||
+                (productName && (
+                  productName.toLowerCase().includes('15 day pass') ||
+                  productName.toLowerCase().includes('15 dages')
+                )) ||
+                (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
+
+              if (is15DayPass) {
+                console.log('[checkout] ✅ Skipping partial-month price verification for 15 day pass');
+              } else {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const startDateStr = today.toISOString().split('T')[0];
+                const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
               
               // Use robust verification method
-              const verification = orderAPI._verifySubscriptionPricing(
-                orderBeforePayment,
-                productId,
-                expectedPrice,
-                today
-              );
+                const verification = orderAPI._verifySubscriptionPricing(
+                  orderBeforePayment,
+                  productId,
+                  expectedPrice,
+                  today
+                );
               
-              console.log('[checkout] Price verification result:', {
-                isCorrect: verification.isCorrect,
-                startDateCorrect: verification.startDateCorrect,
-                priceCorrect: verification.priceCorrect,
-                daysUntilStart: verification.daysUntilStart,
-                orderPriceDKK: verification.orderPriceDKK,
-                expectedPriceDKK: verification.expectedPriceDKK,
-                productId: productId
-              });
+                console.log('[checkout] Price verification result:', {
+                  isCorrect: verification.isCorrect,
+                  startDateCorrect: verification.startDateCorrect,
+                  priceCorrect: verification.priceCorrect,
+                  daysUntilStart: verification.daysUntilStart,
+                  orderPriceDKK: verification.orderPriceDKK,
+                  expectedPriceDKK: verification.expectedPriceDKK,
+                  productId: productId
+                });
               
               // If pricing is incorrect, try to fix it (only if we have permission)
-              if (!verification.isCorrect && subscriptionItem.id && (!verification.priceDifference || verification.priceDifference > 100)) {
-                console.warn('[checkout] ⚠️ ORDER PRICE IS INCORRECT BEFORE PAYMENT LINK GENERATION!');
-                console.warn('[checkout] ⚠️ Backend shows:', verification.orderPriceDKK, 'DKK');
-                console.warn('[checkout] ⚠️ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
-                console.warn('[checkout] ⚠️ Attempting to fix by deleting and re-adding subscription...');
-                console.warn('[checkout] ⚠️ NOTE: This may fail with 403 if order is in a state that prevents modification');
+                if (!verification.isCorrect && subscriptionItem.id && (!verification.priceDifference || verification.priceDifference > 100)) {
+                  console.warn('[checkout] ⚠️ ORDER PRICE IS INCORRECT BEFORE PAYMENT LINK GENERATION!');
+                  console.warn('[checkout] ⚠️ Backend shows:', verification.orderPriceDKK, 'DKK');
+                  console.warn('[checkout] ⚠️ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
+                  console.warn('[checkout] ⚠️ Attempting to fix by deleting and re-adding subscription...');
+                  console.warn('[checkout] ⚠️ NOTE: This may fail with 403 if order is in a state that prevents modification');
                 
                 // Try to fix with multiple strategies
                 // Build URL for subscription endpoint
@@ -12046,56 +12064,57 @@ async function handleCheckout() {
                   subscriptionUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${state.orderId}/items/subscriptions`;
                 }
                 
-                const fixedOrder = await orderAPI._fixBackendPricingBug(
-                  state.orderId,
-                  subscriptionUrl,
-                  {
-                    'Accept-Language': getAcceptLanguageHeader(),
-                    'Content-Type': 'application/json',
-                    ...(typeof window.getAccessToken === 'function' && window.getAccessToken() 
-                      ? { 'Authorization': `Bearer ${window.getAccessToken()}` } 
-                      : {}),
-                  },
-                  subscriptionItem.id,
-                  {
-                    subscriptionProduct: productId,
-                    startDate: startDateStr,
-                    ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
-                    ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
-                  },
-                  productId,
-                  expectedPrice,
-                  typeof window.getAccessToken === 'function' ? window.getAccessToken() : null,
-                  today
-                );
-                
-                if (fixedOrder) {
-                  // Verify the fix worked
-                  const fixedVerification = orderAPI._verifySubscriptionPricing(
-                    fixedOrder,
+                  const fixedOrder = await orderAPI._fixBackendPricingBug(
+                    state.orderId,
+                    subscriptionUrl,
+                    {
+                      'Accept-Language': getAcceptLanguageHeader(),
+                      'Content-Type': 'application/json',
+                      ...(typeof window.getAccessToken === 'function' && window.getAccessToken() 
+                        ? { 'Authorization': `Bearer ${window.getAccessToken()}` } 
+                        : {}),
+                    },
+                    subscriptionItem.id,
+                    {
+                      subscriptionProduct: productId,
+                      startDate: startDateStr,
+                      ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
+                      ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
+                    },
                     productId,
                     expectedPrice,
+                    typeof window.getAccessToken === 'function' ? window.getAccessToken() : null,
                     today
                   );
-                  
-                  if (fixedVerification.isCorrect) {
-                    console.log('[checkout] ✅ Successfully fixed order price before payment link generation!');
-                    orderBeforePayment = fixedOrder;
-                  } else {
-                    console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
-                    console.error('[checkout] ❌ This is a backend bug - payment window will show incorrect price');
+                
+                  if (fixedOrder) {
+                    // Verify the fix worked
+                    const fixedVerification = orderAPI._verifySubscriptionPricing(
+                      fixedOrder,
+                      productId,
+                      expectedPrice,
+                      today
+                    );
+                    
+                    if (fixedVerification.isCorrect) {
+                      console.log('[checkout] ✅ Successfully fixed order price before payment link generation!');
+                      orderBeforePayment = fixedOrder;
+                    } else {
+                      console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
+                      console.error('[checkout] ❌ This is a backend bug - payment window will show incorrect price');
+                      console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
+                      console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
+                    }
+                    } else {
+                    console.error('[checkout] ❌ All fix strategies failed - cannot modify order (likely 403 Forbidden)');
+                    console.error('[checkout] ❌ This is a backend bug - backend ignored startDate parameter');
                     console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
                     console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
+                    console.error('[checkout] ❌ Backend needs to be fixed to respect startDate parameter for productId:', productId);
                   }
-                  } else {
-                  console.error('[checkout] ❌ All fix strategies failed - cannot modify order (likely 403 Forbidden)');
-                  console.error('[checkout] ❌ This is a backend bug - backend ignored startDate parameter');
-                  console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
-                  console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
-                  console.error('[checkout] ❌ Backend needs to be fixed to respect startDate parameter for productId:', productId);
+                } else if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
+                  console.log('[checkout] ✅ Order price is acceptable - no fix needed');
                 }
-              } else if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
-                console.log('[checkout] ✅ Order price is acceptable - no fix needed');
               }
             }
             
