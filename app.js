@@ -1262,13 +1262,12 @@ class OrderAPI {
       if (!orderData.businessUnit && state.selectedBusinessUnit) {
         orderData.businessUnit = state.selectedBusinessUnit;
       }
-      
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders`;
-      } else {
-        url = `${this.baseUrl}/api/orders`;
-      }
+
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/orders',
+      });
       
       console.log('[Step 7] Creating order:', url);
       
@@ -1282,19 +1281,16 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(orderData),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Create order error (${response.status}):`, errorText);
-        throw new Error(`Create order failed: ${response.status} - ${errorText}`);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: orderData });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Create order error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Create order failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Create order response:', data);
 
       const createdOrderId = data?.id ?? data?.orderId ?? data?.data?.id ?? data?.data?.orderId;
@@ -1314,12 +1310,13 @@ class OrderAPI {
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
   async addSubscriptionItem(orderId, productId) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/subscriptions`;
-      } else {
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/items/subscriptions`,
+          })
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions`;
       
       console.log('[Step 7] Adding subscription item:', url);
       
@@ -1414,41 +1411,38 @@ class OrderAPI {
       });
       
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Add subscription item error (${response.status}):`, errorText);
-        
-        // Check for PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
-        let errorData = null;
-        try {
-          errorData = JSON.parse(errorText);
-        } catch (e) {
-          // Not JSON, continue with text error
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        const errorPayload = error?.payload;
+        let errorData = errorPayload;
+        if (typeof errorPayload === 'string') {
+          try {
+            errorData = JSON.parse(errorPayload);
+          } catch (e) {
+            errorData = null;
+          }
         }
-        
         const errorCode = errorData?.errorCode || errorData?.code;
         if (errorCode === 'PRODUCT_NOT_ALLOWED') {
-          const productId = errorData?.id || subscriptionProductId;
-          console.warn(`[Step 7] ⚠️ Product ${productId} is not allowed for this customer (campaign eligibility restriction)`);
+          const blockedProductId = errorData?.id || subscriptionProductId;
+          console.warn(`[Step 7] ⚠️ Product ${blockedProductId} is not allowed for this customer (campaign eligibility restriction)`);
           
           // Create a custom error that can be identified in catch blocks
-          const restrictionError = new Error(`PRODUCT_NOT_ALLOWED: This offer is not available for your account due to campaign restrictions.`);
+          const restrictionError = new Error('PRODUCT_NOT_ALLOWED: This offer is not available for your account due to campaign restrictions.');
           restrictionError.isProductNotAllowed = true;
-          restrictionError.productId = productId;
-          restrictionError.originalError = errorText;
+          restrictionError.productId = blockedProductId;
+          restrictionError.originalError = errorPayload;
           throw restrictionError;
         }
-        
-        throw new Error(`Add subscription item failed: ${response.status} - ${errorText}`);
+
+        const payloadText = typeof errorPayload === 'string'
+          ? errorPayload
+          : JSON.stringify(errorPayload);
+        console.error(`[Step 7] Add subscription item error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Add subscription item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Add subscription item response:', data);
       
       // CRITICAL: Check if backend accepted startDate
@@ -1652,27 +1646,32 @@ class OrderAPI {
     try {
       // Delete subscription item
       const deleteUrl = this.useProxy
-        ? `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`,
+          })
         : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`;
-      
-      const deleteResponse = await fetch(deleteUrl, {
-        method: 'DELETE',
-        headers: {
-          ...headers,
-          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-        },
-      });
-      
-      if (!deleteResponse.ok) {
-        // 403 Forbidden means we don't have permission - this is expected for certain order states
-        // Don't log as error, just skip this strategy
-        if (deleteResponse.status === 403) {
+
+      try {
+        await requestJson({
+          url: deleteUrl,
+          method: 'DELETE',
+          headers: {
+            ...headers,
+            ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+          },
+          expectJson: false,
+        });
+      } catch (error) {
+        if (error.status === 403) {
           console.log('[Step 7] Cannot delete subscription item (403 Forbidden) - order may be in a state that prevents modification');
           return null; // Skip this strategy - we don't have permission
         }
-        // Other errors - log and skip
-        const errorText = await deleteResponse.text().catch(() => 'Unknown error');
-        console.warn('[Step 7] Failed to delete subscription item:', deleteResponse.status, errorText);
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.warn('[Step 7] Failed to delete subscription item:', error.status || 'unknown', payloadText || error);
         return null; // Can't delete, skip this strategy
       }
       
@@ -1680,17 +1679,12 @@ class OrderAPI {
       await new Promise(resolve => setTimeout(resolve, waitTime));
       
       // Re-add subscription
-      const retryResponse = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      if (!retryResponse.ok) {
+      let retryData;
+      try {
+        retryData = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
         return null; // Re-add failed, skip this strategy
       }
-      
-      const retryData = await retryResponse.json();
       
       // Verify pricing is correct
       const verification = this._verifySubscriptionPricing(retryData, productId, expectedPrice, today);
@@ -1765,12 +1759,13 @@ class OrderAPI {
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
   async addValueCardItem(orderId, productId, quantity = 1) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/valuecards`;
-      } else {
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/valuecards`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/items/valuecards`,
+          })
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/valuecards`;
       
       console.log('[Step 7] Adding value card item:', url);
       
@@ -1795,19 +1790,16 @@ class OrderAPI {
       
       console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Add value card item error (${response.status}):`, errorText);
-        throw new Error(`Add value card item failed: ${response.status} - ${errorText}`);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Add value card item error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Add value card item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Add value card item response:', data);
       return data;
     } catch (error) {
@@ -1819,12 +1811,11 @@ class OrderAPI {
   // Step 7: Add article item (add-ons/extras) - POST /api/orders/{orderId}/items/articles
   async addArticleItem(orderId, productId) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders/${orderId}/items/articles`;
-      } else {
-        url = `${this.baseUrl}/api/orders/${orderId}/items/articles`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/orders/${orderId}/items/articles`,
+      });
       
       console.log('[Step 7] Adding article item:', url);
       
@@ -1843,19 +1834,16 @@ class OrderAPI {
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
       };
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Add article item error (${response.status}):`, errorText);
-        throw new Error(`Add article item failed: ${response.status} - ${errorText}`);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Add article item error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Add article item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Add article item response:', data);
       return data;
     } catch (error) {
@@ -1867,12 +1855,11 @@ class OrderAPI {
   // Step 7: Get order - GET /api/orders/{orderId}
   async getOrder(orderId) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders/${orderId}`;
-      } else {
-        url = `${this.baseUrl}/api/orders/${orderId}`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/orders/${orderId}`,
+      });
       
       console.log('[Step 7] Getting order:', url);
       
@@ -1886,21 +1873,18 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Get order error (${response.status}):`, errorText);
-        const error = new Error(`Get order failed: ${response.status} - ${errorText}`);
-        // Store status code on error object for easier detection
-        error.status = response.status;
-        throw error;
+      let data;
+      try {
+        data = await requestJson({ url, headers });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Get order error (${error.status || 'unknown'}):`, payloadText || error);
+        const wrapped = new Error(`Get order failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        wrapped.status = error.status;
+        throw wrapped;
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Get order response:', data);
       return data;
     } catch (error) {
@@ -1916,13 +1900,12 @@ class OrderAPI {
       if (!orderData.businessUnit && state.selectedBusinessUnit) {
         orderData.businessUnit = state.selectedBusinessUnit;
       }
-      
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders/${orderId}`;
-      } else {
-        url = `${this.baseUrl}/api/orders/${orderId}`;
-      }
+
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/orders/${orderId}`,
+      });
       
       console.log('[Step 7] Updating order:', url);
       
@@ -1936,19 +1919,16 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(orderData),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Update order error (${response.status}):`, errorText);
-        throw new Error(`Update order failed: ${response.status} - ${errorText}`);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'PUT', headers, body: orderData });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Update order error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Update order failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Update order response:', data);
       return data;
     } catch (error) {
@@ -1963,14 +1943,13 @@ class OrderAPI {
   async applyDiscountCode(orderId, discountCode) {
     try {
       // ver3 endpoints use different base URL (boulders.brpsystems.com/apiserver)
-      let url;
-      if (this.useProxy) {
-        // Proxy will handle the ver3 endpoint routing
-        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/coupons`;
-      } else {
-        // Direct API call - ver3 endpoints use different base URL
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/coupons`,
+          })
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
       
       console.log('[Discount] Applying coupon:', discountCode, 'to order:', orderId);
       console.log('[Discount] Endpoint:', url);
@@ -1992,37 +1971,37 @@ class OrderAPI {
       
       console.log('[Discount] Request payload:', JSON.stringify(payload, null, 2));
       
-      // Try POST first (API returns 405 for PUT)
-      let response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      // If POST returns 405, the endpoint might not exist or need different path
-      // Try alternative endpoint structure if POST fails
-      if (response.status === 405 || response.status === 404) {
-        console.log('[Discount] POST returned', response.status, '- trying alternative endpoint...');
-        // Try with different path structure: /api/orders/{orderId}/coupon (singular)
-        const altUrl = this.useProxy 
-          ? `${this.baseUrl}?path=/api/orders/${orderId}/coupon`
-          : `${this.baseUrl}/api/orders/${orderId}/coupon`;
-        
-        console.log('[Discount] Trying alternative endpoint:', altUrl);
-        response = await fetch(altUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-        });
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        if (error.status === 405 || error.status === 404) {
+          console.log('[Discount] POST returned', error.status, '- trying alternative endpoint...');
+          const altUrl = this.useProxy
+            ? buildApiUrl({
+                baseUrl: this.baseUrl,
+                useProxy: this.useProxy,
+                path: `/api/orders/${orderId}/coupon`,
+              })
+            : `${this.baseUrl}/api/orders/${orderId}/coupon`;
+          console.log('[Discount] Trying alternative endpoint:', altUrl);
+          try {
+            data = await requestJson({ url: altUrl, method: 'POST', headers, body: payload });
+          } catch (altError) {
+            const payloadText = typeof altError.payload === 'string'
+              ? altError.payload
+              : JSON.stringify(altError.payload);
+            console.error(`[Discount] Apply coupon error (${altError.status || 'unknown'}):`, payloadText || altError);
+            throw new Error(`Apply coupon failed: ${altError.status || 'unknown'} - ${payloadText || altError.message}`);
+          }
+        } else {
+          const payloadText = typeof error.payload === 'string'
+            ? error.payload
+            : JSON.stringify(error.payload);
+          console.error(`[Discount] Apply coupon error (${error.status || 'unknown'}):`, payloadText || error);
+          throw new Error(`Apply coupon failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        }
       }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Discount] Apply coupon error (${response.status}):`, errorText);
-        throw new Error(`Apply coupon failed: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
       console.log('[Discount] Apply coupon response:', data);
       
       // Extract couponDiscount from response
@@ -2142,14 +2121,13 @@ class PaymentAPI {
         throw new Error('Order ID is required for payment link generation');
       }
       
-      let url;
-      if (this.useProxy) {
-        // Use standard API endpoint: /api/payment/generate-link
-        url = `${this.baseUrl}?path=${this.paymentEndpoint}`;
-      } else {
-        // Direct API call to api-join.boulders.dk
-        url = `https://api-join.boulders.dk${this.paymentEndpoint}`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: this.paymentEndpoint,
+          })
+        : `https://api-join.boulders.dk${this.paymentEndpoint}`;
       
       console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
       console.log('[Step 9] Endpoint:', url);
@@ -2220,20 +2198,16 @@ class PaymentAPI {
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
       console.log('[Step 9] Sending Generate Payment Link Card request...');
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      console.log('[Step 9] Response status:', response.status, response.statusText);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 9] ❌ Generate Payment Link Card failed (${response.status}):`, errorText);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 9] ❌ Generate Payment Link Card failed (${error.status || 'unknown'}):`, payloadText || error);
         
-        // If 403 Forbidden, log detailed information about why it might have failed
-        if (response.status === 403) {
+        if (error.status === 403) {
           console.error('[Step 9] ⚠️ 403 Forbidden - Possible reasons:');
           console.error('[Step 9] ⚠️ 1. Order may have incorrect pricing (backend bug - startDate ignored)');
           console.error('[Step 9] ⚠️ 2. Order may be in a state that prevents payment link generation');
@@ -2249,7 +2223,6 @@ class PaymentAPI {
             businessUnit: businessUnitId
           });
           
-          // Check if order price is incorrect (backend bug)
           const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
           if (subscriptionItem) {
             const productId = subscriptionItem?.product?.id;
@@ -2259,7 +2232,7 @@ class PaymentAPI {
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
             const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
             
-            if (!verification.isCorrect) {
+            if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
               console.error('[Step 9] ❌ CONFIRMED: Order has incorrect pricing due to backend bug!');
               console.error('[Step 9] ❌ Backend shows:', verification.orderPriceDKK, 'DKK');
               console.error('[Step 9] ❌ Should be:', verification.expectedPriceDKK || 'N/A', 'DKK');
@@ -2269,10 +2242,8 @@ class PaymentAPI {
           }
         }
         
-        throw new Error(`Generate Payment Link Card failed: ${response.status} - ${errorText}`);
+        throw new Error(`Generate Payment Link Card failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
       // API Response structure from backend example: { "url": "..." }
