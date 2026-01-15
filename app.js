@@ -8029,7 +8029,7 @@ function handleCategoryToggle(category) {
         setTimeout(() => {
           item.setAttribute('tabindex', '-1');
           item.focus();
-          item.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
       }
     } else {
@@ -8188,7 +8188,7 @@ function setupNewAccessStep() {
           category.setAttribute('tabindex', '-1');
           category.focus();
           // Scroll into view smoothly
-          category.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          category.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100); // Small delay to ensure expansion animation has started
       } else {
         currentCategory = null;
