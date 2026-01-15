@@ -50,6 +50,20 @@ Remaining planned work (non-blocking):
 - Guardian/child flows
 - End-to-end walkthrough testing (Step 11)
 
+Test user findings (translated):
+- Junior membership purchase: should show a clear error when purchase is blocked (status: pending)
+- Password length: BRP allows 6 digits; UI currently requires 8 (status: pending)
+- Payment status messaging: shows "payment failed" even when membership is created (status: fixed)
+- Campaign visibility: clarify whether punch cards and membership campaigns both appear under Campaigns (status: fixed)
+- Campaign copy: make auto-renew subscription more explicit for membership campaigns (status: pending)
+- No active campaign: clarify how the campaign option behaves when none are public (status: pending)
+- "Create account" label: make clearer since most users are new (status: fixed)
+- Amount rounding: BRP uses half-kr; comma decimals still show (status: fixed)
+- 15-day pass pricing: currently adds rest-of-month; should be full amount only (status: fixed)
+- 15-day pass proration: unclear amount due from day 15; needs decision/clarification (status: fixed)
+- Campaign rejection flow: define UX when user is blocked due to recent membership (status: pending)
+- Discount code UI: hard to see when applied and not reducing payable amount (status: pending)
+
 Next steps:
 - Monitor production for payment registration and membership creation
 - Run full regression test after backend fix
