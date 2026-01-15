@@ -38,7 +38,10 @@ Tracking report:
 - GTM ecommerce events implemented: select_item, add_to_cart, begin_checkout, purchase
 - GTM utils loaded via index.html; events pushed with GA4 ecommerce schema
 - Debug guide available in docs/TRACKING_DEBUG_GUIDE.md
-- GA4/GTM verification pending using Preview mode and DebugView
+- GTM Preview verification complete on hygiene preview (all 4 events fired once per purchase)
+- GA4 DebugView verification pending
+- Server-side tagging live via gtm.join.boulders.dk (GA4 collects routed through sGTM)
+- Own CDN (Cloudflare) checklist: docs/TRACKING_OWN_CDN_CLOUDFLARE_CHECKLIST.md
 
 Remaining planned work (non-blocking):
 - Punch card setup flow
