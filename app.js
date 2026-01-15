@@ -1,39 +1,14 @@
-const numberFormatter = new Intl.NumberFormat('da-DK');
-const currencyFormatter = new Intl.NumberFormat('da-DK', {
-  style: 'currency',
-  currency: 'DKK',
-});
-
-/**
- * Rounds amount to the nearest half krone (0.00 or 0.50)
- * Formula: floor((amount * 2) + 0.5) / 2
- * @param {number} amount - Amount to round
- * @returns {number} Rounded amount ending in .00 or .50
- */
-function roundToHalfKrone(amount) {
-  if (typeof amount !== 'number' || isNaN(amount)) return 0;
-  return Math.floor((amount * 2) + 0.5) / 2;
-}
-
-/**
- * Formats a price with rounding to half krone, ensuring it ends in .00 or .50
- * @param {number} amount - Amount to format
- * @returns {string} Formatted price string
- */
-function formatPriceHalfKrone(amount) {
-  const rounded = roundToHalfKrone(amount);
-  return numberFormatter.format(rounded);
-}
-
-/**
- * Formats a currency amount with rounding to half krone
- * @param {number} amount - Amount to format
- * @returns {string} Formatted currency string
- */
-function formatCurrencyHalfKrone(amount) {
-  const rounded = roundToHalfKrone(amount);
-  return currencyFormatter.format(rounded);
-}
+import {
+  formatCurrencyHalfKrone,
+  formatPriceHalfKrone,
+  roundToHalfKrone,
+} from './utils/format.js';
+import {
+  calculateDistance,
+  createAddressKey,
+  formatDistance,
+} from './utils/geo.js';
+import { getFlagEmoji } from './utils/locale.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -3240,39 +3215,6 @@ let gymsWithDistances = [];
 // Cache for geocoded addresses
 const geocodeCache = new Map();
 
-// Calculate distance between two coordinates using Haversine formula
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  // Validate inputs
-  if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || 
-      typeof lat2 !== 'number' || typeof lon2 !== 'number' ||
-      isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
-    console.error('[Distance Calculation] Invalid coordinates:', { lat1, lon1, lat2, lon2 });
-    return null;
-  }
-  
-  // Validate coordinate ranges (lat: -90 to 90, lon: -180 to 180)
-  if (lat1 < -90 || lat1 > 90 || lat2 < -90 || lat2 > 90) {
-    console.error('[Distance Calculation] Invalid latitude (must be -90 to 90):', { lat1, lat2 });
-    return null;
-  }
-  if (lon1 < -180 || lon1 > 180 || lon2 < -180 || lon2 > 180) {
-    console.error('[Distance Calculation] Invalid longitude (must be -180 to 180):', { lon1, lon2 });
-    return null;
-  }
-  
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c; // Distance in kilometers
-  
-  return distance;
-}
-
 // Check if geolocation is available
 function isGeolocationAvailable() {
   return 'geolocation' in navigator;
@@ -3366,16 +3308,6 @@ const GYM_COORDINATES = {
   'Vanløse Torv 1, Kronen Vanløse, 2720 København': { latitude: 55.6833, longitude: 12.4833 },
   'Vesterbrogade 149, 1620 København V': { latitude: 55.6761, longitude: 12.5683 },
 };
-
-// Helper to create address key for lookup
-function createAddressKey(address) {
-  if (!address) return null;
-  // Normalize the address string
-  const street = (address.street || '').trim();
-  const postalCode = (address.postalCode || '').trim();
-  const city = (address.city || '').trim();
-  return `${street}, ${postalCode} ${city}`;
-}
 
 // Find coordinates for a gym address (tries multiple matching strategies)
 function findGymCoordinates(address) {
@@ -3583,15 +3515,6 @@ async function calculateGymDistances(gyms, userLat, userLon, userAccuracy = null
   })));
   
   return sorted;
-}
-
-// Format distance for display
-function formatDistance(distance) {
-  if (distance === null || distance === undefined) return '';
-  if (distance < 1) {
-    return `${Math.round(distance * 1000)} m`;
-  }
-  return `${distance.toFixed(1)} km`;
 }
 
 // Load gyms from API and update UI
@@ -3943,20 +3866,6 @@ async function loadCountriesFromAPI() {
   }
 }
 
-// Helper function to get flag emoji from ISO 3166-1 alpha-2 country code
-function getFlagEmoji(alpha2) {
-  if (!alpha2 || alpha2.length !== 2) return '🌍'; // Default globe emoji
-  
-  // Convert alpha2 to flag emoji using regional indicator symbols
-  // Each letter is converted to its regional indicator symbol (U+1F1E6 to U+1F1FF)
-  const codePoints = alpha2
-    .toUpperCase()
-    .split('')
-    .map(char => 127397 + char.charCodeAt(0));
-  
-  return String.fromCodePoint(...codePoints);
-}
-
 // Store country data mapping for flag lookups
 let countryDataMap = new Map(); // Maps phoneCountryCode (as string like "+45") to {alpha2, name, phoneCountryCode}
 
@@ -4092,12 +4001,11 @@ async function findNearestGym() {
   locationStatus.style.display = 'none';
   
   try {
-    // Check permission status first (for debugging)
-    const permissionStatus = await checkGeolocationPermission();
+    // Trigger geolocation immediately from user gesture, then await permission info
+    const permissionPromise = checkGeolocationPermission();
+    const locationPromise = getUserLocation();
+    const [permissionStatus, location] = await Promise.all([permissionPromise, locationPromise]);
     console.log('[Geolocation] Permission status before request:', permissionStatus);
-    
-    // Get user location - this will trigger browser permission prompt
-    const location = await getUserLocation();
     userLocation = location;
     
     console.log('User location:', location);
@@ -5006,23 +4914,7 @@ function init() {
     loadGTMIfConsented();
   }
   
-  // Auto-trigger geolocation on page load (if supported)
-  // This will automatically find nearest gyms when the page loads
-  if (locationBtn && isGeolocationAvailable() && !userLocation) {
-    // Small delay to let the page render first
-    setTimeout(() => {
-      console.log('[Geolocation] Auto-triggering location detection on page load');
-      findNearestGym().catch(err => {
-        // Silently fail - this is expected if user denies permission or location unavailable
-        // On macOS, this is common due to CoreLocation limitations
-        if (err.type === 'unavailable' || err.type === 'timeout') {
-          console.log('[Geolocation] Auto-location unavailable on this device (macOS CoreLocation issue). User can manually trigger if needed.');
-        } else {
-          console.log('[Geolocation] Auto-location failed (this is OK):', err.message);
-        }
-      });
-    }, 500);
-  }
+  // Geolocation must be triggered by user gesture to avoid browser blocks.
   
   updateMainSubtitle();
   
