@@ -3,11 +3,7 @@ import {
   formatPriceHalfKrone,
   roundToHalfKrone,
 } from './utils/format.js';
-import {
-  calculateDistance,
-  createAddressKey,
-  formatDistance,
-} from './utils/geo.js';
+import { formatDistance } from './utils/geo.js';
 import { getFlagEmoji } from './utils/locale.js';
 import {
   clearLoginSessionCookie,
@@ -27,8 +23,29 @@ import { getErrorMessage } from './utils/errors.js';
 import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
 import { highlightFieldError } from './utils/dom.js';
 import { getApiConfig } from './utils/apiConfig.js';
+import {
+  calculateGymDistances,
+  checkGeolocationPermission,
+  getUserLocation,
+  isGeolocationAvailable,
+} from './utils/geolocation.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
+
+const debugEnabled = window.DEBUG_LOGS === true;
+const originalConsoleLog = console.log.bind(console);
+const originalConsoleWarn = console.warn.bind(console);
+if (!debugEnabled) {
+  console.log = () => {};
+  console.warn = () => {};
+}
+const devLog = (...args) => {
+  if (debugEnabled) originalConsoleLog(...args);
+};
+const devWarn = (...args) => {
+  if (debugEnabled) originalConsoleWarn(...args);
+};
+const geoLogger = { log: devLog, warn: devWarn };
 
 const REQUIRED_FIELDS = [
   'firstName',
@@ -3041,310 +3058,6 @@ async function loadSubscriptionAdditions(productId) {
 // Store user location and gym distances
 let userLocation = null;
 let gymsWithDistances = [];
-// Cache for geocoded addresses
-const geocodeCache = new Map();
-
-// Check if geolocation is available
-function isGeolocationAvailable() {
-  return 'geolocation' in navigator;
-}
-
-// Check geolocation permission status
-async function checkGeolocationPermission() {
-  if (!isGeolocationAvailable()) {
-    return 'not-supported';
-  }
-  
-  // Note: Permission API is not widely supported, so we'll try to get location
-  // and handle the error if permission is denied
-  return 'unknown';
-}
-
-// Get user's current location with explicit permission request
-async function getUserLocation() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation is not supported by your browser'));
-      return;
-    }
-
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 15000, // Increased timeout
-      maximumAge: 60000 // Allow 1 minute old cached position
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy // in meters
-        };
-        
-        // Log location accuracy for debugging
-        console.log('[Geolocation] User location obtained:', {
-          coordinates: { lat: location.latitude, lon: location.longitude },
-          accuracy: `${location.accuracy.toFixed(0)} meters`
-        });
-        
-        resolve(location);
-      },
-      (error) => {
-        let errorMessage = 'Unable to get your location';
-        let errorType = 'unknown';
-        
-        switch(error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied. Please allow location access in your browser settings and try again.';
-            errorType = 'permission-denied';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information is unavailable. Please check your device location settings and try again.';
-            errorType = 'unavailable';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out. Please check your connection and try again.';
-            errorType = 'timeout';
-            break;
-        }
-        
-        const errorObj = new Error(errorMessage);
-        errorObj.type = errorType;
-        errorObj.originalError = error;
-        reject(errorObj);
-      },
-      options
-    );
-  });
-}
-
-// Hardcoded coordinates for known Boulders gyms (faster than geocoding)
-// Format: "Street, PostalCode City" -> {latitude, longitude}
-// Hardcoded coordinates for known Boulders gyms (verified and updated for accuracy)
-// Format: "Street, PostalCode City" -> {latitude, longitude}
-const GYM_COORDINATES = {
-  'Skjernvej 4D, 9220 Aalborg': { latitude: 57.0488, longitude: 9.9217 },
-  'Søren Frichs Vej 54, 8230 Aarhus': { latitude: 56.15101, longitude: 10.16778 }, // Updated: Boulders Aarhus Aaby
-  'Ankersgade 12, 8000 Aarhus': { latitude: 56.14836, longitude: 10.19124 }, // Updated: Boulders Aarhus City
-  'Graham Bells Vej 18A, 8200 Aarhus': { latitude: 56.20514, longitude: 10.18169 }, // Updated: Boulders Aarhus Nord
-  'Søren Nymarks Vej 6A, 8270 Aarhus': { latitude: 56.1075, longitude: 10.2039 }, // Updated: Boulders Aarhus Syd
-  'Amager Landevej 233, 2770 København': { latitude: 55.6500, longitude: 12.5833 },
-  'Strandmarksvej 20, 2650 København': { latitude: 55.6500, longitude: 12.4833 },
-  'Bådehavnsgade 38, 2450 København': { latitude: 55.6500, longitude: 12.5500 },
-  'Wichmandsgade 11, 5000 Odense': { latitude: 55.40252, longitude: 10.37333 }, // Updated: Verified via Nominatim
-  'Vigerslev Allé 47, 2500 København': { latitude: 55.6667, longitude: 12.5167 },
-  'Vanløse Torv 1, Kronen Vanløse, 2720 København': { latitude: 55.6833, longitude: 12.4833 },
-  'Vesterbrogade 149, 1620 København V': { latitude: 55.6761, longitude: 12.5683 },
-};
-
-// Find coordinates for a gym address (tries multiple matching strategies)
-function findGymCoordinates(address) {
-  if (!address) return null;
-  
-  const addressKey = createAddressKey(address);
-  if (!addressKey) return null;
-  
-  // Try exact match first
-  if (GYM_COORDINATES[addressKey]) {
-    return GYM_COORDINATES[addressKey];
-  }
-  
-  // Try partial matches (street + postal code)
-  const street = address.street?.trim();
-  const postalCode = address.postalCode?.trim();
-  
-  if (street && postalCode) {
-    // Try matching by street and postal code
-    for (const [key, coords] of Object.entries(GYM_COORDINATES)) {
-      if (key.includes(street) && key.includes(postalCode)) {
-        return coords;
-      }
-    }
-  }
-  
-  return null;
-}
-
-// Geocode address to get coordinates using OpenStreetMap Nominatim (fallback)
-async function geocodeAddress(address) {
-  if (!address) return null;
-  
-  // Try hardcoded coordinates first (instant lookup, no API call needed)
-  const hardcodedCoords = findGymCoordinates(address);
-  if (hardcodedCoords) {
-    const addressKey = createAddressKey(address);
-    console.log(`[Geocoding] Using hardcoded coordinates for: ${addressKey}`);
-    return hardcodedCoords;
-  }
-  
-  // Create address key for cache lookup
-  const addressKey = createAddressKey(address);
-  if (!addressKey) return null;
-  
-  // Check cache
-  if (geocodeCache.has(addressKey)) {
-    return geocodeCache.get(addressKey);
-  }
-  
-  try {
-    // Use OpenStreetMap Nominatim geocoding service (free, no API key)
-    // Use more specific query format for better accuracy - postal code first for precision
-    const query = encodeURIComponent(`${address.postalCode} ${address.city}, ${address.street}, Denmark`);
-    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=dk&addressdetails=1&extratags=1&zoom=18`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Boulders Membership Signup' // Required by Nominatim
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Geocoding failed: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data && data.length > 0) {
-      const result = data[0];
-      const coords = {
-        latitude: parseFloat(result.lat),
-        longitude: parseFloat(result.lon)
-      };
-      
-      // Log geocoding result for accuracy verification
-      console.log(`[Geocoding] Geocoded ${addressKey}:`, {
-        coordinates: coords,
-        displayName: result.display_name,
-        importance: result.importance,
-        type: result.type
-      });
-      
-      // Cache the result
-      geocodeCache.set(addressKey, coords);
-      
-      // Rate limiting: Nominatim allows 1 request per second
-      await new Promise(resolve => setTimeout(resolve, 1100));
-      
-      return coords;
-    }
-    
-    return null;
-  } catch (error) {
-    console.warn('[Geocoding] Failed to geocode address:', addressKey, error);
-    return null;
-  }
-}
-
-// Calculate distances for all gyms and sort by distance
-async function calculateGymDistances(gyms, userLat, userLon, userAccuracy = null) {
-  console.log('[Distance Calculation] User location:', { 
-    latitude: userLat, 
-    longitude: userLon,
-    accuracy: userAccuracy ? `${userAccuracy.toFixed(0)} meters` : 'unknown'
-  });
-  
-  // Warn if accuracy is poor (IP-based geolocation is typically > 1000m)
-  if (userAccuracy && userAccuracy > 1000) {
-    console.warn('[Distance Calculation] WARNING: Low location accuracy detected. Distance calculations may be inaccurate.', {
-      accuracy: `${userAccuracy.toFixed(0)} meters`,
-      note: 'This suggests IP-based geolocation rather than GPS. Distances may be off by hundreds of kilometers.'
-    });
-  }
-  
-  // First, try to get coordinates from API response
-  const gymsWithCoords = await Promise.all(gyms.map(async (gym) => {
-    let gymLat = null;
-    let gymLon = null;
-    
-    if (gym.address) {
-      // Try address.latitude/longitude first
-      if (gym.address.latitude !== undefined && gym.address.longitude !== undefined) {
-        gymLat = parseFloat(gym.address.latitude);
-        gymLon = parseFloat(gym.address.longitude);
-      }
-      // Try address.coordinates (GeoJSON format: [longitude, latitude])
-      else if (gym.address.coordinates && Array.isArray(gym.address.coordinates)) {
-        gymLat = parseFloat(gym.address.coordinates[1]);
-        gymLon = parseFloat(gym.address.coordinates[0]);
-      }
-    }
-    
-    // Try top-level coordinates
-    if ((gymLat === null || isNaN(gymLat)) && gym.coordinates && Array.isArray(gym.coordinates)) {
-      gymLat = parseFloat(gym.coordinates[1]);
-      gymLon = parseFloat(gym.coordinates[0]);
-    }
-    
-    // Validate parsed coordinates
-    if (isNaN(gymLat) || isNaN(gymLon)) {
-      gymLat = null;
-      gymLon = null;
-    }
-    
-    // If no coordinates found, try geocoding
-    if ((gymLat === null || gymLon === null) && gym.address) {
-      console.log(`[Distance Calculation] Geocoding ${gym.name}...`);
-      const coords = await geocodeAddress(gym.address);
-      if (coords) {
-        gymLat = coords.latitude;
-        gymLon = coords.longitude;
-        console.log(`[Distance Calculation] Geocoded ${gym.name}:`, coords);
-      } else {
-        console.warn(`[Distance Calculation] Failed to geocode ${gym.name}`);
-      }
-    }
-    
-    return { ...gym, gymLat, gymLon };
-  }));
-  
-  // Calculate distances
-  const gymsWithDistances = gymsWithCoords.map(gym => {
-    if (gym.gymLat === null || gym.gymLon === null || isNaN(gym.gymLat) || isNaN(gym.gymLon)) {
-      return { ...gym, distance: null };
-    }
-    
-    const distance = calculateDistance(
-      userLat,
-      userLon,
-      gym.gymLat,
-      gym.gymLon
-    );
-    
-    // Log detailed distance calculation for debugging
-    console.log(`[Distance Calculation] ${gym.name}:`, {
-      userLocation: { lat: userLat, lon: userLon },
-      gymLocation: { lat: gym.gymLat, lon: gym.gymLon },
-      distance: `${distance.toFixed(2)} km`,
-      address: gym.address ? `${gym.address.street}, ${gym.address.postalCode} ${gym.address.city}` : 'N/A',
-      // Verify coordinates are valid (lat should be -90 to 90, lon should be -180 to 180)
-      coordinateValidation: {
-        userLatValid: userLat >= -90 && userLat <= 90,
-        userLonValid: userLon >= -180 && userLon <= 180,
-        gymLatValid: gym.gymLat >= -90 && gym.gymLat <= 90,
-        gymLonValid: gym.gymLon >= -180 && gym.gymLon <= 180
-      }
-    });
-    
-    return { ...gym, distance };
-  });
-  
-  // Sort by distance
-  const sorted = gymsWithDistances.sort((a, b) => {
-    // Sort by distance, null distances go to the end
-    if (a.distance === null && b.distance === null) return 0;
-    if (a.distance === null) return 1;
-    if (b.distance === null) return -1;
-    return a.distance - b.distance;
-  });
-  
-  console.log('[Distance Calculation] Sorted gyms:', sorted.map(g => ({
-    name: g.name,
-    distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A'
-  })));
-  
-  return sorted;
-}
 
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
@@ -3354,8 +3067,8 @@ async function loadGymsFromAPI() {
     // Handle different response formats - could be array or object with data property
     const gyms = Array.isArray(response) ? response : (response.data || response.items || []);
     
-    console.log('Loaded gyms from API:', gyms);
-    console.log(`Found ${gyms.length} business units`);
+    devLog('Loaded gyms from API:', gyms);
+    devLog(`Found ${gyms.length} business units`);
     
     // Store gyms for distance calculation
     gymsWithDistances = gyms;
@@ -3390,7 +3103,7 @@ async function loadGymsFromAPI() {
     
     // Log sample gym structure to debug coordinate location
     if (gyms.length > 0) {
-      console.log('[Load Gyms] Sample gym structure:', {
+      devLog('[Load Gyms] Sample gym structure:', {
         name: gyms[0].name,
         address: gyms[0].address,
         hasLatLon: !!(gyms[0].address?.latitude && gyms[0].address?.longitude),
@@ -3401,7 +3114,7 @@ async function loadGymsFromAPI() {
     // If user location is available, sort by distance
     let gymsToDisplay = gyms;
     if (userLocation) {
-      console.log('[Load Gyms] User location available, calculating distances...', userLocation);
+      devLog('[Load Gyms] User location available, calculating distances...', userLocation);
       // Show loading message
       // Hide status text
       const locationStatus = document.getElementById('locationStatus');
@@ -3410,10 +3123,11 @@ async function loadGymsFromAPI() {
       }
       
       gymsToDisplay = await calculateGymDistances(
-        gyms, 
-        userLocation.latitude, 
+        gyms,
+        userLocation.latitude,
         userLocation.longitude,
-        userLocation.accuracy // Pass accuracy for validation
+        userLocation.accuracy,
+        { logger: geoLogger }
       );
       gymsWithDistances = gymsToDisplay;
       
@@ -3429,13 +3143,13 @@ async function loadGymsFromAPI() {
       }
       
       // Log first few gyms to verify sorting
-      console.log('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
+      devLog('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
         name: g.name,
         distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A',
         hasCoordinates: !!(g.address?.latitude && g.address?.longitude)
       })));
     } else {
-      console.log('[Load Gyms] No user location available, displaying gyms in original order');
+      devLog('[Load Gyms] No user location available, displaying gyms in original order');
     }
     
     // Store existing gym items and their positions for animation
@@ -3464,7 +3178,7 @@ async function loadGymsFromAPI() {
         // Mark as nearest if it's the first gym AND has a valid distance
         const isNearest = i === 0 && userLocation && gym.distance !== null && gym.distance !== undefined;
         if (isNearest) {
-          console.log('[Load Gyms] Marking as nearest:', gym.name, `${gym.distance.toFixed(2)} km`);
+          devLog('[Load Gyms] Marking as nearest:', gym.name, `${gym.distance.toFixed(2)} km`);
         }
         const gymItem = createGymItem(gym, isNearest);
         const gymId = `gym-${gym.id}`;
@@ -3774,7 +3488,7 @@ async function findNearestGym() {
   
   // Check if location is already active - toggle it off
   if (userLocation && locationBtn.classList.contains('active')) {
-    console.log('[Geolocation] Toggling location off, restoring default order');
+    devLog('[Geolocation] Toggling location off, restoring default order');
     
     // Clear user location
     userLocation = null;
@@ -3806,12 +3520,12 @@ async function findNearestGym() {
   try {
     // Trigger geolocation immediately from user gesture, then await permission info
     const permissionPromise = checkGeolocationPermission();
-    const locationPromise = getUserLocation();
+    const locationPromise = getUserLocation({ logger: geoLogger });
     const [permissionStatus, location] = await Promise.all([permissionPromise, locationPromise]);
-    console.log('[Geolocation] Permission status before request:', permissionStatus);
+    devLog('[Geolocation] Permission status before request:', permissionStatus);
     userLocation = location;
     
-    console.log('User location:', location);
+    devLog('User location:', location);
     
     // Hide status text
     locationStatus.style.display = 'none';
@@ -3848,13 +3562,13 @@ async function findNearestGym() {
       // Provide macOS-specific troubleshooting
       const isMacOS = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       if (isMacOS) {
-        console.log('%c[Geolocation Troubleshooting]', 'color: #F401F5; font-weight: bold;');
-        console.log('macOS CoreLocation cannot determine your position. Try:');
-        console.log('1. System Settings → Privacy & Security → Location Services (enable)');
-        console.log('2. Grant location permission to your browser');
-        console.log('3. Enable WiFi (needed for macOS location, even if not connected)');
-        console.log('4. Reset browser location permissions');
-        console.log('5. Restart your browser');
+        devLog('%c[Geolocation Troubleshooting]', 'color: #F401F5; font-weight: bold;');
+        devLog('macOS CoreLocation cannot determine your position. Try:');
+        devLog('1. System Settings → Privacy & Security → Location Services (enable)');
+        devLog('2. Grant location permission to your browser');
+        devLog('3. Enable WiFi (needed for macOS location, even if not connected)');
+        devLog('4. Reset browser location permissions');
+        devLog('5. Restart your browser');
         errorMessage = 'Location unavailable on macOS. Check: System Settings → Privacy → Location Services, enable WiFi, and grant browser permission.';
       } else {
         errorMessage = 'Location information is unavailable. Please ensure location services are enabled on your device.';
