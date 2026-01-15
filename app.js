@@ -35,113 +35,6 @@ function formatCurrencyHalfKrone(amount) {
   return currencyFormatter.format(rounded);
 }
 
-const MEMBERSHIP_PLANS = [
-  {
-    id: 'membership-student',
-    name: 'Student',
-    price: 379,
-    priceSuffix: 'kr/mo',
-    description: 'For climbers with valid student ID',
-    features: [
-      'Unlimited access to 10 gyms',
-      'Bloc Life Loyalty Program',
-      '3x 15-Day Guest Passes',
-      '10% off Shoes and Gear'
-    ],
-    cta: 'Select Student',
-  },
-  {
-    id: 'membership-adult',
-    name: 'Adult',
-    price: 445,
-    priceSuffix: 'kr/mo',
-    description: 'For climbers over 16 years',
-    features: [
-      'Unlimited access to 10 gyms',
-      'Bloc Life Loyalty Program',
-      '3x 15-Day Guest Passes',
-      '10% off Shoes and Gear'
-    ],
-    cta: 'Select Adult',
-  },
-  {
-    id: 'membership-junior',
-    name: 'Junior',
-    price: 249,
-    priceSuffix: 'kr/mo',
-    description: 'For climbers under 16 years',
-    features: [
-      'Unlimited access to 10 gyms',
-      'Bloc Life Loyalty Program',
-      '3x 15-Day Guest Passes',
-      'Discount on kids classes',
-    ],
-    cta: 'Select Junior',
-  },
-];
-
-const VALUE_CARDS = [
-  {
-    id: 'value-adult',
-    name: 'Adult',
-    price: 1200,
-    priceSuffix: 'kr',
-    description: 'For ages 16+',
-    features: [
-      '10 x Adult entries',
-      'A physical card you can share',
-      'Valid at all gyms during opening hours',
-      'Can be upgraded to membership',
-    ],
-    min: 0,
-    max: 5,
-  },
-  {
-    id: 'value-junior',
-    name: 'Junior',
-    price: 800,
-    priceSuffix: 'kr',
-    description: 'For ages up to 15 years',
-    features: [
-      '10 x Junior entries',
-      'A physical card you can share',
-      'Valid at all gyms during opening hours',
-      'Can be upgraded to membership',
-    ],
-    min: 0,
-    max: 3,
-  },
-];
-
-const ADDONS = [
-  {
-    id: 'addon-shoes',
-    name: 'Climbing Shoes',
-    price: { original: 599, discounted: 399 },
-    description: 'Essential climbing shoes for beginners',
-    features: [
-      'High-quality rubber sole',
-      'Comfortable fit',
-      'Perfect for bouldering',
-      'Available in multiple sizes',
-    ],
-    cta: 'Add to Cart',
-  },
-  {
-    id: 'addon-chalk',
-    name: 'Chalk Bag Set',
-    price: { original: 299, discounted: 199 },
-    description: 'Complete chalk bag with magnesium chalk',
-    features: [
-      'Premium magnesium chalk',
-      'Durable chalk bag',
-      'Brush included',
-      'Multiple color options',
-    ],
-    cta: 'Add to Cart',
-  },
-];
-
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
 const REQUIRED_FIELDS = [
@@ -4619,15 +4512,23 @@ function populateAddonsModal() {
   const grid = addonsModal.querySelector('[data-modal-addons-grid]');
   if (!grid) return;
   grid.innerHTML = '';
+  const addons = Array.isArray(state.subscriptionAdditions)
+    ? state.subscriptionAdditions
+    : [];
+  if (addons.length === 0) {
+    return;
+  }
   if (!templates.addon) {
     // Fallback simple cards if template missing
-    ADDONS.forEach((addon) => {
+    addons.forEach((addon) => {
       const card = document.createElement('div');
       card.className = 'plan-card addon-card';
       card.style.cursor = 'pointer';
       card.innerHTML = `
         <div style="font-weight:600">${addon.name}</div>
-        <div>${formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted))} kr</div>
+        <div>${typeof addon.price?.discounted === 'number'
+          ? formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted))
+          : '—'} kr</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
       `;
       
@@ -4647,7 +4548,7 @@ function populateAddonsModal() {
     return;
   }
   // Use existing add-on template for consistency
-  ADDONS.forEach((addon) => {
+  addons.forEach((addon) => {
     const card = templates.addon.content.firstElementChild.cloneNode(true);
     const checkCircle = card.querySelector('[data-action="toggle-addon"]');
     if (checkCircle) checkCircle.dataset.addonId = addon.id;
@@ -8275,22 +8176,16 @@ function handleLogout() {
 }
 
 function renderCatalog() {
-  // Step 5: Only render mock data if API data is not available yet
-  // API data will be loaded when business unit is selected and will replace this
-  // Check if we have any products (campaign, membership, 15 Day Pass, or value cards)
-  const hasAnyProducts = (state.campaignSubscriptions?.length || 0) > 0 ||
-                         (state.subscriptions?.length || 0) > 0 || 
-                         (state.dayPassSubscriptions?.length || 0) > 0 || 
-                         (state.valueCards?.length || 0) > 0;
-  if (!hasAnyProducts) {
-    renderMembershipPlans();
-    renderValueCards();
-  }
+  // API-driven catalog: renderProductsFromAPI handles memberships/value cards
+  // Add-ons are rendered from subscription additions when available
   renderAddons();
 }
 
 function renderMembershipPlans() {
   if (!templates.membership || !DOM.membershipPlans) return;
+  if (typeof MEMBERSHIP_PLANS === 'undefined' || !Array.isArray(MEMBERSHIP_PLANS) || MEMBERSHIP_PLANS.length === 0) {
+    return;
+  }
   DOM.membershipPlans.innerHTML = '';
   DOM.membershipPlans.dataset.centerInitialized = 'false';
 
@@ -8683,6 +8578,9 @@ function triggerPlanButtonGlare(button) {
 
 function renderValueCards() {
   if (!templates.valueCard || !DOM.valuePlans) return;
+  if (typeof VALUE_CARDS === 'undefined' || !Array.isArray(VALUE_CARDS) || VALUE_CARDS.length === 0) {
+    return;
+  }
   DOM.valuePlans.innerHTML = '';
   DOM.valuePlans.dataset.centerInitialized = 'false';
 
@@ -8743,8 +8641,15 @@ function renderAddons() {
   if (!templates.addon || !DOM.addonPlans) return;
   DOM.addonPlans.innerHTML = '';
   DOM.addonPlans.dataset.centerInitialized = 'false';
+  const addons = Array.isArray(state.subscriptionAdditions)
+    ? state.subscriptionAdditions
+    : [];
+  if (addons.length === 0) {
+    updateAddonSkipButton();
+    return;
+  }
 
-  ADDONS.forEach((addon) => {
+  addons.forEach((addon) => {
     const card = templates.addon.content.firstElementChild.cloneNode(true);
     card.dataset.planId = addon.id;
 
@@ -8756,10 +8661,26 @@ function renderAddons() {
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
 
     if (nameEl) nameEl.textContent = addon.name;
-    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
-    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
+    const priceOriginal = typeof addon.price?.original === 'number'
+      ? addon.price.original
+      : typeof addon.price?.amount === 'number'
+        ? addon.price.amount / 100
+        : null;
+    const priceDiscounted = typeof addon.price?.discounted === 'number'
+      ? addon.price.discounted
+      : priceOriginal;
+    if (originalPriceEl) {
+      originalPriceEl.textContent = priceOriginal !== null
+        ? formatPriceHalfKrone(roundToHalfKrone(priceOriginal))
+        : '—';
+    }
+    if (discountedPriceEl) {
+      discountedPriceEl.textContent = priceDiscounted !== null
+        ? formatPriceHalfKrone(roundToHalfKrone(priceDiscounted))
+        : '—';
+    }
     if (descriptionEl) descriptionEl.textContent = addon.description;
-    if (featuresEl) {
+    if (featuresEl && Array.isArray(addon.features)) {
       featuresEl.innerHTML = '';
       addon.features.forEach((feature) => {
         const li = document.createElement('li');
@@ -17078,15 +16999,30 @@ function setByPath(target, path, value) {
 }
 
 function findMembershipPlan(id) {
-  return MEMBERSHIP_PLANS.find((plan) => plan.id === id) ?? null;
+  const planId = String(id ?? '');
+  const pools = [
+    state.subscriptions,
+    state.dayPassSubscriptions,
+    state.campaignSubscriptions,
+  ];
+  for (const list of pools) {
+    if (!Array.isArray(list)) continue;
+    const match = list.find((plan) => String(plan.id) === planId);
+    if (match) return match;
+  }
+  return null;
 }
 
 function findValueCard(id) {
-  return VALUE_CARDS.find((plan) => plan.id === id) ?? null;
+  const rawId = String(id ?? '');
+  const normalizedId = rawId.startsWith('punch-') ? rawId.replace('punch-', '') : rawId;
+  if (!Array.isArray(state.valueCards)) return null;
+  return state.valueCards.find((plan) => String(plan.id) === normalizedId) ?? null;
 }
 
 function findAddon(id) {
-  return ADDONS.find((addon) => addon.id === id) ?? null;
+  if (!Array.isArray(state.subscriptionAdditions)) return null;
+  return state.subscriptionAdditions.find((addon) => String(addon.id) === String(id)) ?? null;
 }
 
 function showToast(message, type = 'info') {
