@@ -29,6 +29,7 @@ Production/deployment:
 - Deployed to join.boulders.dk
 - Cloudflare Pages auto-deployments working
 - No build or linter issues reported
+- GitHub Pages works for static UI only; API calls are not expected there (no proxy/backend)
 
 Documentation updates:
 - Status report refreshed to reflect webhook fix and membership creation
