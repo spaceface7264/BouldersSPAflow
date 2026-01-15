@@ -26,6 +26,7 @@ import { showToast } from './utils/toast.js';
 import { getErrorMessage } from './utils/errors.js';
 import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
 import { highlightFieldError } from './utils/dom.js';
+import { getApiConfig } from './utils/apiConfig.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -58,41 +59,9 @@ const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 // API Integration Functions
 class BusinessUnitsAPI {
   constructor(baseUrl = null) {
-    // In development, use Vite proxy (relative URL)
-    // In production on Netlify, use Netlify Function proxy to avoid CORS
-    // In production on Cloudflare, use Cloudflare Pages Function proxy to avoid CORS
-    // Detect if we're in development by checking if we're on localhost
-    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    // Cloudflare Pages detection - check for Pages domains OR boulders.dk domains (which are deployed on Cloudflare Pages)
-    // Note: workers.dev is Cloudflare Workers (not Pages), so it doesn't have Pages Functions
-    const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
-                               window.location.hostname.includes('join.boulders.dk') ||
-                               window.location.hostname === 'boulders.dk';
-    const isCloudflareWorker = window.location.hostname.includes('workers.dev');
-    const isNetlify = window.location.hostname.includes('netlify.app');
-    
-    if (baseUrl) {
-      this.baseUrl = baseUrl;
-    } else if (isDevelopment) {
-      // Use Vite proxy in development
-      this.baseUrl = '';
-    } else if (isNetlify) {
-      // Use Netlify Function proxy in production
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else if (isCloudflarePages) {
-      // Use Cloudflare Pages Function proxy in production
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (isCloudflareWorker) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      // Workers typically don't have CORS issues since they run server-side
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
   }
 
   // Get all business units from API
@@ -100,7 +69,7 @@ class BusinessUnitsAPI {
   // Note: This endpoint uses "No Auth" according to Postman docs
   async getBusinessUnits() {
     try {
-      // Build URL - if using Netlify proxy, add path as query parameter
+      // Build URL - if using proxy, add path as query parameter
       let url;
       if (this.useProxy) {
         url = `${this.baseUrl}?path=/api/reference/business-units`;
@@ -391,30 +360,10 @@ class BusinessUnitsAPI {
 // Caches responses in client state and refreshes when business unit changes
 class ReferenceDataAPI {
   constructor(baseUrl = null) {
-    // Use same proxy logic as BusinessUnitsAPI
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Development: use Vite proxy (relative URL)
-      this.baseUrl = '';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('pages.dev') ||
-               window.location.hostname.includes('join.boulders.dk') ||
-               window.location.hostname === 'boulders.dk') {
-      // Production: use Cloudflare Pages Function proxy
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev')) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
+    this.isDevelopment = config.isDevelopment;
   }
 
   // Fetch reference data (extensible for different types of reference data)
@@ -602,30 +551,10 @@ class ReferenceDataAPI {
 // Handles login, token management, customer creation, and password reset
 class AuthAPI {
   constructor(baseUrl = null) {
-    // Use same proxy logic as BusinessUnitsAPI
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Development: use Vite proxy (relative URL)
-      this.baseUrl = '';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('pages.dev') ||
-               window.location.hostname.includes('join.boulders.dk') ||
-               window.location.hostname === 'boulders.dk') {
-      // Production: use Cloudflare Pages Function proxy
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev')) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
+    this.isDevelopment = config.isDevelopment;
   }
 
   // Step 6: Login - Submit login credentials and store tokens
@@ -1399,30 +1328,10 @@ class AuthAPI {
 // Handles order creation, adding items (subscriptions, value cards, articles), and order management
 class OrderAPI {
   constructor(baseUrl = null) {
-    // Use same proxy logic as BusinessUnitsAPI
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Development: use Vite proxy (relative URL)
-      this.baseUrl = '';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('pages.dev') ||
-               window.location.hostname.includes('join.boulders.dk') ||
-               window.location.hostname === 'boulders.dk') {
-      // Production: use Cloudflare Pages Function proxy
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev')) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
+    this.isDevelopment = config.isDevelopment;
   }
 
   // Step 7: Create order - POST /api/orders
@@ -2262,30 +2171,10 @@ class OrderAPI {
 // Handles payment link generation for checkout
 class PaymentAPI {
   constructor(baseUrl = null) {
-    // Use same proxy logic as BusinessUnitsAPI
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Development: use Vite proxy (relative URL)
-      this.baseUrl = '';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('pages.dev') ||
-               window.location.hostname.includes('join.boulders.dk') ||
-               window.location.hostname === 'boulders.dk') {
-      // Production: use Cloudflare Pages Function proxy
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev')) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
+    this.isDevelopment = config.isDevelopment;
     
     // Correct endpoint: /api/payment/generate-link
     // Base URL: https://api-join.boulders.dk
@@ -3665,9 +3554,9 @@ async function loadGymsFromAPI() {
 // Load countries from API and populate country code selectors
 async function loadCountriesFromAPI() {
   try {
-    // Determine base URL and proxy settings (same logic as BusinessUnitsAPI)
-    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    
+    // Determine base URL and proxy settings
+    const { baseUrl, useProxy, isDevelopment } = getApiConfig();
+
     // Helper to log only in development
     const devLog = (...args) => {
       if (isDevelopment) console.log(...args);
@@ -3678,32 +3567,6 @@ async function loadCountriesFromAPI() {
     const devError = (...args) => {
       if (isDevelopment) console.error(...args);
     };
-    const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
-                               window.location.hostname.includes('join.boulders.dk') ||
-                               window.location.hostname === 'boulders.dk';
-    const isCloudflareWorker = window.location.hostname.includes('workers.dev');
-    const isNetlify = window.location.hostname.includes('netlify.app');
-    
-    let baseUrl;
-    let useProxy = false;
-    
-    if (isDevelopment) {
-      baseUrl = '';
-      useProxy = false;
-    } else if (isNetlify) {
-      baseUrl = '/.netlify/functions/api-proxy';
-      useProxy = true;
-    } else if (isCloudflarePages) {
-      baseUrl = '/api-proxy';
-      useProxy = true;
-    } else if (isCloudflareWorker) {
-      baseUrl = 'https://api-join.boulders.dk';
-      useProxy = false;
-    } else {
-      baseUrl = 'https://api-join.boulders.dk';
-      useProxy = false;
-    }
-    
     // Build URL for countries endpoint
     // Note: /api/ver3/ endpoints use boulders.brpsystems.com/apiserver base URL
     // In development, use Vite proxy which handles this
@@ -4426,15 +4289,12 @@ function populateAddonsModal() {
           // Construct asset URL from reference ID
           const referenceId = mainAsset.reference;
           const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const isNetlify = window.location.hostname.includes('netlify.app');
           const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
                                    window.location.hostname.includes('join.boulders.dk') ||
                                    window.location.hostname === 'boulders.dk';
           
           if (isDevelopment) {
             imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
-          } else if (isNetlify) {
-            imageUrl = `/.netlify/functions/api-proxy?path=/api/assets/${referenceId}`;
           } else if (isCloudflarePages) {
             imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
           } else {
@@ -4649,15 +4509,12 @@ function populateBoostModal() {
           // Construct asset URL from reference ID
           const referenceId = mainAsset.reference;
           const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const isNetlify = window.location.hostname.includes('netlify.app');
           const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
                                    window.location.hostname.includes('join.boulders.dk') ||
                                    window.location.hostname === 'boulders.dk';
           
           if (isDevelopment) {
             imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
-          } else if (isNetlify) {
-            imageUrl = `/.netlify/functions/api-proxy?path=/api/assets/${referenceId}`;
           } else if (isCloudflarePages) {
             imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
           } else {

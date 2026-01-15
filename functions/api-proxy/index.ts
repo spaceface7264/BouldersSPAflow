@@ -1,7 +1,7 @@
 // Cloudflare Pages Function to proxy API requests and avoid CORS issues
 // This function forwards requests from the frontend to the Join Boulders API
 // Supports all HTTP methods (GET, POST, PUT, DELETE) for future implementation steps
-// Based on the Netlify function implementation to maintain consistency
+// Based on the legacy proxy implementation to maintain consistency
 
 export async function onRequest(context: any) {
   const request = context.request;

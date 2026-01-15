@@ -6,7 +6,7 @@
 - **Status**: ✅ COMPLETE
 - **Implementation**: 
   - Base URL hard-coded to `https://api-join.boulders.dk` in `shared/constants/index.ts`
-  - Production uses Netlify Function proxy that forwards to the correct API URL
+  - Production uses Cloudflare Pages Function proxy that forwards to the correct API URL
   - Development uses Vite proxy
 - **Compliance**: ✅ Matches guide requirement
 
@@ -17,7 +17,7 @@
   - Implemented in:
     - `shared/lib/http.ts` (HttpClient class)
     - `app.js` (BusinessUnitsAPI class)
-    - `netlify/functions/api-proxy.js` (Netlify Function)
+    - `functions/api-proxy/index.ts` (Cloudflare Pages Function)
 - **Compliance**: ✅ Matches guide requirement (header-based, not query params)
 
 ### Step 3: Business-Unit Picker ✅
@@ -26,7 +26,7 @@
   - ✅ Fetches from `/api/reference/business-units` endpoint
   - ✅ UI blocks progression until business unit is selected
   - ✅ Stores selected unit in `state.selectedBusinessUnit` and `state.selectedGymId`
-  - ✅ Works in both development (Vite proxy) and production (Netlify Function)
+  - ✅ Works in both development (Vite proxy) and production (Cloudflare Pages Function)
 - **Compliance**: ✅ Matches guide requirements
 
 ### Step 4: Reference Data Loader ✅
@@ -44,7 +44,7 @@
 
 ## 🔧 Infrastructure Setup
 
-### Netlify Function Proxy ✅
+### Cloudflare Pages Function Proxy ✅
 - **Purpose**: Avoids CORS issues in production
 - **Status**: ✅ COMPLETE and ready for future steps
 - **Features**:
@@ -53,7 +53,7 @@
   - ✅ Forwards `Accept-Language: da-DK` header
   - ✅ Forwards Authorization headers (ready for Step 6)
   - ✅ Handles request bodies for POST/PUT/PATCH
-- **Location**: `netlify/functions/api-proxy.js`
+- **Location**: `functions/api-proxy/index.ts`
 
 ### State Management ✅
 - **Status**: ✅ READY
@@ -170,9 +170,9 @@
 - ✅ Headers: `Accept-Language: da-DK` matches requirements
 
 ### Production Readiness:
-- ✅ CORS issue resolved with Netlify Function
+- ✅ CORS issue resolved with Cloudflare Pages Function
 - ✅ Works in development (Vite proxy)
-- ✅ Works in production (Netlify Function)
+- ✅ Works in production (Cloudflare Pages Function)
 - ✅ Error handling in place
 - ✅ Logging for debugging
 
@@ -180,6 +180,6 @@
 
 **Current Status**: Steps 1-9 are **fully implemented and production-ready**.
 
-The setup is solid and follows the implementation guide correctly. The Netlify Function proxy is properly configured to support all future API calls. Authentication is complete with token management, validation, and refresh. Order management is complete with all item types (subscriptions, value cards, articles). Additional catalog items can be fetched and added to orders. Payment link generation is ready for checkout flow. The system will seamlessly handle Steps 10-12 when implemented.
+The setup is solid and follows the implementation guide correctly. The Cloudflare Pages Function proxy is properly configured to support all future API calls. Authentication is complete with token management, validation, and refresh. Order management is complete with all item types (subscriptions, value cards, articles). Additional catalog items can be fetched and added to orders. Payment link generation is ready for checkout flow. The system will seamlessly handle Steps 10-12 when implemented.
 
 **Recommendation**: ✅ **Ready to proceed with Step 10** (Shared State Wiring) or **Step 12** (Guardian and Child Flows).

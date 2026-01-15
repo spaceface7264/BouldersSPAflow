@@ -21,7 +21,7 @@
 - ✅ **Payment Link Timing Fix**: Payment link now generated immediately after subscription is added (backend requirement)
 
 #### Production Features
-- ✅ CORS handling (Netlify Function proxy)
+- ✅ CORS handling (Cloudflare Pages Function proxy)
 - ✅ Error handling throughout checkout flow
 - ✅ Payment return URL handling
 - ✅ SessionStorage for checkout state persistence
@@ -96,8 +96,8 @@
 
 ### Deployment
 - ✅ **Production**: Deployed to `join.boulders.dk`
-- ✅ **Netlify**: Automatic deployments working
-- ✅ **CORS**: Resolved via Netlify Function proxy
+- ✅ **Cloudflare Pages**: Automatic deployments working
+- ✅ **CORS**: Resolved via Cloudflare Pages Function proxy
 - ✅ **Build**: No build errors
 
 ---
