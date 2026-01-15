@@ -23,6 +23,8 @@ import {
 import { stripEmailPlusTag } from './utils/string.js';
 import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
+import { getErrorMessage } from './utils/errors.js';
+import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -10117,7 +10119,7 @@ async function handleApplyDiscount() {
       // Double-check the display was updated
       if (DOM.cartTotal) {
         const displayedTotal = DOM.cartTotal.textContent;
-        const expectedTotal = currencyFormatter.format(state.totals.cartTotal);
+        const expectedTotal = formatCurrencyHalfKrone(state.totals.cartTotal);
         console.log('[Discount] Cart total display check:', {
           displayed: displayedTotal,
           expected: expectedTotal,
@@ -10145,7 +10147,7 @@ async function handleApplyDiscount() {
       const monthlyPaymentText = monthlyPaymentElement ? monthlyPaymentElement.textContent : '';
       
       // Show success message with discount amount and new prices
-      let successMessage = `✓ Coupon "${discountCode}" applied successfully! Discount: ${currencyFormatter.format(discountAmount)}.`;
+      let successMessage = `✓ Coupon "${discountCode}" applied successfully! Discount: ${formatCurrencyHalfKrone(discountAmount)}.`;
       if (payNowText) {
         successMessage += ` Pay now: ${payNowText}`;
       }
@@ -10153,7 +10155,7 @@ async function handleApplyDiscount() {
         successMessage += ` Monthly: ${monthlyPaymentText}`;
       }
       if (!payNowText && !monthlyPaymentText) {
-        successMessage += ` New total: ${currencyFormatter.format(newTotal)}`;
+        successMessage += ` New total: ${formatCurrencyHalfKrone(newTotal)}`;
       }
       showDiscountMessage(successMessage, 'success');
       
@@ -10737,9 +10739,13 @@ function renderCartItems() {
         // Display price - show discounted price if different from original
         if (displayPrice !== originalPrice && state.discountApplied) {
           // Show original price with strikethrough and discounted price
-          priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${numberFormatter.format(originalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${numberFormatter.format(displayPrice)} kr</span>`;
+          const originalText = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
+          const discountedText = formatPriceHalfKrone(roundToHalfKrone(displayPrice));
+          priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`;
         } else {
-          priceEl.textContent = displayPrice ? numberFormatter.format(displayPrice) + ' kr' : '';
+          priceEl.textContent = displayPrice
+            ? `${formatPriceHalfKrone(roundToHalfKrone(displayPrice))} kr`
+            : '';
         }
       }
     }
@@ -11405,15 +11411,15 @@ function updateDiscountDisplay() {
       discountDisplay.innerHTML = `
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
-          <span class="discount-value">${currencyFormatter.format(state.totals.subtotal)}</span>
+          <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
         </div>
         <div class="discount-row discount-applied">
           <span class="discount-label">Discount (${state.discountCode}):</span>
-          <span class="discount-value">-${currencyFormatter.format(state.totals.discountAmount)}</span>
+          <span class="discount-value">-${formatCurrencyHalfKrone(state.totals.discountAmount)}</span>
         </div>
         <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
           <span class="discount-label" style="font-weight: bold;">Total:</span>
-          <span class="discount-value" style="font-weight: bold;">${currencyFormatter.format(state.totals.cartTotal)}</span>
+          <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
         </div>
       `;
     } else if (state.discountCode && !state.discountApplied) {
@@ -11421,7 +11427,7 @@ function updateDiscountDisplay() {
       discountDisplay.innerHTML = `
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
-          <span class="discount-value">${currencyFormatter.format(state.totals.subtotal)}</span>
+          <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
         </div>
         <div class="discount-row discount-pending" style="opacity: 0.7; font-style: italic;">
           <span class="discount-label">Discount code (${state.discountCode}):</span>
@@ -15651,15 +15657,6 @@ function highlightFieldError(fieldId, animate = false) {
   }
 }
 
-function isValidCardNumber(value) {
-  const digits = value.replace(/\s+/g, '');
-  return /^\d{13,19}$/.test(digits);
-}
-
-function isValidExpiryDate(value) {
-  return /^(0[1-9]|1[0-2])\/\d{2}$/.test(value);
-}
-
 function updateCheckoutButton() {
   if (!DOM.checkoutBtn) return;
   const termsAccepted = DOM.termsConsent?.checked ?? false;
@@ -15667,101 +15664,6 @@ function updateCheckoutButton() {
   const hasPayment = Boolean(state.paymentMethod);
 
   DOM.checkoutBtn.disabled = !(termsAccepted && hasMembership && hasPayment);
-}
-
-// Helper function to get user-friendly error messages
-function getErrorMessage(error, context = 'operation') {
-  // Network errors
-  if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-    return 'Network error. Please check your connection and try again.';
-  }
-
-  // Try to parse validation errors from API response (400/401/403 errors with details)
-  if (error.message.includes('400') || error.message.includes('401') || error.message.includes('403')) {
-    try {
-      // Extract JSON from error message - try multiple patterns
-      let jsonMatch = error.message.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        // Also try to parse the entire error text if it's JSON
-        jsonMatch = error.message.match(/-\s*(\{[\s\S]*\})/);
-        if (jsonMatch) {
-          jsonMatch = [jsonMatch[1]];
-        }
-      }
-      
-      if (jsonMatch) {
-        const errorData = JSON.parse(jsonMatch[0]);
-        
-        // Handle 401 errors with specific error codes (like INVALID_CREDENTIALS)
-        if (errorData.code === 'INVALID_CREDENTIALS' || errorData.error?.code === 'INVALID_CREDENTIALS') {
-          return errorData.message || errorData.error?.message || 'Invalid username or password';
-        }
-        
-        // Handle validation errors with details array
-        if (errorData.error?.details && Array.isArray(errorData.error.details)) {
-          const validationErrors = errorData.error.details
-            .map(detail => detail.message || `${detail.field}: ${detail.message}`)
-            .join(', ');
-          return `Please fix the following: ${validationErrors}`;
-        }
-        
-        // Handle field errors (like customerType)
-        if (errorData.error?.details?.fieldErrors && Array.isArray(errorData.error.details.fieldErrors)) {
-          const fieldErrors = errorData.error.details.fieldErrors
-            .map(fieldError => `${fieldError.field}: ${fieldError.errorCode || 'required'}`)
-            .join(', ');
-          return `Missing required fields: ${fieldErrors}`;
-        }
-        
-        // Handle generic error messages from API
-        if (errorData.error?.message) {
-          return errorData.error.message;
-        }
-        if (errorData.message) {
-          return errorData.message;
-        }
-      }
-    } catch (e) {
-      // If parsing fails, fall through to default error message
-      console.warn('[getErrorMessage] Failed to parse error JSON:', e);
-    }
-  }
-
-  // Parse status code from error message
-  const statusMatch = error.message.match(/(\d{3})/);
-  if (statusMatch) {
-    const status = parseInt(statusMatch[1]);
-    
-    switch (status) {
-      case 400:
-        return 'Invalid information provided. Please check your details and try again.';
-      case 401:
-        // For login context, show invalid credentials message
-        if (context === 'Login') {
-          return 'Invalid username or password. Please check your credentials and try again.';
-        }
-        return 'Your session has expired. Please try again.';
-      case 403:
-        return 'You do not have permission to perform this action.';
-      case 404:
-        return `${context} not found. Please try again.`;
-      case 409:
-        return 'This order already exists. Please check your orders or contact support.';
-      case 422:
-        return 'Invalid data provided. Please review your information.';
-      case 429:
-        return 'Too many requests. Please wait a moment and try again.';
-      case 500:
-      case 502:
-      case 503:
-        return 'Server error. Please try again in a few moments.';
-      default:
-        return `An error occurred (${status}). Please try again or contact support.`;
-    }
-  }
-
-  // Default message
-  return error.message || 'An unexpected error occurred. Please try again.';
 }
 
 // Helper function to manage loading state during checkout
