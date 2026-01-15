@@ -54,9 +54,23 @@ const copyFunctionsPlugin = () => ({
 });
 
 // https://vitejs.dev/config/
+const resolveBasePath = () => {
+  if (process.env.VITE_BASE_PATH) {
+    return process.env.VITE_BASE_PATH;
+  }
+
+  // GitHub Actions exposes GITHUB_REPOSITORY as "owner/repo"
+  if (process.env.GITHUB_REPOSITORY) {
+    const repoName = process.env.GITHUB_REPOSITORY.split('/')[1];
+    return `/${repoName}/`;
+  }
+
+  return '/';
+};
+
 export default defineConfig(({ command }) => ({
   plugins: [react(), copyFunctionsPlugin()],
-  base: process.env.VITE_BASE_PATH || '/',
+  base: resolveBasePath(),
   server: {
     host: true,
     port: 5173,
