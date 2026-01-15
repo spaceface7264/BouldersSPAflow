@@ -29,6 +29,7 @@ import {
   getUserLocation,
   isGeolocationAvailable,
 } from './utils/geolocation.js';
+import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -86,55 +87,33 @@ class BusinessUnitsAPI {
   // Note: This endpoint uses "No Auth" according to Postman docs
   async getBusinessUnits() {
     try {
-      // Build URL - if using proxy, add path as query parameter
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/reference/business-units`;
-      } else {
-        url = `${this.baseUrl}/api/reference/business-units`;
-      }
-      console.log('Fetching business units from:', url);
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/reference/business-units',
+      });
+      devLog('Fetching business units from:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(), // Step 2: Language default
         'Content-Type': 'application/json',
         // No Authorization header needed - endpoint uses "No Auth"
       };
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('API Response status:', response.status, response.statusText);
-      console.log('API Response Content-Type:', response.headers.get('Content-Type'));
-      
-      // Check if response is actually JSON before parsing
-      const contentType = response.headers.get('Content-Type') || '';
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('API returned non-JSON response:', text.substring(0, 200));
-        throw new Error(`API returned HTML instead of JSON. Status: ${response.status}. This usually means the API endpoint is not working correctly or the proxy is misconfigured.`);
-      }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Business units API response:', data);
-      console.log('Response type:', Array.isArray(data) ? 'Array' : typeof data);
-      console.log('Number of items:', Array.isArray(data) ? data.length : 'N/A');
-      
+
+      const data = await requestJson({ url, headers });
+      devLog('Business units API response:', data);
+      devLog('Response type:', Array.isArray(data) ? 'Array' : typeof data);
+      devLog('Number of items:', Array.isArray(data) ? data.length : 'N/A');
+
       return data;
     } catch (error) {
       console.error('Error fetching business units:', error);
       console.error('Error details:', {
         message: error.message,
         stack: error.stack,
-        name: error.name
+        name: error.name,
+        status: error.status,
+        payload: error.payload,
       });
       // Don't use fallback mock data - throw error so caller can handle it
       throw error;
@@ -194,16 +173,14 @@ class BusinessUnitsAPI {
       // Build URL with business unit as query parameter
       // Note: We don't send subscriber/customer parameters for anonymous users
       // Backend should set allowedToOrder based on "kan bookes via internet" checkbox
-      let url;
       const cacheBuster = `&_t=${Date.now()}`;
       const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}${cacheBuster}` : `?_t=${Date.now()}`;
-      if (this.useProxy) {
-        // For proxy, include query params in the path
-        url = `${this.baseUrl}?path=/api/products/subscriptions${queryParam}`;
-      } else {
-        url = `${this.baseUrl}/api/products/subscriptions${queryParam}`;
-      }
-      console.log('Fetching subscriptions from:', url);
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products/subscriptions${queryParam}`,
+      });
+      devLog('Fetching subscriptions from:', url);
       
       const acceptLanguage = getAcceptLanguageHeader();
       const headers = {
@@ -211,21 +188,10 @@ class BusinessUnitsAPI {
         'Content-Type': 'application/json',
       };
       
-      console.log('[API] Fetching subscriptions with Accept-Language:', acceptLanguage);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), imageBannerText: data[0].imageBanner?.text?.substring(0, 50) } : 'empty');
+      devLog('[API] Fetching subscriptions with Accept-Language:', acceptLanguage);
+
+      const data = await requestJson({ url, headers });
+      devLog('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), imageBannerText: data[0].imageBanner?.text?.substring(0, 50) } : 'empty');
       return data;
     } catch (error) {
       console.error('Error fetching subscriptions:', error);
@@ -236,14 +202,13 @@ class BusinessUnitsAPI {
   // Step 5: Get value cards (punch cards)
   async getValueCards() {
     try {
-      let url;
       const cacheBuster = `?_t=${Date.now()}`;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/products/valuecards${cacheBuster}`;
-      } else {
-        url = `${this.baseUrl}/api/products/valuecards${cacheBuster}`;
-      }
-      console.log('Fetching value cards from:', url);
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products/valuecards${cacheBuster}`,
+      });
+      devLog('Fetching value cards from:', url);
       
       const acceptLanguage = getAcceptLanguageHeader();
       const headers = {
@@ -251,21 +216,10 @@ class BusinessUnitsAPI {
         'Content-Type': 'application/json',
       };
       
-      console.log('[API] Fetching value cards with Accept-Language:', acceptLanguage);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('[API] Value cards response sample:', data[0] ? { 
+      devLog('[API] Fetching value cards with Accept-Language:', acceptLanguage);
+
+      const data = await requestJson({ url, headers });
+      devLog('[API] Value cards response sample:', data[0] ? { 
         id: data[0].id, 
         name: data[0].name, 
         description: data[0].description?.substring(0, 50) 
@@ -282,44 +236,37 @@ class BusinessUnitsAPI {
   async getSubscriptionAdditions(productId) {
     try {
       // Try the additions endpoint first (as per guide)
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/products/subscriptions/${productId}/additions`;
-      } else {
-        url = `${this.baseUrl}/api/products/subscriptions/${productId}/additions`;
-      }
-      console.log('Fetching subscription additions from:', url);
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products/subscriptions/${productId}/additions`,
+      });
+      devLog('Fetching subscription additions from:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
+
+      let data;
+      try {
+        data = await requestJson({ url, headers });
+      } catch (error) {
         // If 404, the endpoint doesn't exist yet - return empty array for now
-        if (response.status === 404) {
-          console.warn(`Additions endpoint not found for product ${productId}. Endpoint may not be implemented yet.`);
+        if (error.status === 404) {
+          devWarn(`Additions endpoint not found for product ${productId}. Endpoint may not be implemented yet.`);
           return [];
         }
-        const errorText = await response.text();
-        console.error(`API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        throw error;
       }
-      
-      const data = await response.json();
-      console.log('Subscription additions API response:', data);
+      devLog('Subscription additions API response:', data);
       
       // Handle different response formats
       return Array.isArray(data) ? data : (data.data || data.items || []);
     } catch (error) {
       console.error('Error fetching subscription additions:', error);
       // Return empty array if endpoint doesn't exist - don't break the flow
-      console.warn('Returning empty array for add-ons - endpoint may not be available yet');
+      devWarn('Returning empty array for add-ons - endpoint may not be available yet');
       return [];
     }
   }
@@ -328,39 +275,33 @@ class BusinessUnitsAPI {
   // To offer more products, fetch catalogs with GET /api/products
   async getProducts(businessUnitId = null) {
     try {
-      let url;
       const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}` : '';
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/products${queryParam}`;
-      } else {
-        url = `${this.baseUrl}/api/products${queryParam}`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products${queryParam}`,
+      });
       
-      console.log('[Step 8] Fetching additional catalog products from:', url);
+      devLog('[Step 8] Fetching additional catalog products from:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
+
+      let data;
+      try {
+        data = await requestJson({ url, headers });
+      } catch (error) {
         // If 404, the endpoint doesn't exist yet - return empty array
-        if (response.status === 404) {
-          console.log('[Step 8] Products endpoint not found (404) - may not be implemented yet');
+        if (error.status === 404) {
+          devLog('[Step 8] Products endpoint not found (404) - may not be implemented yet');
           return [];
         }
-        const errorText = await response.text();
-        console.error(`[Step 8] API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        throw error;
       }
-      
-      const data = await response.json();
-      console.log('[Step 8] Products API response:', data);
+
+      devLog('[Step 8] Products API response:', data);
       
       // Handle different response formats
       return Array.isArray(data) ? data : (data.data || data.items || []);
@@ -577,14 +518,13 @@ class AuthAPI {
   // Step 6: Login - Submit login credentials and store tokens
   async login(email, password) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/auth/login`;
-      } else {
-        url = `${this.baseUrl}/api/auth/login`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/auth/login',
+      });
       
-      console.log('[Step 6] Logging in:', url);
+      devLog('[Step 6] Logging in:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
@@ -592,70 +532,52 @@ class AuthAPI {
       };
       
       // API expects username field (which is the email)
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ username: email, password }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Login error (${response.status}):`, errorText);
-        
+      let data;
+      try {
+        data = await requestJson({
+          url,
+          method: 'POST',
+          headers,
+          body: { username: email, password },
+        });
+      } catch (error) {
+        const errorPayload = error?.payload;
+        const payloadText = typeof errorPayload === 'string' ? errorPayload : JSON.stringify(errorPayload);
+        console.error(`[Step 6] Login error (${error.status || 'unknown'}):`, payloadText || error);
+
         // Handle rate limit errors with better messaging
-        if (response.status === 429) {
+        if (error.status === 429) {
           let retryAfterSeconds = 60; // Default 1 minute (60 seconds)
-          try {
-            const errorData = JSON.parse(errorText);
-            if (errorData.retryAfter) {
-              // retryAfter is already in seconds (e.g., 900 = 15 minutes)
-              retryAfterSeconds = parseInt(errorData.retryAfter, 10);
-              // Store the actual retry time for cooldown tracking
-              if (typeof window !== 'undefined') {
-                window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
-              }
-            }
-          } catch (e) {
-            // If JSON parse fails, try to extract from error text
-            const retryMatch = errorText.match(/retryAfter["\s:]*(\d+)/i);
+          if (errorPayload && typeof errorPayload === 'object' && errorPayload.retryAfter) {
+            retryAfterSeconds = parseInt(errorPayload.retryAfter, 10);
+          } else if (payloadText) {
+            const retryMatch = payloadText.match(/retryAfter["\s:]*(\d+)/i);
             if (retryMatch) {
               retryAfterSeconds = parseInt(retryMatch[1], 10);
-              if (typeof window !== 'undefined') {
-                window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
-              }
             }
+          }
+          if (typeof window !== 'undefined') {
+            window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
           }
           const retryMinutes = Math.floor(retryAfterSeconds / 60);
           const retrySeconds = retryAfterSeconds % 60;
-          const retryMessage = retryMinutes > 0 
+          const retryMessage = retryMinutes > 0
             ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
             : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
-          throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${response.status} - ${errorText})`);
+          throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${error.status} - ${payloadText})`);
         }
-        
-        // Handle 401 errors - parse JSON to extract actual error message
-        if (response.status === 401) {
-          try {
-            const errorData = JSON.parse(errorText);
-            // Check for INVALID_CREDENTIALS or other specific error codes
-            if (errorData.error?.code === 'INVALID_CREDENTIALS' || errorData.error?.message) {
-              // Preserve the original error structure so getErrorMessage can parse it
-              throw new Error(`Login failed: ${response.status} - ${errorText}`);
-            }
-          } catch (e) {
-            // If this is our thrown error, re-throw it
-            if (e.message && e.message.includes('Login failed')) {
-              throw e;
-            }
-            // If JSON parsing fails, fall through to default error
+
+        // Handle 401 errors - preserve error structure for getErrorMessage
+        if (error.status === 401 && errorPayload && typeof errorPayload === 'object') {
+          if (errorPayload.error?.code === 'INVALID_CREDENTIALS' || errorPayload.error?.message) {
+            throw new Error(`Login failed: ${error.status} - ${payloadText}`);
           }
         }
-        
-        throw new Error(`Login failed: ${response.status} - ${errorText}`);
+
+        throw new Error(`Login failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
-      console.log('[Step 6] Login response:', data);
+
+      devLog('[Step 6] Login response:', data);
       
       const tokenPayload = data?.data ?? data;
       const accessToken = tokenPayload.accessToken || tokenPayload.access_token;
@@ -699,14 +621,13 @@ class AuthAPI {
   // Step 6: Validate token - Keep tokens fresh when app reloads
   async validateToken() {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/auth/validate`;
-      } else {
-        url = `${this.baseUrl}/api/auth/validate`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/auth/validate',
+      });
       
-      console.log('[Step 6] Validating token:', url);
+      devLog('[Step 6] Validating token:', url);
       
       // Note: Authorization header will be added automatically by HttpClient
       // But since we're using fetch directly, we need to add it manually
@@ -724,20 +645,13 @@ class AuthAPI {
         'Authorization': `Bearer ${accessToken}`,
       };
       
-      const response = await fetch(url, {
+      const data = await requestJson({
+        url,
         method: 'POST',
         headers,
-        body: JSON.stringify({ accessToken }), // Some endpoints require explicit payload
+        body: { accessToken },
       });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Token validation error (${response.status}):`, errorText);
-        throw new Error(`Token validation failed: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('[Step 6] Token validation response:', data);
+      devLog('[Step 6] Token validation response:', data);
       return data;
     } catch (error) {
       console.error('[Step 6] Token validation error:', error);
@@ -748,14 +662,13 @@ class AuthAPI {
   // Step 6: Refresh token - Refresh expired tokens
   async refreshToken() {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/auth/refresh`;
-      } else {
-        url = `${this.baseUrl}/api/auth/refresh`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/auth/refresh',
+      });
       
-      console.log('[Step 6] Refreshing token:', url);
+      devLog('[Step 6] Refreshing token:', url);
       
       const refreshToken = typeof window.getRefreshToken === 'function' 
         ? window.getRefreshToken() 
@@ -770,25 +683,26 @@ class AuthAPI {
         'Content-Type': 'application/json',
       };
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ refreshToken }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Token refresh error (${response.status}):`, errorText);
-        const isRateLimit = response.status === 429;
+      let data;
+      try {
+        data = await requestJson({
+          url,
+          method: 'POST',
+          headers,
+          body: { refreshToken },
+        });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string' ? error.payload : JSON.stringify(error.payload);
+        console.error(`[Step 6] Token refresh error (${error.status || 'unknown'}):`, payloadText || error);
+        const isRateLimit = error.status === 429;
         // If refresh fails for other reasons, clear tokens and return to auth step
         if (!isRateLimit && typeof window.clearTokens === 'function') {
           window.clearTokens();
         }
-        throw new Error(`Token refresh failed: ${response.status} - ${errorText}`);
+        throw new Error(`Token refresh failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
       
-      const data = await response.json();
-      console.log('[Step 6] Token refresh response:', data);
+      devLog('[Step 6] Token refresh response:', data);
       
       const tokenPayload = data?.data ?? data;
       const newAccessToken = tokenPayload.accessToken || tokenPayload.access_token;
@@ -833,16 +747,15 @@ class AuthAPI {
   // appId is optional - if not provided, BRP will use default setting for reset link
   async resetPassword(email, appId = null) {
     try {
-      let url;
-      if (this.useProxy) {
-        // Use ver3 endpoint path - proxy will route to correct base URL
-        url = `${this.baseUrl}?path=/api/ver3/auth/resetpassword`;
-      } else {
-        // Direct call to ver3 API
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/auth/resetpassword`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: '/api/ver3/auth/resetpassword',
+          })
+        : 'https://boulders.brpsystems.com/apiserver/api/ver3/auth/resetpassword';
       
-      console.log('[Step 6] Requesting password reset:', url);
+      devLog('[Step 6] Requesting password reset:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
@@ -859,36 +772,25 @@ class AuthAPI {
         }
       }
       
-      console.log('[Step 6] Password reset payload:', payload);
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      // API returns 201 (CREATED) on success, even if email doesn't match (security measure)
-      if (response.status !== 201 && !response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Password reset error (${response.status}):`, errorText);
-        throw new Error(`Password reset failed: ${response.status} - ${errorText}`);
+      devLog('[Step 6] Password reset payload:', payload);
+
+      let data;
+      try {
+        data = await requestJson({
+          url,
+          method: 'POST',
+          headers,
+          body: payload,
+          expectJson: false,
+        });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string' ? error.payload : JSON.stringify(error.payload);
+        console.error(`[Step 6] Password reset error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Password reset failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      // API may return empty body on 201, or JSON response
-      let data = null;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        try {
-          data = await response.json();
-        } catch (e) {
-          // Empty response is OK for 201 status
-          console.log('[Step 6] Password reset returned 201 with no JSON body (expected)');
-        }
-      }
-      
-      console.log('[Step 6] Password reset response:', response.status, data);
-      // Return success indication
-      return { success: true, status: response.status, data };
+
+      devLog('[Step 6] Password reset response:', data);
+      return { success: true, data };
     } catch (error) {
       console.error('[Step 6] Password reset error:', error);
       throw error;
@@ -1046,16 +948,13 @@ class AuthAPI {
   // Step 6: Get customer profile
   async getCustomer(customerId) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}`;
-      } else {
-        // In development, use direct API endpoint (same as fallback)
-        // This avoids Vite proxy issues with /api/ver3 paths
-        url = `https://api-join.boulders.dk/api/ver3/customers/${customerId}`;
-      }
+      let url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/customers/${customerId}`,
+      });
       
-      console.log('[Step 6] Fetching customer profile:', url);
+      devLog('[Step 6] Fetching customer profile:', url);
       
       const accessToken = typeof window.getAccessToken === 'function' 
         ? window.getAccessToken() 
@@ -1070,21 +969,26 @@ class AuthAPI {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       };
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Get customer error (${response.status}):`, errorText);
-        throw new Error(`Get customer failed: ${response.status} - ${errorText}`);
+
+      try {
+        const data = await requestJson({ url, headers });
+        devLog('[Step 6] Get customer response:', data);
+        return data;
+      } catch (error) {
+        if (error.status === 404 && this.useProxy) {
+          // Fallback to ver3 endpoint if legacy customer profile requires it
+          const fallbackUrl = buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/customers/${customerId}`,
+          });
+          devWarn('[Step 6] Customer profile not found on /api/customers. Retrying:', fallbackUrl);
+          const data = await requestJson({ url: fallbackUrl, headers });
+          devLog('[Step 6] Get customer response (ver3):', data);
+          return data;
+        }
+        throw error;
       }
-      
-      const data = await response.json();
-      console.log('[Step 6] Get customer response:', data);
-      return data;
     } catch (error) {
       console.error('[Step 6] Get customer error:', error);
       throw error;
@@ -6831,9 +6735,22 @@ function refreshLoginUI() {
   // Update address display (order: 4)
   if (DOM.loginStatusAddress && DOM.loginStatusAddressRow) {
     let addressParts = [];
-    const addressSource = customer?.address || customer?.shippingAddress || formCustomer?.address;
-    const postalCodeSource = customer?.postalCode || customer?.shippingAddress?.postalCode || formCustomer?.address?.postalCode;
-    const citySource = customer?.city || customer?.shippingAddress?.city || formCustomer?.address?.city;
+    const addressSource =
+      customer?.address ||
+      customer?.shippingAddress ||
+      customer?.streetAddress ||
+      customer?.addressLine1 ||
+      formCustomer?.address;
+    const postalCodeSource =
+      customer?.postalCode ||
+      customer?.zip ||
+      customer?.shippingAddress?.postalCode ||
+      formCustomer?.address?.postalCode;
+    const citySource =
+      customer?.city ||
+      customer?.shippingAddress?.city ||
+      customer?.addressCity ||
+      formCustomer?.address?.city;
     
     if (addressSource) {
       if (typeof addressSource === 'string') {
@@ -6860,8 +6777,15 @@ function refreshLoginUI() {
   // Update phone number display (order: 5)
   if (DOM.loginStatusPhone && DOM.loginStatusPhoneRow) {
     let phoneDisplay = null;
-    const phoneSource = customer?.mobilePhone || customer?.phone || formCustomer?.phone;
-    const phoneCountryCodeSource = customer?.phoneCountryCode || formCustomer?.phone?.countryCode;
+    const phoneSource =
+      customer?.mobilePhone ||
+      customer?.phone ||
+      customer?.phoneNumber ||
+      formCustomer?.phone;
+    const phoneCountryCodeSource =
+      customer?.phoneCountryCode ||
+      customer?.phoneCountry ||
+      formCustomer?.phone?.countryCode;
     
     if (phoneSource) {
       if (typeof phoneSource === 'string') {
@@ -10516,9 +10440,17 @@ function updatePaymentOverview() {
   // Check product name from order data first, then fall back to product data
   const productFromOrder = subscriptionItem?.product;
   const productName = productFromOrder?.name || currentProduct?.name || '';
-  const is15DayPassWithShoes = productName && 
-    productName.toLowerCase().includes('15 dages klatring') &&
-    productName.toLowerCase().includes('sko');
+  const productLabels = currentProduct?.productLabels || currentProduct?.labels || [];
+  const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
+    label => label?.name && label.name.toLowerCase() === '15 day pass'
+  );
+  const is15DayPass =
+    state.selectedProductType === '15daypass' ||
+    has15DayPassLabel ||
+    (productName && (
+      productName.toLowerCase().includes('15 day pass') ||
+      productName.toLowerCase().includes('15 dages')
+    ));
   
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
@@ -10543,8 +10475,8 @@ function updatePaymentOverview() {
     
     console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
     
-    if (is15DayPassWithShoes) {
-      // For 15-day pass with shoes: always use full price (one-time payment)
+    if (is15DayPass) {
+      // For 15-day pass: always use full price (one-time payment)
       payNowAmount = orderPriceDKK;
       
       // Set valid until date (15 days from today)
@@ -10559,7 +10491,7 @@ function updatePaymentOverview() {
         is15DayPass: true
       };
       
-      console.log('[Payment Overview] ✅ 15-day pass with shoes: Full price (one-time payment):', payNowAmount, 'DKK');
+      console.log('[Payment Overview] ✅ 15-day pass: Full price (one-time payment):', payNowAmount, 'DKK');
     } else {
       // Regular membership: Get initialPaymentPeriod (per OpenAPI: SubscriptionItemOut.initialPaymentPeriod - DayRange)
       const initialPaymentPeriod = subscriptionItem.initialPaymentPeriod;
@@ -10651,13 +10583,19 @@ function updatePaymentOverview() {
       );
       
       if (membership) {
-        // Check if this is 15-day pass with shoes (one-time payment)
-        const is15DayPassWithShoes = membership.name && 
-          membership.name.toLowerCase().includes('15 dages klatring') &&
-          membership.name.toLowerCase().includes('sko');
+        const membershipLabels = membership.productLabels || membership.labels || [];
+        const isMembership15DayPass =
+          state.selectedProductType === '15daypass' ||
+          (Array.isArray(membershipLabels) && membershipLabels.some(
+            label => label?.name && label.name.toLowerCase() === '15 day pass'
+          )) ||
+          (membership.name && (
+            membership.name.toLowerCase().includes('15 day pass') ||
+            membership.name.toLowerCase().includes('15 dages')
+          ));
         
-        if (is15DayPassWithShoes) {
-          // For 15-day pass with shoes: always use full price (one-time payment)
+        if (isMembership15DayPass) {
+          // For 15-day pass: always use full price (one-time payment)
           const priceInCents = membership.priceWithInterval?.price?.amount || 0;
           payNowAmount = priceInCents / 100;
           
@@ -10673,7 +10611,7 @@ function updatePaymentOverview() {
             is15DayPass: true
           };
           
-          console.log('[Payment Overview] ✅ 15-day pass with shoes: Full price (one-time payment):', payNowAmount, 'DKK');
+          console.log('[Payment Overview] ✅ 15-day pass: Full price (one-time payment):', payNowAmount, 'DKK');
         } else {
           // Regular membership: Calculate partial month price client-side
           const today = new Date();
@@ -10739,10 +10677,10 @@ function updatePaymentOverview() {
   // ============================================================================
   // CALCULATE "MÅNEDLIG BETALING HEREFTER" (MONTHLY PAYMENT THEREAFTER)
   // ============================================================================
-  // Skip monthly payment calculation for 15-day pass with shoes (one-time payment)
+  // Skip monthly payment calculation for 15-day pass (one-time payment)
   let monthlyPaymentAmount = 0;
   
-  if (!is15DayPassWithShoes) {
+  if (!is15DayPass) {
     // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount
     // This is ALWAYS the regular monthly price after any promotional period
     // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
@@ -10797,7 +10735,7 @@ function updatePaymentOverview() {
       }
     }
   } else {
-    console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass with shoes - one-time payment)');
+    console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass - one-time payment)');
   }
   
   // ============================================================================
@@ -10806,7 +10744,7 @@ function updatePaymentOverview() {
   
   // Prepare billing period text
   let billingPeriodText = '';
-  if (is15DayPassWithShoes && billingPeriod?.is15DayPass) {
+  if (is15DayPass && billingPeriod?.is15DayPass) {
     // For 15-day pass: show "Valid until [date 15 days in future]"
     billingPeriodText = `${t('cart.validUntil')} ${formatDateDMY(billingPeriod.end)}`;
   } else if (billingPeriod) {
@@ -10886,9 +10824,9 @@ function updatePaymentOverview() {
   }
   
   // Update "Månedlig betaling herefter" (Monthly payment thereafter)
-  // Hide monthly payment for 15-day pass with shoes (one-time payment)
+  // Hide monthly payment for 15-day pass (one-time payment)
   if (DOM.monthlyPayment) {
-    if (is15DayPassWithShoes) {
+    if (is15DayPass) {
       // Hide monthly payment section for one-time payment products
       const monthlyPaymentItem = DOM.monthlyPayment.closest('.payment-overview-item');
       if (monthlyPaymentItem) {
@@ -10911,7 +10849,7 @@ function updatePaymentOverview() {
   
   // Display boundUntil date separately if available (for memberships with promotional periods)
   if (DOM.paymentBoundUntil) {
-    if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPassWithShoes) {
+    if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPass) {
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
       const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(boundUntilDate)}`;
       DOM.paymentBoundUntil.textContent = boundUntilText;
