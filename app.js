@@ -3053,14 +3053,32 @@ async function loadGymsFromAPI() {
         locationBtn.classList.add('active');
       }
       
-      // Log first few gyms to verify sorting
-      devLog('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
-        name: g.name,
-        distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A',
-        hasCoordinates: !!(g.address?.latitude && g.address?.longitude)
-      })));
+    // Log first few gyms to verify sorting
+    devLog('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
+      name: g.name,
+      distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A',
+      hasCoordinates: !!(g.address?.latitude && g.address?.longitude)
+    })));
     } else {
       devLog('[Load Gyms] No user location available, displaying gyms in original order');
+    }
+
+    // Center the nearest gym in the first row when using 3-column layout
+    let nearestGymId = null;
+    if (userLocation) {
+      const nearestGym = gymsToDisplay.find(g => g.distance !== null && g.distance !== undefined);
+      if (nearestGym) {
+        nearestGymId = nearestGym.id;
+      }
+
+      if (nearestGymId && window.matchMedia('(min-width: 1024px)').matches) {
+        const targetIndex = 1; // center column in a 3-column grid
+        const currentIndex = gymsToDisplay.findIndex(g => g.id === nearestGymId);
+        if (currentIndex > -1 && currentIndex !== targetIndex && gymsToDisplay.length > targetIndex) {
+          const [nearestGymItem] = gymsToDisplay.splice(currentIndex, 1);
+          gymsToDisplay.splice(targetIndex, 0, nearestGymItem);
+        }
+      }
     }
     
     // Store existing gym items and their positions for animation
@@ -3086,8 +3104,8 @@ async function loadGymsFromAPI() {
       const gym = gymsToDisplay[i];
       if (gym.name && gym.address) {
         // Create and display gym item
-        // Mark as nearest if it's the first gym AND has a valid distance
-        const isNearest = i === 0 && userLocation && gym.distance !== null && gym.distance !== undefined;
+        // Mark as nearest based on actual nearest gym
+        const isNearest = userLocation && nearestGymId && gym.id === nearestGymId && gym.distance !== null && gym.distance !== undefined;
         if (isNearest) {
           devLog('[Load Gyms] Marking as nearest:', gym.name, `${gym.distance.toFixed(2)} km`);
         }
