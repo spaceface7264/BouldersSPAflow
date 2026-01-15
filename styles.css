@@ -1180,7 +1180,7 @@ body {
 }
 
 .step-panel-content {
-    max-width: 100%;
+    max-width: 800px;
     margin: 0 auto;
     margin-bottom: 32px;
     margin-top: 0;
