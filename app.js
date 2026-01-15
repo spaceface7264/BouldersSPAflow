@@ -2132,9 +2132,7 @@ class PaymentAPI {
       // Build return URL if not provided
       if (!returnUrl && orderId) {
         const path = window.location.pathname || '/';
-        const baseUrl = isLocal
-          ? 'https://join.boulders.dk'
-          : window.location.origin.replace('http://', 'https://');
+        const baseUrl = getReturnUrlBase();
         returnUrl = `${baseUrl}${path}?payment=return&orderId=${orderId}`;
       }
       
@@ -3599,6 +3597,27 @@ function setStoredLanguage(languageCode) {
 
 function getAcceptLanguageHeader() {
   return state.language || DEFAULT_LANGUAGE;
+}
+
+function getReturnUrlBase() {
+  let override = null;
+  try {
+    override = window?.BOULDERS_RETURN_URL_BASE || localStorage.getItem('boulders_return_url_base');
+  } catch (e) {
+    // Ignore localStorage errors
+  }
+
+  if (override) {
+    return String(override).replace(/\/$/, '');
+  }
+
+  const isHttps = window.location.protocol === 'https:';
+  if (isHttps) {
+    return window.location.origin.replace('http://', 'https://');
+  }
+
+  // Local HTTP is not accepted by payment API, default to production
+  return 'https://join.boulders.dk';
 }
 
 const state = {
@@ -5080,14 +5099,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // If returning from payment, fetch order data and show confirmation view
   if (paymentReturn === 'return' && orderId) {
-    // Check if payment was cancelled or failed
-    // paymentError can be 'cancelled', 'canceled', or a numeric error code (e.g., '205')
-    const hasPaymentError = paymentError !== null && paymentError !== undefined;
-    const isPaymentCancelled = paymentStatus === 'cancelled' || paymentStatus === 'canceled' || 
-                               paymentError === 'cancelled' || paymentError === 'canceled' ||
-                               paymentReturn === 'cancel' ||
-                               hasPaymentError; // Any error code indicates payment failure
-    
     // TEST MODE: Force failure for testing (add ?test=fail to URL)
     const testMode = urlParams.get('test');
     if (testMode === 'fail') {
@@ -5096,44 +5107,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     
-    if (isPaymentCancelled) {
-      console.log('[Payment Return] Payment was cancelled or failed - showing failure page');
-      console.log('[Payment Return] Error details:', { paymentStatus, paymentError, hasPaymentError });
-      
-      // Determine failure reason based on error code
-      let failureReason = null;
-      if (paymentError) {
-        // Map common error codes to user-friendly messages
-        const errorCode = parseInt(paymentError, 10);
-        if (!isNaN(errorCode)) {
-          switch (errorCode) {
-            case 205:
-              failureReason = 'Payment was declined by your bank or card issuer.';
-              break;
-            case 401:
-            case 403:
-              failureReason = 'Payment authorization failed. Please try again or use a different payment method.';
-              break;
-            default:
-              failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
-          }
-        } else if (paymentError.toLowerCase().includes('cancel')) {
-          failureReason = 'Payment was cancelled before completion.';
-        }
-      }
-      
-      state.currentStep = TOTAL_STEPS;
-      showStep(state.currentStep);
-      updateStepIndicator();
-      updateNavigationButtons();
-      updateMainSubtitle();
-      showPaymentFailedMessage(null, parseInt(orderId, 10), failureReason);
-      return;
-    }
-    
-    // CRITICAL: Don't show success page yet - check payment status first
-    // Fetch order data FIRST to check payment status
-    // Only show success page if payment is confirmed
+    // Always load order first; error params are handled after we verify payment state
     loadOrderForConfirmation(parseInt(orderId, 10));
   }
   
@@ -9754,7 +9728,7 @@ async function handleApplyDiscount() {
         updatePaymentOverview(); // Update payment overview with discounted prices
         
         const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
-        showDiscountMessage(`✓ Coupon "${discountCode}" applied successfully. Total: ${currencyFormatter.format(newTotal)}`, 'success');
+        showDiscountMessage(`✓ Coupon "${discountCode}" applied successfully. Total: ${formatCurrencyHalfKrone(newTotal)}`, 'success');
         
         // Highlight the new price in cart total elements and payment overview
         const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
@@ -11012,7 +10986,7 @@ function updateDiscountDisplay() {
         </div>
         <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
           <span class="discount-label" style="font-weight: bold;">Total:</span>
-          <span class="discount-value" style="font-weight: bold;">${currencyFormatter.format(state.totals.cartTotal)}</span>
+          <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
         </div>
       `;
     }
@@ -12002,10 +11976,7 @@ async function handleCheckout() {
           console.log('[checkout] Payment Method:', state.paymentMethod);
           console.log('[checkout] Business Unit:', state.selectedBusinessUnit);
           
-          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const baseUrl = isLocal
-            ? 'https://join.boulders.dk'
-            : window.location.origin.replace('http://', 'https://');
+          const baseUrl = getReturnUrlBase();
           const returnUrl = `${baseUrl}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
           console.log('[checkout] Return URL:', returnUrl);
           
@@ -12376,10 +12347,7 @@ async function handleCheckout() {
         console.log('[checkout] Has Addons:', state.addonIds?.size > 0);
         
         try {
-          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const baseUrl = isLocal
-            ? 'https://join.boulders.dk'
-            : window.location.origin.replace('http://', 'https://');
+          const baseUrl = getReturnUrlBase();
           const returnUrl = `${baseUrl}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
           
           if (!state.orderId) {
@@ -12594,7 +12562,7 @@ async function handleCheckout() {
               }
               
               // Show success message
-              showDiscountMessage(`Coupon "${discountCodeToApply}" applied! Discount: ${currencyFormatter.format(discountAmount)}`, 'success');
+              showDiscountMessage(`Coupon "${discountCodeToApply}" applied! Discount: ${formatCurrencyHalfKrone(discountAmount)}`, 'success');
               
               console.log('[checkout] ✅ Coupon applied successfully:', discountCodeToApply, 'Amount:', discountAmount);
             } else {
@@ -13087,13 +13055,16 @@ async function loadOrderForConfirmation(orderId) {
   const urlParams = new URLSearchParams(window.location.search);
   const paymentError = urlParams.get('error');
   const paymentStatus = urlParams.get('status');
+  const receiptId = urlParams.get('receiptid') || urlParams.get('receiptId');
+  const receiptUuid = urlParams.get('receiptuuid') || urlParams.get('receiptUuid');
   
-  if (paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled') {
-    console.warn('[Payment Return] ⚠️ Error detected in URL parameters - payment failed');
+  const hasPaymentErrorParam = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
+  const hasReceiptParam = Boolean(receiptId || receiptUuid);
+  let failureReason = null;
+  if (hasPaymentErrorParam) {
+    console.warn('[Payment Return] ⚠️ Error detected in URL parameters - will verify payment status before failing');
     console.warn('[Payment Return] Error details:', { paymentError, paymentStatus });
-    
-    // Determine failure reason based on error code
-    let failureReason = null;
+
     if (paymentError) {
       const errorCode = parseInt(paymentError, 10);
       if (!isNaN(errorCode)) {
@@ -13112,9 +13083,6 @@ async function loadOrderForConfirmation(orderId) {
         failureReason = 'Payment was cancelled before completion.';
       }
     }
-    
-    showPaymentFailedMessage(null, orderId, failureReason);
-    return; // Don't fetch order or show pending
   }
   
   // CRITICAL: Reset payment status flags at start (only if no URL error)
@@ -13195,6 +13163,42 @@ async function loadOrderForConfirmation(orderId) {
           errorString: String(fetchError).substring(0, 200)
         });
         
+        if (hasReceiptParam && !hasPaymentErrorParam) {
+          console.warn('[Payment Return] ⚠️ Order fetch failed, but receipt present - showing success using stored data');
+
+          const summaryOrder = {
+            id: orderId,
+            orderId,
+            number: orderId,
+            created: new Date().toISOString(),
+            total: storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal ?? 0,
+            totalAmount: storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal ?? 0,
+          };
+
+          const payload = buildCheckoutPayload();
+          const summaryCustomer = storedCustomer || null;
+
+          state.orderId = orderId;
+          state.order = buildOrderSummary(payload, summaryOrder, summaryCustomer);
+          state.paymentConfirmed = true;
+          state.paymentFailed = false;
+          state.paymentPending = false;
+
+          state.currentStep = TOTAL_STEPS;
+          showStep(TOTAL_STEPS);
+          updateStepIndicator();
+          updateNavigationButtons();
+          updateMainSubtitle();
+          renderConfirmationView();
+          return;
+        }
+
+        if (isUnauthorized && !hasPaymentErrorParam) {
+          console.warn('[Payment Return] ⚠️ Order fetch unauthorized without error param - showing pending instead of failed');
+          showPaymentPendingMessage(null, orderId);
+          return;
+        }
+
         // Use default calm message instead of technical details
         console.warn('[Payment Return] ⚠️ INNER CATCH: Calling showPaymentFailedMessage');
         showPaymentFailedMessage(null, orderId, null);
@@ -13226,6 +13230,12 @@ async function loadOrderForConfirmation(orderId) {
     
     // CRITICAL: Check payment status BEFORE showing any page
     // If payment is clearly not confirmed (leftToPay > 0 and not paid), show pending immediately
+    if (hasPaymentErrorParam && !initialIsPaid) {
+      console.warn('[Payment Return] ⚠️ Payment error param present and payment not confirmed - showing failure');
+      showPaymentFailedMessage(order, orderId, failureReason);
+      return;
+    }
+
     if (initialLeftToPay !== null && initialLeftToPay > 0 && !initialIsPaid) {
       console.warn('[Payment Return] ⚠️ Payment not confirmed on initial fetch - showing pending immediately');
       showPaymentPendingMessage(order, orderId);
@@ -14470,10 +14480,10 @@ function renderConfirmationView() {
     if (apiOrder?.price?.amount) {
       const amount = apiOrder.price.amount;
       const total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
-      orderTotal.textContent = currencyFormatter.format(total);
+      orderTotal.textContent = formatCurrencyHalfKrone(total);
     } else if (apiOrder?.total) {
       const total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
-      orderTotal.textContent = currencyFormatter.format(total);
+      orderTotal.textContent = formatCurrencyHalfKrone(total);
     } else {
       orderTotal.textContent = '—';
     }
@@ -14890,10 +14900,10 @@ async function showDetailedReceipt() {
   const receiptTotal = document.getElementById('receiptTotal');
   const receiptVat = document.getElementById('receiptVat');
   
-  if (receiptSubtotal) receiptSubtotal.textContent = currencyFormatter.format(subtotal);
-  if (receiptDiscount) receiptDiscount.textContent = discount > 0 ? `-${currencyFormatter.format(discount)}` : '0,00 kr';
-  if (receiptTotal) receiptTotal.textContent = currencyFormatter.format(totalDKK);
-  if (receiptVat) receiptVat.textContent = currencyFormatter.format(vatAmount);
+  if (receiptSubtotal) receiptSubtotal.textContent = formatCurrencyHalfKrone(subtotal);
+  if (receiptDiscount) receiptDiscount.textContent = discount > 0 ? `-${formatCurrencyHalfKrone(discount)}` : '0,00 kr';
+  if (receiptTotal) receiptTotal.textContent = formatCurrencyHalfKrone(totalDKK);
+  if (receiptVat) receiptVat.textContent = formatCurrencyHalfKrone(vatAmount);
   
   // Populate payment details
   const receiptPaymentMethod = document.getElementById('receiptPaymentMethod');
@@ -14905,7 +14915,7 @@ async function showDetailedReceipt() {
     const paymentMethod = order.paymentMethod || order.payment?.method || 'Kortbetaling';
     receiptPaymentMethod.textContent = paymentMethod;
   }
-  if (receiptAmountPaid) receiptAmountPaid.textContent = currencyFormatter.format(totalDKK);
+  if (receiptAmountPaid) receiptAmountPaid.textContent = formatCurrencyHalfKrone(totalDKK);
   if (receiptTransactionId) {
     // Try to get transaction ID from order - check multiple possible fields
     const transactionId = order.externalId || 
@@ -15060,7 +15070,7 @@ async function showDetailedReceipt() {
         itemRow.innerHTML = `
           <div>${itemName}</div>
           <div>${itemQuantity}</div>
-          <div>${currencyFormatter.format(itemTotal)}</div>
+          <div>${formatCurrencyHalfKrone(itemTotal)}</div>
         `;
         receiptItems.appendChild(itemRow);
       });
@@ -15077,7 +15087,7 @@ async function showDetailedReceipt() {
         itemRow.innerHTML = `
           <div>${itemName}</div>
           <div>${itemQuantity}</div>
-          <div>${currencyFormatter.format(itemTotal)}</div>
+          <div>${formatCurrencyHalfKrone(itemTotal)}</div>
         `;
         receiptItems.appendChild(itemRow);
       });
@@ -15089,7 +15099,7 @@ async function showDetailedReceipt() {
         itemRow.innerHTML = `
           <div>${item.name || 'Item'}</div>
           <div>${item.quantity || 1}</div>
-          <div>${currencyFormatter.format(item.amount || 0)}</div>
+          <div>${formatCurrencyHalfKrone(item.amount || 0)}</div>
         `;
         receiptItems.appendChild(itemRow);
       });
