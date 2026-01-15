@@ -9,6 +9,20 @@ import {
   formatDistance,
 } from './utils/geo.js';
 import { getFlagEmoji } from './utils/locale.js';
+import {
+  clearLoginSessionCookie,
+  hydrateFromCookie,
+  readLoginSessionCookie,
+  writeLoginSessionCookie,
+} from './utils/tokenStorage.js';
+import {
+  formatCardNumber,
+  formatExpiryDate,
+  stripNonDigits,
+} from './utils/input.js';
+import { stripEmailPlusTag } from './utils/string.js';
+import { formatDateDMY } from './utils/date.js';
+import { showToast } from './utils/toast.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -1228,67 +1242,11 @@ class AuthAPI {
   const LOGIN_SESSION_COOKIE = 'boulders_login_session';
   let tokenStore = null; // Memory-first storage
 
-  const encodeTokenData = (tokenData) => {
-    const payload = JSON.stringify(tokenData);
-    try {
-      if (typeof btoa === 'function') {
-        return btoa(payload);
-      }
-    } catch (error) {
-      console.warn('[Step 6] Could not base64 encode token data:', error);
-    }
-    try {
-      return encodeURIComponent(payload);
-    } catch (error) {
-      console.warn('[Step 6] Could not URI encode token data:', error);
-    }
-    return payload;
-  };
-
-  const decodeTokenData = (value) => {
-    if (!value) return null;
-    try {
-      if (typeof atob === 'function') {
-        return JSON.parse(atob(value));
-      }
-    } catch (error) {
-      // Fallback to URI decoding below
-    }
-    try {
-      return JSON.parse(decodeURIComponent(value));
-    } catch (error) {
-      console.warn('[Step 6] Could not decode login session cookie:', error);
-      return null;
-    }
-  };
-
-  const writeLoginSessionCookie = (tokenData) => {
-    if (typeof document === 'undefined') return;
-    try {
-      const encoded = encodeTokenData(tokenData);
-      const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
-      document.cookie = `${LOGIN_SESSION_COOKIE}=${encoded}; path=/; SameSite=Lax${secureFlag}`;
-    } catch (error) {
-      console.warn('[Step 6] Could not write login session cookie:', error);
-    }
-  };
-
-  const readLoginSessionCookie = () => {
-    if (typeof document === 'undefined' || !document.cookie) return null;
-    const cookies = document.cookie.split(';');
-    const match = cookies.find((cookie) => cookie.trim().startsWith(`${LOGIN_SESSION_COOKIE}=`));
-    if (!match) return null;
-    const value = match.substring(match.indexOf('=') + 1).trim();
-    return decodeTokenData(value);
-  };
-
-  const clearLoginSessionCookie = () => {
-    if (typeof document === 'undefined') return;
-    document.cookie = `${LOGIN_SESSION_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
-  };
-
-  const hydrateFromCookie = () => {
-    const cookieData = readLoginSessionCookie();
+  const getCookieData = () => readLoginSessionCookie(LOGIN_SESSION_COOKIE);
+  const persistCookie = (tokenData) => writeLoginSessionCookie(LOGIN_SESSION_COOKIE, tokenData);
+  const clearCookie = () => clearLoginSessionCookie(LOGIN_SESSION_COOKIE);
+  const loadCookieTokens = () => {
+    const cookieData = getCookieData();
     if (cookieData) {
       tokenStore = cookieData;
     }
@@ -1306,7 +1264,10 @@ class AuthAPI {
   }
 
   if (!tokenStore) {
-    hydrateFromCookie();
+    const cookieData = hydrateFromCookie(LOGIN_SESSION_COOKIE);
+    if (cookieData) {
+      tokenStore = cookieData;
+    }
   }
 
   // Step 6: saveTokens - Persist tokens in session store and cookie
@@ -1320,7 +1281,7 @@ class AuthAPI {
       console.warn('[Step 6] Could not save tokens to sessionStorage:', error);
     }
 
-    writeLoginSessionCookie(tokenData);
+    persistCookie(tokenData);
     
     // Update header auth indicator when tokens are saved
     // Use setTimeout to ensure DOM is ready (in case this is called during page load)
@@ -1352,7 +1313,7 @@ class AuthAPI {
       console.warn('[Step 6] Could not read tokens from sessionStorage:', error);
     }
 
-    const cookieTokens = hydrateFromCookie();
+    const cookieTokens = loadCookieTokens();
     return cookieTokens?.accessToken || null;
   };
 
@@ -1374,7 +1335,7 @@ class AuthAPI {
       console.warn('[Step 6] Could not read tokens from sessionStorage:', error);
     }
     
-    const cookieTokens = hydrateFromCookie();
+    const cookieTokens = loadCookieTokens();
     return cookieTokens?.refreshToken || null;
   };
 
@@ -1395,7 +1356,7 @@ class AuthAPI {
       console.warn('[Step 6] Could not read token metadata from sessionStorage:', error);
     }
 
-    const cookieTokens = hydrateFromCookie();
+    const cookieTokens = loadCookieTokens();
     return cookieTokens?.metadata || null;
   };
 
@@ -1409,7 +1370,7 @@ class AuthAPI {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
 
-    clearLoginSessionCookie();
+    clearCookie();
     
     // Update header auth indicator when tokens are cleared
     refreshHeaderAuthIndicator();
@@ -1422,7 +1383,7 @@ class AuthAPI {
 
   // Check if token is expired
   window.isTokenExpired = function() {
-    const activeStore = tokenStore ?? readLoginSessionCookie();
+    const activeStore = tokenStore ?? getCookieData();
     if (!activeStore?.expiresAt) {
       return false;
     }
@@ -2520,30 +2481,6 @@ class PaymentAPI {
       throw error;
     }
   }
-}
-
-function stripEmailPlusTag(email) {
-  if (typeof email !== 'string') {
-    return email;
-  }
-  
-  const trimmed = email.trim();
-  const [localPart, domain] = trimmed.split('@');
-  if (!localPart || !domain) {
-    return trimmed;
-  }
-  
-  const plusIndex = localPart.indexOf('+');
-  if (plusIndex === -1) {
-    return trimmed;
-  }
-  
-  const cleanedLocal = localPart.substring(0, plusIndex);
-  const sanitized = `${cleanedLocal}@${domain}`;
-  if (sanitized !== trimmed) {
-    console.log('[Step 9] Receipt email sanitized (plus tag removed):', sanitized);
-  }
-  return sanitized;
 }
 
 function getSubscriberBirthDate() {
@@ -10386,21 +10323,6 @@ function handleParentGuardianToggle(event) {
   clearParentFormFields();
 }
 
-function formatCardNumber(event) {
-  const digits = event.target.value.replace(/\s+/g, '').replace(/[^\d]/g, '');
-  event.target.value = digits.replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
-}
-
-function formatExpiryDate(event) {
-  const digits = event.target.value.replace(/[^\d]/g, '');
-  const formatted = digits.length >= 2 ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}` : digits;
-  event.target.value = formatted.slice(0, 5);
-}
-
-function stripNonDigits(event) {
-  event.target.value = event.target.value.replace(/[^\d]/g, '');
-}
-
 function copyAddressAndContactInfo() {
   const mappings = [
     ['streetAddress', 'parentStreetAddress'],
@@ -11304,27 +11226,18 @@ function updatePaymentOverview() {
   // UPDATE DOM ELEMENTS
   // ============================================================================
   
-  // Update "Betales nu" (Pay now)
-  // Format dates in Danish format (DD.MM.YYYY) - moved up to use for period
-  const formatDate = (date) => {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
-  };
-  
   // Prepare billing period text
   let billingPeriodText = '';
   if (is15DayPassWithShoes && billingPeriod?.is15DayPass) {
     // For 15-day pass: show "Valid until [date 15 days in future]"
-    billingPeriodText = `${t('cart.validUntil')} ${formatDate(billingPeriod.end)}`;
+    billingPeriodText = `${t('cart.validUntil')} ${formatDateDMY(billingPeriod.end)}`;
   } else if (billingPeriod) {
     // Regular membership: show billing period dates only
-    billingPeriodText = `${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
+    billingPeriodText = `${formatDateDMY(billingPeriod.start)} - ${formatDateDMY(billingPeriod.end)}`;
   } else if (hasOrderData && subscriptionItem?.boundUntil) {
     // No initialPaymentPeriod, but there's a boundUntil date
     const boundUntilDate = new Date(subscriptionItem.boundUntil);
-    billingPeriodText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
+    billingPeriodText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(boundUntilDate)}`;
   }
   
   // Fallback to state.billingPeriod if available
@@ -11422,7 +11335,7 @@ function updatePaymentOverview() {
   if (DOM.paymentBoundUntil) {
     if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPassWithShoes) {
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
-      const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
+      const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(boundUntilDate)}`;
       DOM.paymentBoundUntil.textContent = boundUntilText;
       DOM.paymentBoundUntil.style.display = 'block';
     } else {
@@ -16915,20 +16828,6 @@ function findValueCard(id) {
 function findAddon(id) {
   if (!Array.isArray(state.subscriptionAdditions)) return null;
   return state.subscriptionAdditions.find((addon) => String(addon.id) === String(id)) ?? null;
-}
-
-function showToast(message, type = 'info') {
-  const existingToasts = document.querySelectorAll('.toast');
-  existingToasts.forEach((toast) => toast.remove());
-
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  setTimeout(() => {
-    toast.remove();
-  }, 4000);
 }
 
 // Cookie Consent Management (GDPR Compliant)
