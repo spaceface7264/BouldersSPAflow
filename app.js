@@ -9439,7 +9439,7 @@ async function handleApplyDiscount() {
   
   // Order exists - apply coupon immediately
   // Use existingOrderId if state.orderId wasn't set but fullOrder has an ID
-  const orderIdToUse = state.orderId || existingOrderId;
+  let orderIdToUse = state.orderId || existingOrderId;
   
   if (!orderIdToUse) {
     console.error('[Discount] No order ID available for discount application');
@@ -9461,6 +9461,64 @@ async function handleApplyDiscount() {
   
   try {
     const orderAPI = new OrderAPI();
+
+    // Ensure the order has the selected items before applying coupon
+    if (!state.customerId) {
+      throw new Error('Please log in or create an account to apply a discount');
+    }
+
+    let orderSnapshot = state.fullOrder;
+    if (!orderSnapshot || String(orderSnapshot.id) !== String(orderIdToUse)) {
+      try {
+        orderSnapshot = await orderAPI.getOrder(orderIdToUse);
+        state.fullOrder = orderSnapshot;
+      } catch (orderFetchError) {
+        if (orderFetchError?.status === 403 || orderFetchError?.status === 404) {
+          console.warn('[Discount] Existing order is not accessible. Creating a new order.');
+          state.orderId = null;
+          state.subscriptionAttachedOrderId = null;
+          const ensuredOrderId = await ensureOrderCreated('discount-application');
+          if (!ensuredOrderId) {
+            throw new Error('Failed to create order for coupon application');
+          }
+          orderIdToUse = ensuredOrderId;
+          orderSnapshot = await orderAPI.getOrder(orderIdToUse);
+          state.fullOrder = orderSnapshot;
+        } else {
+          throw orderFetchError;
+        }
+      }
+    }
+
+    const isMembership = state.membershipPlanId &&
+      (state.selectedProductType === 'membership' ||
+       (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+
+    if (isMembership) {
+      const subscriptionItems = orderSnapshot?.subscriptionItems || [];
+      if (!subscriptionItems.length || state.subscriptionAttachedOrderId !== orderIdToUse) {
+        await ensureSubscriptionAttached('discount-application');
+        orderSnapshot = await orderAPI.getOrder(orderIdToUse);
+        state.fullOrder = orderSnapshot;
+      }
+    } else if (state.selectedProductType === 'punch-card' && state.valueCardQuantities && state.valueCardQuantities.size > 0) {
+      const existingValueCardItems = orderSnapshot?.valueCardItems || [];
+      for (const [planId, quantity] of state.valueCardQuantities.entries()) {
+        if (quantity > 0) {
+          const numericProductId = typeof planId === 'string' && planId.startsWith('punch-')
+            ? parseInt(planId.replace('punch-', ''), 10)
+            : planId;
+          const existingCount = existingValueCardItems.filter(item => item.product?.id === numericProductId).length;
+          const toAdd = Math.max(0, quantity - existingCount);
+          for (let i = 0; i < toAdd; i += 1) {
+            await orderAPI.addValueCardItem(orderIdToUse, numericProductId, 1);
+          }
+        }
+      }
+      orderSnapshot = await orderAPI.getOrder(orderIdToUse);
+      state.fullOrder = orderSnapshot;
+    }
+
     console.log('[Discount] Applying discount code:', discountCode, 'to order:', orderIdToUse);
     const response = await orderAPI.applyDiscountCode(orderIdToUse, discountCode);
     console.log('[Discount] API response received:', response);
