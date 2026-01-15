@@ -1477,15 +1477,25 @@ class OrderAPI {
       });
       
       // CRITICAL: If backend ignored startDate, attempt to fix with multiple strategies
-      // This ensures correct pricing for ALL products, not just specific ones
+      // Only attempt when price mismatch is significant (avoid churn on rounding diffs)
       if (startDateIgnored && subscriptionItem?.id) {
+        const expectedPrice = this._calculateExpectedPartialMonthPrice(subscriptionProductId, startDate);
+        const orderPriceInCents = typeof responseOrderPrice === 'object'
+          ? responseOrderPrice.amount
+          : responseOrderPrice;
+        const priceDifference = expectedPrice && Number.isFinite(orderPriceInCents)
+          ? Math.abs(orderPriceInCents - expectedPrice.amountInCents)
+          : null;
+
+        if (priceDifference !== null && priceDifference <= 100) {
+          console.warn('[Step 7] ⚠️ Backend ignored startDate but price difference is within rounding tolerance:', priceDifference, 'cents');
+          return data;
+        }
+
         console.warn('[Step 7] ⚠️ Backend ignored startDate - start date is', daysUntilStart, 'days in future');
         console.warn('[Step 7] ⚠️ Product ID:', subscriptionProductId);
         console.warn('[Step 7] ⚠️ Attempting to fix with multiple strategies...');
-        
-        // Calculate expected price for verification
-        const expectedPrice = this._calculateExpectedPartialMonthPrice(subscriptionProductId, startDate);
-        
+
         // Try multiple strategies to fix backend pricing
         const fixedData = await this._fixBackendPricingBug(
           orderId,
@@ -1723,10 +1733,12 @@ class OrderAPI {
     
     // Check if price is correct
     let priceCorrect = false;
-    if (expectedPrice && startDateCorrect) {
-      // If start date is correct, price should match expected partial-month price
-      const priceDifference = Math.abs(orderPriceInCents - expectedPrice.amountInCents);
-      priceCorrect = priceDifference <= 10; // Allow 10 cents difference for rounding
+    const priceDifference = expectedPrice
+      ? Math.abs(orderPriceInCents - expectedPrice.amountInCents)
+      : null;
+    if (expectedPrice) {
+      // Allow up to 1 DKK difference to account for backend rounding
+      priceCorrect = priceDifference <= 100;
     }
     
     const isCorrect = startDateCorrect && priceCorrect;
@@ -1736,6 +1748,7 @@ class OrderAPI {
       startDateCorrect,
       priceCorrect,
       daysUntilStart,
+      priceDifference,
       orderPriceInCents,
       orderPriceDKK: orderPriceInCents / 100,
       expectedPriceInCents: expectedPrice?.amountInCents || null,
@@ -10517,14 +10530,14 @@ function updatePaymentOverview() {
           today
         );
         
-        if (verification.isCorrect) {
+        if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
           // Backend calculated correctly - use backend's price
           payNowAmount = orderPriceDKK;
           billingPeriod = {
             start: backendStartDate,
             end: backendEndDate
           };
-          console.log('[Payment Overview] ✅ Backend pricing is correct:', payNowAmount, 'DKK');
+          console.log('[Payment Overview] ✅ Backend pricing accepted:', payNowAmount, 'DKK');
         } else {
           // Backend pricing is incorrect - calculate correct price client-side
           console.warn('[Payment Overview] ⚠️ Backend pricing is incorrect!');
@@ -11992,7 +12005,7 @@ async function handleCheckout() {
               });
               
               // If pricing is incorrect, try to fix it (only if we have permission)
-              if (!verification.isCorrect && subscriptionItem.id) {
+              if (!verification.isCorrect && subscriptionItem.id && (!verification.priceDifference || verification.priceDifference > 100)) {
                 console.warn('[checkout] ⚠️ ORDER PRICE IS INCORRECT BEFORE PAYMENT LINK GENERATION!');
                 console.warn('[checkout] ⚠️ Backend shows:', verification.orderPriceDKK, 'DKK');
                 console.warn('[checkout] ⚠️ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
@@ -12049,15 +12062,15 @@ async function handleCheckout() {
                     console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
                     console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
                   }
-                } else {
+                  } else {
                   console.error('[checkout] ❌ All fix strategies failed - cannot modify order (likely 403 Forbidden)');
                   console.error('[checkout] ❌ This is a backend bug - backend ignored startDate parameter');
                   console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
                   console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
                   console.error('[checkout] ❌ Backend needs to be fixed to respect startDate parameter for productId:', productId);
                 }
-              } else if (verification.isCorrect) {
-                console.log('[checkout] ✅ Order price is correct - no fix needed');
+              } else if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
+                console.log('[checkout] ✅ Order price is acceptable - no fix needed');
               }
             }
             
@@ -12195,7 +12208,7 @@ async function handleCheckout() {
               const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
               const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
               
-              if (!verification.isCorrect) {
+              if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
                 console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO BACKEND PRICING BUG');
                 console.error('[checkout] ❌ Order has incorrect pricing - backend ignored startDate parameter');
                 console.error('[checkout] ❌ This is a backend issue that needs to be fixed on backend side');
