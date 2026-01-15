@@ -25,6 +25,7 @@ import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
 import { getErrorMessage } from './utils/errors.js';
 import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
+import { highlightFieldError } from './utils/dom.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -15640,20 +15641,6 @@ function clearErrorStates() {
   const paymentMethods = document.querySelector('.payment-methods');
   if (paymentMethods) {
     paymentMethods.style.animation = '';
-  }
-}
-
-function highlightFieldError(fieldId, animate = false) {
-  const field = document.getElementById(fieldId);
-  const formGroup = field?.closest('.form-group');
-  if (formGroup) {
-    formGroup.classList.add('error');
-    // Only animate if explicitly requested (from button clicks)
-    if (animate) {
-      formGroup.style.animation = 'none';
-      void formGroup.offsetWidth; // Trigger reflow
-      formGroup.style.animation = 'shake 0.5s ease-in-out';
-    }
   }
 }
 
