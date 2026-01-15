@@ -973,6 +973,31 @@ class AuthAPI {
       try {
         const data = await requestJson({ url, headers });
         devLog('[Step 6] Get customer response:', data);
+
+        const hasProfileDetails = Boolean(
+          data?.firstName ||
+          data?.lastName ||
+          data?.shippingAddress ||
+          data?.address ||
+          data?.mobilePhone ||
+          data?.phone ||
+          data?.phoneNumber
+        );
+
+        if (!hasProfileDetails) {
+          const fallbackUrl = this.useProxy
+            ? buildApiUrl({
+                baseUrl: this.baseUrl,
+                useProxy: this.useProxy,
+                path: `/api/ver3/customers/${customerId}`,
+              })
+            : `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}`;
+          devWarn('[Step 6] Customer profile missing details. Retrying with ver3:', fallbackUrl);
+          const fallbackData = await requestJson({ url: fallbackUrl, headers });
+          devLog('[Step 6] Get customer response (ver3):', fallbackData);
+          return fallbackData;
+        }
+
         return data;
       } catch (error) {
         if (error.status === 404 && this.useProxy) {
