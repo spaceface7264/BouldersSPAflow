@@ -5331,6 +5331,12 @@ body {
     font-weight: 300;
 }
 
+.payment-overview-discount .payment-label,
+.payment-overview-discount .payment-amount {
+    color: #10B981;
+    font-weight: 600;
+}
+
 .payment-period {
     color: var(--color-text-secondary);
     font-size: var(--font-size-xs);
@@ -5433,8 +5439,10 @@ body {
 /* Discount Display */
 .discount-display {
     margin: 12px 0;
-    padding: 12px 0;
-    border-top: 1px solid #374151;
+    padding: 12px 14px;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-radius: 8px;
+    background: rgba(16, 185, 129, 0.08);
 }
 
 .discount-row {

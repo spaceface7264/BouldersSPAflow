@@ -4446,7 +4446,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
+    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>',
@@ -4502,7 +4502,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
+    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>',
@@ -5188,6 +5188,7 @@ function cacheDom() {
   DOM.paymentOverview = document.querySelector('.payment-overview');
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
+  DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
   DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
@@ -5196,6 +5197,7 @@ function cacheDom() {
   DOM.discountForm = document.querySelector('.discount-form');
   DOM.discountInput = document.querySelector('.discount-input');
   DOM.applyDiscountBtn = document.querySelector('.apply-discount-btn');
+  DOM.discountDisplay = document.querySelector('[data-discount-display]');
   DOM.skipAddonsBtn = document.getElementById('skipAddons');
   DOM.backFromAddonsBtn = document.getElementById('backFromAddons');
   DOM.paymentOptions = Array.from(document.querySelectorAll('input[name="paymentMethod"]'));
@@ -9784,18 +9786,8 @@ async function handleApplyDiscount() {
       const payNowText = payNowElement ? payNowElement.textContent : '';
       const monthlyPaymentText = monthlyPaymentElement ? monthlyPaymentElement.textContent : '';
       
-      // Show success message with discount amount and new prices
-      let successMessage = `✓ Coupon "${discountCode}" applied successfully! Discount: ${formatCurrencyHalfKrone(discountAmount)}.`;
-      if (payNowText) {
-        successMessage += ` Pay now: ${payNowText}`;
-      }
-      if (monthlyPaymentText) {
-        successMessage += ` Monthly: ${monthlyPaymentText}`;
-      }
-      if (!payNowText && !monthlyPaymentText) {
-        successMessage += ` New total: ${formatCurrencyHalfKrone(newTotal)}`;
-      }
-      showDiscountMessage(successMessage, 'success');
+      // Show succinct success message
+      showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
       
       // Force a visual update by triggering a reflow
       if (DOM.cartTotal) {
@@ -9829,7 +9821,7 @@ async function handleApplyDiscount() {
         updatePaymentOverview(); // Update payment overview with discounted prices
         
         const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
-        showDiscountMessage(`✓ Coupon "${discountCode}" applied successfully. Total: ${formatCurrencyHalfKrone(newTotal)}`, 'success');
+        showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
         
         // Highlight the new price in cart total elements and payment overview
         const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
@@ -10908,6 +10900,19 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
+  // If discount is applied but order price isn't available yet, reflect discount in pay-now
+  if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
+    const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
+    if (adjustedPayNow !== payNowAmount) {
+      console.log('[Payment Overview] Applying discount to pay-now fallback:', {
+        original: payNowAmount,
+        discount: state.totals.discountAmount,
+        adjusted: adjustedPayNow
+      });
+      payNowAmount = adjustedPayNow;
+    }
+  }
+
   // Round payNowAmount to half krone and store in state for use in cart total calculation
   state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
   
@@ -10988,6 +10993,19 @@ function updatePaymentOverview() {
       }
     }
   }
+
+  // Show discount row in payment overview when discount is applied
+  if (DOM.paymentDiscount) {
+    const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
+    if (state.discountApplied && state.totals.discountAmount > 0) {
+      DOM.paymentDiscount.textContent = `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`;
+      if (discountRow) {
+        discountRow.style.display = 'flex';
+      }
+    } else if (discountRow) {
+      discountRow.style.display = 'none';
+    }
+  }
   
   // Display boundUntil date separately if available (for memberships with promotional periods)
   if (DOM.paymentBoundUntil) {
@@ -11010,14 +11028,14 @@ function updatePaymentOverview() {
 
 function updateDiscountDisplay() {
   // Find or create discount display element
-  let discountDisplay = document.querySelector('.discount-display');
+  let discountDisplay = DOM.discountDisplay || document.querySelector('[data-discount-display]') || document.querySelector('.discount-display');
   
   // Show discount display if discount is applied OR if discount code is stored (pending application)
   // BUT: Don't show pending message if we're currently applying a discount (button is disabled)
   const isApplyingDiscount = DOM.applyDiscountBtn && DOM.applyDiscountBtn.disabled && DOM.applyDiscountBtn.textContent.includes('Applying');
   const shouldShowPending = state.discountCode && !state.discountApplied && !isApplyingDiscount;
   
-  if ((state.discountApplied && state.totals.discountAmount > 0) || shouldShowPending) {
+  if (state.discountApplied || shouldShowPending) {
     // Ensure subtotal is calculated - but don't call updateCartTotals() to avoid recursion
     // Instead, just recalculate subtotal if needed
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
@@ -11043,23 +11061,32 @@ function updateDiscountDisplay() {
       // Create discount display element
       discountDisplay = document.createElement('div');
       discountDisplay.className = 'discount-display';
-      
-      // Insert before cart total
-      const cartTotalEl = document.querySelector('.cart-total');
-      if (cartTotalEl) {
-        cartTotalEl.insertAdjacentElement('beforebegin', discountDisplay);
+
+      // Prefer placing under the discount form
+      if (DOM.discountForm) {
+        DOM.discountForm.insertAdjacentElement('afterend', discountDisplay);
       } else {
-        // Fallback: try to find cart total by data attribute
-        const cartTotalByAttr = document.querySelector('[data-summary-field="cart-total"]');
-        if (cartTotalByAttr && cartTotalByAttr.parentElement) {
-          cartTotalByAttr.parentElement.insertBefore(discountDisplay, cartTotalByAttr);
+        // Fallback: insert before cart total
+        const cartTotalEl = document.querySelector('.cart-total');
+        if (cartTotalEl) {
+          cartTotalEl.insertAdjacentElement('beforebegin', discountDisplay);
+        } else {
+          // Fallback: try to find cart total by data attribute
+          const cartTotalByAttr = document.querySelector('[data-summary-field="cart-total"]');
+          if (cartTotalByAttr && cartTotalByAttr.parentElement) {
+            cartTotalByAttr.parentElement.insertBefore(discountDisplay, cartTotalByAttr);
+          }
         }
       }
+      DOM.discountDisplay = discountDisplay;
     }
     
     // Build discount display HTML - show subtotal, discount, and final total
-    if (state.discountApplied && state.totals.discountAmount > 0) {
+    if (state.discountApplied) {
       // Discount is applied - show actual discount amount
+      const discountValue = state.totals.discountAmount > 0
+        ? `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`
+        : formatCurrencyHalfKrone(0);
       discountDisplay.innerHTML = `
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
@@ -11067,7 +11094,7 @@ function updateDiscountDisplay() {
         </div>
         <div class="discount-row discount-applied">
           <span class="discount-label">Discount (${state.discountCode}):</span>
-          <span class="discount-value">-${formatCurrencyHalfKrone(state.totals.discountAmount)}</span>
+          <span class="discount-value">${discountValue}</span>
         </div>
         <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
           <span class="discount-label" style="font-weight: bold;">Total:</span>
