@@ -10241,11 +10241,18 @@ async function handleApplyDiscount() {
       // Check if coupon was actually applied to the order (even if discountAmount is 0)
       // The API might return success but with 0 discount (e.g., for future use coupons)
       const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
-      if (couponDiscount !== undefined && couponDiscount !== null) {
-        // Coupon was applied, even if discount is 0
+      // CRITICAL: Only set discountApplied if couponDiscount is actually > 0
+      // If API returns couponDiscount: 0, the coupon was NOT applied (backend rejected it)
+      const couponDiscountAmount = typeof couponDiscount === 'object' 
+        ? (couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0)
+        : (couponDiscount || 0);
+      const actualDiscountAmount = couponDiscountAmount > 10000 ? couponDiscountAmount / 100 : couponDiscountAmount;
+      
+      if (actualDiscountAmount > 0) {
+        // Coupon was successfully applied with a discount > 0
         state.discountCode = discountCode;
         state.discountApplied = true;
-        state.totals.discountAmount = 0; // Set to 0 if that's what the API returned
+        state.totals.discountAmount = actualDiscountAmount;
         
         // CRITICAL: Fetch full order from API to ensure we have the latest price data
         try {
@@ -10268,25 +10275,35 @@ async function handleApplyDiscount() {
           }
         }
         
-        updateCartSummary(); // updateCartSummary() already calls renderCartTotal()
-        updatePaymentOverview(); // Update payment overview with discounted prices
-        
-        const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
-        showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
-        
-        // Highlight the new price in cart total elements and payment overview
-        const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
-        cartTotalElements.forEach(el => {
-          el.classList.add('price-updated');
-          setTimeout(() => {
-            el.classList.remove('price-updated');
-          }, 2000);
-        });
-        
-        DOM.discountInput.disabled = true;
-        DOM.discountInput.style.opacity = '0.6';
-        DOM.discountInput.style.borderColor = '#10B981';
-        DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
+          updateCartSummary(); // updateCartSummary() already calls renderCartTotal()
+          updatePaymentOverview(); // Update payment overview with discounted prices
+          
+          const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
+          showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
+          
+          // Highlight the new price in cart total elements and payment overview
+          const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
+          cartTotalElements.forEach(el => {
+            el.classList.add('price-updated');
+            setTimeout(() => {
+              el.classList.remove('price-updated');
+            }, 2000);
+          });
+          
+          DOM.discountInput.disabled = true;
+          DOM.discountInput.style.opacity = '0.6';
+          DOM.discountInput.style.borderColor = '#10B981';
+          DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
+        } else {
+          // Coupon was returned by API but discount amount is 0 - coupon was NOT applied
+          console.error('[Discount] ❌ Coupon code was sent but backend returned discount: 0');
+          console.error('[Discount] ❌ This means the coupon is not configured for this product or was rejected');
+          console.error('[Discount] ❌ NOT setting discountApplied = true because no discount was actually applied');
+          state.discountCode = null;
+          state.discountApplied = false;
+          state.totals.discountAmount = 0;
+          throw new Error('Coupon code is not valid for this product or order');
+        }
       } else {
         throw new Error('Invalid coupon code or no discount applied');
       }
@@ -10564,13 +10581,16 @@ function updateCartSummary() {
   // Calculate cart total (subtotal - discount)
   // CRITICAL: If order has leftToPay (discounted price from API), use that as source of truth
   // This ensures cart total matches what payment window will show
+  // BUT: Only use leftToPay if discount is actually applied (discountAmount > 0)
+  // If discountApplied is true but discountAmount is 0, the backend rejected the coupon
   let cartTotal = 0;
-  if (state.fullOrder?.price?.leftToPay && (state.discountApplied || state.totals.discountAmount > 0)) {
+  if (state.fullOrder?.price?.leftToPay && state.discountApplied && state.totals.discountAmount > 0) {
     // Use leftToPay from API as the authoritative discounted total
+    // Only use this if discount is actually applied (amount > 0)
     const leftToPayAmount = typeof state.fullOrder.price.leftToPay === 'object' 
       ? state.fullOrder.price.leftToPay.amount 
       : state.fullOrder.price.leftToPay;
-    if (Number.isFinite(leftToPayAmount)) {
+    if (Number.isFinite(leftToPayAmount) && leftToPayAmount > 0) {
       cartTotal = leftToPayAmount / 100; // Convert from cents to DKK
       console.log('[Cart] Using order.leftToPay as cart total:', cartTotal, 'DKK');
     }
