@@ -59,7 +59,6 @@ Test user findings (translated):
 - ✅ Payment status messaging: shows "payment failed" even when membership is created (status: fixed)
 - ✅ Campaign visibility: clarify whether punch cards and membership campaigns both appear under Campaigns (status: fixed)
 - ⏳ Campaign copy: make auto-renew subscription more explicit for membership campaigns (status: pending)
-- ⏳ No active campaign: clarify how the campaign option behaves when none are public (status: pending)
 - ✅ "Create account" label: make clearer since most users are new (status: fixed)
 - ✅ Amount rounding: BRP uses half-kr; comma decimals still show (status: fixed)
 - ✅ 15-day pass pricing: currently adds rest-of-month; should be full amount only (status: fixed)
@@ -70,7 +69,8 @@ Test user findings (translated):
 - ⏳ Ved køb af klippekort, tildeles nyt kundenr når profilen allerede er medlem 
 - ⏳ ved køb af junior medlemskab, tildeles nyt kundenr hvis profilen allerede er medlem + extend form til navn og DOB på barnet
 - ⏳ Junior medlemskab skal oprettes af forældre/værge 
-- ⏳ Gør Hjemmehal i Cart edit knap til at vælge ny hal via modal 
+- ✅ Gør Hjemmehal i Cart edit knap til at vælge ny hal via modal 
+- ⚠️ Note: If campaigns become gym-specific, update home-gym modal to refresh products
 - Ensure start date of memberships and 15 day pass is always today 
 
 
