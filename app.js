@@ -2093,8 +2093,8 @@ class OrderAPI {
             discountAmount = discountAmount / 100;
             console.log('[Discount] Converted from cents:', discountAmount);
           }
-          // Round to half krone
-          discountAmount = roundToHalfKrone(discountAmount);
+          // CRITICAL: Do NOT round discount amount - use API value exactly
+          // Rounding can cause 99% discount to appear as 100% if it rounds up
           discountExtractedFromAPI = discountAmount > 0;
         } else if (typeof couponDiscount === 'number') {
           discountAmount = couponDiscount;
@@ -2105,8 +2105,8 @@ class OrderAPI {
             discountAmount = discountAmount / 100;
             console.log('[Discount] Converted from cents:', discountAmount);
           }
-          // Round to half krone
-          discountAmount = roundToHalfKrone(discountAmount);
+          // CRITICAL: Do NOT round discount amount - use API value exactly
+          // Rounding can cause 99% discount to appear as 100% if it rounds up
           discountExtractedFromAPI = discountAmount > 0 || discountAmount === 0; // Even 0 is valid from API
         }
         
@@ -10069,23 +10069,42 @@ async function handleApplyDiscount() {
       discountAmount = 0; // Set to 0 if API didn't provide it
     }
     
-    // Ensure subtotal is calculated before validating discount
+    // Ensure subtotal is calculated before logging
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
       updateCartSummary(); // This will calculate subtotal using API data
     }
     
-    // Validate discount amount - ensure it doesn't exceed subtotal
+    // CRITICAL: Do NOT cap discount - use API value exactly as provided
+    // The API is the source of truth for discount amount
+    // If API returns discount > subtotal, that's what the API says and we must use it
     const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+    
+    // Log discount details for debugging
+    console.log('[Discount] Discount application details:', {
+      discountAmountFromAPI: discountAmount,
+      subtotal: subtotal,
+      discountPercentage: subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) + '%' : 'N/A',
+      productType: state.selectedProductType,
+      productId: state.selectedProductId,
+      is15DayPass: state.selectedProductType === '15daypass'
+    });
+    
     if (discountAmount > subtotal && subtotal > 0) {
-      console.warn('[Discount] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
-      discountAmount = subtotal;
+      console.warn('[Discount] ⚠️ API discount amount exceeds subtotal - this may indicate an API issue');
+      console.warn('[Discount] ⚠️ API discountAmount:', discountAmount, 'DKK, subtotal:', subtotal, 'DKK');
+      console.warn('[Discount] ⚠️ Using API value as-is (not capping) - API is source of truth');
+      // Do NOT cap - use API value exactly as provided
     }
     
+    // CRITICAL: Use API discount amount exactly - do NOT round or modify
+    // Rounding to half krone can cause 99% discount to appear as 100% if it rounds up
+    // The API value is the source of truth, use it exactly
     if (discountAmount > 0) {
       // Success - apply discount
       state.discountCode = discountCode;
       state.discountApplied = true;
-      state.totals.discountAmount = roundToHalfKrone(discountAmount);
+      // Use API discount amount exactly - do NOT round (rounding can cause 99% to become 100%)
+      state.totals.discountAmount = discountAmount; // Use exact API value, not rounded
       
       // CRITICAL: Fetch full order from API to ensure we have the latest price data
       // The applyDiscountCode response might not have all fields, so we fetch the complete order
@@ -10519,9 +10538,13 @@ function updateCartSummary() {
   
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
-  
-  // Calculate cart total (subtotal - discount) - round to half krone
-  state.totals.cartTotal = roundToHalfKrone(Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0)));
+
+  // Calculate cart total (subtotal - discount)
+  // CRITICAL: Use exact discountAmount from API (not rounded) to preserve discount percentage
+  // Only round the final result, not the discount amount itself
+  const exactDiscount = state.totals.discountAmount || 0;
+  const exactCartTotal = state.totals.subtotal - exactDiscount;
+  state.totals.cartTotal = roundToHalfKrone(Math.max(0, exactCartTotal));
 
   // Track add_to_cart if items were added (not just updated)
   if (newCartItemCount > previousCartItemCount && window.GTM && window.GTM.trackAddToCart) {
@@ -10604,12 +10627,16 @@ function updateCartTotals() {
   });
 
   state.cartItems = items;
-  
+
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
-  
-  // Calculate cart total (subtotal - discount) - round to half krone
-  state.totals.cartTotal = roundToHalfKrone(Math.max(0, state.totals.subtotal - (state.totals.discountAmount || 0)));
+
+  // Calculate cart total (subtotal - discount)
+  // CRITICAL: Use exact discountAmount from API (not rounded) to preserve discount percentage
+  // Only round the final result, not the discount amount itself
+  const exactDiscount = state.totals.discountAmount || 0;
+  const exactCartTotal = state.totals.subtotal - exactDiscount;
+  state.totals.cartTotal = roundToHalfKrone(Math.max(0, exactCartTotal));
 
   renderCartItems();
   renderCartTotal();
@@ -12486,18 +12513,25 @@ async function handleCheckout() {
                   discountAmount = 0; // Set to 0 if API didn't provide it
                 }
               
-              // Cap discount at subtotal
+              // CRITICAL: Do NOT cap discount - use API value exactly as provided
+              // The API is the source of truth for discount amount
+              // If API returns discount > subtotal, that's what the API says and we must use it
               const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
               if (discountAmount > subtotal && subtotal > 0) {
-                discountAmount = subtotal;
+                console.warn('[checkout] ⚠️ API discount amount exceeds subtotal - this may indicate an API issue');
+                console.warn('[checkout] ⚠️ API discountAmount:', discountAmount, 'DKK, subtotal:', subtotal, 'DKK');
+                console.warn('[checkout] ⚠️ Using API value as-is (not capping) - API is source of truth');
+                // Do NOT cap - use API value exactly as provided
               }
               
               if (discountAmount > 0) {
                 state.discountCode = discountCodeToApply;
                 state.discountApplied = true;
-                state.totals.discountAmount = roundToHalfKrone(discountAmount);
+                // CRITICAL: Use API discount amount exactly - do NOT round
+                // Rounding can cause 99% discount to appear as 100% if it rounds up
+                state.totals.discountAmount = discountAmount; // Use exact API value
                 updateCartSummary(); // Use API-based cart update function
-                console.log('[checkout] ✅ Coupon applied before payment link:', discountCodeToApply, 'Amount:', discountAmount);
+                console.log('[checkout] ✅ Coupon applied before payment link:', discountCodeToApply, 'Amount:', discountAmount, 'DKK (exact API value, not rounded)');
                 
                 // CRITICAL: Fetch updated order multiple times to ensure backend has processed the coupon
                 // Payment link generation reads order total from the order, so we need to ensure it's updated
@@ -13341,7 +13375,9 @@ async function handleCheckout() {
               // Success - apply discount
               state.discountCode = discountCodeToApply;
               state.discountApplied = true;
-              state.totals.discountAmount = roundToHalfKrone(discountAmount);
+              // CRITICAL: Use API discount amount exactly - do NOT round
+              // Rounding can cause 99% discount to appear as 100% if it rounds up
+              state.totals.discountAmount = discountAmount; // Use exact API value
               
               console.log('[checkout] Updating cart totals with discount:', discountAmount);
               console.log('[checkout] Subtotal:', state.totals.subtotal, 'Discount:', discountAmount, 'Final Total:', state.totals.subtotal - discountAmount);
