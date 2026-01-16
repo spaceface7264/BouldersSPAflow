@@ -10540,11 +10540,35 @@ function updateCartSummary() {
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
 
   // Calculate cart total (subtotal - discount)
-  // CRITICAL: Use exact discountAmount from API (not rounded) to preserve discount percentage
-  // Only round the final result, not the discount amount itself
-  const exactDiscount = state.totals.discountAmount || 0;
-  const exactCartTotal = state.totals.subtotal - exactDiscount;
-  state.totals.cartTotal = roundToHalfKrone(Math.max(0, exactCartTotal));
+  // CRITICAL: If order has leftToPay (discounted price from API), use that as source of truth
+  // This ensures cart total matches what payment window will show
+  let cartTotal = 0;
+  if (state.fullOrder?.price?.leftToPay && (state.discountApplied || state.totals.discountAmount > 0)) {
+    // Use leftToPay from API as the authoritative discounted total
+    const leftToPayAmount = typeof state.fullOrder.price.leftToPay === 'object' 
+      ? state.fullOrder.price.leftToPay.amount 
+      : state.fullOrder.price.leftToPay;
+    if (Number.isFinite(leftToPayAmount)) {
+      cartTotal = leftToPayAmount / 100; // Convert from cents to DKK
+      console.log('[Cart] Using order.leftToPay as cart total:', cartTotal, 'DKK');
+    }
+  }
+  
+  // Fallback: Calculate from subtotal - discount if leftToPay not available
+  if (cartTotal === 0) {
+    // CRITICAL: Use exact discountAmount from API (not rounded) to preserve discount percentage
+    // Only round the final result, not the discount amount itself
+    const exactDiscount = state.totals.discountAmount || 0;
+    const exactCartTotal = state.totals.subtotal - exactDiscount;
+    cartTotal = Math.max(0, exactCartTotal);
+    if (state.discountApplied && exactCartTotal < 0) {
+      console.warn('[Cart] ⚠️ Calculated cart total is negative:', exactCartTotal, 'DKK');
+      console.warn('[Cart] ⚠️ This suggests discount amount (', exactDiscount, ') exceeds subtotal (', state.totals.subtotal, ')');
+      console.warn('[Cart] ⚠️ Clamping to 0 - this may indicate API issue with discount calculation');
+    }
+  }
+  
+  state.totals.cartTotal = roundToHalfKrone(cartTotal);
 
   // Track add_to_cart if items were added (not just updated)
   if (newCartItemCount > previousCartItemCount && window.GTM && window.GTM.trackAddToCart) {
@@ -11058,15 +11082,47 @@ function updatePaymentOverview() {
     // Per OpenAPI: leftToPay is "The total amount left to pay for the order" (after discounts)
     // This is what the payment link API should use
     const hasDiscountOnOrder = !!(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+    const originalPriceDKK = normalizeOrderPrice(state.fullOrder.price.amount);
+    const leftToPayDKK = normalizeOrderPrice(state.fullOrder?.price?.leftToPay);
+    const couponDiscountDKK = normalizeOrderPrice(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+    
+    // CRITICAL: For 15-day pass with discount, explicitly check leftToPay
+    // If leftToPay is missing or 0 when discount is applied, this is a backend bug
     const preferPriceField = (state.discountApplied || hasDiscountOnOrder)
       ? (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.amount)
       : (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.amount);
     const orderPriceDKK = normalizeOrderPrice(preferPriceField) ?? normalizeOrderPrice(state.fullOrder.price.amount);
     
-    console.log('[Payment Overview] ✅ Using API price from order:', orderPriceDKK, 'DKK');
+    // Log detailed price information for debugging 15-day pass discount issues
+    console.log('[Payment Overview] Price breakdown:', {
+      originalPrice: originalPriceDKK,
+      leftToPay: leftToPayDKK,
+      couponDiscount: couponDiscountDKK,
+      finalPrice: orderPriceDKK,
+      hasDiscount: hasDiscountOnOrder,
+      discountApplied: state.discountApplied,
+      is15DayPass: is15DayPass
+    });
     
     if (is15DayPass) {
-      // For 15-day pass: always use full price (one-time payment)
+      // CRITICAL: For 15-day pass, verify leftToPay is set correctly when discount is applied
+      if (state.discountApplied || hasDiscountOnOrder) {
+        if (leftToPayDKK === null || leftToPayDKK === undefined) {
+          console.error('[Payment Overview] ❌ CRITICAL: 15-day pass has discount but leftToPay is missing!');
+          console.error('[Payment Overview] ❌ Backend should set order.price.leftToPay when coupon is applied');
+          console.error('[Payment Overview] ❌ Falling back to price.amount which may not include discount');
+        } else if (leftToPayDKK === 0 && originalPriceDKK > 0) {
+          console.error('[Payment Overview] ❌ CRITICAL: 15-day pass leftToPay is 0 but original price is', originalPriceDKK);
+          console.error('[Payment Overview] ❌ This suggests backend bug - discount may be calculated incorrectly');
+        } else if (leftToPayDKK !== null && originalPriceDKK !== null && leftToPayDKK >= originalPriceDKK && couponDiscountDKK > 0) {
+          console.warn('[Payment Overview] ⚠️ 15-day pass leftToPay (', leftToPayDKK, ') >= original price (', originalPriceDKK, ')');
+          console.warn('[Payment Overview] ⚠️ Discount may not be reflected in leftToPay');
+        } else {
+          console.log('[Payment Overview] ✅ 15-day pass leftToPay correctly reflects discount:', leftToPayDKK, 'DKK');
+        }
+      }
+      
+      // For 15-day pass: use leftToPay if available (discounted price), otherwise use amount
       payNowAmount = orderPriceDKK;
       
       // Set valid until date (15 days from today)
