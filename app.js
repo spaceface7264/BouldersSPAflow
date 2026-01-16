@@ -6640,6 +6640,27 @@ function refreshHeaderAuthIndicator() {
   headerAuthIndicator.style.display = 'flex';
 }
 
+function formatCityDisplay(city) {
+  if (!city || typeof city !== 'string') return city;
+  const trimmed = city.trim();
+  if (!trimmed) return trimmed;
+  return trimmed
+    .split(' ')
+    .filter(Boolean)
+    .map(word => word
+      .split('-')
+      .map(part => {
+        if (!part) return part;
+        const upper = part.toUpperCase();
+        if (part.length <= 2 && part === upper) {
+          return upper; // Preserve short abbreviations like "C" or "Ø"
+        }
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      })
+      .join('-'))
+    .join(' ');
+}
+
 function refreshLoginUI() {
   // Update header auth indicator first
   refreshHeaderAuthIndicator();
@@ -6767,7 +6788,7 @@ function refreshLoginUI() {
       addressParts.push(postalCodeSource);
     }
     if (citySource) {
-      addressParts.push(citySource);
+      addressParts.push(formatCityDisplay(citySource));
     }
     const addressDisplay = addressParts.length > 0 ? addressParts.join(', ') : null;
     if (addressDisplay) {
