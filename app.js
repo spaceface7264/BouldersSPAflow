@@ -10083,16 +10083,29 @@ async function handleApplyDiscount() {
       state.discountApplied = true;
       state.totals.discountAmount = roundToHalfKrone(discountAmount);
       
-      // CRITICAL: Update fullOrder with discounted prices from API response
-      // This ensures payment overview shows the discounted prices
-      if (response && !state.fullOrder) {
-        state.fullOrder = response;
-      } else if (response && state.fullOrder) {
-        // Merge updated price data into existing fullOrder
-        state.fullOrder.price = response.price || state.fullOrder.price;
-        state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
-        if (response.subscriptionItems && response.subscriptionItems.length > 0) {
-          state.fullOrder.subscriptionItems = response.subscriptionItems;
+      // CRITICAL: Fetch full order from API to ensure we have the latest price data
+      // The applyDiscountCode response might not have all fields, so we fetch the complete order
+      try {
+        console.log('[Discount] Fetching full order to get latest price data...');
+        const updatedOrder = await orderAPI.getOrder(orderIdToUse);
+        state.fullOrder = updatedOrder;
+        console.log('[Discount] ✅ Full order fetched with discounted price:', {
+          orderId: updatedOrder?.id,
+          price: updatedOrder?.price,
+          couponDiscount: updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount,
+        });
+      } catch (fetchError) {
+        console.warn('[Discount] Could not fetch full order, using response data:', fetchError);
+        // Fallback: Use response data if fetch fails
+        if (response && !state.fullOrder) {
+          state.fullOrder = response;
+        } else if (response && state.fullOrder) {
+          // Merge updated price data into existing fullOrder
+          state.fullOrder.price = response.price || state.fullOrder.price;
+          state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
+          if (response.subscriptionItems && response.subscriptionItems.length > 0) {
+            state.fullOrder.subscriptionItems = response.subscriptionItems;
+          }
         }
       }
       
@@ -10189,12 +10202,25 @@ async function handleApplyDiscount() {
         state.discountApplied = true;
         state.totals.discountAmount = 0; // Set to 0 if that's what the API returned
         
-        // Update fullOrder with response to ensure payment overview uses latest data
-        if (response && !state.fullOrder) {
-          state.fullOrder = response;
-        } else if (response && state.fullOrder) {
-          state.fullOrder.price = response.price || state.fullOrder.price;
-          state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
+        // CRITICAL: Fetch full order from API to ensure we have the latest price data
+        try {
+          console.log('[Discount] Fetching full order to get latest price data (0 discount case)...');
+          const updatedOrder = await orderAPI.getOrder(orderIdToUse);
+          state.fullOrder = updatedOrder;
+          console.log('[Discount] ✅ Full order fetched:', {
+            orderId: updatedOrder?.id,
+            price: updatedOrder?.price,
+            couponDiscount: updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount,
+          });
+        } catch (fetchError) {
+          console.warn('[Discount] Could not fetch full order, using response data:', fetchError);
+          // Fallback: Use response data if fetch fails
+          if (response && !state.fullOrder) {
+            state.fullOrder = response;
+          } else if (response && state.fullOrder) {
+            state.fullOrder.price = response.price || state.fullOrder.price;
+            state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
+          }
         }
         
         updateCartSummary(); // updateCartSummary() already calls renderCartTotal()
@@ -11293,17 +11319,35 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
-  // If discount is applied but order price doesn't include it, reflect discount in pay-now
+  // If discount is applied, ensure we're using the discounted price from the order
+  // The order should have the discounted price in leftToPay or total fields
   const orderPriceHasDiscountedTotal = !!(state.fullOrder?.price?.leftToPay || state.fullOrder?.price?.total);
-  if (state.discountApplied && state.totals.discountAmount > 0 && (!hasOrderData || !orderPriceHasDiscountedTotal)) {
-    const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
-    if (adjustedPayNow !== payNowAmount) {
-      console.log('[Payment Overview] Applying discount to pay-now fallback:', {
-        original: payNowAmount,
-        discount: state.totals.discountAmount,
-        adjusted: adjustedPayNow
+  const hasDiscountOnOrder = !!(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+  
+  if (state.discountApplied && state.totals.discountAmount > 0) {
+    // If order has discounted total fields, we should have already used them above
+    // But if not, apply discount manually as fallback
+    if (!orderPriceHasDiscountedTotal && hasOrderData) {
+      // Order doesn't have leftToPay/total fields, but discount is applied
+      // Apply discount to the calculated payNowAmount
+      const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
+      if (adjustedPayNow !== payNowAmount) {
+        console.log('[Payment Overview] Applying discount to pay-now (fallback):', {
+          original: payNowAmount,
+          discount: state.totals.discountAmount,
+          adjusted: adjustedPayNow,
+          reason: 'Order price does not have leftToPay/total fields'
+        });
+        payNowAmount = adjustedPayNow;
+      }
+    } else if (orderPriceHasDiscountedTotal) {
+      // Order has discounted price fields - verify we're using them correctly
+      console.log('[Payment Overview] ✅ Using discounted price from order:', {
+        payNowAmount,
+        leftToPay: state.fullOrder?.price?.leftToPay,
+        total: state.fullOrder?.price?.total,
+        amount: state.fullOrder?.price?.amount
       });
-      payNowAmount = adjustedPayNow;
     }
   }
 
@@ -12699,14 +12743,58 @@ async function handleCheckout() {
             // Store full order object for payment overview
             state.fullOrder = orderBeforePayment;
             
+            // CRITICAL: If discount is applied, verify the order has the discounted price
+            if (state.discountApplied && state.totals.discountAmount > 0) {
+              // Check if order has discounted price in leftToPay or total fields
+              const discountedPrice = orderBeforePayment?.price?.leftToPay || orderBeforePayment?.price?.total;
+              const orderPriceAmount = orderBeforePayment?.price?.amount;
+              
+              // Normalize prices for comparison
+              const normalizePrice = (price) => {
+                if (!price) return null;
+                const rawAmount = typeof price === 'object' ? price.amount : price;
+                if (!Number.isFinite(rawAmount)) return null;
+                return rawAmount / 100; // Convert from cents to DKK
+              };
+              
+              const discountedPriceDKK = normalizePrice(discountedPrice);
+              const orderPriceAmountDKK = normalizePrice(orderPriceAmount);
+              
+              if (discountedPriceDKK !== null && orderPriceAmountDKK !== null) {
+                // Check if amount field reflects the discount
+                const priceDifference = Math.abs(discountedPriceDKK - orderPriceAmountDKK);
+                if (priceDifference > 0.01) {
+                  console.warn('[checkout] ⚠️ DISCOUNT PRICE MISMATCH DETECTED!');
+                  console.warn('[checkout] ⚠️ order.price.amount (used by payment API):', orderPriceAmountDKK, 'DKK');
+                  console.warn('[checkout] ⚠️ order.price.leftToPay/total (discounted):', discountedPriceDKK, 'DKK');
+                  console.warn('[checkout] ⚠️ Payment window may show incorrect price if API uses order.price.amount');
+                  console.warn('[checkout] ⚠️ Expected discounted price:', discountedPriceDKK, 'DKK');
+                } else {
+                  console.log('[checkout] ✅ Order price.amount correctly reflects discount:', orderPriceAmountDKK, 'DKK');
+                }
+              }
+            }
+            
             // CRITICAL: Log the exact price that will be sent to payment window
+            // Payment link API reads from order.price.amount, but if discount is applied,
+            // the backend should update amount to reflect the discounted price
             const finalOrderPrice = orderBeforePayment?.price?.amount || 0;
             const finalOrderPriceDKK = typeof finalOrderPrice === 'object' 
               ? finalOrderPrice.amount / 100 
               : finalOrderPrice / 100;
             
-            console.log('[checkout] 🔍 FINAL PRICE THAT WILL BE SENT TO PAYMENT WINDOW:', finalOrderPrice, '(in cents) =', finalOrderPriceDKK, 'DKK');
-            console.log('[checkout] This is order.price.amount from backend - payment link API will use this exact value');
+            // If discount is applied, also check leftToPay/total fields
+            const discountedOrderPrice = orderBeforePayment?.price?.leftToPay || orderBeforePayment?.price?.total;
+            const discountedOrderPriceDKK = discountedOrderPrice 
+              ? (typeof discountedOrderPrice === 'object' ? discountedOrderPrice.amount / 100 : discountedOrderPrice / 100)
+              : null;
+            
+            console.log('[checkout] 🔍 FINAL PRICE THAT WILL BE SENT TO PAYMENT WINDOW:');
+            console.log('[checkout] 🔍 order.price.amount (primary):', finalOrderPrice, '(in cents) =', finalOrderPriceDKK, 'DKK');
+            if (discountedOrderPriceDKK !== null) {
+              console.log('[checkout] 🔍 order.price.leftToPay/total (discounted):', discountedOrderPriceDKK, 'DKK');
+            }
+            console.log('[checkout] 🔍 Payment link API will use order.price.amount from backend');
             
             // Update payment overview with final order data
             updatePaymentOverview();
@@ -12715,8 +12803,9 @@ async function handleCheckout() {
             const orderCouponDiscount = orderBeforePayment?.couponDiscount || orderBeforePayment?.price?.couponDiscount;
             if (orderCouponDiscount) {
               console.log('[checkout] ✅ Order has couponDiscount, payment link should reflect discount');
-            } else {
-              console.warn('[checkout] ⚠️ Order does not have couponDiscount - payment link may not reflect discount');
+            } else if (state.discountApplied) {
+              console.warn('[checkout] ⚠️ Discount is applied in UI but order does not have couponDiscount field');
+              console.warn('[checkout] ⚠️ Payment link may not reflect discount - backend may not have applied it');
             }
             
             // Log comprehensive price information for debugging
