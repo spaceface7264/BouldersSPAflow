@@ -516,8 +516,9 @@ class AuthAPI {
   }
 
   // Step 6: Login - Submit login credentials and store tokens
-  async login(email, password) {
+  async login(email, password, options = {}) {
     try {
+      const { saveTokens = true } = options;
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
@@ -591,15 +592,17 @@ class AuthAPI {
       
       if (accessToken && refreshToken) {
         if (typeof window.saveTokens === 'function') {
-          const metadata = {
-            username: tokenPayload.username || tokenPayload.userName,
-            email: tokenPayload.email || email,
-            roles: tokenPayload.roles || [],
-            tokenType: tokenPayload.tokenType || tokenPayload.token_type,
-            expiresIn: tokenPayload.expiresIn || tokenPayload.expires_in,
-          };
-          window.saveTokens(accessToken, refreshToken, expiresAt, metadata);
-          console.log('[Step 6] ✅ Tokens saved successfully');
+          if (saveTokens) {
+            const metadata = {
+              username: tokenPayload.username || tokenPayload.userName,
+              email: tokenPayload.email || email,
+              roles: tokenPayload.roles || [],
+              tokenType: tokenPayload.tokenType || tokenPayload.token_type,
+              expiresIn: tokenPayload.expiresIn || tokenPayload.expires_in,
+            };
+            window.saveTokens(accessToken, refreshToken, expiresAt, metadata);
+            console.log('[Step 6] ✅ Tokens saved successfully');
+          }
         } else {
           console.warn('[Step 6] saveTokens function not available - tokens not saved');
         }
@@ -7084,7 +7087,27 @@ async function handleSaveAccount() {
         console.warn('[Save Account] Could not check localStorage:', e);
       }
       
-      // Note: We don't check via login because the API returns INVALID_CREDENTIALS 
+      // If the backend allows duplicate creation when password matches, prevent it by probing login.
+      const passwordForExistingCheck = customerData.password || document.getElementById('password')?.value;
+      if (passwordForExistingCheck) {
+        try {
+          await authAPI.login(email, passwordForExistingCheck, { saveTokens: false });
+          showSaveAccountMessage('An account with this email address already exists. Please log in instead.', 'error');
+          showToast('Account already exists. Please log in.', 'error');
+          switchAuthMode('login', email);
+          return;
+        } catch (probeError) {
+          const probeMessage = probeError?.message || '';
+          const isInvalidCredentials =
+            probeMessage.includes('Login failed: 401') ||
+            probeMessage.includes('INVALID_CREDENTIALS');
+          if (!isInvalidCredentials) {
+            throw probeError;
+          }
+        }
+      }
+
+      // Note: We don't check via login for non-matching passwords because the API returns INVALID_CREDENTIALS
       // for both "account doesn't exist" and "wrong password" for security reasons.
       // We rely on:
       // 1. Session tracking (state.createdEmails)
