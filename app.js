@@ -12804,19 +12804,28 @@ async function handleCheckout() {
             // Store full order object for payment overview
             state.fullOrder = orderBeforePayment;
             
+            // CRITICAL: Log the exact price that will be sent to payment window
+            // Per OpenAPI documentation:
+            // - OrderOut.price - "The total price of the order" (original price)
+            // - OrderOut.leftToPay - "The total amount left to pay for the order" (after discounts)
+            // The payment link API should use leftToPay if available, otherwise price.amount
+            const normalizePrice = (price) => {
+              if (!price) return null;
+              const rawAmount = typeof price === 'object' ? price.amount : price;
+              if (!Number.isFinite(rawAmount)) return null;
+              return rawAmount / 100; // Convert from cents to DKK
+            };
+            
+            const orderPriceAmount = orderBeforePayment?.price?.amount;
+            const orderPriceAmountDKK = normalizePrice(orderPriceAmount);
+            const orderLeftToPay = orderBeforePayment?.price?.leftToPay;
+            const orderLeftToPayDKK = normalizePrice(orderLeftToPay);
+            const orderCouponDiscount = orderBeforePayment?.couponDiscount || orderBeforePayment?.price?.couponDiscount;
+            
             // CRITICAL: If discount is applied, verify the order has leftToPay set (per OpenAPI)
             // Per OpenAPI: leftToPay is "The total amount left to pay for the order" (after discounts)
             // Payment link API should use leftToPay if available, otherwise price.amount
             if (state.discountApplied && state.totals.discountAmount > 0) {
-              const normalizePrice = (price) => {
-                if (!price) return null;
-                const rawAmount = typeof price === 'object' ? price.amount : price;
-                if (!Number.isFinite(rawAmount)) return null;
-                return rawAmount / 100; // Convert from cents to DKK
-              };
-              
-              const orderPriceAmountDKK = normalizePrice(orderBeforePayment?.price?.amount);
-              const orderLeftToPayDKK = normalizePrice(orderBeforePayment?.price?.leftToPay);
               
               if (orderLeftToPayDKK === null) {
                 console.error('[checkout] ❌ CRITICAL: Discount is applied but order.price.leftToPay is missing!');
@@ -12865,24 +12874,6 @@ async function handleCheckout() {
               }
             }
             
-            // CRITICAL: Log the exact price that will be sent to payment window
-            // Per OpenAPI documentation:
-            // - OrderOut.price - "The total price of the order" (original price)
-            // - OrderOut.leftToPay - "The total amount left to pay for the order" (after discounts)
-            // The payment link API should use leftToPay if available, otherwise price.amount
-            const normalizePrice = (price) => {
-              if (!price) return null;
-              const rawAmount = typeof price === 'object' ? price.amount : price;
-              if (!Number.isFinite(rawAmount)) return null;
-              return rawAmount / 100; // Convert from cents to DKK
-            };
-            
-            const orderPriceAmount = orderBeforePayment?.price?.amount;
-            const orderPriceAmountDKK = normalizePrice(orderPriceAmount);
-            const orderLeftToPay = orderBeforePayment?.price?.leftToPay;
-            const orderLeftToPayDKK = normalizePrice(orderLeftToPay);
-            const orderCouponDiscount = orderBeforePayment?.couponDiscount || orderBeforePayment?.price?.couponDiscount;
-            
             // Per OpenAPI: Payment link API should use leftToPay (amount after discounts)
             const priceForPayment = orderLeftToPayDKK ?? orderPriceAmountDKK;
             
@@ -12910,8 +12901,7 @@ async function handleCheckout() {
             // Update payment overview with final order data
             updatePaymentOverview();
             
-            // Verify coupon discount is present
-            const orderCouponDiscount = orderBeforePayment?.couponDiscount || orderBeforePayment?.price?.couponDiscount;
+            // Verify coupon discount is present (orderCouponDiscount already declared above)
             if (orderCouponDiscount) {
               console.log('[checkout] ✅ Order has couponDiscount, payment link should reflect discount');
             } else if (state.discountApplied) {
@@ -12922,8 +12912,10 @@ async function handleCheckout() {
             // Log comprehensive price information for debugging
             console.log('[checkout] Final order price summary:', {
               orderId: orderBeforePayment?.id,
-              orderPriceAmount: finalOrderPrice,
-              orderPriceDKK: finalOrderPriceDKK,
+              orderPriceAmount: orderPriceAmountDKK,
+              orderPriceDKK: orderPriceAmountDKK,
+              leftToPayDKK: orderLeftToPayDKK,
+              priceForPayment: priceForPayment,
               hasPrice: !!orderBeforePayment?.price,
               priceKeys: orderBeforePayment?.price ? Object.keys(orderBeforePayment.price) : [],
               couponDiscount: orderCouponDiscount,
