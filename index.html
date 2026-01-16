@@ -619,6 +619,14 @@
                                         <div class="payment-overview-bound-until" data-summary-field="payment-bound-until" style="display: none;"></div>
                                     </div>
                                 </div>
+
+                                <!-- Cart Total (Punch cards, add-ons) -->
+                                <div class="cart-total" style="display: none;">
+                                    <div class="cart-total-row">
+                                        <span class="total-label" data-i18n-key="cart.total">Total</span>
+                                        <span class="total-amount" data-summary-field="cart-total">0,00 kr</span>
+                                    </div>
+                                </div>
                                 
                                 <!-- Discount Code -->
                                 <div class="discount-section">
@@ -632,6 +640,11 @@
                                     </div>
                                     <div class="discount-display" data-discount-display style="display: none;"></div>
                                 </div>
+
+                                <div class="campaign-checkout-warning" data-campaign-warning style="display: none;" data-i18n-key="cart.campaignWarning">
+                                    Starting checkout for a campaign can block re-signup if payment is not completed.
+                                </div>
+
                                 
                                 <!-- Consents -->
                                 <div class="consents-section">
@@ -1051,6 +1064,56 @@
             </div>
         </div>
     </div>
+
+    <!-- Campaign Restriction Modal -->
+    <div class="campaign-rejection-modal" id="campaignRestrictionModal" style="display: none;">
+        <div class="campaign-rejection-modal-content" role="dialog" aria-modal="true" aria-labelledby="campaignRestrictionTitle" aria-describedby="campaignRestrictionBody">
+            <div class="campaign-rejection-modal-header">
+                <h3 class="campaign-rejection-modal-title" id="campaignRestrictionTitle" data-i18n-key="modal.campaignBlocked.title">Campaign not available</h3>
+                <button class="campaign-rejection-modal-close" type="button" data-action="close-campaign-restriction" aria-label="Close">×</button>
+            </div>
+            <p class="campaign-rejection-modal-body" id="campaignRestrictionBody" data-i18n-key="modal.campaignBlocked.body">
+                This offer isn’t available for your account because of a recent membership. You can still choose a regular membership instead.
+            </p>
+            <a class="campaign-rejection-modal-support" href="mailto:medlem@boulders.dk" data-i18n-key="modal.campaignBlocked.support">
+                If you believe this is a mistake, contact support.
+            </a>
+            <div class="campaign-rejection-modal-actions">
+                <button class="campaign-rejection-modal-primary" type="button" data-action="campaign-restriction-cta" data-i18n-key="modal.campaignBlocked.cta">Show regular memberships</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Home Gym Modal -->
+    <div class="home-gym-modal" id="homeGymModal" style="display: none;">
+        <div class="home-gym-modal-content" role="dialog" aria-modal="true" aria-labelledby="homeGymModalTitle">
+            <div class="home-gym-modal-header">
+                <h3 class="home-gym-modal-title" id="homeGymModalTitle" data-i18n-key="modal.homeGym.title">Change home gym</h3>
+                <button class="home-gym-modal-close" type="button" data-action="close-home-gym-modal" aria-label="Close">×</button>
+            </div>
+            <div class="home-gym-modal-body">
+                <div class="search-wrapper home-gym-search">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                    <input type="text" class="search-input" placeholder="" id="homeGymSearch" data-i18n-placeholder="button.searchGyms">
+                    <button type="button" class="location-icon-btn" id="homeGymFindNearest" title="" data-i18n-title="button.findNearest">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                    </button>
+                </div>
+                <div class="home-gym-modal-message" id="homeGymModalMessage" style="display: none;"></div>
+                <div class="home-gym-modal-list" data-component="home-gym-list"></div>
+                <div class="home-gym-modal-no-results no-results hidden" id="homeGymNoResults" data-i18n-key="search.noResults">
+                    No gyms found matching your search.
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Global Footer -->
     <footer class="global-footer">

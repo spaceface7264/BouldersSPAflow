@@ -1566,11 +1566,13 @@ class OrderAPI {
 
   /**
    * Calculates the expected partial-month price for a subscription starting today.
+   * If today is between the 16th and last day of month, price includes the rest
+   * of the current month + the full next month.
    * Used to verify backend pricing is correct.
    * 
    * @param {number} productId - The subscription product ID
    * @param {string} startDate - Start date in YYYY-MM-DD format
-   * @returns {Object|null} Expected price info { amountInCents, amountInDKK, daysRemaining, daysInMonth } or null
+   * @returns {Object|null} Expected price info { amountInCents, amountInDKK, daysRemaining, daysInMonth, includesNextMonth, billingPeriodStart, billingPeriodEnd } or null
    */
   _calculateExpectedPartialMonthPrice(productId, startDate) {
     // Check all subscription types: campaign, membership, and 15 Day Pass
@@ -1603,16 +1605,29 @@ class OrderAPI {
     const dayOfMonth = today.getDate();
     const daysRemainingInMonth = daysInCurrentMonth - dayOfMonth + 1;
     
-    // Calculate prorated price
-    const proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+    // Calculate prorated price for the rest of this month
+    const proratedCurrentMonthInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+    
+    // If date is between 16th and last day, include full next month
+    const includesNextMonth = dayOfMonth >= 16;
+    const billingPeriodEnd = includesNextMonth
+      ? new Date(currentYear, currentMonth + 2, 0)
+      : lastDayOfMonth;
+    
+    const totalPriceInCents = includesNextMonth
+      ? proratedCurrentMonthInCents + monthlyPriceInCents
+      : proratedCurrentMonthInCents;
     
     return {
-      amountInCents: proratedPriceInCents,
-      amountInDKK: proratedPriceInCents / 100,
+      amountInCents: totalPriceInCents,
+      amountInDKK: totalPriceInCents / 100,
       daysRemaining: daysRemainingInMonth,
       daysInMonth: daysInCurrentMonth,
       monthlyPriceInCents,
-      monthlyPriceInDKK: monthlyPriceInCents / 100
+      monthlyPriceInDKK: monthlyPriceInCents / 100,
+      includesNextMonth,
+      billingPeriodStart: startDateObj,
+      billingPeriodEnd
     };
   }
 
@@ -3676,6 +3691,12 @@ const state = {
   // Discount code state
   discountCode: null, // Applied discount code
   discountApplied: false, // Whether discount is currently applied
+  // Campaign restriction UX
+  campaignRestrictionShown: false,
+  campaignRestrictionProductId: null,
+  homeGymModalGyms: null,
+  homeGymModalQuery: '',
+  homeGymModalLocationActive: false,
   // Email tracking to prevent duplicate account creation
   createdEmails: new Set(), // Track emails that have been used to create accounts in this session
   // Step 5: Store fetched products from API
@@ -4445,6 +4466,11 @@ const translations = {
     'form.resetPassword': 'NULSTIL ADGANGSKODE', 'form.resetPassword.desc': 'Indtast din e-mailadresse, og vi sender dig instruktioner til at nulstille din adgangskode.',
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
+    'modal.campaignBlocked.title': 'Kampagne ikke tilgængelig',
+    'modal.campaignBlocked.body': 'Dette tilbud er ikke tilgængeligt for din konto på grund af et nyligt medlemskab. Du kan stadig vælge et almindeligt medlemskab.',
+    'modal.campaignBlocked.cta': 'Vis medlemskaber',
+    'modal.campaignBlocked.support': 'Hvis du mener dette er en fejl, kontakt support.',
+    'modal.homeGym.title': 'Skift hjemmehal',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
@@ -4454,6 +4480,7 @@ const translations = {
     'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
+    'cart.campaignWarning': 'Starter du checkout for en kampagne og ikke gennemfører betaling, kan du blive blokeret fra at tilmelde dig igen.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
@@ -4501,6 +4528,11 @@ const translations = {
     'form.resetPassword': 'RESET PASSWORD', 'form.resetPassword.desc': 'Enter your email address and we\'ll send you instructions to reset your password.',
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
+    'modal.campaignBlocked.title': 'Campaign not available',
+    'modal.campaignBlocked.body': 'This offer isn’t available for your account because of a recent membership. You can still choose a regular membership instead.',
+    'modal.campaignBlocked.cta': 'Show regular memberships',
+    'modal.campaignBlocked.support': 'If you believe this is a mistake, contact support.',
+    'modal.homeGym.title': 'Change home gym',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
@@ -4510,6 +4542,7 @@ const translations = {
     'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
+    'cart.campaignWarning': 'Starting checkout for a campaign can block re-signup if payment is not completed.',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
@@ -5253,6 +5286,21 @@ function cacheDom() {
   DOM.dataPolicyModalClose = document.getElementById('dataPolicyModalClose');
   DOM.dataPolicyModalLangDa = document.getElementById('dataPolicyModalLangDa');
   DOM.dataPolicyModalLangEn = document.getElementById('dataPolicyModalLangEn');
+
+  // Campaign restriction modal
+  DOM.campaignRestrictionModal = document.getElementById('campaignRestrictionModal');
+  DOM.campaignRestrictionClose = document.querySelector('[data-action="close-campaign-restriction"]');
+  DOM.campaignRestrictionCta = document.querySelector('[data-action="campaign-restriction-cta"]');
+  DOM.campaignWarning = document.querySelector('[data-campaign-warning]');
+
+  // Home gym modal
+  DOM.homeGymModal = document.getElementById('homeGymModal');
+  DOM.homeGymModalClose = document.querySelector('[data-action="close-home-gym-modal"]');
+  DOM.homeGymModalList = document.querySelector('[data-component="home-gym-list"]');
+  DOM.homeGymSearch = document.getElementById('homeGymSearch');
+  DOM.homeGymFindNearest = document.getElementById('homeGymFindNearest');
+  DOM.homeGymNoResults = document.getElementById('homeGymNoResults');
+  DOM.homeGymModalMessage = document.getElementById('homeGymModalMessage');
   
   // Store current modal state
   state.currentModalType = null;
@@ -5383,6 +5431,51 @@ function setupEventListeners() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
       closeForgotPasswordModal();
+    }
+  });
+
+  // Campaign restriction modal handlers
+  if (DOM.campaignRestrictionCta) {
+    DOM.campaignRestrictionCta.addEventListener('click', () => {
+      closeCampaignRestrictionModal();
+      switchToRegularMemberships();
+    });
+  }
+  if (DOM.campaignRestrictionClose) {
+    DOM.campaignRestrictionClose.addEventListener('click', closeCampaignRestrictionModal);
+  }
+  if (DOM.campaignRestrictionModal) {
+    DOM.campaignRestrictionModal.addEventListener('click', (e) => {
+      if (e.target === DOM.campaignRestrictionModal) {
+        closeCampaignRestrictionModal();
+      }
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && DOM.campaignRestrictionModal && DOM.campaignRestrictionModal.style.display === 'flex') {
+      closeCampaignRestrictionModal();
+    }
+  });
+
+  // Home gym modal handlers
+  if (DOM.homeGymModalClose) {
+    DOM.homeGymModalClose.addEventListener('click', closeHomeGymModal);
+  }
+  if (DOM.homeGymModal) {
+    DOM.homeGymModal.addEventListener('click', (e) => {
+      if (e.target === DOM.homeGymModal) {
+        closeHomeGymModal();
+      }
+    });
+  }
+  DOM.homeGymSearch?.addEventListener('input', handleHomeGymSearch);
+  DOM.homeGymFindNearest?.addEventListener('click', (e) => {
+    e.preventDefault();
+    findNearestGymForModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && DOM.homeGymModal && DOM.homeGymModal.style.display === 'flex') {
+      closeHomeGymModal();
     }
   });
   
@@ -5672,6 +5765,237 @@ function closeForgotPasswordModal() {
   if (DOM.forgotPasswordForm) {
     DOM.forgotPasswordForm.reset();
   }
+}
+
+let campaignRestrictionFocusTrapHandler = null;
+let campaignRestrictionLastFocus = null;
+
+function getFocusableElements(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )).filter(el => !el.disabled && el.offsetParent !== null);
+}
+
+function openCampaignRestrictionModal(productId = null) {
+  if (!DOM.campaignRestrictionModal) return;
+  campaignRestrictionLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  DOM.campaignRestrictionModal.style.display = 'flex';
+  document.body.classList.add('modal-open');
+  state.campaignRestrictionShown = true;
+  state.campaignRestrictionProductId = productId ? String(productId) : null;
+
+  const focusable = getFocusableElements(DOM.campaignRestrictionModal);
+  if (focusable.length > 0) {
+    focusable[0].focus();
+  }
+
+  if (!campaignRestrictionFocusTrapHandler) {
+    campaignRestrictionFocusTrapHandler = (e) => {
+      if (e.key !== 'Tab') return;
+      const elements = getFocusableElements(DOM.campaignRestrictionModal);
+      if (!elements.length) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+  }
+  DOM.campaignRestrictionModal.addEventListener('keydown', campaignRestrictionFocusTrapHandler);
+}
+
+function closeCampaignRestrictionModal() {
+  if (!DOM.campaignRestrictionModal) return;
+  DOM.campaignRestrictionModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
+  if (campaignRestrictionFocusTrapHandler) {
+    DOM.campaignRestrictionModal.removeEventListener('keydown', campaignRestrictionFocusTrapHandler);
+  }
+  if (campaignRestrictionLastFocus) {
+    campaignRestrictionLastFocus.focus();
+    campaignRestrictionLastFocus = null;
+  }
+  state.campaignRestrictionShown = false;
+  state.campaignRestrictionProductId = null;
+  state.checkoutInProgress = false;
+  setCheckoutLoadingState(false);
+}
+
+function isCampaignSelected() {
+  return typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('campaign-');
+}
+
+function updateCampaignWarning() {
+  if (!DOM.campaignWarning) return;
+  DOM.campaignWarning.style.display = isCampaignSelected() ? 'block' : 'none';
+}
+
+function switchToRegularMemberships() {
+  if (state.currentStep !== 2) {
+    state.currentStep = 2;
+    showStep(2);
+  }
+  setTimeout(() => {
+    const membershipCategory = document.querySelector('[data-category="membership"]');
+    if (!membershipCategory) return;
+    const header = membershipCategory.querySelector('.category-header');
+    if (header && !membershipCategory.classList.contains('expanded')) {
+      header.click();
+    }
+    membershipCategory.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    membershipCategory.setAttribute('tabindex', '-1');
+    membershipCategory.focus();
+  }, 150);
+}
+
+function openHomeGymModal() {
+  if (!DOM.homeGymModal) return;
+  state.homeGymModalQuery = '';
+  state.homeGymModalGyms = null;
+  state.homeGymModalLocationActive = false;
+  if (DOM.homeGymSearch) DOM.homeGymSearch.value = '';
+  if (DOM.homeGymModalMessage) DOM.homeGymModalMessage.style.display = 'none';
+  if (DOM.homeGymFindNearest) DOM.homeGymFindNearest.classList.remove('active');
+  renderHomeGymModalList();
+  DOM.homeGymModal.style.display = 'flex';
+  document.body.classList.add('modal-open');
+}
+
+function closeHomeGymModal() {
+  if (!DOM.homeGymModal) return;
+  DOM.homeGymModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
+}
+
+function renderHomeGymModalList() {
+  if (!DOM.homeGymModalList) return;
+  DOM.homeGymModalList.innerHTML = '';
+  const gymsSource = state.homeGymModalGyms && state.homeGymModalGyms.length > 0
+    ? state.homeGymModalGyms
+    : (gymsWithDistances && gymsWithDistances.length > 0 ? gymsWithDistances : (state.gyms || []));
+  const query = (state.homeGymModalQuery || '').toLowerCase();
+  const gyms = query
+    ? gymsSource.filter(gym => {
+        const name = gym.name?.toLowerCase() || '';
+        const address = gym.address ? `${gym.address.street || ''} ${gym.address.postalCode || ''} ${gym.address.city || ''}`.toLowerCase() : '';
+        return name.includes(query) || address.includes(query);
+      })
+    : gymsSource;
+  if (!gyms || gyms.length === 0) {
+    if (DOM.homeGymNoResults) {
+      DOM.homeGymNoResults.classList.remove('hidden');
+    }
+    return;
+  }
+  if (DOM.homeGymNoResults) {
+    DOM.homeGymNoResults.classList.add('hidden');
+  }
+  gyms.forEach((gym, index) => {
+    const gymItem = createGymItem(gym, index === 0 && gym.distance !== null && gym.distance !== undefined);
+    const gymId = `gym-${gym.id}`;
+    if (String(state.selectedBusinessUnit) === String(gym.id)) {
+      gymItem.classList.add('selected');
+    }
+    gymItem.setAttribute('data-gym-id', gymId);
+    gymItem.addEventListener('click', () => handleHomeGymModalSelection(gym));
+    DOM.homeGymModalList.appendChild(gymItem);
+  });
+}
+
+function handleHomeGymSearch(event) {
+  state.homeGymModalQuery = event.target.value || '';
+  renderHomeGymModalList();
+}
+
+async function findNearestGymForModal() {
+  if (!DOM.homeGymFindNearest) return;
+  if (DOM.homeGymModalMessage) {
+    DOM.homeGymModalMessage.style.display = 'none';
+    DOM.homeGymModalMessage.textContent = '';
+    DOM.homeGymModalMessage.classList.remove('is-error', 'is-info');
+  }
+  if (state.homeGymModalLocationActive) {
+    state.homeGymModalLocationActive = false;
+    state.homeGymModalGyms = null;
+    DOM.homeGymFindNearest.classList.remove('active');
+    renderHomeGymModalList();
+    return;
+  }
+
+  if (!isGeolocationAvailable()) {
+    if (DOM.homeGymModalMessage) {
+      DOM.homeGymModalMessage.textContent = 'Location is not available for this device.';
+      DOM.homeGymModalMessage.classList.add('is-info');
+      DOM.homeGymModalMessage.style.display = 'block';
+    }
+    return;
+  }
+
+  DOM.homeGymFindNearest.disabled = true;
+  DOM.homeGymFindNearest.classList.add('loading');
+
+  try {
+    const location = await getUserLocation({ logger: geoLogger });
+    const gymsSource = gymsWithDistances && gymsWithDistances.length > 0 ? gymsWithDistances : (state.gyms || []);
+    if (!gymsSource || gymsSource.length === 0) return;
+    const sortedGyms = await calculateGymDistances(gymsSource, location, { logger: geoLogger });
+    state.homeGymModalGyms = sortedGyms;
+    state.homeGymModalLocationActive = true;
+    DOM.homeGymFindNearest.classList.add('active');
+    renderHomeGymModalList();
+  } catch (error) {
+    console.warn('[Home Gym] Location error:', error?.message || error);
+    if (DOM.homeGymModalMessage) {
+      DOM.homeGymModalMessage.textContent = 'Location could not be determined. Please pick a gym manually.';
+      DOM.homeGymModalMessage.classList.add('is-info');
+      DOM.homeGymModalMessage.style.display = 'block';
+    }
+  } finally {
+    DOM.homeGymFindNearest.classList.remove('loading');
+    DOM.homeGymFindNearest.disabled = false;
+  }
+}
+
+async function handleHomeGymModalSelection(gym) {
+  if (!gym?.id) return;
+  const numericId = String(gym.id);
+  const previousBusinessUnit = state.selectedBusinessUnit;
+  if (previousBusinessUnit !== numericId) {
+    state.referenceData = {};
+    state.referenceDataLoaded = false;
+  }
+  state.selectedGymId = numericId;
+  state.selectedBusinessUnit = numericId;
+  state.selectedGymName = gym.name || state.selectedGymName;
+  updateSelectedGymDisplay();
+  renderCartItems();
+
+  if (state.orderId) {
+    try {
+      await orderAPI.updateOrder(state.orderId, { businessUnit: state.selectedBusinessUnit });
+    } catch (error) {
+      console.warn('[Home Gym] Could not update order business unit:', error);
+    }
+  }
+
+  persistOrderSnapshot(state.orderId);
+  closeHomeGymModal();
+}
+
+function handleCampaignRestriction(error) {
+  const productId = error?.productId || state.selectedProductId;
+  const productKey = productId ? String(productId) : null;
+  if (state.campaignRestrictionShown && productKey && state.campaignRestrictionProductId === productKey) {
+    return;
+  }
+  state.checkoutInProgress = false;
+  setCheckoutLoadingState(false);
+  openCampaignRestrictionModal(productKey);
 }
 
 // Terms Content - Embedded directly to avoid CORS issues
@@ -7532,6 +7856,12 @@ function handleLogout() {
   state.authenticatedCustomer = null;
   state.authenticatedEmail = null;
   state.customerId = null;
+  state.campaignRestrictionShown = false;
+  state.campaignRestrictionProductId = null;
+  state.checkoutInProgress = false;
+  setCheckoutLoadingState(false);
+  resetOrderStateForProductChange('logout');
+  updateCartSummary();
   
   if (typeof window.clearTokens === 'function') {
     window.clearTokens();
@@ -8383,6 +8713,10 @@ function setupNewAccessStep() {
         state.selectedProductType = 'punch-card';
       }
 
+      // Reset campaign restriction state on new selection
+      state.campaignRestrictionShown = false;
+      state.campaignRestrictionProductId = null;
+
       if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
         resetOrderStateForProductChange('plan-selection');
       }
@@ -8559,6 +8893,12 @@ function switchAuthMode(mode, email = null) {
   
   // Store current mode
   state.currentAuthMode = mode;
+  state.campaignRestrictionShown = false;
+  state.campaignRestrictionProductId = null;
+  state.checkoutInProgress = false;
+  setCheckoutLoadingState(false);
+  resetOrderStateForProductChange('auth-switch');
+  updateCartSummary();
   
   // Update button text and mode based on current section
   switchBtns.forEach(btn => {
@@ -8756,6 +9096,11 @@ function handleGlobalClick(event) {
     case 'edit-gym': {
       event.preventDefault();
       handleBackToGym();
+      break;
+    }
+    case 'edit-home-gym': {
+      event.preventDefault();
+      openHomeGymModal();
       break;
     }
     case 'toggle-addons-step': {
@@ -10163,6 +10508,7 @@ function updateCartSummary() {
 
   renderCartItems();
   renderCartTotal();
+  updateCampaignWarning();
   
   // If we're on step 4 and have order data, ensure payment overview is updated
   if (state.currentStep === 4 && state.orderId && !state.fullOrder) {
@@ -10259,9 +10605,11 @@ function renderCartItems() {
     const gymInfoContainer = document.createElement('div');
     gymInfoContainer.className = 'home-gym-info';
     
-    const gymInfoText = document.createElement('span');
-    gymInfoText.className = 'home-gym-text';
-    gymInfoText.textContent = `${t('homeGym.label')} ${selectedGym.name}`;
+    const gymInfoButton = document.createElement('button');
+    gymInfoButton.type = 'button';
+    gymInfoButton.className = 'home-gym-text home-gym-button';
+    gymInfoButton.setAttribute('data-action', 'edit-home-gym');
+    gymInfoButton.textContent = `${t('homeGym.label')} ${selectedGym.name}`;
     
     // Create info icon
     const infoIcon = document.createElement('span');
@@ -10315,7 +10663,7 @@ function renderCartItems() {
     
     infoWrapper.appendChild(infoIcon);
     infoWrapper.appendChild(tooltip);
-    gymInfoContainer.appendChild(gymInfoText);
+    gymInfoContainer.appendChild(gymInfoButton);
     gymInfoContainer.appendChild(infoWrapper);
     
     return gymInfoContainer;
@@ -10381,6 +10729,9 @@ function renderCartItems() {
     // Hide price for membership items (price already shown in Monthly fee section)
     if (priceEl) {
       if (item.type === 'membership') {
+        priceEl.style.display = 'none';
+      } else if (item.type === 'value-card' && state.selectedProductType === 'punch-card') {
+        // Avoid duplicate price display for punch cards (total row covers it)
         priceEl.style.display = 'none';
       } else {
         // Calculate discounted price for this item
@@ -10636,13 +10987,19 @@ function updatePaymentOverview() {
   if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
     // CRITICAL: Use API price from order - this is the authoritative source
     // This ensures "Pay now" matches exactly what backend sends to payment window
-    // Extract price amount (CurrencyOut can be object with .amount or direct number)
-    const orderPriceAmount = state.fullOrder.price.amount;
-    const orderPriceDKK = typeof orderPriceAmount === 'object' 
-      ? orderPriceAmount.amount / 100 
-      : orderPriceAmount / 100;
+    const normalizeOrderPrice = (value) => {
+      if (value === null || value === undefined) return null;
+      const rawAmount = typeof value === 'object' ? value.amount : value;
+      if (!Number.isFinite(rawAmount)) return null;
+      return rawAmount / 100;
+    };
+    const hasDiscountOnOrder = !!(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+    const preferPriceField = (state.discountApplied || hasDiscountOnOrder)
+      ? (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.total ?? state.fullOrder?.price?.amount)
+      : state.fullOrder?.price?.amount;
+    const orderPriceDKK = normalizeOrderPrice(preferPriceField) ?? normalizeOrderPrice(state.fullOrder.price.amount);
     
-    console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
+    console.log('[Payment Overview] ✅ Using API price from order:', orderPriceDKK, 'DKK');
     
     if (is15DayPass) {
       // For 15-day pass: always use full price (one-time payment)
@@ -10705,13 +11062,10 @@ function updatePaymentOverview() {
             // Use calculated correct price
             payNowAmount = expectedPrice.amountInDKK;
             
-            // Set billing period to today - end of month
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            // Set billing period to today - end of current month or next month (16th+ rule)
             billingPeriod = {
               start: today,
-              end: lastDayOfMonth
+              end: expectedPrice.billingPeriodEnd || new Date(today.getFullYear(), today.getMonth() + 1, 0)
             };
             console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
             console.warn('[Payment Overview] ⚠️ NOTE: Payment window may show different price if backend bug persists');
@@ -10793,13 +11147,10 @@ function updatePaymentOverview() {
             if (expectedPrice) {
               payNowAmount = expectedPrice.amountInDKK;
               
-              // Set billing period to today - end of month
-              const currentMonth = today.getMonth();
-              const currentYear = today.getFullYear();
-              const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+              // Set billing period to today - end of current month or next month (16th+ rule)
               billingPeriod = {
                 start: today,
-                end: lastDayOfMonth
+                end: expectedPrice.billingPeriodEnd || new Date(today.getFullYear(), today.getMonth() + 1, 0)
               };
               console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month):', payNowAmount, 'DKK');
             } else {
@@ -10820,12 +11171,19 @@ function updatePaymentOverview() {
             const daysInMonth = lastDayOfMonth.getDate();
             const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
             
-            // Calculate partial month price
+            // If date is between 16th and last day, include full next month
+            const includesNextMonth = today.getDate() >= 16;
+            const nextMonthEnd = new Date(currentYear, currentMonth + 2, 0);
+            
+            // Calculate price: rest of current month + next month (if applicable)
             payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+            if (includesNextMonth) {
+              payNowAmount += monthlyPrice;
+            }
             
             billingPeriod = {
               start: today,
-              end: lastDayOfMonth
+              end: includesNextMonth ? nextMonthEnd : lastDayOfMonth
             };
             
             console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month, manual calc):', payNowAmount, 'DKK');
@@ -10935,8 +11293,9 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
-  // If discount is applied but order price isn't available yet, reflect discount in pay-now
-  if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
+  // If discount is applied but order price doesn't include it, reflect discount in pay-now
+  const orderPriceHasDiscountedTotal = !!(state.fullOrder?.price?.leftToPay || state.fullOrder?.price?.total);
+  if (state.discountApplied && state.totals.discountAmount > 0 && (!hasOrderData || !orderPriceHasDiscountedTotal)) {
     const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
     if (adjustedPayNow !== payNowAmount) {
       console.log('[Payment Overview] Applying discount to pay-now fallback:', {
@@ -10982,10 +11341,16 @@ function updatePaymentOverview() {
     
     // Verify this matches payment window price (only if order data is available)
     if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
-      const orderPriceForPayment = state.fullOrder.price.amount;
-      const orderPriceDKK = typeof orderPriceForPayment === 'object' 
-        ? orderPriceForPayment.amount / 100 
-        : orderPriceForPayment / 100;
+      const hasDiscountOnOrder = !!(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+      const preferredPriceForCompare = (state.discountApplied || hasDiscountOnOrder)
+        ? (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.total ?? state.fullOrder?.price?.amount)
+        : state.fullOrder?.price?.amount;
+      let orderPriceDKK = typeof preferredPriceForCompare === 'object' 
+        ? preferredPriceForCompare.amount / 100 
+        : preferredPriceForCompare / 100;
+      if (state.discountApplied && state.totals.discountAmount > 0 && !orderPriceHasDiscountedTotal) {
+        orderPriceDKK = Math.max(0, orderPriceDKK - state.totals.discountAmount);
+      }
       const pricesMatch = Math.abs(payNowAmount - orderPriceDKK) < 0.01; // Allow small rounding differences
       
       console.log('[Payment Overview] 🔍 "Betales nu" price:', payNowAmount, 'DKK');
@@ -11294,6 +11659,7 @@ async function ensureSubscriptionAttached(context = 'auto') {
   const isMembership = state.membershipPlanId && 
     (state.selectedProductType === 'membership' || 
      (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+
   
   if (!state.membershipPlanId || !isMembership) {
     if (state.membershipPlanId && !isMembership) {
@@ -11325,7 +11691,18 @@ async function ensureSubscriptionAttached(context = 'auto') {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
-    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+    let subscriptionResponse;
+    try {
+      subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+    } catch (error) {
+      const isProductNotAllowed = error?.isProductNotAllowed || 
+                                  (error?.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
+      if (isProductNotAllowed) {
+        handleCampaignRestriction(error);
+        return null;
+      }
+      throw error;
+    }
     state.subscriptionAttachedOrderId = orderId;
     
     // CRITICAL: Use the order from addSubscriptionItem response if available (has correct price after re-add)
@@ -11486,6 +11863,7 @@ async function handleCheckout() {
     }
     return;
   }
+
   
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
@@ -12432,8 +12810,7 @@ async function handleCheckout() {
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
           
           if (isProductNotAllowed) {
-            // Show friendly message that this is a restriction, not an error
-            showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
+            handleCampaignRestriction(error);
             throw error; // Re-throw to stop checkout flow
           }
           
@@ -12838,13 +13215,15 @@ async function handleCheckout() {
                                   (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
       
       if (isProductNotAllowed) {
-        // Show friendly message that this is a restriction, not an error
-        showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
-      } else {
-        // Show error message for actual errors
-        showToast(getErrorMessage(error, 'Adding items'), 'error');
+        handleCampaignRestriction(error);
+        state.checkoutInProgress = false;
+        setCheckoutLoadingState(false);
+        return;
       }
+      // Show error message for actual errors
+      showToast(getErrorMessage(error, 'Adding items'), 'error');
       
+      state.checkoutInProgress = false;
       setCheckoutLoadingState(false);
       return;
     }

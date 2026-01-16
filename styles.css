@@ -4046,6 +4046,217 @@ body {
     animation: slideUp 0.3s ease-out;
 }
 
+/* Campaign Restriction Modal */
+.campaign-rejection-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.campaign-rejection-modal-content {
+    background-color: #1a1a1a;
+    border: 1px solid #374151;
+    border-radius: 12px;
+    padding: 28px;
+    max-width: 520px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+    animation: slideUp 0.3s ease-out;
+}
+
+.campaign-rejection-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.campaign-rejection-modal-title {
+    margin: 0;
+    color: var(--color-text-white);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+.campaign-rejection-modal-close {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.campaign-rejection-modal-close:hover {
+    color: var(--color-text-white);
+}
+
+.campaign-rejection-modal-body {
+    margin: 0 0 20px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-md);
+    line-height: 1.5;
+}
+
+.campaign-rejection-modal-support {
+    display: inline-block;
+    margin-bottom: 16px;
+    color: #F401F5;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.campaign-rejection-modal-support:hover {
+    color: #D401D5;
+    text-decoration: underline;
+}
+
+.campaign-checkout-warning {
+    margin: 12px 0 20px;
+    padding: 10px 12px;
+    border: 1px solid rgba(244, 1, 245, 0.4);
+    border-radius: 8px;
+    color: #F401F5;
+    font-size: var(--font-size-sm);
+    background: rgba(244, 1, 245, 0.08);
+}
+
+.campaign-rejection-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.campaign-rejection-modal-primary {
+    background: #F401F5;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.campaign-rejection-modal-primary:hover {
+    background: #D401D5;
+}
+
+/* Home Gym Modal */
+.home-gym-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.home-gym-modal-content {
+    background-color: #1a1a1a;
+    border: 1px solid #374151;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 640px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+    animation: slideUp 0.3s ease-out;
+}
+
+.home-gym-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.home-gym-modal-title {
+    margin: 0;
+    color: var(--color-text-white);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+.home-gym-modal-close {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.home-gym-modal-close:hover {
+    color: var(--color-text-white);
+}
+
+.home-gym-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.home-gym-modal-message {
+    margin-top: 4px;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.home-gym-modal-message.is-error {
+    color: #F87171;
+}
+
+.home-gym-modal-message.is-info {
+    color: #FDE047;
+}
+
+.home-gym-modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.home-gym-modal-list .gym-item {
+    cursor: pointer;
+}
+
+.home-gym-button {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: #F401F5;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+}
+
+.home-gym-button:hover {
+    color: #D401D5;
+    text-decoration: underline;
+}
+
+.home-gym-modal-no-results {
+    margin-top: 8px;
+}
+
 @keyframes slideUp {
     from {
         opacity: 0;
@@ -5353,6 +5564,29 @@ body {
     margin-top: 4px;
     padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Cart Total (Punch cards, add-ons) */
+.cart-total {
+    margin: 16px 0;
+}
+
+.cart-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cart-total .total-label {
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+}
+
+.cart-total .total-amount {
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 600;
 }
 
 /* Discount Code */
