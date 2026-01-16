@@ -3694,6 +3694,9 @@ const state = {
   // Campaign restriction UX
   campaignRestrictionShown: false,
   campaignRestrictionProductId: null,
+  homeGymModalGyms: null,
+  homeGymModalQuery: '',
+  homeGymModalLocationActive: false,
   // Email tracking to prevent duplicate account creation
   createdEmails: new Set(), // Track emails that have been used to create accounts in this session
   // Step 5: Store fetched products from API
@@ -4466,6 +4469,7 @@ const translations = {
     'modal.campaignBlocked.title': 'Kampagne ikke tilgængelig',
     'modal.campaignBlocked.body': 'Dette tilbud er ikke tilgængeligt for din konto på grund af et nyligt medlemskab. Du kan stadig vælge et almindeligt medlemskab.',
     'modal.campaignBlocked.cta': 'Vis medlemskaber',
+    'modal.homeGym.title': 'Skift hjemmehal',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
@@ -4525,6 +4529,7 @@ const translations = {
     'modal.campaignBlocked.title': 'Campaign not available',
     'modal.campaignBlocked.body': 'This offer isn’t available for your account because of a recent membership. You can still choose a regular membership instead.',
     'modal.campaignBlocked.cta': 'Show regular memberships',
+    'modal.homeGym.title': 'Change home gym',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
@@ -5282,6 +5287,15 @@ function cacheDom() {
   DOM.campaignRestrictionModal = document.getElementById('campaignRestrictionModal');
   DOM.campaignRestrictionClose = document.querySelector('[data-action="close-campaign-restriction"]');
   DOM.campaignRestrictionCta = document.querySelector('[data-action="campaign-restriction-cta"]');
+
+  // Home gym modal
+  DOM.homeGymModal = document.getElementById('homeGymModal');
+  DOM.homeGymModalClose = document.querySelector('[data-action="close-home-gym-modal"]');
+  DOM.homeGymModalList = document.querySelector('[data-component="home-gym-list"]');
+  DOM.homeGymSearch = document.getElementById('homeGymSearch');
+  DOM.homeGymFindNearest = document.getElementById('homeGymFindNearest');
+  DOM.homeGymNoResults = document.getElementById('homeGymNoResults');
+  DOM.homeGymModalMessage = document.getElementById('homeGymModalMessage');
   
   // Store current modal state
   state.currentModalType = null;
@@ -5435,6 +5449,28 @@ function setupEventListeners() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && DOM.campaignRestrictionModal && DOM.campaignRestrictionModal.style.display === 'flex') {
       closeCampaignRestrictionModal();
+    }
+  });
+
+  // Home gym modal handlers
+  if (DOM.homeGymModalClose) {
+    DOM.homeGymModalClose.addEventListener('click', closeHomeGymModal);
+  }
+  if (DOM.homeGymModal) {
+    DOM.homeGymModal.addEventListener('click', (e) => {
+      if (e.target === DOM.homeGymModal) {
+        closeHomeGymModal();
+      }
+    });
+  }
+  DOM.homeGymSearch?.addEventListener('input', handleHomeGymSearch);
+  DOM.homeGymFindNearest?.addEventListener('click', (e) => {
+    e.preventDefault();
+    findNearestGymForModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && DOM.homeGymModal && DOM.homeGymModal.style.display === 'flex') {
+      closeHomeGymModal();
     }
   });
   
@@ -5797,6 +5833,140 @@ function switchToRegularMemberships() {
     membershipCategory.setAttribute('tabindex', '-1');
     membershipCategory.focus();
   }, 150);
+}
+
+function openHomeGymModal() {
+  if (!DOM.homeGymModal) return;
+  state.homeGymModalQuery = '';
+  state.homeGymModalGyms = null;
+  state.homeGymModalLocationActive = false;
+  if (DOM.homeGymSearch) DOM.homeGymSearch.value = '';
+  if (DOM.homeGymModalMessage) DOM.homeGymModalMessage.style.display = 'none';
+  if (DOM.homeGymFindNearest) DOM.homeGymFindNearest.classList.remove('active');
+  renderHomeGymModalList();
+  DOM.homeGymModal.style.display = 'flex';
+  document.body.classList.add('modal-open');
+}
+
+function closeHomeGymModal() {
+  if (!DOM.homeGymModal) return;
+  DOM.homeGymModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
+}
+
+function renderHomeGymModalList() {
+  if (!DOM.homeGymModalList) return;
+  DOM.homeGymModalList.innerHTML = '';
+  const gymsSource = state.homeGymModalGyms && state.homeGymModalGyms.length > 0
+    ? state.homeGymModalGyms
+    : (gymsWithDistances && gymsWithDistances.length > 0 ? gymsWithDistances : (state.gyms || []));
+  const query = (state.homeGymModalQuery || '').toLowerCase();
+  const gyms = query
+    ? gymsSource.filter(gym => {
+        const name = gym.name?.toLowerCase() || '';
+        const address = gym.address ? `${gym.address.street || ''} ${gym.address.postalCode || ''} ${gym.address.city || ''}`.toLowerCase() : '';
+        return name.includes(query) || address.includes(query);
+      })
+    : gymsSource;
+  if (!gyms || gyms.length === 0) {
+    if (DOM.homeGymNoResults) {
+      DOM.homeGymNoResults.classList.remove('hidden');
+    }
+    return;
+  }
+  if (DOM.homeGymNoResults) {
+    DOM.homeGymNoResults.classList.add('hidden');
+  }
+  gyms.forEach((gym, index) => {
+    const gymItem = createGymItem(gym, index === 0 && gym.distance !== null && gym.distance !== undefined);
+    const gymId = `gym-${gym.id}`;
+    if (String(state.selectedBusinessUnit) === String(gym.id)) {
+      gymItem.classList.add('selected');
+    }
+    gymItem.setAttribute('data-gym-id', gymId);
+    gymItem.addEventListener('click', () => handleHomeGymModalSelection(gym));
+    DOM.homeGymModalList.appendChild(gymItem);
+  });
+}
+
+function handleHomeGymSearch(event) {
+  state.homeGymModalQuery = event.target.value || '';
+  renderHomeGymModalList();
+}
+
+async function findNearestGymForModal() {
+  if (!DOM.homeGymFindNearest) return;
+  if (DOM.homeGymModalMessage) {
+    DOM.homeGymModalMessage.style.display = 'none';
+    DOM.homeGymModalMessage.textContent = '';
+    DOM.homeGymModalMessage.classList.remove('is-error', 'is-info');
+  }
+  if (state.homeGymModalLocationActive) {
+    state.homeGymModalLocationActive = false;
+    state.homeGymModalGyms = null;
+    DOM.homeGymFindNearest.classList.remove('active');
+    renderHomeGymModalList();
+    return;
+  }
+
+  if (!isGeolocationAvailable()) {
+    if (DOM.homeGymModalMessage) {
+      DOM.homeGymModalMessage.textContent = 'Location is not available for this device.';
+      DOM.homeGymModalMessage.classList.add('is-info');
+      DOM.homeGymModalMessage.style.display = 'block';
+    }
+    return;
+  }
+
+  DOM.homeGymFindNearest.disabled = true;
+  DOM.homeGymFindNearest.classList.add('loading');
+
+  try {
+    const location = await getUserLocation({ logger: geoLogger });
+    const gymsSource = gymsWithDistances && gymsWithDistances.length > 0 ? gymsWithDistances : (state.gyms || []);
+    if (!gymsSource || gymsSource.length === 0) return;
+    const sortedGyms = await calculateGymDistances(gymsSource, location, { logger: geoLogger });
+    state.homeGymModalGyms = sortedGyms;
+    state.homeGymModalLocationActive = true;
+    DOM.homeGymFindNearest.classList.add('active');
+    renderHomeGymModalList();
+  } catch (error) {
+    console.warn('[Home Gym] Location error:', error?.message || error);
+    if (DOM.homeGymModalMessage) {
+      DOM.homeGymModalMessage.textContent = 'Location could not be determined. Please pick a gym manually.';
+      DOM.homeGymModalMessage.classList.add('is-info');
+      DOM.homeGymModalMessage.style.display = 'block';
+    }
+  } finally {
+    DOM.homeGymFindNearest.classList.remove('loading');
+    DOM.homeGymFindNearest.disabled = false;
+  }
+}
+
+async function handleHomeGymModalSelection(gym) {
+  if (!gym?.id) return;
+  const numericId = String(gym.id);
+  const previousBusinessUnit = state.selectedBusinessUnit;
+  if (previousBusinessUnit !== numericId) {
+    state.referenceData = {};
+    state.referenceDataLoaded = false;
+  }
+  state.selectedGymId = numericId;
+  state.selectedBusinessUnit = numericId;
+  state.selectedGymName = gym.name || state.selectedGymName;
+  updateSelectedGymDisplay();
+  renderCartItems();
+
+  if (state.orderId) {
+    try {
+      await orderAPI.updateOrder(state.orderId, { businessUnit: state.selectedBusinessUnit });
+    } catch (error) {
+      console.warn('[Home Gym] Could not update order business unit:', error);
+    }
+  }
+
+  persistOrderSnapshot(state.orderId);
+  closeHomeGymModal();
 }
 
 function handleCampaignRestriction(error) {
@@ -8896,6 +9066,11 @@ function handleGlobalClick(event) {
       handleBackToGym();
       break;
     }
+    case 'edit-home-gym': {
+      event.preventDefault();
+      openHomeGymModal();
+      break;
+    }
     case 'toggle-addons-step': {
       event.preventDefault();
       handleAddonContinue();
@@ -10397,9 +10572,11 @@ function renderCartItems() {
     const gymInfoContainer = document.createElement('div');
     gymInfoContainer.className = 'home-gym-info';
     
-    const gymInfoText = document.createElement('span');
-    gymInfoText.className = 'home-gym-text';
-    gymInfoText.textContent = `${t('homeGym.label')} ${selectedGym.name}`;
+    const gymInfoButton = document.createElement('button');
+    gymInfoButton.type = 'button';
+    gymInfoButton.className = 'home-gym-text home-gym-button';
+    gymInfoButton.setAttribute('data-action', 'edit-home-gym');
+    gymInfoButton.textContent = `${t('homeGym.label')} ${selectedGym.name}`;
     
     // Create info icon
     const infoIcon = document.createElement('span');
@@ -10453,7 +10630,7 @@ function renderCartItems() {
     
     infoWrapper.appendChild(infoIcon);
     infoWrapper.appendChild(tooltip);
-    gymInfoContainer.appendChild(gymInfoText);
+    gymInfoContainer.appendChild(gymInfoButton);
     gymInfoContainer.appendChild(infoWrapper);
     
     return gymInfoContainer;

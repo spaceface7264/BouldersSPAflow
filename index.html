@@ -1076,6 +1076,36 @@
         </div>
     </div>
 
+    <!-- Home Gym Modal -->
+    <div class="home-gym-modal" id="homeGymModal" style="display: none;">
+        <div class="home-gym-modal-content" role="dialog" aria-modal="true" aria-labelledby="homeGymModalTitle">
+            <div class="home-gym-modal-header">
+                <h3 class="home-gym-modal-title" id="homeGymModalTitle" data-i18n-key="modal.homeGym.title">Change home gym</h3>
+                <button class="home-gym-modal-close" type="button" data-action="close-home-gym-modal" aria-label="Close">×</button>
+            </div>
+            <div class="home-gym-modal-body">
+                <div class="search-wrapper home-gym-search">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                    <input type="text" class="search-input" placeholder="" id="homeGymSearch" data-i18n-placeholder="button.searchGyms">
+                    <button type="button" class="location-icon-btn" id="homeGymFindNearest" title="" data-i18n-title="button.findNearest">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                    </button>
+                </div>
+                <div class="home-gym-modal-message" id="homeGymModalMessage" style="display: none;"></div>
+                <div class="home-gym-modal-list" data-component="home-gym-list"></div>
+                <div class="home-gym-modal-no-results no-results hidden" id="homeGymNoResults" data-i18n-key="search.noResults">
+                    No gyms found matching your search.
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Global Footer -->
     <footer class="global-footer">
         <div class="footer-content">
