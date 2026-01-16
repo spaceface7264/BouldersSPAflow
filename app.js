@@ -2105,7 +2105,9 @@ class OrderAPI {
             console.error('[Discount] ❌   1. Coupon is not configured for this product type');
             console.error('[Discount] ❌   2. Coupon restrictions (product, customer, date, etc.)');
             console.error('[Discount] ❌   3. Backend bug in coupon application logic');
-            console.error('[Discount] ❌ Check backend coupon configuration for product:', data?.subscriptionItems?.[0]?.product?.id || 'unknown');
+            const productIdFromResponse = data?.subscriptionItems?.[0]?.product?.id || data?.valueCardItems?.[0]?.product?.id || 'unknown';
+            console.error('[Discount] ❌ Check backend coupon configuration for product:', productIdFromResponse);
+            console.error('[Discount] ❌ Selected product ID:', state.selectedProductId || 'not set');
           }
         } else if (typeof couponDiscount === 'number') {
           discountAmount = couponDiscount;
@@ -11132,10 +11134,11 @@ function updatePaymentOverview() {
       if (state.discountApplied) {
         // User applied a discount code, but check if backend actually applied it
         if (couponDiscountAmount === 0 || couponDiscountAmount === null) {
+          const productId = state.selectedProductId || state.fullOrder?.subscriptionItems?.[0]?.product?.id || 'unknown';
           console.error('[Payment Overview] ❌ CRITICAL: 15-day pass discount code was applied but backend returned couponDiscount: 0!');
-          console.error('[Payment Overview] ❌ This is a BACKEND BUG - coupon is not being applied to product 491 (15-day pass)');
+          console.error('[Payment Overview] ❌ This is a BACKEND BUG - coupon is not being applied to product', productId, '(15-day pass)');
           console.error('[Payment Overview] ❌ Backend should apply the coupon and return couponDiscount > 0');
-          console.error('[Payment Overview] ❌ Check backend coupon configuration for product 491');
+          console.error('[Payment Overview] ❌ Check backend coupon configuration for product', productId);
         } else if (leftToPayDKK === null || leftToPayDKK === undefined) {
           console.error('[Payment Overview] ❌ CRITICAL: 15-day pass has discount but leftToPay is missing!');
           console.error('[Payment Overview] ❌ Backend should set order.price.leftToPay when coupon is applied');
