@@ -855,6 +855,22 @@ class AuthAPI {
         const errorLower = errorMessage.toLowerCase();
         const errorCode = errorData?.errorCode || '';
         const errorCodeLower = errorCode.toLowerCase();
+
+        // Handle validation errors for email (e.g., incomplete/invalid email)
+        const validationDetails = errorData?.error?.details;
+        const emailValidationDetail = Array.isArray(validationDetails)
+          ? validationDetails.find(detail => {
+              const field = (detail?.field || '').toLowerCase();
+              return field.includes('email') || field === 'customer.email';
+            })
+          : null;
+        if (emailValidationDetail) {
+          const validationError = new Error('Please enter a valid email address.');
+          validationError.status = response.status;
+          validationError.isInvalidEmail = true;
+          validationError.validationDetail = emailValidationDetail;
+          throw validationError;
+        }
         
         // Check for EMAIL_ALREADY_EXISTS error code (from API docs)
         const hasEmailExistsErrorCode = 
@@ -6877,8 +6893,8 @@ async function handleSaveAccount() {
   
   // Validate password length
   const passwordInput = document.getElementById('password');
-  if (passwordInput && passwordInput.value && passwordInput.value.length < 8) {
-    showSaveAccountMessage('Password must be at least 8 characters long.', 'error');
+  if (passwordInput && passwordInput.value && passwordInput.value.length < 6) {
+    showSaveAccountMessage('Password must be at least 6 characters long.', 'error');
     highlightFieldError('password', true);
     const saveBtn = document.querySelector('[data-action="save-account"]');
     if (saveBtn) {
@@ -6891,8 +6907,8 @@ async function handleSaveAccount() {
   // Validate parent password length if parent form is visible
   const parentPasswordInput = document.getElementById('parentPassword');
   const parentForm = document.getElementById('parentGuardianForm');
-  if (parentPasswordInput && parentForm && parentForm.style.display !== 'none' && parentPasswordInput.value && parentPasswordInput.value.length < 8) {
-    showSaveAccountMessage('Parent/Guardian password must be at least 8 characters long.', 'error');
+  if (parentPasswordInput && parentForm && parentForm.style.display !== 'none' && parentPasswordInput.value && parentPasswordInput.value.length < 6) {
+    showSaveAccountMessage('Parent/Guardian password must be at least 6 characters long.', 'error');
     highlightFieldError('parentPassword', true);
     const saveBtn = document.querySelector('[data-action="save-account"]');
     if (saveBtn) {
@@ -7258,8 +7274,12 @@ async function handleSaveAccount() {
   } catch (error) {
     console.error('[Save Account] Error saving account:', error);
     
-    // Handle duplicate email error specifically
-    if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
+    // Handle invalid email error specifically
+    if (error.isInvalidEmail) {
+      showSaveAccountMessage('Please enter a valid email address.', 'error');
+      showToast('Please enter a valid email address.', 'error');
+      highlightFieldError('email', true);
+    } else if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
       const email = document.getElementById('email')?.value?.trim() || '';
       const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
       showSaveAccountMessage(duplicateMessage, 'error');
