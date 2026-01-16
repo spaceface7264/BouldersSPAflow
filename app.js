@@ -13184,12 +13184,14 @@ async function handleCheckout() {
       
       if (isProductNotAllowed) {
         handleCampaignRestriction(error);
+        state.checkoutInProgress = false;
         setCheckoutLoadingState(false);
         return;
       }
       // Show error message for actual errors
       showToast(getErrorMessage(error, 'Adding items'), 'error');
       
+      state.checkoutInProgress = false;
       setCheckoutLoadingState(false);
       return;
     }
