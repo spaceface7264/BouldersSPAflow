@@ -6054,7 +6054,7 @@ main {
     position: fixed;
     top: 20px;
     right: 20px;
-    background-color: #EF4444;
+    background-color: #111827;
     color: white;
     padding: 12px 16px;
     border-radius: 8px;
@@ -6069,6 +6069,10 @@ main {
 
 .toast.error {
     background-color: #EF4444;
+}
+
+.toast.info {
+    background-color: #2563EB;
 }
 
 @keyframes slideInRight {
