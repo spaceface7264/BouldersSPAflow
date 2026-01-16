@@ -61,9 +61,14 @@ Test user findings (translated):
 - Amount rounding: BRP uses half-kr; comma decimals still show (status: fixed)
 - 15-day pass pricing: currently adds rest-of-month; should be full amount only (status: fixed)
 - 15-day pass proration: unclear amount due from day 15; needs decision/clarification (status: fixed)
-- Campaign rejection flow: define UX when user is blocked due to recent membership (status: pending)
+- Campaign rejection flow: define UX when user is blocked due to recent membership (status: pending) !!
 - Discount code UI: hard to see when applied and not reducing payable amount (status: fixed)
 - Pay now membership price: when date is between 16th and last day of month, pay now price is rest of current month + next month (fetch price from API when possible, fallback to calculation)
+- Ved køb af klippekort, tildeles nyt kundenr når profilen allerede er medlem
+- ved køb af junior medlemskab, tildeles nyt kundenr hvis profilen allerede er medlem + extend form til navn og DOB på barnet
+- Junior medlemskab skal oprettes af forældre/værge 
+- Gør Hjemmehal i Cart edit knap til at vælge ny hal via modal 
+
 
 Next steps:
 - Monitor production for payment registration and membership creation
