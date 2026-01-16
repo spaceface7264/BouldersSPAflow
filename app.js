@@ -2096,6 +2096,17 @@ class OrderAPI {
           // CRITICAL: Do NOT round discount amount - use API value exactly
           // Rounding can cause 99% discount to appear as 100% if it rounds up
           discountExtractedFromAPI = discountAmount > 0;
+          
+          // Check if discount is 0 - this indicates backend didn't apply the coupon
+          if (discountAmount === 0) {
+            console.error('[Discount] ❌ CRITICAL: Backend returned couponDiscount.amount = 0');
+            console.error('[Discount] ❌ This means the coupon was NOT applied by the backend');
+            console.error('[Discount] ❌ Possible causes:');
+            console.error('[Discount] ❌   1. Coupon is not configured for this product type');
+            console.error('[Discount] ❌   2. Coupon restrictions (product, customer, date, etc.)');
+            console.error('[Discount] ❌   3. Backend bug in coupon application logic');
+            console.error('[Discount] ❌ Check backend coupon configuration for product:', data?.subscriptionItems?.[0]?.product?.id || 'unknown');
+          }
         } else if (typeof couponDiscount === 'number') {
           discountAmount = couponDiscount;
           
@@ -2108,10 +2119,19 @@ class OrderAPI {
           // CRITICAL: Do NOT round discount amount - use API value exactly
           // Rounding can cause 99% discount to appear as 100% if it rounds up
           discountExtractedFromAPI = discountAmount > 0 || discountAmount === 0; // Even 0 is valid from API
+          
+          // Check if discount is 0 - this indicates backend didn't apply the coupon
+          if (discountAmount === 0) {
+            console.error('[Discount] ❌ CRITICAL: Backend returned couponDiscount = 0');
+            console.error('[Discount] ❌ This means the coupon was NOT applied by the backend');
+            console.error('[Discount] ❌ Check backend coupon configuration');
+          }
         }
         
-        if (discountExtractedFromAPI) {
+        if (discountExtractedFromAPI && discountAmount > 0) {
           console.log('[Discount] ✅ Using discount amount from API couponDiscount:', discountAmount, 'DKK');
+        } else if (discountExtractedFromAPI && discountAmount === 0) {
+          console.warn('[Discount] ⚠️ API returned couponDiscount but amount is 0 - coupon not applied');
         }
       }
       
@@ -11081,13 +11101,15 @@ function updatePaymentOverview() {
     
     // Per OpenAPI: leftToPay is "The total amount left to pay for the order" (after discounts)
     // This is what the payment link API should use
-    const hasDiscountOnOrder = !!(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+    const couponDiscountObj = state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount;
+    const couponDiscountAmount = couponDiscountObj ? (typeof couponDiscountObj === 'object' ? couponDiscountObj.amount : couponDiscountObj) : null;
+    const hasDiscountOnOrder = couponDiscountAmount !== null && couponDiscountAmount !== undefined && couponDiscountAmount > 0;
     const originalPriceDKK = normalizeOrderPrice(state.fullOrder.price.amount);
     const leftToPayDKK = normalizeOrderPrice(state.fullOrder?.price?.leftToPay);
-    const couponDiscountDKK = normalizeOrderPrice(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+    const couponDiscountDKK = normalizeOrderPrice(couponDiscountObj);
     
     // CRITICAL: For 15-day pass with discount, explicitly check leftToPay
-    // If leftToPay is missing or 0 when discount is applied, this is a backend bug
+    // If leftToPay is missing or equals original price when discount is applied, this is a backend bug
     const preferPriceField = (state.discountApplied || hasDiscountOnOrder)
       ? (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.amount)
       : (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.amount);
@@ -11098,6 +11120,7 @@ function updatePaymentOverview() {
       originalPrice: originalPriceDKK,
       leftToPay: leftToPayDKK,
       couponDiscount: couponDiscountDKK,
+      couponDiscountRaw: couponDiscountObj,
       finalPrice: orderPriceDKK,
       hasDiscount: hasDiscountOnOrder,
       discountApplied: state.discountApplied,
@@ -11105,20 +11128,27 @@ function updatePaymentOverview() {
     });
     
     if (is15DayPass) {
-      // CRITICAL: For 15-day pass, verify leftToPay is set correctly when discount is applied
-      if (state.discountApplied || hasDiscountOnOrder) {
-        if (leftToPayDKK === null || leftToPayDKK === undefined) {
+      // CRITICAL: For 15-day pass, verify discount is actually applied by backend
+      if (state.discountApplied) {
+        // User applied a discount code, but check if backend actually applied it
+        if (couponDiscountAmount === 0 || couponDiscountAmount === null) {
+          console.error('[Payment Overview] ❌ CRITICAL: 15-day pass discount code was applied but backend returned couponDiscount: 0!');
+          console.error('[Payment Overview] ❌ This is a BACKEND BUG - coupon is not being applied to product 491 (15-day pass)');
+          console.error('[Payment Overview] ❌ Backend should apply the coupon and return couponDiscount > 0');
+          console.error('[Payment Overview] ❌ Check backend coupon configuration for product 491');
+        } else if (leftToPayDKK === null || leftToPayDKK === undefined) {
           console.error('[Payment Overview] ❌ CRITICAL: 15-day pass has discount but leftToPay is missing!');
           console.error('[Payment Overview] ❌ Backend should set order.price.leftToPay when coupon is applied');
           console.error('[Payment Overview] ❌ Falling back to price.amount which may not include discount');
-        } else if (leftToPayDKK === 0 && originalPriceDKK > 0) {
+        } else if (leftToPayDKK === 0 && originalPriceDKK > 0 && couponDiscountDKK > 0) {
           console.error('[Payment Overview] ❌ CRITICAL: 15-day pass leftToPay is 0 but original price is', originalPriceDKK);
           console.error('[Payment Overview] ❌ This suggests backend bug - discount may be calculated incorrectly');
-        } else if (leftToPayDKK !== null && originalPriceDKK !== null && leftToPayDKK >= originalPriceDKK && couponDiscountDKK > 0) {
-          console.warn('[Payment Overview] ⚠️ 15-day pass leftToPay (', leftToPayDKK, ') >= original price (', originalPriceDKK, ')');
-          console.warn('[Payment Overview] ⚠️ Discount may not be reflected in leftToPay');
-        } else {
-          console.log('[Payment Overview] ✅ 15-day pass leftToPay correctly reflects discount:', leftToPayDKK, 'DKK');
+        } else if (leftToPayDKK !== null && originalPriceDKK !== null && Math.abs(leftToPayDKK - originalPriceDKK) < 0.01 && couponDiscountDKK > 0) {
+          console.error('[Payment Overview] ❌ CRITICAL: 15-day pass leftToPay (', leftToPayDKK, ') equals original price (', originalPriceDKK, ')');
+          console.error('[Payment Overview] ❌ Backend returned couponDiscount (', couponDiscountDKK, ') but leftToPay was not updated!');
+          console.error('[Payment Overview] ❌ This is a BACKEND BUG - leftToPay should be originalPrice - couponDiscount');
+        } else if (leftToPayDKK !== null && originalPriceDKK !== null && leftToPayDKK < originalPriceDKK) {
+          console.log('[Payment Overview] ✅ 15-day pass leftToPay correctly reflects discount:', leftToPayDKK, 'DKK (was', originalPriceDKK, 'DKK)');
         }
       }
       
