@@ -1566,11 +1566,13 @@ class OrderAPI {
 
   /**
    * Calculates the expected partial-month price for a subscription starting today.
+   * If today is between the 16th and last day of month, price includes the rest
+   * of the current month + the full next month.
    * Used to verify backend pricing is correct.
    * 
    * @param {number} productId - The subscription product ID
    * @param {string} startDate - Start date in YYYY-MM-DD format
-   * @returns {Object|null} Expected price info { amountInCents, amountInDKK, daysRemaining, daysInMonth } or null
+   * @returns {Object|null} Expected price info { amountInCents, amountInDKK, daysRemaining, daysInMonth, includesNextMonth, billingPeriodStart, billingPeriodEnd } or null
    */
   _calculateExpectedPartialMonthPrice(productId, startDate) {
     // Check all subscription types: campaign, membership, and 15 Day Pass
@@ -1603,16 +1605,29 @@ class OrderAPI {
     const dayOfMonth = today.getDate();
     const daysRemainingInMonth = daysInCurrentMonth - dayOfMonth + 1;
     
-    // Calculate prorated price
-    const proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+    // Calculate prorated price for the rest of this month
+    const proratedCurrentMonthInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+    
+    // If date is between 16th and last day, include full next month
+    const includesNextMonth = dayOfMonth >= 16;
+    const billingPeriodEnd = includesNextMonth
+      ? new Date(currentYear, currentMonth + 2, 0)
+      : lastDayOfMonth;
+    
+    const totalPriceInCents = includesNextMonth
+      ? proratedCurrentMonthInCents + monthlyPriceInCents
+      : proratedCurrentMonthInCents;
     
     return {
-      amountInCents: proratedPriceInCents,
-      amountInDKK: proratedPriceInCents / 100,
+      amountInCents: totalPriceInCents,
+      amountInDKK: totalPriceInCents / 100,
       daysRemaining: daysRemainingInMonth,
       daysInMonth: daysInCurrentMonth,
       monthlyPriceInCents,
-      monthlyPriceInDKK: monthlyPriceInCents / 100
+      monthlyPriceInDKK: monthlyPriceInCents / 100,
+      includesNextMonth,
+      billingPeriodStart: startDateObj,
+      billingPeriodEnd
     };
   }
 
@@ -10705,13 +10720,10 @@ function updatePaymentOverview() {
             // Use calculated correct price
             payNowAmount = expectedPrice.amountInDKK;
             
-            // Set billing period to today - end of month
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            // Set billing period to today - end of current month or next month (16th+ rule)
             billingPeriod = {
               start: today,
-              end: lastDayOfMonth
+              end: expectedPrice.billingPeriodEnd || new Date(today.getFullYear(), today.getMonth() + 1, 0)
             };
             console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
             console.warn('[Payment Overview] ⚠️ NOTE: Payment window may show different price if backend bug persists');
@@ -10793,13 +10805,10 @@ function updatePaymentOverview() {
             if (expectedPrice) {
               payNowAmount = expectedPrice.amountInDKK;
               
-              // Set billing period to today - end of month
-              const currentMonth = today.getMonth();
-              const currentYear = today.getFullYear();
-              const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+              // Set billing period to today - end of current month or next month (16th+ rule)
               billingPeriod = {
                 start: today,
-                end: lastDayOfMonth
+                end: expectedPrice.billingPeriodEnd || new Date(today.getFullYear(), today.getMonth() + 1, 0)
               };
               console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month):', payNowAmount, 'DKK');
             } else {
@@ -10820,12 +10829,19 @@ function updatePaymentOverview() {
             const daysInMonth = lastDayOfMonth.getDate();
             const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
             
-            // Calculate partial month price
+            // If date is between 16th and last day, include full next month
+            const includesNextMonth = today.getDate() >= 16;
+            const nextMonthEnd = new Date(currentYear, currentMonth + 2, 0);
+            
+            // Calculate price: rest of current month + next month (if applicable)
             payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+            if (includesNextMonth) {
+              payNowAmount += monthlyPrice;
+            }
             
             billingPeriod = {
               start: today,
-              end: lastDayOfMonth
+              end: includesNextMonth ? nextMonthEnd : lastDayOfMonth
             };
             
             console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month, manual calc):', payNowAmount, 'DKK');
