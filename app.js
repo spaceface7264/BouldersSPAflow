@@ -3691,6 +3691,9 @@ const state = {
   // Discount code state
   discountCode: null, // Applied discount code
   discountApplied: false, // Whether discount is currently applied
+  // Campaign restriction UX
+  campaignRestrictionShown: false,
+  campaignRestrictionProductId: null,
   // Email tracking to prevent duplicate account creation
   createdEmails: new Set(), // Track emails that have been used to create accounts in this session
   // Step 5: Store fetched products from API
@@ -4460,6 +4463,9 @@ const translations = {
     'form.resetPassword': 'NULSTIL ADGANGSKODE', 'form.resetPassword.desc': 'Indtast din e-mailadresse, og vi sender dig instruktioner til at nulstille din adgangskode.',
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
+    'modal.campaignBlocked.title': 'Kampagne ikke tilgængelig',
+    'modal.campaignBlocked.body': 'Dette tilbud er ikke tilgængeligt for din konto på grund af et nyligt medlemskab. Du kan stadig vælge et almindeligt medlemskab.',
+    'modal.campaignBlocked.cta': 'Vis medlemskaber',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
@@ -4516,6 +4522,9 @@ const translations = {
     'form.resetPassword': 'RESET PASSWORD', 'form.resetPassword.desc': 'Enter your email address and we\'ll send you instructions to reset your password.',
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
+    'modal.campaignBlocked.title': 'Campaign not available',
+    'modal.campaignBlocked.body': 'This offer isn’t available for your account because of a recent membership. You can still choose a regular membership instead.',
+    'modal.campaignBlocked.cta': 'Show regular memberships',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
@@ -5268,6 +5277,11 @@ function cacheDom() {
   DOM.dataPolicyModalClose = document.getElementById('dataPolicyModalClose');
   DOM.dataPolicyModalLangDa = document.getElementById('dataPolicyModalLangDa');
   DOM.dataPolicyModalLangEn = document.getElementById('dataPolicyModalLangEn');
+
+  // Campaign restriction modal
+  DOM.campaignRestrictionModal = document.getElementById('campaignRestrictionModal');
+  DOM.campaignRestrictionClose = document.querySelector('[data-action="close-campaign-restriction"]');
+  DOM.campaignRestrictionCta = document.querySelector('[data-action="campaign-restriction-cta"]');
   
   // Store current modal state
   state.currentModalType = null;
@@ -5398,6 +5412,29 @@ function setupEventListeners() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
       closeForgotPasswordModal();
+    }
+  });
+
+  // Campaign restriction modal handlers
+  if (DOM.campaignRestrictionCta) {
+    DOM.campaignRestrictionCta.addEventListener('click', () => {
+      closeCampaignRestrictionModal();
+      switchToRegularMemberships();
+    });
+  }
+  if (DOM.campaignRestrictionClose) {
+    DOM.campaignRestrictionClose.addEventListener('click', closeCampaignRestrictionModal);
+  }
+  if (DOM.campaignRestrictionModal) {
+    DOM.campaignRestrictionModal.addEventListener('click', (e) => {
+      if (e.target === DOM.campaignRestrictionModal) {
+        closeCampaignRestrictionModal();
+      }
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && DOM.campaignRestrictionModal && DOM.campaignRestrictionModal.style.display === 'flex') {
+      closeCampaignRestrictionModal();
     }
   });
   
@@ -5687,6 +5724,43 @@ function closeForgotPasswordModal() {
   if (DOM.forgotPasswordForm) {
     DOM.forgotPasswordForm.reset();
   }
+}
+
+function openCampaignRestrictionModal(productId = null) {
+  if (!DOM.campaignRestrictionModal) return;
+  DOM.campaignRestrictionModal.style.display = 'flex';
+  document.body.classList.add('modal-open');
+  state.campaignRestrictionShown = true;
+  state.campaignRestrictionProductId = productId ? String(productId) : null;
+}
+
+function closeCampaignRestrictionModal() {
+  if (!DOM.campaignRestrictionModal) return;
+  DOM.campaignRestrictionModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
+}
+
+function switchToRegularMemberships() {
+  const membershipCategory = document.querySelector('[data-category="membership"]');
+  if (!membershipCategory) return;
+  const header = membershipCategory.querySelector('.category-header');
+  if (header) {
+    header.click();
+  }
+  setTimeout(() => {
+    membershipCategory.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    membershipCategory.setAttribute('tabindex', '-1');
+    membershipCategory.focus();
+  }, 150);
+}
+
+function handleCampaignRestriction(error) {
+  const productId = error?.productId || state.selectedProductId;
+  const productKey = productId ? String(productId) : null;
+  if (state.campaignRestrictionShown && productKey && state.campaignRestrictionProductId === productKey) {
+    return;
+  }
+  openCampaignRestrictionModal(productKey);
 }
 
 // Terms Content - Embedded directly to avoid CORS issues
@@ -8397,6 +8471,10 @@ function setupNewAccessStep() {
       } else {
         state.selectedProductType = 'punch-card';
       }
+
+      // Reset campaign restriction state on new selection
+      state.campaignRestrictionShown = false;
+      state.campaignRestrictionProductId = null;
 
       if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
         resetOrderStateForProductChange('plan-selection');
@@ -12464,8 +12542,7 @@ async function handleCheckout() {
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
           
           if (isProductNotAllowed) {
-            // Show friendly message that this is a restriction, not an error
-            showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
+            handleCampaignRestriction(error);
             throw error; // Re-throw to stop checkout flow
           }
           
@@ -12870,12 +12947,12 @@ async function handleCheckout() {
                                   (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
       
       if (isProductNotAllowed) {
-        // Show friendly message that this is a restriction, not an error
-        showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
-      } else {
-        // Show error message for actual errors
-        showToast(getErrorMessage(error, 'Adding items'), 'error');
+        handleCampaignRestriction(error);
+        setCheckoutLoadingState(false);
+        return;
       }
+      // Show error message for actual errors
+      showToast(getErrorMessage(error, 'Adding items'), 'error');
       
       setCheckoutLoadingState(false);
       return;

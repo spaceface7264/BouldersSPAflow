@@ -1060,6 +1060,22 @@
         </div>
     </div>
 
+    <!-- Campaign Restriction Modal -->
+    <div class="campaign-rejection-modal" id="campaignRestrictionModal" style="display: none;">
+        <div class="campaign-rejection-modal-content" role="dialog" aria-modal="true" aria-labelledby="campaignRestrictionTitle" aria-describedby="campaignRestrictionBody">
+            <div class="campaign-rejection-modal-header">
+                <h3 class="campaign-rejection-modal-title" id="campaignRestrictionTitle" data-i18n-key="modal.campaignBlocked.title">Campaign not available</h3>
+                <button class="campaign-rejection-modal-close" type="button" data-action="close-campaign-restriction" aria-label="Close">×</button>
+            </div>
+            <p class="campaign-rejection-modal-body" id="campaignRestrictionBody" data-i18n-key="modal.campaignBlocked.body">
+                This offer isn’t available for your account because of a recent membership. You can still choose a regular membership instead.
+            </p>
+            <div class="campaign-rejection-modal-actions">
+                <button class="campaign-rejection-modal-primary" type="button" data-action="campaign-restriction-cta" data-i18n-key="modal.campaignBlocked.cta">Show regular memberships</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Global Footer -->
     <footer class="global-footer">
         <div class="footer-content">
