@@ -7846,6 +7846,8 @@ function handleLogout() {
   state.campaignRestrictionProductId = null;
   state.checkoutInProgress = false;
   setCheckoutLoadingState(false);
+  resetOrderStateForProductChange('logout');
+  updateCartSummary();
   
   if (typeof window.clearTokens === 'function') {
     window.clearTokens();
@@ -8881,6 +8883,8 @@ function switchAuthMode(mode, email = null) {
   state.campaignRestrictionProductId = null;
   state.checkoutInProgress = false;
   setCheckoutLoadingState(false);
+  resetOrderStateForProductChange('auth-switch');
+  updateCartSummary();
   
   // Update button text and mode based on current section
   switchBtns.forEach(btn => {
@@ -11671,7 +11675,18 @@ async function ensureSubscriptionAttached(context = 'auto') {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
-    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+    let subscriptionResponse;
+    try {
+      subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+    } catch (error) {
+      const isProductNotAllowed = error?.isProductNotAllowed || 
+                                  (error?.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
+      if (isProductNotAllowed) {
+        handleCampaignRestriction(error);
+        return null;
+      }
+      throw error;
+    }
     state.subscriptionAttachedOrderId = orderId;
     
     // CRITICAL: Use the order from addSubscriptionItem response if available (has correct price after re-add)
