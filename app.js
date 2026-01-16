@@ -5815,6 +5815,10 @@ function closeCampaignRestrictionModal() {
     campaignRestrictionLastFocus.focus();
     campaignRestrictionLastFocus = null;
   }
+  state.campaignRestrictionShown = false;
+  state.campaignRestrictionProductId = null;
+  state.checkoutInProgress = false;
+  setCheckoutLoadingState(false);
 }
 
 function switchToRegularMemberships() {
@@ -5975,6 +5979,8 @@ function handleCampaignRestriction(error) {
   if (state.campaignRestrictionShown && productKey && state.campaignRestrictionProductId === productKey) {
     return;
   }
+  state.checkoutInProgress = false;
+  setCheckoutLoadingState(false);
   openCampaignRestrictionModal(productKey);
 }
 
@@ -7836,6 +7842,10 @@ function handleLogout() {
   state.authenticatedCustomer = null;
   state.authenticatedEmail = null;
   state.customerId = null;
+  state.campaignRestrictionShown = false;
+  state.campaignRestrictionProductId = null;
+  state.checkoutInProgress = false;
+  setCheckoutLoadingState(false);
   
   if (typeof window.clearTokens === 'function') {
     window.clearTokens();
@@ -8867,6 +8877,10 @@ function switchAuthMode(mode, email = null) {
   
   // Store current mode
   state.currentAuthMode = mode;
+  state.campaignRestrictionShown = false;
+  state.campaignRestrictionProductId = null;
+  state.checkoutInProgress = false;
+  setCheckoutLoadingState(false);
   
   // Update button text and mode based on current section
   switchBtns.forEach(btn => {
