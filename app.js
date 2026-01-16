@@ -2063,11 +2063,12 @@ class OrderAPI {
       }
       console.log('[Discount] Apply coupon response:', data);
       
-      // Extract couponDiscount from response
-      // Response is an Order object with couponDiscount field
+      // CRITICAL: Extract couponDiscount from API response - this is the source of truth
+      // Response is an Order object with couponDiscount field (per OpenAPI: OrderOut.couponDiscount)
       const couponDiscount = data?.couponDiscount || data?.price?.couponDiscount || null;
       let discountAmount = 0;
-      
+      let discountExtractedFromAPI = false; // Track if we successfully extracted from API
+
       console.log('[Discount] Full API response structure:', {
         hasCouponDiscount: !!data?.couponDiscount,
         hasPriceCouponDiscount: !!data?.price?.couponDiscount,
@@ -2078,8 +2079,9 @@ class OrderAPI {
         orderLeftToPay: data?.price?.leftToPay,
       });
       
-      if (couponDiscount) {
-        console.log('[Discount] Raw coupon discount:', couponDiscount);
+      // CRITICAL: Always use API's couponDiscount value if provided - never override with calculations
+      if (couponDiscount !== null && couponDiscount !== undefined) {
+        console.log('[Discount] ✅ API provided couponDiscount - using API value as source of truth:', couponDiscount);
         
         if (typeof couponDiscount === 'object') {
           // Try different possible fields - avoid 'total' as it might be order total, not discount
@@ -2087,43 +2089,40 @@ class OrderAPI {
           
           // If amount is in cents (common in APIs), convert to DKK
           if (discountAmount > 10000) {
-            console.log('[Discount] Large amount detected, might be in cents:', discountAmount);
+            console.log('[Discount] Large amount detected, converting from cents:', discountAmount);
             discountAmount = discountAmount / 100;
             console.log('[Discount] Converted from cents:', discountAmount);
           }
           // Round to half krone
           discountAmount = roundToHalfKrone(discountAmount);
+          discountExtractedFromAPI = discountAmount > 0;
         } else if (typeof couponDiscount === 'number') {
           discountAmount = couponDiscount;
           
           // If amount is in cents, convert to DKK
           if (discountAmount > 10000) {
-            console.log('[Discount] Large number detected, might be in cents:', discountAmount);
+            console.log('[Discount] Large number detected, converting from cents:', discountAmount);
             discountAmount = discountAmount / 100;
             console.log('[Discount] Converted from cents:', discountAmount);
           }
           // Round to half krone
           discountAmount = roundToHalfKrone(discountAmount);
+          discountExtractedFromAPI = discountAmount > 0 || discountAmount === 0; // Even 0 is valid from API
+        }
+        
+        if (discountExtractedFromAPI) {
+          console.log('[Discount] ✅ Using discount amount from API couponDiscount:', discountAmount, 'DKK');
         }
       }
       
-      // Fallback: Calculate discount from price difference if couponDiscount extraction failed
-      if (!discountAmount || discountAmount === 0) {
-        console.log('[Discount] Attempting to calculate discount from price difference...');
-        const orderPrice = data?.price;
-        if (orderPrice) {
-          // Get subtotal from current state
-          const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-          const newTotal = orderPrice.total || orderPrice.leftToPay || 0;
-          
-          // Convert to DKK if in cents
-          const newTotalDKK = newTotal > 10000 ? newTotal / 100 : newTotal;
-          
-          if (newTotalDKK < subtotal && subtotal > 0) {
-            discountAmount = roundToHalfKrone(subtotal - newTotalDKK);
-            console.log('[Discount] Calculated from price difference:', discountAmount, '(subtotal:', subtotal, 'new total:', newTotalDKK, ')');
-          }
-        }
+      // CRITICAL: Do NOT use fallback calculation - API must provide couponDiscount
+      // If API did not provide couponDiscount, we cannot calculate discount from price difference
+      // The API is the ONLY source of truth for discount amount
+      if (!discountExtractedFromAPI) {
+        console.error('[Discount] ❌ ERROR: API did not provide couponDiscount - cannot apply discount!');
+        console.error('[Discount] ❌ API response:', JSON.stringify(data, null, 2));
+        console.error('[Discount] ❌ Discount cannot be applied without API couponDiscount value');
+        discountAmount = 0; // Set to 0 if API didn't provide it
       }
       
       console.log('[Discount] Final extracted discountAmount:', discountAmount);
@@ -10005,11 +10004,12 @@ async function handleApplyDiscount() {
     const response = await orderAPI.applyDiscountCode(orderIdToUse, discountCode);
     console.log('[Discount] API response received:', response);
     
-    // Extract discount information from response
-    // API returns Order object with couponDiscount field
+    // CRITICAL: Extract discount information from API response - this is the source of truth
+    // API returns Order object with couponDiscount field (per OpenAPI: OrderOut.couponDiscount)
     // couponDiscount can be an object { amount, currency } or a number
     const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
     let discountAmount = 0;
+    let discountExtractedFromAPI = false; // Track if we successfully extracted from API
     
     console.log('[Discount] Extracting discount from response:', {
       couponDiscount,
@@ -10017,7 +10017,10 @@ async function handleApplyDiscount() {
       responseKeys: Object.keys(response || {}),
     });
     
-    if (couponDiscount) {
+    // CRITICAL: Always use API's couponDiscount value if provided - never override with calculations
+    if (couponDiscount !== null && couponDiscount !== undefined) {
+      console.log('[Discount] ✅ API provided couponDiscount - using API value as source of truth:', couponDiscount);
+      
       if (typeof couponDiscount === 'object') {
         // Avoid 'total' field as it might be order total, not discount
         discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
@@ -10027,6 +10030,7 @@ async function handleApplyDiscount() {
           console.log('[Discount] Large discountAmount detected, converting from cents:', discountAmount);
           discountAmount = discountAmount / 100;
         }
+        discountExtractedFromAPI = true; // Mark as extracted from API, even if 0
       } else if (typeof couponDiscount === 'number') {
         discountAmount = couponDiscount;
         
@@ -10035,11 +10039,16 @@ async function handleApplyDiscount() {
           console.log('[Discount] Large discountAmount detected, converting from cents:', discountAmount);
           discountAmount = discountAmount / 100;
         }
+        discountExtractedFromAPI = true; // Mark as extracted from API, even if 0
+      }
+      
+      if (discountExtractedFromAPI) {
+        console.log('[Discount] ✅ Using discount amount from API couponDiscount:', discountAmount, 'DKK');
       }
     }
     
-    // Also check if discountAmount was already extracted by the API method
-    if (!discountAmount && response?.discountAmount) {
+    // Also check if discountAmount was already extracted by the API method (from applyDiscountCode return)
+    if (!discountExtractedFromAPI && response?.discountAmount) {
       discountAmount = response.discountAmount;
       
       // If amount is in cents, convert to DKK
@@ -10047,22 +10056,17 @@ async function handleApplyDiscount() {
         console.log('[Discount] Large discountAmount from response, converting from cents:', discountAmount);
         discountAmount = discountAmount / 100;
       }
+      discountExtractedFromAPI = true; // This is also from API
     }
     
-    // Calculate discount from price difference if needed
-    if (!discountAmount && response?.price) {
-      const originalTotal = state.totals.subtotal || state.totals.cartTotal || 0;
-      let newTotal = response.price.total || response.price.leftToPay || 0;
-      
-      // Convert to DKK if in cents
-      if (newTotal > 10000) {
-        newTotal = newTotal / 100;
-      }
-      
-      if (newTotal < originalTotal && originalTotal > 0) {
-        discountAmount = originalTotal - newTotal;
-        console.log('[Discount] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-      }
+    // CRITICAL: Do NOT use fallback calculation - API must provide couponDiscount
+    // If API did not provide couponDiscount, we cannot calculate discount from price difference
+    // The API is the ONLY source of truth for discount amount
+    if (!discountExtractedFromAPI) {
+      console.error('[Discount] ❌ ERROR: API did not provide couponDiscount - cannot apply discount!');
+      console.error('[Discount] ❌ API response:', JSON.stringify(response, null, 2));
+      console.error('[Discount] ❌ Discount cannot be applied without API couponDiscount value');
+      discountAmount = 0; // Set to 0 if API didn't provide it
     }
     
     // Ensure subtotal is calculated before validating discount
@@ -12439,34 +12443,48 @@ async function handleCheckout() {
                 const discountResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
                 console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
               
-                // Extract discount from couponDiscount field
+                // CRITICAL: Extract discount from API couponDiscount field ONLY - no fallback calculations
+                // API returns Order object with couponDiscount field (per OpenAPI: OrderOut.couponDiscount)
+                // The API is the ONLY source of truth for discount amount
                 const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
                 let discountAmount = 0;
+                let discountExtractedFromAPI = false;
               
-              if (couponDiscount) {
-                if (typeof couponDiscount === 'object') {
-                  discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
-                } else if (typeof couponDiscount === 'number') {
-                  discountAmount = couponDiscount;
-                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
+                if (couponDiscount !== null && couponDiscount !== undefined) {
+                  console.log('[checkout] ✅ API provided couponDiscount - using API value as source of truth:', couponDiscount);
+                  
+                  if (typeof couponDiscount === 'object') {
+                    discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
+                    if (discountAmount > 10000) discountAmount = discountAmount / 100;
+                    discountExtractedFromAPI = true;
+                  } else if (typeof couponDiscount === 'number') {
+                    discountAmount = couponDiscount;
+                    if (discountAmount > 10000) discountAmount = discountAmount / 100;
+                    discountExtractedFromAPI = true;
+                  }
+                  
+                  if (discountExtractedFromAPI) {
+                    console.log('[checkout] ✅ Using discount amount from API couponDiscount:', discountAmount, 'DKK');
+                  }
                 }
-              }
               
-              if (!discountAmount && discountResponse?.discountAmount) {
-                discountAmount = discountResponse.discountAmount;
-                if (discountAmount > 10000) discountAmount = discountAmount / 100;
-              }
-              
-              // Calculate from price difference if needed
-              if (!discountAmount && discountResponse?.price) {
-                const originalTotal = state.totals.subtotal || state.totals.cartTotal || 0;
-                let newTotal = discountResponse.price.total || discountResponse.price.leftToPay || 0;
-                if (newTotal > 10000) newTotal = newTotal / 100;
-                if (newTotal < originalTotal && originalTotal > 0) {
-                  discountAmount = originalTotal - newTotal;
+                // Also check if discountAmount was already extracted by the API method (from applyDiscountCode return)
+                if (!discountExtractedFromAPI && discountResponse?.discountAmount) {
+                  discountAmount = discountResponse.discountAmount;
+                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
+                  discountExtractedFromAPI = true;
+                  console.log('[checkout] ✅ Using discountAmount from API response:', discountAmount, 'DKK');
                 }
-              }
+              
+                // CRITICAL: Do NOT use fallback calculation - API must provide couponDiscount
+                // If API did not provide couponDiscount, we cannot calculate discount from price difference
+                // The API is the ONLY source of truth for discount amount
+                if (!discountExtractedFromAPI) {
+                  console.error('[checkout] ❌ ERROR: API did not provide couponDiscount - cannot apply discount!');
+                  console.error('[checkout] ❌ API response:', JSON.stringify(discountResponse, null, 2));
+                  console.error('[checkout] ❌ Discount cannot be applied without API couponDiscount value');
+                  discountAmount = 0; // Set to 0 if API didn't provide it
+                }
               
               // Cap discount at subtotal
               const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
@@ -13306,62 +13324,18 @@ async function handleCheckout() {
               console.log('[checkout] Using discountAmount from response:', discountAmount);
             }
             
-            // Check price.leftToPay or price.total as fallback
-            if (!discountAmount && discountResponse?.price) {
-              const originalTotal = state.totals.subtotal || state.totals.cartTotal;
-              let newTotal = discountResponse.price.total || discountResponse.price.leftToPay || 0;
-              
-              // Convert to DKK if in cents
-              if (newTotal > 10000) {
-                newTotal = newTotal / 100;
-              }
-              
-              if (newTotal < originalTotal && originalTotal > 0) {
-                discountAmount = originalTotal - newTotal;
-                console.log('[checkout] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-              }
-            }
-            
-            // Validate discount amount - ensure it doesn't exceed subtotal
+            // CRITICAL: Do NOT calculate discount from price difference - API must provide couponDiscount
+            // The API is the ONLY source of truth for discount amount
+            // Validate discount amount - ensure it doesn't exceed subtotal (safety check only)
             const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
             if (discountAmount > subtotal && subtotal > 0) {
-              console.warn('[checkout] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
-              discountAmount = subtotal;
+              console.warn('[checkout] ⚠️ Discount amount from API exceeds subtotal - this may indicate an API issue');
+              console.warn('[checkout] ⚠️ API discountAmount:', discountAmount, 'subtotal:', subtotal);
+              console.warn('[checkout] ⚠️ Using API value as-is (not capping) - API is source of truth');
+              // Do NOT cap - use API value exactly as provided
             }
             
-            console.log('[checkout] Final discountAmount:', discountAmount, '(subtotal:', subtotal, ')');
-            
-            // If we couldn't extract discount amount, try fetching the order to get updated totals
-            if (!discountAmount || discountAmount === 0) {
-              console.log('[checkout] Attempting to fetch updated order to calculate discount...');
-              try {
-                const updatedOrder = await orderAPI.getOrder(state.orderId);
-                console.log('[checkout] Updated order:', JSON.stringify(updatedOrder, null, 2));
-                
-                // Try to extract discount from updated order
-                const updatedCouponDiscount = updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount;
-                if (updatedCouponDiscount) {
-                  if (typeof updatedCouponDiscount === 'object') {
-                    discountAmount = updatedCouponDiscount.amount || updatedCouponDiscount.value || updatedCouponDiscount.total || 0;
-                  } else if (typeof updatedCouponDiscount === 'number') {
-                    discountAmount = updatedCouponDiscount;
-                  }
-                  console.log('[checkout] Extracted discount from updated order:', discountAmount);
-                }
-                
-                // Calculate discount from price difference if still not found
-                if (!discountAmount || discountAmount === 0) {
-                  const originalTotal = state.totals.subtotal || state.totals.cartTotal;
-                  const newTotal = updatedOrder?.price?.total || updatedOrder?.price?.leftToPay || updatedOrder?.total || 0;
-                  if (newTotal < originalTotal && newTotal > 0) {
-                    discountAmount = originalTotal - newTotal;
-                    console.log('[checkout] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-                  }
-                }
-              } catch (fetchError) {
-                console.warn('[checkout] Could not fetch updated order:', fetchError);
-              }
-            }
+            console.log('[checkout] Final discountAmount from API:', discountAmount, 'DKK (subtotal:', subtotal, ')');
             
             if (discountAmount > 0) {
               // Success - apply discount
