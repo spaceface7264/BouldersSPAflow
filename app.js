@@ -5726,18 +5726,59 @@ function closeForgotPasswordModal() {
   }
 }
 
+let campaignRestrictionFocusTrapHandler = null;
+let campaignRestrictionLastFocus = null;
+
+function getFocusableElements(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  )).filter(el => !el.disabled && el.offsetParent !== null);
+}
+
 function openCampaignRestrictionModal(productId = null) {
   if (!DOM.campaignRestrictionModal) return;
+  campaignRestrictionLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   DOM.campaignRestrictionModal.style.display = 'flex';
   document.body.classList.add('modal-open');
   state.campaignRestrictionShown = true;
   state.campaignRestrictionProductId = productId ? String(productId) : null;
+
+  const focusable = getFocusableElements(DOM.campaignRestrictionModal);
+  if (focusable.length > 0) {
+    focusable[0].focus();
+  }
+
+  if (!campaignRestrictionFocusTrapHandler) {
+    campaignRestrictionFocusTrapHandler = (e) => {
+      if (e.key !== 'Tab') return;
+      const elements = getFocusableElements(DOM.campaignRestrictionModal);
+      if (!elements.length) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+  }
+  DOM.campaignRestrictionModal.addEventListener('keydown', campaignRestrictionFocusTrapHandler);
 }
 
 function closeCampaignRestrictionModal() {
   if (!DOM.campaignRestrictionModal) return;
   DOM.campaignRestrictionModal.style.display = 'none';
   document.body.classList.remove('modal-open');
+  if (campaignRestrictionFocusTrapHandler) {
+    DOM.campaignRestrictionModal.removeEventListener('keydown', campaignRestrictionFocusTrapHandler);
+  }
+  if (campaignRestrictionLastFocus) {
+    campaignRestrictionLastFocus.focus();
+    campaignRestrictionLastFocus = null;
+  }
 }
 
 function switchToRegularMemberships() {

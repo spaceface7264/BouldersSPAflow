@@ -71,6 +71,7 @@ Test user findings (translated):
 - ⏳ ved køb af junior medlemskab, tildeles nyt kundenr hvis profilen allerede er medlem + extend form til navn og DOB på barnet
 - ⏳ Junior medlemskab skal oprettes af forældre/værge 
 - ⏳ Gør Hjemmehal i Cart edit knap til at vælge ny hal via modal 
+- Ensure start date of memberships and 15 day pass is always today 
 
 
 Next steps:
