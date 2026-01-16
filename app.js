@@ -11002,16 +11002,20 @@ function updatePaymentOverview() {
   // CALCULATE "BETALES NU" (PAY NOW)
   // ============================================================================
   // CRITICAL: Use the EXACT same price that backend sends to payment window
-  // Payment link API reads order.price.amount from backend, so we must use the same value
-  // This ensures "Betales nu" matches the price shown in payment window
+  // Per OpenAPI documentation:
+  // - OrderOut.price (CurrencyOut) - "The total price of the order"
+  // - OrderOut.leftToPay (CurrencyOut) - "The total amount left to pay for the order"
+  // - OrderOut.couponDiscount (CurrencyOut) - "Combined discount from all order items"
   // 
-  // Per OpenAPI: OrderOut.price (CurrencyOut) - The total price of the order
+  // The payment link API should use leftToPay (amount after discounts), not price.amount
+  // This ensures "Betales nu" matches the price shown in payment window
   // If order data is not available, calculate from product data
   let payNowAmount = 0;
   let billingPeriod = null;
   
-  if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
+  if (hasOrderData && state.fullOrder?.price) {
     // CRITICAL: Use API price from order - this is the authoritative source
+    // Per OpenAPI: Use leftToPay if available (amount after discounts), otherwise use price.amount
     // This ensures "Pay now" matches exactly what backend sends to payment window
     const normalizeOrderPrice = (value) => {
       if (value === null || value === undefined) return null;
@@ -11019,10 +11023,13 @@ function updatePaymentOverview() {
       if (!Number.isFinite(rawAmount)) return null;
       return rawAmount / 100;
     };
+    
+    // Per OpenAPI: leftToPay is "The total amount left to pay for the order" (after discounts)
+    // This is what the payment link API should use
     const hasDiscountOnOrder = !!(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
     const preferPriceField = (state.discountApplied || hasDiscountOnOrder)
-      ? (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.total ?? state.fullOrder?.price?.amount)
-      : state.fullOrder?.price?.amount;
+      ? (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.amount)
+      : (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.amount);
     const orderPriceDKK = normalizeOrderPrice(preferPriceField) ?? normalizeOrderPrice(state.fullOrder.price.amount);
     
     console.log('[Payment Overview] ✅ Using API price from order:', orderPriceDKK, 'DKK');
@@ -12533,9 +12540,9 @@ async function handleCheckout() {
                       hasCouponDiscount: !!orderCouponDiscount,
                     });
                     
-                    // CRITICAL: Verify that order.price.amount reflects the discount
-                    // Payment link API reads from order.price.amount, so it must be updated
-                    const orderPriceAmount = updatedOrder?.price?.amount;
+                    // CRITICAL: Verify that order.price.leftToPay reflects the discount
+                    // Per OpenAPI: leftToPay is "The total amount left to pay for the order" (after discounts)
+                    // Payment link API should use leftToPay if available, otherwise price.amount
                     const normalizePrice = (price) => {
                       if (!price) return null;
                       const rawAmount = typeof price === 'object' ? price.amount : price;
@@ -12543,28 +12550,32 @@ async function handleCheckout() {
                       return rawAmount / 100; // Convert from cents to DKK
                     };
                     
-                    const orderPriceAmountDKK = normalizePrice(orderPriceAmount);
-                    const discountedPriceDKK = normalizePrice(updatedOrder?.price?.leftToPay || updatedOrder?.price?.total);
+                    const orderPriceAmountDKK = normalizePrice(updatedOrder?.price?.amount);
+                    const orderLeftToPayDKK = normalizePrice(updatedOrder?.price?.leftToPay);
                     
-                    // Check if amount field reflects the discount
-                    const amountReflectsDiscount = discountedPriceDKK !== null && orderPriceAmountDKK !== null
-                      ? Math.abs(discountedPriceDKK - orderPriceAmountDKK) < 0.01
+                    // Per OpenAPI: leftToPay should contain the amount after discounts
+                    // If discount is applied, leftToPay should be less than price.amount
+                    const leftToPayReflectsDiscount = orderLeftToPayDKK !== null && orderPriceAmountDKK !== null
+                      ? (orderLeftToPayDKK < orderPriceAmountDKK || Math.abs(orderLeftToPayDKK - orderPriceAmountDKK) < 0.01)
                       : false;
                     
-                    // Verify discount is reflected - check if couponDiscount exists AND order.price.amount is updated
-                    if (orderCouponDiscount && amountReflectsDiscount) {
-                      // Coupon discount exists AND amount field is updated
+                    // Verify discount is reflected - check if couponDiscount exists AND order.price.leftToPay is set
+                    // Per OpenAPI: leftToPay is "The total amount left to pay for the order" (after discounts)
+                    if (orderCouponDiscount && orderLeftToPayDKK !== null) {
+                      // Coupon discount exists AND leftToPay is set (per OpenAPI, this is what payment API should use)
                       orderUpdated = true;
-                      console.log('[checkout] ✅ Order has couponDiscount AND price.amount reflects discount, proceeding to payment link generation');
-                    } else if (orderCouponDiscount && !amountReflectsDiscount) {
-                      // Coupon discount exists but amount field is not updated
-                      console.warn('[checkout] ⚠️ Order has couponDiscount but price.amount does NOT reflect discount!');
+                      console.log('[checkout] ✅ Order has couponDiscount AND leftToPay is set (per OpenAPI), proceeding to payment link generation');
+                      console.log('[checkout] ✅ Payment link API should use order.price.leftToPay:', orderLeftToPayDKK, 'DKK');
+                    } else if (orderCouponDiscount && orderLeftToPayDKK === null) {
+                      // Coupon discount exists but leftToPay is not set (backend bug)
+                      console.warn('[checkout] ⚠️ Order has couponDiscount but price.leftToPay is missing!');
+                      console.warn('[checkout] ⚠️ Per OpenAPI: leftToPay should be "The total amount left to pay for the order" (after discounts)');
                       console.warn('[checkout] ⚠️ order.price.amount:', orderPriceAmountDKK, 'DKK');
-                      console.warn('[checkout] ⚠️ order.price.leftToPay/total:', discountedPriceDKK, 'DKK');
-                      console.warn('[checkout] ⚠️ Payment window will show incorrect price if backend uses order.price.amount');
-                      console.warn('[checkout] ⚠️ Attempting to re-apply coupon to force backend to update amount...');
+                      console.warn('[checkout] ⚠️ order.price.leftToPay: MISSING');
+                      console.warn('[checkout] ⚠️ Payment window may show incorrect price if backend uses order.price.amount instead of leftToPay');
+                      console.warn('[checkout] ⚠️ Attempting to re-apply coupon to force backend to set leftToPay...');
                       
-                      // Try re-applying the coupon to force backend to update amount
+                      // Try re-applying the coupon to force backend to set leftToPay (per OpenAPI)
                       try {
                         const reapplyResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
                         console.log('[checkout] Re-applied coupon, response:', JSON.stringify(reapplyResponse, null, 2));
@@ -12576,7 +12587,8 @@ async function handleCheckout() {
                         // If we've tried multiple times, proceed anyway
                         if (attempts >= maxAttempts - 1) {
                           orderUpdated = true;
-                          console.warn('[checkout] ⚠️ Proceeding despite amount mismatch - backend bug may cause payment window to show wrong price');
+                          console.warn('[checkout] ⚠️ Proceeding despite leftToPay missing - backend bug may cause payment window to show wrong price');
+                          console.warn('[checkout] ⚠️ Backend must set order.price.leftToPay when coupon is applied (per OpenAPI)');
                         }
                       }
                       
@@ -12792,13 +12804,10 @@ async function handleCheckout() {
             // Store full order object for payment overview
             state.fullOrder = orderBeforePayment;
             
-            // CRITICAL: If discount is applied, verify the order has the discounted price
+            // CRITICAL: If discount is applied, verify the order has leftToPay set (per OpenAPI)
+            // Per OpenAPI: leftToPay is "The total amount left to pay for the order" (after discounts)
+            // Payment link API should use leftToPay if available, otherwise price.amount
             if (state.discountApplied && state.totals.discountAmount > 0) {
-              // Check if order has discounted price in leftToPay or total fields
-              const discountedPrice = orderBeforePayment?.price?.leftToPay || orderBeforePayment?.price?.total;
-              const orderPriceAmount = orderBeforePayment?.price?.amount;
-              
-              // Normalize prices for comparison
               const normalizePrice = (price) => {
                 if (!price) return null;
                 const rawAmount = typeof price === 'object' ? price.amount : price;
@@ -12806,78 +12815,97 @@ async function handleCheckout() {
                 return rawAmount / 100; // Convert from cents to DKK
               };
               
-              const discountedPriceDKK = normalizePrice(discountedPrice);
-              const orderPriceAmountDKK = normalizePrice(orderPriceAmount);
+              const orderPriceAmountDKK = normalizePrice(orderBeforePayment?.price?.amount);
+              const orderLeftToPayDKK = normalizePrice(orderBeforePayment?.price?.leftToPay);
               
-              if (discountedPriceDKK !== null && orderPriceAmountDKK !== null) {
-                // Check if amount field reflects the discount
-                const priceDifference = Math.abs(discountedPriceDKK - orderPriceAmountDKK);
-                if (priceDifference > 0.01) {
-                  console.warn('[checkout] ⚠️ DISCOUNT PRICE MISMATCH DETECTED BEFORE PAYMENT LINK!');
-                  console.warn('[checkout] ⚠️ order.price.amount (used by payment API):', orderPriceAmountDKK, 'DKK');
-                  console.warn('[checkout] ⚠️ order.price.leftToPay/total (discounted):', discountedPriceDKK, 'DKK');
-                  console.warn('[checkout] ⚠️ Payment window will show incorrect price - backend has not updated order.price.amount');
-                  console.warn('[checkout] ⚠️ Attempting final fix by re-applying coupon...');
-                  
-                  // Last attempt to fix: re-apply the coupon and wait
-                  const discountCodeToApply = state.discountCode;
-                  if (discountCodeToApply) {
-                    try {
-                      console.log('[checkout] Final attempt: Re-applying coupon to force backend to update order.price.amount...');
-                      const finalFixResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
-                      console.log('[checkout] Final fix response:', JSON.stringify(finalFixResponse, null, 2));
-                      
-                      // Wait for backend to process
-                      await new Promise(resolve => setTimeout(resolve, 2000));
-                      
-                      // Re-fetch order to check if amount was updated
-                      const finalOrderCheck = await orderAPI.getOrder(state.orderId);
-                      const finalOrderPriceAmountDKK = normalizePrice(finalOrderCheck?.price?.amount);
-                      const finalDiscountedPriceDKK = normalizePrice(finalOrderCheck?.price?.leftToPay || finalOrderCheck?.price?.total);
-                      
-                      if (finalDiscountedPriceDKK !== null && finalOrderPriceAmountDKK !== null) {
-                        const finalPriceDifference = Math.abs(finalDiscountedPriceDKK - finalOrderPriceAmountDKK);
-                        if (finalPriceDifference < 0.01) {
-                          console.log('[checkout] ✅ Final fix successful! order.price.amount now reflects discount:', finalOrderPriceAmountDKK, 'DKK');
-                          orderBeforePayment = finalOrderCheck;
-                          state.fullOrder = finalOrderCheck;
-                        } else {
-                          console.error('[checkout] ❌ Final fix failed - order.price.amount still does not reflect discount');
-                          console.error('[checkout] ❌ This is a backend bug - payment window will show incorrect price');
-                          console.error('[checkout] ❌ Backend must update order.price.amount when coupon is applied');
-                        }
-                      }
-                    } catch (finalFixError) {
-                      console.error('[checkout] ❌ Final fix attempt failed:', finalFixError);
-                      console.error('[checkout] ❌ Payment window will show incorrect price due to backend bug');
+              if (orderLeftToPayDKK === null) {
+                console.error('[checkout] ❌ CRITICAL: Discount is applied but order.price.leftToPay is missing!');
+                console.error('[checkout] ❌ Per OpenAPI: leftToPay should be "The total amount left to pay for the order" (after discounts)');
+                console.error('[checkout] ❌ Payment link API may use order.price.amount instead, showing wrong price');
+                console.error('[checkout] ❌ Attempting final fix by re-applying coupon...');
+                
+                // Last attempt to fix: re-apply the coupon to force backend to set leftToPay
+                const discountCodeToApply = state.discountCode;
+                if (discountCodeToApply) {
+                  try {
+                    console.log('[checkout] Final attempt: Re-applying coupon to force backend to set order.price.leftToPay (per OpenAPI)...');
+                    const finalFixResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
+                    console.log('[checkout] Final fix response:', JSON.stringify(finalFixResponse, null, 2));
+                    
+                    // Wait for backend to process
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    // Re-fetch order to check if leftToPay was set
+                    const finalOrderCheck = await orderAPI.getOrder(state.orderId);
+                    const finalOrderLeftToPayDKK = normalizePrice(finalOrderCheck?.price?.leftToPay);
+                    
+                    if (finalOrderLeftToPayDKK !== null) {
+                      console.log('[checkout] ✅ Final fix successful! order.price.leftToPay now set (per OpenAPI):', finalOrderLeftToPayDKK, 'DKK');
+                      orderBeforePayment = finalOrderCheck;
+                      state.fullOrder = finalOrderCheck;
+                    } else {
+                      console.error('[checkout] ❌ Final fix failed - order.price.leftToPay still missing');
+                      console.error('[checkout] ❌ This is a backend bug - backend must set leftToPay when coupon is applied (per OpenAPI)');
+                      console.error('[checkout] ❌ Payment window will show incorrect price');
                     }
+                  } catch (finalFixError) {
+                    console.error('[checkout] ❌ Final fix attempt failed:', finalFixError);
+                    console.error('[checkout] ❌ Payment window will show incorrect price due to backend bug');
                   }
+                }
+              } else if (orderPriceAmountDKK !== null) {
+                // leftToPay is set - verify it reflects the discount
+                const priceDifference = Math.abs(orderPriceAmountDKK - orderLeftToPayDKK);
+                if (priceDifference > 0.01) {
+                  console.log('[checkout] ✅ order.price.leftToPay correctly reflects discount (per OpenAPI):', orderLeftToPayDKK, 'DKK');
+                  console.log('[checkout] ✅ Payment link API should use leftToPay:', orderLeftToPayDKK, 'DKK');
                 } else {
-                  console.log('[checkout] ✅ Order price.amount correctly reflects discount:', orderPriceAmountDKK, 'DKK');
+                  console.warn('[checkout] ⚠️ order.price.leftToPay equals price.amount - discount may not be applied');
                 }
               }
             }
             
             // CRITICAL: Log the exact price that will be sent to payment window
-            // Payment link API reads from order.price.amount, but if discount is applied,
-            // the backend should update amount to reflect the discounted price
-            const finalOrderPrice = orderBeforePayment?.price?.amount || 0;
-            const finalOrderPriceDKK = typeof finalOrderPrice === 'object' 
-              ? finalOrderPrice.amount / 100 
-              : finalOrderPrice / 100;
+            // Per OpenAPI documentation:
+            // - OrderOut.price - "The total price of the order" (original price)
+            // - OrderOut.leftToPay - "The total amount left to pay for the order" (after discounts)
+            // The payment link API should use leftToPay if available, otherwise price.amount
+            const normalizePrice = (price) => {
+              if (!price) return null;
+              const rawAmount = typeof price === 'object' ? price.amount : price;
+              if (!Number.isFinite(rawAmount)) return null;
+              return rawAmount / 100; // Convert from cents to DKK
+            };
             
-            // If discount is applied, also check leftToPay/total fields
-            const discountedOrderPrice = orderBeforePayment?.price?.leftToPay || orderBeforePayment?.price?.total;
-            const discountedOrderPriceDKK = discountedOrderPrice 
-              ? (typeof discountedOrderPrice === 'object' ? discountedOrderPrice.amount / 100 : discountedOrderPrice / 100)
-              : null;
+            const orderPriceAmount = orderBeforePayment?.price?.amount;
+            const orderPriceAmountDKK = normalizePrice(orderPriceAmount);
+            const orderLeftToPay = orderBeforePayment?.price?.leftToPay;
+            const orderLeftToPayDKK = normalizePrice(orderLeftToPay);
+            const orderCouponDiscount = orderBeforePayment?.couponDiscount || orderBeforePayment?.price?.couponDiscount;
             
-            console.log('[checkout] 🔍 FINAL PRICE THAT WILL BE SENT TO PAYMENT WINDOW:');
-            console.log('[checkout] 🔍 order.price.amount (primary):', finalOrderPrice, '(in cents) =', finalOrderPriceDKK, 'DKK');
-            if (discountedOrderPriceDKK !== null) {
-              console.log('[checkout] 🔍 order.price.leftToPay/total (discounted):', discountedOrderPriceDKK, 'DKK');
+            // Per OpenAPI: Payment link API should use leftToPay (amount after discounts)
+            const priceForPayment = orderLeftToPayDKK ?? orderPriceAmountDKK;
+            
+            console.log('[checkout] 🔍 FINAL PRICE THAT WILL BE SENT TO PAYMENT WINDOW (per OpenAPI):');
+            console.log('[checkout] 🔍 order.price.amount (original):', orderPriceAmountDKK, 'DKK');
+            console.log('[checkout] 🔍 order.price.leftToPay (after discounts):', orderLeftToPayDKK, 'DKK');
+            console.log('[checkout] 🔍 Payment link API should use leftToPay:', priceForPayment, 'DKK');
+            console.log('[checkout] 🔍 Has couponDiscount:', !!orderCouponDiscount);
+            
+            if (state.discountApplied && orderLeftToPayDKK === null) {
+              console.error('[checkout] ❌ CRITICAL: Discount is applied but order.price.leftToPay is missing!');
+              console.error('[checkout] ❌ Payment link API may use order.price.amount instead, showing wrong price');
+              console.error('[checkout] ❌ Backend must update order.price.leftToPay when coupon is applied');
+            } else if (state.discountApplied && orderLeftToPayDKK !== null && orderPriceAmountDKK !== null) {
+              const priceDiff = Math.abs(orderPriceAmountDKK - orderLeftToPayDKK);
+              if (priceDiff > 0.01) {
+                console.log('[checkout] ✅ Discount correctly reflected in leftToPay:', {
+                  original: orderPriceAmountDKK,
+                  discounted: orderLeftToPayDKK,
+                  difference: priceDiff
+                });
+              }
             }
-            console.log('[checkout] 🔍 Payment link API will use order.price.amount from backend');
             
             // Update payment overview with final order data
             updatePaymentOverview();
