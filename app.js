@@ -12533,11 +12533,60 @@ async function handleCheckout() {
                       hasCouponDiscount: !!orderCouponDiscount,
                     });
                     
-                    // Verify discount is reflected - check if couponDiscount exists OR order total matches expected
-                    if (orderCouponDiscount) {
-                      // Coupon discount exists in order
+                    // CRITICAL: Verify that order.price.amount reflects the discount
+                    // Payment link API reads from order.price.amount, so it must be updated
+                    const orderPriceAmount = updatedOrder?.price?.amount;
+                    const normalizePrice = (price) => {
+                      if (!price) return null;
+                      const rawAmount = typeof price === 'object' ? price.amount : price;
+                      if (!Number.isFinite(rawAmount)) return null;
+                      return rawAmount / 100; // Convert from cents to DKK
+                    };
+                    
+                    const orderPriceAmountDKK = normalizePrice(orderPriceAmount);
+                    const discountedPriceDKK = normalizePrice(updatedOrder?.price?.leftToPay || updatedOrder?.price?.total);
+                    
+                    // Check if amount field reflects the discount
+                    const amountReflectsDiscount = discountedPriceDKK !== null && orderPriceAmountDKK !== null
+                      ? Math.abs(discountedPriceDKK - orderPriceAmountDKK) < 0.01
+                      : false;
+                    
+                    // Verify discount is reflected - check if couponDiscount exists AND order.price.amount is updated
+                    if (orderCouponDiscount && amountReflectsDiscount) {
+                      // Coupon discount exists AND amount field is updated
                       orderUpdated = true;
-                      console.log('[checkout] ✅ Order has couponDiscount, proceeding to payment link generation');
+                      console.log('[checkout] ✅ Order has couponDiscount AND price.amount reflects discount, proceeding to payment link generation');
+                    } else if (orderCouponDiscount && !amountReflectsDiscount) {
+                      // Coupon discount exists but amount field is not updated
+                      console.warn('[checkout] ⚠️ Order has couponDiscount but price.amount does NOT reflect discount!');
+                      console.warn('[checkout] ⚠️ order.price.amount:', orderPriceAmountDKK, 'DKK');
+                      console.warn('[checkout] ⚠️ order.price.leftToPay/total:', discountedPriceDKK, 'DKK');
+                      console.warn('[checkout] ⚠️ Payment window will show incorrect price if backend uses order.price.amount');
+                      console.warn('[checkout] ⚠️ Attempting to re-apply coupon to force backend to update amount...');
+                      
+                      // Try re-applying the coupon to force backend to update amount
+                      try {
+                        const reapplyResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
+                        console.log('[checkout] Re-applied coupon, response:', JSON.stringify(reapplyResponse, null, 2));
+                        // Wait a bit for backend to process
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        // Don't mark as updated yet - will check again in next iteration
+                      } catch (reapplyError) {
+                        console.warn('[checkout] Failed to re-apply coupon:', reapplyError);
+                        // If we've tried multiple times, proceed anyway
+                        if (attempts >= maxAttempts - 1) {
+                          orderUpdated = true;
+                          console.warn('[checkout] ⚠️ Proceeding despite amount mismatch - backend bug may cause payment window to show wrong price');
+                        }
+                      }
+                      
+                      if (!orderUpdated) {
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before next attempt
+                      }
+                    } else if (orderCouponDiscount) {
+                      // Coupon discount exists but we can't verify amount (no discounted price field)
+                      orderUpdated = true;
+                      console.log('[checkout] ✅ Order has couponDiscount, proceeding to payment link generation (cannot verify amount)');
                     } else if (orderTotalDKK > 0 && Math.abs(orderTotalDKK - expectedTotal) < 1) {
                       // Order total matches expected discounted total
                       orderUpdated = true;
@@ -12764,11 +12813,45 @@ async function handleCheckout() {
                 // Check if amount field reflects the discount
                 const priceDifference = Math.abs(discountedPriceDKK - orderPriceAmountDKK);
                 if (priceDifference > 0.01) {
-                  console.warn('[checkout] ⚠️ DISCOUNT PRICE MISMATCH DETECTED!');
+                  console.warn('[checkout] ⚠️ DISCOUNT PRICE MISMATCH DETECTED BEFORE PAYMENT LINK!');
                   console.warn('[checkout] ⚠️ order.price.amount (used by payment API):', orderPriceAmountDKK, 'DKK');
                   console.warn('[checkout] ⚠️ order.price.leftToPay/total (discounted):', discountedPriceDKK, 'DKK');
-                  console.warn('[checkout] ⚠️ Payment window may show incorrect price if API uses order.price.amount');
-                  console.warn('[checkout] ⚠️ Expected discounted price:', discountedPriceDKK, 'DKK');
+                  console.warn('[checkout] ⚠️ Payment window will show incorrect price - backend has not updated order.price.amount');
+                  console.warn('[checkout] ⚠️ Attempting final fix by re-applying coupon...');
+                  
+                  // Last attempt to fix: re-apply the coupon and wait
+                  const discountCodeToApply = state.discountCode;
+                  if (discountCodeToApply) {
+                    try {
+                      console.log('[checkout] Final attempt: Re-applying coupon to force backend to update order.price.amount...');
+                      const finalFixResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
+                      console.log('[checkout] Final fix response:', JSON.stringify(finalFixResponse, null, 2));
+                      
+                      // Wait for backend to process
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                      
+                      // Re-fetch order to check if amount was updated
+                      const finalOrderCheck = await orderAPI.getOrder(state.orderId);
+                      const finalOrderPriceAmountDKK = normalizePrice(finalOrderCheck?.price?.amount);
+                      const finalDiscountedPriceDKK = normalizePrice(finalOrderCheck?.price?.leftToPay || finalOrderCheck?.price?.total);
+                      
+                      if (finalDiscountedPriceDKK !== null && finalOrderPriceAmountDKK !== null) {
+                        const finalPriceDifference = Math.abs(finalDiscountedPriceDKK - finalOrderPriceAmountDKK);
+                        if (finalPriceDifference < 0.01) {
+                          console.log('[checkout] ✅ Final fix successful! order.price.amount now reflects discount:', finalOrderPriceAmountDKK, 'DKK');
+                          orderBeforePayment = finalOrderCheck;
+                          state.fullOrder = finalOrderCheck;
+                        } else {
+                          console.error('[checkout] ❌ Final fix failed - order.price.amount still does not reflect discount');
+                          console.error('[checkout] ❌ This is a backend bug - payment window will show incorrect price');
+                          console.error('[checkout] ❌ Backend must update order.price.amount when coupon is applied');
+                        }
+                      }
+                    } catch (finalFixError) {
+                      console.error('[checkout] ❌ Final fix attempt failed:', finalFixError);
+                      console.error('[checkout] ❌ Payment window will show incorrect price due to backend bug');
+                    }
+                  }
                 } else {
                   console.log('[checkout] ✅ Order price.amount correctly reflects discount:', orderPriceAmountDKK, 'DKK');
                 }
@@ -12830,6 +12913,38 @@ async function handleCheckout() {
               updatePaymentOverview();
             } catch (fallbackError) {
               console.error('[checkout] Could not fetch order for payment overview:', fallbackError);
+            }
+          }
+          
+          // CRITICAL: Final refresh of order right before generating payment link
+          // This ensures we have the absolute latest order data with any discount applied
+          if (state.discountApplied && state.orderId) {
+            try {
+              console.log('[checkout] Final order refresh before payment link generation...');
+              const finalOrderRefresh = await orderAPI.getOrder(state.orderId);
+              state.fullOrder = finalOrderRefresh;
+              
+              // Log final price state
+              const finalAmount = finalOrderRefresh?.price?.amount;
+              const finalAmountDKK = typeof finalAmount === 'object' ? finalAmount.amount / 100 : finalAmount / 100;
+              const finalDiscounted = finalOrderRefresh?.price?.leftToPay || finalOrderRefresh?.price?.total;
+              const finalDiscountedDKK = finalDiscounted 
+                ? (typeof finalDiscounted === 'object' ? finalDiscounted.amount / 100 : finalDiscounted / 100)
+                : null;
+              
+              console.log('[checkout] 🔍 FINAL ORDER STATE BEFORE PAYMENT LINK:');
+              console.log('[checkout] 🔍 order.price.amount:', finalAmountDKK, 'DKK');
+              if (finalDiscountedDKK !== null) {
+                console.log('[checkout] 🔍 order.price.leftToPay/total:', finalDiscountedDKK, 'DKK');
+                if (Math.abs(finalAmountDKK - finalDiscountedDKK) > 0.01) {
+                  console.error('[checkout] ❌ CRITICAL: order.price.amount does NOT match discounted price!');
+                  console.error('[checkout] ❌ Payment window will show:', finalAmountDKK, 'DKK (WRONG)');
+                  console.error('[checkout] ❌ Should show:', finalDiscountedDKK, 'DKK (CORRECT)');
+                  console.error('[checkout] ❌ This is a backend bug - backend must update order.price.amount when coupon is applied');
+                }
+              }
+            } catch (refreshError) {
+              console.warn('[checkout] Could not refresh order before payment link:', refreshError);
             }
           }
           
