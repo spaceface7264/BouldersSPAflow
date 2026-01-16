@@ -8155,9 +8155,14 @@ function handlePlanSelection(selectedCard) {
   const productId = selectedCard.dataset.productId || planId; // Use API product ID if available
   const isMembership = category === 'campaign' || category === 'membership' || category === '15daypass';
   
+  const previousProductId = state.selectedProductId;
+  const previousPlanId = state.membershipPlanId;
   state.membershipPlanId = planId; // Keep for backward compatibility
   state.selectedProductId = productId; // Store API product ID
   state.selectedProductType = isMembership ? 'membership' : 'punch-card';
+  if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
+    resetOrderStateForProductChange('plan-selection');
+  }
   
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
   
@@ -8271,6 +8276,9 @@ function setupNewAccessStep() {
       // Clear selected plan when switching categories
       selectedPlan = null;
       state.membershipPlanId = null;
+      state.selectedProductId = null;
+      state.selectedProductType = null;
+      resetOrderStateForProductChange('category-switch');
       
       // Clear all punch card quantities when switching categories
       state.valueCardQuantities.clear();
@@ -8343,6 +8351,8 @@ function setupNewAccessStep() {
       
       // Step 5: Store the selected plan and product details
       const productId = card.dataset.productId || planId; // Use API product ID if available
+      const previousProductId = state.selectedProductId;
+      const previousPlanId = state.membershipPlanId;
       state.membershipPlanId = planId; // Keep for backward compatibility
       state.selectedProductId = productId; // Store API product ID
       // Determine product type based on category
@@ -8350,6 +8360,10 @@ function setupNewAccessStep() {
         state.selectedProductType = 'membership'; // All are subscription products
       } else {
         state.selectedProductType = 'punch-card';
+      }
+
+      if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
+        resetOrderStateForProductChange('plan-selection');
       }
 
       // GTM: Track select_item for API-driven plan cards
@@ -11154,6 +11168,43 @@ function clearStoredOrderData(reason = 'manual') {
     cartTotal: 0,
     membershipMonthly: 0,
   };
+
+  try {
+    sessionStorage.removeItem('boulders_checkout_order');
+  } catch (error) {
+    console.warn('[checkout] Could not clear order session data:', error);
+  }
+}
+
+function resetOrderStateForProductChange(reason = 'product-change') {
+  const hadOrderData = Boolean(state.orderId || state.fullOrder || state.paymentLink || state.paymentLinkGenerated);
+  const hadDiscount = Boolean(state.discountApplied || state.discountCode);
+  if (!hadOrderData && !hadDiscount) {
+    return;
+  }
+  console.log(`[checkout] Resetting order state (${reason})`);
+  state.order = null;
+  state.fullOrder = null;
+  state.orderId = null;
+  state.subscriptionAttachedOrderId = null;
+  state.paymentLink = null;
+  state.paymentLinkGenerated = false;
+  state.checkoutInProgress = false;
+  state.billingPeriod = '';
+  state.totals.discountAmount = 0;
+  state.totals.payNowAmount = 0;
+  state.discountApplied = false;
+  state.discountCode = null;
+
+  if (DOM.discountInput) {
+    DOM.discountInput.disabled = false;
+    DOM.discountInput.value = '';
+    DOM.discountInput.style.opacity = '';
+    DOM.discountInput.style.borderColor = '';
+    DOM.discountInput.style.backgroundColor = '';
+  }
+  clearDiscountMessage();
+  updateDiscountDisplay();
 
   try {
     sessionStorage.removeItem('boulders_checkout_order');
