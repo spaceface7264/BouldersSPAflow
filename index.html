@@ -640,6 +640,11 @@
                                     </div>
                                     <div class="discount-display" data-discount-display style="display: none;"></div>
                                 </div>
+
+                                <div class="campaign-checkout-warning" data-campaign-warning style="display: none;" data-i18n-key="cart.campaignWarning">
+                                    Starting checkout for a campaign can block re-signup if payment is not completed.
+                                </div>
+
                                 
                                 <!-- Consents -->
                                 <div class="consents-section">
@@ -1070,6 +1075,9 @@
             <p class="campaign-rejection-modal-body" id="campaignRestrictionBody" data-i18n-key="modal.campaignBlocked.body">
                 This offer isn’t available for your account because of a recent membership. You can still choose a regular membership instead.
             </p>
+            <a class="campaign-rejection-modal-support" href="mailto:medlem@boulders.dk" data-i18n-key="modal.campaignBlocked.support">
+                If you believe this is a mistake, contact support.
+            </a>
             <div class="campaign-rejection-modal-actions">
                 <button class="campaign-rejection-modal-primary" type="button" data-action="campaign-restriction-cta" data-i18n-key="modal.campaignBlocked.cta">Show regular memberships</button>
             </div>
@@ -1105,6 +1113,7 @@
             </div>
         </div>
     </div>
+
 
     <!-- Global Footer -->
     <footer class="global-footer">

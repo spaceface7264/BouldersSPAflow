@@ -4469,6 +4469,7 @@ const translations = {
     'modal.campaignBlocked.title': 'Kampagne ikke tilgængelig',
     'modal.campaignBlocked.body': 'Dette tilbud er ikke tilgængeligt for din konto på grund af et nyligt medlemskab. Du kan stadig vælge et almindeligt medlemskab.',
     'modal.campaignBlocked.cta': 'Vis medlemskaber',
+    'modal.campaignBlocked.support': 'Hvis du mener dette er en fejl, kontakt support.',
     'modal.homeGym.title': 'Skift hjemmehal',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
@@ -4479,6 +4480,7 @@ const translations = {
     'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
+    'cart.campaignWarning': 'Starter du checkout for en kampagne og ikke gennemfører betaling, kan du blive blokeret fra at tilmelde dig igen.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
@@ -4529,6 +4531,7 @@ const translations = {
     'modal.campaignBlocked.title': 'Campaign not available',
     'modal.campaignBlocked.body': 'This offer isn’t available for your account because of a recent membership. You can still choose a regular membership instead.',
     'modal.campaignBlocked.cta': 'Show regular memberships',
+    'modal.campaignBlocked.support': 'If you believe this is a mistake, contact support.',
     'modal.homeGym.title': 'Change home gym',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
@@ -4539,6 +4542,7 @@ const translations = {
     'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
+    'cart.campaignWarning': 'Starting checkout for a campaign can block re-signup if payment is not completed.',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
@@ -5287,6 +5291,7 @@ function cacheDom() {
   DOM.campaignRestrictionModal = document.getElementById('campaignRestrictionModal');
   DOM.campaignRestrictionClose = document.querySelector('[data-action="close-campaign-restriction"]');
   DOM.campaignRestrictionCta = document.querySelector('[data-action="campaign-restriction-cta"]');
+  DOM.campaignWarning = document.querySelector('[data-campaign-warning]');
 
   // Home gym modal
   DOM.homeGymModal = document.getElementById('homeGymModal');
@@ -5819,6 +5824,15 @@ function closeCampaignRestrictionModal() {
   state.campaignRestrictionProductId = null;
   state.checkoutInProgress = false;
   setCheckoutLoadingState(false);
+}
+
+function isCampaignSelected() {
+  return typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('campaign-');
+}
+
+function updateCampaignWarning() {
+  if (!DOM.campaignWarning) return;
+  DOM.campaignWarning.style.display = isCampaignSelected() ? 'block' : 'none';
 }
 
 function switchToRegularMemberships() {
@@ -10494,6 +10508,7 @@ function updateCartSummary() {
 
   renderCartItems();
   renderCartTotal();
+  updateCampaignWarning();
   
   // If we're on step 4 and have order data, ensure payment overview is updated
   if (state.currentStep === 4 && state.orderId && !state.fullOrder) {
@@ -11644,6 +11659,7 @@ async function ensureSubscriptionAttached(context = 'auto') {
   const isMembership = state.membershipPlanId && 
     (state.selectedProductType === 'membership' || 
      (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+
   
   if (!state.membershipPlanId || !isMembership) {
     if (state.membershipPlanId && !isMembership) {
@@ -11847,6 +11863,7 @@ async function handleCheckout() {
     }
     return;
   }
+
   
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
