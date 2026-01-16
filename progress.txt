@@ -63,6 +63,7 @@ Test user findings (translated):
 - 15-day pass proration: unclear amount due from day 15; needs decision/clarification (status: fixed)
 - Campaign rejection flow: define UX when user is blocked due to recent membership (status: pending)
 - Discount code UI: hard to see when applied and not reducing payable amount (status: fixed)
+- Pay now membership price: when date is between 16th and last day of month, pay now price is rest of current month + next month (fetch price from API when possible, fallback to calculation)
 
 Next steps:
 - Monitor production for payment registration and membership creation
