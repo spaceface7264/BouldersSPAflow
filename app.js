@@ -10397,6 +10397,9 @@ function renderCartItems() {
     if (priceEl) {
       if (item.type === 'membership') {
         priceEl.style.display = 'none';
+      } else if (item.type === 'value-card' && state.selectedProductType === 'punch-card') {
+        // Avoid duplicate price display for punch cards (total row covers it)
+        priceEl.style.display = 'none';
       } else {
         // Calculate discounted price for this item
         let displayPrice = item.amount;

@@ -5355,6 +5355,29 @@ body {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* Cart Total (Punch cards, add-ons) */
+.cart-total {
+    margin: 16px 0;
+}
+
+.cart-total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cart-total .total-label {
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+}
+
+.cart-total .total-amount {
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+}
+
 /* Discount Code */
 .discount-section {
     margin-bottom: 20px;
