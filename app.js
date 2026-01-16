@@ -10651,13 +10651,19 @@ function updatePaymentOverview() {
   if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
     // CRITICAL: Use API price from order - this is the authoritative source
     // This ensures "Pay now" matches exactly what backend sends to payment window
-    // Extract price amount (CurrencyOut can be object with .amount or direct number)
-    const orderPriceAmount = state.fullOrder.price.amount;
-    const orderPriceDKK = typeof orderPriceAmount === 'object' 
-      ? orderPriceAmount.amount / 100 
-      : orderPriceAmount / 100;
+    const normalizeOrderPrice = (value) => {
+      if (value === null || value === undefined) return null;
+      const rawAmount = typeof value === 'object' ? value.amount : value;
+      if (!Number.isFinite(rawAmount)) return null;
+      return rawAmount / 100;
+    };
+    const hasDiscountOnOrder = !!(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+    const preferPriceField = (state.discountApplied || hasDiscountOnOrder)
+      ? (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.total ?? state.fullOrder?.price?.amount)
+      : state.fullOrder?.price?.amount;
+    const orderPriceDKK = normalizeOrderPrice(preferPriceField) ?? normalizeOrderPrice(state.fullOrder.price.amount);
     
-    console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
+    console.log('[Payment Overview] ✅ Using API price from order:', orderPriceDKK, 'DKK');
     
     if (is15DayPass) {
       // For 15-day pass: always use full price (one-time payment)
@@ -10951,8 +10957,9 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
-  // If discount is applied but order price isn't available yet, reflect discount in pay-now
-  if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
+  // If discount is applied but order price doesn't include it, reflect discount in pay-now
+  const orderPriceHasDiscountedTotal = !!(state.fullOrder?.price?.leftToPay || state.fullOrder?.price?.total);
+  if (state.discountApplied && state.totals.discountAmount > 0 && (!hasOrderData || !orderPriceHasDiscountedTotal)) {
     const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
     if (adjustedPayNow !== payNowAmount) {
       console.log('[Payment Overview] Applying discount to pay-now fallback:', {
@@ -10998,10 +11005,16 @@ function updatePaymentOverview() {
     
     // Verify this matches payment window price (only if order data is available)
     if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
-      const orderPriceForPayment = state.fullOrder.price.amount;
-      const orderPriceDKK = typeof orderPriceForPayment === 'object' 
-        ? orderPriceForPayment.amount / 100 
-        : orderPriceForPayment / 100;
+      const hasDiscountOnOrder = !!(state.fullOrder?.couponDiscount || state.fullOrder?.price?.couponDiscount);
+      const preferredPriceForCompare = (state.discountApplied || hasDiscountOnOrder)
+        ? (state.fullOrder?.price?.leftToPay ?? state.fullOrder?.price?.total ?? state.fullOrder?.price?.amount)
+        : state.fullOrder?.price?.amount;
+      let orderPriceDKK = typeof preferredPriceForCompare === 'object' 
+        ? preferredPriceForCompare.amount / 100 
+        : preferredPriceForCompare / 100;
+      if (state.discountApplied && state.totals.discountAmount > 0 && !orderPriceHasDiscountedTotal) {
+        orderPriceDKK = Math.max(0, orderPriceDKK - state.totals.discountAmount);
+      }
       const pricesMatch = Math.abs(payNowAmount - orderPriceDKK) < 0.01; // Allow small rounding differences
       
       console.log('[Payment Overview] 🔍 "Betales nu" price:', payNowAmount, 'DKK');
