@@ -10238,75 +10238,16 @@ async function handleApplyDiscount() {
       DOM.discountInput.style.borderColor = '#10B981';
       DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
     } else {
-      // Check if coupon was actually applied to the order (even if discountAmount is 0)
-      // The API might return success but with 0 discount (e.g., for future use coupons)
-      const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
-      // CRITICAL: Only set discountApplied if couponDiscount is actually > 0
-      // If API returns couponDiscount: 0, the coupon was NOT applied (backend rejected it)
-      const couponDiscountAmount = typeof couponDiscount === 'object' 
-        ? (couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0)
-        : (couponDiscount || 0);
-      const actualDiscountAmount = couponDiscountAmount > 10000 ? couponDiscountAmount / 100 : couponDiscountAmount;
-      
-      if (actualDiscountAmount > 0) {
-        // Coupon was successfully applied with a discount > 0
-        state.discountCode = discountCode;
-        state.discountApplied = true;
-        state.totals.discountAmount = actualDiscountAmount;
-        
-        // CRITICAL: Fetch full order from API to ensure we have the latest price data
-        try {
-          console.log('[Discount] Fetching full order to get latest price data (0 discount case)...');
-          const updatedOrder = await orderAPI.getOrder(orderIdToUse);
-          state.fullOrder = updatedOrder;
-          console.log('[Discount] ✅ Full order fetched:', {
-            orderId: updatedOrder?.id,
-            price: updatedOrder?.price,
-            couponDiscount: updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount,
-          });
-        } catch (fetchError) {
-          console.warn('[Discount] Could not fetch full order, using response data:', fetchError);
-          // Fallback: Use response data if fetch fails
-          if (response && !state.fullOrder) {
-            state.fullOrder = response;
-          } else if (response && state.fullOrder) {
-            state.fullOrder.price = response.price || state.fullOrder.price;
-            state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
-          }
-        }
-        
-          updateCartSummary(); // updateCartSummary() already calls renderCartTotal()
-          updatePaymentOverview(); // Update payment overview with discounted prices
-          
-          const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
-          showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
-          
-          // Highlight the new price in cart total elements and payment overview
-          const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
-          cartTotalElements.forEach(el => {
-            el.classList.add('price-updated');
-            setTimeout(() => {
-              el.classList.remove('price-updated');
-            }, 2000);
-          });
-          
-          DOM.discountInput.disabled = true;
-          DOM.discountInput.style.opacity = '0.6';
-          DOM.discountInput.style.borderColor = '#10B981';
-          DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
-        } else {
-          // Coupon was returned by API but discount amount is 0 - coupon was NOT applied
-          console.error('[Discount] ❌ Coupon code was sent but backend returned discount: 0');
-          console.error('[Discount] ❌ This means the coupon is not configured for this product or was rejected');
-          console.error('[Discount] ❌ NOT setting discountApplied = true because no discount was actually applied');
-          state.discountCode = null;
-          state.discountApplied = false;
-          state.totals.discountAmount = 0;
-          throw new Error('Coupon code is not valid for this product or order');
-        }
-      } else {
-        throw new Error('Invalid coupon code or no discount applied');
-      }
+      // discountAmount is 0 - coupon was NOT applied (backend rejected it)
+      // CRITICAL: Do NOT set discountApplied = true when discount is 0
+      // This prevents showing discount when none was actually applied
+      console.error('[Discount] ❌ Coupon code was sent but backend returned discount: 0');
+      console.error('[Discount] ❌ This means the coupon is not configured for this product or was rejected');
+      console.error('[Discount] ❌ NOT setting discountApplied = true because no discount was actually applied');
+      state.discountCode = null;
+      state.discountApplied = false;
+      state.totals.discountAmount = 0;
+      throw new Error('Coupon code is not valid for this product or order');
     }
   } catch (error) {
     console.error('[Discount] Error applying coupon:', error);
