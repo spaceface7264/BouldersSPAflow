@@ -5741,13 +5741,17 @@ function closeCampaignRestrictionModal() {
 }
 
 function switchToRegularMemberships() {
-  const membershipCategory = document.querySelector('[data-category="membership"]');
-  if (!membershipCategory) return;
-  const header = membershipCategory.querySelector('.category-header');
-  if (header) {
-    header.click();
+  if (state.currentStep !== 2) {
+    state.currentStep = 2;
+    showStep(2);
   }
   setTimeout(() => {
+    const membershipCategory = document.querySelector('[data-category="membership"]');
+    if (!membershipCategory) return;
+    const header = membershipCategory.querySelector('.category-header');
+    if (header && !membershipCategory.classList.contains('expanded')) {
+      header.click();
+    }
     membershipCategory.scrollIntoView({ behavior: 'smooth', block: 'center' });
     membershipCategory.setAttribute('tabindex', '-1');
     membershipCategory.focus();
