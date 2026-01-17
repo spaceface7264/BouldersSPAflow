@@ -15,6 +15,7 @@ const ALLOWED_ORIGINS = [
 // Allowed API path patterns for security
 const ALLOWED_PATH_PATTERNS = [
   /^\/api\/reference\/.+/,
+  /^\/api\/products\/.+/,
   /^\/api\/ver3\/services\/.+/,
   /^\/services\/.+/,
   /^\/ver3\/.+/,
