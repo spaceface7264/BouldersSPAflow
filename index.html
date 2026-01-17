@@ -21,30 +21,21 @@
       (function() {
         if (typeof Sentry !== 'undefined') {
           try {
+            const isProduction = window.location.hostname === 'join.boulders.dk';
+            
             Sentry.init({
               dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
-              environment: window.location.hostname === 'join.boulders.dk' ? 'production' : 'development',
+              environment: isProduction ? 'production' : 'development',
               sendDefaultPii: true,
               sampleRate: 1.0,
               tracesSampleRate: 0.1,
-              debug: true, // Enable debug mode to see what's happening
+              debug: !isProduction, // Only enable debug in development
               beforeSend(event, hint) {
-                console.log('[Sentry] beforeSend called - Capturing error:', event.message || event.exception?.values?.[0]?.value);
-                console.log('[Sentry] Event details:', {
-                  message: event.message,
-                  exception: event.exception?.values?.[0]?.value,
-                  level: event.level,
-                  tags: event.tags
-                });
-                return event;
-              },
-              afterSend(event, sendResponse) {
-                console.log('[Sentry] afterSend called - Response:', sendResponse);
-                if (sendResponse && sendResponse.statusCode) {
-                  console.log('[Sentry] ✅ Event sent successfully, status:', sendResponse.statusCode);
-                } else {
-                  console.warn('[Sentry] ⚠️ Event send response unclear:', sendResponse);
+                // Only log in development
+                if (!isProduction) {
+                  console.log('[Sentry] Capturing:', event.message || event.exception?.values?.[0]?.value);
                 }
+                return event;
               },
             });
             
@@ -52,61 +43,30 @@
             const hub = Sentry.getCurrentHub();
             const client = hub.getClient();
             if (client) {
-              console.log('[Sentry] ✅ Initialized successfully');
-              console.log('[Sentry] DSN:', client.getDsn()?.toString());
-              console.log('[Sentry] Environment:', client.getOptions()?.environment);
-              console.log('[Sentry] Enabled:', client.getOptions()?.enabled);
-              
-              // Test manual capture immediately
-              console.log('[Sentry] Testing manual capture...');
-              Sentry.captureMessage('Sentry initialization test - ' + new Date().toISOString(), 'info');
-              console.log('[Sentry] Test message sent');
+              if (!isProduction) {
+                console.log('[Sentry] ✅ Initialized in', client.getOptions()?.environment, 'mode');
+              }
             } else {
-              console.error('[Sentry] ❌ Client not found after initialization');
+              console.error('[Sentry] ❌ Initialization failed');
             }
             
             // Make available globally
             window.Sentry = Sentry;
             
-            // Add test function for debugging
+            // Test function for debugging (available in all environments)
             window.testSentry = function() {
-              console.log('[Sentry Test] Starting test...');
-              const hub = Sentry.getCurrentHub();
-              const client = hub.getClient();
+              const testHub = Sentry.getCurrentHub();
+              const testClient = testHub.getClient();
               
-              if (!client) {
+              if (!testClient) {
                 console.error('[Sentry Test] ❌ Client not found');
                 return;
               }
               
-              console.log('[Sentry Test] Client found');
-              console.log('[Sentry Test] DSN:', client.getDsn()?.toString());
-              console.log('[Sentry Test] Options:', {
-                enabled: client.getOptions()?.enabled,
-                environment: client.getOptions()?.environment,
-                sampleRate: client.getOptions()?.sampleRate,
-              });
-              
-              // Test 1: Manual capture
-              console.log('[Sentry Test] Test 1: Manual captureException');
-              try {
-                Sentry.captureException(new Error('Test error from testSentry() - ' + new Date().toISOString()));
-                console.log('[Sentry Test] ✅ captureException called');
-              } catch (e) {
-                console.error('[Sentry Test] ❌ captureException failed:', e);
-              }
-              
-              // Test 2: Manual captureMessage
-              console.log('[Sentry Test] Test 2: Manual captureMessage');
-              try {
-                Sentry.captureMessage('Test message from testSentry() - ' + new Date().toISOString(), 'info');
-                console.log('[Sentry Test] ✅ captureMessage called');
-              } catch (e) {
-                console.error('[Sentry Test] ❌ captureMessage failed:', e);
-              }
-              
-              console.log('[Sentry Test] Check Network tab for requests to *.ingest.de.sentry.io');
-              console.log('[Sentry Test] Check Sentry dashboard in 5-10 seconds');
+              console.log('[Sentry Test] Sending test events...');
+              Sentry.captureException(new Error('Test error - ' + new Date().toISOString()));
+              Sentry.captureMessage('Test message - ' + new Date().toISOString(), 'info');
+              console.log('[Sentry Test] ✅ Test events sent - check dashboard in 5-10 seconds');
             };
           } catch (e) {
             console.error('[Sentry] ❌ Initialization error:', e);
