@@ -7,7 +7,8 @@
 const ALLOWED_ORIGINS = [
   'https://join.boulders.dk',
   'https://bouldersspaflow.pages.dev',
-  'http://localhost:5173', // Local development
+  'http://localhost:5173', // Local development (Vite default)
+  'http://localhost:5174', // Local development (alternative port)
   'http://localhost:4173', // Local preview
 ];
 
