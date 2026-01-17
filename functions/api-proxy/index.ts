@@ -13,17 +13,13 @@ const ALLOWED_ORIGINS = [
 ];
 
 // Allowed API path patterns for security
+// Using broader patterns to avoid breaking when backend adds new endpoints
+// Origin validation (CORS) is the primary security layer
+// Path validation is defense-in-depth to ensure only API paths are proxied
 const ALLOWED_PATH_PATTERNS = [
-  /^\/api\/reference\/.+/,
-  /^\/api\/products\/.+/,
-  /^\/api\/auth\/.+/,
-  /^\/api\/addresses\/.+/,
-  /^\/api\/orders/,
-  /^\/api\/payment\/.+/,
-  /^\/api\/ver3\/services\/.+/,
-  /^\/api\/ver3\/auth\/.+/,
-  /^\/services\/.+/,
-  /^\/ver3\/.+/,
+  /^\/api\/.+/,      // Allow any /api/* endpoint (goes to api-join.boulders.dk)
+  /^\/services\/.+/, // Allow /services/* (goes to brpsystems.com with /api/ver3 prefix)
+  /^\/ver3\/.+/,     // Allow /ver3/* (goes to brpsystems.com with /api prefix)
 ];
 
 // Helper function to validate origin
