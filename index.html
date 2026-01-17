@@ -14,12 +14,38 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
 
-    <!-- Sentry Error Monitoring - Loader Script -->
-    <!-- This loads Sentry early to capture all errors from page load -->
-    <script
-      src="https://js-de.sentry-cdn.com/1cc58b6b7d525b61ce37f528a8ddf2ed.min.js"
-      crossorigin="anonymous"
-    ></script>
+    <!-- Sentry Error Monitoring - SDK Import -->
+    <!-- Load Sentry SDK from CDN and initialize immediately -->
+    <script src="https://cdn.jsdelivr.net/npm/@sentry/browser@10.34.0/build/bundle.min.js" onload="initSentry()"></script>
+    <script>
+      // Initialize Sentry after SDK loads
+      function initSentry() {
+        if (window.Sentry && window.Sentry.init) {
+          window.Sentry.init({
+            dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
+            // Setting this option to true will send default PII data to Sentry.
+            sendDefaultPii: true,
+            environment: window.location.hostname === 'join.boulders.dk' ? 'production' : 'development',
+            sampleRate: 1.0, // 100% of errors
+            tracesSampleRate: 0.1, // 10% of performance transactions
+          });
+          console.log('[Sentry] Initialized successfully');
+        } else {
+          console.error('[Sentry] SDK not available');
+        }
+      }
+      
+      // Fallback: try to initialize if script already loaded
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          if (!window.Sentry || !window.Sentry.init) {
+            setTimeout(initSentry, 500);
+          }
+        });
+      } else {
+        setTimeout(initSentry, 100);
+      }
+    </script>
 
     <!-- Google Tag Manager - Loaded conditionally after consent -->
     <script>
