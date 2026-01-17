@@ -1,0 +1,56 @@
+# Security headers for Cloudflare Pages
+# Applied to all static assets (HTML, JS, CSS)
+# See: https://developers.cloudflare.com/pages/platform/headers/
+
+/*
+  # Prevent MIME type sniffing
+  X-Content-Type-Options: nosniff
+
+  # Prevent clickjacking
+  X-Frame-Options: DENY
+
+  # Control referrer information
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # Enable browser XSS protection (legacy support)
+  X-XSS-Protection: 1; mode=block
+
+  # Strict Transport Security (HSTS) - Force HTTPS
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+  # Content Security Policy (CSP)
+  # Note: Using 'unsafe-inline' for scripts due to inline GTM and legacy code
+  # TODO: Remove 'unsafe-inline' after migrating all inline scripts to external files
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://tagmanager.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://api-join.boulders.dk https://boulders.brpsystems.com https://www.google-analytics.com https://www.googletagmanager.com; frame-src 'self' https://www.googletagmanager.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;
+
+  # Permissions Policy (formerly Feature Policy)
+  # Restrict browser features to minimize attack surface
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(self), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+
+# Additional headers for API proxy function
+/api-proxy/*
+  # CORS handled in the function itself
+  # Security headers added in getSecurityHeaders()
+
+# Cache control for static assets
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.woff
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.ttf
+  Cache-Control: public, max-age=31536000, immutable
+
+# Don't cache HTML files
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate

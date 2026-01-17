@@ -3,18 +3,73 @@
 // Supports all HTTP methods (GET, POST, PUT, DELETE) for future implementation steps
 // Based on the legacy proxy implementation to maintain consistency
 
+// Allowed origins for CORS - production domains only
+const ALLOWED_ORIGINS = [
+  'https://join.boulders.dk',
+  'https://bouldersspaflow.pages.dev',
+  'http://localhost:5173', // Local development
+  'http://localhost:4173', // Local preview
+];
+
+// Allowed API path patterns for security
+const ALLOWED_PATH_PATTERNS = [
+  /^\/api\/reference\/.+/,
+  /^\/api\/ver3\/services\/.+/,
+  /^\/services\/.+/,
+  /^\/ver3\/.+/,
+];
+
+// Helper function to validate origin
+function validateOrigin(origin: string | null): string {
+  if (!origin) {
+    return ALLOWED_ORIGINS[0]; // Default to production domain
+  }
+
+  // Check if origin is in allowed list
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    return origin;
+  }
+
+  // Check if it's a preview deployment (*.pages.dev)
+  if (origin.endsWith('.pages.dev')) {
+    return origin;
+  }
+
+  // Default to first allowed origin if not matched
+  return ALLOWED_ORIGINS[0];
+}
+
+// Helper function to validate API path
+function isValidApiPath(path: string): boolean {
+  return ALLOWED_PATH_PATTERNS.some(pattern => pattern.test(path));
+}
+
+// Security headers to add to all responses
+function getSecurityHeaders(origin: string): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept-Language',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  };
+}
+
 export async function onRequest(context: any) {
   const request = context.request;
   const url = new URL(request.url);
+
+  // Validate origin
+  const requestOrigin = request.headers.get('Origin');
+  const allowedOrigin = validateOrigin(requestOrigin);
   
   // Handle CORS preflight requests
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
       headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept-Language',
+        ...getSecurityHeaders(allowedOrigin),
         'Access-Control-Max-Age': '86400',
       },
     });
@@ -23,7 +78,7 @@ export async function onRequest(context: any) {
   // Extract the API path from the query string
   // The function will be called as: /api-proxy?path=/api/reference/business-units
   const apiPath = url.searchParams.get('path');
-  
+
   if (!apiPath) {
     return new Response(
       JSON.stringify({ error: 'API path is required' }),
@@ -31,7 +86,21 @@ export async function onRequest(context: any) {
         status: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...getSecurityHeaders(allowedOrigin),
+        },
+      }
+    );
+  }
+
+  // Validate API path for security
+  if (!isValidApiPath(apiPath)) {
+    return new Response(
+      JSON.stringify({ error: 'Invalid API path' }),
+      {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getSecurityHeaders(allowedOrigin),
         },
       }
     );
@@ -109,24 +178,22 @@ export async function onRequest(context: any) {
         status: response.status,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept-Language',
+          ...getSecurityHeaders(allowedOrigin),
         },
       }
     );
   } catch (error: any) {
     console.error('API Proxy Error:', error);
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: 'Internal server error',
-        message: error.message 
+        message: error.message
       }),
       {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...getSecurityHeaders(allowedOrigin),
         },
       }
     );
