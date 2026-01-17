@@ -30,6 +30,28 @@
               sampleRate: 1.0,
               tracesSampleRate: 0.1,
               debug: !isProduction, // Only enable debug in development
+              release: 'join-boulders-dk@' + (new Date().toISOString().split('T')[0]), // Release tracking
+              // Filter out common non-critical errors
+              ignoreErrors: [
+                // Browser extensions
+                'top.GLOBALS',
+                'chrome-extension://',
+                'moz-extension://',
+                'safari-extension://',
+                // Network errors that are expected
+                'NetworkError',
+                'Failed to fetch',
+                'Network request failed',
+                // User cancellations
+                'AbortError',
+                'User cancelled',
+                // Common browser quirks
+                'ResizeObserver loop limit exceeded',
+                'Non-Error promise rejection captured',
+                // Script errors from extensions
+                /^Script error\.?$/,
+                /^Javascript error: Script error\.?$/,
+              ],
               beforeSend(event, hint) {
                 // Only log in development
                 if (!isProduction) {

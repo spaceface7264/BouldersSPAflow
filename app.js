@@ -7570,6 +7570,11 @@ function handleLogout() {
     window.clearTokens();
   }
   
+  // Clear Sentry user context on logout
+  if (window.Sentry && window.Sentry.setUser) {
+    window.Sentry.setUser(null);
+  }
+  
   // Refresh UI to show logged out state
   refreshLoginUI();
   
