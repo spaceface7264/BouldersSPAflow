@@ -11152,7 +11152,7 @@ function updateDiscountDisplay() {
           <span class="discount-label" style="font-weight: bold;">Total:</span>
           <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
         </div>
-      `;
+      `);
     }
     discountDisplay.style.display = 'block';
   } else if (discountDisplay) {
@@ -14059,8 +14059,8 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
             </div>
           </div>
         </div>
-      `;
-      
+      `);
+
       // Add event listeners for action buttons
       setTimeout(() => {
         const retryBtn = document.getElementById('retry-payment-btn');
