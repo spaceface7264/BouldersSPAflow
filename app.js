@@ -1,21 +1,16 @@
-// Initialize Sentry FIRST - before any other imports
-// This ensures errors are captured from the very start
-import { initSentry, captureException, setUser } from './sentry.config.js';
-
-// Initialize Sentry with DSN (hardcoded for now, can use env var if needed)
-initSentry({
-  dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
-  environment: window.location.hostname === 'join.boulders.dk' ? 'production' : 'development',
-  sendDefaultPii: true,
-  sampleRate: 1.0, // 100% of errors
-  tracesSampleRate: 0.1, // 10% of performance transactions
-  enabled: true, // Enable in all environments for testing
-});
-
-// Make Sentry available globally for debugging
-if (typeof window !== 'undefined' && window.Sentry) {
-  console.log('[Sentry] ✅ Initialized and ready');
-}
+// Sentry is initialized in index.html via CDN script tag
+// Use window.Sentry for error tracking
+const Sentry = window.Sentry || {};
+const captureException = (error, context) => {
+  if (Sentry.captureException) {
+    Sentry.captureException(error, context);
+  }
+};
+const setUser = (user) => {
+  if (Sentry.setUser) {
+    Sentry.setUser(user);
+  }
+};
 
 import {
   formatCurrencyHalfKrone,

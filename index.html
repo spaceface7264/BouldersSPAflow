@@ -14,9 +14,31 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
 
-    <!-- Sentry Error Monitoring - Initialized via SDK in app.js -->
-    <!-- Sentry SDK is installed via npm and initialized early in app.js -->
-    <!-- This ensures errors are captured from the very start -->
+    <!-- Sentry Error Monitoring - Load from CDN and initialize immediately -->
+    <script src="https://browser.sentry-cdn.com/7.91.0/bundle.min.js" crossorigin="anonymous"></script>
+    <script>
+      // Initialize Sentry immediately - runs synchronously before any modules
+      (function() {
+        if (typeof Sentry !== 'undefined') {
+          try {
+            Sentry.init({
+              dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
+              environment: window.location.hostname === 'join.boulders.dk' ? 'production' : 'development',
+              sendDefaultPii: true,
+              sampleRate: 1.0,
+              tracesSampleRate: 0.1,
+            });
+            console.log('[Sentry] ✅ Initialized successfully');
+            // Make available globally
+            window.Sentry = Sentry;
+          } catch (e) {
+            console.error('[Sentry] ❌ Initialization error:', e);
+          }
+        } else {
+          console.error('[Sentry] ❌ Sentry SDK not loaded');
+        }
+      })();
+    </script>
 
     <!-- Google Tag Manager - Loaded conditionally after consent -->
     <script>
