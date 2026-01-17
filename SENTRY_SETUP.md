@@ -4,11 +4,19 @@ This document describes how Sentry error monitoring is configured for production
 
 ## Overview
 
-Sentry is configured to capture:
-- Uncaught JavaScript errors
+Sentry is configured using the **Loader Script** approach to capture:
+- Uncaught JavaScript errors (from page load onwards)
 - Unhandled promise rejections
 - Critical payment and authentication errors
-- Performance metrics (10% sample rate)
+- Performance metrics (configured in Sentry project settings)
+
+## Implementation Approach
+
+We use Sentry's **Loader Script** (CDN-hosted) which:
+- Loads immediately when HTML parses (before JavaScript)
+- Captures errors that happen before app.js loads
+- Auto-configured via Sentry project settings
+- Reduces bundle size (no Sentry SDK in bundle)
 
 ## Setup Instructions
 
@@ -17,170 +25,168 @@ Sentry is configured to capture:
 1. Go to [sentry.io](https://sentry.io) and create an account
 2. Create a new project:
    - Platform: **JavaScript - Browser**
+   - Framework: **Nope, Vanilla**
    - Project name: `join-boulders-dk` (or your preferred name)
-3. Copy your **DSN** from the project settings
+3. You'll see setup instructions with a **Loader Script**
 
-### 2. Configure Environment Variables
+### 2. Copy Loader Script to HTML
 
-#### For Cloudflare Pages (Production)
+The loader script is already added to `index.html` (line 19-22):
 
-Go to your Cloudflare Pages project settings:
-
-**Settings > Environment Variables**
-
-Add the following variables:
-
-**Production Environment:**
-```
-VITE_SENTRY_DSN=https://your-sentry-dsn@sentry.io/your-project-id
-VITE_SENTRY_ENVIRONMENT=production
+```html
+<script
+  src="https://js-de.sentry-cdn.com/1cc58b6b7d525b61ce37f528a8ddf2ed.min.js"
+  crossorigin="anonymous"
+></script>
 ```
 
-**Preview Environment (Optional):**
-```
-VITE_SENTRY_DSN=https://your-sentry-dsn@sentry.io/your-project-id
-VITE_SENTRY_ENVIRONMENT=preview
-```
+**Note:** This URL is specific to your Sentry project. If you create a new project, update this URL with the new loader script from Sentry's setup instructions.
 
-#### For Source Map Upload (Optional but Recommended)
+### 3. Configure Project Settings in Sentry Dashboard
 
-To enable better error debugging with source maps, add:
+Since we're using the loader script (not environment variables), configuration is done in the Sentry web UI:
 
-```
-SENTRY_AUTH_TOKEN=your-sentry-auth-token
-SENTRY_ORG=your-sentry-org-name
-SENTRY_PROJECT=join-boulders-dk
-VITE_SENTRY_RELEASE=1.0.0
-```
+1. Go to **Settings > Projects > [your-project] > Client Keys (DSN)**
+2. The loader script URL contains your project's DSN
+3. Configure settings in **Settings > Projects > [your-project] > Settings**:
+   - **Environment**: Set based on domain (production for join.boulders.dk)
+   - **Release Tracking**: Optional
+   - **Sample Rates**: Configure error and performance sampling
 
-**To get your Sentry auth token:**
-1. Go to Sentry.io → Settings → Account → Auth Tokens
-2. Click "Create New Token"
-3. Name: "Cloudflare Pages Deploy"
-4. Scopes: `project:read`, `project:releases`, `org:read`
-5. Copy the token
+### 4. Verify Installation
 
-#### For Local Development
+After deploying with the loader script:
 
-Create a `.env` file in the project root:
+1. Open your deployed site
+2. Open browser console
+3. Run: `throw new Error('Test Sentry error')`
+4. Check Sentry dashboard - error should appear within seconds
 
-```bash
-# Sentry DSN (required to enable Sentry)
-VITE_SENTRY_DSN=https://your-sentry-dsn@sentry.io/your-project-id
+## Configuration in Sentry Dashboard
 
-# Environment (defaults to "development" if not production)
-VITE_SENTRY_ENVIRONMENT=development
+All Sentry configuration is done through the web UI:
 
-# Source map upload (only needed for production builds)
-# SENTRY_AUTH_TOKEN=your-auth-token
-# SENTRY_ORG=your-org
-# SENTRY_PROJECT=join-boulders-dk
-```
+### Error Monitoring Settings
 
-**Note:** Sentry is disabled by default in development. To enable it, set:
-```bash
-VITE_SENTRY_ENVIRONMENT=production
-```
+**Settings > Projects > [your-project] > Error Monitoring**
+
+- **Error Sample Rate**: 100% (capture all errors) - recommended
+- **Filters**: Configure to ignore browser extensions, network errors, etc.
+- **Data Scrubbing**: Enable to remove sensitive data from errors
+
+### Performance Monitoring
+
+**Settings > Projects > [your-project] > Performance**
+
+- **Traces Sample Rate**: 10% recommended (or adjust based on traffic)
+- **Enable Performance Monitoring**: Toggle on/off
+
+### Alerts
+
+**Alerts > Create Alert Rule**
+
+Recommended alerts:
+1. **High Error Rate**: > 10 errors in 5 minutes
+2. **New Error**: First time an error occurs
+3. **Critical Errors**: Errors tagged with `flow:checkout` or `flow:authentication`
 
 ## Features Implemented
 
-### 1. Global Error Handlers
+### 1. Sentry Loader Script
 
-**File:** `app.js:39-61`
+**File:** `index.html:19-22`
 
-Automatically captures:
-- Uncaught JavaScript errors
-- Unhandled promise rejections
+The loader script automatically:
+- Initializes Sentry on page load
+- Captures uncaught JavaScript errors
+- Captures unhandled promise rejections
+- Sends errors to Sentry dashboard
+- Applies project configuration from Sentry UI
 
-### 2. Critical Error Tracking
+### 2. Manual Error Tracking
 
-**Payment Errors** (`app.js:12459-12469`)
+Our app.js captures specific errors that need additional context:
+
+**Payment Errors** (`app.js:12464-12474`)
 - Captures payment link generation failures
 - Tags: `flow:checkout`, `error_type:payment_link_generation`
-- Includes order ID and subscription items
+- Includes order ID and subscription items for debugging
 
-**Login Errors** (`app.js:650-659`)
+**Login Errors** (`app.js:643-656`)
 - Captures server errors during login (excludes user input errors)
 - Tags: `flow:authentication`, `error_type:login_failed`
-- Excludes: 400, 401 (user errors), 429 (rate limits)
+- Excludes: 400 (bad request), 401 (unauthorized), 429 (rate limits)
 
-### 3. User Context Tracking
+### 3. User Context
 
-**File:** `app.js:635-639`
+**File:** `app.js:622-628`
 
-When users log in successfully, Sentry tracks:
-- User ID
+When users log in successfully, we set user context in Sentry:
+- User ID (from token)
 - Email address
 
-This helps correlate errors to specific users.
+This helps identify which users are experiencing errors.
 
-### 4. Source Maps
+### 4. Configuration
 
-**File:** `vite.config.ts:86-106, 176`
-
-- Source maps are generated during production builds
-- Uploaded to Sentry automatically if `SENTRY_AUTH_TOKEN` is set
-- Deleted after upload to reduce bundle size
-- Enables viewing original source code in error reports
-
-### 5. Data Privacy
-
-**File:** `sentry.config.js:85-100`
-
-Automatically filters sensitive data:
-- Authorization headers
-- Cookie headers
-- Sensitive breadcrumb data
-
-### 6. Error Filtering
-
-**File:** `sentry.config.js:68-83`
-
-Ignores non-critical errors:
-- Browser extension errors
-- Network errors (expected)
-- User cancellations
+All Sentry configuration is managed through the Sentry web UI:
+- **Error filtering**: Settings > Processing > Inbound Filters
+- **Data scrubbing**: Settings > Security & Privacy
+- **Sample rates**: Settings > Performance or Error Monitoring
+- **Alerts**: Alerts > Create Alert Rule
+- **Releases**: Settings > Releases (if using source maps)
 
 ## Testing Sentry Integration
 
-### Test 1: Manual Error Capture
+### Test 1: Verify Loader Script Loaded
 
-Open browser console on your site and run:
+1. Open your deployed site
+2. Open browser console
+3. Check that `window.Sentry` exists:
+   ```javascript
+   console.log(window.Sentry); // Should show Sentry SDK object
+   ```
+
+### Test 2: Trigger Test Errors
+
+Open browser console and run:
 
 ```javascript
 // Test uncaught error
-throw new Error('Test Sentry error');
+throw new Error('Test Sentry error from console');
 
 // Test promise rejection
 Promise.reject(new Error('Test promise rejection'));
 
 // Test manual capture
-window.Sentry.captureException(new Error('Manual test'));
+Sentry.captureException(new Error('Manual test error'));
 ```
 
-### Test 2: Check Sentry Dashboard
+### Test 3: Check Sentry Dashboard
 
 1. Go to Sentry.io → Issues
 2. You should see the test errors appear within seconds
 3. Click on an error to see:
-   - Stack trace
+   - Stack trace with line numbers
    - User context (if logged in)
    - Breadcrumbs (user actions before error)
    - Device/browser info
+   - Environment (should show your configured environment)
 
-### Test 3: Trigger Real Errors
+### Test 4: Test Real Application Errors
 
-Try these scenarios to test automatic error capture:
+1. **Payment Flow:**
+   - Complete a checkout to trigger any payment errors
+   - Check Sentry for errors tagged with `flow:checkout`
 
-1. **Payment Error Test:**
-   - Complete a checkout flow
-   - Check Sentry for any payment errors
+2. **Login Flow:**
+   - Try logging in with wrong credentials (should NOT appear - 401 excluded)
+   - Cause a server error if possible (should appear with `flow:authentication` tag)
 
-2. **Login Error Test:**
-   - Try logging in with invalid credentials
-   - Should NOT appear in Sentry (400/401 excluded)
-   - Try causing a server error (if possible)
-   - Should appear in Sentry
+3. **User Context:**
+   - Log in successfully
+   - Trigger an error
+   - Error in Sentry should show your user email
 
 ## Monitoring and Alerts
 
@@ -264,52 +270,80 @@ ignoreErrors: [
 
 ## Files Modified
 
-- `sentry.config.js` - Sentry configuration and initialization
-- `app.js:34-61` - Sentry initialization and global handlers
-- `app.js:635-639` - User context tracking
-- `app.js:650-659` - Login error tracking
-- `app.js:12459-12469` - Payment error tracking
-- `vite.config.ts` - Source map generation and upload
-- `package.json` - Sentry dependencies
+- `index.html:19-22` - Sentry loader script (CDN-hosted)
+- `app.js:38-48` - Sentry helper functions (captureException, setUser)
+- `app.js:622-628` - User context tracking on login
+- `app.js:643-656` - Login error tracking
+- `app.js:12464-12474` - Payment error tracking
+- `vite.config.ts:176` - Source map generation (optional)
+- `package.json` - Sentry Vite plugin for source maps (optional)
 
-## Manual Functions
+## Manual Error Capture
 
-The following Sentry functions are available globally via `window.Sentry`:
+The Sentry SDK is loaded globally and available via `window.Sentry`:
 
 ```javascript
-// Capture an exception
-window.Sentry.captureException(error, {
-  tags: { custom: 'tag' },
-  extra: { data: 'value' },
+// Capture an error with context
+Sentry.captureException(new Error('Something went wrong'), {
+  tags: {
+    flow: 'checkout',
+    error_type: 'payment_failed'
+  },
+  extra: {
+    orderId: '12345',
+    amount: 299
+  },
+  level: 'error' // or 'warning', 'info'
 });
 
-// Capture a message
-window.Sentry.captureMessage('Something happened', 'info', {
-  tags: { custom: 'tag' },
+// Capture a message (not an error)
+Sentry.captureMessage('User completed checkout', {
+  level: 'info',
+  tags: { flow: 'checkout' }
 });
 
-// Set user context
-window.Sentry.setUser({
-  id: '12345',
-  email: 'user@example.com',
+// Set user context (done automatically on login in app.js)
+Sentry.setUser({
+  id: 'user-123',
+  email: 'user@example.com'
 });
+
+// Clear user context (on logout)
+Sentry.setUser(null);
 
 // Add breadcrumb for debugging
-window.Sentry.addBreadcrumb('User clicked button', {
-  buttonId: 'checkout',
-}, 'user-action');
+Sentry.addBreadcrumb({
+  message: 'User clicked checkout button',
+  category: 'user-action',
+  data: {
+    buttonId: 'checkout',
+    cartTotal: 299
+  },
+  level: 'info'
+});
 ```
+
+**Note:** Our app.js already handles payment errors, login errors, and user context automatically. Manual capture is only needed for additional custom tracking.
 
 ## Next Steps
 
-1. Set up Sentry account and get DSN
-2. Configure environment variables in Cloudflare Pages
-3. Deploy and test error capture
-4. Configure alerts for critical errors
-5. Monitor Sentry dashboard regularly
-6. Adjust sample rates based on quota usage
+1. ✅ Sentry loader script is already added to `index.html`
+2. Deploy to production - Sentry will start capturing errors immediately
+3. Test error capture using browser console
+4. Configure alerts for critical errors in Sentry dashboard
+5. Set up filters for noise (browser extensions, etc.)
+6. Monitor Sentry dashboard regularly
+7. Adjust sample rates in Sentry settings based on quota usage
+
+## Important Notes
+
+- **Loader Script URL**: The current loader script URL in `index.html` is specific to the `join-boulders` Sentry project. If you create a new Sentry project, update the URL.
+- **No Environment Variables Needed**: Configuration is done through Sentry web UI, not environment variables
+- **Source Maps**: Optional - requires `SENTRY_AUTH_TOKEN` environment variable in build pipeline
+- **Testing**: Always test in browser console after deployment to verify Sentry is capturing errors
 
 ## Support
 
-- Sentry Documentation: https://docs.sentry.io/platforms/javascript/
-- Cloudflare Pages Env Vars: https://developers.cloudflare.com/pages/configuration/build-configuration/#environment-variables
+- Sentry Loader Script Docs: https://docs.sentry.io/platforms/javascript/install/loader/
+- Sentry Browser SDK: https://docs.sentry.io/platforms/javascript/
+- Sentry Configuration: https://docs.sentry.io/platforms/javascript/configuration/
