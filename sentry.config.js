@@ -43,10 +43,10 @@ export function initSentry(options = {}) {
     || import.meta.env.VITE_SENTRY_ENVIRONMENT
     || (window.location.hostname === 'join.boulders.dk' ? 'production' : 'development');
 
-  // Only enable in production by default
+  // Enable based on options, or default to production only
   const enabled = options.enabled !== undefined
     ? options.enabled
-    : environment === 'production';
+    : (environment === 'production');
 
   Sentry.init({
     dsn,
@@ -178,12 +178,12 @@ export function addBreadcrumb(message, data = {}, category = 'custom') {
   });
 }
 
-// Make Sentry available globally for debugging
+// Make Sentry available globally for debugging and compatibility
 if (typeof window !== 'undefined') {
-  window.Sentry = {
-    captureException,
-    captureMessage,
-    setUser,
-    addBreadcrumb,
-  };
+  window.Sentry = Sentry;
+  // Also expose helper functions for convenience
+  window.Sentry.captureException = captureException;
+  window.Sentry.captureMessage = captureMessage;
+  window.Sentry.setUser = setUser;
+  window.Sentry.addBreadcrumb = addBreadcrumb;
 }
