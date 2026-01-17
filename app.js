@@ -7472,44 +7472,60 @@ function showLogoutConfirmation() {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   `;
   
-  confirmationDialog.innerHTML = sanitizeHTML(`
-    <h3 style="margin: 0 0 16px 0; color: #FFFFFF; font-size: 18px; font-weight: 600;">Log out?</h3>
-    <p style="margin: 0 0 24px 0; color: rgba(255, 255, 255, 0.7); line-height: 1.5; font-size: 14px;">
-      Are you sure you want to log out? You'll need to log in again to continue.
-    </p>
-    <div style="display: flex; gap: 12px; justify-content: center;">
-      <button class="logout-confirmation-btn logout-confirmation-cancel" style="
-        padding: 10px 20px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
-        background: transparent;
-        color: rgba(255, 255, 255, 0.9);
-        cursor: pointer;
-        font-weight: 500;
-        font-size: 14px;
-        transition: all 0.2s ease;
-      ">Cancel</button>
-      <button class="logout-confirmation-btn logout-confirmation-confirm" style="
-        padding: 10px 20px;
-        border: none;
-        border-radius: 8px;
-        background: rgba(239, 68, 68, 0.2);
-        border: 1px solid rgba(239, 68, 68, 0.4);
-        color: #F87171;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 14px;
-        transition: all 0.2s ease;
-      ">Log out</button>
-    </div>
-  `);
+  // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
+  const title = document.createElement('h3');
+  title.textContent = 'Log out?';
+  title.style.cssText = 'margin: 0 0 16px 0; color: #FFFFFF; font-size: 18px; font-weight: 600;';
+  
+  const message = document.createElement('p');
+  message.textContent = "Are you sure you want to log out? You'll need to log in again to continue.";
+  message.style.cssText = 'margin: 0 0 24px 0; color: rgba(255, 255, 255, 0.7); line-height: 1.5; font-size: 14px;';
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'logout-confirmation-btn logout-confirmation-cancel';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = `
+    padding: 10px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  `;
+  
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'logout-confirmation-btn logout-confirmation-confirm';
+  confirmBtn.textContent = 'Log out';
+  confirmBtn.style.cssText = `
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #F87171;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  `;
+  
+  buttonContainer.appendChild(cancelBtn);
+  buttonContainer.appendChild(confirmBtn);
+  
+  confirmationDialog.appendChild(title);
+  confirmationDialog.appendChild(message);
+  confirmationDialog.appendChild(buttonContainer);
   
   confirmationOverlay.appendChild(confirmationDialog);
   document.body.appendChild(confirmationOverlay);
   
   // Add hover effects
-  const cancelBtn = confirmationOverlay.querySelector('.logout-confirmation-cancel');
-  const confirmBtn = confirmationOverlay.querySelector('.logout-confirmation-confirm');
   
   if (cancelBtn) {
     cancelBtn.addEventListener('mouseenter', () => {
