@@ -27,6 +27,11 @@
               sendDefaultPii: true,
               sampleRate: 1.0,
               tracesSampleRate: 0.1,
+              debug: true, // Enable debug mode to see what's happening
+              beforeSend(event, hint) {
+                console.log('[Sentry] Capturing error:', event.message || event.exception?.values?.[0]?.value);
+                return event;
+              },
             });
             console.log('[Sentry] ✅ Initialized successfully');
             // Make available globally
