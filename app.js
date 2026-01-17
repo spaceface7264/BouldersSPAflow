@@ -31,6 +31,34 @@ import {
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
+import { initSentry, captureException, setUser, addBreadcrumb } from './sentry.config.js';
+
+// Initialize Sentry for error monitoring
+initSentry();
+
+// Global error handlers for uncaught errors
+window.addEventListener('error', (event) => {
+  console.error('Uncaught error:', event.error);
+  captureException(event.error, {
+    tags: { type: 'uncaught_error' },
+    extra: {
+      message: event.message,
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+    },
+  });
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+  captureException(event.reason, {
+    tags: { type: 'unhandled_rejection' },
+    extra: {
+      promise: event.promise,
+    },
+  });
+});
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -603,6 +631,12 @@ class AuthAPI {
             };
             window.saveTokens(accessToken, refreshToken, expiresAt, metadata);
             console.log('[Step 6] ✅ Tokens saved successfully');
+
+            // Set user context in Sentry for error tracking
+            setUser({
+              id: tokenPayload.sub || tokenPayload.userId,
+              email: tokenPayload.email || email,
+            });
           }
         } else {
           console.warn('[Step 6] saveTokens function not available - tokens not saved');
@@ -618,6 +652,18 @@ class AuthAPI {
       return data;
     } catch (error) {
       console.error('[Step 6] Login error:', error);
+
+      // Report login errors to Sentry (excluding rate limits and user input errors)
+      if (error.status !== 429 && error.status !== 400 && error.status !== 401) {
+        captureException(error, {
+          tags: {
+            flow: 'authentication',
+            error_type: 'login_failed',
+            status: error.status,
+          },
+        });
+      }
+
       throw error;
     }
   }
@@ -12427,7 +12473,19 @@ async function handleCheckout() {
           }
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
-          
+
+          // Report critical payment errors to Sentry
+          captureException(error, {
+            tags: {
+              flow: 'checkout',
+              error_type: 'payment_link_generation',
+            },
+            extra: {
+              orderId: state.fullOrder?.id,
+              subscriptionItems: state.fullOrder?.subscriptionItems,
+            },
+          });
+
           // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
           const isProductNotAllowed = error.isProductNotAllowed || 
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));

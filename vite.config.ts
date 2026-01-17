@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { sentryVitePlugin } from '@sentry/vite-plugin'
 import fs from 'fs'
 import path from 'path'
 
@@ -76,74 +77,105 @@ const resolveBasePath = () => {
   return '/';
 };
 
-export default defineConfig(({ command }) => ({
-  plugins: [react(), copyFunctionsPlugin()],
-  base: resolveBasePath(),
-  server: {
-    host: true,
-    port: 5173,
-    strictPort: false,
-    // Disable HMR overlay for cleaner error handling (can be re-enabled if needed)
-    hmr: {
-      overlay: true,
-    },
-    // Only use HTTPS in dev mode when certificate files are present
-    ...(key && cert && command === 'serve' ? {
-      https: {
-        // Self-signed certificate for local development
-        // Required for geolocation API to work on mobile devices
-        key,
-        cert,
-      },
-    } : {}),
-    // Proxy API requests to avoid CORS issues in development
-    proxy: {
-      // Handle /api/ver3/ endpoints - these go to boulders.brpsystems.com/apiserver
-      // Vite proxy by default strips the matched prefix (/api/ver3), so we need to rewrite
-      // to keep the full path including /api/ver3
-      '/api/ver3': {
-        target: 'https://boulders.brpsystems.com/apiserver',
-        changeOrigin: true,
-        secure: true,
-        rewrite: (path) => {
-          // Vite strips the matched prefix, so /api/ver3/services/countries becomes /services/countries
-          // We need to add /api/ver3 back to get /api/ver3/services/countries
-          // But check if it's already there to avoid doubling
-          if (path.startsWith('/api/ver3')) {
-            return path; // Already has the prefix
-          }
-          return `/api/ver3${path}`;
+export default defineConfig(({ command }) => {
+  // Conditionally include Sentry plugin only in production builds with auth token
+  const plugins = [react(), copyFunctionsPlugin()];
+
+  // Only upload source maps to Sentry if auth token is provided
+  // Set SENTRY_AUTH_TOKEN in your CI/CD environment
+  if (command === 'build' && process.env.SENTRY_AUTH_TOKEN) {
+    plugins.push(
+      sentryVitePlugin({
+        org: process.env.SENTRY_ORG || 'boulders',
+        project: process.env.SENTRY_PROJECT || 'join-boulders-dk',
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+
+        // Upload source maps to Sentry for better error debugging
+        sourcemaps: {
+          assets: './dist/assets/**',
+          filesToDeleteAfterUpload: './dist/assets/**/*.map',
         },
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Forward Accept-Language header from client request, or default to da-DK
-            const acceptLanguage = req.headers['accept-language'] || req.headers['Accept-Language'] || 'da-DK';
-            proxyReq.setHeader('Accept-Language', acceptLanguage);
-            proxyReq.setHeader('Content-Type', 'application/json');
-            console.log('[Vite Proxy] Forwarding /api/ver3 request:', req.url, 'to:', proxyReq.path, 'with Accept-Language:', acceptLanguage);
-          });
+
+        // Set release version for tracking
+        release: {
+          name: process.env.VITE_SENTRY_RELEASE || `${Date.now()}`,
         },
-      },
-      // Handle other /api endpoints - these go to api-join.boulders.dk
-      '/api': {
-        target: 'https://api-join.boulders.dk',
-        changeOrigin: true,
-        secure: true,
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Forward Accept-Language header from client request, or default to da-DK
-            const acceptLanguage = req.headers['accept-language'] || req.headers['Accept-Language'] || 'da-DK';
-            proxyReq.setHeader('Accept-Language', acceptLanguage);
-            proxyReq.setHeader('Content-Type', 'application/json');
-            console.log('[Vite Proxy] Forwarding /api request:', req.url, 'with Accept-Language:', acceptLanguage);
-          });
-        },
-      },
-    },
-  },
-  build: {
-    outDir: 'dist',
-    assetsDir: 'assets'
+      })
+    );
+    console.log('[Vite] Sentry plugin enabled - source maps will be uploaded');
   }
-}))
+
+  return {
+    plugins,
+    base: resolveBasePath(),
+    server: {
+      host: true,
+      port: 5173,
+      strictPort: false,
+      // Disable HMR overlay for cleaner error handling (can be re-enabled if needed)
+      hmr: {
+        overlay: true,
+      },
+      // Only use HTTPS in dev mode when certificate files are present
+      ...(key && cert && command === 'serve' ? {
+        https: {
+          // Self-signed certificate for local development
+          // Required for geolocation API to work on mobile devices
+          key,
+          cert,
+        },
+      } : {}),
+      // Proxy API requests to avoid CORS issues in development
+      proxy: {
+        // Handle /api/ver3/ endpoints - these go to boulders.brpsystems.com/apiserver
+        // Vite proxy by default strips the matched prefix (/api/ver3), so we need to rewrite
+        // to keep the full path including /api/ver3
+        '/api/ver3': {
+          target: 'https://boulders.brpsystems.com/apiserver',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path) => {
+            // Vite strips the matched prefix, so /api/ver3/services/countries becomes /services/countries
+            // We need to add /api/ver3 back to get /api/ver3/services/countries
+            // But check if it's already there to avoid doubling
+            if (path.startsWith('/api/ver3')) {
+              return path; // Already has the prefix
+            }
+            return `/api/ver3${path}`;
+          },
+          configure: (proxy, _options) => {
+            proxy.on('proxyReq', (proxyReq, req, _res) => {
+              // Forward Accept-Language header from client request, or default to da-DK
+              const acceptLanguage = req.headers['accept-language'] || req.headers['Accept-Language'] || 'da-DK';
+              proxyReq.setHeader('Accept-Language', acceptLanguage);
+              proxyReq.setHeader('Content-Type', 'application/json');
+              console.log('[Vite Proxy] Forwarding /api/ver3 request:', req.url, 'to:', proxyReq.path, 'with Accept-Language:', acceptLanguage);
+            });
+          },
+        },
+        // Handle other /api endpoints - these go to api-join.boulders.dk
+        '/api': {
+          target: 'https://api-join.boulders.dk',
+          changeOrigin: true,
+          secure: true,
+          configure: (proxy, _options) => {
+            proxy.on('proxyReq', (proxyReq, req, _res) => {
+              // Forward Accept-Language header from client request, or default to da-DK
+              const acceptLanguage = req.headers['accept-language'] || req.headers['Accept-Language'] || 'da-DK';
+              proxyReq.setHeader('Accept-Language', acceptLanguage);
+              proxyReq.setHeader('Content-Type', 'application/json');
+              console.log('[Vite Proxy] Forwarding /api request:', req.url, 'with Accept-Language:', acceptLanguage);
+            });
+          },
+        },
+      },
+    },
+    build: {
+      outDir: 'dist',
+      assetsDir: 'assets',
+      // Enable source maps for better error debugging in Sentry
+      sourcemap: true,
+    }
+  }
+})
 
