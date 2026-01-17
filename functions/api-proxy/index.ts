@@ -22,10 +22,16 @@ const ALLOWED_PATH_PATTERNS = [
   /^\/ver3\/.+/,     // Allow /ver3/* (goes to brpsystems.com with /api prefix)
 ];
 
+// Maximum request body size (1MB)
+const MAX_REQUEST_SIZE = 1024 * 1024;
+
 // Helper function to validate origin
-function validateOrigin(origin: string | null): string {
+// Returns the origin if valid, null if invalid
+function validateOrigin(origin: string | null): string | null {
   if (!origin) {
-    return ALLOWED_ORIGINS[0]; // Default to production domain
+    // For same-origin requests (no Origin header), allow but log
+    // This is common for same-origin requests from the same domain
+    return null;
   }
 
   // Check if origin is in allowed list
@@ -38,8 +44,8 @@ function validateOrigin(origin: string | null): string {
     return origin;
   }
 
-  // Default to first allowed origin if not matched
-  return ALLOWED_ORIGINS[0];
+  // Reject unknown origins for security
+  return null;
 }
 
 // Helper function to validate API path
@@ -67,14 +73,38 @@ export async function onRequest(context: any) {
   const requestOrigin = request.headers.get('Origin');
   const allowedOrigin = validateOrigin(requestOrigin);
   
+  // Reject requests from unknown origins
+  if (requestOrigin && !allowedOrigin) {
+    console.warn('[API Proxy] Rejected request from unknown origin:', requestOrigin);
+    return new Response(
+      JSON.stringify({ error: 'Origin not allowed' }),
+      {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      }
+    );
+  }
+  
   // Handle CORS preflight requests
   if (request.method === 'OPTIONS') {
+    // For same-origin requests (no Origin header), return basic headers
+    const preflightHeaders: Record<string, string> = {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    };
+    
+    if (allowedOrigin) {
+      Object.assign(preflightHeaders, getSecurityHeaders(allowedOrigin));
+      preflightHeaders['Access-Control-Max-Age'] = '86400';
+    }
+    
     return new Response(null, {
       status: 200,
-      headers: {
-        ...getSecurityHeaders(allowedOrigin),
-        'Access-Control-Max-Age': '86400',
-      },
+      headers: preflightHeaders,
     });
   }
 
@@ -83,28 +113,36 @@ export async function onRequest(context: any) {
   const apiPath = url.searchParams.get('path');
 
   if (!apiPath) {
+    const errorHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
+    };
+    if (allowedOrigin) {
+      Object.assign(errorHeaders, getSecurityHeaders(allowedOrigin));
+    }
     return new Response(
       JSON.stringify({ error: 'API path is required' }),
       {
         status: 400,
-        headers: {
-          'Content-Type': 'application/json',
-          ...getSecurityHeaders(allowedOrigin),
-        },
+        headers: errorHeaders,
       }
     );
   }
 
   // Validate API path for security
   if (!isValidApiPath(apiPath)) {
+    const invalidHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
+    };
+    if (allowedOrigin) {
+      Object.assign(invalidHeaders, getSecurityHeaders(allowedOrigin));
+    }
     return new Response(
       JSON.stringify({ error: 'Invalid API path' }),
       {
         status: 403,
-        headers: {
-          'Content-Type': 'application/json',
-          ...getSecurityHeaders(allowedOrigin),
-        },
+        headers: invalidHeaders,
       }
     );
   }
@@ -159,7 +197,43 @@ export async function onRequest(context: any) {
 
     // Include request body for POST, PUT, PATCH methods
     if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
-      requestOptions.body = await request.text();
+      const contentLength = request.headers.get('Content-Length');
+      if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_SIZE) {
+        const errorHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Content-Type-Options': 'nosniff',
+        };
+        if (allowedOrigin) {
+          Object.assign(errorHeaders, getSecurityHeaders(allowedOrigin));
+        }
+        return new Response(
+          JSON.stringify({ error: 'Request body too large' }),
+          {
+            status: 413,
+            headers: errorHeaders,
+          }
+        );
+      }
+      
+      const bodyText = await request.text();
+      if (bodyText.length > MAX_REQUEST_SIZE) {
+        const errorHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Content-Type-Options': 'nosniff',
+        };
+        if (allowedOrigin) {
+          Object.assign(errorHeaders, getSecurityHeaders(allowedOrigin));
+        }
+        return new Response(
+          JSON.stringify({ error: 'Request body too large' }),
+          {
+            status: 413,
+            headers: errorHeaders,
+          }
+        );
+      }
+      
+      requestOptions.body = bodyText;
     }
 
     // Forward the request to the API
@@ -175,29 +249,46 @@ export async function onRequest(context: any) {
     }
 
     // Return the response with CORS headers
+    const responseHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
+    };
+    if (allowedOrigin) {
+      Object.assign(responseHeaders, getSecurityHeaders(allowedOrigin));
+    }
+    
     return new Response(
       JSON.stringify(jsonData),
       {
         status: response.status,
-        headers: {
-          'Content-Type': 'application/json',
-          ...getSecurityHeaders(allowedOrigin),
-        },
+        headers: responseHeaders,
       }
     );
   } catch (error: any) {
-    console.error('API Proxy Error:', error);
+    // Log full error details server-side for debugging
+    console.error('[API Proxy] Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
+    
+    // Return generic error message to client (don't leak internal details)
+    const errorResponseHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
+    };
+    if (allowedOrigin) {
+      Object.assign(errorResponseHeaders, getSecurityHeaders(allowedOrigin));
+    }
+    
     return new Response(
       JSON.stringify({
         error: 'Internal server error',
-        message: error.message
+        // Don't expose error.message to prevent information leakage
       }),
       {
         status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          ...getSecurityHeaders(allowedOrigin),
-        },
+        headers: errorResponseHeaders,
       }
     );
   }

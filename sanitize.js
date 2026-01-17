@@ -18,6 +18,7 @@ import DOMPurify from 'dompurify';
  */
 export function sanitizeHTML(dirty, config = {}) {
   // Default config allows most HTML but removes scripts and event handlers
+  // Note: 'style' attribute is NOT allowed to prevent CSS-based XSS attacks
   const defaultConfig = {
     ALLOWED_TAGS: [
       'div', 'span', 'p', 'br', 'strong', 'em', 'b', 'i', 'u',
@@ -25,7 +26,7 @@ export function sanitizeHTML(dirty, config = {}) {
       'ul', 'ol', 'li', 'a', 'img', 'table', 'tr', 'td', 'th',
       'thead', 'tbody', 'tfoot', 'pre', 'code', 'blockquote'
     ],
-    ALLOWED_ATTR: ['class', 'id', 'href', 'src', 'alt', 'title', 'style'],
+    ALLOWED_ATTR: ['class', 'id', 'href', 'src', 'alt', 'title'],
     KEEP_CONTENT: true, // Keep text content even if tags are removed
     ...config
   };
