@@ -31,34 +31,21 @@ import {
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
-import { initSentry, captureException, setUser, addBreadcrumb } from './sentry.config.js';
 
-// Initialize Sentry for error monitoring
-initSentry();
-
-// Global error handlers for uncaught errors
-window.addEventListener('error', (event) => {
-  console.error('Uncaught error:', event.error);
-  captureException(event.error, {
-    tags: { type: 'uncaught_error' },
-    extra: {
-      message: event.message,
-      filename: event.filename,
-      lineno: event.lineno,
-      colno: event.colno,
-    },
-  });
-});
-
-window.addEventListener('unhandledrejection', (event) => {
-  console.error('Unhandled promise rejection:', event.reason);
-  captureException(event.reason, {
-    tags: { type: 'unhandled_rejection' },
-    extra: {
-      promise: event.promise,
-    },
-  });
-});
+// Import Sentry helpers for manual error tracking
+// Note: Sentry is initialized via loader script in index.html
+// We use window.Sentry for capturing specific errors and setting user context
+const Sentry = window.Sentry || {};
+const captureException = (error, context) => {
+  if (Sentry.captureException) {
+    Sentry.captureException(error, context);
+  }
+};
+const setUser = (user) => {
+  if (Sentry.setUser) {
+    Sentry.setUser(user);
+  }
+};
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
