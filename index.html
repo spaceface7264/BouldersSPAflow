@@ -15,36 +15,61 @@
     <link rel="stylesheet" href="./styles.css">
 
     <!-- Sentry Error Monitoring - SDK Import -->
-    <!-- Load Sentry SDK from CDN and initialize immediately -->
-    <script src="https://cdn.jsdelivr.net/npm/@sentry/browser@10.34.0/build/bundle.min.js" onload="initSentry()"></script>
+    <!-- Load Sentry SDK from unpkg CDN (more reliable) -->
+    <script src="https://unpkg.com/@sentry/browser@10.34.0/build/bundle.min.js"></script>
     <script>
       // Initialize Sentry after SDK loads
-      function initSentry() {
-        if (window.Sentry && window.Sentry.init) {
-          window.Sentry.init({
-            dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
-            // Setting this option to true will send default PII data to Sentry.
-            sendDefaultPii: true,
-            environment: window.location.hostname === 'join.boulders.dk' ? 'production' : 'development',
-            sampleRate: 1.0, // 100% of errors
-            tracesSampleRate: 0.1, // 10% of performance transactions
-          });
-          console.log('[Sentry] Initialized successfully');
-        } else {
-          console.error('[Sentry] SDK not available');
-        }
-      }
-      
-      // Fallback: try to initialize if script already loaded
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-          if (!window.Sentry || !window.Sentry.init) {
-            setTimeout(initSentry, 500);
+      (function() {
+        function initSentry() {
+          if (window.Sentry && typeof window.Sentry.init === 'function') {
+            try {
+              window.Sentry.init({
+                dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
+                // Setting this option to true will send default PII data to Sentry.
+                sendDefaultPii: true,
+                environment: window.location.hostname === 'join.boulders.dk' ? 'production' : 'development',
+                sampleRate: 1.0, // 100% of errors
+                tracesSampleRate: 0.1, // 10% of performance transactions
+              });
+              console.log('[Sentry] Initialized successfully');
+              return true;
+            } catch (e) {
+              console.error('[Sentry] Initialization error:', e);
+              return false;
+            }
           }
-        });
-      } else {
-        setTimeout(initSentry, 100);
-      }
+          return false;
+        }
+        
+        // Try to initialize immediately if SDK already loaded
+        if (initSentry()) {
+          return;
+        }
+        
+        // Wait for script to load
+        const sentryScript = document.querySelector('script[src*="sentry-cdn.com"]');
+        if (sentryScript) {
+          sentryScript.addEventListener('load', function() {
+            setTimeout(initSentry, 100);
+          });
+          sentryScript.addEventListener('error', function() {
+            console.error('[Sentry] Failed to load SDK script');
+          });
+        }
+        
+        // Fallback: retry initialization
+        let retries = 0;
+        const maxRetries = 10;
+        const retryInterval = setInterval(function() {
+          retries++;
+          if (initSentry() || retries >= maxRetries) {
+            clearInterval(retryInterval);
+            if (retries >= maxRetries && !window.Sentry) {
+              console.error('[Sentry] SDK failed to load after', maxRetries, 'retries');
+            }
+          }
+        }, 200);
+      })();
     </script>
 
     <!-- Google Tag Manager - Loaded conditionally after consent -->
