@@ -16,7 +16,12 @@ const ALLOWED_ORIGINS = [
 const ALLOWED_PATH_PATTERNS = [
   /^\/api\/reference\/.+/,
   /^\/api\/products\/.+/,
+  /^\/api\/auth\/.+/,
+  /^\/api\/addresses\/.+/,
+  /^\/api\/orders/,
+  /^\/api\/payment\/.+/,
   /^\/api\/ver3\/services\/.+/,
+  /^\/api\/ver3\/auth\/.+/,
   /^\/services\/.+/,
   /^\/ver3\/.+/,
 ];
