@@ -1,0 +1,50 @@
+/**
+ * XSS Protection Utility using DOMPurify
+ *
+ * This utility provides a simple wrapper around DOMPurify for sanitizing
+ * HTML content before inserting it into the DOM via innerHTML.
+ *
+ * Usage:
+ *   element.innerHTML = sanitizeHTML(untrustedContent);
+ */
+
+import DOMPurify from 'dompurify';
+
+/**
+ * Sanitize HTML content to prevent XSS attacks
+ * @param {string} dirty - The potentially unsafe HTML string
+ * @param {object} config - Optional DOMPurify configuration
+ * @returns {string} - Sanitized HTML safe for insertion
+ */
+export function sanitizeHTML(dirty, config = {}) {
+  // Default config allows most HTML but removes scripts and event handlers
+  const defaultConfig = {
+    ALLOWED_TAGS: [
+      'div', 'span', 'p', 'br', 'strong', 'em', 'b', 'i', 'u',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li', 'a', 'img', 'table', 'tr', 'td', 'th',
+      'thead', 'tbody', 'tfoot', 'pre', 'code', 'blockquote'
+    ],
+    ALLOWED_ATTR: ['class', 'id', 'href', 'src', 'alt', 'title', 'style'],
+    KEEP_CONTENT: true, // Keep text content even if tags are removed
+    ...config
+  };
+
+  return DOMPurify.sanitize(dirty, defaultConfig);
+}
+
+/**
+ * Set text content safely (alternative to innerHTML for plain text)
+ * This should be used when you just want to display text without HTML
+ * @param {HTMLElement} element - The DOM element
+ * @param {string} text - The text content
+ */
+export function setTextContent(element, text) {
+  element.textContent = text;
+}
+
+// Make it available globally for legacy code
+if (typeof window !== 'undefined') {
+  window.sanitizeHTML = sanitizeHTML;
+  window.setTextContent = setTextContent;
+}
