@@ -8970,43 +8970,60 @@ function showSkipConfirmation() {
     color: var(--color-text-secondary);
   `;
   
-  confirmationDialog.innerHTML = sanitizeHTML(`
-    <h3 style="margin: 0 0 16px 0; color: var(--color-text-secondary); font-size: 18px;">Are you sure?</h3>
-    <p style="margin: 0 0 24px 0; color: var(--color-text-muted); line-height: 1.5;">
-      You're missing out on essential gear that could enhance your climbing experience.
-      These add-ons are specially selected and offer great value!
-    </p>
-    <div style="display: flex; gap: 12px; justify-content: center;">
-      <button class="confirmation-btn confirmation-cancel" style="
-        padding: 10px 20px;
-        border: 1px solid var(--color-item-border);
-        border-radius: 8px;
-        background: transparent;
-        color: var(--color-text-secondary);
-        cursor: pointer;
-        font-weight: 600;
-      ">Go Back</button>
-      <button class="confirmation-btn confirmation-skip" style="
-        padding: 10px 20px;
-        border: none;
-        border-radius: 8px;
-        background: var(--color-brand-accent);
-        color: var(--color-button-primary);
-        cursor: pointer;
-        font-weight: 600;
-      ">Skip Anyway</button>
-    </div>
-  `);
+  // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
+  const title = document.createElement('h3');
+  title.textContent = 'Are you sure?';
+  title.style.cssText = 'margin: 0 0 16px 0; color: var(--color-text-secondary); font-size: 18px;';
+  
+  const message = document.createElement('p');
+  message.textContent = "You're missing out on essential gear that could enhance your climbing experience. These add-ons are specially selected and offer great value!";
+  message.style.cssText = 'margin: 0 0 24px 0; color: var(--color-text-muted); line-height: 1.5;';
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'confirmation-btn confirmation-cancel';
+  cancelBtn.textContent = 'Go Back';
+  cancelBtn.style.cssText = `
+    padding: 10px 20px;
+    border: 1px solid var(--color-item-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-weight: 600;
+  `;
+  
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'confirmation-btn confirmation-skip';
+  skipBtn.textContent = 'Skip Anyway';
+  skipBtn.style.cssText = `
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: var(--color-brand-accent);
+    color: var(--color-button-primary);
+    cursor: pointer;
+    font-weight: 600;
+  `;
+  
+  buttonContainer.appendChild(cancelBtn);
+  buttonContainer.appendChild(skipBtn);
+  
+  confirmationDialog.appendChild(title);
+  confirmationDialog.appendChild(message);
+  confirmationDialog.appendChild(buttonContainer);
   
   confirmationOverlay.appendChild(confirmationDialog);
   document.body.appendChild(confirmationOverlay);
   
   // Add event listeners
-  confirmationOverlay.querySelector('.confirmation-cancel').addEventListener('click', () => {
+  cancelBtn.addEventListener('click', () => {
     document.body.removeChild(confirmationOverlay);
   });
   
-  confirmationOverlay.querySelector('.confirmation-skip').addEventListener('click', () => {
+  skipBtn.addEventListener('click', () => {
     document.body.removeChild(confirmationOverlay);
     proceedAfterAddons();
   });
