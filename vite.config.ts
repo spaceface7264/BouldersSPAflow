@@ -50,6 +50,14 @@ const copyFunctionsPlugin = () => ({
       fs.copyFileSync(postalCodesFile, distPostalCodesFile);
       console.log(`[Vite] Copied postal-codes-dk.js to dist/`);
     }
+
+    // Copy _headers file to dist root for Cloudflare Pages
+    const headersFile = path.resolve(__dirname, '_headers');
+    if (fs.existsSync(headersFile)) {
+      const distHeadersFile = path.resolve(__dirname, 'dist', '_headers');
+      fs.copyFileSync(headersFile, distHeadersFile);
+      console.log(`[Vite] Copied _headers to dist/`);
+    }
   }
 });
 
