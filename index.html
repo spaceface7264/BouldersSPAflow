@@ -14,61 +14,60 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
 
-    <!-- Sentry Error Monitoring - SDK Import -->
-    <!-- Load Sentry SDK from unpkg CDN (more reliable) -->
-    <script src="https://unpkg.com/@sentry/browser@10.34.0/build/bundle.min.js"></script>
+    <!-- Sentry Error Monitoring - Loader Script -->
+    <!-- Using official Sentry loader script for better reliability -->
+    <script
+      src="https://js-de.sentry-cdn.com/1cc58b6b7d525b61ce37f528a8ddf2ed.min.js"
+      crossorigin="anonymous"
+    ></script>
     <script>
-      // Initialize Sentry after SDK loads
+      // Configure Sentry after loader script initializes
+      // The loader script automatically initializes Sentry, but we can configure it further
       (function() {
-        function initSentry() {
-          if (window.Sentry && typeof window.Sentry.init === 'function') {
+        // Wait for Sentry to be available from the loader script
+        function configureSentry() {
+          if (window.Sentry && window.Sentry.getCurrentHub) {
             try {
-              window.Sentry.init({
-                dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
-                // Setting this option to true will send default PII data to Sentry.
-                sendDefaultPii: true,
-                environment: window.location.hostname === 'join.boulders.dk' ? 'production' : 'development',
-                sampleRate: 1.0, // 100% of errors
-                tracesSampleRate: 0.1, // 10% of performance transactions
-              });
-              console.log('[Sentry] Initialized successfully');
-              return true;
+              const hub = window.Sentry.getCurrentHub();
+              const client = hub.getClient();
+              
+              if (client) {
+                // Sentry is already initialized by the loader script
+                // We can configure additional options if needed
+                const scope = hub.getScope();
+                if (scope) {
+                  scope.setTag('environment', window.location.hostname === 'join.boulders.dk' ? 'production' : 'development');
+                }
+                console.log('[Sentry] Configured successfully');
+                return true;
+              }
             } catch (e) {
-              console.error('[Sentry] Initialization error:', e);
-              return false;
+              console.error('[Sentry] Configuration error:', e);
             }
           }
           return false;
         }
         
-        // Try to initialize immediately if SDK already loaded
-        if (initSentry()) {
+        // Try to configure immediately
+        if (configureSentry()) {
           return;
         }
         
-        // Wait for script to load
-        const sentryScript = document.querySelector('script[src*="sentry-cdn.com"]');
-        if (sentryScript) {
-          sentryScript.addEventListener('load', function() {
-            setTimeout(initSentry, 100);
-          });
-          sentryScript.addEventListener('error', function() {
-            console.error('[Sentry] Failed to load SDK script');
-          });
-        }
-        
-        // Fallback: retry initialization
+        // Wait for loader script to initialize Sentry
         let retries = 0;
-        const maxRetries = 10;
+        const maxRetries = 20; // Increased retries for loader script
         const retryInterval = setInterval(function() {
           retries++;
-          if (initSentry() || retries >= maxRetries) {
+          if (configureSentry() || retries >= maxRetries) {
             clearInterval(retryInterval);
             if (retries >= maxRetries && !window.Sentry) {
-              console.error('[Sentry] SDK failed to load after', maxRetries, 'retries');
+              console.error('[Sentry] Failed to initialize after', maxRetries, 'retries');
+              console.error('[Sentry] Check network tab to verify loader script loaded from sentry-cdn.com');
+            } else if (window.Sentry) {
+              console.log('[Sentry] Loaded and ready');
             }
           }
-        }, 200);
+        }, 250);
       })();
     </script>
 
