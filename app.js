@@ -5079,13 +5079,33 @@ document.addEventListener('DOMContentLoaded', () => {
     clearStoredOrderData('page-refresh');
   }
   
+  // CRITICAL: Check for payment errors BEFORE init() to prevent step 1 from showing
   if (paymentReturn === 'return' && orderId) {
-    // We're returning from payment - show confirmation instead of resetting
+    // We're returning from payment - check for errors first
     console.log('[Payment Return] Detected payment return for order:', orderId);
+    
     // Set order ID in state if available
     state.orderId = parseInt(orderId, 10);
-    // Skip normal init and go straight to confirmation
-    // We'll still call init but then immediately show confirmation
+    
+    // If there's a payment error, go directly to payment failed page
+    const hasPaymentError = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
+    if (hasPaymentError) {
+      console.log('[Payment Return] Payment error detected - preventing step 1 from showing');
+      // Set step to 5 immediately to prevent step 1 from showing
+      state.currentStep = TOTAL_STEPS;
+      state.paymentFailed = true;
+      state.paymentConfirmed = false;
+      state.paymentPending = false;
+      
+      // CRITICAL: Hide step 1 immediately before init() runs
+      // This prevents the flash of step 1
+      const step1Panel = document.getElementById('step-1');
+      if (step1Panel) {
+        step1Panel.style.display = 'none';
+        step1Panel.style.visibility = 'hidden';
+        step1Panel.style.opacity = '0';
+      }
+    }
   }
   
   init();
@@ -5206,6 +5226,43 @@ document.addEventListener('DOMContentLoaded', () => {
       showPaymentFailedMessage(null, parseInt(orderId, 10), null); // Use default calm message
       return;
     }
+    
+      // CRITICAL: If payment error detected, show failed message immediately
+      // This prevents step 1 from flashing before the error is shown
+      const hasPaymentError = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
+      if (hasPaymentError) {
+        console.log('[Payment Return] Payment error detected - showing failed message immediately');
+        // Ensure step 5 is shown and all other steps are hidden
+        state.currentStep = TOTAL_STEPS;
+        state.paymentFailed = true;
+        
+        // Hide all step panels immediately (DOM should be cached by now from init())
+        const stepPanels = document.querySelectorAll('.step-panel');
+        stepPanels.forEach((panel, index) => {
+          const stepNumber = index + 1;
+          if (stepNumber === TOTAL_STEPS) {
+            // Show step 5
+            panel.classList.add('active');
+            panel.style.display = 'block';
+            panel.style.visibility = 'visible';
+            panel.style.opacity = '1';
+          } else {
+            // Hide all other steps immediately
+            panel.classList.remove('active');
+            panel.style.display = 'none';
+            panel.style.visibility = 'hidden';
+            panel.style.opacity = '0';
+          }
+        });
+        
+        // Show payment failed message immediately
+        showPaymentFailedMessage(null, parseInt(orderId, 10), null);
+        // Still load order in background for data, but don't wait
+        loadOrderForConfirmation(parseInt(orderId, 10)).catch(err => {
+          console.warn('[Payment Return] Could not load order after showing failed message:', err);
+        });
+        return;
+      }
     
     // Always load order first; error params are handled after we verify payment state
     loadOrderForConfirmation(parseInt(orderId, 10));
@@ -14048,25 +14105,28 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
   console.log('[Payment Failed] Navigating to confirmation page...');
   state.currentStep = TOTAL_STEPS;
   
-  // Show step 5 panel
+  // Show step 5 panel immediately - hide all other steps first to prevent flash
   const step5Panel = document.getElementById('step-5');
   if (step5Panel) {
-    // Mark step 5 panel as payment failed for CSS targeting
-    step5Panel.setAttribute('data-payment-failed', 'true');
-    // Hide all other panels first
+    // CRITICAL: Hide all other panels FIRST to prevent any flash of step 1
     DOM.stepPanels.forEach((panel, index) => {
       if (index + 1 === TOTAL_STEPS) {
+        // This is step 5 - show it
         panel.classList.add('active');
         panel.style.display = 'block';
         panel.style.visibility = 'visible';
         panel.style.opacity = '1';
       } else {
+        // Hide all other steps immediately
         panel.classList.remove('active');
-        if (panel.id !== 'step-3') {
-          panel.style.display = 'none';
-        }
+        panel.style.display = 'none';
+        panel.style.visibility = 'hidden';
+        panel.style.opacity = '0';
       }
     });
+    
+    // Mark step 5 panel as payment failed for CSS targeting
+    step5Panel.setAttribute('data-payment-failed', 'true');
     
     // IMMEDIATELY modify the HTML BEFORE it's visible to user
     const confirmationHeader = step5Panel.querySelector('.confirmation-header');
@@ -14100,8 +14160,8 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
     const displayOrderId = orderId || order?.number || order?.id || 'N/A';
     
     // Use a single friendly message for all payment failures
-    const statusText = 'Payment Interrupted';
-    const statusDetail = 'The payment process was stopped before completion. You can try again below.';
+    const statusText = 'Payment Error';
+    const statusDetail = 'Something went wrong with your payment. Please try again.';
     
     // Create payment failed badge
     if (!paymentFailedBadge) {
