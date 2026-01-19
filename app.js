@@ -14095,18 +14095,19 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
         state.customerId = storedCustomer.id;
         console.log('[Payment Failed] Restored customer ID from sessionStorage:', storedCustomer.id);
         
-                // If user is authenticated, fetch full customer profile to display all fields
-                if (isUserAuthenticated() && storedCustomer.id) {
-                  try {
-                    const customerProfile = await authAPI.getCustomer(storedCustomer.id);
-                    state.authenticatedCustomer = customerProfile;
-                    // Also set authenticatedEmail for refreshLoginUI
-                    if (customerProfile?.email) {
-                      state.authenticatedEmail = customerProfile.email;
-                    }
-                    console.log('[Payment Failed] ✅ Loaded full customer profile:', customerProfile);
-                    // Refresh UI after loading full profile
-                    refreshLoginUI();
+        // Fetch full customer profile to display all fields (if we have a customer ID)
+        // Try to fetch even if authentication status is unclear, as we might have valid tokens
+        if (storedCustomer.id) {
+          try {
+            const customerProfile = await authAPI.getCustomer(storedCustomer.id);
+            state.authenticatedCustomer = customerProfile;
+            // Also set authenticatedEmail for refreshLoginUI
+            if (customerProfile?.email) {
+              state.authenticatedEmail = customerProfile.email;
+            }
+            console.log('[Payment Failed] ✅ Loaded full customer profile:', customerProfile);
+            // Refresh UI after loading full profile
+            refreshLoginUI();
           } catch (profileError) {
             console.warn('[Payment Failed] Could not fetch full customer profile, using stored data:', profileError);
             // Fallback: Use stored customer data if available
@@ -14118,12 +14119,16 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
                 email: storedCustomer.email,
                 // Note: Full profile might not have all fields, but we'll try to use what we have
               };
+              // Also set authenticatedEmail for refreshLoginUI
+              if (storedCustomer.email) {
+                state.authenticatedEmail = storedCustomer.email;
+              }
             }
             // Refresh UI with fallback data
             refreshLoginUI();
           }
         } else {
-          // Not authenticated or no customer ID - refresh UI with what we have
+          // No customer ID - refresh UI with what we have
           refreshLoginUI();
         }
       } catch (e) {
