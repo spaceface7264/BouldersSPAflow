@@ -14431,8 +14431,9 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
                 state.customerId = storedCustomer.id;
                 console.log('[Payment Retry] Restored customer ID from sessionStorage:', storedCustomer.id);
                 
-                // If user is authenticated, fetch full customer profile to display all fields
-                if (isUserAuthenticated() && storedCustomer.id) {
+                // Fetch full customer profile to display all fields (if we have a customer ID)
+                // Try to fetch even if authentication status is unclear, as we might have valid tokens
+                if (storedCustomer.id) {
                   try {
                     const customerProfile = await authAPI.getCustomer(storedCustomer.id);
                     state.authenticatedCustomer = customerProfile;
@@ -14463,7 +14464,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
                     refreshLoginUI();
                   }
                 } else {
-                  // Not authenticated or no customer ID - refresh UI with what we have
+                  // No customer ID - refresh UI with what we have
                   refreshLoginUI();
                 }
               } catch (e) {
