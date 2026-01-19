@@ -525,6 +525,7 @@ body > .header {
 body {
     background-color: #1a1a1a;
     background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
+    background-opacity: 0.5;
     width: 100%;
     max-width: 100vw;
     overflow-x: hidden;
@@ -6089,7 +6090,7 @@ main {
 /* Confirmation Page Styles */
 .confirmation-header {
     text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 196px;
 }
 
 .success-badge {
@@ -6130,6 +6131,289 @@ main {
 .step-panel[data-payment-pending="true"] .confirmation-right {
   display: none !important;
   visibility: hidden !important;
+}
+
+/* Hide success elements when payment fails */
+.step-panel[data-payment-failed="true"] .success-badge,
+.step-panel[data-payment-failed="true"] .success-title,
+.step-panel[data-payment-failed="true"] .success-message {
+  display: none !important;
+}
+
+/* Show payment failed elements when payment fails */
+.step-panel[data-payment-failed="true"] .payment-failed-badge,
+.step-panel[data-payment-failed="true"] .payment-failed-title,
+.step-panel[data-payment-failed="true"] .quick-status,
+.step-panel[data-payment-failed="true"] .failure-actions {
+  display: block;
+}
+
+.step-panel[data-payment-failed="true"] .reassurance-bar {
+  display: flex;
+}
+
+/* Payment Failed Badge - Magenta */
+.payment-failed-badge {
+    width: 90px;
+    height: 90px;
+    background: linear-gradient(135deg, rgba(217, 70, 239, 0.15) 0%, rgba(192, 38, 211, 0.1) 100%);
+    border: 2px solid rgba(217, 70, 239, 0.3);
+    color: #D946EF;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    position: relative;
+}
+
+.payment-failed-badge svg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 44px;
+    height: 44px;
+}
+
+/* Payment Failed Title - Magenta */
+.payment-failed-title {
+    color: #D946EF;
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    letter-spacing: 1px;
+    font-weight: bold;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+/* Quick Status */
+.quick-status {
+    margin: 24px auto 32px;
+    max-width: 500px;
+    text-align: center;
+}
+
+.status-badge {
+    display: inline-block;
+    background: rgba(217, 70, 239, 0.1);
+    border: 1px solid rgba(217, 70, 239, 0.25);
+    color: #D946EF;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.status-detail {
+    margin: 12px 0 0 0;
+    color: #9CA3AF;
+    font-size: 1rem;
+}
+
+/* Reassurance Bar */
+.reassurance-bar {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    justify-content: center;
+    align-items: stretch;
+    margin: 0 auto 40px;
+    max-width: 700px;
+    flex-wrap: nowrap;
+    width: 100%;
+}
+
+.reassurance-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--color-text-white);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    padding: 10px 8px;
+    background: rgba(16, 185, 129, 0.469);
+    border-radius: 90px;
+    border: 1px solid rgba(43, 200, 64, 0.366);
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.reassurance-item svg {
+    flex-shrink: 0;
+}
+
+/* Failure Actions */
+.failure-actions {
+    margin: 40px auto 0;
+    max-width: 700px;
+}
+
+/* Action Grid */
+.action-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.action-option {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 24px 20px;
+    text-align: center;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.action-option:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(217, 70, 239, 0.3);
+    transform: translateY(-2px);
+}
+
+.primary-option {
+    border-color: rgba(217, 70, 239, 0.25);
+    background: rgba(217, 70, 239, 0.05);
+}
+
+.option-icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+    filter: grayscale(0.3);
+}
+
+.action-option h4 {
+    margin: 0 0 8px 0;
+    color: #F3F4F6;
+    font-size: 1.0625rem;
+    font-weight: 600;
+}
+
+.action-option p {
+    margin: 0;
+    color: #9CA3AF;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+/* Retry Button - Magenta CTA */
+.retry-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #D946EF 0%, #C026D3 100%);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 10px;
+    padding: 16px 32px;
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 16px rgba(217, 70, 239, 0.25);
+}
+
+.retry-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(217, 70, 239, 0.35);
+}
+
+.retry-btn:active {
+    transform: translateY(0);
+}
+
+/* Support Link */
+.support-link {
+    width: 100%;
+    background: transparent;
+    color: #9CA3AF;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 14px 32px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 12px;
+    transition: all 0.2s ease;
+}
+
+.support-link:hover {
+    color: #D1D5DB;
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Mobile Responsive for Payment Failed */
+@media (max-width: 768px) {
+    .payment-failed-badge {
+        width: 70px;
+        height: 70px;
+    }
+    
+    .payment-failed-badge svg {
+        width: 36px;
+        height: 36px;
+    }
+    
+    .reassurance-bar {
+        flex-wrap: nowrap;
+        gap: 8px;
+        max-width: 100%;
+    }
+    
+    .reassurance-item {
+        padding: 12px 10px;
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 0.875rem;
+        white-space: normal;
+    }
+    
+    .action-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .action-option {
+        padding: 20px 16px;
+    }
+    
+    .retry-btn {
+        font-size: 1rem;
+        padding: 14px 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .confirmation-header {
+        margin-bottom: 30px;
+    }
+    
+    .payment-failed-title {
+        font-size: 1.5rem;
+        letter-spacing: 0.5px;
+    }
+    
+    .reassurance-bar {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .reassurance-item {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
 }
 
 .confirmation-layout {

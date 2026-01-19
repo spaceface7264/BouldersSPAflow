@@ -4976,6 +4976,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check URL parameters for test mode and payment return
   const urlParams = new URLSearchParams(window.location.search);
   const testSuccess = urlParams.get('testSuccess') === 'true';
+  const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
   const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
@@ -4986,6 +4987,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
+  }
+  
+  if (testPaymentFailed) {
+    console.log('[Test Mode] Test payment failed page mode enabled');
+    // Store test mode in state
+    state.testMode = true;
   }
   let orderId = urlParams.get('orderId');
   let isPaymentReturnFlow = false;
@@ -5020,6 +5027,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   init();
+  
+  // If in test mode for payment failed, navigate directly to failed page
+  if (testPaymentFailed) {
+    console.log('[Test Mode] Navigating to payment failed page for testing');
+    // Set up minimal test data
+    state.orderId = 99999; // Mock order ID
+    state.currentStep = TOTAL_STEPS;
+    
+    // Call the payment failed function directly
+    // You can test different failure reasons by adding ?testPaymentFailedReason=declined to URL
+    const failureReason = urlParams.get('testPaymentFailedReason');
+    let reason = null;
+    if (failureReason === 'declined') {
+      reason = 'Payment was declined by your bank or card issuer.';
+    } else if (failureReason === 'cancelled') {
+      reason = 'You closed the payment window before completing the transaction.';
+    } else if (failureReason === 'expired') {
+      reason = 'The payment session expired or was cancelled.';
+    } else if (failureReason) {
+      reason = failureReason; // Use custom reason
+    }
+    
+    showPaymentFailedMessage(null, state.orderId, reason);
+    return; // Exit early, don't continue with normal flow
+  }
   
   // If in test mode, navigate directly to success page
   if (testSuccess) {
@@ -13970,271 +14002,321 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
     });
     
     // IMMEDIATELY modify the HTML BEFORE it's visible to user
+    const confirmationHeader = step5Panel.querySelector('.confirmation-header');
+    if (!confirmationHeader) {
+      console.error('[Payment Failed] Confirmation header not found');
+      return;
+    }
+    
+    // Hide success elements
     const successTitle = step5Panel.querySelector('.success-title');
     const successMessage = step5Panel.querySelector('.success-message');
     const successBadge = step5Panel.querySelector('.success-badge');
     
     if (successTitle) {
-      // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
-      successTitle.removeAttribute('data-i18n-key');
-      successTitle.textContent = 'Payment Couldn\'t Be Completed';
-      successTitle.style.color = '#f59e0b'; // Use amber/orange instead of red for less alarming tone
-      console.log('[Payment Failed] ✅ Title set to calm message');
+      successTitle.style.display = 'none';
+    }
+    if (successMessage) {
+      successMessage.style.display = 'none';
+    }
+    if (successBadge) {
+      successBadge.style.display = 'none';
     }
     
-    if (successMessage) {
-      // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
-      successMessage.removeAttribute('data-i18n-key');
-      const displayOrderId = orderId || order?.number || order?.id || 'N/A';
-      
-      // Determine failure reason and provide specific guidance
-      let specificGuidance = '';
-      
-      // If a specific reason was provided (e.g., from URL error code), use it directly
-      if (reason && reason.trim() && !reason.toLowerCase().includes('payment was not completed')) {
-        specificGuidance = reason;
-      } else {
-        // Otherwise, try to infer from reason string patterns
-        const reasonLower = String(reason || '').toLowerCase();
-        
-        if (reasonLower.includes('declined') || reasonLower.includes('bank') || reasonLower.includes('card issuer')) {
-          specificGuidance = 'Payment was declined by your bank or card issuer.';
-        } else if (reasonLower.includes('cancelled') || reasonLower.includes('canceled')) {
-          specificGuidance = 'You closed the payment window before completing the transaction.';
-        } else if (reasonLower.includes('unauthorized') || reasonLower.includes('401') || reasonLower.includes('authorization failed')) {
-          specificGuidance = 'The payment session expired or was cancelled.';
-        } else if (reasonLower.includes('not found') || reasonLower.includes('404')) {
-          specificGuidance = 'The order could not be found. This may happen if the payment window was open for too long.';
-        } else {
-          specificGuidance = 'The payment process was interrupted before completion.';
-        }
+    // Get or create payment failed elements
+    let paymentFailedBadge = confirmationHeader.querySelector('.payment-failed-badge');
+    let paymentFailedTitle = confirmationHeader.querySelector('.payment-failed-title');
+    let quickStatus = confirmationHeader.querySelector('.quick-status');
+    let reassuranceBar = confirmationHeader.querySelector('.reassurance-bar');
+    let failureActions = confirmationHeader.querySelector('.failure-actions');
+    
+    const displayOrderId = orderId || order?.number || order?.id || 'N/A';
+    
+    // Determine failure reason and status text
+    let statusText = 'Payment Interrupted';
+    let statusDetail = 'The payment process was stopped before completion';
+    
+    if (reason && reason.trim() && !reason.toLowerCase().includes('payment was not completed')) {
+      statusDetail = reason;
+      const reasonLower = String(reason).toLowerCase();
+      if (reasonLower.includes('declined') || reasonLower.includes('bank') || reasonLower.includes('card issuer')) {
+        statusText = 'Payment Declined';
+      } else if (reasonLower.includes('cancelled') || reasonLower.includes('canceled')) {
+        statusText = 'Payment Cancelled';
+      } else if (reasonLower.includes('unauthorized') || reasonLower.includes('401') || reasonLower.includes('expired') || reasonLower.includes('authorization failed')) {
+        statusText = 'Session Expired';
+      } else if (reasonLower.includes('not found') || reasonLower.includes('404')) {
+        statusText = 'Order Not Found';
+        statusDetail = 'The order could not be found. This may happen if the payment window was open for too long.';
       }
-      
-      // Build clear, actionable message with status, reason, and next steps
-      successMessage.innerHTML = `
-        <div style="text-align: left; max-width: 600px; margin: 0 auto;">
-          <!-- Status Explanation -->
-          <div style="margin-bottom: 24px; padding: 16px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; border-radius: 4px;">
-            <strong style="color: #f59e0b; display: block; margin-bottom: 8px; font-size: 16px;">Status: Payment Not Completed</strong>
-            <p style="color: #d1d5db; margin: 0; line-height: 1.6;">${specificGuidance}</p>
-          </div>
-          
-          <!-- Reassurance -->
-          <div style="margin-bottom: 24px; padding: 16px; background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e; border-radius: 4px;">
-            <p style="color: #9ca3af; margin: 0; line-height: 1.8;">
-              <strong style="color: #22c55e;">✓</strong> Nothing was charged<br>
-              <strong style="color: #22c55e;">✓</strong> Your order details are saved<br>
-              <strong style="color: #22c55e;">✓</strong> No membership has been activated yet
-            </p>
-          </div>
-          
-          <!-- Actionable Steps -->
-          <div style="color: #d1d5db; line-height: 1.8;">
-            <strong style="color: #f59e0b; display: block; margin-bottom: 16px; font-size: 16px;">What you can do:</strong>
-            
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
-              <strong style="color: #3b82f6; display: block; margin-bottom: 4px;">1. Try Again</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">Click the button below to retry payment with the same details. Your order is saved and ready.</p>
-            </div>
-            
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
-              <strong style="color: #8b5cf6; display: block; margin-bottom: 4px;">2. Use a Different Payment Method</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">If the issue persists, try a different card or payment method. Your order will remain the same.</p>
-            </div>
-            
-            <div style="margin-bottom: 24px; padding: 12px; background: rgba(107, 114, 128, 0.1); border-radius: 4px;">
-              <strong style="color: #6b7280; display: block; margin-bottom: 4px;">3. Contact Support</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">If you continue to experience issues, our support team can help. Reference Order #${displayOrderId}</p>
-            </div>
-            
-            <!-- Action Buttons -->
-            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px;">
-              <button id="retry-payment-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
-                Try Payment Again
-              </button>
-              <button id="contact-support-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: transparent; color: #9ca3af; border: 2px solid #374151; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#6b7280'; this.style.color='#d1d5db'" onmouseout="this.style.borderColor='#374151'; this.style.color='#9ca3af'">
-                Contact Support
-              </button>
-            </div>
-          </div>
+    } else {
+      const reasonLower = String(reason || '').toLowerCase();
+      if (reasonLower.includes('declined') || reasonLower.includes('bank') || reasonLower.includes('card issuer')) {
+        statusText = 'Payment Declined';
+        statusDetail = 'Payment was declined by your bank or card issuer.';
+      } else if (reasonLower.includes('cancelled') || reasonLower.includes('canceled')) {
+        statusText = 'Payment Cancelled';
+        statusDetail = 'You closed the payment window before completing the transaction.';
+      } else if (reasonLower.includes('unauthorized') || reasonLower.includes('401') || reasonLower.includes('expired') || reasonLower.includes('authorization failed')) {
+        statusText = 'Session Expired';
+        statusDetail = 'The payment session expired or was cancelled.';
+      } else if (reasonLower.includes('not found') || reasonLower.includes('404')) {
+        statusText = 'Order Not Found';
+        statusDetail = 'The order could not be found. This may happen if the payment window was open for too long.';
+      }
+    }
+    
+    // Create payment failed badge
+    if (!paymentFailedBadge) {
+      paymentFailedBadge = document.createElement('div');
+      paymentFailedBadge.className = 'payment-failed-badge';
+      confirmationHeader.insertBefore(paymentFailedBadge, confirmationHeader.firstChild);
+    }
+    paymentFailedBadge.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    `;
+    
+    // Create payment failed title
+    if (!paymentFailedTitle) {
+      paymentFailedTitle = document.createElement('h2');
+      paymentFailedTitle.className = 'payment-failed-title';
+      confirmationHeader.insertBefore(paymentFailedTitle, quickStatus || reassuranceBar || failureActions || null);
+    }
+    paymentFailedTitle.textContent = 'Payment Couldn\'t Be Completed';
+    
+    // Create quick status
+    if (!quickStatus) {
+      quickStatus = document.createElement('div');
+      quickStatus.className = 'quick-status';
+      confirmationHeader.insertBefore(quickStatus, reassuranceBar || failureActions || null);
+    }
+    quickStatus.innerHTML = `
+      <span class="status-badge">${statusText}</span>
+      <p class="status-detail">${statusDetail}</p>
+    `;
+    
+    // Create reassurance bar with separate containers
+    if (!reassuranceBar) {
+      reassuranceBar = document.createElement('div');
+      reassuranceBar.className = 'reassurance-bar';
+      confirmationHeader.insertBefore(reassuranceBar, failureActions || null);
+    }
+    reassuranceBar.innerHTML = `
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Nothing charged</span>
+      </div>
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Order saved</span>
+      </div>
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Profile saved</span>
+      </div>
+    `;
+    
+    // Create failure actions
+    if (!failureActions) {
+      failureActions = document.createElement('div');
+      failureActions.className = 'failure-actions';
+      confirmationHeader.appendChild(failureActions);
+    }
+    failureActions.innerHTML = `
+      <div class="action-grid">
+        <div class="action-option primary-option">
+          <div class="option-icon">↻</div>
+          <h4>Try Again</h4>
+          <p>Retry payment with saved order details</p>
         </div>
-      `;
-      
-      // Add event listeners for action buttons
-      setTimeout(() => {
-        const retryBtn = document.getElementById('retry-payment-btn');
-        const supportBtn = document.getElementById('contact-support-btn');
         
-        if (retryBtn) {
-          retryBtn.addEventListener('click', () => {
-            console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
-            
-            // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
-            // This ensures cart is populated when showStep(4) runs
-            try {
-              const orderData = sessionStorage.getItem('boulders_checkout_order');
-              if (orderData) {
-                const storedOrder = JSON.parse(orderData);
-                console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
+        
+        <div class="action-option" id="contact-support-option">
+          <div class="option-icon">💬</div>
+          <h4>Get Help</h4>
+          <p>Contact support • Order #<span id="failed-order-id">${displayOrderId}</span></p>
+        </div>
+      </div>
+
+      <button id="retry-payment-btn" class="retry-btn">
+        <span>Try Payment Again</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12 5 19 12 12 19"/>
+        </svg>
+      </button>
+    `;
+    
+    // Add event listeners for action buttons
+    setTimeout(() => {
+      const retryBtn = document.getElementById('retry-payment-btn');
+      const supportOption = document.getElementById('contact-support-option');
+      
+      if (retryBtn) {
+        retryBtn.addEventListener('click', () => {
+          console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
+          
+          // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
+          // This ensures cart is populated when showStep(4) runs
+          try {
+            const orderData = sessionStorage.getItem('boulders_checkout_order');
+            if (orderData) {
+              const storedOrder = JSON.parse(orderData);
+              console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
+              
+              // Always restore cart items (force restore, don't check if empty)
+              if (storedOrder.cartItems) {
+                state.cartItems = storedOrder.cartItems;
+                console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
                 
-                // Always restore cart items (force restore, don't check if empty)
-                if (storedOrder.cartItems) {
-                  state.cartItems = storedOrder.cartItems;
-                  console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
-                  
-                  // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
-                  // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
-                  const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
-                  if (punchCardItems.length > 0) {
-                    console.log('[Payment Retry] Found punch card items, rebuilding valueCardQuantities');
-                    state.valueCardQuantities.clear();
-                    punchCardItems.forEach(item => {
-                      // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
-                      // If membershipPlanId exists, use it; otherwise construct from productId
-                      const planId = storedOrder.membershipPlanId || 
-                                    (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
-                      const quantity = item.quantity || 1;
-                      state.valueCardQuantities.set(planId, quantity);
-                      console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
-                    });
-                  }
+                // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
+                // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
+                const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
+                if (punchCardItems.length > 0) {
+                  console.log('[Payment Retry] Found punch card items, rebuilding valueCardQuantities');
+                  state.valueCardQuantities.clear();
+                  punchCardItems.forEach(item => {
+                    // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
+                    // If membershipPlanId exists, use it; otherwise construct from productId
+                    const planId = storedOrder.membershipPlanId || 
+                                  (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
+                    const quantity = item.quantity || 1;
+                    state.valueCardQuantities.set(planId, quantity);
+                    console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
+                  });
                 }
-                if (storedOrder.totals) {
-                  state.totals = { ...state.totals, ...storedOrder.totals };
-                  console.log('[Payment Retry] ✅ Restored totals');
-                }
+              }
+              if (storedOrder.totals) {
+                state.totals = { ...state.totals, ...storedOrder.totals };
+                console.log('[Payment Retry] ✅ Restored totals');
+              }
+              
+              // Restore selectedProductType and selectedProductId if available
+              if (storedOrder.selectedProductType) {
+                state.selectedProductType = storedOrder.selectedProductType;
+                console.log('[Payment Retry] ✅ Restored selectedProductType:', state.selectedProductType);
+              }
+              if (storedOrder.selectedProductId) {
+                state.selectedProductId = storedOrder.selectedProductId;
+                console.log('[Payment Retry] ✅ Restored selectedProductId:', state.selectedProductId);
+              }
+              
+              if (storedOrder.membershipPlanId) {
+                state.membershipPlanId = storedOrder.membershipPlanId;
+                console.log('[Payment Retry] ✅ Restored membershipPlanId:', state.membershipPlanId);
                 
-                // Restore selectedProductType and selectedProductId if available
-                if (storedOrder.selectedProductType) {
-                  state.selectedProductType = storedOrder.selectedProductType;
-                  console.log('[Payment Retry] ✅ Restored selectedProductType:', state.selectedProductType);
-                }
-                if (storedOrder.selectedProductId) {
-                  state.selectedProductId = storedOrder.selectedProductId;
-                  console.log('[Payment Retry] ✅ Restored selectedProductId:', state.selectedProductId);
-                }
-                
-                if (storedOrder.membershipPlanId) {
-                  state.membershipPlanId = storedOrder.membershipPlanId;
-                  console.log('[Payment Retry] ✅ Restored membershipPlanId:', state.membershipPlanId);
-                  
-                  // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
-                  // Handle all formats: campaign-, membership-, 15daypass-, punch-
-                  if (!state.selectedProductType || !state.selectedProductId) {
-                    if (typeof storedOrder.membershipPlanId === 'string') {
-                      if (storedOrder.membershipPlanId.startsWith('campaign-')) {
-                        const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
+                // Handle all formats: campaign-, membership-, 15daypass-, punch-
+                if (!state.selectedProductType || !state.selectedProductId) {
+                  if (typeof storedOrder.membershipPlanId === 'string') {
+                    if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+                      const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+                      const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from membership:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+                      const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
+                               storedOrder.membershipPlanId === 'adult-punch' || 
+                               storedOrder.membershipPlanId === 'junior-punch') {
+                      // For punch cards, extract productId from membershipPlanId
+                      if (storedOrder.membershipPlanId.startsWith('punch-')) {
+                        const productId = storedOrder.membershipPlanId.replace('punch-', '');
                         state.selectedProductId = parseInt(productId, 10) || productId;
-                        state.selectedProductType = 'membership';
-                        console.log('[Payment Retry] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
-                      } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
-                        const productId = storedOrder.membershipPlanId.replace('membership-', '');
-                        state.selectedProductId = parseInt(productId, 10) || productId;
-                        state.selectedProductType = 'membership';
-                        console.log('[Payment Retry] ✅ Derived selectedProductId from membership:', state.selectedProductId);
-                      } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
-                        const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
-                        state.selectedProductId = parseInt(productId, 10) || productId;
-                        state.selectedProductType = 'membership';
-                        console.log('[Payment Retry] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
-                      } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
-                                 storedOrder.membershipPlanId === 'adult-punch' || 
-                                 storedOrder.membershipPlanId === 'junior-punch') {
-                        // For punch cards, extract productId from membershipPlanId
-                        if (storedOrder.membershipPlanId.startsWith('punch-')) {
-                          const productId = storedOrder.membershipPlanId.replace('punch-', '');
-                          state.selectedProductId = parseInt(productId, 10) || productId;
-                        } else {
-                          // For adult-punch/junior-punch, we need to find the productId from cart items
-                          const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
-                          if (punchCardItem) {
-                            state.selectedProductId = punchCardItem.productId || punchCardItem.id;
-                          }
+                      } else {
+                        // For adult-punch/junior-punch, we need to find the productId from cart items
+                        const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
+                        if (punchCardItem) {
+                          state.selectedProductId = punchCardItem.productId || punchCardItem.id;
                         }
-                        state.selectedProductType = 'punch-card';
-                        console.log('[Payment Retry] ✅ Derived selectedProductId from punch card:', state.selectedProductId);
                       }
+                      state.selectedProductType = 'punch-card';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from punch card:', state.selectedProductId);
                     }
                   }
                 }
-                if (storedOrder.selectedBusinessUnit) {
-                  state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
-                  console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
-                }
-                if (storedOrder.orderId) {
-                  state.orderId = storedOrder.orderId;
-                  console.log('[Payment Retry] ✅ Restored orderId');
-                }
               }
-            } catch (e) {
-              console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
+              if (storedOrder.selectedBusinessUnit) {
+                state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+                console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
+              }
+              if (storedOrder.orderId) {
+                state.orderId = storedOrder.orderId;
+                console.log('[Payment Retry] ✅ Restored orderId');
+              }
             }
+          } catch (e) {
+            console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
+          }
+          
+          // Reset payment failed state and navigate to step 4
+          state.paymentFailed = false;
+          state.currentStep = 4;
+          showStep(4);
+          updateStepIndicator();
+          updateNavigationButtons();
+          updateMainSubtitle();
+          
+          // CRITICAL: Update cart and payment overview after DOM is ready
+          // Use setTimeout to ensure showStep(4) has finished rendering
+          setTimeout(() => {
+            updateCartSummary();
             
-            // Reset payment failed state and navigate to step 4
-            state.paymentFailed = false;
-            state.currentStep = 4;
-            showStep(4);
-            updateStepIndicator();
-            updateNavigationButtons();
-            updateMainSubtitle();
-            
-            // CRITICAL: Update cart and payment overview after DOM is ready
-            // Use setTimeout to ensure showStep(4) has finished rendering
-            setTimeout(() => {
-              updateCartSummary();
-              
-              // If order exists, fetch full order data for payment overview
-              if (state.orderId) {
-                console.log('[Payment Retry] Fetching order data for payment overview (orderId:', state.orderId, ')');
-                orderAPI.getOrder(state.orderId)
-                  .then(order => {
-                    state.fullOrder = order;
-                    updatePaymentOverview();
-                    console.log('[Payment Retry] ✅ Order data fetched, payment overview updated');
-                  })
-                  .catch(error => {
-                    console.warn('[Payment Retry] Could not fetch order data for payment overview:', error);
-                    // Still update payment overview with available data
-                    updatePaymentOverview();
-                  });
-              } else {
-                // Update payment overview with current state data
-                updatePaymentOverview();
-              }
-            }, 100);
-            
-            scrollToTop();
-          });
-        }
-        
-        if (supportBtn) {
-          supportBtn.addEventListener('click', () => {
-            console.log('[Payment Failed] User clicked "Contact Support"');
-            // Open support email or support page
-            const supportEmail = 'support@boulders.dk';
-            const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
-            const body = encodeURIComponent(`Hello,\n\nI experienced a payment issue with Order #${displayOrderId}.\n\nCould you please help me complete my membership purchase?\n\nThank you!`);
-            window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
-          });
-        }
-      }, 100);
-      successMessage.style.color = '#d1d5db';
-      successMessage.style.lineHeight = '1.6';
-      successMessage.style.whiteSpace = 'normal';
-      console.log('[Payment Failed] ✅ Message updated with clear status, reason, and actionable steps');
-    }
+            // If order exists, fetch full order data for payment overview
+            if (state.orderId) {
+              console.log('[Payment Retry] Fetching order data for payment overview (orderId:', state.orderId, ')');
+              orderAPI.getOrder(state.orderId)
+                .then(order => {
+                  state.fullOrder = order;
+                  updatePaymentOverview();
+                  console.log('[Payment Retry] ✅ Order data fetched, payment overview updated');
+                })
+                .catch(error => {
+                  console.warn('[Payment Retry] Could not fetch order data for payment overview:', error);
+                  // Still update payment overview with available data
+                  updatePaymentOverview();
+                });
+            } else {
+              // Update payment overview with current state data
+              updatePaymentOverview();
+            }
+          }, 100);
+          
+          scrollToTop();
+        });
+      }
+      
+      if (supportOption) {
+        supportOption.addEventListener('click', () => {
+          console.log('[Payment Failed] User clicked "Get Help"');
+          // Open support email or support page
+          const supportEmail = 'support@boulders.dk';
+          const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
+          const body = encodeURIComponent(`Hello,\n\nI experienced a payment issue with Order #${displayOrderId}.\n\nCould you please help me complete my membership purchase?\n\nThank you!`);
+          window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+        });
+      }
+    }, 100);
     
-    if (successBadge) {
-      // Use a less alarming icon - info/warning circle instead of harsh X
-      successBadge.innerHTML = `
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-      `;
-      console.log('[Payment Failed] ✅ Badge updated to calm info icon');
-    }
+    console.log('[Payment Failed] ✅ New payment failed UI structure created');
     
     // CRITICAL: Hide order details, membership details, and "What happens next?" sections
     // These should only be shown when payment is successful
