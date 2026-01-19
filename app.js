@@ -13428,14 +13428,28 @@ async function loadOrderForConfirmation(orderId) {
             break;
           case 401:
           case 403:
-            failureReason = 'Payment authorization failed. Please try again or use a different payment method.';
+            failureReason = 'The payment session expired or was cancelled.';
+            break;
+          case 404:
+            failureReason = 'The order could not be found. This may happen if the payment window was open for too long.';
             break;
           default:
             failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
         }
-      } else if (paymentError.toLowerCase().includes('cancel')) {
-        failureReason = 'Payment was cancelled before completion.';
+      } else {
+        const errorLower = paymentError.toLowerCase();
+        if (errorLower.includes('cancel')) {
+          failureReason = 'You closed the payment window before completing the transaction.';
+        } else if (errorLower.includes('declined') || errorLower.includes('bank') || errorLower.includes('card issuer')) {
+          failureReason = 'Payment was declined by your bank or card issuer.';
+        } else if (errorLower.includes('expired') || errorLower.includes('timeout')) {
+          failureReason = 'The payment session expired or was cancelled.';
+        } else if (errorLower.includes('not found') || errorLower.includes('404')) {
+          failureReason = 'The order could not be found. This may happen if the payment window was open for too long.';
+        }
       }
+    } else if (paymentStatus === 'cancelled' || paymentStatus === 'canceled') {
+      failureReason = 'You closed the payment window before completing the transaction.';
     }
   }
   
@@ -13553,9 +13567,21 @@ async function loadOrderForConfirmation(orderId) {
           return;
         }
 
-        // Use default calm message instead of technical details
-        console.warn('[Payment Return] ⚠️ INNER CATCH: Calling showPaymentFailedMessage');
-        showPaymentFailedMessage(null, orderId, null);
+        // Try to extract error information for better user messaging
+        let catchReason = null;
+        const errorMessage = String(fetchError?.message || fetchError || '').toLowerCase();
+        if (errorMessage.includes('declined') || errorMessage.includes('bank') || errorMessage.includes('card issuer')) {
+          catchReason = 'Payment was declined by your bank or card issuer.';
+        } else if (errorMessage.includes('cancelled') || errorMessage.includes('canceled')) {
+          catchReason = 'You closed the payment window before completing the transaction.';
+        } else if (errorMessage.includes('expired') || errorMessage.includes('timeout') || errorMessage.includes('401')) {
+          catchReason = 'The payment session expired or was cancelled.';
+        } else if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+          catchReason = 'The order could not be found. This may happen if the payment window was open for too long.';
+        }
+        
+        console.warn('[Payment Return] ⚠️ INNER CATCH: Calling showPaymentFailedMessage with reason:', catchReason);
+        showPaymentFailedMessage(null, orderId, catchReason);
         console.warn('[Payment Return] ✅ showPaymentFailedMessage called from inner catch - returning early');
         return; // CRITICAL: Always return to prevent success page
       } catch (innerError) {
@@ -13946,7 +13972,14 @@ async function loadOrderForConfirmation(orderId) {
     // Also show failed for ANY error when returning from payment (safer than showing success)
     if (isUnauthorized || isNotFound || has401InMessage || has404InMessage) {
       console.warn('[Payment Return] ⚠️ DETECTED 401/404 ERROR - Calling showPaymentFailedMessage');
-        const failureReason = null; // Use default calm message instead of technical details
+      
+      // Determine appropriate failure reason based on error type
+      let failureReason = null;
+      if (isNotFound || has404InMessage) {
+        failureReason = 'The order could not be found. This may happen if the payment window was open for too long.';
+      } else if (isUnauthorized || has401InMessage) {
+        failureReason = 'The payment session expired or was cancelled.';
+      }
       
       // CRITICAL: Always call showPaymentFailedMessage for 401/404 errors
       console.warn('[Payment Return] About to call showPaymentFailedMessage with:', { orderId, failureReason });
@@ -13958,8 +13991,22 @@ async function loadOrderForConfirmation(orderId) {
     // For any other error when returning from payment, also show failed (safer than showing success)
     // This handles cases where error doesn't match 401/404 patterns but still indicates failure
     console.warn('[Payment Return] ⚠️ Unexpected error during payment return - showing payment failed as fallback');
-    console.warn('[Payment Return] About to call showPaymentFailedMessage (fallback)');
-    showPaymentFailedMessage(null, orderId, null); // Use default calm message
+    
+    // Try to extract error information from the error object
+    let fallbackReason = null;
+    if (error) {
+      const errorMessage = String(error?.message || error || '').toLowerCase();
+      if (errorMessage.includes('declined') || errorMessage.includes('bank') || errorMessage.includes('card issuer')) {
+        fallbackReason = 'Payment was declined by your bank or card issuer.';
+      } else if (errorMessage.includes('cancelled') || errorMessage.includes('canceled')) {
+        fallbackReason = 'You closed the payment window before completing the transaction.';
+      } else if (errorMessage.includes('expired') || errorMessage.includes('timeout')) {
+        fallbackReason = 'The payment session expired or was cancelled.';
+      }
+    }
+    
+    console.warn('[Payment Return] About to call showPaymentFailedMessage (fallback) with reason:', fallbackReason);
+    showPaymentFailedMessage(null, orderId, fallbackReason);
     console.warn('[Payment Return] showPaymentFailedMessage (fallback) called - returning early');
     return; // Don't show success page or pending message
   }
@@ -14238,16 +14285,24 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
     failureActions.innerHTML = `
       <div class="action-grid">
         <div class="action-option primary-option">
-          <div class="option-icon">↻</div>
+          <div class="option-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+            </svg>
+          </div>
           <h4>Try Again</h4>
           <p>Retry payment with saved order details</p>
         </div>
         
         
         <div class="action-option" id="contact-support-option">
-          <div class="option-icon">💬</div>
+          <div class="option-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
           <h4>Get Help</h4>
-          <p>Contact support • Order #<span id="failed-order-id">${displayOrderId}</span></p>
+          <p>Email support • Order #<span id="failed-order-id">${displayOrderId}</span></p>
         </div>
       </div>
 
@@ -14264,9 +14319,10 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
     setTimeout(() => {
       const retryBtn = document.getElementById('retry-payment-btn');
       const supportOption = document.getElementById('contact-support-option');
+      const primaryOption = document.querySelector('.action-option.primary-option');
       
-      if (retryBtn) {
-        retryBtn.addEventListener('click', () => {
+      // Shared retry payment handler function
+      const handleRetryPayment = () => {
           console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
           
           // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
@@ -14404,7 +14460,18 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
           }, 100);
           
           scrollToTop();
-        });
+      };
+      
+      // Attach handler to retry button
+      if (retryBtn) {
+        retryBtn.addEventListener('click', handleRetryPayment);
+      }
+      
+      // Attach handler to primary option (Try Again card)
+      if (primaryOption) {
+        primaryOption.addEventListener('click', handleRetryPayment);
+        // Add cursor pointer style for better UX
+        primaryOption.style.cursor = 'pointer';
       }
       
       if (supportOption) {
