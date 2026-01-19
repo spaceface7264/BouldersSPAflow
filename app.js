@@ -33,6 +33,19 @@ import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
+/**
+ * Gets today's date in YYYY-MM-DD format using local time (not UTC).
+ * This ensures we always send the user's local "today" date to the backend.
+ * @returns {string} Today's date in YYYY-MM-DD format (e.g., "2026-01-05")
+ */
+function getTodayLocalDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const debugEnabled = window.DEBUG_LOGS === true;
 const originalConsoleLog = console.log.bind(console);
 const originalConsoleWarn = console.warn.bind(console);
@@ -1401,8 +1414,8 @@ class OrderAPI {
       
       // Set start date to today so membership starts immediately
       // Format: YYYY-MM-DD (ISO date format)
-      const todayDate = new Date();
-      const startDate = todayDate.toISOString().split('T')[0]; // e.g., "2026-01-05"
+      // Use local date (not UTC) to ensure we always send the user's local "today"
+      const startDate = getTodayLocalDateString(); // e.g., "2026-01-05" (local date)
       
       // CRITICAL BACKEND BUG: Backend ignores startDate parameter for productId 134 ("Medlemskab")
       // but accepts it for productId 56 ("Junior") and productId 135 ("Student").
@@ -1647,10 +1660,10 @@ class OrderAPI {
       // Other error - continue to next strategy
     }
     
-    // Strategy 2: Try with explicit date format
+    // Strategy 2: Try with explicit date format (using helper function for consistency)
     console.log('[Step 7] Strategy 2: Try with explicit date format');
     try {
-      const todayExplicit = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const todayExplicit = getTodayLocalDateString();
       if (todayExplicit !== basePayload.startDate) {
         const payloadVariant = { ...basePayload, startDate: todayExplicit };
         const strategy2Result = await this._tryStrategyDeleteAndReadd(
@@ -2304,7 +2317,7 @@ class PaymentAPI {
             const productId = subscriptionItem?.product?.id;
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const startDateStr = today.toISOString().split('T')[0];
+            const startDateStr = getTodayLocalDateString();
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
             const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
             
@@ -10737,7 +10750,7 @@ function updatePaymentOverview() {
       const productId = subscriptionItem?.product?.id || state.selectedProductId;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const startDateStr = today.toISOString().split('T')[0];
+      const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
       
       if (initialPaymentPeriod?.start) {
@@ -10851,7 +10864,7 @@ function updatePaymentOverview() {
           // Regular membership: Calculate partial month price client-side
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const startDateStr = today.toISOString().split('T')[0];
+          const startDateStr = getTodayLocalDateString();
           
           // Try to use the helper function if available
           if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
@@ -12292,7 +12305,7 @@ async function handleCheckout() {
               } else {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                const startDateStr = today.toISOString().split('T')[0];
+                const startDateStr = getTodayLocalDateString();
                 const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
               
               // Use robust verification method
@@ -12514,7 +12527,7 @@ async function handleCheckout() {
               const productId = subscriptionItem?.product?.id;
               const today = new Date();
               today.setHours(0, 0, 0, 0);
-              const startDateStr = today.toISOString().split('T')[0];
+              const startDateStr = getTodayLocalDateString();
               const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
               const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
               
@@ -13217,7 +13230,7 @@ window.verifyOrderPrice = async function(orderId = null) {
     const productId = subscriptionItem?.product?.id;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const startDateStr = today.toISOString().split('T')[0];
+    const startDateStr = getTodayLocalDateString();
     const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
     const verification = orderAPI._verifySubscriptionPricing(order, productId, expectedPrice, today);
     
