@@ -13419,37 +13419,49 @@ async function loadOrderForConfirmation(orderId) {
     console.warn('[Payment Return] ⚠️ Error detected in URL parameters - will verify payment status before failing');
     console.warn('[Payment Return] Error details:', { paymentError, paymentStatus });
 
-    if (paymentError) {
-      const errorCode = parseInt(paymentError, 10);
-      if (!isNaN(errorCode)) {
-        switch (errorCode) {
-          case 205:
-            failureReason = 'Payment was declined by your bank or card issuer.';
-            break;
-          case 401:
-          case 403:
-            failureReason = 'The payment session expired or was cancelled.';
-            break;
-          case 404:
-            failureReason = 'The order could not be found. This may happen if the payment window was open for too long.';
-            break;
-          default:
-            failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
-        }
+    // CRITICAL: Check for cancellation FIRST (before decline) since user cancellation is more specific
+    // Check paymentStatus parameter first
+    if (paymentStatus === 'cancelled' || paymentStatus === 'canceled') {
+      failureReason = 'You closed the payment window before completing the transaction.';
+    } else if (paymentError) {
+      const errorLower = paymentError.toLowerCase();
+      // Check if error parameter itself indicates cancellation (before parsing as error code)
+      if (errorLower.includes('cancel') || errorLower === 'cancelled' || errorLower === 'canceled') {
+        failureReason = 'You closed the payment window before completing the transaction.';
       } else {
-        const errorLower = paymentError.toLowerCase();
-        if (errorLower.includes('cancel')) {
-          failureReason = 'You closed the payment window before completing the transaction.';
-        } else if (errorLower.includes('declined') || errorLower.includes('bank') || errorLower.includes('card issuer')) {
-          failureReason = 'Payment was declined by your bank or card issuer.';
-        } else if (errorLower.includes('expired') || errorLower.includes('timeout')) {
-          failureReason = 'The payment session expired or was cancelled.';
-        } else if (errorLower.includes('not found') || errorLower.includes('404')) {
-          failureReason = 'The order could not be found. This may happen if the payment window was open for too long.';
+        // Parse as error code
+        const errorCode = parseInt(paymentError, 10);
+        if (!isNaN(errorCode)) {
+          switch (errorCode) {
+            case 205:
+              // Error 205 could be decline OR cancellation - check if status indicates cancellation
+              if (paymentStatus === 'cancelled' || paymentStatus === 'canceled') {
+                failureReason = 'You closed the payment window before completing the transaction.';
+              } else {
+                failureReason = 'Payment was declined by your bank or card issuer.';
+              }
+              break;
+            case 401:
+            case 403:
+              failureReason = 'The payment session expired or was cancelled.';
+              break;
+            case 404:
+              failureReason = 'The order could not be found. This may happen if the payment window was open for too long.';
+              break;
+            default:
+              failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
+          }
+        } else {
+          // Not a numeric code - check text-based errors
+          if (errorLower.includes('declined') || errorLower.includes('bank') || errorLower.includes('card issuer')) {
+            failureReason = 'Payment was declined by your bank or card issuer.';
+          } else if (errorLower.includes('expired') || errorLower.includes('timeout')) {
+            failureReason = 'The payment session expired or was cancelled.';
+          } else if (errorLower.includes('not found') || errorLower.includes('404')) {
+            failureReason = 'The order could not be found. This may happen if the payment window was open for too long.';
+          }
         }
       }
-    } else if (paymentStatus === 'cancelled' || paymentStatus === 'canceled') {
-      failureReason = 'You closed the payment window before completing the transaction.';
     }
   }
   
