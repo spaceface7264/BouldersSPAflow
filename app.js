@@ -14317,13 +14317,15 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
       const primaryOption = document.querySelector('.action-option.primary-option');
       
       // Shared retry payment handler function
-      const handleRetryPayment = () => {
+      const handleRetryPayment = async () => {
           console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
           
           // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
           // This ensures cart is populated when showStep(4) runs
           try {
             const orderData = sessionStorage.getItem('boulders_checkout_order');
+            const customerData = sessionStorage.getItem('boulders_checkout_customer');
+            
             if (orderData) {
               const storedOrder = JSON.parse(orderData);
               console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
@@ -14417,8 +14419,54 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
                 console.log('[Payment Retry] ✅ Restored orderId');
               }
             }
+            
+            // CRITICAL: Restore customer profile data to show full profile info
+            if (customerData) {
+              try {
+                const storedCustomer = JSON.parse(customerData);
+                state.customerId = storedCustomer.id;
+                console.log('[Payment Retry] Restored customer ID from sessionStorage:', storedCustomer.id);
+                
+                // If user is authenticated, fetch full customer profile to display all fields
+                if (isUserAuthenticated() && storedCustomer.id) {
+                  try {
+                    const customerProfile = await authAPI.getCustomer(storedCustomer.id);
+                    state.authenticatedCustomer = customerProfile;
+                    console.log('[Payment Retry] ✅ Loaded full customer profile:', customerProfile);
+                    // Refresh UI after loading full profile
+                    refreshLoginUI();
+                  } catch (profileError) {
+                    console.warn('[Payment Retry] Could not fetch full customer profile, using stored data:', profileError);
+                    // Fallback: Use stored customer data if available
+                    if (storedCustomer.firstName || storedCustomer.lastName || storedCustomer.email) {
+                      state.authenticatedCustomer = {
+                        id: storedCustomer.id,
+                        firstName: storedCustomer.firstName,
+                        lastName: storedCustomer.lastName,
+                        email: storedCustomer.email,
+                        // Note: Full profile might not have all fields, but we'll try to use what we have
+                      };
+                    }
+                    // Refresh UI with fallback data
+                    refreshLoginUI();
+                  }
+                } else {
+                  // Not authenticated or no customer ID - refresh UI with what we have
+                  refreshLoginUI();
+                }
+              } catch (e) {
+                console.warn('[Payment Retry] Could not parse customer data from sessionStorage:', e);
+                // Still refresh UI even if customer data parse failed
+                refreshLoginUI();
+              }
+            } else {
+              // No customer data in sessionStorage - refresh UI with current state
+              refreshLoginUI();
+            }
           } catch (e) {
             console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
+            // Still refresh UI even if restore failed
+            refreshLoginUI();
           }
           
           // Reset payment failed state and navigate to step 4
