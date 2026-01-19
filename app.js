@@ -13984,7 +13984,7 @@ async function loadOrderForConfirmation(orderId) {
   }
 }
 
-function showPaymentFailedMessage(order, orderId, reason = null) {
+async function showPaymentFailedMessage(order, orderId, reason = null) {
   // reason parameter is kept for backward compatibility but no longer used
   // All payment failures now show the same friendly message
   console.log('[Payment Failed] Called with:', { orderId, currentStep: state.currentStep });
@@ -13993,6 +13993,8 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
   // This ensures cart is populated when user clicks "Try Payment Again"
   try {
     const orderData = sessionStorage.getItem('boulders_checkout_order');
+    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    
     if (orderData) {
       const storedOrder = JSON.parse(orderData);
       console.log('[Payment Failed] Restoring cart and state from sessionStorage:', storedOrder);
@@ -14085,8 +14087,54 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
         console.log('[Payment Failed] ✅ Restored orderId:', state.orderId);
       }
     }
+    
+    // CRITICAL: Restore customer profile data to show full profile info
+    if (customerData) {
+      try {
+        const storedCustomer = JSON.parse(customerData);
+        state.customerId = storedCustomer.id;
+        console.log('[Payment Failed] Restored customer ID from sessionStorage:', storedCustomer.id);
+        
+        // If user is authenticated, fetch full customer profile to display all fields
+        if (isUserAuthenticated() && storedCustomer.id) {
+          try {
+            const customerProfile = await authAPI.getCustomer(storedCustomer.id);
+            state.authenticatedCustomer = customerProfile;
+            console.log('[Payment Failed] ✅ Loaded full customer profile:', customerProfile);
+            // Refresh UI after loading full profile
+            refreshLoginUI();
+          } catch (profileError) {
+            console.warn('[Payment Failed] Could not fetch full customer profile, using stored data:', profileError);
+            // Fallback: Use stored customer data if available
+            if (storedCustomer.firstName || storedCustomer.lastName || storedCustomer.email) {
+              state.authenticatedCustomer = {
+                id: storedCustomer.id,
+                firstName: storedCustomer.firstName,
+                lastName: storedCustomer.lastName,
+                email: storedCustomer.email,
+                // Note: Full profile might not have all fields, but we'll try to use what we have
+              };
+            }
+            // Refresh UI with fallback data
+            refreshLoginUI();
+          }
+        } else {
+          // Not authenticated or no customer ID - refresh UI with what we have
+          refreshLoginUI();
+        }
+      } catch (e) {
+        console.warn('[Payment Failed] Could not parse customer data from sessionStorage:', e);
+        // Still refresh UI even if customer data parse failed
+        refreshLoginUI();
+      }
+    } else {
+      // No customer data in sessionStorage - refresh UI with current state
+      refreshLoginUI();
+    }
   } catch (e) {
     console.warn('[Payment Failed] Could not restore cart from sessionStorage:', e);
+    // Still refresh UI even if restore failed
+    refreshLoginUI();
   }
   
   // CRITICAL: Mark payment as failed FIRST to prevent success page from rendering
