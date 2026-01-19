@@ -1616,8 +1616,23 @@ class OrderAPI {
     const dayOfMonth = today.getDate();
     const daysRemainingInMonth = daysInCurrentMonth - dayOfMonth + 1;
     
-    // Calculate prorated price
-    const proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+    // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
+    // Otherwise: just rest of current month (prorated)
+    let proratedPriceInCents;
+    let includesNextMonth = false;
+    
+    if (dayOfMonth >= 16) {
+      // Calculate: (rest of current month) + (full next month)
+      const partialCurrentMonthPrice = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+      const fullNextMonthPrice = monthlyPriceInCents;
+      proratedPriceInCents = partialCurrentMonthPrice + fullNextMonthPrice;
+      includesNextMonth = true;
+      console.log(`[Price Calculation] Day ${dayOfMonth} >= 16: Calculating rest of month (${daysRemainingInMonth} days) + full next month`);
+    } else {
+      // Calculate: just rest of current month (prorated)
+      proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+      console.log(`[Price Calculation] Day ${dayOfMonth} < 16: Calculating prorated price for remaining ${daysRemainingInMonth} days`);
+    }
     
     return {
       amountInCents: proratedPriceInCents,
@@ -1625,7 +1640,8 @@ class OrderAPI {
       daysRemaining: daysRemainingInMonth,
       daysInMonth: daysInCurrentMonth,
       monthlyPriceInCents,
-      monthlyPriceInDKK: monthlyPriceInCents / 100
+      monthlyPriceInDKK: monthlyPriceInCents / 100,
+      includesNextMonth // Flag to indicate if next month is included
     };
   }
 
@@ -10872,15 +10888,30 @@ function updatePaymentOverview() {
             if (expectedPrice) {
               payNowAmount = expectedPrice.amountInDKK;
               
-              // Set billing period to today - end of month
+              // Set billing period based on whether next month is included
               const currentMonth = today.getMonth();
               const currentYear = today.getFullYear();
-              const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-              billingPeriod = {
-                start: today,
-                end: lastDayOfMonth
-              };
-              console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month):', payNowAmount, 'DKK');
+              const dayOfMonth = today.getDate();
+              
+              if (expectedPrice.includesNextMonth) {
+                // Billing period extends to end of next month
+                const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+                const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+                const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+                billingPeriod = {
+                  start: today,
+                  end: lastDayOfNextMonth
+                };
+                console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month):', payNowAmount, 'DKK');
+              } else {
+                // Billing period is just rest of current month
+                const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+                billingPeriod = {
+                  start: today,
+                  end: lastDayOfMonth
+                };
+                console.log('[Payment Overview] ✅ Pay now calculated (partial month):', payNowAmount, 'DKK');
+              }
             } else {
               // Fallback to full month price
               const priceInCents = membership.priceWithInterval?.price?.amount || 0;
@@ -10897,17 +10928,37 @@ function updatePaymentOverview() {
             const currentYear = today.getFullYear();
             const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
             const daysInMonth = lastDayOfMonth.getDate();
+            const dayOfMonth = today.getDate();
             const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
             
-            // Calculate partial month price
-            payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
-            
-            billingPeriod = {
-              start: today,
-              end: lastDayOfMonth
-            };
-            
-            console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month, manual calc):', payNowAmount, 'DKK');
+            // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
+            if (dayOfMonth >= 16) {
+              // Calculate: (rest of current month) + (full next month)
+              const partialCurrentMonthPrice = (monthlyPrice / daysInMonth) * daysRemaining;
+              payNowAmount = partialCurrentMonthPrice + monthlyPrice;
+              
+              // Billing period extends to end of next month
+              const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+              const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+              const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+              
+              billingPeriod = {
+                start: today,
+                end: lastDayOfNextMonth
+              };
+              
+              console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month, manual calc):', payNowAmount, 'DKK');
+            } else {
+              // Calculate: just rest of current month (prorated)
+              payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+              
+              billingPeriod = {
+                start: today,
+                end: lastDayOfMonth
+              };
+              
+              console.log('[Payment Overview] ✅ Pay now calculated (partial month, manual calc):', payNowAmount, 'DKK');
+            }
           }
         }
       } else {
