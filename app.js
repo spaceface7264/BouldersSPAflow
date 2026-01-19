@@ -5236,24 +5236,24 @@ document.addEventListener('DOMContentLoaded', () => {
         state.currentStep = TOTAL_STEPS;
         state.paymentFailed = true;
         
-        // Hide all step panels immediately (DOM should be cached by now from init())
-        const stepPanels = document.querySelectorAll('.step-panel');
-        stepPanels.forEach((panel, index) => {
-          const stepNumber = index + 1;
-          if (stepNumber === TOTAL_STEPS) {
-            // Show step 5
-            panel.classList.add('active');
-            panel.style.display = 'block';
-            panel.style.visibility = 'visible';
-            panel.style.opacity = '1';
-          } else {
-            // Hide all other steps immediately
-            panel.classList.remove('active');
-            panel.style.display = 'none';
-            panel.style.visibility = 'hidden';
-            panel.style.opacity = '0';
-          }
-        });
+      // Hide all step panels immediately (use direct DOM query since cacheDom might not have run yet)
+      const stepPanels = document.querySelectorAll('.step-panel');
+      const step5Panel = document.getElementById('step-5');
+      stepPanels.forEach((panel) => {
+        if (panel.id === 'step-5') {
+          // Show step 5
+          panel.classList.add('active');
+          panel.style.display = 'block';
+          panel.style.visibility = 'visible';
+          panel.style.opacity = '1';
+        } else {
+          // Hide all other steps immediately
+          panel.classList.remove('active');
+          panel.style.display = 'none';
+          panel.style.visibility = 'hidden';
+          panel.style.opacity = '0';
+        }
+      });
         
         // Show payment failed message immediately
         showPaymentFailedMessage(null, parseInt(orderId, 10), null);
