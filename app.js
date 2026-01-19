@@ -14480,6 +14480,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           // CRITICAL: Update cart and payment overview after DOM is ready
           // Use setTimeout to ensure showStep(4) has finished rendering
           setTimeout(() => {
+            // Refresh login UI to ensure profile information is displayed
+            refreshLoginUI();
             updateCartSummary();
             
             // If order exists, fetch full order data for payment overview
