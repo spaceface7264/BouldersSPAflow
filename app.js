@@ -1633,40 +1633,70 @@ class OrderAPI {
   async _fixBackendPricingBug(orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today) {
     // Strategy 1: Delete and re-add with same payload (sometimes backend needs fresh start)
     console.log('[Step 7] Strategy 1: Delete and re-add with same payload');
-    const strategy1Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today
-    );
-    if (strategy1Result) return strategy1Result;
+    try {
+      const strategy1Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today
+      );
+      if (strategy1Result) return strategy1Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked (403 Forbidden) - cannot modify subscription item');
+        console.warn('[Step 7] ⚠️ Skipping remaining fix strategies - order cannot be modified');
+        return null; // Order is locked, can't fix
+      }
+      // Other error - continue to next strategy
+    }
     
     // Strategy 2: Try with explicit date format
     console.log('[Step 7] Strategy 2: Try with explicit date format');
-    const todayExplicit = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    if (todayExplicit !== basePayload.startDate) {
-      const payloadVariant = { ...basePayload, startDate: todayExplicit };
-      const strategy2Result = await this._tryStrategyDeleteAndReadd(
-        orderId, url, headers, subscriptionItemId, payloadVariant, productId, expectedPrice, accessToken, today
-      );
-      if (strategy2Result) return strategy2Result;
+    try {
+      const todayExplicit = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      if (todayExplicit !== basePayload.startDate) {
+        const payloadVariant = { ...basePayload, startDate: todayExplicit };
+        const strategy2Result = await this._tryStrategyDeleteAndReadd(
+          orderId, url, headers, subscriptionItemId, payloadVariant, productId, expectedPrice, accessToken, today
+        );
+        if (strategy2Result) return strategy2Result;
+      }
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - skipping remaining strategies');
+        return null;
+      }
     }
     
     // Strategy 3: Try minimal payload (only required fields)
     console.log('[Step 7] Strategy 3: Try minimal payload');
-    const minimalPayload = {
-      subscriptionProduct: basePayload.subscriptionProduct,
-      startDate: basePayload.startDate,
-      ...(basePayload.birthDate ? { birthDate: basePayload.birthDate } : {}),
-    };
-    const strategy3Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, minimalPayload, productId, expectedPrice, accessToken, today
-    );
-    if (strategy3Result) return strategy3Result;
+    try {
+      const minimalPayload = {
+        subscriptionProduct: basePayload.subscriptionProduct,
+        startDate: basePayload.startDate,
+        ...(basePayload.birthDate ? { birthDate: basePayload.birthDate } : {}),
+      };
+      const strategy3Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, minimalPayload, productId, expectedPrice, accessToken, today
+      );
+      if (strategy3Result) return strategy3Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - skipping remaining strategies');
+        return null;
+      }
+    }
     
     // Strategy 4: Try with longer wait time (backend might need more time to process)
     console.log('[Step 7] Strategy 4: Try with longer wait time');
-    const strategy4Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today, 2000
-    );
-    if (strategy4Result) return strategy4Result;
+    try {
+      const strategy4Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today, 2000
+      );
+      if (strategy4Result) return strategy4Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - all strategies failed');
+        return null;
+      }
+    }
     
     return null; // All strategies failed
   }
@@ -1710,7 +1740,11 @@ class OrderAPI {
       } catch (error) {
         if (error.status === 403) {
           console.log('[Step 7] Cannot delete subscription item (403 Forbidden) - order may be in a state that prevents modification');
-          return null; // Skip this strategy - we don't have permission
+          // Throw a specific error so caller knows order is locked
+          const lockedError = new Error('Order is locked (403 Forbidden)');
+          lockedError.isOrderLocked = true;
+          lockedError.status = 403;
+          throw lockedError;
         }
         const payloadText = typeof error.payload === 'string'
           ? error.payload
@@ -12494,9 +12528,15 @@ async function handleCheckout() {
                 
                 // Show user-friendly error message
                 showToast(
-                  'Der opstod et problem med betalingslinket på grund af en backend-fejl. Kontakt support hvis problemet fortsætter.',
+                  'Unable to process payment due to a system issue. Please try again in a few moments or contact support.',
                   'error'
                 );
+                
+                // Reset checkout state to allow retry
+                state.checkoutInProgress = false;
+                if (typeof setCheckoutLoadingState === 'function') {
+                  setCheckoutLoadingState(false);
+                }
                 
                 throw new Error(`Payment link generation failed due to backend pricing bug. Order price: ${verification.orderPriceDKK} DKK, Expected: ${verification.expectedPriceDKK || 'N/A'} DKK. Product ID: ${productId}. Backend ignored startDate parameter.`);
               }
