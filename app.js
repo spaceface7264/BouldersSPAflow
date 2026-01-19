@@ -14424,8 +14424,8 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
       if (supportOption) {
         supportOption.addEventListener('click', () => {
           console.log('[Payment Failed] User clicked "Get Help"');
-          // Open support email or support page
-          const supportEmail = 'support@boulders.dk';
+          // Open support email
+          const supportEmail = 'medlem@boulders.dk';
           const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
           const body = encodeURIComponent(`Hello,\n\nI experienced a payment issue with Order #${displayOrderId}.\n\nCould you please help me complete my membership purchase?\n\nThank you!`);
           window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
