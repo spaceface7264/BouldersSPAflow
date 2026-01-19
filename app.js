@@ -14241,7 +14241,7 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
           <p>Retry payment with saved order details</p>
         </div>
         
-        
+
         <div class="action-option" id="contact-support-option">
           <div class="option-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -14427,7 +14427,7 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
           // Open support email
           const supportEmail = 'medlem@boulders.dk';
           const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
-          const body = encodeURIComponent(`Hello,\n\nI experienced a payment issue with Order #${displayOrderId}.\n\nCould you please help me complete my membership purchase?\n\nThank you!`);
+          const body = encodeURIComponent(`Hello,\n\nHej, jeg kunne ikke gennemføre købet af ordrenr. #${displayOrderId}.\n\nKan i hjælpe med at løse det?\n\nMange tak!`);
           window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
         });
       }
