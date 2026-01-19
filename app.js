@@ -13569,14 +13569,14 @@ async function loadOrderForConfirmation(orderId) {
 
         // Try to extract error information for better user messaging
         let catchReason = null;
-        const errorMessage = String(fetchError?.message || fetchError || '').toLowerCase();
-        if (errorMessage.includes('declined') || errorMessage.includes('bank') || errorMessage.includes('card issuer')) {
+        const errorMessageLower = errorMessage.toLowerCase();
+        if (errorMessageLower.includes('declined') || errorMessageLower.includes('bank') || errorMessageLower.includes('card issuer')) {
           catchReason = 'Payment was declined by your bank or card issuer.';
-        } else if (errorMessage.includes('cancelled') || errorMessage.includes('canceled')) {
+        } else if (errorMessageLower.includes('cancelled') || errorMessageLower.includes('canceled')) {
           catchReason = 'You closed the payment window before completing the transaction.';
-        } else if (errorMessage.includes('expired') || errorMessage.includes('timeout') || errorMessage.includes('401')) {
+        } else if (errorMessageLower.includes('expired') || errorMessageLower.includes('timeout') || errorMessageLower.includes('401')) {
           catchReason = 'The payment session expired or was cancelled.';
-        } else if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+        } else if (errorMessageLower.includes('not found') || errorMessageLower.includes('404')) {
           catchReason = 'The order could not be found. This may happen if the payment window was open for too long.';
         }
         
