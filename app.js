@@ -1417,13 +1417,11 @@ class OrderAPI {
       // Use local date (not UTC) to ensure we always send the user's local "today"
       const startDate = getTodayLocalDateString(); // e.g., "2026-01-05" (local date)
       
-      // CRITICAL BACKEND BUG: Backend ignores startDate parameter for productId 134 ("Medlemskab")
-      // but accepts it for productId 56 ("Junior") and productId 135 ("Student").
-      // This causes backend to set initialPaymentPeriod.start to future date (next month)
-      // for productId 134, preventing partial-month pricing calculation.
-      // This is a backend issue that needs to be fixed on backend side.
-      // Workaround: Frontend calculates partial-month pricing client-side for display,
-      // but payment window will still show full monthly price because backend uses its own calculation.
+      // Pricing calculation: When startDate is on day 16 or later, price includes:
+      // - Rest of current month (prorated) + Full next month
+      // When startDate is before day 16, price includes:
+      // - Rest of current month only (prorated)
+      // Frontend calculation now matches backend logic to ensure price consistency.
       
       // Build payload according to OpenAPI spec:
       // Required: subscriptionProduct, birthDate
@@ -1438,21 +1436,23 @@ class OrderAPI {
         // ...(state.selectedBusinessUnit ? { businessUnit: state.selectedBusinessUnit } : {}),
       };
       
-      // Log warning if this is productId 134 (known backend bug)
+      // Log pricing calculation details for productId 134 for verification
       if (subscriptionProductId === 134) {
-        console.warn('[Step 7] ⚠️ BACKEND BUG: Adding subscription for productId 134 ("Medlemskab")');
-        console.warn('[Step 7] ⚠️ Backend will ignore startDate parameter and set start date to future');
-        console.warn('[Step 7] ⚠️ This prevents partial-month pricing calculation on backend');
-        console.warn('[Step 7] ⚠️ Frontend will calculate partial-month pricing client-side for display');
-        console.warn('[Step 7] ⚠️ But payment window will show full monthly price (backend bug)');
-        console.warn('[Step 7] ⚠️ This is a backend issue - backend should accept startDate for all products');
+        const dayOfMonth = new Date().getDate();
+        if (dayOfMonth >= 16) {
+          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
+          console.log('[Step 7] ℹ️ Day >= 16: Price will include rest of current month + full next month');
+        } else {
+          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
+          console.log('[Step 7] ℹ️ Day < 16: Price will include prorated rest of current month only');
+        }
       }
       
       console.log('[Step 7] Adding subscription item - productId:', productId);
       console.log('[Step 7] Extracted subscriptionProductId:', subscriptionProductId);
       console.log('[Step 7] Subscription item payload:', JSON.stringify(payload, null, 2));
       
-      // CRITICAL: Log payload details for debugging why backend ignores startDate for productId 134
+      // Log payload details for debugging and verification
       console.log('[Step 7] 🔍 Payload analysis:', {
         subscriptionProductId,
         productId,
@@ -1565,9 +1565,8 @@ class OrderAPI {
         }
         
         // If all strategies failed, log detailed error
-        console.error('[Step 7] ❌ All strategies failed to fix backend pricing bug for productId:', subscriptionProductId);
-        console.error('[Step 7] ❌ Payment window will show incorrect price');
-        console.error('[Step 7] ❌ Cart summary will calculate and show correct price');
+        console.error('[Step 7] ❌ All strategies failed to fix pricing mismatch for productId:', subscriptionProductId);
+        console.error('[Step 7] ❌ Order may have pricing discrepancy - verification will continue');
       }
       
       return data;
@@ -2314,7 +2313,7 @@ class PaymentAPI {
         
         if (error.status === 403) {
           console.error('[Step 9] ⚠️ 403 Forbidden - Possible reasons:');
-          console.error('[Step 9] ⚠️ 1. Order may have incorrect pricing (backend bug - startDate ignored)');
+          console.error('[Step 9] ⚠️ 1. Order may have pricing mismatch (price verification failed)');
           console.error('[Step 9] ⚠️ 2. Order may be in a state that prevents payment link generation');
           console.error('[Step 9] ⚠️ 3. Payment method may not be valid for this order');
           console.error('[Step 9] ⚠️ 4. Business unit may not match order');
@@ -2338,11 +2337,11 @@ class PaymentAPI {
             const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
             
             if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
-              console.error('[Step 9] ❌ CONFIRMED: Order has incorrect pricing due to backend bug!');
+              console.error('[Step 9] ❌ CONFIRMED: Order has pricing mismatch!');
               console.error('[Step 9] ❌ Backend shows:', verification.orderPriceDKK, 'DKK');
-              console.error('[Step 9] ❌ Should be:', verification.expectedPriceDKK || 'N/A', 'DKK');
-              console.error('[Step 9] ❌ This is why payment link generation is failing with 403');
-              console.error('[Step 9] ❌ Backend needs to fix startDate handling for productId:', productId);
+              console.error('[Step 9] ❌ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
+              console.error('[Step 9] ❌ This may cause payment link generation to fail with 403');
+              console.error('[Step 9] ❌ Product ID:', productId);
             }
           }
         }
@@ -10809,7 +10808,7 @@ function updatePaymentOverview() {
               end: lastDayOfMonth
             };
             console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
-            console.warn('[Payment Overview] ⚠️ NOTE: Payment window may show different price if backend bug persists');
+            console.warn('[Payment Overview] ⚠️ NOTE: Using calculated price - verify against backend order price');
           } else {
             // Can't calculate expected price - use backend price as fallback
             payNowAmount = orderPriceDKK;
@@ -12431,16 +12430,16 @@ async function handleCheckout() {
                       orderBeforePayment = fixedOrder;
                     } else {
                       console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
-                      console.error('[checkout] ❌ This is a backend bug - payment window will show incorrect price');
-                      console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
-                      console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
+                      console.error('[checkout] ❌ Pricing mismatch detected');
+                      console.error('[checkout] ❌ UI shows calculated price:', verification.expectedPriceDKK, 'DKK');
+                      console.error('[checkout] ❌ Backend order price:', verification.orderPriceDKK, 'DKK');
                     }
                     } else {
                     console.error('[checkout] ❌ All fix strategies failed - cannot modify order (likely 403 Forbidden)');
-                    console.error('[checkout] ❌ This is a backend bug - backend ignored startDate parameter');
-                    console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
-                    console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
-                    console.error('[checkout] ❌ Backend needs to be fixed to respect startDate parameter for productId:', productId);
+                    console.error('[checkout] ❌ Pricing mismatch - cannot fix order (order may be locked)');
+                    console.error('[checkout] ❌ UI shows calculated price:', verification.expectedPriceDKK, 'DKK');
+                    console.error('[checkout] ❌ Backend order price:', verification.orderPriceDKK, 'DKK');
+                    console.error('[checkout] ❌ Product ID:', productId);
                   }
                 } else if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
                   console.log('[checkout] ✅ Order price is acceptable - no fix needed');
@@ -12583,7 +12582,7 @@ async function handleCheckout() {
               const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
               
               if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
-                console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO BACKEND PRICING BUG');
+                console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO PRICING MISMATCH');
                 console.error('[checkout] ❌ Order has incorrect pricing - backend ignored startDate parameter');
                 console.error('[checkout] ❌ This is a backend issue that needs to be fixed on backend side');
                 console.error('[checkout] ❌ Product ID:', productId);
