@@ -106,6 +106,17 @@
       window.GTM_CONTAINER_ID = window.GTM_CONTAINER_ID || 'GTM-KHB92N9P';
       // GTM will be loaded conditionally after cookie consent is checked
       window.GTM_LOADED = false;
+      
+      // Initialize GA4 Consent Mode - deny by default until user consents
+      // This must run before GTM/GA4 loads to ensure consent mode is set correctly
+      // Format: https://developers.google.com/tag-platform/security/guides/consent
+      window.dataLayer.push({
+        'consent': 'default',
+        'analytics_storage': 'denied',
+        'ad_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied',
+      });
     </script>
     <!-- End Google Tag Manager -->
 </head>

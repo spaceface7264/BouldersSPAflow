@@ -45,6 +45,12 @@ import {
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
+import {
+  initAnalytics,
+  updateGA4ConsentMode,
+  getAnalyticsHeaders,
+  clearGA4ClientId,
+} from './utils/analytics.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -1365,10 +1371,14 @@ class OrderAPI {
         ? window.getAccessToken() 
         : null;
       
+      // Get customer ID from state if available
+      const customerId = state.customer?.id || state.customerId || null;
+      
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        ...getAnalyticsHeaders(customerId),
       };
       
       let data;
@@ -1414,10 +1424,14 @@ class OrderAPI {
         ? window.getAccessToken() 
         : null;
       
+      // Get customer ID from state if available
+      const customerId = state.customer?.id || state.customerId || null;
+      
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        ...getAnalyticsHeaders(customerId),
       };
       
       // API expects subscriptionProduct field, not productId
@@ -1912,10 +1926,14 @@ class OrderAPI {
         ? window.getAccessToken() 
         : null;
       
+      // Get customer ID from state if available
+      const customerId = state.customer?.id || state.customerId || null;
+      
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        ...getAnalyticsHeaders(customerId),
       };
       
       // API Documentation requires 'valueCardProduct' field (integer, required)
@@ -1962,10 +1980,14 @@ class OrderAPI {
         ? window.getAccessToken() 
         : null;
       
+      // Get customer ID from state if available
+      const customerId = state.customer?.id || state.customerId || null;
+      
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        ...getAnalyticsHeaders(customerId),
       };
       
       const payload = {
@@ -2282,14 +2304,22 @@ class PaymentAPI {
         console.error('[Step 9] Make sure user is logged in or token is stored in session.');
       }
       
+      // Get customer ID from state if available
+      const customerId = state.customer?.id || state.customerId || null;
+      
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        ...getAnalyticsHeaders(customerId),
       };
       
       console.log('[Step 9] Headers:', headers);
       console.log('[Step 9] Has Authorization header:', !!headers.Authorization);
+      console.log('[Step 9] Has analytics headers:', {
+        'x-ga-client-id': !!headers['x-ga-client-id'],
+        'x-ga-user-id': !!headers['x-ga-user-id'],
+      });
       
       // Step 9: Payload structure according to Postman documentation
       // Endpoint: POST /api/payment/generate-link
@@ -5062,6 +5092,15 @@ function initLanguageSwitcher() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize analytics utilities with cookie consent functions
+  initAnalytics(getCookieConsent, getCookieCategoryConsent);
+  
+  // Check for existing consent and update GA4 consent mode if consent already exists
+  const existingConsent = getCookieConsent();
+  if (existingConsent) {
+    updateGA4ConsentMode(existingConsent);
+  }
+  
   // Initialize language switcher (must be early to set language before API calls)
   initLanguageSwitcher();
   
@@ -17045,6 +17084,9 @@ function setCookieConsent(accepted, categories = null) {
       unloadGTM();
     }
     
+    // Update GA4 consent mode and capture client ID
+    updateGA4ConsentMode(consentData);
+    
     // Dispatch custom event for other scripts to listen to
     window.dispatchEvent(new CustomEvent('cookieConsentChanged', {
       detail: consentData
@@ -17130,6 +17172,9 @@ function unloadGTM() {
   
   // Clear dataLayer (optional - you may want to keep it for essential tracking)
   // window.dataLayer = [];
+  
+  // Clear GA4 client ID when GTM is unloaded
+  clearGA4ClientId();
   
   window.GTM_LOADED = false;
   console.log('[Cookie Consent] GTM unloaded');
