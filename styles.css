@@ -6214,7 +6214,7 @@ main {
     height: 90px;
     background: linear-gradient(135deg, rgba(217, 70, 239, 0.15) 0%, rgba(192, 38, 211, 0.1) 100%);
     border: 2px solid rgba(217, 70, 239, 0.3);
-    color: #D946EF;
+    color: #ef4646;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -6254,7 +6254,7 @@ main {
     display: inline-block;
     background: rgba(217, 70, 239, 0.1);
     border: 1px solid rgba(217, 70, 239, 0.25);
-    color: #D946EF;
+    color: #ef4646;
     padding: 6px 16px;
     border-radius: 20px;
     font-size: 0.875rem;
