@@ -6233,7 +6233,22 @@ main {
 }
 
 /* Compensate for step panel container positioning when success page is shown */
-/* Target step-content when it contains active step-5 (success page, not payment failed) */
+/* Use class-based selector for reliable targeting (added via JavaScript in renderConfirmationView) */
+.step-content.success-page-active {
+  flex: none !important;
+  flex-grow: 0 !important;
+  flex-shrink: 0 !important;
+  min-height: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Fallback: Target step-content when it contains active step-5 (success page, not payment failed) */
 .step-content:has(#step-5.active:not([data-payment-failed="true"])),
 .step-content:has(#step-5.active:not([data-payment-pending="true"])),
 .step-content:has(#step-5.step-panel.active:not([data-payment-failed="true"])),
@@ -6254,6 +6269,7 @@ main {
 }
 
 /* Also adjust main container when success page is shown to prevent flex expansion */
+.main:has(.step-content.success-page-active),
 .main:has(.step-content:has(#step-5.active:not([data-payment-failed="true"]))),
 .main:has(.step-content:has(#step-5.active:not([data-payment-pending="true"]))) {
   flex: none !important;
@@ -6262,6 +6278,8 @@ main {
 }
 
 /* Override all #step-5 .step-panel-content margin-top rules when success page is shown */
+/* Primary: Use class-based selector for reliability */
+.step-content.success-page-active #step-5 .step-panel-content,
 #step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .step-panel-content,
 #step-5.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .step-panel-content,
 .step-content:has(#step-5.active:not([data-payment-failed="true"])) #step-5 .step-panel-content,
@@ -6277,6 +6295,8 @@ main {
 }
 
 /* Adjust confirmation-header on success page */
+/* Primary: Use class-based selector for reliability */
+.step-content.success-page-active .confirmation-header,
 #step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .confirmation-header,
 .step-content:has(#step-5.active:not([data-payment-failed="true"])) .confirmation-header {
   margin-bottom: 40px !important; /* Reduced from 196px to prevent pushing content down */
