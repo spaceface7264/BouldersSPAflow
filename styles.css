@@ -736,6 +736,12 @@ body {
         margin-top: 0 !important;
         padding-top: 30px;
     }
+    
+    /* Override for success page (not payment failed) */
+    #step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .step-panel-content {
+        margin-top: 48px !important; /* Match tablet header height to prevent content falling behind header */
+        padding-top: 0 !important;
+    }
 }
 
 @media (max-width: 480px) {
@@ -798,6 +804,12 @@ body {
     #step-5[data-payment-failed="true"] .step-panel-content {
         margin-top: 0 !important;
         padding-top: 20px;
+    }
+    
+    /* Override for success page (not payment failed) */
+    #step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .step-panel-content {
+        margin-top: 44px !important; /* Match mobile header height to prevent content falling behind header */
+        padding-top: 0 !important;
     }
     
     .language-btn {
@@ -1175,9 +1187,11 @@ body {
 }
 
 /* Remove flex and margin when step 5 (success page) is active */
-.step-content:has(#step-5.active) {
-    margin-top: 0;
-    flex: none; /* Prevent container from taking up all available space */
+.step-content:has(#step-5.active:not([data-payment-failed="true"]):not([data-payment-pending="true"])) {
+    margin-top: 0 !important;
+    flex: none !important; /* Prevent container from taking up all available space */
+    height: auto !important;
+    min-height: auto !important;
 }
 
 
@@ -1225,6 +1239,16 @@ body {
     text-align: left;
     margin-top: 120px; /* Respect header height on desktop */
     padding-top: 0;
+}
+
+/* Override margin-top for success page (not payment failed) - must be more specific than line 1226 */
+#step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .step-panel-content {
+    margin-top: 120px !important; /* Match desktop header height to prevent content falling behind header */
+    padding-top: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
 }
 
 
@@ -6207,6 +6231,75 @@ main {
   width: 100%;
   max-width: 800px;
 }
+
+/* Compensate for step panel container positioning when success page is shown */
+/* Target step-content when it contains active step-5 (success page, not payment failed) */
+.step-content:has(#step-5.active:not([data-payment-failed="true"])),
+.step-content:has(#step-5.active:not([data-payment-pending="true"])),
+.step-content:has(#step-5.step-panel.active:not([data-payment-failed="true"])),
+.step-content:has(#step-5.step-panel.active:not([data-payment-pending="true"])),
+.step-content:has(.step-panel#step-5.active:not([data-payment-failed="true"])),
+.step-content:has(.step-panel#step-5.active:not([data-payment-pending="true"])) {
+  flex: none !important;
+  flex-grow: 0 !important;
+  flex-shrink: 0 !important;
+  min-height: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Also adjust main container when success page is shown to prevent flex expansion */
+.main:has(.step-content:has(#step-5.active:not([data-payment-failed="true"]))),
+.main:has(.step-content:has(#step-5.active:not([data-payment-pending="true"]))) {
+  flex: none !important;
+  min-height: auto !important;
+  height: auto !important;
+}
+
+/* Override all #step-5 .step-panel-content margin-top rules when success page is shown */
+#step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .step-panel-content,
+#step-5.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .step-panel-content,
+.step-content:has(#step-5.active:not([data-payment-failed="true"])) #step-5 .step-panel-content,
+.step-content:has(#step-5.active:not([data-payment-pending="true"])) #step-5 .step-panel-content {
+  margin-top: 120px !important; /* Match desktop header height to prevent content falling behind header */
+  padding-top: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  position: relative !important;
+  top: 0 !important;
+}
+
+/* Adjust confirmation-header on success page */
+#step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .confirmation-header,
+.step-content:has(#step-5.active:not([data-payment-failed="true"])) .confirmation-header {
+  margin-bottom: 40px !important; /* Reduced from 196px to prevent pushing content down */
+  margin-top: 0 !important;
+  width: 100%;
+  max-width: 800px;
+  position: relative;
+  z-index: 1;
+}
+
+/* CRITICAL FIX: Use body selector to ensure step-content doesn't expand when step-5 success is active */
+body:has(#step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"])) .step-content,
+body:has(#step-5.active:not([data-payment-failed="true"]):not([data-payment-pending="true"])) .step-content {
+  flex: none !important;
+  flex-grow: 0 !important;
+  flex-shrink: 0 !important;
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
 
 /* Payment Failed Badge - Magenta */
 .payment-failed-badge {
