@@ -1,7 +1,13 @@
-# Backend Bug: productId 134 ("Medlemskab") ignorerer startDate parameter
+# ~~RESOLVED~~ - Pricing Calculation Mismatch for productId 134
 
-## Problem
-Backend ignorerer `startDate`-parameteren når man tilføjer subscription item for productId 134 ("Medlemskab"), men accepterer den for productId 56 ("Junior") og productId 135 ("Student").
+> **Status:** ✅ RESOLVED - January 2026
+> 
+> **Resolution:** Issue was a frontend calculation mismatch, not a backend bug. Frontend now matches backend pricing logic (day >= 16 = rest of month + full next month).
+> 
+> See `BACKEND_BUG_PRODUCTID_134_RESOLVED.md` for details.
+
+## ~~Original Problem~~ (Resolved)
+~~Backend ignorerer `startDate`-parameteren når man tilføjer subscription item for productId 134 ("Medlemskab"), men accepterer den for productId 56 ("Junior") og productId 135 ("Student").~~
 
 ## Symptomer
 - **Frontend sender:** `startDate: "2026-01-05"` (i dag)
