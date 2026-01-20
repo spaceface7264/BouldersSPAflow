@@ -20,12 +20,12 @@ You're looking at **GET requests** (loading products), but analytics headers onl
 2. Wait 2-3 seconds for GA4 to initialize
 3. Check console for: `[Analytics] GA4 client ID captured`
 
-### Step 2: Actually Add to Cart
+### Step 2: Click Checkout Button
 
-**Don't just click the product** - you need to **add it to cart**:
+**Important**: The cart is populated locally when you click a product, but **no POST request happens until checkout**:
 
-1. Click on a membership product card
-2. **Click "Add to Cart" or "Select" button**
+1. Click on a membership product card (cart updates locally - no API call)
+2. **Click the "Checkout" or "Continue" button** (this triggers the POST request)
 3. This triggers **POST** `/api/orders` (creates order)
 4. **THIS is where headers appear!**
 
@@ -40,10 +40,12 @@ You're looking at **GET requests** (loading products), but analytics headers onl
 ## Visual Guide
 
 ```
-❌ Clicking product → GET /api/products/... → NO headers
-✅ Adding to cart → POST /api/orders → HAS headers
-✅ Checkout → POST /api/payment/generate-link → HAS headers
+❌ Clicking product → Cart updates locally → NO API call → NO headers
+✅ Clicking checkout → POST /api/orders → HAS headers (creates order)
+✅ Proceeding to payment → POST /api/payment/generate-link → HAS headers
 ```
+
+**Note**: The cart is populated client-side when you click a product. The actual POST request happens when you click checkout.
 
 ## Quick Test
 
@@ -51,10 +53,11 @@ You're looking at **GET requests** (loading products), but analytics headers onl
 2. **Filter by "Fetch" or "XHR"**
 3. **Accept cookies** (if not already)
 4. **Wait 3 seconds**
-5. **Add a product to cart** (click "Add to Cart" button)
-6. **Look for POST request** (should see `/api/orders` or `/api-proxy?path=/api/orders`)
-7. **Click on POST request** → Headers → Request Headers
-8. **Find `x-ga-client-id`** header
+5. **Click on a product** (cart updates locally - no API call yet)
+6. **Click "Checkout" or "Continue" button** (this triggers POST request)
+7. **Look for POST request** (should see `/api/orders` or `/api-proxy?path=/api/orders`)
+8. **Click on POST request** → Headers → Request Headers
+9. **Find `x-ga-client-id`** header
 
 ## Still Not Seeing It?
 
@@ -82,20 +85,22 @@ console.log('GTM loaded:', window.GTM_LOADED);
 ## Expected Flow
 
 1. **Page loads** → GET requests (no headers)
-2. **User clicks product** → GET `/api/products/...` (no headers)
-3. **User adds to cart** → **POST `/api/orders`** → ✅ **HAS HEADERS**
-4. **User checks out** → **POST `/api/payment/generate-link`** → ✅ **HAS HEADERS**
+2. **User clicks product** → Cart updates locally (no API call, no headers)
+3. **User clicks checkout** → **POST `/api/orders`** → ✅ **HAS HEADERS** (creates order)
+4. **User proceeds to payment** → **POST `/api/payment/generate-link`** → ✅ **HAS HEADERS**
 
 ## Summary
 
-**You need to actually add the product to cart, not just click on it!**
+**The cart is populated locally when you click a product, but no POST request happens until checkout!**
 
 The headers appear when you:
-- ✅ Add item to cart (POST /api/orders)
-- ✅ Proceed to checkout (POST /api/payment/generate-link)
+- ✅ Click checkout button (POST /api/orders - creates order)
+- ✅ Proceed to payment (POST /api/payment/generate-link)
 - ✅ Add items to existing order (POST /api/orders/{id}/items/...)
 
 They do NOT appear when you:
-- ❌ Click on products (GET requests)
+- ❌ Click on products (cart updates locally, no API call)
 - ❌ View product details (GET requests)
 - ❌ Load product lists (GET requests)
+
+**Key Point**: The POST request with analytics headers happens when you click the checkout button, not when you select a product.
