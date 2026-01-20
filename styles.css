@@ -5272,6 +5272,40 @@ body {
 }
 
 /* Cart Items */
+/* Campaign Warning Banner */
+.campaign-warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    background-color: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 8px;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.campaign-warning-icon {
+    flex-shrink: 0;
+    color: #FBBF24;
+    display: flex;
+    align-items: center;
+    margin-top: 2px;
+}
+
+.campaign-warning-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.campaign-warning-message {
+    color: #FCD34D;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    margin: 0;
+    flex: 1;
+}
+
 .cart-items {
     margin-bottom: 20px;
 }
