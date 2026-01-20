@@ -13,7 +13,92 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
-    
+
+    <!-- Sentry Error Monitoring - Load from CDN and initialize immediately -->
+    <script src="https://browser.sentry-cdn.com/7.91.0/bundle.min.js" crossorigin="anonymous"></script>
+    <script>
+      // Initialize Sentry immediately - runs synchronously before any modules
+      (function() {
+        if (typeof Sentry !== 'undefined') {
+          try {
+            const isProduction = window.location.hostname === 'join.boulders.dk';
+            
+            Sentry.init({
+              dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
+              environment: isProduction ? 'production' : 'development',
+              sendDefaultPii: true,
+              sampleRate: 1.0,
+              tracesSampleRate: 0.1,
+              debug: !isProduction, // Only enable debug in development
+              release: 'join-boulders-dk@' + (new Date().toISOString().split('T')[0]), // Release tracking
+              // Filter out common non-critical errors
+              ignoreErrors: [
+                // Browser extensions
+                'top.GLOBALS',
+                'chrome-extension://',
+                'moz-extension://',
+                'safari-extension://',
+                // Network errors that are expected
+                'NetworkError',
+                'Failed to fetch',
+                'Network request failed',
+                // User cancellations
+                'AbortError',
+                'User cancelled',
+                // Common browser quirks
+                'ResizeObserver loop limit exceeded',
+                'Non-Error promise rejection captured',
+                // Script errors from extensions
+                /^Script error\.?$/,
+                /^Javascript error: Script error\.?$/,
+              ],
+              beforeSend(event, hint) {
+                // Only log in development
+                if (!isProduction) {
+                  console.log('[Sentry] Capturing:', event.message || event.exception?.values?.[0]?.value);
+                }
+                return event;
+              },
+            });
+            
+            // Verify initialization
+            const hub = Sentry.getCurrentHub();
+            const client = hub.getClient();
+            if (client) {
+              if (!isProduction) {
+                console.log('[Sentry] ✅ Initialized in', client.getOptions()?.environment, 'mode');
+              }
+            } else {
+              console.error('[Sentry] ❌ Initialization failed');
+            }
+            
+            // Make available globally
+            window.Sentry = Sentry;
+            
+            // Test function for debugging (available in all environments)
+            window.testSentry = function() {
+              const testHub = Sentry.getCurrentHub();
+              const testClient = testHub.getClient();
+              
+              if (!testClient) {
+                console.error('[Sentry Test] ❌ Client not found');
+                return;
+              }
+              
+              console.log('[Sentry Test] Sending test events...');
+              Sentry.captureException(new Error('Test error - ' + new Date().toISOString()));
+              Sentry.captureMessage('Test message - ' + new Date().toISOString(), 'info');
+              console.log('[Sentry Test] ✅ Test events sent - check dashboard in 5-10 seconds');
+            };
+          } catch (e) {
+            console.error('[Sentry] ❌ Initialization error:', e);
+          }
+        } else {
+          console.error('[Sentry] ❌ Sentry SDK not loaded');
+        }
+      })();
+    </script>
+
     <!-- Google Tag Manager - Loaded conditionally after consent -->
     <script>
       window.dataLayer = window.dataLayer || [];

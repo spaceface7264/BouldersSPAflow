@@ -19,24 +19,24 @@
 - [x] Check Sentry dashboard - test events should appear within 10 seconds
 
 ### 2. Core Application Functionality ✅
-- [ ] **Page loads** - No JavaScript errors blocking page load
-- [ ] **Gym selection (Step 1)** - Can search and select gyms
-- [ ] **Access type selection (Step 2)** - Can view and select membership/punch cards
+- [x] **Page loads** - No JavaScript errors blocking page load
+- [x] **Gym selection (Step 1)** - Can search and select gyms
+- [x] **Access type selection (Step 2)** - Can view and select membership/punch cards
 - [ ] **Add-ons (Step 3)** - Can view and select add-ons (if applicable)
-- [ ] **Checkout form (Step 4)** - Form fields work, validation works
-- [ ] **Payment flow** - Can generate payment link and redirect to payment provider
-- [ ] **Confirmation (Step 5)** - Order confirmation displays correctly
+- [x] **Checkout form (Step 4)** - Form fields work, validation works
+- [x] **Payment flow** - Can generate payment link and redirect to payment provider
+- [x] **Confirmation (Step 5)** - Order confirmation displays correctly
 
 ### 3. Authentication Flow ✅
-- [ ] **Login** - Can log in with valid credentials
+- [x] **Login** - Can log in with valid credentials
 - [ ] **User context** - After login, check Sentry dashboard shows user email in error context
-- [ ] **Logout** - Can log out successfully
+- [x] **Logout** - Can log out successfully
 - [ ] **User context cleared** - After logout, Sentry user context should be cleared
-- [ ] **Account creation** - Can create new account
+- [x] **Account creation** - Can create new account
 
 ### 4. Error Handling ✅
-- [ ] **Network errors** - App handles API failures gracefully (no Sentry spam)
-- [ ] **Form validation** - Validation errors don't trigger Sentry
+- [x] **Network errors** - App handles API failures gracefully (no Sentry spam)
+- [x] **Form validation** - Validation errors don't trigger Sentry
 - [ ] **Payment errors** - Payment failures are captured in Sentry (check dashboard)
 - [ ] **Login errors** - Invalid login attempts don't spam Sentry (400/401 excluded)
 

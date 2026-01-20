@@ -1,3 +1,17 @@
+// Sentry is initialized in index.html via CDN script tag
+// Use window.Sentry for error tracking
+const Sentry = window.Sentry || {};
+const captureException = (error, context) => {
+  if (Sentry.captureException) {
+    Sentry.captureException(error, context);
+  }
+};
+const setUser = (user) => {
+  if (Sentry.setUser) {
+    Sentry.setUser(user);
+  }
+};
+
 import {
   formatCurrencyHalfKrone,
   formatPriceHalfKrone,
@@ -30,6 +44,7 @@ import {
   isGeolocationAvailable,
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
+import { sanitizeHTML } from './sanitize.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
@@ -602,6 +617,12 @@ class AuthAPI {
             };
             window.saveTokens(accessToken, refreshToken, expiresAt, metadata);
             console.log('[Step 6] ✅ Tokens saved successfully');
+
+            // Set user context in Sentry for error tracking
+            setUser({
+              id: tokenPayload.sub || tokenPayload.userId,
+              email: tokenPayload.email || email,
+            });
           }
         } else {
           console.warn('[Step 6] saveTokens function not available - tokens not saved');
@@ -617,6 +638,18 @@ class AuthAPI {
       return data;
     } catch (error) {
       console.error('[Step 6] Login error:', error);
+
+      // Report login errors to Sentry (excluding rate limits and user input errors)
+      if (error.status !== 429 && error.status !== 400 && error.status !== 401) {
+        captureException(error, {
+          tags: {
+            flow: 'authentication',
+            error_type: 'login_failed',
+            status: error.status,
+          },
+        });
+      }
+
       throw error;
     }
   }
@@ -2786,7 +2819,7 @@ function renderProductsFromAPI() {
           .replace(/\n/g, '<br>')
       : '';
     
-    planCard.innerHTML = `
+    planCard.innerHTML = sanitizeHTML(`
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
@@ -2800,7 +2833,7 @@ function renderProductsFromAPI() {
         </div>
       </div>
       <div class="check-circle"></div>
-    `;
+    `);
     
     return planCard;
   };
@@ -2842,11 +2875,11 @@ function renderProductsFromAPI() {
       // Show "No products available" message
       const noProductsMessage = document.createElement('div');
       noProductsMessage.className = 'no-products-message';
-      noProductsMessage.innerHTML = `
+      noProductsMessage.innerHTML = sanitizeHTML(`
         <div class="no-products-content">
           <p data-i18n-key="message.noProducts.membership">No membership options available at this time.</p>
         </div>
-      `;
+      `);
       membershipPlansList.appendChild(noProductsMessage);
       // Update translation immediately
       const messageP = noProductsMessage.querySelector('p[data-i18n-key]');
@@ -2869,11 +2902,11 @@ function renderProductsFromAPI() {
       // Show "No products available" message
       const noProductsMessage = document.createElement('div');
       noProductsMessage.className = 'no-products-message';
-      noProductsMessage.innerHTML = `
+      noProductsMessage.innerHTML = sanitizeHTML(`
         <div class="no-products-content">
           <p>No 15 Day Pass options available at this time.</p>
         </div>
-      `;
+      `);
       dayPassPlansList.appendChild(noProductsMessage);
     }
   }
@@ -2909,7 +2942,7 @@ function renderProductsFromAPI() {
               .replace(/\n/g, '<br>')
           : '';
         
-        planCard.innerHTML = `
+        planCard.innerHTML = sanitizeHTML(`
           <div class="plan-info">
             <div class="plan-content-left">
               <div class="plan-type">${product.name || 'Punch Card'}</div>
@@ -2931,7 +2964,7 @@ function renderProductsFromAPI() {
             </div>
             <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
           </div>
-        `;
+        `);
         
         // Event listeners will be set up by setupNewAccessStep()
         punchCardPlansList.appendChild(planCard);
@@ -2940,11 +2973,11 @@ function renderProductsFromAPI() {
       // Show "No products available" message
       const noProductsMessage = document.createElement('div');
       noProductsMessage.className = 'no-products-message';
-      noProductsMessage.innerHTML = `
+      noProductsMessage.innerHTML = sanitizeHTML(`
         <div class="no-products-content">
           <p data-i18n-key="message.noProducts.punchcard">No punch card options available at this time.</p>
         </div>
-      `;
+      `);
       punchCardPlansList.appendChild(noProductsMessage);
       // Update translation immediately
       const messageP = noProductsMessage.querySelector('p[data-i18n-key]');
@@ -3548,7 +3581,7 @@ function createGymItem(gym, isNearest = false) {
     ? `<div class="nearest-badge">${t('gym.nearest')}</div>`
     : '';
   
-  gymItem.innerHTML = `
+  gymItem.innerHTML = sanitizeHTML(`
     ${nearestBadge}
     ${distanceBadge}
     <div class="gym-info">
@@ -3561,7 +3594,7 @@ function createGymItem(gym, isNearest = false) {
       </div>
     </div>
     <div class="check-circle"></div>
-  `;
+  `);
   
   return gymItem;
 }
@@ -3900,13 +3933,13 @@ function populateAddonsModal() {
       const card = document.createElement('div');
       card.className = 'plan-card addon-card';
       card.style.cursor = 'pointer';
-      card.innerHTML = `
+      card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${addon.name}</div>
         <div>${typeof addon.price?.discounted === 'number'
           ? formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted))
           : '—'} kr</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
-      `;
+      `);
       
       // Make entire card clickable
       card.addEventListener('click', (e) => {
@@ -4112,11 +4145,11 @@ function populateBoostModal() {
                        product.currency || 
                        'DKK';
       
-      card.innerHTML = `
+      card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${product.name || 'Boost Product'}</div>
         <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr' : '—'}</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${product.id}"></div>
-      `;
+      `);
       
       // Make entire card clickable
       card.addEventListener('click', (e) => {
@@ -4580,7 +4613,7 @@ function updatePageTranslations() {
       } else {
         // Handle HTML content for elements that may contain links (like consent text)
         if (translation.includes('<a') || translation.includes('<span')) {
-          element.innerHTML = translation;
+          element.innerHTML = sanitizeHTML(translation);
         } else {
           element.textContent = translation;
         }
@@ -4858,13 +4891,13 @@ function updateCartTranslations() {
   if (termsConsent) {
     // Handle HTML content with links
     const termsHtml = t('cart.consent.terms');
-    termsConsent.innerHTML = termsHtml;
+    termsConsent.innerHTML = sanitizeHTML(termsHtml);
   }
-  
+
   const marketingConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.marketing"]');
   if (marketingConsent) {
     const marketingHtml = t('cart.consent.marketing');
-    marketingConsent.innerHTML = marketingHtml;
+    marketingConsent.innerHTML = sanitizeHTML(marketingHtml);
   }
   
   // Payment overview labels are handled by data-i18n-key attributes in HTML
@@ -6220,7 +6253,7 @@ function openTermsModal(termsType) {
     DOM.termsModalTitle.textContent = title;
     
     // Set content
-    DOM.termsModalContent.innerHTML = content;
+    DOM.termsModalContent.innerHTML = sanitizeHTML(content);
     state.termsOriginalContent = content;
   }
   
@@ -6280,7 +6313,7 @@ function switchTermsTab(tabType) {
   const content = termsContent[tabType]?.[langCode] || termsContent[tabType]?.da || '<p>Content not available.</p>';
   
   if (termsContent[tabType]) {
-    DOM.termsModalContent.innerHTML = content;
+    DOM.termsModalContent.innerHTML = sanitizeHTML(content);
     state.termsOriginalContent = content;
     DOM.termsModalContent.scrollTop = 0;
   }
@@ -6298,13 +6331,13 @@ function performTermsSearch(searchQuery) {
   
   if (!query) {
     // Restore original content
-    DOM.termsModalContent.innerHTML = state.termsOriginalContent;
+    DOM.termsModalContent.innerHTML = sanitizeHTML(state.termsOriginalContent);
     return;
   }
-  
+
   // Create a temporary div to parse HTML
   const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = state.termsOriginalContent;
+  tempDiv.innerHTML = sanitizeHTML(state.termsOriginalContent);
   
   // Search and highlight function
   function highlightText(node, searchText) {
@@ -6369,7 +6402,7 @@ function performTermsSearch(searchQuery) {
     DOM.termsModalContent.appendChild(highlightedContent);
   } else {
     // No results found
-    DOM.termsModalContent.innerHTML = '<div class="search-no-results">No results found for "' + searchQuery + '"</div>';
+    DOM.termsModalContent.innerHTML = sanitizeHTML('<div class="search-no-results">No results found for "' + searchQuery + '"</div>');
   }
   
   // Scroll to first match
@@ -6389,7 +6422,7 @@ function clearTermsSearch() {
   
   // Restore original content
   if (state.termsOriginalContent) {
-    DOM.termsModalContent.innerHTML = state.termsOriginalContent;
+    DOM.termsModalContent.innerHTML = sanitizeHTML(state.termsOriginalContent);
     DOM.termsModalContent.scrollTop = 0;
   }
 }
@@ -6455,7 +6488,7 @@ function switchModalLanguage(modalType, lang) {
         DOM.termsModalTitle.textContent = title;
       }
       if (DOM.termsModalContent) {
-        DOM.termsModalContent.innerHTML = content;
+        DOM.termsModalContent.innerHTML = sanitizeHTML(content);
         state.termsOriginalContent = content;
         DOM.termsModalContent.scrollTop = 0;
       }
@@ -6475,7 +6508,7 @@ function switchModalLanguage(modalType, lang) {
     const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
     
     if (DOM.dataPolicyModalContent) {
-      DOM.dataPolicyModalContent.innerHTML = content;
+      DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
       DOM.dataPolicyModalContent.scrollTop = 0;
     }
   }
@@ -6494,7 +6527,7 @@ function openDataPolicyModal() {
   const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
   
   // Set content
-  DOM.dataPolicyModalContent.innerHTML = content;
+  DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
   
   // Show modal
   DOM.dataPolicyModal.style.display = 'flex';
@@ -7439,44 +7472,60 @@ function showLogoutConfirmation() {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   `;
   
-  confirmationDialog.innerHTML = `
-    <h3 style="margin: 0 0 16px 0; color: #FFFFFF; font-size: 18px; font-weight: 600;">Log out?</h3>
-    <p style="margin: 0 0 24px 0; color: rgba(255, 255, 255, 0.7); line-height: 1.5; font-size: 14px;">
-      Are you sure you want to log out? You'll need to log in again to continue.
-    </p>
-    <div style="display: flex; gap: 12px; justify-content: center;">
-      <button class="logout-confirmation-btn logout-confirmation-cancel" style="
-        padding: 10px 20px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
-        background: transparent;
-        color: rgba(255, 255, 255, 0.9);
-        cursor: pointer;
-        font-weight: 500;
-        font-size: 14px;
-        transition: all 0.2s ease;
-      ">Cancel</button>
-      <button class="logout-confirmation-btn logout-confirmation-confirm" style="
-        padding: 10px 20px;
-        border: none;
-        border-radius: 8px;
-        background: rgba(239, 68, 68, 0.2);
-        border: 1px solid rgba(239, 68, 68, 0.4);
-        color: #F87171;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 14px;
-        transition: all 0.2s ease;
-      ">Log out</button>
-    </div>
+  // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
+  const title = document.createElement('h3');
+  title.textContent = 'Log out?';
+  title.style.cssText = 'margin: 0 0 16px 0; color: #FFFFFF; font-size: 18px; font-weight: 600;';
+  
+  const message = document.createElement('p');
+  message.textContent = "Are you sure you want to log out? You'll need to log in again to continue.";
+  message.style.cssText = 'margin: 0 0 24px 0; color: rgba(255, 255, 255, 0.7); line-height: 1.5; font-size: 14px;';
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'logout-confirmation-btn logout-confirmation-cancel';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = `
+    padding: 10px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.2s ease;
   `;
+  
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'logout-confirmation-btn logout-confirmation-confirm';
+  confirmBtn.textContent = 'Log out';
+  confirmBtn.style.cssText = `
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #F87171;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  `;
+  
+  buttonContainer.appendChild(cancelBtn);
+  buttonContainer.appendChild(confirmBtn);
+  
+  confirmationDialog.appendChild(title);
+  confirmationDialog.appendChild(message);
+  confirmationDialog.appendChild(buttonContainer);
   
   confirmationOverlay.appendChild(confirmationDialog);
   document.body.appendChild(confirmationOverlay);
   
   // Add hover effects
-  const cancelBtn = confirmationOverlay.querySelector('.logout-confirmation-cancel');
-  const confirmBtn = confirmationOverlay.querySelector('.logout-confirmation-confirm');
   
   if (cancelBtn) {
     cancelBtn.addEventListener('mouseenter', () => {
@@ -7535,6 +7584,11 @@ function handleLogout() {
   
   if (typeof window.clearTokens === 'function') {
     window.clearTokens();
+  }
+  
+  // Clear Sentry user context on logout
+  if (window.Sentry && window.Sentry.setUser) {
+    window.Sentry.setUser(null);
   }
   
   // Refresh UI to show logged out state
@@ -8277,7 +8331,7 @@ function setupNewAccessStep() {
         category.classList.add('expanded', 'selected');
         currentCategory = categoryType;
         if (footerText) {
-          footerText.innerHTML = footerTexts[categoryType];
+          footerText.innerHTML = sanitizeHTML(footerTexts[categoryType]);
         }
         
         // Focus the expanded category item for accessibility
@@ -8290,7 +8344,7 @@ function setupNewAccessStep() {
       } else {
         currentCategory = null;
         if (footerText) {
-          footerText.innerHTML = 'Select a category above to view available plans.';
+          footerText.innerHTML = sanitizeHTML('Select a category above to view available plans.');
         }
       }
 
@@ -8567,25 +8621,25 @@ function switchAuthMode(mode, email = null) {
       const textSpan = btn.querySelector('.auth-mode-switch-text');
       if (textSpan) textSpan.textContent = t('form.authSwitch.createAccount');
       // Update icon to account icon
-      btn.innerHTML = `
+      btn.innerHTML = sanitizeHTML(`
         <span class="auth-mode-switch-text">${t('form.authSwitch.createAccount')}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path>
         </svg>
-      `;
+      `);
     } else {
       btn.dataset.mode = 'login';
       const textSpan = btn.querySelector('.auth-mode-switch-text');
       if (textSpan) textSpan.textContent = t('form.authSwitch.login');
       // Update icon to login icon
-      btn.innerHTML = `
+      btn.innerHTML = sanitizeHTML(`
         <span class="auth-mode-switch-text">${t('form.authSwitch.login')}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
           <polyline points="10 17 15 12 10 7"></polyline>
           <line x1="15" y1="12" x2="3" y2="12"></line>
         </svg>
-      `;
+      `);
     }
   });
   
@@ -8916,43 +8970,60 @@ function showSkipConfirmation() {
     color: var(--color-text-secondary);
   `;
   
-  confirmationDialog.innerHTML = `
-    <h3 style="margin: 0 0 16px 0; color: var(--color-text-secondary); font-size: 18px;">Are you sure?</h3>
-    <p style="margin: 0 0 24px 0; color: var(--color-text-muted); line-height: 1.5;">
-      You're missing out on essential gear that could enhance your climbing experience. 
-      These add-ons are specially selected and offer great value!
-    </p>
-    <div style="display: flex; gap: 12px; justify-content: center;">
-      <button class="confirmation-btn confirmation-cancel" style="
-        padding: 10px 20px;
-        border: 1px solid var(--color-item-border);
-        border-radius: 8px;
-        background: transparent;
-        color: var(--color-text-secondary);
-        cursor: pointer;
-        font-weight: 600;
-      ">Go Back</button>
-      <button class="confirmation-btn confirmation-skip" style="
-        padding: 10px 20px;
-        border: none;
-        border-radius: 8px;
-        background: var(--color-brand-accent);
-        color: var(--color-button-primary);
-        cursor: pointer;
-        font-weight: 600;
-      ">Skip Anyway</button>
-    </div>
+  // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
+  const title = document.createElement('h3');
+  title.textContent = 'Are you sure?';
+  title.style.cssText = 'margin: 0 0 16px 0; color: var(--color-text-secondary); font-size: 18px;';
+  
+  const message = document.createElement('p');
+  message.textContent = "You're missing out on essential gear that could enhance your climbing experience. These add-ons are specially selected and offer great value!";
+  message.style.cssText = 'margin: 0 0 24px 0; color: var(--color-text-muted); line-height: 1.5;';
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'confirmation-btn confirmation-cancel';
+  cancelBtn.textContent = 'Go Back';
+  cancelBtn.style.cssText = `
+    padding: 10px 20px;
+    border: 1px solid var(--color-item-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-weight: 600;
   `;
+  
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'confirmation-btn confirmation-skip';
+  skipBtn.textContent = 'Skip Anyway';
+  skipBtn.style.cssText = `
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: var(--color-brand-accent);
+    color: var(--color-button-primary);
+    cursor: pointer;
+    font-weight: 600;
+  `;
+  
+  buttonContainer.appendChild(cancelBtn);
+  buttonContainer.appendChild(skipBtn);
+  
+  confirmationDialog.appendChild(title);
+  confirmationDialog.appendChild(message);
+  confirmationDialog.appendChild(buttonContainer);
   
   confirmationOverlay.appendChild(confirmationDialog);
   document.body.appendChild(confirmationOverlay);
   
   // Add event listeners
-  confirmationOverlay.querySelector('.confirmation-cancel').addEventListener('click', () => {
+  cancelBtn.addEventListener('click', () => {
     document.body.removeChild(confirmationOverlay);
   });
   
-  confirmationOverlay.querySelector('.confirmation-skip').addEventListener('click', () => {
+  skipBtn.addEventListener('click', () => {
     document.body.removeChild(confirmationOverlay);
     proceedAfterAddons();
   });
@@ -10267,13 +10338,13 @@ function renderCartItems() {
     const infoIcon = document.createElement('span');
     infoIcon.className = 'home-gym-info-icon';
     infoIcon.setAttribute('aria-label', 'Information about home gym');
-    infoIcon.innerHTML = `
+    infoIcon.innerHTML = sanitizeHTML(`
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"></circle>
         <line x1="12" y1="16" x2="12" y2="12"></line>
         <line x1="12" y1="8" x2="12.01" y2="8"></line>
       </svg>
-    `;
+    `);
     
     // Create wrapper for info icon and tooltip
     const infoWrapper = document.createElement('span');
@@ -10282,12 +10353,12 @@ function renderCartItems() {
     // Create tooltip
     const tooltip = document.createElement('div');
     tooltip.className = 'home-gym-tooltip';
-    tooltip.innerHTML = `
+    tooltip.innerHTML = sanitizeHTML(`
       <div class="tooltip-content">
         <p><strong>${t('homeGym.tooltip.title')}</strong></p>
         <p>${t('homeGym.tooltip.desc')}</p>
       </div>
-    `;
+    `);
     
     // Add click handler to toggle tooltip
     infoIcon.addEventListener('click', (e) => {
@@ -10353,7 +10424,7 @@ function renderCartItems() {
         const bannerTextSpan = document.createElement('span');
         // Preserve line breaks from backend - replace newlines with <br> tags
         const bannerTextWithBreaks = item.imageBannerText.replace(/\n/g, '<br>');
-        bannerTextSpan.innerHTML = bannerTextWithBreaks;
+        bannerTextSpan.innerHTML = sanitizeHTML(bannerTextWithBreaks);
         bannerTextSpan.style.fontSize = 'var(--font-size-sm)';
         bannerTextSpan.style.color = 'var(--color-text-muted)';
         bannerTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
@@ -10406,7 +10477,7 @@ function renderCartItems() {
           // Show original price with strikethrough and discounted price
           const originalText = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
           const discountedText = formatPriceHalfKrone(roundToHalfKrone(displayPrice));
-          priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`;
+          priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`);
         } else {
           priceEl.textContent = displayPrice
             ? `${formatPriceHalfKrone(roundToHalfKrone(displayPrice))} kr`
@@ -10468,7 +10539,7 @@ function renderCartAddons() {
       // Display price - show discounted price if different from original
       if (roundedDisplayPrice !== roundedOriginalPrice && state.discountApplied) {
         // Show original price with strikethrough and discounted price
-        priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr</span>`;
+        priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr</span>`);
       } else {
         // Always show price, including "0 kr" for free items
         priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr';
@@ -11122,7 +11193,7 @@ function updateDiscountDisplay() {
       const discountValue = state.totals.discountAmount > 0
         ? `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`
         : formatCurrencyHalfKrone(0);
-      discountDisplay.innerHTML = `
+      discountDisplay.innerHTML = sanitizeHTML(`
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
           <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
@@ -11135,10 +11206,10 @@ function updateDiscountDisplay() {
           <span class="discount-label" style="font-weight: bold;">Total:</span>
           <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
         </div>
-      `;
+      `);
     } else if (state.discountCode && !state.discountApplied) {
       // Discount code entered but not yet applied (pending) - show subtotal only
-      discountDisplay.innerHTML = `
+      discountDisplay.innerHTML = sanitizeHTML(`
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
           <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
@@ -11151,7 +11222,7 @@ function updateDiscountDisplay() {
           <span class="discount-label" style="font-weight: bold;">Total:</span>
           <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
         </div>
-      `;
+      `);
     }
     discountDisplay.style.display = 'block';
   } else if (discountDisplay) {
@@ -12426,7 +12497,19 @@ async function handleCheckout() {
           }
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
-          
+
+          // Report critical payment errors to Sentry
+          captureException(error, {
+            tags: {
+              flow: 'checkout',
+              error_type: 'payment_link_generation',
+            },
+            extra: {
+              orderId: state.fullOrder?.id,
+              subscriptionItems: state.fullOrder?.subscriptionItems,
+            },
+          });
+
           // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
           const isProductNotAllowed = error.isProductNotAllowed || 
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
@@ -14011,14 +14094,14 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
       }
       
       // Build clear, actionable message with status, reason, and next steps
-      successMessage.innerHTML = `
+      successMessage.innerHTML = sanitizeHTML(`
         <div style="text-align: left; max-width: 600px; margin: 0 auto;">
           <!-- Status Explanation -->
           <div style="margin-bottom: 24px; padding: 16px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; border-radius: 4px;">
             <strong style="color: #f59e0b; display: block; margin-bottom: 8px; font-size: 16px;">Status: Payment Not Completed</strong>
             <p style="color: #d1d5db; margin: 0; line-height: 1.6;">${specificGuidance}</p>
           </div>
-          
+
           <!-- Reassurance -->
           <div style="margin-bottom: 24px; padding: 16px; background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e; border-radius: 4px;">
             <p style="color: #9ca3af; margin: 0; line-height: 1.8;">
@@ -14027,26 +14110,26 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
               <strong style="color: #22c55e;">✓</strong> No membership has been activated yet
             </p>
           </div>
-          
+
           <!-- Actionable Steps -->
           <div style="color: #d1d5db; line-height: 1.8;">
             <strong style="color: #f59e0b; display: block; margin-bottom: 16px; font-size: 16px;">What you can do:</strong>
-            
+
             <div style="margin-bottom: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
               <strong style="color: #3b82f6; display: block; margin-bottom: 4px;">1. Try Again</strong>
               <p style="color: #9ca3af; margin: 0; font-size: 14px;">Click the button below to retry payment with the same details. Your order is saved and ready.</p>
             </div>
-            
+
             <div style="margin-bottom: 16px; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
               <strong style="color: #8b5cf6; display: block; margin-bottom: 4px;">2. Use a Different Payment Method</strong>
               <p style="color: #9ca3af; margin: 0; font-size: 14px;">If the issue persists, try a different card or payment method. Your order will remain the same.</p>
             </div>
-            
+
             <div style="margin-bottom: 24px; padding: 12px; background: rgba(107, 114, 128, 0.1); border-radius: 4px;">
               <strong style="color: #6b7280; display: block; margin-bottom: 4px;">3. Contact Support</strong>
               <p style="color: #9ca3af; margin: 0; font-size: 14px;">If you continue to experience issues, our support team can help. Reference Order #${displayOrderId}</p>
             </div>
-            
+
             <!-- Action Buttons -->
             <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px;">
               <button id="retry-payment-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
@@ -14058,8 +14141,8 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
             </div>
           </div>
         </div>
-      `;
-      
+      `);
+
       // Add event listeners for action buttons
       setTimeout(() => {
         const retryBtn = document.getElementById('retry-payment-btn');
@@ -14226,13 +14309,13 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
     
     if (successBadge) {
       // Use a less alarming icon - info/warning circle instead of harsh X
-      successBadge.innerHTML = `
+      successBadge.innerHTML = sanitizeHTML(`
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
           <circle cx="12" cy="12" r="10"></circle>
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>
-      `;
+      `);
       console.log('[Payment Failed] ✅ Badge updated to calm info icon');
     }
     
@@ -14342,12 +14425,12 @@ function showPaymentPendingMessage(order, orderId) {
   
   if (successBadge) {
     // Change checkmark to a clock/spinner icon
-    successBadge.innerHTML = `
+    successBadge.innerHTML = sanitizeHTML(`
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
         <circle cx="12" cy="12" r="10"></circle>
         <polyline points="12 6 12 12 16 14"></polyline>
       </svg>
-    `;
+    `);
   }
   
   // CRITICAL: Hide order details, membership details, and "What happens next?" sections
@@ -14816,10 +14899,10 @@ function createPurchaseItemElement() {
   const item = document.createElement('div');
   item.className = 'purchase-item';
   item.setAttribute('data-confirmation-item', '');
-  item.innerHTML = `
+  item.innerHTML = sanitizeHTML(`
     <span class="item-name" data-element="name"></span>
     <span class="item-price" data-element="price"></span>
-  `;
+  `);
   return item;
 }
 
@@ -15271,11 +15354,11 @@ async function showDetailedReceipt() {
     // Add header row
     const headerRow = document.createElement('div');
     headerRow.className = 'receipt-item receipt-item-header';
-    headerRow.innerHTML = `
+    headerRow.innerHTML = sanitizeHTML(`
       <div>Navn</div>
       <div>Antal</div>
       <div>TOTALT</div>
-    `;
+    `);
     receiptItems.appendChild(headerRow);
     
     // Add items from order - per OrderOut schema
@@ -15291,11 +15374,11 @@ async function showDetailedReceipt() {
         // Per ValueCardItemOut: price.amount is total price for all quantity (not per unit)
         const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
         
-        itemRow.innerHTML = `
+        itemRow.innerHTML = sanitizeHTML(`
           <div>${itemName}</div>
           <div>${itemQuantity}</div>
           <div>${formatCurrencyHalfKrone(itemTotal)}</div>
-        `;
+        `);
         receiptItems.appendChild(itemRow);
       });
     } else if (order.subscriptionItems && order.subscriptionItems.length > 0) {
@@ -15307,12 +15390,12 @@ async function showDetailedReceipt() {
         const itemQuantity = item.quantity || 1;
         // Per SubscriptionItemOut: price.amount is total price for all quantity
         const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
-        
-        itemRow.innerHTML = `
+
+        itemRow.innerHTML = sanitizeHTML(`
           <div>${itemName}</div>
           <div>${itemQuantity}</div>
           <div>${formatCurrencyHalfKrone(itemTotal)}</div>
-        `;
+        `);
         receiptItems.appendChild(itemRow);
       });
     } else if (state.order?.items && state.order.items.length > 0) {
@@ -15320,11 +15403,11 @@ async function showDetailedReceipt() {
       state.order.items.forEach(item => {
         const itemRow = document.createElement('div');
         itemRow.className = 'receipt-item';
-        itemRow.innerHTML = `
+        itemRow.innerHTML = sanitizeHTML(`
           <div>${item.name || 'Item'}</div>
           <div>${item.quantity || 1}</div>
           <div>${formatCurrencyHalfKrone(item.amount || 0)}</div>
-        `;
+        `);
         receiptItems.appendChild(itemRow);
       });
     }
@@ -16148,8 +16231,8 @@ function updateStepIndicator() {
     circle.classList.toggle('inactive', !isActive && !isCompleted);
 
     if (isCompleted) {
-      circle.innerHTML =
-        '<svg class="checkmark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+      circle.innerHTML = sanitizeHTML(
+        '<svg class="checkmark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>');
     } else {
       circle.textContent = String(index + 1);
     }
@@ -16751,7 +16834,7 @@ function updateCookieBannerTranslations() {
   if (description) {
     const descriptionText = t('cookie.banner.description');
     // Parse HTML from translation (for the link)
-    description.innerHTML = descriptionText;
+    description.innerHTML = sanitizeHTML(descriptionText);
     // Re-attach event listener to the link
     const link = description.querySelector('.cookie-banner-link');
     if (link) {
