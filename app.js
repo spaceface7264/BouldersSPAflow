@@ -4564,6 +4564,11 @@ const translations = {
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
+    'modal.loading': 'Indlæser...',
+    'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
+    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagnebebegrænsninger. Du kan oprette et almindeligt medlemskab. Kontakt support hvis du tror dette er en fejl.',
+    'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
+    'modal.campaignRejection.option2': 'Kontakt support',
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
@@ -4620,6 +4625,11 @@ const translations = {
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
+    'modal.loading': 'Loading...',
+    'modal.campaignRejection.title': 'Campaign Not Available',
+    'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.',
+    'modal.campaignRejection.option1': 'Regular Membership',
+    'modal.campaignRejection.option2': 'Contact Support',
   },
 };
 
@@ -5059,6 +5069,90 @@ function initLanguageSwitcher() {
       }
     });
   });
+}
+
+// Campaign Rejection Modal Functions
+function showCampaignRejectionModal() {
+  const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    // Focus the first button for accessibility
+    setTimeout(() => {
+      const firstButton = document.getElementById('campaignRejectionOption1');
+      if (firstButton) {
+        firstButton.focus();
+      }
+    }, 100);
+  }
+}
+
+function hideCampaignRejectionModal() {
+  const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function handleRejectionOption1() {
+  // Hide modal first
+  hideCampaignRejectionModal();
+  
+  // Navigate to step 2
+  state.currentStep = 2;
+  showStep(2);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  
+  // Wait for DOM to be ready, then expand membership category
+  setTimeout(() => {
+    const membershipCategory = document.querySelector('.category-item[data-category="membership"]');
+    if (membershipCategory) {
+      // Collapse all other categories
+      const categoryItems = document.querySelectorAll('.category-item');
+      categoryItems.forEach(item => {
+        if (item !== membershipCategory) {
+          item.classList.remove('expanded', 'selected');
+        }
+      });
+      
+      // Expand membership category
+      membershipCategory.classList.add('expanded', 'selected');
+      
+      // Update plan sections visibility
+      const singlePlans = document.getElementById('singleChoiceMode');
+      const quantityPlans = document.getElementById('quantityMode');
+      const singleCategory = document.querySelector('.category-item[data-category="single"]');
+      const quantityCategory = document.querySelector('.category-item[data-category="quantity"]');
+      
+      if (singlePlans) singlePlans.style.display = 'none';
+      if (quantityPlans) quantityPlans.style.display = 'none';
+      
+      // Focus and scroll the category into view
+      setTimeout(() => {
+        membershipCategory.setAttribute('tabindex', '-1');
+        membershipCategory.focus();
+        membershipCategory.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+    
+    // Scroll to top
+    scrollToTop();
+    setTimeout(() => {
+      scrollToTop();
+    }, 200);
+  }, 200);
+}
+
+function handleRejectionOption2() {
+  // Hide modal
+  hideCampaignRejectionModal();
+  
+  // Open email to support
+  const supportEmail = 'medlem@boulders.dk';
+  const subject = encodeURIComponent('Campaign Purchase Issue');
+  const body = encodeURIComponent('Hello,\n\nI tried to purchase a campaign membership but was told it\'s not available for my account. I believe this may be a mistake.\n\nCould you please help?\n\nThank you!');
+  window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -5552,8 +5646,14 @@ function setupEventListeners() {
   
   // Close modal on Escape key
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
-      closeForgotPasswordModal();
+    if (e.key === 'Escape') {
+      if (DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
+        closeForgotPasswordModal();
+      }
+      const campaignRejectionModal = document.getElementById('campaignRejectionModal');
+      if (campaignRejectionModal && campaignRejectionModal.style.display === 'flex') {
+        hideCampaignRejectionModal();
+      }
     }
   });
   
@@ -5609,7 +5709,31 @@ function setupEventListeners() {
     if (e.target === DOM.dataPolicyModalClose || e.target.closest('#dataPolicyModalClose')) {
       closeDataPolicyModal();
     }
+    
+    // Campaign rejection modal handlers
+    if (e.target.closest('#campaignRejectionOption1')) {
+      handleRejectionOption1();
+    }
+    
+    if (e.target.closest('#campaignRejectionOption2')) {
+      handleRejectionOption2();
+    }
+    
+    if (e.target.closest('#campaignRejectionModalClose')) {
+      hideCampaignRejectionModal();
+    }
   });
+  
+  // Close campaign rejection modal when clicking outside
+  const campaignRejectionModal = document.getElementById('campaignRejectionModal');
+  if (campaignRejectionModal) {
+    campaignRejectionModal.addEventListener('click', (e) => {
+      if (e.target === campaignRejectionModal) {
+        hideCampaignRejectionModal();
+      }
+    });
+  }
+  
   
   // Search input live update
   if (DOM.termsSearchInput) {
@@ -12688,9 +12812,9 @@ async function handleCheckout() {
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
           
           if (isProductNotAllowed) {
-            // Show friendly message that this is a restriction, not an error
-            showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
-            throw error; // Re-throw to stop checkout flow
+            // Show modal with options instead of toast
+            showCampaignRejectionModal();
+            return; // Stop checkout flow without throwing error
           }
           
           // Check if this is a payment link generation error due to backend pricing bug
@@ -13100,8 +13224,8 @@ async function handleCheckout() {
                                   (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
       
       if (isProductNotAllowed) {
-        // Show friendly message that this is a restriction, not an error
-        showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
+        // Show modal with options instead of toast
+        showCampaignRejectionModal();
       } else {
         // Show error message for actual errors
         showToast(getErrorMessage(error, 'Adding items'), 'error');
