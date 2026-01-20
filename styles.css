@@ -3946,6 +3946,7 @@ body {
 
 /* Login Button */
 .login-btn {
+    display: none; /* Hide login button by default until logic is configured*/
     width: 100%;
     padding: 16px 24px;
     background-color: #F401F5;
