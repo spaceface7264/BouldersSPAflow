@@ -4444,6 +4444,124 @@ body {
     font-style: italic;
 }
 
+/* Campaign Rejection Modal */
+.campaign-rejection-content {
+    padding: 32px;
+}
+
+.campaign-rejection-message {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-md);
+    margin-bottom: 32px;
+    line-height: 1.7;
+    text-align: center;
+}
+
+.campaign-rejection-actions {
+    display: flex;
+    gap: 16px;
+    flex-direction: column;
+    width: 100%;
+}
+
+.campaign-rejection-btn {
+    width: 100%;
+    padding: 16px 32px;
+    border: none;
+    border-radius: 8px;
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.campaign-rejection-btn-primary {
+    background-color: #F401F5;
+    color: white;
+    box-shadow: 0 4px 12px rgba(244, 1, 245, 0.3);
+}
+
+.campaign-rejection-btn-primary:hover {
+    background-color: #D401D5;
+    box-shadow: 0 6px 16px rgba(244, 1, 245, 0.4);
+    transform: translateY(-1px);
+}
+
+.campaign-rejection-btn-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.3);
+}
+
+.campaign-rejection-btn-secondary {
+    background-color: transparent;
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-item-border);
+}
+
+.campaign-rejection-btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: var(--color-text-muted);
+    transform: translateY(-1px);
+}
+
+.campaign-rejection-btn-secondary:active {
+    transform: translateY(0);
+}
+
+.campaign-rejection-btn:focus {
+    outline: 2px solid #F401F5;
+    outline-offset: 2px;
+}
+
+.campaign-rejection-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Desktop: Side-by-side buttons */
+@media (min-width: 640px) {
+    .campaign-rejection-actions {
+        flex-direction: row;
+        gap: 16px;
+    }
+    
+    .campaign-rejection-btn {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .campaign-rejection-content {
+        padding: 40px;
+    }
+    
+    .campaign-rejection-message {
+        font-size: var(--font-size-lg);
+        margin-bottom: 40px;
+    }
+}
+
+/* Large desktop: Better spacing */
+@media (min-width: 1024px) {
+    .campaign-rejection-content {
+        padding: 48px;
+    }
+    
+    .campaign-rejection-actions {
+        gap: 20px;
+    }
+    
+    .campaign-rejection-btn {
+        padding: 18px 40px;
+        font-size: var(--font-size-md);
+    }
+}
+
 .terms-modal-loading {
     display: flex;
     flex-direction: column;
@@ -5154,6 +5272,40 @@ body {
 }
 
 /* Cart Items */
+/* Campaign Warning Banner */
+.campaign-warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    background-color: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 8px;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.campaign-warning-icon {
+    flex-shrink: 0;
+    color: #FBBF24;
+    display: flex;
+    align-items: center;
+    margin-top: 2px;
+}
+
+.campaign-warning-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.campaign-warning-message {
+    color: #FCD34D;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    margin: 0;
+    flex: 1;
+}
+
 .cart-items {
     margin-bottom: 20px;
 }
