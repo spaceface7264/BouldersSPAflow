@@ -13,8 +13,10 @@
 2. Wait 2-3 seconds (for GA4 to initialize)
 
 ### Step 3: Trigger API Call
-1. **Add item to cart** (or any action that triggers API)
-2. Look for API request in Network tab (e.g., `/api/orders`)
+1. **Add item to cart** (this triggers **POST** `/api/orders`)
+   - ⚠️ **Important**: Headers only appear on **POST** requests (funnel endpoints)
+   - ❌ **NOT** on GET requests like `/api/products/valuecards`
+2. Look for **POST** request in Network tab (e.g., `/api/orders` or `/api-proxy?path=/api/orders`)
 
 ### Step 4: Check Headers
 1. Click on the API request
@@ -26,6 +28,16 @@
 
 ### ✅ Success!
 If you see `x-ga-client-id` header → **It's working!**
+
+### ⚠️ Not Seeing Headers?
+
+**Check these:**
+1. **Are you testing a POST request?** (Headers only on POST, not GET)
+2. **Did you accept cookies?** (Check console: `localStorage.getItem('boulders_cookie_consent')`)
+3. **Did you wait 2-3 seconds?** (GA4 needs time to initialize)
+4. **Is it a funnel endpoint?** (orders, payment, items - not products)
+
+See `DEBUG_ANALYTICS_HEADERS.md` for detailed troubleshooting.
 
 ---
 
