@@ -2417,6 +2417,242 @@ class PaymentAPI {
   }
 }
 
+// Signature Case API Integration
+// API Endpoints (per OpenAPI documentation):
+// - POST /api/ver3/customers/{customer}/signaturecases - Create signature case
+// - GET /api/ver3/customers/{customer}/signaturecases - List signature cases
+// - GET /api/ver3/customers/{customer}/signaturecases/{id} - Get specific signature case
+class SignatureCaseAPI {
+  constructor(baseUrl = null) {
+    // Use same proxy logic as other API classes
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      // Development: use Vite proxy (relative URL)
+      this.baseUrl = '';
+      this.useProxy = false;
+    } else if (window.location.hostname.includes('pages.dev') ||
+               window.location.hostname.includes('join.boulders.dk') ||
+               window.location.hostname === 'boulders.dk') {
+      // Production: use Cloudflare Pages Function proxy
+      this.baseUrl = '/api-proxy';
+      this.useProxy = true;
+    } else if (window.location.hostname.includes('workers.dev')) {
+      // Cloudflare Workers don't have Pages Functions, use direct API
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
+    } else if (window.location.hostname.includes('netlify')) {
+      // Production: use Netlify Function proxy
+      this.baseUrl = '/.netlify/functions/api-proxy';
+      this.useProxy = true;
+    } else {
+      // Fallback to direct API (may have CORS issues)
+      this.baseUrl = 'https://api-join.boulders.dk';
+      this.useProxy = false;
+    }
+  }
+
+  // Create signature case for a subscription booking
+  // POST /api/ver3/customers/{customer}/signaturecases
+  // Returns SignatureCaseOut or null (if 204 - subscription doesn't require signature)
+  async createSignatureCase(customerId, { subscriptionBooking, subscription, redirectUrl, subscriptionSigner = 'USER_AND_PAYER' }) {
+    try {
+      if (!customerId) {
+        throw new Error('Customer ID is required to create signature case');
+      }
+
+      // Either subscriptionBooking or subscription must be provided
+      if (!subscriptionBooking && !subscription) {
+        throw new Error('Either subscriptionBooking or subscription must be provided');
+      }
+      if (!redirectUrl) {
+        throw new Error('Redirect URL is required for signature case creation');
+      }
+
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/signaturecases`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/signaturecases`;
+      }
+
+      console.log('[SignatureCase] Creating signature case:', url);
+
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+
+      if (!accessToken) {
+        throw new Error('Authentication required to create signature case');
+      }
+
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+
+      const payload = {
+        ...(subscriptionBooking ? { subscriptionBooking } : {}),
+        ...(subscription ? { subscription } : {}),
+        redirectUrl,
+        subscriptionSigner, // USER, PAYER, or USER_AND_PAYER (default)
+      };
+
+      console.log('[SignatureCase] Request payload:', JSON.stringify(payload, null, 2));
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      // 204 means subscription doesn't require a signature case
+      if (response.status === 204) {
+        console.log('[SignatureCase] Subscription does not require a signature case (204)');
+        return null;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[SignatureCase] Create signature case error (${response.status}):`, errorText);
+        throw new Error(`Create signature case failed: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('[SignatureCase] Signature case created:', data);
+      return data;
+    } catch (error) {
+      console.error('[SignatureCase] Create signature case error:', error);
+      throw error;
+    }
+  }
+
+  // Get a specific signature case
+  // GET /api/ver3/customers/{customer}/signaturecases/{id}
+  async getSignatureCase(customerId, signatureCaseId) {
+    try {
+      if (!customerId || !signatureCaseId) {
+        throw new Error('Customer ID and signature case ID are required');
+      }
+
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/signaturecases/${signatureCaseId}`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/signaturecases/${signatureCaseId}`;
+      }
+
+      console.log('[SignatureCase] Getting signature case:', url);
+
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+
+      if (!accessToken) {
+        throw new Error('Authentication required to get signature case');
+      }
+
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[SignatureCase] Get signature case error (${response.status}):`, errorText);
+        throw new Error(`Get signature case failed: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('[SignatureCase] Signature case retrieved:', data);
+      return data;
+    } catch (error) {
+      console.error('[SignatureCase] Get signature case error:', error);
+      throw error;
+    }
+  }
+
+  // List all signature cases for a customer
+  // GET /api/ver3/customers/{customer}/signaturecases
+  async listSignatureCases(customerId) {
+    try {
+      if (!customerId) {
+        throw new Error('Customer ID is required to list signature cases');
+      }
+
+      let url;
+      if (this.useProxy) {
+        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}/signaturecases`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}/signaturecases`;
+      }
+
+      console.log('[SignatureCase] Listing signature cases:', url);
+
+      const accessToken = typeof window.getAccessToken === 'function' 
+        ? window.getAccessToken() 
+        : null;
+
+      if (!accessToken) {
+        throw new Error('Authentication required to list signature cases');
+      }
+
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      };
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[SignatureCase] List signature cases error (${response.status}):`, errorText);
+        throw new Error(`List signature cases failed: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('[SignatureCase] Signature cases retrieved:', data);
+      return Array.isArray(data) ? data : (data.data || data.items || []);
+    } catch (error) {
+      console.error('[SignatureCase] List signature cases error:', error);
+      throw error;
+    }
+  }
+}
+
+function stripEmailPlusTag(email) {
+  if (typeof email !== 'string') {
+    return email;
+  }
+  
+  const trimmed = email.trim();
+  const [localPart, domain] = trimmed.split('@');
+  if (!localPart || !domain) {
+    return trimmed;
+  }
+  
+  const plusIndex = localPart.indexOf('+');
+  if (plusIndex === -1) {
+    return trimmed;
+  }
+  
+  const cleanedLocal = localPart.substring(0, plusIndex);
+  const sanitized = `${cleanedLocal}@${domain}`;
+  if (sanitized !== trimmed) {
+    console.log('[Step 9] Receipt email sanitized (plus tag removed):', sanitized);
+  }
+  return sanitized;
+}
+
 function getSubscriberBirthDate() {
   try {
     const dateField = document.getElementById('dateOfBirth');
@@ -2445,6 +2681,7 @@ const referenceDataAPI = new ReferenceDataAPI();
 const authAPI = new AuthAPI();
 const orderAPI = new OrderAPI();
 const paymentAPI = new PaymentAPI();
+const signatureCaseAPI = new SignatureCaseAPI();
 
 // Step 6: Token validation on app reload
 // Keep tokens fresh by calling POST /api/auth/validate when app reloads with saved credentials
@@ -3789,6 +4026,14 @@ const state = {
   // Test mode for success page
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
+  // Signature case state
+  signatureCase: {
+    id: null,
+    documentUrl: null,
+    signed: false,
+    subscriptionBookingId: null,
+    subscriptionId: null,
+  },
 };
 
 let orderCreationPromise = null;
@@ -5092,6 +5337,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let orderId = urlParams.get('orderId');
   let isPaymentReturnFlow = false;
   
+  // Check for signature case test URL
+  const signatureCaseTest = urlParams.get('test') === 'signature';
+  const signatureCaseId = urlParams.get('signatureCaseId');
+  const signatureCustomerId = urlParams.get('customerId');
+  
   // Fix: Payment provider may append /confirmation to orderId
   // Extract just the numeric part (e.g., "817247/confirmation" -> "817247")
   if (orderId) {
@@ -5299,6 +5549,130 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Always load order first; error params are handled after we verify payment state
     loadOrderForConfirmation(parseInt(orderId, 10));
+  }
+  
+  // Handle signature case completion redirect
+  // Usage: ?signature=complete&orderId=123&customerId=456
+  const signatureComplete = urlParams.get('signature') === 'complete';
+  const signatureOrderId = urlParams.get('orderId');
+  const signatureCustomerIdParam = urlParams.get('customerId');
+  
+  if (signatureComplete && signatureOrderId && signatureCustomerIdParam) {
+    console.log('[SignatureCase Return] Detected signature completion return');
+    console.log('[SignatureCase Return] Order ID:', signatureOrderId);
+    console.log('[SignatureCase Return] Customer ID:', signatureCustomerIdParam);
+    
+    // Restore checkout state from sessionStorage
+    try {
+      const signatureState = sessionStorage.getItem('boulders_checkout_signature');
+      if (signatureState) {
+        const parsed = JSON.parse(signatureState);
+        state.orderId = parsed.orderId || parseInt(signatureOrderId, 10);
+        state.customerId = parsed.customerId || signatureCustomerIdParam;
+        state.signatureCase = {
+          ...state.signatureCase,
+          id: parsed.signatureCaseId || state.signatureCase?.id,
+        };
+        console.log('[SignatureCase Return] Restored state from sessionStorage');
+      }
+    } catch (e) {
+      console.warn('[SignatureCase Return] Could not restore state from sessionStorage:', e);
+      state.orderId = parseInt(signatureOrderId, 10);
+      state.customerId = signatureCustomerIdParam;
+    }
+    
+    // Verify signature case is signed
+    (async () => {
+      try {
+        if (state.signatureCase && state.signatureCase.id) {
+          console.log('[SignatureCase Return] Verifying signature case status...');
+          const signatureCase = await signatureCaseAPI.getSignatureCase(
+            parseInt(state.customerId, 10),
+            state.signatureCase.id
+          );
+          
+          if (signatureCase && signatureCase.signed) {
+            console.log('[SignatureCase Return] ✅ Signature case is signed, continuing checkout...');
+            state.signatureCase.signed = true;
+            
+            // Clear signature state from sessionStorage
+            try {
+              sessionStorage.removeItem('boulders_checkout_signature');
+            } catch (e) {
+              console.warn('[SignatureCase Return] Could not clear signature state:', e);
+            }
+            
+            // Continue with checkout flow - trigger payment link generation
+            // We need to be on step 4 (payment step) to continue
+            state.currentStep = 4;
+            showStep(4);
+            updateStepIndicator();
+            updateNavigationButtons();
+            updateMainSubtitle();
+            
+            // Trigger checkout to continue with payment link generation
+            // The checkout button should be visible and ready
+            console.log('[SignatureCase Return] Ready to continue checkout - user can click checkout button');
+            showToast('Contract signed successfully! You can now proceed with payment.', 'success');
+          } else {
+            console.warn('[SignatureCase Return] ⚠️ Signature case not yet signed');
+            showToast('Signature is still pending. Please wait a moment and try again.', 'warning');
+          }
+        } else {
+          console.warn('[SignatureCase Return] ⚠️ Signature case ID not found in state');
+          showToast('Could not verify signature status. Please try again.', 'error');
+        }
+      } catch (error) {
+        console.error('[SignatureCase Return] ❌ Failed to verify signature:', error);
+        showToast('Could not verify signature status. Please contact support.', 'error');
+      }
+    })();
+  }
+  
+  // Handle signature case test URL
+  // Usage: ?test=signature&customerId=123&signatureCaseId=456
+  // Or: ?test=signature&customerId=123 (to list all signature cases)
+  if (signatureCaseTest) {
+    console.log('[SignatureCase Test] Test mode detected');
+    console.log('[SignatureCase Test] Customer ID:', signatureCustomerId);
+    console.log('[SignatureCase Test] Signature Case ID:', signatureCaseId);
+    
+    // Ensure user is authenticated
+    if (!isUserAuthenticated()) {
+      console.error('[SignatureCase Test] User must be authenticated to test signature cases');
+      alert('Please log in first to test signature cases. Use the login form on step 3.');
+      return;
+    }
+    
+    // Run test asynchronously
+    (async () => {
+      try {
+        if (signatureCaseId && signatureCustomerId) {
+          // Test: Get specific signature case
+          console.log('[SignatureCase Test] Testing getSignatureCase...');
+          const signatureCase = await signatureCaseAPI.getSignatureCase(
+            parseInt(signatureCustomerId, 10),
+            parseInt(signatureCaseId, 10)
+          );
+          console.log('[SignatureCase Test] ✅ Signature case retrieved:', signatureCase);
+          alert(`Signature Case Test: Success!\n\nID: ${signatureCase.id}\nSigned: ${signatureCase.signed}\nDocument URL: ${signatureCase.documentUrl || 'N/A'}\n\nCheck console for full details.`);
+        } else if (signatureCustomerId) {
+          // Test: List all signature cases
+          console.log('[SignatureCase Test] Testing listSignatureCases...');
+          const signatureCases = await signatureCaseAPI.listSignatureCases(
+            parseInt(signatureCustomerId, 10)
+          );
+          console.log('[SignatureCase Test] ✅ Signature cases retrieved:', signatureCases);
+          alert(`Signature Case Test: Success!\n\nFound ${signatureCases.length} signature case(s).\n\nCheck console for full details.`);
+        } else {
+          console.error('[SignatureCase Test] Missing required parameters');
+          alert('Signature Case Test: Missing parameters!\n\nUsage:\n- ?test=signature&customerId=123&signatureCaseId=456 (get specific)\n- ?test=signature&customerId=123 (list all)');
+        }
+      } catch (error) {
+        console.error('[SignatureCase Test] ❌ Test failed:', error);
+        alert(`Signature Case Test: Failed!\n\nError: ${error.message}\n\nCheck console for details.`);
+      }
+    })();
   }
   
   // Step 6: Validate tokens on app load
@@ -11600,6 +11974,22 @@ async function ensureSubscriptionAttached(context = 'auto') {
       productId: subscriptionItem?.product?.id,
     });
     
+    // Check if signature case is required (only during checkout flow, not auto-ensure)
+    if (context === 'checkout-flow' && subscriptionItem) {
+      try {
+        const signatureCase = await createSignatureCaseIfRequired(orderId, subscriptionItem);
+        if (signatureCase && signatureCase.documentUrl) {
+          // Store signature case info for redirect handling
+          console.log('[ensureSubscriptionAttached] Signature case required - will redirect to Assently');
+          // Don't redirect here - let checkout flow handle it
+          // The signature case is stored in state.signatureCase
+        }
+      } catch (error) {
+        console.warn('[ensureSubscriptionAttached] Signature case creation failed, continuing checkout:', error);
+        // Continue checkout even if signature case creation fails
+      }
+    }
+    
     updatePaymentOverview();
     console.log(`[checkout] Order updated with subscriptionItems for payment overview`);
     
@@ -11615,6 +12005,64 @@ async function ensureSubscriptionAttached(context = 'auto') {
     throw error;
   } finally {
     subscriptionAttachPromise = null;
+  }
+}
+
+// Create signature case for subscription if required
+// Returns signature case object if created, null if not required, throws error on failure
+async function createSignatureCaseIfRequired(orderId, subscriptionItem) {
+  try {
+    if (!state.customerId) {
+      console.warn('[SignatureCase] Cannot create signature case - customer ID missing');
+      return null;
+    }
+
+    if (!subscriptionItem || !subscriptionItem.id) {
+      console.warn('[SignatureCase] Cannot create signature case - subscription item ID missing');
+      return null;
+    }
+
+    // Build redirect URL for after signature completion
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const baseUrl = isLocal
+      ? 'https://join.boulders.dk'
+      : window.location.origin.replace('http://', 'https://');
+    const redirectUrl = `${baseUrl}${window.location.pathname}?signature=complete&orderId=${orderId}&customerId=${state.customerId}`;
+
+    console.log('[SignatureCase] Creating signature case for subscription booking:', subscriptionItem.id);
+    console.log('[SignatureCase] Redirect URL:', redirectUrl);
+
+    // Create signature case - API returns null (204) if not required
+    const signatureCase = await signatureCaseAPI.createSignatureCase(
+      parseInt(state.customerId, 10),
+      {
+        subscriptionBooking: subscriptionItem.id,
+        redirectUrl: redirectUrl,
+        subscriptionSigner: 'USER_AND_PAYER', // Default - both user and payer must sign
+      }
+    );
+
+    if (!signatureCase) {
+      console.log('[SignatureCase] Subscription does not require a signature case (204 response)');
+      return null;
+    }
+
+    // Store signature case in state
+    state.signatureCase = {
+      id: signatureCase.id,
+      documentUrl: signatureCase.documentUrl,
+      signed: signatureCase.signed || false,
+      subscriptionBookingId: subscriptionItem.id,
+      subscriptionId: signatureCase.subscription || null,
+    };
+
+    console.log('[SignatureCase] ✅ Signature case created:', state.signatureCase);
+    return signatureCase;
+  } catch (error) {
+    console.error('[SignatureCase] Failed to create signature case:', error);
+    // Don't throw - allow checkout to continue even if signature case creation fails
+    // The backend will handle this case
+    return null;
   }
 }
 
@@ -12408,6 +12856,31 @@ async function handleCheckout() {
             } catch (verifyError) {
               console.warn('[checkout] Could not verify discount on order:', verifyError);
             }
+          }
+          
+          // Check if signature case is required before generating payment link
+          // If signature case exists and has document URL, redirect to Assently first
+          if (state.signatureCase && state.signatureCase.documentUrl && !state.signatureCase.signed) {
+            console.log('[checkout] ===== SIGNATURE CASE REQUIRED =====');
+            console.log('[checkout] Signature case found, redirecting to Assently for signing...');
+            console.log('[checkout] Document URL:', state.signatureCase.documentUrl);
+            console.log('[checkout] Signature Case ID:', state.signatureCase.id);
+            
+            // Store checkout state in sessionStorage for return
+            try {
+              sessionStorage.setItem('boulders_checkout_signature', JSON.stringify({
+                orderId: state.orderId,
+                customerId: state.customerId,
+                signatureCaseId: state.signatureCase.id,
+                returnToCheckout: true,
+              }));
+            } catch (e) {
+              console.warn('[checkout] Could not save signature state to sessionStorage:', e);
+            }
+            
+            // Redirect to Assently document URL
+            window.location.href = state.signatureCase.documentUrl;
+            return; // Stop checkout flow - will resume after signature completion
           }
           
           // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied
