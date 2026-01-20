@@ -14271,6 +14271,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
     // Add class to step-content to adjust layout when payment fails
     const stepContent = document.querySelector('.step-content');
     if (stepContent) {
+      stepContent.classList.remove('success-page-active'); // Remove success page class if present
       stepContent.classList.add('payment-failed-active');
       stepContent.style.flex = 'none';
       stepContent.style.minHeight = 'auto';
@@ -14972,9 +14973,11 @@ function renderConfirmationView() {
     step5Panel.removeAttribute('data-payment-pending');
     
     // Clean up payment-failed-active class and inline styles from step-content
+    // Add success-page-active class for reliable CSS targeting
     const stepContent = document.querySelector('.step-content');
     if (stepContent) {
       stepContent.classList.remove('payment-failed-active');
+      stepContent.classList.add('success-page-active'); // Add class for reliable CSS targeting
       stepContent.style.flex = '';
       stepContent.style.minHeight = '';
       stepContent.style.height = '';
