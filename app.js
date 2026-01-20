@@ -15643,6 +15643,9 @@ function renderConfirmationView() {
   } else {
     console.warn('[Confirmation] Unknown product type or section not found:', productType);
   }
+  
+  // Display signature case information if contract was signed
+  displaySignatureCaseInfo();
 
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
@@ -15781,6 +15784,115 @@ function renderConfirmationView() {
     }
   }
   
+// Display signature case information on confirmation page
+async function displaySignatureCaseInfo() {
+  const signatureCaseInfo = document.getElementById('signatureCaseInfo');
+  const signatureCaseStatus = document.getElementById('signatureCaseStatus');
+  const viewContractLink = document.getElementById('viewContractLink');
+  
+  if (!signatureCaseInfo) {
+    return; // Element doesn't exist, skip
+  }
+  
+  console.log('[Confirmation] ===== CHECKING FOR SIGNATURE CASE =====');
+  console.log('[Confirmation] Signature case in state:', state.signatureCase);
+  console.log('[Confirmation] Customer ID:', state.customerId);
+  console.log('[Confirmation] Full order:', state.fullOrder);
+  
+  // Try to find signature case - check state first, then try to fetch from API
+  let signatureCaseToDisplay = null;
+  let signatureCaseId = null;
+  
+  // Check state first
+  if (state.signatureCase && state.signatureCase.id) {
+    signatureCaseId = state.signatureCase.id;
+    console.log('[Confirmation] Found signature case ID in state:', signatureCaseId);
+  }
+  
+  // If we have customer ID, try to list signature cases to find one for this order
+  if (!signatureCaseId && state.customerId && state.orderId) {
+    try {
+      console.log('[Confirmation] Listing signature cases to find one for this order...');
+      const signatureCases = await signatureCaseAPI.listSignatureCases(parseInt(state.customerId, 10));
+      console.log('[Confirmation] Found signature cases:', signatureCases);
+      
+      // Find signature case for this order
+      const orderSignatureCase = signatureCases.find(sc => 
+        sc.order?.id === state.orderId || 
+        sc.order?.orderId === state.orderId ||
+        String(sc.order?.id) === String(state.orderId)
+      );
+      
+      if (orderSignatureCase) {
+        signatureCaseId = orderSignatureCase.id;
+        signatureCaseToDisplay = orderSignatureCase;
+        console.log('[Confirmation] Found signature case for this order:', orderSignatureCase);
+      }
+    } catch (error) {
+      console.warn('[Confirmation] Could not list signature cases:', error);
+    }
+  }
+  
+  // Fetch signature case details if we have an ID
+  if (signatureCaseId && !signatureCaseToDisplay && state.customerId) {
+    try {
+      console.log('[Confirmation] Fetching signature case details...');
+      signatureCaseToDisplay = await signatureCaseAPI.getSignatureCase(
+        parseInt(state.customerId, 10),
+        signatureCaseId
+      );
+      console.log('[Confirmation] Signature case retrieved:', signatureCaseToDisplay);
+    } catch (error) {
+      console.warn('[Confirmation] Could not fetch signature case:', error);
+    }
+  }
+  
+  // Display signature case info if we have it
+  if (signatureCaseToDisplay) {
+    console.log('[Confirmation] ✅ Displaying signature case info');
+    signatureCaseInfo.style.display = 'block';
+    
+    if (signatureCaseToDisplay.signed) {
+      if (signatureCaseStatus) {
+        signatureCaseStatus.textContent = 'Signed';
+        signatureCaseStatus.style.color = '#22d3ee';
+      }
+      
+      // Show link to view contract if documentUrl is available
+      if (signatureCaseToDisplay.documentUrl && viewContractLink) {
+        viewContractLink.href = signatureCaseToDisplay.documentUrl;
+        viewContractLink.style.display = 'block';
+        viewContractLink.textContent = 'View signed contract';
+      }
+    } else {
+      if (signatureCaseStatus) {
+        signatureCaseStatus.textContent = 'Pending';
+        signatureCaseStatus.style.color = '#fbbf24';
+      }
+      if (viewContractLink) {
+        viewContractLink.style.display = 'none';
+      }
+    }
+  } else if (state.signatureCase && state.signatureCase.signed) {
+    // Fallback: Use state data if API fetch failed
+    console.log('[Confirmation] Using signature case from state (API fetch failed)');
+    signatureCaseInfo.style.display = 'block';
+    if (signatureCaseStatus) {
+      signatureCaseStatus.textContent = 'Signed';
+      signatureCaseStatus.style.color = '#22d3ee';
+    }
+    if (state.signatureCase.documentUrl && viewContractLink) {
+      viewContractLink.href = state.signatureCase.documentUrl;
+      viewContractLink.style.display = 'block';
+      viewContractLink.textContent = 'View signed contract';
+    }
+  } else {
+    // No signature case - hide the section
+    console.log('[Confirmation] No signature case found - hiding section');
+    signatureCaseInfo.style.display = 'none';
+  }
+}
+
 // Helper function to create purchase item element if template not available
 function createPurchaseItemElement() {
   const item = document.createElement('div');

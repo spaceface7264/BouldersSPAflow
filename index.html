@@ -967,6 +967,23 @@
                                     </div>
                                 </div>
                                 
+                                <!-- Signature Case Information (if contract was signed) -->
+                                <div class="signature-case-info" id="signatureCaseInfo" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                                    <div class="membership-item" style="display: flex; align-items: center; gap: 8px;">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #22d3ee; flex-shrink: 0;">
+                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                            <path d="M22 4L12 14.01l-3-3"/>
+                                        </svg>
+                                        <div style="flex: 1;">
+                                            <span class="membership-label" style="display: block; margin-bottom: 4px;">Contract Status:</span>
+                                            <span class="membership-value" id="signatureCaseStatus" style="color: #22d3ee; font-weight: 600;">Signed</span>
+                                        </div>
+                                    </div>
+                                    <a href="#" id="viewContractLink" target="_blank" style="display: none; margin-top: 12px; color: #22d3ee; text-decoration: underline; font-size: 14px;">
+                                        View signed contract
+                                    </a>
+                                </div>
+                                
                                 <button class="login-btn" data-action="open-login">Log in</button>
                             </div>
                             
