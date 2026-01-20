@@ -24,9 +24,19 @@ export function sanitizeHTML(dirty, config = {}) {
       'div', 'span', 'p', 'br', 'strong', 'em', 'b', 'i', 'u',
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'ul', 'ol', 'li', 'a', 'img', 'table', 'tr', 'td', 'th',
-      'thead', 'tbody', 'tfoot', 'pre', 'code', 'blockquote'
+      'thead', 'tbody', 'tfoot', 'pre', 'code', 'blockquote',
+      // SVG tags for icons
+      'svg', 'path', 'circle', 'rect', 'line', 'polygon', 'polyline',
+      'g', 'use', 'defs', 'symbol', 'title', 'desc', 'text', 'tspan'
     ],
-    ALLOWED_ATTR: ['class', 'id', 'href', 'src', 'alt', 'title'],
+    ALLOWED_ATTR: [
+      'class', 'id', 'href', 'src', 'alt', 'title',
+      // SVG attributes
+      'viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width',
+      'stroke-linecap', 'stroke-linejoin', 'd', 'cx', 'cy', 'r', 'rx', 'ry',
+      'x', 'y', 'x1', 'y1', 'x2', 'y2', 'points', 'xlink:href',
+      'transform', 'preserveAspectRatio', 'xmlns', 'xmlns:xlink'
+    ],
     KEEP_CONTENT: true, // Keep text content even if tags are removed
     ...config
   };
