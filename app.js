@@ -14185,6 +14185,15 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
     // Mark step 5 panel as payment failed for CSS targeting
     step5Panel.setAttribute('data-payment-failed', 'true');
     
+    // Add class to step-content to adjust layout when payment fails
+    const stepContent = document.querySelector('.step-content');
+    if (stepContent) {
+      stepContent.classList.add('payment-failed-active');
+      stepContent.style.flex = 'none';
+      stepContent.style.minHeight = 'auto';
+      stepContent.style.height = 'auto';
+    }
+    
     // IMMEDIATELY modify the HTML BEFORE it's visible to user
     const confirmationHeader = step5Panel.querySelector('.confirmation-header');
     if (!confirmationHeader) {
@@ -14489,6 +14498,15 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           
           // Reset payment failed state and navigate to step 4
           state.paymentFailed = false;
+          // Clean up payment-failed-active class and inline styles before navigating
+          const stepContent = document.querySelector('.step-content');
+          if (stepContent) {
+            stepContent.classList.remove('payment-failed-active');
+            stepContent.style.flex = '';
+            stepContent.style.minHeight = '';
+            stepContent.style.height = '';
+          }
+          
           state.currentStep = 4;
           showStep(4);
           updateStepIndicator();
@@ -14869,6 +14887,15 @@ function renderConfirmationView() {
     // Remove payment failed/pending attributes to allow CSS to show sections
     step5Panel.removeAttribute('data-payment-failed');
     step5Panel.removeAttribute('data-payment-pending');
+    
+    // Clean up payment-failed-active class and inline styles from step-content
+    const stepContent = document.querySelector('.step-content');
+    if (stepContent) {
+      stepContent.classList.remove('payment-failed-active');
+      stepContent.style.flex = '';
+      stepContent.style.minHeight = '';
+      stepContent.style.height = '';
+    }
     
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
     const confirmationLeft = step5Panel.querySelector('.confirmation-left');

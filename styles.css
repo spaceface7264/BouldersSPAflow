@@ -729,6 +729,13 @@ body {
     #step-5 .step-panel-content {
         margin-top: 48px; /* Match tablet header height */
     }
+    
+    /* Override for payment failed state */
+    #step-5.step-panel[data-payment-failed="true"] .step-panel-content,
+    #step-5[data-payment-failed="true"] .step-panel-content {
+        margin-top: 0 !important;
+        padding-top: 30px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -784,6 +791,13 @@ body {
     /* Step 5 - Respect header height on mobile */
     #step-5 .step-panel-content {
         margin-top: 44px; /* Match mobile header height */
+    }
+    
+    /* Override for payment failed state */
+    #step-5.step-panel[data-payment-failed="true"] .step-panel-content,
+    #step-5[data-payment-failed="true"] .step-panel-content {
+        margin-top: 0 !important;
+        padding-top: 20px;
     }
     
     .language-btn {
@@ -1165,6 +1179,7 @@ body {
     margin-top: 0;
     flex: none; /* Prevent container from taking up all available space */
 }
+
 
 .step-panel {
     display: none;
@@ -6152,6 +6167,47 @@ main {
   display: flex;
 }
 
+/* Compensate for step panel container positioning when payment fails */
+/* Target step-content when it contains payment-failed step-5 */
+.step-content:has(.step-panel[data-payment-failed="true"]),
+.step-content:has(#step-5[data-payment-failed="true"]),
+.step-content:has(#step-5.active[data-payment-failed="true"]),
+.step-content.payment-failed-active {
+  flex: none !important;
+  min-height: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+}
+
+/* Also adjust main container when payment fails to prevent flex expansion */
+.main:has(.step-content:has(#step-5[data-payment-failed="true"])),
+.main:has(.step-content.payment-failed-active) {
+  flex: none !important;
+  min-height: auto !important;
+  height: auto !important;
+}
+
+/* Override all #step-5 .step-panel-content margin-top rules when payment fails */
+#step-5.step-panel[data-payment-failed="true"] .step-panel-content,
+#step-5[data-payment-failed="true"] .step-panel-content {
+  margin-top: 0 !important;
+  padding-top: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.step-panel[data-payment-failed="true"] .confirmation-header {
+  margin-bottom: 0 !important;
+  margin-top: 60px;
+  width: 100%;
+  max-width: 800px;
+}
+
 /* Payment Failed Badge - Magenta */
 .payment-failed-badge {
     width: 90px;
@@ -6398,6 +6454,15 @@ main {
 @media (max-width: 480px) {
     .confirmation-header {
         margin-bottom: 30px;
+    }
+    
+    .step-panel[data-payment-failed="true"] .confirmation-header {
+        margin-bottom: 0 !important;
+        margin-top: 40px;
+    }
+    
+    .step-panel[data-payment-failed="true"] .step-panel-content {
+        padding-top: 20px;
     }
     
     .payment-failed-title {
@@ -7113,6 +7178,18 @@ main {
         grid-template-columns: 1fr;
         gap: 24px;
     }
+    
+    .step-panel[data-payment-failed="true"] .step-panel-content,
+    #step-5.step-panel[data-payment-failed="true"] .step-panel-content,
+    #step-5[data-payment-failed="true"] .step-panel-content {
+        padding-top: 30px;
+    }
+    
+    .step-content.payment-failed-active {
+        flex: none !important;
+        min-height: auto !important;
+        height: auto !important;
+    }
 
     .success-title {
         font-size: var(--font-size-4xl);
@@ -7126,6 +7203,15 @@ main {
 @media (max-width: 768px) {
     .confirmation-header {
         margin-bottom: 30px;
+    }
+    
+    .step-panel[data-payment-failed="true"] .confirmation-header {
+        margin-bottom: 0 !important;
+        margin-top: 50px;
+    }
+    
+    .step-panel[data-payment-failed="true"] .step-panel-content {
+        padding-top: 30px;
     }
 
     .success-badge {
