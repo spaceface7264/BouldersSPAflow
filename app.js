@@ -4564,6 +4564,7 @@ const translations = {
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
+    'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
     'modal.loading': 'Indlæser...',
     'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
     'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagnebebegrænsninger. Du kan oprette et almindeligt medlemskab. Kontakt support hvis du tror dette er en fejl.',
@@ -4625,6 +4626,7 @@ const translations = {
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
+    'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
     'modal.loading': 'Loading...',
     'modal.campaignRejection.title': 'Campaign Not Available',
     'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.',
@@ -10367,6 +10369,59 @@ function clearParentFormFields() {
   });
 }
 
+// Helper function to check if cart contains a campaign
+function hasCampaignInCart() {
+  // Check if membershipPlanId starts with "campaign-"
+  if (state.membershipPlanId && String(state.membershipPlanId).startsWith('campaign-')) {
+    return true;
+  }
+  
+  // Check if any cart item's productId exists in campaignSubscriptions
+  if (state.cartItems && state.cartItems.length > 0 && state.campaignSubscriptions) {
+    return state.cartItems.some(item => {
+      if (!item.productId) return false;
+      const productIdNum = typeof item.productId === 'string' 
+        ? parseInt(item.productId) 
+        : item.productId;
+      return state.campaignSubscriptions.some(campaign => 
+        campaign.id === item.productId || 
+        campaign.id === productIdNum ||
+        String(campaign.id) === String(item.productId)
+      );
+    });
+  }
+  
+  // Check if selectedProductId is in campaignSubscriptions
+  if (state.selectedProductId && state.campaignSubscriptions) {
+    const productIdNum = typeof state.selectedProductId === 'string' 
+      ? parseInt(state.selectedProductId) 
+      : state.selectedProductId;
+    return state.campaignSubscriptions.some(campaign => 
+      campaign.id === state.selectedProductId || 
+      campaign.id === productIdNum ||
+      String(campaign.id) === String(state.selectedProductId)
+    );
+  }
+  
+  return false;
+}
+
+// Show campaign warning banner
+function showCampaignWarning() {
+  const banner = document.getElementById('campaignWarningBanner');
+  if (banner) {
+    banner.style.display = 'flex';
+  }
+}
+
+// Hide campaign warning banner
+function hideCampaignWarning() {
+  const banner = document.getElementById('campaignWarningBanner');
+  if (banner) {
+    banner.style.display = 'none';
+  }
+}
+
 function updateCartSummary() {
   const items = [];
   state.totals.membershipMonthly = 0;
@@ -10475,6 +10530,13 @@ function updateCartSummary() {
   
   state.cartItems = items;
   
+  // Check for campaigns and show/hide warning banner
+  if (hasCampaignInCart()) {
+    showCampaignWarning();
+  } else {
+    hideCampaignWarning();
+  }
+  
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   
@@ -10575,6 +10637,13 @@ function updateCartTotals() {
 function renderCartItems() {
   if (!templates.cartItem || !DOM.cartItems) return;
   DOM.cartItems.innerHTML = '';
+
+  // Check for campaigns and show/hide warning banner
+  if (hasCampaignInCart()) {
+    showCampaignWarning();
+  } else {
+    hideCampaignWarning();
+  }
 
   if (!state.cartItems.length) {
     // Only show empty message if there's no gym selected either
