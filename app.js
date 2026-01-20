@@ -48,6 +48,19 @@ import { sanitizeHTML } from './sanitize.js';
 
 const VALUE_CARD_PUNCH_MULTIPLIER = 10;
 
+/**
+ * Gets today's date in YYYY-MM-DD format using local time (not UTC).
+ * This ensures we always send the user's local "today" date to the backend.
+ * @returns {string} Today's date in YYYY-MM-DD format (e.g., "2026-01-05")
+ */
+function getTodayLocalDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const debugEnabled = window.DEBUG_LOGS === true;
 const originalConsoleLog = console.log.bind(console);
 const originalConsoleWarn = console.warn.bind(console);
@@ -1434,16 +1447,14 @@ class OrderAPI {
       
       // Set start date to today so membership starts immediately
       // Format: YYYY-MM-DD (ISO date format)
-      const todayDate = new Date();
-      const startDate = todayDate.toISOString().split('T')[0]; // e.g., "2026-01-05"
+      // Use local date (not UTC) to ensure we always send the user's local "today"
+      const startDate = getTodayLocalDateString(); // e.g., "2026-01-05" (local date)
       
-      // CRITICAL BACKEND BUG: Backend ignores startDate parameter for productId 134 ("Medlemskab")
-      // but accepts it for productId 56 ("Junior") and productId 135 ("Student").
-      // This causes backend to set initialPaymentPeriod.start to future date (next month)
-      // for productId 134, preventing partial-month pricing calculation.
-      // This is a backend issue that needs to be fixed on backend side.
-      // Workaround: Frontend calculates partial-month pricing client-side for display,
-      // but payment window will still show full monthly price because backend uses its own calculation.
+      // Pricing calculation: When startDate is on day 16 or later, price includes:
+      // - Rest of current month (prorated) + Full next month
+      // When startDate is before day 16, price includes:
+      // - Rest of current month only (prorated)
+      // Frontend calculation now matches backend logic to ensure price consistency.
       
       // Build payload according to OpenAPI spec:
       // Required: subscriptionProduct, birthDate
@@ -1458,21 +1469,23 @@ class OrderAPI {
         // ...(state.selectedBusinessUnit ? { businessUnit: state.selectedBusinessUnit } : {}),
       };
       
-      // Log warning if this is productId 134 (known backend bug)
+      // Log pricing calculation details for productId 134 for verification
       if (subscriptionProductId === 134) {
-        console.warn('[Step 7] ⚠️ BACKEND BUG: Adding subscription for productId 134 ("Medlemskab")');
-        console.warn('[Step 7] ⚠️ Backend will ignore startDate parameter and set start date to future');
-        console.warn('[Step 7] ⚠️ This prevents partial-month pricing calculation on backend');
-        console.warn('[Step 7] ⚠️ Frontend will calculate partial-month pricing client-side for display');
-        console.warn('[Step 7] ⚠️ But payment window will show full monthly price (backend bug)');
-        console.warn('[Step 7] ⚠️ This is a backend issue - backend should accept startDate for all products');
+        const dayOfMonth = new Date().getDate();
+        if (dayOfMonth >= 16) {
+          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
+          console.log('[Step 7] ℹ️ Day >= 16: Price will include rest of current month + full next month');
+        } else {
+          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
+          console.log('[Step 7] ℹ️ Day < 16: Price will include prorated rest of current month only');
+        }
       }
       
       console.log('[Step 7] Adding subscription item - productId:', productId);
       console.log('[Step 7] Extracted subscriptionProductId:', subscriptionProductId);
       console.log('[Step 7] Subscription item payload:', JSON.stringify(payload, null, 2));
       
-      // CRITICAL: Log payload details for debugging why backend ignores startDate for productId 134
+      // Log payload details for debugging and verification
       console.log('[Step 7] 🔍 Payload analysis:', {
         subscriptionProductId,
         productId,
@@ -1585,9 +1598,8 @@ class OrderAPI {
         }
         
         // If all strategies failed, log detailed error
-        console.error('[Step 7] ❌ All strategies failed to fix backend pricing bug for productId:', subscriptionProductId);
-        console.error('[Step 7] ❌ Payment window will show incorrect price');
-        console.error('[Step 7] ❌ Cart summary will calculate and show correct price');
+        console.error('[Step 7] ❌ All strategies failed to fix pricing mismatch for productId:', subscriptionProductId);
+        console.error('[Step 7] ❌ Order may have pricing discrepancy - verification will continue');
       }
       
       return data;
@@ -1636,8 +1648,23 @@ class OrderAPI {
     const dayOfMonth = today.getDate();
     const daysRemainingInMonth = daysInCurrentMonth - dayOfMonth + 1;
     
-    // Calculate prorated price
-    const proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+    // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
+    // Otherwise: just rest of current month (prorated)
+    let proratedPriceInCents;
+    let includesNextMonth = false;
+    
+    if (dayOfMonth >= 16) {
+      // Calculate: (rest of current month) + (full next month)
+      const partialCurrentMonthPrice = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+      const fullNextMonthPrice = monthlyPriceInCents;
+      proratedPriceInCents = partialCurrentMonthPrice + fullNextMonthPrice;
+      includesNextMonth = true;
+      console.log(`[Price Calculation] Day ${dayOfMonth} >= 16: Calculating rest of month (${daysRemainingInMonth} days) + full next month`);
+    } else {
+      // Calculate: just rest of current month (prorated)
+      proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+      console.log(`[Price Calculation] Day ${dayOfMonth} < 16: Calculating prorated price for remaining ${daysRemainingInMonth} days`);
+    }
     
     return {
       amountInCents: proratedPriceInCents,
@@ -1645,7 +1672,8 @@ class OrderAPI {
       daysRemaining: daysRemainingInMonth,
       daysInMonth: daysInCurrentMonth,
       monthlyPriceInCents,
-      monthlyPriceInDKK: monthlyPriceInCents / 100
+      monthlyPriceInDKK: monthlyPriceInCents / 100,
+      includesNextMonth // Flag to indicate if next month is included
     };
   }
 
@@ -1666,40 +1694,70 @@ class OrderAPI {
   async _fixBackendPricingBug(orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today) {
     // Strategy 1: Delete and re-add with same payload (sometimes backend needs fresh start)
     console.log('[Step 7] Strategy 1: Delete and re-add with same payload');
-    const strategy1Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today
-    );
-    if (strategy1Result) return strategy1Result;
-    
-    // Strategy 2: Try with explicit date format
-    console.log('[Step 7] Strategy 2: Try with explicit date format');
-    const todayExplicit = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    if (todayExplicit !== basePayload.startDate) {
-      const payloadVariant = { ...basePayload, startDate: todayExplicit };
-      const strategy2Result = await this._tryStrategyDeleteAndReadd(
-        orderId, url, headers, subscriptionItemId, payloadVariant, productId, expectedPrice, accessToken, today
+    try {
+      const strategy1Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today
       );
-      if (strategy2Result) return strategy2Result;
+      if (strategy1Result) return strategy1Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked (403 Forbidden) - cannot modify subscription item');
+        console.warn('[Step 7] ⚠️ Skipping remaining fix strategies - order cannot be modified');
+        return null; // Order is locked, can't fix
+      }
+      // Other error - continue to next strategy
+    }
+    
+    // Strategy 2: Try with explicit date format (using helper function for consistency)
+    console.log('[Step 7] Strategy 2: Try with explicit date format');
+    try {
+      const todayExplicit = getTodayLocalDateString();
+      if (todayExplicit !== basePayload.startDate) {
+        const payloadVariant = { ...basePayload, startDate: todayExplicit };
+        const strategy2Result = await this._tryStrategyDeleteAndReadd(
+          orderId, url, headers, subscriptionItemId, payloadVariant, productId, expectedPrice, accessToken, today
+        );
+        if (strategy2Result) return strategy2Result;
+      }
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - skipping remaining strategies');
+        return null;
+      }
     }
     
     // Strategy 3: Try minimal payload (only required fields)
     console.log('[Step 7] Strategy 3: Try minimal payload');
-    const minimalPayload = {
-      subscriptionProduct: basePayload.subscriptionProduct,
-      startDate: basePayload.startDate,
-      ...(basePayload.birthDate ? { birthDate: basePayload.birthDate } : {}),
-    };
-    const strategy3Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, minimalPayload, productId, expectedPrice, accessToken, today
-    );
-    if (strategy3Result) return strategy3Result;
+    try {
+      const minimalPayload = {
+        subscriptionProduct: basePayload.subscriptionProduct,
+        startDate: basePayload.startDate,
+        ...(basePayload.birthDate ? { birthDate: basePayload.birthDate } : {}),
+      };
+      const strategy3Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, minimalPayload, productId, expectedPrice, accessToken, today
+      );
+      if (strategy3Result) return strategy3Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - skipping remaining strategies');
+        return null;
+      }
+    }
     
     // Strategy 4: Try with longer wait time (backend might need more time to process)
     console.log('[Step 7] Strategy 4: Try with longer wait time');
-    const strategy4Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today, 2000
-    );
-    if (strategy4Result) return strategy4Result;
+    try {
+      const strategy4Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today, 2000
+      );
+      if (strategy4Result) return strategy4Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - all strategies failed');
+        return null;
+      }
+    }
     
     return null; // All strategies failed
   }
@@ -1743,7 +1801,11 @@ class OrderAPI {
       } catch (error) {
         if (error.status === 403) {
           console.log('[Step 7] Cannot delete subscription item (403 Forbidden) - order may be in a state that prevents modification');
-          return null; // Skip this strategy - we don't have permission
+          // Throw a specific error so caller knows order is locked
+          const lockedError = new Error('Order is locked (403 Forbidden)');
+          lockedError.isOrderLocked = true;
+          lockedError.status = 403;
+          throw lockedError;
         }
         const payloadText = typeof error.payload === 'string'
           ? error.payload
@@ -2284,7 +2346,7 @@ class PaymentAPI {
         
         if (error.status === 403) {
           console.error('[Step 9] ⚠️ 403 Forbidden - Possible reasons:');
-          console.error('[Step 9] ⚠️ 1. Order may have incorrect pricing (backend bug - startDate ignored)');
+          console.error('[Step 9] ⚠️ 1. Order may have pricing mismatch (price verification failed)');
           console.error('[Step 9] ⚠️ 2. Order may be in a state that prevents payment link generation');
           console.error('[Step 9] ⚠️ 3. Payment method may not be valid for this order');
           console.error('[Step 9] ⚠️ 4. Business unit may not match order');
@@ -2303,16 +2365,16 @@ class PaymentAPI {
             const productId = subscriptionItem?.product?.id;
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const startDateStr = today.toISOString().split('T')[0];
+            const startDateStr = getTodayLocalDateString();
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
             const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
             
             if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
-              console.error('[Step 9] ❌ CONFIRMED: Order has incorrect pricing due to backend bug!');
+              console.error('[Step 9] ❌ CONFIRMED: Order has pricing mismatch!');
               console.error('[Step 9] ❌ Backend shows:', verification.orderPriceDKK, 'DKK');
-              console.error('[Step 9] ❌ Should be:', verification.expectedPriceDKK || 'N/A', 'DKK');
-              console.error('[Step 9] ❌ This is why payment link generation is failing with 403');
-              console.error('[Step 9] ❌ Backend needs to fix startDate handling for productId:', productId);
+              console.error('[Step 9] ❌ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
+              console.error('[Step 9] ❌ This may cause payment link generation to fail with 403');
+              console.error('[Step 9] ❌ Product ID:', productId);
             }
           }
         }
@@ -5009,6 +5071,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check URL parameters for test mode and payment return
   const urlParams = new URLSearchParams(window.location.search);
   const testSuccess = urlParams.get('testSuccess') === 'true';
+  const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
   const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
@@ -5019,6 +5082,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
+  }
+  
+  if (testPaymentFailed) {
+    console.log('[Test Mode] Test payment failed page mode enabled');
+    // Store test mode in state
+    state.testMode = true;
   }
   let orderId = urlParams.get('orderId');
   let isPaymentReturnFlow = false;
@@ -5043,16 +5112,48 @@ document.addEventListener('DOMContentLoaded', () => {
     clearStoredOrderData('page-refresh');
   }
   
+  // CRITICAL: Check for payment errors BEFORE init() to prevent step 1 from showing
   if (paymentReturn === 'return' && orderId) {
-    // We're returning from payment - show confirmation instead of resetting
+    // We're returning from payment - check for errors first
     console.log('[Payment Return] Detected payment return for order:', orderId);
+    
     // Set order ID in state if available
     state.orderId = parseInt(orderId, 10);
-    // Skip normal init and go straight to confirmation
-    // We'll still call init but then immediately show confirmation
+    
+    // If there's a payment error, go directly to payment failed page
+    const hasPaymentError = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
+    if (hasPaymentError) {
+      console.log('[Payment Return] Payment error detected - preventing step 1 from showing');
+      // Set step to 5 immediately to prevent step 1 from showing
+      state.currentStep = TOTAL_STEPS;
+      state.paymentFailed = true;
+      state.paymentConfirmed = false;
+      state.paymentPending = false;
+      
+      // CRITICAL: Hide step 1 immediately before init() runs
+      // This prevents the flash of step 1
+      const step1Panel = document.getElementById('step-1');
+      if (step1Panel) {
+        step1Panel.style.display = 'none';
+        step1Panel.style.visibility = 'hidden';
+        step1Panel.style.opacity = '0';
+      }
+    }
   }
   
   init();
+  
+  // If in test mode for payment failed, navigate directly to failed page
+  if (testPaymentFailed) {
+    console.log('[Test Mode] Navigating to payment failed page for testing');
+    // Set up minimal test data
+    state.orderId = 99999; // Mock order ID
+    state.currentStep = TOTAL_STEPS;
+    
+    // Call the payment failed function directly (for testing)
+    showPaymentFailedMessage(null, state.orderId, null);
+    return; // Exit early, don't continue with normal flow
+  }
   
   // If in test mode, navigate directly to success page
   if (testSuccess) {
@@ -5158,6 +5259,43 @@ document.addEventListener('DOMContentLoaded', () => {
       showPaymentFailedMessage(null, parseInt(orderId, 10), null); // Use default calm message
       return;
     }
+    
+      // CRITICAL: If payment error detected, show failed message immediately
+      // This prevents step 1 from flashing before the error is shown
+      const hasPaymentError = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
+      if (hasPaymentError) {
+        console.log('[Payment Return] Payment error detected - showing failed message immediately');
+        // Ensure step 5 is shown and all other steps are hidden
+        state.currentStep = TOTAL_STEPS;
+        state.paymentFailed = true;
+        
+      // Hide all step panels immediately (use direct DOM query since cacheDom might not have run yet)
+      const stepPanels = document.querySelectorAll('.step-panel');
+      const step5Panel = document.getElementById('step-5');
+      stepPanels.forEach((panel) => {
+        if (panel.id === 'step-5') {
+          // Show step 5
+          panel.classList.add('active');
+          panel.style.display = 'block';
+          panel.style.visibility = 'visible';
+          panel.style.opacity = '1';
+        } else {
+          // Hide all other steps immediately
+          panel.classList.remove('active');
+          panel.style.display = 'none';
+          panel.style.visibility = 'hidden';
+          panel.style.opacity = '0';
+        }
+      });
+        
+        // Show payment failed message immediately
+        showPaymentFailedMessage(null, parseInt(orderId, 10), null);
+        // Still load order in background for data, but don't wait
+        loadOrderForConfirmation(parseInt(orderId, 10)).catch(err => {
+          console.warn('[Payment Return] Could not load order after showing failed message:', err);
+        });
+        return;
+      }
     
     // Always load order first; error params are handled after we verify payment state
     loadOrderForConfirmation(parseInt(orderId, 10));
@@ -10742,7 +10880,7 @@ function updatePaymentOverview() {
       const productId = subscriptionItem?.product?.id || state.selectedProductId;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const startDateStr = today.toISOString().split('T')[0];
+      const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
       
       if (initialPaymentPeriod?.start) {
@@ -10785,7 +10923,7 @@ function updatePaymentOverview() {
               end: lastDayOfMonth
             };
             console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
-            console.warn('[Payment Overview] ⚠️ NOTE: Payment window may show different price if backend bug persists');
+            console.warn('[Payment Overview] ⚠️ NOTE: Using calculated price - verify against backend order price');
           } else {
             // Can't calculate expected price - use backend price as fallback
             payNowAmount = orderPriceDKK;
@@ -10856,7 +10994,7 @@ function updatePaymentOverview() {
           // Regular membership: Calculate partial month price client-side
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const startDateStr = today.toISOString().split('T')[0];
+          const startDateStr = getTodayLocalDateString();
           
           // Try to use the helper function if available
           if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
@@ -10864,15 +11002,30 @@ function updatePaymentOverview() {
             if (expectedPrice) {
               payNowAmount = expectedPrice.amountInDKK;
               
-              // Set billing period to today - end of month
+              // Set billing period based on whether next month is included
               const currentMonth = today.getMonth();
               const currentYear = today.getFullYear();
-              const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-              billingPeriod = {
-                start: today,
-                end: lastDayOfMonth
-              };
-              console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month):', payNowAmount, 'DKK');
+              const dayOfMonth = today.getDate();
+              
+              if (expectedPrice.includesNextMonth) {
+                // Billing period extends to end of next month
+                const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+                const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+                const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+                billingPeriod = {
+                  start: today,
+                  end: lastDayOfNextMonth
+                };
+                console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month):', payNowAmount, 'DKK');
+              } else {
+                // Billing period is just rest of current month
+                const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+                billingPeriod = {
+                  start: today,
+                  end: lastDayOfMonth
+                };
+                console.log('[Payment Overview] ✅ Pay now calculated (partial month):', payNowAmount, 'DKK');
+              }
             } else {
               // Fallback to full month price
               const priceInCents = membership.priceWithInterval?.price?.amount || 0;
@@ -10889,17 +11042,37 @@ function updatePaymentOverview() {
             const currentYear = today.getFullYear();
             const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
             const daysInMonth = lastDayOfMonth.getDate();
+            const dayOfMonth = today.getDate();
             const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
             
-            // Calculate partial month price
-            payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
-            
-            billingPeriod = {
-              start: today,
-              end: lastDayOfMonth
-            };
-            
-            console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month, manual calc):', payNowAmount, 'DKK');
+            // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
+            if (dayOfMonth >= 16) {
+              // Calculate: (rest of current month) + (full next month)
+              const partialCurrentMonthPrice = (monthlyPrice / daysInMonth) * daysRemaining;
+              payNowAmount = partialCurrentMonthPrice + monthlyPrice;
+              
+              // Billing period extends to end of next month
+              const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+              const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+              const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+              
+              billingPeriod = {
+                start: today,
+                end: lastDayOfNextMonth
+              };
+              
+              console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month, manual calc):', payNowAmount, 'DKK');
+            } else {
+              // Calculate: just rest of current month (prorated)
+              payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+              
+              billingPeriod = {
+                start: today,
+                end: lastDayOfMonth
+              };
+              
+              console.log('[Payment Overview] ✅ Pay now calculated (partial month, manual calc):', payNowAmount, 'DKK');
+            }
           }
         }
       } else {
@@ -12297,7 +12470,7 @@ async function handleCheckout() {
               } else {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                const startDateStr = today.toISOString().split('T')[0];
+                const startDateStr = getTodayLocalDateString();
                 const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
               
               // Use robust verification method
@@ -12372,16 +12545,16 @@ async function handleCheckout() {
                       orderBeforePayment = fixedOrder;
                     } else {
                       console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
-                      console.error('[checkout] ❌ This is a backend bug - payment window will show incorrect price');
-                      console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
-                      console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
+                      console.error('[checkout] ❌ Pricing mismatch detected');
+                      console.error('[checkout] ❌ UI shows calculated price:', verification.expectedPriceDKK, 'DKK');
+                      console.error('[checkout] ❌ Backend order price:', verification.orderPriceDKK, 'DKK');
                     }
                     } else {
                     console.error('[checkout] ❌ All fix strategies failed - cannot modify order (likely 403 Forbidden)');
-                    console.error('[checkout] ❌ This is a backend bug - backend ignored startDate parameter');
-                    console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
-                    console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
-                    console.error('[checkout] ❌ Backend needs to be fixed to respect startDate parameter for productId:', productId);
+                    console.error('[checkout] ❌ Pricing mismatch - cannot fix order (order may be locked)');
+                    console.error('[checkout] ❌ UI shows calculated price:', verification.expectedPriceDKK, 'DKK');
+                    console.error('[checkout] ❌ Backend order price:', verification.orderPriceDKK, 'DKK');
+                    console.error('[checkout] ❌ Product ID:', productId);
                   }
                 } else if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
                   console.log('[checkout] ✅ Order price is acceptable - no fix needed');
@@ -12531,12 +12704,12 @@ async function handleCheckout() {
               const productId = subscriptionItem?.product?.id;
               const today = new Date();
               today.setHours(0, 0, 0, 0);
-              const startDateStr = today.toISOString().split('T')[0];
+              const startDateStr = getTodayLocalDateString();
               const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
               const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
               
               if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
-                console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO BACKEND PRICING BUG');
+                console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO PRICING MISMATCH');
                 console.error('[checkout] ❌ Order has incorrect pricing - backend ignored startDate parameter');
                 console.error('[checkout] ❌ This is a backend issue that needs to be fixed on backend side');
                 console.error('[checkout] ❌ Product ID:', productId);
@@ -12545,9 +12718,15 @@ async function handleCheckout() {
                 
                 // Show user-friendly error message
                 showToast(
-                  'Der opstod et problem med betalingslinket på grund af en backend-fejl. Kontakt support hvis problemet fortsætter.',
+                  'Unable to process payment due to a system issue. Please try again in a few moments or contact support.',
                   'error'
                 );
+                
+                // Reset checkout state to allow retry
+                state.checkoutInProgress = false;
+                if (typeof setCheckoutLoadingState === 'function') {
+                  setCheckoutLoadingState(false);
+                }
                 
                 throw new Error(`Payment link generation failed due to backend pricing bug. Order price: ${verification.orderPriceDKK} DKK, Expected: ${verification.expectedPriceDKK || 'N/A'} DKK. Product ID: ${productId}. Backend ignored startDate parameter.`);
               }
@@ -13228,7 +13407,7 @@ window.verifyOrderPrice = async function(orderId = null) {
     const productId = subscriptionItem?.product?.id;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const startDateStr = today.toISOString().split('T')[0];
+    const startDateStr = getTodayLocalDateString();
     const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
     const verification = orderAPI._verifySubscriptionPricing(order, productId, expectedPrice, today);
     
@@ -13362,30 +13541,8 @@ async function loadOrderForConfirmation(orderId) {
   
   const hasPaymentErrorParam = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
   const hasReceiptParam = Boolean(receiptId || receiptUuid);
-  let failureReason = null;
-  if (hasPaymentErrorParam) {
-    console.warn('[Payment Return] ⚠️ Error detected in URL parameters - will verify payment status before failing');
-    console.warn('[Payment Return] Error details:', { paymentError, paymentStatus });
-
-    if (paymentError) {
-      const errorCode = parseInt(paymentError, 10);
-      if (!isNaN(errorCode)) {
-        switch (errorCode) {
-          case 205:
-            failureReason = 'Payment was declined by your bank or card issuer.';
-            break;
-          case 401:
-          case 403:
-            failureReason = 'Payment authorization failed. Please try again or use a different payment method.';
-            break;
-          default:
-            failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
-        }
-      } else if (paymentError.toLowerCase().includes('cancel')) {
-        failureReason = 'Payment was cancelled before completion.';
-      }
-    }
-  }
+  // Note: We no longer extract specific failure reasons since we show a single friendly message
+  // But we still check for payment error params to determine if payment failed
   
   // CRITICAL: Reset payment status flags at start (only if no URL error)
   state.paymentFailed = false;
@@ -13501,7 +13658,6 @@ async function loadOrderForConfirmation(orderId) {
           return;
         }
 
-        // Use default calm message instead of technical details
         console.warn('[Payment Return] ⚠️ INNER CATCH: Calling showPaymentFailedMessage');
         showPaymentFailedMessage(null, orderId, null);
         console.warn('[Payment Return] ✅ showPaymentFailedMessage called from inner catch - returning early');
@@ -13534,7 +13690,7 @@ async function loadOrderForConfirmation(orderId) {
     // If payment is clearly not confirmed (leftToPay > 0 and not paid), show pending immediately
     if (hasPaymentErrorParam && !initialIsPaid) {
       console.warn('[Payment Return] ⚠️ Payment error param present and payment not confirmed - showing failure');
-      showPaymentFailedMessage(order, orderId, failureReason);
+      showPaymentFailedMessage(order, orderId, null);
       return;
     }
 
@@ -13894,11 +14050,10 @@ async function loadOrderForConfirmation(orderId) {
     // Also show failed for ANY error when returning from payment (safer than showing success)
     if (isUnauthorized || isNotFound || has401InMessage || has404InMessage) {
       console.warn('[Payment Return] ⚠️ DETECTED 401/404 ERROR - Calling showPaymentFailedMessage');
-        const failureReason = null; // Use default calm message instead of technical details
       
       // CRITICAL: Always call showPaymentFailedMessage for 401/404 errors
-      console.warn('[Payment Return] About to call showPaymentFailedMessage with:', { orderId, failureReason });
-      showPaymentFailedMessage(null, orderId, failureReason);
+      console.warn('[Payment Return] About to call showPaymentFailedMessage');
+      showPaymentFailedMessage(null, orderId, null);
       console.warn('[Payment Return] showPaymentFailedMessage called - returning early');
       return; // Don't show success page
     }
@@ -13906,20 +14061,23 @@ async function loadOrderForConfirmation(orderId) {
     // For any other error when returning from payment, also show failed (safer than showing success)
     // This handles cases where error doesn't match 401/404 patterns but still indicates failure
     console.warn('[Payment Return] ⚠️ Unexpected error during payment return - showing payment failed as fallback');
-    console.warn('[Payment Return] About to call showPaymentFailedMessage (fallback)');
-    showPaymentFailedMessage(null, orderId, null); // Use default calm message
+    showPaymentFailedMessage(null, orderId, null);
     console.warn('[Payment Return] showPaymentFailedMessage (fallback) called - returning early');
     return; // Don't show success page or pending message
   }
 }
 
-function showPaymentFailedMessage(order, orderId, reason = null) {
-  console.log('[Payment Failed] Called with:', { orderId, reason, currentStep: state.currentStep });
+async function showPaymentFailedMessage(order, orderId, reason = null) {
+  // reason parameter is kept for backward compatibility but no longer used
+  // All payment failures now show the same friendly message
+  console.log('[Payment Failed] Called with:', { orderId, currentStep: state.currentStep });
   
   // CRITICAL: Restore cart and state from sessionStorage BEFORE showing failure page
   // This ensures cart is populated when user clicks "Try Payment Again"
   try {
     const orderData = sessionStorage.getItem('boulders_checkout_order');
+    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    
     if (orderData) {
       const storedOrder = JSON.parse(orderData);
       console.log('[Payment Failed] Restoring cart and state from sessionStorage:', storedOrder);
@@ -14012,8 +14170,63 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
         console.log('[Payment Failed] ✅ Restored orderId:', state.orderId);
       }
     }
+    
+    // CRITICAL: Restore customer profile data to show full profile info
+    if (customerData) {
+      try {
+        const storedCustomer = JSON.parse(customerData);
+        state.customerId = storedCustomer.id;
+        console.log('[Payment Failed] Restored customer ID from sessionStorage:', storedCustomer.id);
+        
+        // Fetch full customer profile to display all fields (if we have a customer ID)
+        // Try to fetch even if authentication status is unclear, as we might have valid tokens
+        if (storedCustomer.id) {
+          try {
+            const customerProfile = await authAPI.getCustomer(storedCustomer.id);
+            state.authenticatedCustomer = customerProfile;
+            // Also set authenticatedEmail for refreshLoginUI
+            if (customerProfile?.email) {
+              state.authenticatedEmail = customerProfile.email;
+            }
+            console.log('[Payment Failed] ✅ Loaded full customer profile:', customerProfile);
+            // Refresh UI after loading full profile
+            refreshLoginUI();
+          } catch (profileError) {
+            console.warn('[Payment Failed] Could not fetch full customer profile, using stored data:', profileError);
+            // Fallback: Use stored customer data if available
+            if (storedCustomer.firstName || storedCustomer.lastName || storedCustomer.email) {
+              state.authenticatedCustomer = {
+                id: storedCustomer.id,
+                firstName: storedCustomer.firstName,
+                lastName: storedCustomer.lastName,
+                email: storedCustomer.email,
+                // Note: Full profile might not have all fields, but we'll try to use what we have
+              };
+              // Also set authenticatedEmail for refreshLoginUI
+              if (storedCustomer.email) {
+                state.authenticatedEmail = storedCustomer.email;
+              }
+            }
+            // Refresh UI with fallback data
+            refreshLoginUI();
+          }
+        } else {
+          // No customer ID - refresh UI with what we have
+          refreshLoginUI();
+        }
+      } catch (e) {
+        console.warn('[Payment Failed] Could not parse customer data from sessionStorage:', e);
+        // Still refresh UI even if customer data parse failed
+        refreshLoginUI();
+      }
+    } else {
+      // No customer data in sessionStorage - refresh UI with current state
+      refreshLoginUI();
+    }
   } catch (e) {
     console.warn('[Payment Failed] Could not restore cart from sessionStorage:', e);
+    // Still refresh UI even if restore failed
+    refreshLoginUI();
   }
   
   // CRITICAL: Mark payment as failed FIRST to prevent success page from rendering
@@ -14032,292 +14245,412 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
   console.log('[Payment Failed] Navigating to confirmation page...');
   state.currentStep = TOTAL_STEPS;
   
-  // Show step 5 panel
+  // Show step 5 panel immediately - hide all other steps first to prevent flash
   const step5Panel = document.getElementById('step-5');
   if (step5Panel) {
-    // Mark step 5 panel as payment failed for CSS targeting
-    step5Panel.setAttribute('data-payment-failed', 'true');
-    // Hide all other panels first
+    // CRITICAL: Hide all other panels FIRST to prevent any flash of step 1
     DOM.stepPanels.forEach((panel, index) => {
       if (index + 1 === TOTAL_STEPS) {
+        // This is step 5 - show it
         panel.classList.add('active');
         panel.style.display = 'block';
         panel.style.visibility = 'visible';
         panel.style.opacity = '1';
       } else {
+        // Hide all other steps immediately
         panel.classList.remove('active');
-        if (panel.id !== 'step-3') {
-          panel.style.display = 'none';
-        }
+        panel.style.display = 'none';
+        panel.style.visibility = 'hidden';
+        panel.style.opacity = '0';
       }
     });
     
+    // Mark step 5 panel as payment failed for CSS targeting
+    step5Panel.setAttribute('data-payment-failed', 'true');
+    
+    // Add class to step-content to adjust layout when payment fails
+    const stepContent = document.querySelector('.step-content');
+    if (stepContent) {
+      stepContent.classList.add('payment-failed-active');
+      stepContent.style.flex = 'none';
+      stepContent.style.minHeight = 'auto';
+      stepContent.style.height = 'auto';
+    }
+    
     // IMMEDIATELY modify the HTML BEFORE it's visible to user
+    const confirmationHeader = step5Panel.querySelector('.confirmation-header');
+    if (!confirmationHeader) {
+      console.error('[Payment Failed] Confirmation header not found');
+      return;
+    }
+    
+    // Hide success elements
     const successTitle = step5Panel.querySelector('.success-title');
     const successMessage = step5Panel.querySelector('.success-message');
     const successBadge = step5Panel.querySelector('.success-badge');
     
     if (successTitle) {
-      // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
-      successTitle.removeAttribute('data-i18n-key');
-      successTitle.textContent = 'Payment Couldn\'t Be Completed';
-      successTitle.style.color = '#f59e0b'; // Use amber/orange instead of red for less alarming tone
-      console.log('[Payment Failed] ✅ Title set to calm message');
+      successTitle.style.display = 'none';
+    }
+    if (successMessage) {
+      successMessage.style.display = 'none';
+    }
+    if (successBadge) {
+      successBadge.style.display = 'none';
     }
     
-    if (successMessage) {
-      // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
-      successMessage.removeAttribute('data-i18n-key');
-      const displayOrderId = orderId || order?.number || order?.id || 'N/A';
-      
-      // Determine failure reason and provide specific guidance
-      let specificGuidance = '';
-      
-      // If a specific reason was provided (e.g., from URL error code), use it directly
-      if (reason && reason.trim() && !reason.toLowerCase().includes('payment was not completed')) {
-        specificGuidance = reason;
-      } else {
-        // Otherwise, try to infer from reason string patterns
-        const reasonLower = String(reason || '').toLowerCase();
-        
-        if (reasonLower.includes('declined') || reasonLower.includes('bank') || reasonLower.includes('card issuer')) {
-          specificGuidance = 'Payment was declined by your bank or card issuer.';
-        } else if (reasonLower.includes('cancelled') || reasonLower.includes('canceled')) {
-          specificGuidance = 'You closed the payment window before completing the transaction.';
-        } else if (reasonLower.includes('unauthorized') || reasonLower.includes('401') || reasonLower.includes('authorization failed')) {
-          specificGuidance = 'The payment session expired or was cancelled.';
-        } else if (reasonLower.includes('not found') || reasonLower.includes('404')) {
-          specificGuidance = 'The order could not be found. This may happen if the payment window was open for too long.';
-        } else {
-          specificGuidance = 'The payment process was interrupted before completion.';
-        }
-      }
-      
-      // Build clear, actionable message with status, reason, and next steps
-      successMessage.innerHTML = sanitizeHTML(`
-        <div style="text-align: left; max-width: 600px; margin: 0 auto;">
-          <!-- Status Explanation -->
-          <div style="margin-bottom: 24px; padding: 16px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; border-radius: 4px;">
-            <strong style="color: #f59e0b; display: block; margin-bottom: 8px; font-size: 16px;">Status: Payment Not Completed</strong>
-            <p style="color: #d1d5db; margin: 0; line-height: 1.6;">${specificGuidance}</p>
+    // Get or create payment failed elements
+    let paymentFailedBadge = confirmationHeader.querySelector('.payment-failed-badge');
+    let paymentFailedTitle = confirmationHeader.querySelector('.payment-failed-title');
+    let quickStatus = confirmationHeader.querySelector('.quick-status');
+    let reassuranceBar = confirmationHeader.querySelector('.reassurance-bar');
+    let failureActions = confirmationHeader.querySelector('.failure-actions');
+    
+    const displayOrderId = orderId || order?.number || order?.id || 'N/A';
+    
+    // Use a single friendly message for all payment failures
+    const statusText = 'Payment Error';
+    const statusDetail = 'Something went wrong with your payment. Please try again.';
+    
+    // Create payment failed badge
+    if (!paymentFailedBadge) {
+      paymentFailedBadge = document.createElement('div');
+      paymentFailedBadge.className = 'payment-failed-badge';
+      confirmationHeader.insertBefore(paymentFailedBadge, confirmationHeader.firstChild);
+    }
+    paymentFailedBadge.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    `;
+    
+    // Create payment failed title
+    if (!paymentFailedTitle) {
+      paymentFailedTitle = document.createElement('h2');
+      paymentFailedTitle.className = 'payment-failed-title';
+      confirmationHeader.insertBefore(paymentFailedTitle, quickStatus || reassuranceBar || failureActions || null);
+    }
+    paymentFailedTitle.textContent = 'Payment Couldn\'t Be Completed';
+    
+    // Create quick status
+    if (!quickStatus) {
+      quickStatus = document.createElement('div');
+      quickStatus.className = 'quick-status';
+      confirmationHeader.insertBefore(quickStatus, reassuranceBar || failureActions || null);
+    }
+    quickStatus.innerHTML = `
+      <span class="status-badge">${statusText}</span>
+      <p class="status-detail">${statusDetail}</p>
+    `;
+    
+    // Create reassurance bar with separate containers
+    if (!reassuranceBar) {
+      reassuranceBar = document.createElement('div');
+      reassuranceBar.className = 'reassurance-bar';
+      confirmationHeader.insertBefore(reassuranceBar, failureActions || null);
+    }
+    reassuranceBar.innerHTML = `
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Nothing charged</span>
+      </div>
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Order saved</span>
+      </div>
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Profile saved</span>
+      </div>
+    `;
+    
+    // Create failure actions
+    if (!failureActions) {
+      failureActions = document.createElement('div');
+      failureActions.className = 'failure-actions';
+      confirmationHeader.appendChild(failureActions);
+    }
+    failureActions.innerHTML = `
+      <div class="action-grid">
+        <div class="action-option primary-option">
+          <div class="option-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+            </svg>
           </div>
-
-          <!-- Reassurance -->
-          <div style="margin-bottom: 24px; padding: 16px; background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e; border-radius: 4px;">
-            <p style="color: #9ca3af; margin: 0; line-height: 1.8;">
-              <strong style="color: #22c55e;">✓</strong> Nothing was charged<br>
-              <strong style="color: #22c55e;">✓</strong> Your order details are saved<br>
-              <strong style="color: #22c55e;">✓</strong> No membership has been activated yet
-            </p>
-          </div>
-
-          <!-- Actionable Steps -->
-          <div style="color: #d1d5db; line-height: 1.8;">
-            <strong style="color: #f59e0b; display: block; margin-bottom: 16px; font-size: 16px;">What you can do:</strong>
-
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
-              <strong style="color: #3b82f6; display: block; margin-bottom: 4px;">1. Try Again</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">Click the button below to retry payment with the same details. Your order is saved and ready.</p>
-            </div>
-
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
-              <strong style="color: #8b5cf6; display: block; margin-bottom: 4px;">2. Use a Different Payment Method</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">If the issue persists, try a different card or payment method. Your order will remain the same.</p>
-            </div>
-
-            <div style="margin-bottom: 24px; padding: 12px; background: rgba(107, 114, 128, 0.1); border-radius: 4px;">
-              <strong style="color: #6b7280; display: block; margin-bottom: 4px;">3. Contact Support</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">If you continue to experience issues, our support team can help. Reference Order #${displayOrderId}</p>
-            </div>
-
-            <!-- Action Buttons -->
-            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px;">
-              <button id="retry-payment-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
-                Try Payment Again
-              </button>
-              <button id="contact-support-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: transparent; color: #9ca3af; border: 2px solid #374151; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#6b7280'; this.style.color='#d1d5db'" onmouseout="this.style.borderColor='#374151'; this.style.color='#9ca3af'">
-                Contact Support
-              </button>
-            </div>
-          </div>
+          <h4>Try Again</h4>
+          <p>Retry payment with saved order details</p>
         </div>
-      `);
-
-      // Add event listeners for action buttons
-      setTimeout(() => {
-        const retryBtn = document.getElementById('retry-payment-btn');
-        const supportBtn = document.getElementById('contact-support-btn');
         
-        if (retryBtn) {
-          retryBtn.addEventListener('click', () => {
-            console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
+
+        <div class="action-option" id="contact-support-option">
+          <div class="option-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <h4>Get Help</h4>
+          <p>Email support • Order #<span id="failed-order-id">${displayOrderId}</span></p>
+        </div>
+      </div>
+
+      <button id="retry-payment-btn" class="retry-btn">
+        <span>Try Payment Again</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12 5 19 12 12 19"/>
+        </svg>
+      </button>
+    `;
+    
+    // Add event listeners for action buttons
+    setTimeout(() => {
+      const retryBtn = document.getElementById('retry-payment-btn');
+      const supportOption = document.getElementById('contact-support-option');
+      const primaryOption = document.querySelector('.action-option.primary-option');
+      
+      // Shared retry payment handler function
+      const handleRetryPayment = async () => {
+          console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
+          
+          // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
+          // This ensures cart is populated when showStep(4) runs
+          try {
+            const orderData = sessionStorage.getItem('boulders_checkout_order');
+            const customerData = sessionStorage.getItem('boulders_checkout_customer');
             
-            // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
-            // This ensures cart is populated when showStep(4) runs
-            try {
-              const orderData = sessionStorage.getItem('boulders_checkout_order');
-              if (orderData) {
-                const storedOrder = JSON.parse(orderData);
-                console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
+            if (orderData) {
+              const storedOrder = JSON.parse(orderData);
+              console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
+              
+              // Always restore cart items (force restore, don't check if empty)
+              if (storedOrder.cartItems) {
+                state.cartItems = storedOrder.cartItems;
+                console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
                 
-                // Always restore cart items (force restore, don't check if empty)
-                if (storedOrder.cartItems) {
-                  state.cartItems = storedOrder.cartItems;
-                  console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
-                  
-                  // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
-                  // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
-                  const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
-                  if (punchCardItems.length > 0) {
-                    console.log('[Payment Retry] Found punch card items, rebuilding valueCardQuantities');
-                    state.valueCardQuantities.clear();
-                    punchCardItems.forEach(item => {
-                      // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
-                      // If membershipPlanId exists, use it; otherwise construct from productId
-                      const planId = storedOrder.membershipPlanId || 
-                                    (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
-                      const quantity = item.quantity || 1;
-                      state.valueCardQuantities.set(planId, quantity);
-                      console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
-                    });
-                  }
+                // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
+                // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
+                const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
+                if (punchCardItems.length > 0) {
+                  console.log('[Payment Retry] Found punch card items, rebuilding valueCardQuantities');
+                  state.valueCardQuantities.clear();
+                  punchCardItems.forEach(item => {
+                    // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
+                    // If membershipPlanId exists, use it; otherwise construct from productId
+                    const planId = storedOrder.membershipPlanId || 
+                                  (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
+                    const quantity = item.quantity || 1;
+                    state.valueCardQuantities.set(planId, quantity);
+                    console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
+                  });
                 }
-                if (storedOrder.totals) {
-                  state.totals = { ...state.totals, ...storedOrder.totals };
-                  console.log('[Payment Retry] ✅ Restored totals');
-                }
+              }
+              if (storedOrder.totals) {
+                state.totals = { ...state.totals, ...storedOrder.totals };
+                console.log('[Payment Retry] ✅ Restored totals');
+              }
+              
+              // Restore selectedProductType and selectedProductId if available
+              if (storedOrder.selectedProductType) {
+                state.selectedProductType = storedOrder.selectedProductType;
+                console.log('[Payment Retry] ✅ Restored selectedProductType:', state.selectedProductType);
+              }
+              if (storedOrder.selectedProductId) {
+                state.selectedProductId = storedOrder.selectedProductId;
+                console.log('[Payment Retry] ✅ Restored selectedProductId:', state.selectedProductId);
+              }
+              
+              if (storedOrder.membershipPlanId) {
+                state.membershipPlanId = storedOrder.membershipPlanId;
+                console.log('[Payment Retry] ✅ Restored membershipPlanId:', state.membershipPlanId);
                 
-                // Restore selectedProductType and selectedProductId if available
-                if (storedOrder.selectedProductType) {
-                  state.selectedProductType = storedOrder.selectedProductType;
-                  console.log('[Payment Retry] ✅ Restored selectedProductType:', state.selectedProductType);
-                }
-                if (storedOrder.selectedProductId) {
-                  state.selectedProductId = storedOrder.selectedProductId;
-                  console.log('[Payment Retry] ✅ Restored selectedProductId:', state.selectedProductId);
-                }
-                
-                if (storedOrder.membershipPlanId) {
-                  state.membershipPlanId = storedOrder.membershipPlanId;
-                  console.log('[Payment Retry] ✅ Restored membershipPlanId:', state.membershipPlanId);
-                  
-                  // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
-                  // Handle all formats: campaign-, membership-, 15daypass-, punch-
-                  if (!state.selectedProductType || !state.selectedProductId) {
-                    if (typeof storedOrder.membershipPlanId === 'string') {
-                      if (storedOrder.membershipPlanId.startsWith('campaign-')) {
-                        const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
+                // Handle all formats: campaign-, membership-, 15daypass-, punch-
+                if (!state.selectedProductType || !state.selectedProductId) {
+                  if (typeof storedOrder.membershipPlanId === 'string') {
+                    if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+                      const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+                      const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from membership:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+                      const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
+                               storedOrder.membershipPlanId === 'adult-punch' || 
+                               storedOrder.membershipPlanId === 'junior-punch') {
+                      // For punch cards, extract productId from membershipPlanId
+                      if (storedOrder.membershipPlanId.startsWith('punch-')) {
+                        const productId = storedOrder.membershipPlanId.replace('punch-', '');
                         state.selectedProductId = parseInt(productId, 10) || productId;
-                        state.selectedProductType = 'membership';
-                        console.log('[Payment Retry] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
-                      } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
-                        const productId = storedOrder.membershipPlanId.replace('membership-', '');
-                        state.selectedProductId = parseInt(productId, 10) || productId;
-                        state.selectedProductType = 'membership';
-                        console.log('[Payment Retry] ✅ Derived selectedProductId from membership:', state.selectedProductId);
-                      } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
-                        const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
-                        state.selectedProductId = parseInt(productId, 10) || productId;
-                        state.selectedProductType = 'membership';
-                        console.log('[Payment Retry] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
-                      } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
-                                 storedOrder.membershipPlanId === 'adult-punch' || 
-                                 storedOrder.membershipPlanId === 'junior-punch') {
-                        // For punch cards, extract productId from membershipPlanId
-                        if (storedOrder.membershipPlanId.startsWith('punch-')) {
-                          const productId = storedOrder.membershipPlanId.replace('punch-', '');
-                          state.selectedProductId = parseInt(productId, 10) || productId;
-                        } else {
-                          // For adult-punch/junior-punch, we need to find the productId from cart items
-                          const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
-                          if (punchCardItem) {
-                            state.selectedProductId = punchCardItem.productId || punchCardItem.id;
-                          }
+                      } else {
+                        // For adult-punch/junior-punch, we need to find the productId from cart items
+                        const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
+                        if (punchCardItem) {
+                          state.selectedProductId = punchCardItem.productId || punchCardItem.id;
                         }
-                        state.selectedProductType = 'punch-card';
-                        console.log('[Payment Retry] ✅ Derived selectedProductId from punch card:', state.selectedProductId);
                       }
+                      state.selectedProductType = 'punch-card';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from punch card:', state.selectedProductId);
                     }
                   }
                 }
-                if (storedOrder.selectedBusinessUnit) {
-                  state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
-                  console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
-                }
-                if (storedOrder.orderId) {
-                  state.orderId = storedOrder.orderId;
-                  console.log('[Payment Retry] ✅ Restored orderId');
-                }
               }
-            } catch (e) {
-              console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
+              if (storedOrder.selectedBusinessUnit) {
+                state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+                console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
+              }
+              if (storedOrder.orderId) {
+                state.orderId = storedOrder.orderId;
+                console.log('[Payment Retry] ✅ Restored orderId');
+              }
             }
             
-            // Reset payment failed state and navigate to step 4
-            state.paymentFailed = false;
-            state.currentStep = 4;
-            showStep(4);
-            updateStepIndicator();
-            updateNavigationButtons();
-            updateMainSubtitle();
-            
-            // CRITICAL: Update cart and payment overview after DOM is ready
-            // Use setTimeout to ensure showStep(4) has finished rendering
-            setTimeout(() => {
-              updateCartSummary();
-              
-              // If order exists, fetch full order data for payment overview
-              if (state.orderId) {
-                console.log('[Payment Retry] Fetching order data for payment overview (orderId:', state.orderId, ')');
-                orderAPI.getOrder(state.orderId)
-                  .then(order => {
-                    state.fullOrder = order;
-                    updatePaymentOverview();
-                    console.log('[Payment Retry] ✅ Order data fetched, payment overview updated');
-                  })
-                  .catch(error => {
-                    console.warn('[Payment Retry] Could not fetch order data for payment overview:', error);
-                    // Still update payment overview with available data
-                    updatePaymentOverview();
-                  });
-              } else {
-                // Update payment overview with current state data
-                updatePaymentOverview();
+            // CRITICAL: Restore customer profile data to show full profile info
+            if (customerData) {
+              try {
+                const storedCustomer = JSON.parse(customerData);
+                state.customerId = storedCustomer.id;
+                console.log('[Payment Retry] Restored customer ID from sessionStorage:', storedCustomer.id);
+                
+                // Fetch full customer profile to display all fields (if we have a customer ID)
+                // Try to fetch even if authentication status is unclear, as we might have valid tokens
+                if (storedCustomer.id) {
+                  try {
+                    const customerProfile = await authAPI.getCustomer(storedCustomer.id);
+                    state.authenticatedCustomer = customerProfile;
+                    // Also set authenticatedEmail for refreshLoginUI
+                    if (customerProfile?.email) {
+                      state.authenticatedEmail = customerProfile.email;
+                    }
+                    console.log('[Payment Retry] ✅ Loaded full customer profile:', customerProfile);
+                    // Refresh UI after loading full profile
+                    refreshLoginUI();
+                  } catch (profileError) {
+                    console.warn('[Payment Retry] Could not fetch full customer profile, using stored data:', profileError);
+                    // Fallback: Use stored customer data if available
+                    if (storedCustomer.firstName || storedCustomer.lastName || storedCustomer.email) {
+                      state.authenticatedCustomer = {
+                        id: storedCustomer.id,
+                        firstName: storedCustomer.firstName,
+                        lastName: storedCustomer.lastName,
+                        email: storedCustomer.email,
+                        // Note: Full profile might not have all fields, but we'll try to use what we have
+                      };
+                      // Also set authenticatedEmail for refreshLoginUI
+                      if (storedCustomer.email) {
+                        state.authenticatedEmail = storedCustomer.email;
+                      }
+                    }
+                    // Refresh UI with fallback data
+                    refreshLoginUI();
+                  }
+                } else {
+                  // No customer ID - refresh UI with what we have
+                  refreshLoginUI();
+                }
+              } catch (e) {
+                console.warn('[Payment Retry] Could not parse customer data from sessionStorage:', e);
+                // Still refresh UI even if customer data parse failed
+                refreshLoginUI();
               }
-            }, 100);
+            } else {
+              // No customer data in sessionStorage - refresh UI with current state
+              refreshLoginUI();
+            }
+          } catch (e) {
+            console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
+            // Still refresh UI even if restore failed
+            refreshLoginUI();
+          }
+          
+          // Reset payment failed state and navigate to step 4
+          state.paymentFailed = false;
+          // Clean up payment-failed-active class and inline styles before navigating
+          const stepContent = document.querySelector('.step-content');
+          if (stepContent) {
+            stepContent.classList.remove('payment-failed-active');
+            stepContent.style.flex = '';
+            stepContent.style.minHeight = '';
+            stepContent.style.height = '';
+          }
+          
+          state.currentStep = 4;
+          showStep(4);
+          updateStepIndicator();
+          updateNavigationButtons();
+          updateMainSubtitle();
+          
+          // CRITICAL: Update cart and payment overview after DOM is ready
+          // Use setTimeout to ensure showStep(4) has finished rendering
+          setTimeout(() => {
+            // Refresh login UI to ensure profile information is displayed
+            refreshLoginUI();
+            updateCartSummary();
             
-            scrollToTop();
-          });
-        }
-        
-        if (supportBtn) {
-          supportBtn.addEventListener('click', () => {
-            console.log('[Payment Failed] User clicked "Contact Support"');
-            // Open support email or support page
-            const supportEmail = 'support@boulders.dk';
-            const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
-            const body = encodeURIComponent(`Hello,\n\nI experienced a payment issue with Order #${displayOrderId}.\n\nCould you please help me complete my membership purchase?\n\nThank you!`);
-            window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
-          });
-        }
-      }, 100);
-      successMessage.style.color = '#d1d5db';
-      successMessage.style.lineHeight = '1.6';
-      successMessage.style.whiteSpace = 'normal';
-      console.log('[Payment Failed] ✅ Message updated with clear status, reason, and actionable steps');
-    }
+            // If order exists, fetch full order data for payment overview
+            if (state.orderId) {
+              console.log('[Payment Retry] Fetching order data for payment overview (orderId:', state.orderId, ')');
+              orderAPI.getOrder(state.orderId)
+                .then(order => {
+                  state.fullOrder = order;
+                  updatePaymentOverview();
+                  console.log('[Payment Retry] ✅ Order data fetched, payment overview updated');
+                })
+                .catch(error => {
+                  console.warn('[Payment Retry] Could not fetch order data for payment overview:', error);
+                  // Still update payment overview with available data
+                  updatePaymentOverview();
+                });
+            } else {
+              // Update payment overview with current state data
+              updatePaymentOverview();
+            }
+          }, 100);
+          
+          scrollToTop();
+      };
+      
+      // Attach handler to retry button
+      if (retryBtn) {
+        retryBtn.addEventListener('click', handleRetryPayment);
+      }
+      
+      // Attach handler to primary option (Try Again card)
+      if (primaryOption) {
+        primaryOption.addEventListener('click', handleRetryPayment);
+        // Add cursor pointer style for better UX
+        primaryOption.style.cursor = 'pointer';
+      }
+      
+      if (supportOption) {
+        supportOption.addEventListener('click', () => {
+          console.log('[Payment Failed] User clicked "Get Help"');
+          // Open support email
+          const supportEmail = 'medlem@boulders.dk';
+          const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
+          const body = encodeURIComponent(`Hello,\n\nHej, jeg kunne ikke gennemføre købet af ordrenr. #${displayOrderId}.\n\nKan i hjælpe med at løse det?\n\nMange tak!`);
+          window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+        });
+      }
+    }, 100);
     
-    if (successBadge) {
-      // Use a less alarming icon - info/warning circle instead of harsh X
-      successBadge.innerHTML = sanitizeHTML(`
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-      `);
-      console.log('[Payment Failed] ✅ Badge updated to calm info icon');
-    }
+    console.log('[Payment Failed] ✅ New payment failed UI structure created');
     
     // CRITICAL: Hide order details, membership details, and "What happens next?" sections
     // These should only be shown when payment is successful
@@ -14637,6 +14970,15 @@ function renderConfirmationView() {
     // Remove payment failed/pending attributes to allow CSS to show sections
     step5Panel.removeAttribute('data-payment-failed');
     step5Panel.removeAttribute('data-payment-pending');
+    
+    // Clean up payment-failed-active class and inline styles from step-content
+    const stepContent = document.querySelector('.step-content');
+    if (stepContent) {
+      stepContent.classList.remove('payment-failed-active');
+      stepContent.style.flex = '';
+      stepContent.style.minHeight = '';
+      stepContent.style.height = '';
+    }
     
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
     const confirmationLeft = step5Panel.querySelector('.confirmation-left');
