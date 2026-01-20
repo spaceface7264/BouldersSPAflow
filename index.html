@@ -944,6 +944,27 @@
                             <!-- Membership Details Card (for regular memberships) -->
                             <div class="confirmation-card" id="confirmationMembershipSection" style="display: none;">
                                 <h3 class="card-title" data-i18n-key="cart.membershipDetails">Membership Details</h3>
+                                
+                                <!-- Signature Case Information (if contract was signed) -->
+                                <div class="signature-case-info" id="signatureCaseInfo" style="display: none; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                                        <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 200px;">
+                                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                                <span style="font-size: 12px; color: rgba(255, 255, 255, 0.6); text-transform: uppercase; letter-spacing: 0.5px;">Contract</span>
+                                                <span id="signatureCaseStatus" style="font-size: 14px; font-weight: 600; line-height: 1.2;">Signed</span>
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 8px; align-items: center;">
+                                            <a href="#" id="viewContractLink" target="_blank" style="display: none; padding: 8px 16px; background: rgba(34, 211, 238, 0.1); color: #22d3ee; text-decoration: none; border-radius: 6px; font-size: 13px; font-weight: 500; border: 1px solid rgba(34, 211, 238, 0.3); transition: all 0.2s; white-space: nowrap;" onmouseover="this.style.background='rgba(34, 211, 238, 0.2)'; this.style.borderColor='rgba(34, 211, 238, 0.5)'" onmouseout="this.style.background='rgba(34, 211, 238, 0.1)'; this.style.borderColor='rgba(34, 211, 238, 0.3)'">
+                                                View Contract
+                                            </a>
+                                            <button id="signContractBtn" style="display: none; padding: 8px 16px; background: rgba(126, 172, 17, 1); color: rgba(255, 255, 255, 1); border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap;" onmouseover="this.style.background='rgba(100, 140, 15, 1)'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(126, 172, 17, 1)'; this.style.transform='translateY(0)'">
+                                                Sign Contract
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <div class="membership-info">
                                     <div class="membership-item">
                                         <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
@@ -965,23 +986,6 @@
                                         <span class="membership-label">Monthly Price:</span>
                                         <span class="membership-value" data-summary-field="membership-price">0,00 kr/month</span>
                                     </div>
-                                </div>
-                                
-                                <!-- Signature Case Information (if contract was signed) -->
-                                <div class="signature-case-info" id="signatureCaseInfo" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
-                                    <div class="membership-item" style="display: flex; align-items: center; gap: 8px;">
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #22d3ee; flex-shrink: 0;">
-                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                            <path d="M22 4L12 14.01l-3-3"/>
-                                        </svg>
-                                        <div style="flex: 1;">
-                                            <span class="membership-label" style="display: block; margin-bottom: 4px;">Contract Status:</span>
-                                            <span class="membership-value" id="signatureCaseStatus" style="color: #22d3ee; font-weight: 600;">Signed</span>
-                                        </div>
-                                    </div>
-                                    <a href="#" id="viewContractLink" target="_blank" style="display: none; margin-top: 12px; color: #22d3ee; text-decoration: underline; font-size: 14px;">
-                                        View signed contract
-                                    </a>
                                 </div>
                                 
                                 <button class="login-btn" data-action="open-login">Log in</button>

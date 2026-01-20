@@ -5303,11 +5303,61 @@ document.addEventListener('DOMContentLoaded', () => {
   const signatureCaseId = urlParams.get('signatureCaseId');
   const signatureCustomerId = urlParams.get('customerId');
   
+  // Test mode for signature case UI (for member 71153 or any customer)
+  const testSignatureCaseUI = urlParams.get('testSignatureCase') === 'true';
+  const testMemberNumber = urlParams.get('memberNumber');
+  const testSignatureStatus = urlParams.get('signatureStatus') || 'pending'; // 'pending' or 'signed'
+  
   if (testSuccess) {
     console.log('[Test Mode] Test success page mode enabled for product type:', testProductType);
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
+  }
+  
+  // Test mode for signature case UI
+  if (testSignatureCaseUI) {
+    console.log('[Test Mode] Signature case UI test mode enabled');
+    console.log('[Test Mode] Member number:', testMemberNumber);
+    console.log('[Test Mode] Signature status:', testSignatureStatus);
+    state.testMode = true;
+    state.testProductType = testProductType || 'membership';
+    
+    // Set customer ID if member number provided
+    if (testMemberNumber) {
+      state.customerId = testMemberNumber;
+    }
+    
+    // Mock signature case in state for UI testing
+    state.signatureCase = {
+      id: 'test-123',
+      documentUrl: 'https://app.assently.com/sign/test-document',
+      signed: testSignatureStatus === 'signed',
+      subscriptionBookingId: 'test-booking-123',
+      subscriptionId: 'test-subscription-123',
+    };
+    
+    // Set up mock order data for success page
+    state.order = {
+      number: 'TEST-12345',
+      date: new Date(),
+      items: [
+        { name: state.testProductType === 'membership' ? 'Membership' : state.testProductType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
+      ],
+      total: 469,
+      memberName: 'Test User',
+      membershipNumber: testMemberNumber || 'TEST-12345',
+      membershipType: state.testProductType === 'membership' ? 'Medlemskab' : state.testProductType === '15daypass' ? '15 Day Pass' : 'Punch Card',
+      primaryGym: 'Boulders Aarhus Nord',
+      membershipPrice: 469,
+    };
+    state.orderId = 'TEST-12345';
+    state.paymentConfirmed = true;
+    state.paymentFailed = false;
+    state.paymentPending = false;
+    
+    console.log('[Test Mode] Mock signature case set:', state.signatureCase);
+    console.log('[Test Mode] Mock order set:', state.order);
   }
   
   if (testPaymentFailed) {
@@ -5382,7 +5432,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // If in test mode, navigate directly to success page
-  if (testSuccess) {
+  if (testSuccess || testSignatureCaseUI) {
     console.log('[Test Mode] Navigating to success page for testing');
     state.currentStep = TOTAL_STEPS;
     
@@ -15798,19 +15848,26 @@ async function displaySignatureCaseInfo() {
   console.log('[Confirmation] Signature case in state:', state.signatureCase);
   console.log('[Confirmation] Customer ID:', state.customerId);
   console.log('[Confirmation] Full order:', state.fullOrder);
+  console.log('[Confirmation] Test mode:', state.testMode);
   
   // Try to find signature case - check state first, then try to fetch from API
   let signatureCaseToDisplay = null;
   let signatureCaseId = null;
   
-  // Check state first
-  if (state.signatureCase && state.signatureCase.id) {
+  // In test mode, use state directly without API calls
+  if (state.testMode && state.signatureCase && state.signatureCase.id) {
+    console.log('[Confirmation] Test mode: Using mock signature case from state');
+    signatureCaseToDisplay = state.signatureCase;
+  }
+  // Check state first (non-test mode)
+  else if (state.signatureCase && state.signatureCase.id) {
     signatureCaseId = state.signatureCase.id;
     console.log('[Confirmation] Found signature case ID in state:', signatureCaseId);
   }
   
   // If we have customer ID, try to list signature cases to find one for this order
-  if (!signatureCaseId && state.customerId && state.orderId) {
+  // Skip API calls in test mode
+  if (!signatureCaseToDisplay && !signatureCaseId && state.customerId && state.orderId && !state.testMode) {
     try {
       console.log('[Confirmation] Listing signature cases to find one for this order...');
       const signatureCases = await signatureCaseAPI.listSignatureCases(parseInt(state.customerId, 10));
@@ -15833,8 +15890,8 @@ async function displaySignatureCaseInfo() {
     }
   }
   
-  // Fetch signature case details if we have an ID
-  if (signatureCaseId && !signatureCaseToDisplay && state.customerId) {
+  // Fetch signature case details if we have an ID (skip in test mode)
+  if (signatureCaseId && !signatureCaseToDisplay && state.customerId && !state.testMode) {
     try {
       console.log('[Confirmation] Fetching signature case details...');
       signatureCaseToDisplay = await signatureCaseAPI.getSignatureCase(
@@ -15852,19 +15909,71 @@ async function displaySignatureCaseInfo() {
     console.log('[Confirmation] ✅ Displaying signature case info');
     signatureCaseInfo.style.display = 'block';
     
-    if (signatureCaseToDisplay.signed) {
+          const signContractBtn = document.getElementById('signContractBtn');
+          
+          if (signatureCaseToDisplay.signed) {
+            if (signatureCaseStatus) {
+              signatureCaseStatus.textContent = 'Signed';
+              signatureCaseStatus.style.color = '#22d3ee';
+            }
+            
+            // Show link to view contract if documentUrl is available
+            if (signatureCaseToDisplay.documentUrl && viewContractLink) {
+              viewContractLink.href = signatureCaseToDisplay.documentUrl;
+              viewContractLink.style.display = 'inline-flex';
+              viewContractLink.textContent = 'View Contract';
+            }
+            
+            // Hide sign button
+            if (signContractBtn) {
+              signContractBtn.style.display = 'none';
+            }
+          } else {
+            // Contract is pending - show sign button
+            if (signatureCaseStatus) {
+              signatureCaseStatus.textContent = 'Pending';
+              signatureCaseStatus.style.color = '#fbbf24';
+            }
+            
+            // Hide view link
+            if (viewContractLink) {
+              viewContractLink.style.display = 'none';
+            }
+            
+            // Show sign button if documentUrl is available
+            if (signatureCaseToDisplay.documentUrl && signContractBtn) {
+              signContractBtn.style.display = 'inline-flex';
+              signContractBtn.onclick = (e) => {
+                e.preventDefault();
+                console.log('[Confirmation] Redirecting to contract signing:', signatureCaseToDisplay.documentUrl);
+                window.location.href = signatureCaseToDisplay.documentUrl;
+              };
+            } else if (signContractBtn) {
+              signContractBtn.style.display = 'none';
+            }
+          }
+  } else if (state.signatureCase) {
+    // Fallback: Use state data if API fetch failed
+    console.log('[Confirmation] Using signature case from state (API fetch failed)');
+    signatureCaseInfo.style.display = 'block';
+    
+    const signContractBtn = document.getElementById('signContractBtn');
+    
+    if (state.signatureCase.signed) {
       if (signatureCaseStatus) {
         signatureCaseStatus.textContent = 'Signed';
         signatureCaseStatus.style.color = '#22d3ee';
       }
-      
-      // Show link to view contract if documentUrl is available
-      if (signatureCaseToDisplay.documentUrl && viewContractLink) {
-        viewContractLink.href = signatureCaseToDisplay.documentUrl;
-        viewContractLink.style.display = 'block';
-        viewContractLink.textContent = 'View signed contract';
+      if (state.signatureCase.documentUrl && viewContractLink) {
+        viewContractLink.href = state.signatureCase.documentUrl;
+        viewContractLink.style.display = 'inline-flex';
+        viewContractLink.textContent = 'View Contract';
+      }
+      if (signContractBtn) {
+        signContractBtn.style.display = 'none';
       }
     } else {
+      // Pending - show sign button
       if (signatureCaseStatus) {
         signatureCaseStatus.textContent = 'Pending';
         signatureCaseStatus.style.color = '#fbbf24';
@@ -15872,19 +15981,16 @@ async function displaySignatureCaseInfo() {
       if (viewContractLink) {
         viewContractLink.style.display = 'none';
       }
-    }
-  } else if (state.signatureCase && state.signatureCase.signed) {
-    // Fallback: Use state data if API fetch failed
-    console.log('[Confirmation] Using signature case from state (API fetch failed)');
-    signatureCaseInfo.style.display = 'block';
-    if (signatureCaseStatus) {
-      signatureCaseStatus.textContent = 'Signed';
-      signatureCaseStatus.style.color = '#22d3ee';
-    }
-    if (state.signatureCase.documentUrl && viewContractLink) {
-      viewContractLink.href = state.signatureCase.documentUrl;
-      viewContractLink.style.display = 'block';
-      viewContractLink.textContent = 'View signed contract';
+      if (state.signatureCase.documentUrl && signContractBtn) {
+        signContractBtn.style.display = 'inline-flex';
+        signContractBtn.onclick = (e) => {
+          e.preventDefault();
+          console.log('[Confirmation] Redirecting to contract signing:', state.signatureCase.documentUrl);
+          window.location.href = state.signatureCase.documentUrl;
+        };
+      } else if (signContractBtn) {
+        signContractBtn.style.display = 'none';
+      }
     }
   } else {
     // No signature case - hide the section
