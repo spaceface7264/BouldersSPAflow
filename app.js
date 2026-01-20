@@ -11999,17 +11999,36 @@ async function ensureSubscriptionAttached(context = 'auto') {
     
     // Check if signature case is required (only during checkout flow, not auto-ensure)
     if (context === 'checkout-flow' && subscriptionItem) {
+      console.log('[ensureSubscriptionAttached] ===== CHECKING FOR SIGNATURE CASE REQUIREMENT =====');
+      console.log('[ensureSubscriptionAttached] Context:', context);
+      console.log('[ensureSubscriptionAttached] Subscription item:', subscriptionItem);
+      console.log('[ensureSubscriptionAttached] Subscription item ID:', subscriptionItem?.id);
+      console.log('[ensureSubscriptionAttached] Customer ID:', state.customerId);
+      
       try {
         const signatureCase = await createSignatureCaseIfRequired(orderId, subscriptionItem);
         if (signatureCase && signatureCase.documentUrl) {
           // Store signature case info for redirect handling
-          console.log('[ensureSubscriptionAttached] Signature case required - will redirect to Assently');
+          console.log('[ensureSubscriptionAttached] ✅ Signature case required - will redirect to Assently');
+          console.log('[ensureSubscriptionAttached] Signature case stored in state:', state.signatureCase);
           // Don't redirect here - let checkout flow handle it
           // The signature case is stored in state.signatureCase
+        } else if (signatureCase === null) {
+          console.log('[ensureSubscriptionAttached] ℹ️ Signature case not required (subscription does not need signing)');
+        } else {
+          console.warn('[ensureSubscriptionAttached] ⚠️ Signature case created but no document URL:', signatureCase);
         }
       } catch (error) {
-        console.warn('[ensureSubscriptionAttached] Signature case creation failed, continuing checkout:', error);
+        console.error('[ensureSubscriptionAttached] ❌ Signature case creation failed:', error);
+        console.warn('[ensureSubscriptionAttached] Continuing checkout despite signature case error');
         // Continue checkout even if signature case creation fails
+      }
+    } else {
+      if (context !== 'checkout-flow') {
+        console.log(`[ensureSubscriptionAttached] Skipping signature case check - context is '${context}', not 'checkout-flow'`);
+      }
+      if (!subscriptionItem) {
+        console.warn('[ensureSubscriptionAttached] Skipping signature case check - no subscription item');
       }
     }
     
@@ -12034,16 +12053,36 @@ async function ensureSubscriptionAttached(context = 'auto') {
 // Create signature case for subscription if required
 // Returns signature case object if created, null if not required, throws error on failure
 async function createSignatureCaseIfRequired(orderId, subscriptionItem) {
+  console.log('[SignatureCase] ===== CREATE SIGNATURE CASE IF REQUIRED =====');
+  console.log('[SignatureCase] Order ID:', orderId);
+  console.log('[SignatureCase] Subscription item:', subscriptionItem);
+  console.log('[SignatureCase] Subscription item ID:', subscriptionItem?.id);
+  console.log('[SignatureCase] Customer ID:', state.customerId);
+  
   try {
     if (!state.customerId) {
-      console.warn('[SignatureCase] Cannot create signature case - customer ID missing');
+      console.warn('[SignatureCase] ❌ Cannot create signature case - customer ID missing');
       return null;
     }
 
-    if (!subscriptionItem || !subscriptionItem.id) {
-      console.warn('[SignatureCase] Cannot create signature case - subscription item ID missing');
+    if (!subscriptionItem) {
+      console.warn('[SignatureCase] ❌ Cannot create signature case - subscription item missing');
       return null;
     }
+    
+    // Try multiple ways to get subscription booking ID
+    const subscriptionBookingId = subscriptionItem.id || 
+                                   subscriptionItem.subscriptionBookingId || 
+                                   subscriptionItem.subscriptionBooking?.id ||
+                                   subscriptionItem.bookingId;
+    
+    if (!subscriptionBookingId) {
+      console.warn('[SignatureCase] ❌ Cannot create signature case - subscription booking ID missing');
+      console.warn('[SignatureCase] Subscription item keys:', Object.keys(subscriptionItem));
+      return null;
+    }
+    
+    console.log('[SignatureCase] ✅ Using subscription booking ID:', subscriptionBookingId);
 
     // Build redirect URL for after signature completion
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -12056,10 +12095,11 @@ async function createSignatureCaseIfRequired(orderId, subscriptionItem) {
     console.log('[SignatureCase] Redirect URL:', redirectUrl);
 
     // Create signature case - API returns null (204) if not required
+    console.log('[SignatureCase] Calling API to create signature case...');
     const signatureCase = await signatureCaseAPI.createSignatureCase(
       parseInt(state.customerId, 10),
       {
-        subscriptionBooking: subscriptionItem.id,
+        subscriptionBooking: subscriptionBookingId,
         redirectUrl: redirectUrl,
         subscriptionSigner: 'USER_AND_PAYER', // Default - both user and payer must sign
       }
@@ -12075,7 +12115,7 @@ async function createSignatureCaseIfRequired(orderId, subscriptionItem) {
       id: signatureCase.id,
       documentUrl: signatureCase.documentUrl,
       signed: signatureCase.signed || false,
-      subscriptionBookingId: subscriptionItem.id,
+      subscriptionBookingId: subscriptionBookingId,
       subscriptionId: signatureCase.subscription || null,
     };
 
@@ -12883,6 +12923,12 @@ async function handleCheckout() {
           
           // Check if signature case is required before generating payment link
           // If signature case exists and has document URL, redirect to Assently first
+          console.log('[checkout] ===== CHECKING SIGNATURE CASE BEFORE PAYMENT LINK =====');
+          console.log('[checkout] Signature case state:', state.signatureCase);
+          console.log('[checkout] Has signature case:', !!state.signatureCase);
+          console.log('[checkout] Has document URL:', !!state.signatureCase?.documentUrl);
+          console.log('[checkout] Is signed:', state.signatureCase?.signed);
+          
           if (state.signatureCase && state.signatureCase.documentUrl && !state.signatureCase.signed) {
             console.log('[checkout] ===== SIGNATURE CASE REQUIRED =====');
             console.log('[checkout] Signature case found, redirecting to Assently for signing...');
