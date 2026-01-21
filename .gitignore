@@ -80,3 +80,6 @@ temp/
 
 # Local Netlify folder
 .netlify
+
+# API Flow Checklist (local documentation)
+docs/API_FLOW_CHECKLIST.md
