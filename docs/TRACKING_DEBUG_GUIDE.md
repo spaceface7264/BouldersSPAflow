@@ -1,5 +1,23 @@
 # GTM Tracking Debug Guide
 
+## ⚠️ CRITICAL: Enable Debug Mode First!
+
+**If you're not seeing events in GA4 DebugView, you need to enable debug mode:**
+
+1. Add `?debug_mode=true` to your URL:
+   ```
+   https://your-site.com?debug_mode=true
+   ```
+
+2. Verify it's enabled in browser console:
+   ```javascript
+   window.GTM.isDebugMode()  // Should return true
+   ```
+
+3. Now check GA4 → **Admin** → **DebugView** for real-time events
+
+---
+
 ## Quick Debug Checklist
 
 ### 1. Verify Events Are Firing in Browser
@@ -107,14 +125,41 @@ window.dataLayer[0] // Should show {gtm.start: timestamp, event: 'gtm.js'}
 
 **If no stream exists:** Create a new Web stream and connect it to your website.
 
-### 7. Check GA4 DebugView (Real-time)
+### 7. Enable Debug Mode and Check GA4 DebugView
+
+**IMPORTANT:** To see events in GA4 DebugView, you MUST enable debug mode first!
+
+#### Option 1: URL Parameter (Recommended)
+
+Add `?debug_mode=true` to your URL:
+
+```
+https://your-site.com?debug_mode=true
+```
+
+**How it works:**
+- The code automatically detects the `debug_mode=true` parameter
+- All GA4 events will include `debug_mode: true`
+- Events appear in GA4 DebugView in real-time
+
+**To verify it's enabled:**
+```javascript
+// Check in browser console
+console.log('Debug mode enabled:', window.GTM.isDebugMode());
+```
+
+#### Option 2: Google Analytics Debugger Extension
+
+Install the [Google Analytics Debugger Chrome Extension](https://chrome.google.com/webstore/detail/google-analytics-debugger/jnkmfdileelhofjcijamephohjechhna)
+
+#### Check DebugView
 
 1. Go to GA4 → **Admin** → **DebugView**
-2. Enable debug mode (add `?debug_mode=true` to URL or use GA Debugger extension)
-3. Complete a test purchase
-4. Watch for events in real-time
+2. Open your site with `?debug_mode=true` in the URL
+3. Complete a test purchase or trigger events
+4. Watch for events appearing in real-time in DebugView
 
-**Expected:** You should see `purchase` event appear within seconds.
+**Expected:** You should see events appear within seconds with full event parameters.
 
 ## Common Issues
 

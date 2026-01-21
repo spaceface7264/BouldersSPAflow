@@ -8,6 +8,24 @@
 window.dataLayer = window.dataLayer || [];
 
 /**
+ * Check if debug mode is enabled via URL parameter
+ * @returns {boolean} True if debug_mode=true is in URL
+ */
+function isDebugMode() {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get('debug_mode') === 'true';
+}
+
+// Detect and enable debug mode on script load
+if (isDebugMode()) {
+  console.log('[GTM] Debug mode enabled - events will appear in GA4 DebugView');
+  // Push debug_mode configuration to dataLayer
+  window.dataLayer.push({
+    'debug_mode': true
+  });
+}
+
+/**
  * Push an event to the DataLayer
  * @param {string} eventName - The name of the event
  * @param {object} eventData - The event data object
@@ -22,6 +40,11 @@ function pushToDataLayer(eventName, eventData = {}) {
     event: eventName,
     ...eventData
   };
+
+  // Add debug_mode if enabled
+  if (isDebugMode()) {
+    event.debug_mode = true;
+  }
 
   window.dataLayer.push(event);
   console.log('[GTM] Pushed event:', eventName, eventData);
@@ -176,7 +199,8 @@ if (typeof module !== 'undefined' && module.exports) {
     trackBeginCheckout,
     trackPurchase,
     formatProductForGA4,
-    formatPrice
+    formatPrice,
+    isDebugMode
   };
 }
 
@@ -188,5 +212,6 @@ window.GTM = {
   trackBeginCheckout,
   trackPurchase,
   formatProductForGA4,
-  formatPrice
+  formatPrice,
+  isDebugMode
 };
