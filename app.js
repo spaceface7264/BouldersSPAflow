@@ -4764,7 +4764,6 @@ const translations = {
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
-    'cart.campaignWarning.message': 'Vigtigt: Hvis du fortsætter til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagner senere.',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>',
     'cart.consent.marketing': 'Jeg vil gerne modtage marketing-e-mails. Læs vores <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datapolitik</a>.',
@@ -4786,10 +4785,12 @@ const translations = {
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
+    'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
+    'modal.loading': 'Indlæser...',
     'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
-    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagneberettigelsesregler. Du kan tilmelde dig et almindeligt medlemskab. Hvis du mener, at dette er en fejl, skal du kontakte support.',
-    'modal.campaignRejection.option1': 'Almindeligt Medlemskab',
-    'modal.campaignRejection.option2': 'Kontakt Support',
+    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagnebebegrænsninger. Du kan oprette et almindeligt medlemskab. Kontakt support hvis du tror dette er en fejl.',
+    'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
+    'modal.campaignRejection.option2': 'Kontakt support',
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
@@ -4825,7 +4826,6 @@ const translations = {
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
-    'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing campaigns later.',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>',
     'cart.consent.marketing': 'I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.',
@@ -4847,6 +4847,8 @@ const translations = {
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
+    'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
+    'modal.loading': 'Loading...',
     'modal.campaignRejection.title': 'Campaign Not Available',
     'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.',
     'modal.campaignRejection.option1': 'Regular Membership',
@@ -5292,6 +5294,90 @@ function initLanguageSwitcher() {
   });
 }
 
+// Campaign Rejection Modal Functions
+function showCampaignRejectionModal() {
+  const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    // Focus the first button for accessibility
+    setTimeout(() => {
+      const firstButton = document.getElementById('campaignRejectionOption1');
+      if (firstButton) {
+        firstButton.focus();
+      }
+    }, 100);
+  }
+}
+
+function hideCampaignRejectionModal() {
+  const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function handleRejectionOption1() {
+  // Hide modal first
+  hideCampaignRejectionModal();
+  
+  // Navigate to step 2
+  state.currentStep = 2;
+  showStep(2);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  
+  // Wait for DOM to be ready, then expand membership category
+  setTimeout(() => {
+    const membershipCategory = document.querySelector('.category-item[data-category="membership"]');
+    if (membershipCategory) {
+      // Collapse all other categories
+      const categoryItems = document.querySelectorAll('.category-item');
+      categoryItems.forEach(item => {
+        if (item !== membershipCategory) {
+          item.classList.remove('expanded', 'selected');
+        }
+      });
+      
+      // Expand membership category
+      membershipCategory.classList.add('expanded', 'selected');
+      
+      // Update plan sections visibility
+      const singlePlans = document.getElementById('singleChoiceMode');
+      const quantityPlans = document.getElementById('quantityMode');
+      const singleCategory = document.querySelector('.category-item[data-category="single"]');
+      const quantityCategory = document.querySelector('.category-item[data-category="quantity"]');
+      
+      if (singlePlans) singlePlans.style.display = 'none';
+      if (quantityPlans) quantityPlans.style.display = 'none';
+      
+      // Focus and scroll the category into view
+      setTimeout(() => {
+        membershipCategory.setAttribute('tabindex', '-1');
+        membershipCategory.focus();
+        membershipCategory.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+    
+    // Scroll to top
+    scrollToTop();
+    setTimeout(() => {
+      scrollToTop();
+    }, 200);
+  }, 200);
+}
+
+function handleRejectionOption2() {
+  // Hide modal
+  hideCampaignRejectionModal();
+  
+  // Open email to support
+  const supportEmail = 'medlem@boulders.dk';
+  const subject = encodeURIComponent('Campaign Purchase Issue');
+  const body = encodeURIComponent('Hello,\n\nI tried to purchase a campaign membership but was told it\'s not available for my account. I believe this may be a mistake.\n\nCould you please help?\n\nThank you!');
+  window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize language switcher (must be early to set language before API calls)
   initLanguageSwitcher();
@@ -5313,11 +5399,61 @@ document.addEventListener('DOMContentLoaded', () => {
   const signatureCaseId = urlParams.get('signatureCaseId');
   const signatureCustomerId = urlParams.get('customerId');
   
+  // Test mode for signature case UI (for member 71153 or any customer)
+  const testSignatureCaseUI = urlParams.get('testSignatureCase') === 'true';
+  const testMemberNumber = urlParams.get('memberNumber');
+  const testSignatureStatus = urlParams.get('signatureStatus') || 'pending'; // 'pending' or 'signed'
+  
   if (testSuccess) {
     console.log('[Test Mode] Test success page mode enabled for product type:', testProductType);
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
+  }
+  
+  // Test mode for signature case UI
+  if (testSignatureCaseUI) {
+    console.log('[Test Mode] Signature case UI test mode enabled');
+    console.log('[Test Mode] Member number:', testMemberNumber);
+    console.log('[Test Mode] Signature status:', testSignatureStatus);
+    state.testMode = true;
+    state.testProductType = testProductType || 'membership';
+    
+    // Set customer ID if member number provided
+    if (testMemberNumber) {
+      state.customerId = testMemberNumber;
+    }
+    
+    // Mock signature case in state for UI testing
+    state.signatureCase = {
+      id: 'test-123',
+      documentUrl: 'https://app.assently.com/sign/test-document',
+      signed: testSignatureStatus === 'signed',
+      subscriptionBookingId: 'test-booking-123',
+      subscriptionId: 'test-subscription-123',
+    };
+    
+    // Set up mock order data for success page
+    state.order = {
+      number: 'TEST-12345',
+      date: new Date(),
+      items: [
+        { name: state.testProductType === 'membership' ? 'Membership' : state.testProductType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
+      ],
+      total: 469,
+      memberName: 'Test User',
+      membershipNumber: testMemberNumber || 'TEST-12345',
+      membershipType: state.testProductType === 'membership' ? 'Medlemskab' : state.testProductType === '15daypass' ? '15 Day Pass' : 'Punch Card',
+      primaryGym: 'Boulders Aarhus Nord',
+      membershipPrice: 469,
+    };
+    state.orderId = 'TEST-12345';
+    state.paymentConfirmed = true;
+    state.paymentFailed = false;
+    state.paymentPending = false;
+    
+    console.log('[Test Mode] Mock signature case set:', state.signatureCase);
+    console.log('[Test Mode] Mock order set:', state.order);
   }
   
   if (testPaymentFailed) {
@@ -5392,7 +5528,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // If in test mode, navigate directly to success page
-  if (testSuccess) {
+  if (testSuccess || testSignatureCaseUI) {
     console.log('[Test Mode] Navigating to success page for testing');
     state.currentStep = TOTAL_STEPS;
     
@@ -5464,24 +5600,12 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     }
     
-    // Add mock signature case for testing contract UI
-    // Check URL for signature status (signed or pending)
-    const signatureStatus = urlParams.get('signatureStatus') || 'signed';
-    state.signatureCase = {
-      id: 'test-123',
-      documentUrl: 'https://app.assently.com/sign/test-document',
-      signed: signatureStatus === 'signed',
-      subscriptionBookingId: 'test-booking-123',
-      subscriptionId: 'test-subscription-123',
-    };
-    
     console.log('[Test Mode] Mock data created:', {
       productType: productType,
       selectedProductType: state.selectedProductType,
       membershipPlanId: state.membershipPlanId,
       hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
-      hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length),
-      signatureCase: state.signatureCase
+      hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
     });
     
     // Show step and render confirmation
@@ -5590,7 +5714,7 @@ document.addEventListener('DOMContentLoaded', () => {
           );
           
           if (signatureCase && signatureCase.signed) {
-            console.log('[SignatureCase Return] ✅ Signature case is signed');
+            console.log('[SignatureCase Return] ✅ Signature case is signed, continuing checkout...');
             state.signatureCase.signed = true;
             
             // Clear signature state from sessionStorage
@@ -5600,24 +5724,18 @@ document.addEventListener('DOMContentLoaded', () => {
               console.warn('[SignatureCase Return] Could not clear signature state:', e);
             }
             
-            // Load order and show success page (user already paid, now just signed contract)
-            state.paymentConfirmed = true;
-            state.paymentFailed = false;
-            state.paymentPending = false;
+            // Continue with checkout flow - trigger payment link generation
+            // We need to be on step 4 (payment step) to continue
+            state.currentStep = 4;
+            showStep(4);
+            updateStepIndicator();
+            updateNavigationButtons();
+            updateMainSubtitle();
             
-            // Load order data and show success page
-            loadOrderForConfirmation(parseInt(signatureOrderId, 10)).then(() => {
-              state.currentStep = TOTAL_STEPS;
-              showStep(TOTAL_STEPS);
-              updateStepIndicator();
-              updateNavigationButtons();
-              updateMainSubtitle();
-              renderConfirmationView();
-              showToast('Contract signed successfully!', 'success');
-            }).catch(err => {
-              console.error('[SignatureCase Return] Failed to load order:', err);
-              showToast('Contract signed successfully!', 'success');
-            });
+            // Trigger checkout to continue with payment link generation
+            // The checkout button should be visible and ready
+            console.log('[SignatureCase Return] Ready to continue checkout - user can click checkout button');
+            showToast('Contract signed successfully! You can now proceed with payment.', 'success');
           } else {
             console.warn('[SignatureCase Return] ⚠️ Signature case not yet signed');
             showToast('Signature is still pending. Please wait a moment and try again.', 'warning');
@@ -5678,6 +5796,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     })();
   }
+  
   
   // Handle signature case test URL
   // Usage: ?test=signature&customerId=123&signatureCaseId=456
@@ -5976,8 +6095,14 @@ function setupEventListeners() {
   
   // Close modal on Escape key
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
-      closeForgotPasswordModal();
+    if (e.key === 'Escape') {
+      if (DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
+        closeForgotPasswordModal();
+      }
+      const campaignRejectionModal = document.getElementById('campaignRejectionModal');
+      if (campaignRejectionModal && campaignRejectionModal.style.display === 'flex') {
+        hideCampaignRejectionModal();
+      }
     }
   });
   
@@ -6048,6 +6173,17 @@ function setupEventListeners() {
     }
   });
   
+  // Close campaign rejection modal when clicking outside
+  const campaignRejectionModal = document.getElementById('campaignRejectionModal');
+  if (campaignRejectionModal) {
+    campaignRejectionModal.addEventListener('click', (e) => {
+      if (e.target === campaignRejectionModal) {
+        hideCampaignRejectionModal();
+      }
+    });
+  }
+  
+  
   // Search input live update
   if (DOM.termsSearchInput) {
     DOM.termsSearchInput.addEventListener('input', (e) => {
@@ -6080,16 +6216,6 @@ function setupEventListeners() {
     });
   }
   
-  // Close campaign rejection modal when clicking outside
-  const campaignRejectionModal = document.getElementById('campaignRejectionModal');
-  if (campaignRejectionModal) {
-    campaignRejectionModal.addEventListener('click', (e) => {
-      if (e.target === campaignRejectionModal) {
-        hideCampaignRejectionModal();
-      }
-    });
-  }
-  
   // Close modals on Escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -6102,9 +6228,6 @@ function setupEventListeners() {
       const receiptModal = document.getElementById('detailedReceiptModal');
       if (receiptModal && receiptModal.style.display !== 'none') {
         closeDetailedReceipt();
-      }
-      if (campaignRejectionModal && campaignRejectionModal.style.display !== 'none') {
-        hideCampaignRejectionModal();
       }
     }
   });
@@ -10715,7 +10838,7 @@ function hasCampaignInCart() {
     });
   }
   
-  // Check if selectedProductId exists in campaignSubscriptions
+  // Check if selectedProductId is in campaignSubscriptions
   if (state.selectedProductId && state.campaignSubscriptions) {
     const productIdNum = typeof state.selectedProductId === 'string' 
       ? parseInt(state.selectedProductId) 
@@ -10744,81 +10867,6 @@ function hideCampaignWarning() {
   if (banner) {
     banner.style.display = 'none';
   }
-}
-
-// Campaign Rejection Modal Functions
-function showCampaignRejectionModal() {
-  const modal = document.getElementById('campaignRejectionModal');
-  if (modal) {
-    modal.style.display = 'flex';
-    // Focus the first button for accessibility
-    setTimeout(() => {
-      const firstButton = document.getElementById('campaignRejectionOption1');
-      if (firstButton) {
-        firstButton.focus();
-      }
-    }, 100);
-  }
-}
-
-function hideCampaignRejectionModal() {
-  const modal = document.getElementById('campaignRejectionModal');
-  if (modal) {
-    modal.style.display = 'none';
-  }
-}
-
-function handleRejectionOption1() {
-  // Hide modal first
-  hideCampaignRejectionModal();
-  
-  // Navigate to step 2
-  state.currentStep = 2;
-  showStep(2);
-  updateStepIndicator();
-  updateNavigationButtons();
-  updateMainSubtitle();
-  
-  // Wait for DOM to be ready, then expand membership category
-  setTimeout(() => {
-    const membershipCategory = document.querySelector('.category-item[data-category="membership"]');
-    if (membershipCategory) {
-      // Collapse all other categories
-      const categoryItems = document.querySelectorAll('.category-item');
-      categoryItems.forEach(item => {
-        if (item !== membershipCategory) {
-          item.classList.remove('expanded', 'selected');
-        }
-      });
-      
-      // Expand membership category
-      membershipCategory.classList.add('expanded', 'selected');
-      
-      // Update plan sections visibility
-      const singlePlans = document.getElementById('singleChoiceMode');
-      const quantityPlans = document.getElementById('quantityMode');
-      const singleCategory = document.querySelector('.category-item[data-category="single"]');
-      const quantityCategory = document.querySelector('.category-item[data-category="quantity"]');
-      
-      if (singlePlans && quantityPlans && singleCategory && quantityCategory) {
-        singlePlans.style.display = 'block';
-        quantityPlans.style.display = 'none';
-        singleCategory.classList.add('selected');
-        quantityCategory.classList.remove('selected');
-      }
-    }
-  }, 200);
-}
-
-function handleRejectionOption2() {
-  // Hide modal
-  hideCampaignRejectionModal();
-  
-  // Open email to support
-  const supportEmail = 'medlem@boulders.dk';
-  const subject = encodeURIComponent('Campaign Purchase Issue');
-  const body = encodeURIComponent('Hello,\n\nI tried to purchase a campaign membership but was told it\'s not available for my account. I believe this may be a mistake.\n\nCould you please help?\n\nThank you!');
-  window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
 }
 
 function updateCartSummary() {
@@ -11036,6 +11084,13 @@ function updateCartTotals() {
 function renderCartItems() {
   if (!templates.cartItem || !DOM.cartItems) return;
   DOM.cartItems.innerHTML = '';
+
+  // Check for campaigns and show/hide warning banner
+  if (hasCampaignInCart()) {
+    showCampaignWarning();
+  } else {
+    hideCampaignWarning();
+  }
 
   if (!state.cartItems.length) {
     // Only show empty message if there's no gym selected either
@@ -12187,17 +12242,36 @@ async function ensureSubscriptionAttached(context = 'auto') {
     
     // Check if signature case is required (only during checkout flow, not auto-ensure)
     if (context === 'checkout-flow' && subscriptionItem) {
+      console.log('[ensureSubscriptionAttached] ===== CHECKING FOR SIGNATURE CASE REQUIREMENT =====');
+      console.log('[ensureSubscriptionAttached] Context:', context);
+      console.log('[ensureSubscriptionAttached] Subscription item:', subscriptionItem);
+      console.log('[ensureSubscriptionAttached] Subscription item ID:', subscriptionItem?.id);
+      console.log('[ensureSubscriptionAttached] Customer ID:', state.customerId);
+      
       try {
         const signatureCase = await createSignatureCaseIfRequired(orderId, subscriptionItem);
         if (signatureCase && signatureCase.documentUrl) {
           // Store signature case info for redirect handling
-          console.log('[ensureSubscriptionAttached] Signature case required - will redirect to Assently');
+          console.log('[ensureSubscriptionAttached] ✅ Signature case required - will redirect to Assently');
+          console.log('[ensureSubscriptionAttached] Signature case stored in state:', state.signatureCase);
           // Don't redirect here - let checkout flow handle it
           // The signature case is stored in state.signatureCase
+        } else if (signatureCase === null) {
+          console.log('[ensureSubscriptionAttached] ℹ️ Signature case not required (subscription does not need signing)');
+        } else {
+          console.warn('[ensureSubscriptionAttached] ⚠️ Signature case created but no document URL:', signatureCase);
         }
       } catch (error) {
-        console.warn('[ensureSubscriptionAttached] Signature case creation failed, continuing checkout:', error);
+        console.error('[ensureSubscriptionAttached] ❌ Signature case creation failed:', error);
+        console.warn('[ensureSubscriptionAttached] Continuing checkout despite signature case error');
         // Continue checkout even if signature case creation fails
+      }
+    } else {
+      if (context !== 'checkout-flow') {
+        console.log(`[ensureSubscriptionAttached] Skipping signature case check - context is '${context}', not 'checkout-flow'`);
+      }
+      if (!subscriptionItem) {
+        console.warn('[ensureSubscriptionAttached] Skipping signature case check - no subscription item');
       }
     }
     
@@ -12222,19 +12296,38 @@ async function ensureSubscriptionAttached(context = 'auto') {
 // Create signature case for subscription if required
 // Returns signature case object if created, null if not required, throws error on failure
 async function createSignatureCaseIfRequired(orderId, subscriptionItem) {
+  console.log('[SignatureCase] ===== CREATE SIGNATURE CASE IF REQUIRED =====');
+  console.log('[SignatureCase] Order ID:', orderId);
+  console.log('[SignatureCase] Subscription item:', subscriptionItem);
+  console.log('[SignatureCase] Subscription item ID:', subscriptionItem?.id);
+  console.log('[SignatureCase] Customer ID:', state.customerId);
+  
   try {
     if (!state.customerId) {
-      console.warn('[SignatureCase] Cannot create signature case - customer ID missing');
+      console.warn('[SignatureCase] ❌ Cannot create signature case - customer ID missing');
       return null;
     }
 
-    if (!subscriptionItem || !subscriptionItem.id) {
-      console.warn('[SignatureCase] Cannot create signature case - subscription item ID missing');
+    if (!subscriptionItem) {
+      console.warn('[SignatureCase] ❌ Cannot create signature case - subscription item missing');
       return null;
     }
+    
+    // Try multiple ways to get subscription booking ID
+    const subscriptionBookingId = subscriptionItem.id || 
+                                   subscriptionItem.subscriptionBookingId || 
+                                   subscriptionItem.subscriptionBooking?.id ||
+                                   subscriptionItem.bookingId;
+    
+    if (!subscriptionBookingId) {
+      console.warn('[SignatureCase] ❌ Cannot create signature case - subscription booking ID missing');
+      console.warn('[SignatureCase] Subscription item keys:', Object.keys(subscriptionItem));
+      return null;
+    }
+    
+    console.log('[SignatureCase] ✅ Using subscription booking ID:', subscriptionBookingId);
 
     // Build redirect URL for after signature completion
-    // After payment, user signs contract and returns to success page
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const baseUrl = isLocal
       ? 'https://join.boulders.dk'
@@ -12245,10 +12338,11 @@ async function createSignatureCaseIfRequired(orderId, subscriptionItem) {
     console.log('[SignatureCase] Redirect URL:', redirectUrl);
 
     // Create signature case - API returns null (204) if not required
+    console.log('[SignatureCase] Calling API to create signature case...');
     const signatureCase = await signatureCaseAPI.createSignatureCase(
       parseInt(state.customerId, 10),
       {
-        subscriptionBooking: subscriptionItem.id,
+        subscriptionBooking: subscriptionBookingId,
         redirectUrl: redirectUrl,
         subscriptionSigner: 'USER_AND_PAYER', // Default - both user and payer must sign
       }
@@ -12264,7 +12358,7 @@ async function createSignatureCaseIfRequired(orderId, subscriptionItem) {
       id: signatureCase.id,
       documentUrl: signatureCase.documentUrl,
       signed: signatureCase.signed || false,
-      subscriptionBookingId: subscriptionItem.id,
+      subscriptionBookingId: subscriptionBookingId,
       subscriptionId: signatureCase.subscription || null,
     };
 
@@ -13070,9 +13164,36 @@ async function handleCheckout() {
             }
           }
           
-          // Note: Signature case is created and stored in state.signatureCase
-          // User will sign contract AFTER payment on the success page
-          // No redirect here - allow payment to proceed first
+          // Check if signature case is required before generating payment link
+          // If signature case exists and has document URL, redirect to Assently first
+          console.log('[checkout] ===== CHECKING SIGNATURE CASE BEFORE PAYMENT LINK =====');
+          console.log('[checkout] Signature case state:', state.signatureCase);
+          console.log('[checkout] Has signature case:', !!state.signatureCase);
+          console.log('[checkout] Has document URL:', !!state.signatureCase?.documentUrl);
+          console.log('[checkout] Is signed:', state.signatureCase?.signed);
+          
+          if (state.signatureCase && state.signatureCase.documentUrl && !state.signatureCase.signed) {
+            console.log('[checkout] ===== SIGNATURE CASE REQUIRED =====');
+            console.log('[checkout] Signature case found, redirecting to Assently for signing...');
+            console.log('[checkout] Document URL:', state.signatureCase.documentUrl);
+            console.log('[checkout] Signature Case ID:', state.signatureCase.id);
+            
+            // Store checkout state in sessionStorage for return
+            try {
+              sessionStorage.setItem('boulders_checkout_signature', JSON.stringify({
+                orderId: state.orderId,
+                customerId: state.customerId,
+                signatureCaseId: state.signatureCase.id,
+                returnToCheckout: true,
+              }));
+            } catch (e) {
+              console.warn('[checkout] Could not save signature state to sessionStorage:', e);
+            }
+            
+            // Redirect to Assently document URL
+            window.location.href = state.signatureCase.documentUrl;
+            return; // Stop checkout flow - will resume after signature completion
+          }
           
           // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied
           // The order should now have the discount applied, so payment link will show discounted price
@@ -13352,9 +13473,9 @@ async function handleCheckout() {
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
           
           if (isProductNotAllowed) {
-            // Show campaign rejection modal instead of toast
+            // Show modal with options instead of toast
             showCampaignRejectionModal();
-            throw error; // Re-throw to stop checkout flow
+            return; // Stop checkout flow without throwing error
           }
           
           // Check if this is a payment link generation error due to backend pricing bug
@@ -13764,7 +13885,7 @@ async function handleCheckout() {
                                   (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
       
       if (isProductNotAllowed) {
-        // Show campaign rejection modal instead of toast
+        // Show modal with options instead of toast
         showCampaignRejectionModal();
       } else {
         // Show error message for actual errors
@@ -14244,27 +14365,6 @@ async function loadOrderForConfirmation(orderId) {
         if (storedOrder.cartItems) state.cartItems = storedOrder.cartItems;
         if (storedOrder.totals) state.totals = storedOrder.totals;
         if (storedOrder.selectedBusinessUnit) state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
-      }
-      
-      // Restore signature case from sessionStorage if available
-      try {
-        const signatureState = sessionStorage.getItem('boulders_checkout_signature');
-        if (signatureState) {
-          const parsed = JSON.parse(signatureState);
-          if (parsed.signatureCaseId && !state.signatureCase) {
-            // Restore signature case ID (will fetch full details in displaySignatureCaseInfo)
-            state.signatureCase = {
-              id: parsed.signatureCaseId,
-              documentUrl: null, // Will be fetched
-              signed: false, // Will be checked
-              subscriptionBookingId: null,
-              subscriptionId: null,
-            };
-            console.log('[Payment Return] Restored signature case ID from sessionStorage:', parsed.signatureCaseId);
-          }
-        }
-      } catch (e) {
-        console.warn('[Payment Return] Could not restore signature case from sessionStorage:', e);
         console.log('[Payment Return] Restored order data from sessionStorage:', storedOrder);
       }
       
@@ -15775,11 +15875,6 @@ function renderConfirmationView() {
     console.log('[Confirmation] Showing membership section');
     membershipSection.style.display = 'block';
     membershipSection.style.setProperty('display', 'block', 'important');
-    
-    // Display signature case information if available (async - will fetch from API if needed)
-    displaySignatureCaseInfo().catch(err => {
-      console.warn('[Confirmation] Error displaying signature case info:', err);
-    });
   } else if (productType === '15daypass' && dayPassSection) {
     console.log('[Confirmation] Showing 15 day pass section');
     dayPassSection.style.display = 'block';
@@ -15791,6 +15886,9 @@ function renderConfirmationView() {
   } else {
     console.warn('[Confirmation] Unknown product type or section not found:', productType);
   }
+  
+  // Display signature case information if contract was signed
+  displaySignatureCaseInfo();
 
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
@@ -15929,6 +16027,171 @@ function renderConfirmationView() {
     }
   }
   
+// Display signature case information on confirmation page
+async function displaySignatureCaseInfo() {
+  const signatureCaseInfo = document.getElementById('signatureCaseInfo');
+  const signatureCaseStatus = document.getElementById('signatureCaseStatus');
+  const viewContractLink = document.getElementById('viewContractLink');
+  
+  if (!signatureCaseInfo) {
+    return; // Element doesn't exist, skip
+  }
+  
+  console.log('[Confirmation] ===== CHECKING FOR SIGNATURE CASE =====');
+  console.log('[Confirmation] Signature case in state:', state.signatureCase);
+  console.log('[Confirmation] Customer ID:', state.customerId);
+  console.log('[Confirmation] Full order:', state.fullOrder);
+  console.log('[Confirmation] Test mode:', state.testMode);
+  
+  // Try to find signature case - check state first, then try to fetch from API
+  let signatureCaseToDisplay = null;
+  let signatureCaseId = null;
+  
+  // In test mode, use state directly without API calls
+  if (state.testMode && state.signatureCase && state.signatureCase.id) {
+    console.log('[Confirmation] Test mode: Using mock signature case from state');
+    signatureCaseToDisplay = state.signatureCase;
+  }
+  // Check state first (non-test mode)
+  else if (state.signatureCase && state.signatureCase.id) {
+    signatureCaseId = state.signatureCase.id;
+    console.log('[Confirmation] Found signature case ID in state:', signatureCaseId);
+  }
+  
+  // If we have customer ID, try to list signature cases to find one for this order
+  // Skip API calls in test mode
+  if (!signatureCaseToDisplay && !signatureCaseId && state.customerId && state.orderId && !state.testMode) {
+    try {
+      console.log('[Confirmation] Listing signature cases to find one for this order...');
+      const signatureCases = await signatureCaseAPI.listSignatureCases(parseInt(state.customerId, 10));
+      console.log('[Confirmation] Found signature cases:', signatureCases);
+      
+      // Find signature case for this order
+      const orderSignatureCase = signatureCases.find(sc => 
+        sc.order?.id === state.orderId || 
+        sc.order?.orderId === state.orderId ||
+        String(sc.order?.id) === String(state.orderId)
+      );
+      
+      if (orderSignatureCase) {
+        signatureCaseId = orderSignatureCase.id;
+        signatureCaseToDisplay = orderSignatureCase;
+        console.log('[Confirmation] Found signature case for this order:', orderSignatureCase);
+      }
+    } catch (error) {
+      console.warn('[Confirmation] Could not list signature cases:', error);
+    }
+  }
+  
+  // Fetch signature case details if we have an ID (skip in test mode)
+  if (signatureCaseId && !signatureCaseToDisplay && state.customerId && !state.testMode) {
+    try {
+      console.log('[Confirmation] Fetching signature case details...');
+      signatureCaseToDisplay = await signatureCaseAPI.getSignatureCase(
+        parseInt(state.customerId, 10),
+        signatureCaseId
+      );
+      console.log('[Confirmation] Signature case retrieved:', signatureCaseToDisplay);
+    } catch (error) {
+      console.warn('[Confirmation] Could not fetch signature case:', error);
+    }
+  }
+  
+  // Display signature case info if we have it
+  if (signatureCaseToDisplay) {
+    console.log('[Confirmation] ✅ Displaying signature case info');
+    signatureCaseInfo.style.display = 'block';
+    
+          const signContractBtn = document.getElementById('signContractBtn');
+          
+          if (signatureCaseToDisplay.signed) {
+            if (signatureCaseStatus) {
+              signatureCaseStatus.textContent = 'Signed';
+              signatureCaseStatus.style.color = '#22d3ee';
+            }
+            
+            // Show link to view contract if documentUrl is available
+            if (signatureCaseToDisplay.documentUrl && viewContractLink) {
+              viewContractLink.href = signatureCaseToDisplay.documentUrl;
+              viewContractLink.style.display = 'inline-flex';
+              viewContractLink.textContent = 'View Contract';
+            }
+            
+            // Hide sign button
+            if (signContractBtn) {
+              signContractBtn.style.display = 'none';
+            }
+          } else {
+            // Contract is pending - show sign button
+            if (signatureCaseStatus) {
+              signatureCaseStatus.textContent = 'Pending';
+              signatureCaseStatus.style.color = '#fbbf24';
+            }
+            
+            // Hide view link
+            if (viewContractLink) {
+              viewContractLink.style.display = 'none';
+            }
+            
+            // Show sign button if documentUrl is available
+            if (signatureCaseToDisplay.documentUrl && signContractBtn) {
+              signContractBtn.style.display = 'inline-flex';
+              signContractBtn.onclick = (e) => {
+                e.preventDefault();
+                console.log('[Confirmation] Redirecting to contract signing:', signatureCaseToDisplay.documentUrl);
+                window.location.href = signatureCaseToDisplay.documentUrl;
+              };
+            } else if (signContractBtn) {
+              signContractBtn.style.display = 'none';
+            }
+          }
+  } else if (state.signatureCase) {
+    // Fallback: Use state data if API fetch failed
+    console.log('[Confirmation] Using signature case from state (API fetch failed)');
+    signatureCaseInfo.style.display = 'block';
+    
+    const signContractBtn = document.getElementById('signContractBtn');
+    
+    if (state.signatureCase.signed) {
+      if (signatureCaseStatus) {
+        signatureCaseStatus.textContent = 'Signed';
+        signatureCaseStatus.style.color = '#22d3ee';
+      }
+      if (state.signatureCase.documentUrl && viewContractLink) {
+        viewContractLink.href = state.signatureCase.documentUrl;
+        viewContractLink.style.display = 'inline-flex';
+        viewContractLink.textContent = 'View Contract';
+      }
+      if (signContractBtn) {
+        signContractBtn.style.display = 'none';
+      }
+    } else {
+      // Pending - show sign button
+      if (signatureCaseStatus) {
+        signatureCaseStatus.textContent = 'Pending';
+        signatureCaseStatus.style.color = '#fbbf24';
+      }
+      if (viewContractLink) {
+        viewContractLink.style.display = 'none';
+      }
+      if (state.signatureCase.documentUrl && signContractBtn) {
+        signContractBtn.style.display = 'inline-flex';
+        signContractBtn.onclick = (e) => {
+          e.preventDefault();
+          console.log('[Confirmation] Redirecting to contract signing:', state.signatureCase.documentUrl);
+          window.location.href = state.signatureCase.documentUrl;
+        };
+      } else if (signContractBtn) {
+        signContractBtn.style.display = 'none';
+      }
+    }
+  } else {
+    // No signature case - hide the section
+    console.log('[Confirmation] No signature case found - hiding section');
+    signatureCaseInfo.style.display = 'none';
+  }
+}
+
 // Helper function to create purchase item element if template not available
 function createPurchaseItemElement() {
   const item = document.createElement('div');
@@ -16161,154 +16424,6 @@ function createPurchaseItemElement() {
         membershipPlanId: state.membershipPlanId
       });
     }
-  }
-}
-
-// Display signature case information on confirmation page
-async function displaySignatureCaseInfo() {
-  const signatureCaseInfo = document.getElementById('signatureCaseInfo');
-  const signatureCaseStatus = document.getElementById('signatureCaseStatus');
-  const viewContractLink = document.getElementById('viewContractLink');
-  const signContractBtn = document.getElementById('signContractBtn');
-  
-  if (!signatureCaseInfo) {
-    return; // Element doesn't exist, skip
-  }
-  
-  console.log('[Confirmation] ===== CHECKING FOR SIGNATURE CASE =====');
-  console.log('[Confirmation] Signature case in state:', state.signatureCase);
-  console.log('[Confirmation] Test mode:', state.testMode);
-  console.log('[Confirmation] Customer ID:', state.customerId);
-  console.log('[Confirmation] Order ID:', state.orderId);
-  
-  // Try to find signature case - check state first, then try to fetch from API
-  let signatureCaseToDisplay = null;
-  let signatureCaseId = null;
-  
-  // In test mode, use state directly without API calls
-  if (state.testMode && state.signatureCase && state.signatureCase.id) {
-    console.log('[Confirmation] Test mode: Using mock signature case from state');
-    signatureCaseToDisplay = state.signatureCase;
-  }
-  // Check state first (non-test mode)
-  else if (state.signatureCase && state.signatureCase.id) {
-    signatureCaseId = state.signatureCase.id;
-    signatureCaseToDisplay = state.signatureCase;
-    console.log('[Confirmation] Found signature case ID in state:', signatureCaseId);
-  }
-  
-  // If we have customer ID and order ID, try to list signature cases to find one for this order
-  // Skip API calls in test mode
-  if (!signatureCaseToDisplay && !signatureCaseId && state.customerId && state.orderId && !state.testMode) {
-    try {
-      console.log('[Confirmation] Listing signature cases to find one for this order...');
-      const signatureCases = await signatureCaseAPI.listSignatureCases(parseInt(state.customerId, 10));
-      console.log('[Confirmation] Found signature cases:', signatureCases);
-      
-      // Find signature case for this order
-      const orderSignatureCase = signatureCases.find(sc => 
-        sc.order?.id === state.orderId || 
-        sc.order?.orderId === state.orderId ||
-        String(sc.order?.id) === String(state.orderId)
-      );
-      
-      if (orderSignatureCase) {
-        signatureCaseId = orderSignatureCase.id;
-        signatureCaseToDisplay = orderSignatureCase;
-        console.log('[Confirmation] Found signature case for this order:', orderSignatureCase);
-      }
-    } catch (error) {
-      console.warn('[Confirmation] Could not list signature cases:', error);
-    }
-  }
-  
-  // Fetch signature case details if we have an ID (skip in test mode)
-  if (signatureCaseId && !signatureCaseToDisplay && state.customerId && !state.testMode) {
-    try {
-      console.log('[Confirmation] Fetching signature case details...');
-      signatureCaseToDisplay = await signatureCaseAPI.getSignatureCase(
-        parseInt(state.customerId, 10),
-        signatureCaseId
-      );
-      console.log('[Confirmation] Signature case retrieved:', signatureCaseToDisplay);
-    } catch (error) {
-      console.warn('[Confirmation] Could not fetch signature case:', error);
-    }
-  }
-  
-  // Update state with found signature case
-  if (signatureCaseToDisplay && !state.signatureCase) {
-    state.signatureCase = {
-      id: signatureCaseToDisplay.id,
-      documentUrl: signatureCaseToDisplay.documentUrl,
-      signed: signatureCaseToDisplay.signed || false,
-      subscriptionBookingId: signatureCaseToDisplay.subscriptionBooking || null,
-      subscriptionId: signatureCaseToDisplay.subscription || null,
-    };
-  }
-  
-  if (signatureCaseToDisplay && signatureCaseToDisplay.id) {
-    console.log('[Confirmation] ✅ Displaying signature case info');
-    signatureCaseInfo.style.display = 'block';
-    
-    if (signatureCaseToDisplay.signed) {
-      // Contract is signed
-      if (signatureCaseStatus) {
-        signatureCaseStatus.textContent = 'Signed';
-        signatureCaseStatus.style.color = '#22d3ee';
-      }
-      
-      // Show link to view contract if documentUrl is available
-      if (signatureCaseToDisplay.documentUrl && viewContractLink) {
-        viewContractLink.href = signatureCaseToDisplay.documentUrl;
-        viewContractLink.style.display = 'inline-flex';
-        viewContractLink.textContent = 'View Contract';
-      }
-      
-      // Hide sign button
-      if (signContractBtn) {
-        signContractBtn.style.display = 'none';
-      }
-    } else {
-      // Contract is pending - show sign button
-      if (signatureCaseStatus) {
-        signatureCaseStatus.textContent = 'Pending';
-        signatureCaseStatus.style.color = '#FBBF24';
-      }
-      
-      // Hide view link
-      if (viewContractLink) {
-        viewContractLink.style.display = 'none';
-      }
-      
-      // Show sign button if documentUrl is available
-      if (signatureCaseToDisplay.documentUrl && signContractBtn) {
-        signContractBtn.style.display = 'inline-flex';
-        signContractBtn.onclick = (e) => {
-          e.preventDefault();
-          console.log('[Confirmation] Redirecting to contract signing:', signatureCaseToDisplay.documentUrl);
-          
-          // Store state in sessionStorage for return from signing
-          try {
-            sessionStorage.setItem('boulders_checkout_signature', JSON.stringify({
-              orderId: state.orderId,
-              customerId: state.customerId,
-              signatureCaseId: signatureCaseToDisplay.id,
-            }));
-          } catch (err) {
-            console.warn('[Confirmation] Could not save signature state to sessionStorage:', err);
-          }
-          
-          window.location.href = signatureCaseToDisplay.documentUrl;
-        };
-      } else if (signContractBtn) {
-        signContractBtn.style.display = 'none';
-      }
-    }
-  } else {
-    // No signature case - hide the section
-    console.log('[Confirmation] No signature case found - hiding section');
-    signatureCaseInfo.style.display = 'none';
   }
 }
 

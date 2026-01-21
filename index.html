@@ -649,6 +649,8 @@
                                     </button>
                                 </div>
                                 
+
+                                
                                 <!-- Cart Items -->
                                 <template id="cart-item-template">
                                     <div class="cart-item" data-cart-item>
@@ -784,6 +786,19 @@
                                     </div>
                                     <p class="campaign-warning-message" data-i18n-key="cart.campaignWarning.message">
                                         Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing campaigns later.
+                                    </p>
+                                </div>
+                                                                <!-- Campaign Warning Banner -->
+                                <div class="campaign-warning-banner" id="campaignWarningBanner" style="display: none;" role="alert">
+                                    <div class="campaign-warning-icon">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                        </svg>
+                                    </div>
+                                    <p class="campaign-warning-message" data-i18n-key="cart.campaignWarning.message">
+                                        If you proceed to payment without completing the purchase, you may be blocked from purchasing campaigns later.
                                     </p>
                                 </div>
                                 
@@ -1172,6 +1187,31 @@
         </div>
     </div>
 
+    <!-- Campaign Rejection Modal -->
+    <div class="terms-modal" id="campaignRejectionModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" data-i18n-key="modal.campaignRejection.title">Campaign Not Available</h3>
+                <div class="terms-modal-header-actions">
+                    <button class="terms-modal-close" id="campaignRejectionModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="campaign-rejection-content">
+                    <p class="campaign-rejection-message" data-i18n-key="modal.campaignRejection.message">This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.</p>
+                    <div class="campaign-rejection-actions">
+                        <button class="campaign-rejection-btn campaign-rejection-btn-primary" id="campaignRejectionOption1" data-i18n-key="modal.campaignRejection.option1">Regular Membership</button>
+                        <button class="campaign-rejection-btn campaign-rejection-btn-secondary" id="campaignRejectionOption2" data-i18n-key="modal.campaignRejection.option2">Contact Support</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Global Footer -->
     <footer class="global-footer">
         <div class="footer-content">
@@ -1346,30 +1386,6 @@
         </div>
     </div>
     
-    <!-- Campaign Rejection Modal -->
-    <div class="terms-modal" id="campaignRejectionModal" style="display: none;">
-        <div class="terms-modal-content">
-            <div class="terms-modal-header">
-                <h3 class="terms-modal-title" data-i18n-key="modal.campaignRejection.title">Campaign Not Available</h3>
-                <div class="terms-modal-header-actions">
-                    <button class="terms-modal-close" id="campaignRejectionModalClose" aria-label="Close">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M18 6L6 18M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div class="terms-modal-body">
-                <div class="campaign-rejection-content">
-                    <p class="campaign-rejection-message" data-i18n-key="modal.campaignRejection.message">This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.</p>
-                    <div class="campaign-rejection-actions">
-                        <button class="campaign-rejection-btn campaign-rejection-btn-primary" id="campaignRejectionOption1" data-i18n-key="modal.campaignRejection.option1">Regular Membership</button>
-                        <button class="campaign-rejection-btn campaign-rejection-btn-secondary" id="campaignRejectionOption2" data-i18n-key="modal.campaignRejection.option2">Contact Support</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
 </body>
 </html>
