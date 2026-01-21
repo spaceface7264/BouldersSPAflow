@@ -9523,6 +9523,11 @@ function handleGlobalClick(event) {
       handleBackToGym();
       break;
     }
+    case 'go-to-step-1': {
+      event.preventDefault();
+      handleBackToGym();
+      break;
+    }
     case 'toggle-addons-step': {
       event.preventDefault();
       handleAddonContinue();

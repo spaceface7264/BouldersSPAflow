@@ -525,7 +525,6 @@ body > .header {
 body {
     background-color: #1a1a1a;
     background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
-    background-opacity: 0.5;
     width: 100%;
     max-width: 100vw;
     overflow-x: hidden;
@@ -651,6 +650,7 @@ body {
     display: block;
     opacity: 0.95;
     transition: opacity 0.2s ease;
+    cursor: pointer;
 }
 
 .logo-image:hover {
@@ -667,6 +667,7 @@ body {
     background: transparent;
     border-radius: 4px;
     padding: 6px 10px;
+    cursor: pointer;
     height: 32px;
     min-width: 90px;
     letter-spacing: 0.5px;
