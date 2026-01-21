@@ -13352,8 +13352,8 @@ async function handleCheckout() {
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
           
           if (isProductNotAllowed) {
-            // Show friendly message that this is a restriction, not an error
-            showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
+            // Show campaign rejection modal instead of toast
+            showCampaignRejectionModal();
             throw error; // Re-throw to stop checkout flow
           }
           
@@ -13764,8 +13764,8 @@ async function handleCheckout() {
                                   (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
       
       if (isProductNotAllowed) {
-        // Show friendly message that this is a restriction, not an error
-        showToast('This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules.', 'info');
+        // Show campaign rejection modal instead of toast
+        showCampaignRejectionModal();
       } else {
         // Show error message for actual errors
         showToast(getErrorMessage(error, 'Adding items'), 'error');
