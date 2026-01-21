@@ -4786,6 +4786,10 @@ const translations = {
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
+    'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
+    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagneberettigelsesregler. Du kan tilmelde dig et almindeligt medlemskab. Hvis du mener, at dette er en fejl, skal du kontakte support.',
+    'modal.campaignRejection.option1': 'Almindeligt Medlemskab',
+    'modal.campaignRejection.option2': 'Kontakt Support',
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
@@ -4843,6 +4847,10 @@ const translations = {
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
+    'modal.campaignRejection.title': 'Campaign Not Available',
+    'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.',
+    'modal.campaignRejection.option1': 'Regular Membership',
+    'modal.campaignRejection.option2': 'Contact Support',
   },
 };
 
@@ -6025,6 +6033,19 @@ function setupEventListeners() {
     if (e.target === DOM.dataPolicyModalClose || e.target.closest('#dataPolicyModalClose')) {
       closeDataPolicyModal();
     }
+    
+    // Campaign rejection modal handlers
+    if (e.target.closest('#campaignRejectionOption1')) {
+      handleRejectionOption1();
+    }
+    
+    if (e.target.closest('#campaignRejectionOption2')) {
+      handleRejectionOption2();
+    }
+    
+    if (e.target.closest('#campaignRejectionModalClose')) {
+      hideCampaignRejectionModal();
+    }
   });
   
   // Search input live update
@@ -6059,6 +6080,16 @@ function setupEventListeners() {
     });
   }
   
+  // Close campaign rejection modal when clicking outside
+  const campaignRejectionModal = document.getElementById('campaignRejectionModal');
+  if (campaignRejectionModal) {
+    campaignRejectionModal.addEventListener('click', (e) => {
+      if (e.target === campaignRejectionModal) {
+        hideCampaignRejectionModal();
+      }
+    });
+  }
+  
   // Close modals on Escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -6071,6 +6102,9 @@ function setupEventListeners() {
       const receiptModal = document.getElementById('detailedReceiptModal');
       if (receiptModal && receiptModal.style.display !== 'none') {
         closeDetailedReceipt();
+      }
+      if (campaignRejectionModal && campaignRejectionModal.style.display !== 'none') {
+        hideCampaignRejectionModal();
       }
     }
   });
@@ -10710,6 +10744,81 @@ function hideCampaignWarning() {
   if (banner) {
     banner.style.display = 'none';
   }
+}
+
+// Campaign Rejection Modal Functions
+function showCampaignRejectionModal() {
+  const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    // Focus the first button for accessibility
+    setTimeout(() => {
+      const firstButton = document.getElementById('campaignRejectionOption1');
+      if (firstButton) {
+        firstButton.focus();
+      }
+    }, 100);
+  }
+}
+
+function hideCampaignRejectionModal() {
+  const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function handleRejectionOption1() {
+  // Hide modal first
+  hideCampaignRejectionModal();
+  
+  // Navigate to step 2
+  state.currentStep = 2;
+  showStep(2);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  
+  // Wait for DOM to be ready, then expand membership category
+  setTimeout(() => {
+    const membershipCategory = document.querySelector('.category-item[data-category="membership"]');
+    if (membershipCategory) {
+      // Collapse all other categories
+      const categoryItems = document.querySelectorAll('.category-item');
+      categoryItems.forEach(item => {
+        if (item !== membershipCategory) {
+          item.classList.remove('expanded', 'selected');
+        }
+      });
+      
+      // Expand membership category
+      membershipCategory.classList.add('expanded', 'selected');
+      
+      // Update plan sections visibility
+      const singlePlans = document.getElementById('singleChoiceMode');
+      const quantityPlans = document.getElementById('quantityMode');
+      const singleCategory = document.querySelector('.category-item[data-category="single"]');
+      const quantityCategory = document.querySelector('.category-item[data-category="quantity"]');
+      
+      if (singlePlans && quantityPlans && singleCategory && quantityCategory) {
+        singlePlans.style.display = 'block';
+        quantityPlans.style.display = 'none';
+        singleCategory.classList.add('selected');
+        quantityCategory.classList.remove('selected');
+      }
+    }
+  }, 200);
+}
+
+function handleRejectionOption2() {
+  // Hide modal
+  hideCampaignRejectionModal();
+  
+  // Open email to support
+  const supportEmail = 'medlem@boulders.dk';
+  const subject = encodeURIComponent('Campaign Purchase Issue');
+  const body = encodeURIComponent('Hello,\n\nI tried to purchase a campaign membership but was told it\'s not available for my account. I believe this may be a mistake.\n\nCould you please help?\n\nThank you!');
+  window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
 }
 
 function updateCartSummary() {

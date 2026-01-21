@@ -1346,6 +1346,30 @@
         </div>
     </div>
     
+    <!-- Campaign Rejection Modal -->
+    <div class="terms-modal" id="campaignRejectionModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" data-i18n-key="modal.campaignRejection.title">Campaign Not Available</h3>
+                <div class="terms-modal-header-actions">
+                    <button class="terms-modal-close" id="campaignRejectionModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="campaign-rejection-content">
+                    <p class="campaign-rejection-message" data-i18n-key="modal.campaignRejection.message">This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.</p>
+                    <div class="campaign-rejection-actions">
+                        <button class="campaign-rejection-btn campaign-rejection-btn-primary" id="campaignRejectionOption1" data-i18n-key="modal.campaignRejection.option1">Regular Membership</button>
+                        <button class="campaign-rejection-btn campaign-rejection-btn-secondary" id="campaignRejectionOption2" data-i18n-key="modal.campaignRejection.option2">Contact Support</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
 </body>
 </html>
