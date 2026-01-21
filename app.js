@@ -10657,6 +10657,59 @@ function clearParentFormFields() {
   });
 }
 
+// Helper function to check if cart contains a campaign
+function hasCampaignInCart() {
+  // Check if membershipPlanId starts with "campaign-"
+  if (state.membershipPlanId && String(state.membershipPlanId).startsWith('campaign-')) {
+    return true;
+  }
+  
+  // Check if any cart item's productId exists in campaignSubscriptions
+  if (state.cartItems && state.cartItems.length > 0 && state.campaignSubscriptions) {
+    return state.cartItems.some(item => {
+      if (!item.productId) return false;
+      const productIdNum = typeof item.productId === 'string' 
+        ? parseInt(item.productId) 
+        : item.productId;
+      return state.campaignSubscriptions.some(campaign => 
+        campaign.id === item.productId || 
+        campaign.id === productIdNum ||
+        String(campaign.id) === String(item.productId)
+      );
+    });
+  }
+  
+  // Check if selectedProductId exists in campaignSubscriptions
+  if (state.selectedProductId && state.campaignSubscriptions) {
+    const productIdNum = typeof state.selectedProductId === 'string' 
+      ? parseInt(state.selectedProductId) 
+      : state.selectedProductId;
+    return state.campaignSubscriptions.some(campaign => 
+      campaign.id === state.selectedProductId || 
+      campaign.id === productIdNum ||
+      String(campaign.id) === String(state.selectedProductId)
+    );
+  }
+  
+  return false;
+}
+
+// Show campaign warning banner
+function showCampaignWarning() {
+  const banner = document.getElementById('campaignWarningBanner');
+  if (banner) {
+    banner.style.display = 'flex';
+  }
+}
+
+// Hide campaign warning banner
+function hideCampaignWarning() {
+  const banner = document.getElementById('campaignWarningBanner');
+  if (banner) {
+    banner.style.display = 'none';
+  }
+}
+
 function updateCartSummary() {
   const items = [];
   state.totals.membershipMonthly = 0;
@@ -10764,6 +10817,13 @@ function updateCartSummary() {
   const newCartItemCount = items.length;
   
   state.cartItems = items;
+  
+  // Check for campaigns and show/hide warning banner
+  if (hasCampaignInCart()) {
+    showCampaignWarning();
+  } else {
+    hideCampaignWarning();
+  }
   
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
