@@ -1989,6 +1989,12 @@ body {
     flex-direction: column;
     gap: 12px;
     margin-bottom: 24px;
+    min-height: 0; /* Allow flex children to shrink */
+}
+
+.category-list .category-item.expanded.selected {
+    flex: 1;
+    min-height: 0; /* Allow content to determine height */
 }
 
 .category-item {
@@ -2041,6 +2047,11 @@ body {
 .category-item.selected {
     border-color: #f0f;
     background: #1D283B;
+}
+
+.category-item.expanded.selected {
+    display: flex;
+    flex-direction: column;
 }
 
 .category-header {
@@ -2111,6 +2122,11 @@ body {
     outline: none; /* Remove default focus outline */
 }
 
+.category-item.expanded.selected .category-content {
+    max-height: none; /* Remove max-height constraint for selected items to show all content */
+    flex: 1; /* Allow content to grow to fill available space */
+}
+
 .category-item.expanded .category-content:focus {
     outline: none; /* Remove purple outline on focus */
 }
@@ -2177,6 +2193,10 @@ body {
 .category-item.expanded .plans-list {
     opacity: 1;
     transform: translateY(0);
+}
+
+.category-item.expanded.selected .plans-list {
+    max-height: none; /* Remove max-height constraint for selected items to show all content */
 }
 
 .plan-card {
