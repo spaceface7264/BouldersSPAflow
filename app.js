@@ -33,7 +33,7 @@ import {
 import { stripEmailPlusTag } from './utils/string.js';
 import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
-import { getErrorMessage } from './utils/errors.js';
+import { getErrorMessage, extractErrorFields } from './utils/errors.js';
 import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
 import { highlightFieldError } from './utils/dom.js';
 import { getApiConfig } from './utils/apiConfig.js';
@@ -4765,8 +4765,12 @@ const translations = {
     'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
-    'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>',
-    'cart.consent.marketing': 'Jeg vil gerne modtage marketing-e-mails. Læs vores <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datapolitik</a>.',
+    'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
+    'cart.consent.privacy': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Persondatapolitik</a>.*',
+    'cart.consent.marketing': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">marketing-e-mails</a>.',
+    'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
+    'cart.consent.sms': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS-beskeder</a>.',
+    'consent.sms.explainer': 'SMS<br><br>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
     'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
@@ -4827,8 +4831,12 @@ const translations = {
     'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
-    'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>',
-    'cart.consent.marketing': 'I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.',
+    'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
+    'cart.consent.privacy': 'I accept the <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Privacy Policy</a>*.',
+    'cart.consent.marketing': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Marketing Emails</a>.',
+    'consent.email.explainer': 'E-mail<br><br>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.',
+    'cart.consent.sms': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS Messages.</a>.',
+    'consent.sms.explainer': 'SMS<br><br>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.',
     'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
@@ -5182,6 +5190,13 @@ function updateCartTranslations() {
   }
   
   // Consent checkboxes
+  const privacyConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.privacy"]');
+  if (privacyConsent) {
+    // Handle HTML content with links
+    const privacyHtml = t('cart.consent.privacy');
+    privacyConsent.innerHTML = sanitizeHTML(privacyHtml);
+  }
+
   const termsConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.terms"]');
   if (termsConsent) {
     // Handle HTML content with links
@@ -5194,6 +5209,30 @@ function updateCartTranslations() {
     const marketingHtml = t('cart.consent.marketing');
     marketingConsent.innerHTML = sanitizeHTML(marketingHtml);
   }
+
+  const smsConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.sms"]');
+  if (smsConsent) {
+    const smsHtml = t('cart.consent.sms');
+    smsConsent.innerHTML = sanitizeHTML(smsHtml);
+  }
+  
+  // Make only the checkmark clickable to toggle checkboxes (not the label text)
+  const consentCheckboxes = document.querySelectorAll('.consent-checkbox');
+  consentCheckboxes.forEach((label) => {
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    const checkmark = label.querySelector('.checkmark');
+    
+    if (checkbox && checkmark) {
+      // Prevent label clicks from toggling (handled by pointer-events: none in CSS)
+      // Only allow checkmark clicks to toggle
+      checkmark.addEventListener('click', (e) => {
+        e.stopPropagation();
+        checkbox.checked = !checkbox.checked;
+        // Trigger change event to ensure any listeners are notified
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+  });
   
   // Payment overview labels are handled by data-i18n-key attributes in HTML
   // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
@@ -5906,6 +5945,7 @@ function cacheDom() {
   DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
+  DOM.privacyConsent = document.getElementById('privacyConsent');
   DOM.termsConsent = document.getElementById('termsConsent');
   DOM.discountToggle = document.querySelector('.discount-toggle');
   DOM.discountForm = document.querySelector('.discount-form');
@@ -6010,6 +6050,7 @@ function setupEventListeners() {
   });
   DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
   DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
+  DOM.privacyConsent?.addEventListener('change', updateCheckoutButton);
   DOM.termsConsent?.addEventListener('change', updateCheckoutButton);
 
   // Postal code auto-fill event listeners
@@ -6118,6 +6159,10 @@ function setupEventListeners() {
       const termsType = e.target.closest('[data-action="open-terms"]').dataset.termsType;
       if (termsType === 'privacy') {
         openDataPolicyModal();
+      } else if (termsType === 'email-consent') {
+        openTermsModal('email-consent');
+      } else if (termsType === 'sms-consent') {
+        openTermsModal('sms-consent');
       } else if (termsType === 'terms') {
         openTermsModal('terms');
       } else if (termsType === 'membership' || termsType === 'punchcard') {
@@ -6379,6 +6424,14 @@ async function handleLoginSubmit(event) {
       showToast(`Rate limit exceeded. Please wait ${cooldownMessage} before trying again.`, 'error');
       console.warn(`[login] Rate limited. Cooldown set for ${secondsLeft}s (${cooldownMessage})`);
     } else {
+      // Extract and highlight error fields
+      const errorFields = extractErrorFields(error);
+      errorFields.forEach(({ fieldId }) => {
+        if (fieldId) {
+          highlightFieldError(fieldId, false);
+        }
+      });
+      
       showToast(getErrorMessage(error, 'Login'), 'error');
     }
   } finally {
@@ -6892,6 +6945,140 @@ boulders.dk</p>
 
 <h3>Questions?</h3>
 <p>If you have questions or comments regarding our cookie policy, please feel free to contact us. The cookie declaration itself is regularly updated via Cookiebot.</p>`
+  },
+  'email-consent': {
+    da: `<p>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.</p>`,
+    en: `<p>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.</p>`
+  },
+  'sms-consent': {
+    da: `<p>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.</p>`,
+    en: `<p>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.</p>`
+  },
+  privacy: {
+    da: `<h2>Generelt</h2>
+<p>Denne politik for behandling af personoplysninger ("Persondatapolitik") gælder, når du interagerer med Boulders ("vi", "os", "vores"). Den beskriver, hvordan vi indsamler og behandler dine oplysninger, når du bruger vores hjemmeside boulders.goactivebooking.com ("Hjemmesiden"), benytter vores app ("Appen"), eller i forbindelse med dit kundeforhold og din træning hos os.</p>
+
+<h2>Dataansvar</h2>
+<p>Boulders ApS er ansvarlig for behandlingen af de personoplysninger, vi indsamler om dig. Du kan kontakte os på følgende adresse:</p>
+<p><strong>Boulders ApS</strong><br>
+Graham Bells Vej, 8200 Aarhus N<br>
+CVR nr.: 32777651<br>
+boulders.dk</p>
+<p>Hvis du har spørgsmål om vores behandling af dine personoplysninger, kan du skrive til os på hej@boulders.dk.</p>
+
+<h2>Hvornår indsamler vi personlige oplysninger om dig?</h2>
+<p>Vi indsamler dine personoplysninger i forskellige situationer, herunder når du:</p>
+<ul>
+<li>Tilmelder dig som medlem af Boulders.</li>
+<li>Underskriver ansvarsfraskrivelse, ved køb af dagsbillet, indløser fribillet eller lign.</li>
+<li>Køber produkter på boulders.goactivebooking.com.</li>
+<li>Besøger og bruger vores hjemmeside, som beskrevet i vores cookiepolitik.</li>
+<li>Kontakter os via e-mail ved at udfylde formular eller sender en mail til en @boulders.dk-mailkonto.</li>
+<li>Tilmeld dig vores nyhedsbrev.</li>
+<li>Bruger Boulders' app.</li>
+<li>Booker hold.</li>
+<li>Tjekker ind i vores centre med dit medlems- eller adgangs-kort.</li>
+</ul>
+<p>Vi kan også modtage oplysninger om dig fra sociale medieplatforme som Facebook og Instagram, når du interagerer med vores sider der.</p>
+
+<h2>Hvilke personlige oplysninger indsamler vi om dig?</h2>
+<p>Hos Boulders indsamler vi personoplysninger, der er nødvendige for at administrere dit medlemskab eller anden type adgang, og give dig adgang til vores faciliteter og services. De oplysninger, vi typisk indsamler, omfatter:</p>
+<ul>
+<li>Dit fulde navn, CPR-nummer (hvis oplyst), køn, e-mailadresse, postadresse, telefonnummer, og billede.</li>
+<li>Kredit- eller betalingskortoplysninger, bankkontonummer, og registreringsnummer.</li>
+<li>Dit medlemsnummer, check-in tider, og de haller, du besøger.</li>
+<li>Dine præferencer for produkter og tjenester samt markedsføringspræferencer.</li>
+<li>Data fra Boulders' app, herunder check-ins og hold.</li>
+</ul>
+
+<h2>Hvordan bruger vi dine personlige oplysninger?</h2>
+<p>Vi anvender dine personlige oplysninger til at levere de tjenester og produkter, du har købt, og til at administrere dit medlemskab. Dette inkluderer:</p>
+<ul>
+<li>Opfyldelse af aftaler, såsom medlemskab og produktkøb.</li>
+<li>Verifikation af identitet ved adgangskontrol.</li>
+<li>Fakturering og administration af betalinger.</li>
+<li>Kommunikation om tjenester og medlemskab.</li>
+<li>Tilbud og kampagner baseret på dine præferencer.</li>
+<li>Analyse af brugsmønstre for at forbedre vores tjenester.</li>
+<li>Forebyggelse af svindel og overholdelse af sikkerhed.</li>
+</ul>
+
+<h2>Grundlag for behandling af dine personlige oplysninger</h2>
+<p>Boulders behandler, lagrer og opbevarer dine personoplysninger på følgende lovlige grundlag:</p>
+<ul>
+<li>Behandling er nødvendig for at opfylde din medlemsaftale med Boulders, jf. GDPR art. 6, stk. 1, litra b.</li>
+<li>Behandling er nødvendig for at overholde en retlig forpligtelse, f.eks. bogføringsloven, jf. GDPR art. 6, stk. 1, litra c.</li>
+<li>Behandling er nødvendig for vores legitime interesse i at kommunikere med medlemmer og forbedre vores tjenester, jf. GDPR art. 6, stk. 1, litra f.</li>
+<li>Behandling af billeder eller specifikke oplysninger, såsom cpr.nr., er baseret på dit samtykke, jf. GDPR art. 6, stk. 1, litra a og relevante bestemmelser i databeskyttelsesloven.</li>
+</ul>
+
+<h2>Cookies</h2>
+<p>Når du besøger vores hjemmeside, indsamler vi automatisk oplysninger om din brug af hjemmesiden gennem session cookies og lignende teknologier. Cookies er små tekstfiler, der gemmes i din browser og hjælper os med at gøre hjemmesiden mere relevant for dine behov og interesser. Du kan vælge at afvise cookies, men dette kan begrænse din adgang til visse funktioner på vores hjemmeside. Læs mere i vores cookiepolitik her.</p>
+
+<h2>Sletning af dine personlige oplysninger</h2>
+<p>Vi opbevarer dine personlige data så længe, det er nødvendigt for formålet med behandlingen. Når dit medlemskab ophører, gemmer vi dine data i en begrænset periode for at opfylde juridiske krav og vores legitime interesser. Typisk opbevares data i op til 3 år efter sidste aktivitet, mens oplysninger omfattet af bogføringsloven kan opbevares i 5 år.</p>`,
+    en: `<h2>General</h2>
+<p>This policy for the processing of personal data ("Privacy Policy") applies when you interact with Boulders ("we", "us", "our"). It describes how we collect and process your information when you use our website boulders.goactivebooking.com ("Website"), use our app ("App"), or in connection with your customer relationship and training with us.</p>
+
+<h2>Data Controller</h2>
+<p>Boulders ApS is responsible for the processing of the personal data we collect about you. You can contact us at the following address:</p>
+<p><strong>Boulders ApS</strong><br>
+Graham Bells Vej, 8200 Aarhus N<br>
+CVR no.: 32777651<br>
+boulders.dk</p>
+<p>If you have questions about our processing of your personal data, you can write to us at hej@boulders.dk.</p>
+
+<h2>When do we collect personal information about you?</h2>
+<p>We collect your personal information in various situations, including when you:</p>
+<ul>
+<li>Sign up as a member of Boulders.</li>
+<li>Sign a liability waiver, when purchasing a day pass, redeeming a free pass, or similar.</li>
+<li>Purchase products on boulders.goactivebooking.com.</li>
+<li>Visit and use our website, as described in our cookie policy.</li>
+<li>Contact us via email by filling out a form or sending an email to a @boulders.dk email account.</li>
+<li>Subscribe to our newsletter.</li>
+<li>Use Boulders' app.</li>
+<li>Book classes.</li>
+<li>Check in at our centers with your membership or access card.</li>
+</ul>
+<p>We may also receive information about you from social media platforms such as Facebook and Instagram when you interact with our pages there.</p>
+
+<h2>What personal information do we collect about you?</h2>
+<p>At Boulders, we collect personal information that is necessary to manage your membership or other type of access, and to give you access to our facilities and services. The information we typically collect includes:</p>
+<ul>
+<li>Your full name, CPR number (if provided), gender, email address, postal address, phone number, and photo.</li>
+<li>Credit or payment card information, bank account number, and registration number.</li>
+<li>Your membership number, check-in times, and the halls you visit.</li>
+<li>Your preferences for products and services as well as marketing preferences.</li>
+<li>Data from Boulders' app, including check-ins and classes.</li>
+</ul>
+
+<h2>How do we use your personal information?</h2>
+<p>We use your personal information to deliver the services and products you have purchased, and to manage your membership. This includes:</p>
+<ul>
+<li>Fulfillment of agreements, such as membership and product purchases.</li>
+<li>Identity verification for access control.</li>
+<li>Billing and payment administration.</li>
+<li>Communication about services and membership.</li>
+<li>Offers and campaigns based on your preferences.</li>
+<li>Analysis of usage patterns to improve our services.</li>
+<li>Fraud prevention and security compliance.</li>
+</ul>
+
+<h2>Legal basis for processing your personal information</h2>
+<p>Boulders processes, stores, and retains your personal information on the following legal bases:</p>
+<ul>
+<li>Processing is necessary to fulfill your membership agreement with Boulders, cf. GDPR art. 6, para. 1, lit. b.</li>
+<li>Processing is necessary to comply with a legal obligation, e.g., the Accounting Act, cf. GDPR art. 6, para. 1, lit. c.</li>
+<li>Processing is necessary for our legitimate interest in communicating with members and improving our services, cf. GDPR art. 6, para. 1, lit. f.</li>
+<li>Processing of images or specific information, such as CPR no., is based on your consent, cf. GDPR art. 6, para. 1, lit. a and relevant provisions in the Data Protection Act.</li>
+</ul>
+
+<h2>Cookies</h2>
+<p>When you visit our website, we automatically collect information about your use of the website through session cookies and similar technologies. Cookies are small text files stored in your browser that help us make the website more relevant to your needs and interests. You can choose to reject cookies, but this may limit your access to certain features on our website. Read more in our cookie policy here.</p>
+
+<h2>Deletion of your personal information</h2>
+<p>We retain your personal data for as long as necessary for the purpose of processing. When your membership ends, we store your data for a limited period to comply with legal requirements and our legitimate interests. Typically, data is retained for up to 3 years after last activity, while information covered by the Accounting Act may be retained for 5 years.</p>`
   }
 };
 
@@ -6909,6 +7096,8 @@ function openTermsModal(termsType) {
     punchcard: t('footer.terms.punchcard'),
     privacy: t('footer.policies.privacy'),
     cookie: t('footer.policies.cookie'),
+    'email-consent': 'E-mail',
+    'sms-consent': 'SMS',
   };
   
   // Handle 'terms' type with tabs
@@ -6952,8 +7141,10 @@ function openTermsModal(termsType) {
       DOM.termsModalTabs.style.display = 'none';
     }
     
-    const title = termsTitles[termsType]?.[currentLang] || termsTitles[termsType]?.da || 'Terms and Conditions';
-    const content = termsContent[termsType]?.[currentLang] || termsContent[termsType]?.da || '<p>Content not available.</p>';
+    // Convert language code (da-DK -> da, en-GB -> en)
+    const langCode = currentLang.split('-')[0];
+    const title = termsTitles[termsType] || 'Terms and Conditions';
+    const content = termsContent[termsType]?.[langCode] || termsContent[termsType]?.da || '<p>Content not available.</p>';
     
     if (!termsContent[termsType]) {
       console.error('Invalid terms type:', termsType);
@@ -7661,6 +7852,28 @@ async function handleSaveAccount() {
     }
   });
   
+  // Validate privacy consent
+  const privacyConsent = document.getElementById('privacyConsent');
+  if (!privacyConsent || !privacyConsent.checked) {
+    showSaveAccountMessage('Please accept the privacy policy to continue.', 'error');
+    if (privacyConsent) {
+      const formGroup = privacyConsent.closest('.form-group');
+      if (formGroup) {
+        formGroup.classList.add('error');
+        formGroup.style.animation = 'shake 0.5s ease-in-out';
+        setTimeout(() => {
+          formGroup.style.animation = '';
+        }, 500);
+      }
+    }
+    const saveBtn = document.querySelector('[data-action="save-account"]');
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Account';
+    }
+    return;
+  }
+  
   // Validate password length
   const passwordInput = document.getElementById('password');
   if (passwordInput && passwordInput.value && passwordInput.value.length < 6) {
@@ -7776,6 +7989,7 @@ async function handleSaveAccount() {
       password: payload.customer?.password || document.getElementById('password')?.value,
       customerType: 1, // Required by API
       ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
+      ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
     };
     
     // Also include phone and phoneCountryCode for backward compatibility (remove if not needed)
@@ -8088,9 +8302,17 @@ async function handleSaveAccount() {
         switchAuthMode('login');
       }
     } else {
-      const errorMessage = error.message || 'Failed to save account. Please try again.';
+      // Extract and highlight error fields
+      const errorFields = extractErrorFields(error);
+      errorFields.forEach(({ fieldId }) => {
+        if (fieldId) {
+          highlightFieldError(fieldId, true);
+        }
+      });
+      
+      const errorMessage = getErrorMessage(error, 'Account creation') || error.message || 'Failed to save account. Please try again.';
       showSaveAccountMessage(errorMessage, 'error');
-      showToast('Failed to save account', 'error');
+      showToast(errorMessage, 'error');
     }
   } finally {
     // Reset button state
@@ -12599,6 +12821,8 @@ async function handleCheckout() {
           customerType: 1, // Required by API - numeric ID (typically 1 = Individual customer type)
           // Include marketing email consent - API field: allowMassSendEmail
           ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
+          // Include SMS consent - API field: allowMassSendSms
+          ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
         };
         
         // Also include phone and phoneCountryCode for backward compatibility
@@ -12615,6 +12839,9 @@ async function handleCheckout() {
         console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
         if (customerData.allowMassSendEmail !== undefined) {
           console.log('[checkout] Marketing consent (allowMassSendEmail):', customerData.allowMassSendEmail);
+        }
+        if (customerData.allowMassSendSms !== undefined) {
+          console.log('[checkout] SMS consent (allowMassSendSms):', customerData.allowMassSendSms);
         }
         
         // Remove undefined/null values (but keep empty strings for now to debug)
@@ -12870,6 +13097,14 @@ async function handleCheckout() {
           state.checkoutInProgress = false;
           return;
         }
+        
+        // Extract and highlight error fields
+        const errorFields = extractErrorFields(error);
+        errorFields.forEach(({ fieldId }) => {
+          if (fieldId) {
+            highlightFieldError(fieldId, false);
+          }
+        });
         
         showToast(getErrorMessage(error, 'Customer creation'), 'error');
         setCheckoutLoadingState(false);
@@ -16777,6 +17012,25 @@ function validateForm(animate = false) {
     });
   }
 
+  if (!DOM.privacyConsent?.checked) {
+    isValid = false;
+    if (animate) {
+      showToast('Please accept the privacy policy.', 'error');
+      // Animate privacy consent checkbox
+      const privacyConsent = DOM.privacyConsent;
+      if (privacyConsent) {
+        const formGroup = privacyConsent.closest('.form-group') || privacyConsent.closest('.consents-section');
+        if (formGroup) {
+          formGroup.classList.add('error');
+          formGroup.style.animation = 'shake 0.5s ease-in-out';
+          setTimeout(() => {
+            formGroup.style.animation = '';
+          }, 500);
+        }
+      }
+    }
+  }
+
   if (!DOM.termsConsent?.checked) {
     isValid = false;
     if (animate) {
@@ -16842,11 +17096,12 @@ function clearErrorStates() {
 
 function updateCheckoutButton() {
   if (!DOM.checkoutBtn) return;
+  const privacyAccepted = DOM.privacyConsent?.checked ?? false;
   const termsAccepted = DOM.termsConsent?.checked ?? false;
   const hasMembership = Boolean(state.membershipPlanId);
   const hasPayment = Boolean(state.paymentMethod);
 
-  DOM.checkoutBtn.disabled = !(termsAccepted && hasMembership && hasPayment);
+  DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasMembership && hasPayment);
 }
 
 // Helper function to manage loading state during checkout
