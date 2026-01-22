@@ -4491,7 +4491,7 @@ function populateBoostModal() {
       
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${product.name || 'Boost Product'}</div>
-        <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr' : '—'}</div>
+        <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr.' : '—'}</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${product.id}"></div>
       `);
       
@@ -11399,11 +11399,13 @@ function updateCartSummary() {
   }
 
   // Handle add-ons (boost products and subscription additions)
+  // Store addons separately to append after subscriptions
+  const addonItems = [];
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
     const price = getAddonPrice(addon);
-    items.push({
+    addonItems.push({
       id: addon.id,
       name: addon.name || 'Add-on',
       amount: roundToHalfKrone(price),
@@ -11412,11 +11414,23 @@ function updateCartSummary() {
     });
   });
 
+  // Ensure correct order: subscriptions/value cards first, then addons
+  // Items array already has subscriptions and value cards in correct order
+  // Now append addons at the end
+  items.push(...addonItems);
+
+  // CRITICAL: Explicitly sort items to ensure subscriptions come first
+  // This ensures the array order matches the display order
+  const sortedItems = [
+    ...items.filter(item => item.type === 'membership' || item.type === 'value-card'),
+    ...items.filter(item => item.type === 'addon')
+  ];
+
   // GTM: Track add_to_cart event when items are added
   const previousCartItemCount = state.cartItems?.length || 0;
-  const newCartItemCount = items.length;
+  const newCartItemCount = sortedItems.length;
   
-  state.cartItems = items;
+  state.cartItems = sortedItems;
   
   // Check for campaigns and show/hide warning banner
   if (hasCampaignInCart()) {
@@ -11502,11 +11516,13 @@ function updateCartTotals() {
   });
   
   // Add add-ons (boost products and subscription additions)
+  // Store addons separately to append after subscriptions
+  const addonItems = [];
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
     const price = getAddonPrice(addon);
-    items.push({
+    addonItems.push({
       id: addon.id,
       name: addon.name || 'Add-on',
       amount: roundToHalfKrone(price),
@@ -11514,7 +11530,19 @@ function updateCartTotals() {
     });
   });
 
-  state.cartItems = items;
+  // Ensure correct order: subscriptions/value cards first, then addons
+  // Items array already has subscriptions and value cards in correct order
+  // Now append addons at the end
+  items.push(...addonItems);
+
+  // CRITICAL: Explicitly sort items to ensure subscriptions come first
+  // This ensures the array order matches the display order
+  const sortedItems = [
+    ...items.filter(item => item.type === 'membership' || item.type === 'value-card'),
+    ...items.filter(item => item.type === 'addon')
+  ];
+
+  state.cartItems = sortedItems;
   
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
@@ -11528,8 +11556,7 @@ function updateCartTotals() {
 
 function renderCartItems() {
   if (!templates.cartItem || !DOM.cartItems) return;
-  DOM.cartItems.innerHTML = '';
-
+  
   // Check for campaigns and show/hide warning banner
   if (hasCampaignInCart()) {
     showCampaignWarning();
@@ -11537,7 +11564,8 @@ function renderCartItems() {
     hideCampaignWarning();
   }
 
-  if (!state.cartItems.length) {
+  if (!state.cartItems || !state.cartItems.length) {
+    DOM.cartItems.innerHTML = '';
     // Only show empty message if there's no gym selected either
     if (!state.selectedGymId && !state.selectedBusinessUnit) {
       const empty = document.createElement('div');
@@ -11547,6 +11575,9 @@ function renderCartItems() {
     }
     return;
   }
+  
+  // Clear DOM to ensure clean rendering order
+  DOM.cartItems.innerHTML = '';
 
   // Helper function to create Home Gym info element
   function createHomeGymInfo(selectedGym) {
@@ -11624,7 +11655,16 @@ function renderCartItems() {
     );
   }
 
-  state.cartItems.forEach((item, index) => {
+  // Separate items into two groups: subscriptions/15day pass/value cards first, then addons
+  // All subscriptions (including 15-day passes) have type 'membership', value cards have type 'value-card'
+  // CRITICAL: Filter to ensure subscriptions come first, regardless of state.cartItems order
+  const subscriptionItems = state.cartItems.filter(item => 
+    item.type === 'membership' || item.type === 'value-card'
+  );
+  const addonItems = state.cartItems.filter(item => item.type === 'addon');
+
+  // Helper function to render a single cart item
+  function renderCartItem(item, isFirstSubscriptionItem = false) {
     const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
     const nameEl = cartItem.querySelector('[data-element="name"]');
     const priceEl = cartItem.querySelector('[data-element="price"]');
@@ -11657,15 +11697,16 @@ function renderCartItems() {
         nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the name container for first item
-        if (index === 0 && selectedGym) {
+        if (isFirstSubscriptionItem && selectedGym) {
           const gymInfo = createHomeGymInfo(selectedGym);
           nameEl.appendChild(gymInfo);
         }
       } else {
+        // For addon items, we'll add the plus sign later in the rendering loop
         nameEl.textContent = item.name;
         
         // Add Home Gym info below the first item's name
-        if (index === 0 && selectedGym) {
+        if (isFirstSubscriptionItem && selectedGym) {
           const gymInfo = createHomeGymInfo(selectedGym);
           nameEl.appendChild(gymInfo);
         }
@@ -11702,12 +11743,60 @@ function renderCartItems() {
           const discountedText = formatPriceHalfKrone(roundToHalfKrone(displayPrice));
           priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`);
         } else {
-          // Always show price, including "0 kr" for free items
-          priceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr';
+          // Always show price, including "0 kr." for free items
+          priceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
         }
       }
     }
 
+    return cartItem;
+  }
+
+  // CRITICAL: Clear DOM first to ensure clean rendering
+  DOM.cartItems.innerHTML = '';
+  
+  // CRITICAL: Render subscription/15day pass/value card items FIRST
+  // This ensures they appear at the top of the cart
+  subscriptionItems.forEach((item, index) => {
+    const cartItem = renderCartItem(item, index === 0);
+    DOM.cartItems.appendChild(cartItem);
+  });
+
+  // Add separator line after subscription items if there are addon items
+  if (subscriptionItems.length > 0 && addonItems.length > 0) {
+    const separator = document.createElement('div');
+    separator.className = 'cart-separator';
+    separator.style.height = '1px';
+    separator.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+    separator.style.margin = '12px 0';
+    separator.style.width = '100%';
+    DOM.cartItems.appendChild(separator);
+  }
+
+  // Render addon items AFTER subscriptions (at the bottom)
+  addonItems.forEach((item) => {
+    const cartItem = renderCartItem(item, false);
+    // Add plus sign before addon product names (inline, to the left) with brand accent color
+    const nameEl = cartItem.querySelector('[data-element="name"]');
+    if (nameEl) {
+      const currentText = nameEl.textContent || nameEl.innerText || '';
+      if (currentText && !currentText.trim().startsWith('+')) {
+        // Change flex direction to row for addon items so plus appears inline
+        nameEl.style.flexDirection = 'row';
+        nameEl.style.alignItems = 'center';
+        // Create a span for the plus sign with brand accent color
+        const plusSpan = document.createElement('span');
+        plusSpan.textContent = '+ ';
+        plusSpan.style.color = 'var(--color-brand-accent)';
+        plusSpan.style.marginRight = '4px';
+        // Clear and rebuild content
+        nameEl.innerHTML = '';
+        nameEl.appendChild(plusSpan);
+        const textSpan = document.createElement('span');
+        textSpan.textContent = currentText.trim();
+        nameEl.appendChild(textSpan);
+      }
+    }
     DOM.cartItems.appendChild(cartItem);
   });
 }
@@ -11761,10 +11850,10 @@ function renderCartAddons() {
       // Display price - show discounted price if different from original
       if (roundedDisplayPrice !== roundedOriginalPrice && state.discountApplied) {
         // Show original price with strikethrough and discounted price
-        priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr</span>`);
+        priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr.</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr.</span>`);
       } else {
-        // Always show price, including "0 kr" for free items
-        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr';
+        // Always show price, including "0 kr." for free items
+        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr.';
       }
     }
 
@@ -11789,7 +11878,7 @@ function renderCartTotal() {
     // Use already-calculated cartTotal (includes membership + addons - discount)
     // state.totals.cartTotal is calculated in updateCartSummary() as: subtotal - discount
     const total = state.totals.cartTotal || 0;
-    cartTotalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(total)) + ' kr';
+    cartTotalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(total)) + ' kr.';
     console.log('[Cart] Updated cart total display:', total);
   } else {
     console.warn('[Cart] Cart total element not found in DOM');
