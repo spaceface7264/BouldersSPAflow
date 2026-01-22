@@ -10,11 +10,13 @@
 
 ## 🚨 Problem Summary
 
-The backend **ignores the `startDate` parameter** when adding subscription items for products 134 and 143, causing:
+The backend **ignores the `startDate` parameter** when adding subscription items for products 134 and 143 **during the checkout flow**, causing:
 - ❌ Incorrect pricing (monthly fee instead of partial-month price)
 - ❌ Wrong `initialPaymentPeriod.start` date (26+ days in future instead of today)
 - ❌ Users charged incorrect amount (469 DKK instead of 620.29 DKK)
 - ❌ Frontend cannot fix the issue (order locked with 403 Forbidden)
+
+**Note**: This issue occurs during **checkout** when the order is created. It does NOT occur during payment return flows (e.g., when `error=205` is present), as those flows handle payment failures and don't proceed with checkout.
 
 ## 📋 Detailed Description
 
@@ -212,6 +214,14 @@ The frontend now:
 3. **Timing**: The issue occurs immediately when the subscription item is added - the order is locked before frontend can attempt fixes.
 
 4. **User Experience**: Users see correct price in UI but checkout is blocked, which is better than charging them incorrectly but still not ideal.
+
+5. **When Issue Occurs**: This issue manifests during the **checkout flow** when:
+   - User selects product 134 or 143
+   - Order is created with subscription item
+   - Backend ignores `startDate` and returns incorrect price
+   - Frontend detects the issue and blocks checkout
+   
+   The issue does NOT occur during payment return flows (e.g., `error=205`), as those handle payment failures and don't proceed with the checkout pricing verification.
 
 ## 🔗 Related Issues
 
