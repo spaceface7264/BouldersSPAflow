@@ -2837,6 +2837,9 @@ async function loadProductsFromAPI() {
       ? valueCardsResponse
       : (valueCardsResponse.data || valueCardsResponse.items || []);
 
+    // Store raw products before filtering (for boost product detection)
+    // This ensures boost products aren't missed if they're filtered out by display rules
+    state.allRawProducts = [...subscriptions, ...valueCards];
 
     // Filter out products that shouldn't be displayed according to OpenAPI documentation
     // Reference: docs/brp-api3-openapi.yaml - SubscriptionProductOut schema (line ~14970)
@@ -3992,6 +3995,7 @@ const state = {
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
   subscriptionAdditions: [], // Fetched add-ons for selected membership
+  boostProducts: [], // Products with "boostProduct" label for boost modal
   selectedProductType: null, // 'membership' or 'punch-card'
   selectedProductId: null, // The actual product ID from API
   selectedAddonIds: [], // Array of selected add-on product IDs
@@ -4216,10 +4220,11 @@ function populateAddonsModal() {
       const card = document.createElement('div');
       card.className = 'plan-card addon-card';
       card.style.cursor = 'pointer';
+      const addonPrice = getAddonPrice(addon);
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${addon.name}</div>
-        <div>${typeof addon.price?.discounted === 'number'
-          ? formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted))
+        <div>${addonPrice > 0
+          ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
           : '—'} kr</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
       `);
@@ -4312,8 +4317,23 @@ function populateAddonsModal() {
       console.log('[Addons Modal] Image element not found for', addon.name);
     }
     
-    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
-    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
+    // Handle original price (only for subscription additions with discount)
+    if (originalPriceEl) {
+      const originalPrice = addon.price?.original;
+      if (typeof originalPrice === 'number' && originalPrice > 0) {
+        originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
+        originalPriceEl.style.display = '';
+      } else {
+        originalPriceEl.style.display = 'none';
+      }
+    }
+    // Use helper function for discounted/current price
+    const addonPrice = getAddonPrice(addon);
+    if (discountedPriceEl) {
+      discountedPriceEl.textContent = addonPrice > 0
+        ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
+        : '—';
+    }
     if (descriptionEl) descriptionEl.textContent = addon.description;
     if (featuresEl) {
       featuresEl.innerHTML = '';
@@ -4387,6 +4407,15 @@ function populateBoostModal() {
     return;
   }
   
+  // Ensure templates are initialized
+  if (!templates.addon) {
+    console.warn('[Boost Modal] Templates not initialized yet, initializing...');
+    templates.addon = document.getElementById('addon-card-template');
+    if (!templates.addon) {
+      console.error('[Boost Modal] Addon template not found in DOM!');
+    }
+  }
+  
   // Update title for boost modal
   if (title) {
     title.textContent = 'Boost your membership';
@@ -4397,8 +4426,11 @@ function populateBoostModal() {
   // Use products with "boostProduct" label
   const boostProducts = state.boostProducts || [];
   
+  console.log(`[Boost Modal] populateBoostModal: ${boostProducts.length} boost products to render`);
+  
   if (boostProducts.length === 0) {
     // No boost products available
+    console.warn('[Boost Modal] No boost products to display');
     const emptyMsg = document.createElement('div');
     emptyMsg.className = 'addons-empty';
     emptyMsg.textContent = 'No boost products available.';
@@ -4409,8 +4441,14 @@ function populateBoostModal() {
     return;
   }
   
+  // Check if template exists
+  if (!templates.addon) {
+    console.warn('[Boost Modal] Addon template not found, using fallback rendering');
+  }
+  
   // Render each boost product
-  boostProducts.forEach((product) => {
+  boostProducts.forEach((product, index) => {
+    console.log(`[Boost Modal] Rendering boost product ${index + 1}/${boostProducts.length}: ${product.name} (ID: ${product.id})`);
     if (!templates.addon) {
       // Fallback simple card if template missing
       const card = document.createElement('div');
@@ -4519,13 +4557,12 @@ function populateBoostModal() {
       }
     }
     
-    // Extract price from product structure (similar to renderSubscriptionCard)
-    const priceInCents = product.priceWithInterval?.price?.amount || 
-                         product.price?.amount || 
-                         product.amount || 
-                         0;
-    const price = priceInCents > 0 ? priceInCents / 100 : 0;
-    const originalPrice = product.originalPrice ? product.originalPrice / 100 : null;
+    // Use helper function for consistent price extraction
+    const price = getAddonPrice(product);
+    // Handle original price if available (for products with discounts)
+    const originalPrice = product.originalPrice 
+      ? (typeof product.originalPrice === 'number' ? product.originalPrice / 100 : product.originalPrice)
+      : (product.price?.original ? product.price.original : null);
     
     if (originalPriceEl && originalPrice && originalPrice > price) {
       originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
@@ -4571,12 +4608,34 @@ function populateBoostModal() {
     });
     
     grid.appendChild(card);
+    console.log(`[Boost Modal] ✅ Card appended for product: ${product.name}`);
   });
+  
+  console.log(`[Boost Modal] ✅ Finished rendering ${boostProducts.length} boost products`);
 }
 
 // Show boost modal (uses same modal infrastructure as addons)
 async function showBoostModal() {
   ensureAddonsModal();
+  
+  // Ensure products are loaded first
+  const hasAnyProducts = (state.allRawProducts?.length || 0) > 0 || 
+                         (state.subscriptions?.length || 0) > 0 || 
+                         (state.campaignSubscriptions?.length || 0) > 0 ||
+                         (state.dayPassSubscriptions?.length || 0) > 0 ||
+                         (state.valueCards?.length || 0) > 0;
+  
+  if (!hasAnyProducts) {
+    console.warn('[Boost Modal] No products loaded yet. Waiting for products to load...');
+    // Wait a bit and try again, or load products if business unit is selected
+    if (state.selectedBusinessUnit) {
+      await loadProductsFromAPI();
+    } else {
+      console.error('[Boost Modal] Cannot load boost products: No business unit selected');
+      showToast('Unable to load boost products. Please try again.', 'error');
+      return;
+    }
+  }
   
   // Load boost products if not already loaded
   if (!state.boostProducts || state.boostProducts.length === 0) {
@@ -4603,6 +4662,64 @@ async function showBoostModal() {
 // Expose a small API to set the image dynamically if desired
 // Usage: window.setAddonsUpsellImage('https://.../image.jpg')
 // Image API removed
+
+// Check if a product has the "Boost" label
+function hasBoostLabel(product) {
+  if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+    return false;
+  }
+  return product.productLabels.some(
+    label => label.name && label.name.toLowerCase() === 'boost'
+  );
+}
+
+// Load and filter products with "boostProduct" label
+async function loadBoostProducts() {
+  const boostProducts = [];
+  const seenIds = new Set();
+  
+  // Helper function to check if product has boostProduct label
+  const hasBoostProductLabel = (product) => {
+    if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+      return false;
+    }
+    return product.productLabels.some(
+      label => label.name && label.name.toLowerCase() === 'boostproduct'
+    );
+  };
+  
+  // Scan all product sources - prioritize raw products (before filtering) to catch all boost products
+  // Then also check filtered arrays in case products are in both
+  const productSources = [
+    ...(state.allRawProducts || []), // Raw products before filtering (most important)
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+    ...(state.valueCards || [])
+  ];
+  
+  console.log(`[Boost Modal] Scanning ${productSources.length} products for boostProduct label`);
+  console.log(`[Boost Modal] Raw products: ${state.allRawProducts?.length || 0}, Subscriptions: ${state.subscriptions?.length || 0}, Campaigns: ${state.campaignSubscriptions?.length || 0}, DayPass: ${state.dayPassSubscriptions?.length || 0}, ValueCards: ${state.valueCards?.length || 0}`);
+  
+  // Filter products with boostProduct label and deduplicate by ID
+  productSources.forEach((product) => {
+    if (hasBoostProductLabel(product) && product.id) {
+      const productId = String(product.id);
+      if (!seenIds.has(productId)) {
+        seenIds.add(productId);
+        boostProducts.push(product);
+        console.log(`[Boost Modal] Found boost product: ${product.name} (ID: ${product.id})`);
+      }
+    }
+  });
+  
+  state.boostProducts = boostProducts;
+  console.log(`[Boost Modal] Loaded ${boostProducts.length} boost products`);
+  if (boostProducts.length === 0) {
+    console.warn('[Boost Modal] No boost products found! Check that products have "boostProduct" label.');
+  }
+  return boostProducts;
+}
 
 // Hide Boost from the step indicator permanently and toggle Boost step panel by selection
 function applyConditionalSteps() {
@@ -9024,14 +9141,12 @@ function renderAddons() {
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
 
     if (nameEl) nameEl.textContent = addon.name;
+    // Handle original price (only for subscription additions with discount)
     const priceOriginal = typeof addon.price?.original === 'number'
       ? addon.price.original
-      : typeof addon.price?.amount === 'number'
-        ? addon.price.amount / 100
-        : null;
-    const priceDiscounted = typeof addon.price?.discounted === 'number'
-      ? addon.price.discounted
-      : priceOriginal;
+      : null;
+    // Use helper function for current price
+    const priceDiscounted = getAddonPrice(addon);
     if (originalPriceEl) {
       originalPriceEl.textContent = priceOriginal !== null
         ? formatPriceHalfKrone(roundToHalfKrone(priceOriginal))
@@ -9174,6 +9289,31 @@ function handlePlanSelection(selectedCard) {
   
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
   
+  // Find the product object to check for Boost label
+  let product = null;
+  const productIdNum = typeof productId === 'string' ? parseInt(productId) : productId;
+  
+  if (isMembership) {
+    // Check all subscription types
+    const allSubscriptions = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || [])
+    ];
+    product = allSubscriptions.find(p => 
+      p.id === productId || 
+      p.id === productIdNum ||
+      String(p.id) === String(productId)
+    );
+  } else {
+    // Check value cards
+    product = (state.valueCards || []).find(p => 
+      p.id === productId || 
+      p.id === productIdNum ||
+      String(p.id) === String(productId)
+    );
+  }
+  
   // GTM: Track select_item event
   trackSelectItemEvent({
     product,
@@ -9201,10 +9341,22 @@ function handlePlanSelection(selectedCard) {
   // Update cart to reflect selection
   updateCartSummary();
   
-  // Auto-advance to next step after a short delay
-  setTimeout(() => {
-    nextStep();
-  }, 500);
+  // Check if product has Boost label - if so, show modal instead of auto-advancing
+  if (product && hasBoostLabel(product)) {
+    // Load boost products if not already loaded
+    if (!state.boostProducts || state.boostProducts.length === 0) {
+      loadBoostProducts().then(() => {
+        showBoostModal();
+      });
+    } else {
+      showBoostModal();
+    }
+  } else {
+    // Auto-advance to next step after a short delay
+    setTimeout(() => {
+      nextStep();
+    }, 500);
+  }
 }
 
 function setupNewAccessStep() {
@@ -9463,23 +9615,38 @@ function setupNewAccessStep() {
           // Update cart to reflect selection
           updateCartSummary();
           
-          // Clear any pending membership navigation timeout to prevent double-clicks
-          if (pendingNavigationTimeouts.membership) {
-            clearTimeout(pendingNavigationTimeouts.membership);
-            pendingNavigationTimeouts.membership = null;
-          }
-          
-          // Reset card animation and auto-advance to next step
-          pendingNavigationTimeouts.membership = setTimeout(() => {
-            // Clear timeout reference before navigation
-            pendingNavigationTimeouts.membership = null;
+          // Check if product has Boost label - if so, show modal instead of auto-advancing
+          if (selectedProduct && hasBoostLabel(selectedProduct)) {
+            // Reset card animation
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
-            // Only navigate if we're still on step 2 (prevent stale state navigation)
-            if (state.currentStep === 2) {
-              nextStep();
+            // Load boost products if not already loaded
+            if (!state.boostProducts || state.boostProducts.length === 0) {
+              loadBoostProducts().then(() => {
+                showBoostModal();
+              });
+            } else {
+              showBoostModal();
             }
-          }, 500);
+          } else {
+            // Clear any pending membership navigation timeout to prevent double-clicks
+            if (pendingNavigationTimeouts.membership) {
+              clearTimeout(pendingNavigationTimeouts.membership);
+              pendingNavigationTimeouts.membership = null;
+            }
+            
+            // Reset card animation and auto-advance to next step
+            pendingNavigationTimeouts.membership = setTimeout(() => {
+              // Clear timeout reference before navigation
+              pendingNavigationTimeouts.membership = null;
+              card.style.transform = 'scale(1)';
+              card.style.boxShadow = '';
+              // Only navigate if we're still on step 2 (prevent stale state navigation)
+              if (state.currentStep === 2) {
+                nextStep();
+              }
+            }, 500);
+          }
         }
     });
   });
@@ -9853,6 +10020,7 @@ function toggleAddon(addonId, checkCircle) {
   updateCartSummary();
   updateAddonSkipButton();
   updateAddonActionButton();
+  updateCheckoutButton(); // Re-evaluate checkout button state when addons change
 }
 
 function updateAddonActionButton() {
@@ -11186,15 +11354,17 @@ function updateCartSummary() {
     });
   }
 
-  // Handle add-ons (if any were selected - currently disabled but keeping for future)
+  // Handle add-ons (boost products and subscription additions)
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
+    const price = getAddonPrice(addon);
     items.push({
       id: addon.id,
-      name: addon.name,
-      amount: roundToHalfKrone(addon.price.discounted),
+      name: addon.name || 'Add-on',
+      amount: roundToHalfKrone(price),
       type: 'addon',
+      productId: addon.id, // Store API product ID for order creation
     });
   });
 
@@ -11232,6 +11402,9 @@ function updateCartSummary() {
 
   renderCartItems();
   renderCartTotal();
+  
+  // Update checkout button state when cart changes (addons might have been added/removed)
+  updateCheckoutButton();
   
   // If we're on step 4 and have order data, ensure payment overview is updated
   if (state.currentStep === 4 && state.orderId && !state.fullOrder) {
@@ -11284,14 +11457,15 @@ function updateCartTotals() {
     }
   });
   
-  // Add add-ons
+  // Add add-ons (boost products and subscription additions)
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
+    const price = getAddonPrice(addon);
     items.push({
       id: addon.id,
-      name: addon.name,
-      amount: roundToHalfKrone(addon.price.discounted),
+      name: addon.name || 'Add-on',
+      amount: roundToHalfKrone(price),
       type: 'addon',
     });
   });
@@ -11562,31 +11736,20 @@ function renderCartTotal() {
   // Update payment overview (shows "Betales nu" and "Månedlig betaling herefter")
   updatePaymentOverview();
   
-  // Update cart total display
-  const cartTotalEl = document.querySelector('[data-summary-field="cart-total"]');
+  // Update cart total display - use already-calculated cartTotal from state
+  const cartTotalEl = document.querySelector('[data-summary-field="cart-total"]') ||
+                      document.querySelector('.cart-total .total-amount') ||
+                      document.querySelector('.total-amount');
   const cartTotalContainer = document.querySelector('.cart-total');
   
   if (cartTotalEl) {
-    // Calculate total as: Pay now amount + addon items
-    // Get addon items total (non-membership items)
-    const addonItems = state.cartItems.filter(item => item.type !== 'membership');
-    const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
-    
-    // Get "Pay now" amount from state (calculated by updatePaymentOverview)
-    const payNowAmount = state.totals.payNowAmount || 0;
-    
-    // Total = Pay now + Addons (both already rounded to half krone)
-    let total = (state.totals.payNowAmount || 0) + addonTotal;
-    
-    // Apply discount if applicable (discount should be applied to the total)
-    if (state.discountApplied && state.totals.discountAmount > 0) {
-      total = Math.max(0, total - state.totals.discountAmount);
-    }
-    
-    // Round total to half krone and format
-    // Format: "569,00 kr" or "569,50 kr" (no dot, consistent with cart items)
-    const roundedTotal = roundToHalfKrone(total);
-    cartTotalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr';
+    // Use already-calculated cartTotal (includes membership + addons - discount)
+    // state.totals.cartTotal is calculated in updateCartSummary() as: subtotal - discount
+    const total = state.totals.cartTotal || 0;
+    cartTotalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(total)) + ' kr';
+    console.log('[Cart] Updated cart total display:', total);
+  } else {
+    console.warn('[Cart] Cart total element not found in DOM');
   }
   
   // Show/hide cart total container based on whether there are items
@@ -12165,10 +12328,41 @@ function updatePaymentOverview() {
     }
   }
   
+  // Calculate and display total (Pay now + Addons)
+  const totalEl = document.querySelector('[data-summary-field="total"]');
+  const totalContainer = document.querySelector('.payment-overview-total');
+  
+  if (totalEl && totalContainer) {
+    // Calculate addon total
+    const addonItems = state.cartItems.filter(item => item.type === 'addon');
+    const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
+    
+    // Total = Pay now + Addons
+    let total = payNowAmount + addonTotal;
+    
+    // Apply discount if applicable
+    if (state.discountApplied && state.totals.discountAmount > 0) {
+      total = Math.max(0, total - state.totals.discountAmount);
+    }
+    
+    // Round and format total
+    const roundedTotal = roundToHalfKrone(total);
+    totalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
+    
+    // Show/hide total container based on whether addons are present
+    if (addonTotal > 0) {
+      totalContainer.style.display = 'block';
+      console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now:', payNowAmount, '+ Addons:', addonTotal, ')');
+    } else {
+      totalContainer.style.display = 'none';
+    }
+  }
+  
   console.log('[Payment Overview] ✅ Updated:', {
     payNow: payNowAmount,
     monthlyPayment: monthlyPaymentAmount,
-    billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A'
+    billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A',
+    total: totalEl ? (payNowAmount + (state.cartItems.filter(item => item.type === 'addon').reduce((sum, item) => sum + item.amount, 0))) : 'N/A'
   });
 }
 
@@ -12198,7 +12392,10 @@ function updateDiscountDisplay() {
       });
       state.addonIds.forEach((addonId) => {
         const addon = findAddon(addonId);
-        if (addon) items.push({ amount: addon.price.discounted });
+        if (addon) {
+          const price = getAddonPrice(addon);
+          items.push({ amount: price });
+        }
       });
       state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
     }
@@ -16575,6 +16772,31 @@ function createPurchaseItemElement() {
           hasItems = true;
         });
       }
+      
+      // Add article items (boost products/add-ons)
+      if (state.fullOrder.articleItems && state.fullOrder.articleItems.length > 0) {
+        state.fullOrder.articleItems.forEach(item => {
+          const node = templates.confirmationItem 
+            ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+            : createPurchaseItemElement();
+          const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+          const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
+          
+          if (nameEl) {
+            const productName = item.product?.name || item.name || 'Add-on';
+            nameEl.textContent = productName;
+          }
+          
+          if (priceEl) {
+            // Per ProductItemOut: price.amount is total price
+            const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+            priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemTotal));
+          }
+          
+          DOM.confirmationItems.appendChild(node);
+          hasItems = true;
+        });
+      }
     }
     
     // Priority 2: Fallback to state.order.items if fullOrder not available or has no items
@@ -17096,12 +17318,48 @@ function clearErrorStates() {
 
 function updateCheckoutButton() {
   if (!DOM.checkoutBtn) return;
-  const privacyAccepted = DOM.privacyConsent?.checked ?? false;
+  
+  // Re-cache DOM elements in case they weren't found initially (e.g., when logged in and create form is hidden)
+  if (!DOM.privacyConsent) {
+    DOM.privacyConsent = document.getElementById('privacyConsent');
+  }
+  if (!DOM.termsConsent) {
+    DOM.termsConsent = document.getElementById('termsConsent');
+  }
+  
+  const isAuthenticated = isUserAuthenticated();
+  
+  // For logged-in users, privacy consent is assumed (they already have an account)
+  // For new users, check if privacy consent checkbox is checked
+  const privacyAccepted = isAuthenticated 
+    ? true 
+    : (DOM.privacyConsent?.checked ?? false);
+  
   const termsAccepted = DOM.termsConsent?.checked ?? false;
   const hasMembership = Boolean(state.membershipPlanId);
+  const hasPunchCards = state.valueCardQuantities && 
+    Array.from(state.valueCardQuantities.values()).some(qty => qty > 0);
+  const hasAddons = state.addonIds && state.addonIds.size > 0;
   const hasPayment = Boolean(state.paymentMethod);
 
-  DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasMembership && hasPayment);
+  // Enable checkout if: privacy + terms accepted, payment method selected, AND (membership OR punch cards OR addons)
+  // This matches the validation logic in handleCheckout()
+  const hasProduct = hasMembership || hasPunchCards || hasAddons;
+  DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct && hasPayment);
+  
+  console.log('[Checkout Button] State:', {
+    isAuthenticated,
+    privacyAccepted,
+    termsAccepted,
+    hasMembership,
+    hasPunchCards,
+    hasAddons,
+    hasPayment,
+    hasProduct,
+    disabled: DOM.checkoutBtn.disabled,
+    privacyConsentElement: DOM.privacyConsent ? 'found' : 'not found',
+    termsConsentElement: DOM.termsConsent ? 'found' : 'not found'
+  });
 }
 
 // Helper function to manage loading state during checkout
@@ -18166,8 +18424,52 @@ function findValueCard(id) {
 }
 
 function findAddon(id) {
-  if (!Array.isArray(state.subscriptionAdditions)) return null;
-  return state.subscriptionAdditions.find((addon) => String(addon.id) === String(id)) ?? null;
+  // First check subscription additions (traditional addons)
+  if (Array.isArray(state.subscriptionAdditions)) {
+    const addon = state.subscriptionAdditions.find((addon) => String(addon.id) === String(id));
+    if (addon) return addon;
+  }
+  
+  // Then check boost products
+  if (Array.isArray(state.boostProducts)) {
+    const boostProduct = state.boostProducts.find((product) => String(product.id) === String(id));
+    if (boostProduct) return boostProduct;
+  }
+  
+  return null;
+}
+
+// Extract price from addon (handles both subscription additions and boost products)
+function getAddonPrice(addon) {
+  if (!addon) return 0;
+  
+  // Subscription additions typically have price.discounted structure
+  if (addon.price && typeof addon.price.discounted === 'number') {
+    return addon.price.discounted;
+  }
+  
+  // Boost products use API structure similar to subscriptions
+  // Try priceWithInterval.price.amount (cents)
+  if (addon.priceWithInterval?.price?.amount) {
+    return addon.priceWithInterval.price.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try price.amount (cents)
+  if (addon.price?.amount) {
+    return addon.price.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try direct amount (cents)
+  if (addon.amount) {
+    return addon.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try direct price (already in DKK)
+  if (typeof addon.price === 'number') {
+    return addon.price;
+  }
+  
+  return 0;
 }
 
 // Cookie Consent Management (GDPR Compliant)
