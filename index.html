@@ -537,6 +537,15 @@
                                <input type="password" id="password" name="password" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="customer.password" required minlength="6">
                             </div>
                             
+                            <!-- Marketing Consent -->
+                            <div class="form-group">
+                                <label class="consent-checkbox">
+                                    <input type="checkbox" id="marketingConsent" data-api-field="consent.marketing" checked>
+                                    <span class="checkmark"></span>
+                                    <span class="consent-text" data-i18n-key="cart.consent.marketing">I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.</span>
+                                </label>
+                            </div>
+                            
                             <!-- Save Account Button -->
                             <div class="form-group">
                                 <button type="button" class="save-account-btn" data-action="save-account" data-i18n-key="form.saveAccount">
@@ -726,12 +735,6 @@
                                         <input type="checkbox" id="termsConsent" data-api-field="consent.terms" required>
                                         <span class="checkmark"></span>
                                         <span class="consent-text" data-i18n-key="cart.consent.terms">I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a></span>
-                                    </label>
-                                    
-                                    <label class="consent-checkbox">
-                                        <input type="checkbox" id="marketingConsent" data-api-field="consent.marketing" checked>
-                                        <span class="checkmark"></span>
-                                        <span class="consent-text" data-i18n-key="cart.consent.marketing">I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.</span>
                                     </label>
                                 </div>
                                 

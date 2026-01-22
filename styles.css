@@ -3682,6 +3682,10 @@ body {
     color: var(--color-text-secondary);
 }
 
+.form-group label.consent-checkbox {
+    display: flex;
+}
+
 .form-group input,
 .form-group select {
     width: 100%;
@@ -5040,8 +5044,8 @@ body {
     }
     
     .step-circle {
-        width: 56px;
-        height: 56px;
+        width: 48px;
+        height: 48px;
         font-size: var(--font-size-lg);
     }
     
