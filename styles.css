@@ -5736,16 +5736,18 @@ body {
     margin-bottom: 32px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 0;
 }
 
 .consent-checkbox {
     display: flex;
-    align-items: flex-start;
+    align-items: flex-end;
     cursor: pointer;
     color: var(--color-text-secondary);
     font-size: var(--font-size-base);
+    font-weight: 400;
     line-height: 1.5;
+    margin-bottom: 0;
     transition: opacity 0.2s ease;
 }
 
@@ -5758,12 +5760,11 @@ body {
 }
 
 .consent-checkbox .checkmark {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     border: 2px solid #4B5563;
     border-radius: 4px;
-    margin-right: 12px;
-    margin-top: 2px;
+    margin-right: 10px;
     flex-shrink: 0;
     position: relative;
     transition: all 0.2s ease;
@@ -5786,7 +5787,7 @@ body {
     left: 50%;
     transform: translate(-50%, -50%);
     color: white;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: bold;
     line-height: 1;
 }
@@ -5794,10 +5795,13 @@ body {
 .consent-text {
     flex: 1;
     min-width: 0;
+    font-size: var(--font-size-sm);
+    align-items: flex-end;
     word-wrap: break-word;
     overflow-wrap: break-word;
     hyphens: auto;
     line-height: 1.5;
+    font-weight: 400;
 }
 
 .consent-checkbox a {

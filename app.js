@@ -4766,7 +4766,10 @@ const translations = {
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>',
-    'cart.consent.marketing': 'Jeg vil gerne modtage marketing-e-mails. Læs vores <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datapolitik</a>.',
+    'cart.consent.marketing': 'Jeg vil gerne modtage marketing-e-mails. <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Læs mere</a>.',
+    'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
+    'cart.consent.sms': 'Jeg vil gerne modtage SMS-beskeder. <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">Læs mere</a>.',
+    'consent.sms.explainer': 'SMS<br><br>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
     'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
@@ -4828,7 +4831,10 @@ const translations = {
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>',
-    'cart.consent.marketing': 'I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.',
+    'cart.consent.marketing': 'I want to receive marketing emails. <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Read more</a>.',
+    'consent.email.explainer': 'E-mail<br><br>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.',
+    'cart.consent.sms': 'I want to receive SMS messages. <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">Read more</a>.',
+    'consent.sms.explainer': 'SMS<br><br>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.',
     'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
@@ -5193,6 +5199,12 @@ function updateCartTranslations() {
   if (marketingConsent) {
     const marketingHtml = t('cart.consent.marketing');
     marketingConsent.innerHTML = sanitizeHTML(marketingHtml);
+  }
+
+  const smsConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.sms"]');
+  if (smsConsent) {
+    const smsHtml = t('cart.consent.sms');
+    smsConsent.innerHTML = sanitizeHTML(smsHtml);
   }
   
   // Payment overview labels are handled by data-i18n-key attributes in HTML
@@ -6118,6 +6130,10 @@ function setupEventListeners() {
       const termsType = e.target.closest('[data-action="open-terms"]').dataset.termsType;
       if (termsType === 'privacy') {
         openDataPolicyModal();
+      } else if (termsType === 'email-consent') {
+        openTermsModal('email-consent');
+      } else if (termsType === 'sms-consent') {
+        openTermsModal('sms-consent');
       } else if (termsType === 'terms') {
         openTermsModal('terms');
       } else if (termsType === 'membership' || termsType === 'punchcard') {
@@ -6892,6 +6908,14 @@ boulders.dk</p>
 
 <h3>Questions?</h3>
 <p>If you have questions or comments regarding our cookie policy, please feel free to contact us. The cookie declaration itself is regularly updated via Cookiebot.</p>`
+  },
+  'email-consent': {
+    da: `<p>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.</p>`,
+    en: `<p>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.</p>`
+  },
+  'sms-consent': {
+    da: `<p>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.</p>`,
+    en: `<p>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.</p>`
   }
 };
 
@@ -6909,6 +6933,8 @@ function openTermsModal(termsType) {
     punchcard: t('footer.terms.punchcard'),
     privacy: t('footer.policies.privacy'),
     cookie: t('footer.policies.cookie'),
+    'email-consent': 'E-mail',
+    'sms-consent': 'SMS',
   };
   
   // Handle 'terms' type with tabs
@@ -6952,8 +6978,10 @@ function openTermsModal(termsType) {
       DOM.termsModalTabs.style.display = 'none';
     }
     
-    const title = termsTitles[termsType]?.[currentLang] || termsTitles[termsType]?.da || 'Terms and Conditions';
-    const content = termsContent[termsType]?.[currentLang] || termsContent[termsType]?.da || '<p>Content not available.</p>';
+    // Convert language code (da-DK -> da, en-GB -> en)
+    const langCode = currentLang.split('-')[0];
+    const title = termsTitles[termsType] || 'Terms and Conditions';
+    const content = termsContent[termsType]?.[langCode] || termsContent[termsType]?.da || '<p>Content not available.</p>';
     
     if (!termsContent[termsType]) {
       console.error('Invalid terms type:', termsType);
@@ -7776,6 +7804,7 @@ async function handleSaveAccount() {
       password: payload.customer?.password || document.getElementById('password')?.value,
       customerType: 1, // Required by API
       ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
+      ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
     };
     
     // Also include phone and phoneCountryCode for backward compatibility (remove if not needed)
@@ -12599,6 +12628,8 @@ async function handleCheckout() {
           customerType: 1, // Required by API - numeric ID (typically 1 = Individual customer type)
           // Include marketing email consent - API field: allowMassSendEmail
           ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
+          // Include SMS consent - API field: allowMassSendSms
+          ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
         };
         
         // Also include phone and phoneCountryCode for backward compatibility
@@ -12615,6 +12646,9 @@ async function handleCheckout() {
         console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
         if (customerData.allowMassSendEmail !== undefined) {
           console.log('[checkout] Marketing consent (allowMassSendEmail):', customerData.allowMassSendEmail);
+        }
+        if (customerData.allowMassSendSms !== undefined) {
+          console.log('[checkout] SMS consent (allowMassSendSms):', customerData.allowMassSendSms);
         }
         
         // Remove undefined/null values (but keep empty strings for now to debug)
