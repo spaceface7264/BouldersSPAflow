@@ -4122,6 +4122,25 @@ function defaultAddonsImage() {
 </svg>`;
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
+
+function getProductPlaceholderImage() {
+  // Placeholder image for individual product cards (consistent aspect ratio)
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <defs>
+    <linearGradient id="productGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#productGrad)"/>
+  <g fill="#64748b" opacity="0.3">
+    <rect x="150" y="100" width="100" height="100" rx="8"/>
+  </g>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-size="14" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial">No image</text>
+</svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
 function ensureAddonsModal() {
   if (addonsModal) return addonsModal;
   const overlay = document.createElement('div');
@@ -4294,24 +4313,31 @@ function populateAddonsModal() {
       
       console.log('[Addons Modal] Image URL for', addon.name, ':', imageUrl);
       
+      // Always show image element - use placeholder if no image URL
+      imageEl.removeAttribute('style'); // Remove inline style that hides it
+      imageEl.style.display = 'block';
+      imageEl.style.visibility = 'visible';
+      imageEl.style.opacity = '1';
+      imageEl.style.width = '100%';
+      imageEl.style.height = '200px';
+      imageEl.style.minHeight = '200px';
+      imageEl.style.maxHeight = '200px';
+      imageEl.style.objectFit = 'cover';
+      imageEl.style.borderRadius = '8px';
+      imageEl.style.marginBottom = '12px';
+      imageEl.style.backgroundColor = '#1e293b'; // Background color for placeholder
+      imageEl.classList.add('addon-image');
+      
       if (imageUrl) {
         imageEl.src = imageUrl;
         imageEl.alt = addon.name || 'Addon image';
-        imageEl.removeAttribute('style'); // Remove inline style that hides it
-        imageEl.style.display = 'block';
-        imageEl.style.visibility = 'visible';
-        imageEl.style.opacity = '1';
-        imageEl.style.width = '100%';
-        imageEl.style.height = '200px';
-        imageEl.style.objectFit = 'cover';
-        imageEl.style.borderRadius = '8px';
-        imageEl.style.marginBottom = '12px';
-        imageEl.classList.add('addon-image');
         console.log('[Addons Modal] Image set for', addon.name, '- src:', imageEl.src);
         console.log('[Addons Modal] Image computed display:', window.getComputedStyle(imageEl).display);
       } else {
-        imageEl.style.display = 'none';
-        console.log('[Addons Modal] No image URL found for', addon.name);
+        // Use placeholder image when no image is available
+        imageEl.src = getProductPlaceholderImage();
+        imageEl.alt = (addon.name || 'Addon') + ' - No image available';
+        console.log('[Addons Modal] Using placeholder image for', addon.name);
       }
     } else {
       console.log('[Addons Modal] Image element not found for', addon.name);
@@ -4545,15 +4571,30 @@ function populateBoostModal() {
       
       console.log('[Boost Modal] Image URL for', product.name, ':', imageUrl);
       
+      // Always show image element - use placeholder if no image URL
+      imageEl.removeAttribute('style'); // Remove inline style that hides it
+      imageEl.style.display = 'block';
+      imageEl.style.visibility = 'visible';
+      imageEl.style.opacity = '1';
+      imageEl.style.width = '100%';
+      imageEl.style.height = '200px';
+      imageEl.style.minHeight = '200px';
+      imageEl.style.maxHeight = '200px';
+      imageEl.style.objectFit = 'cover';
+      imageEl.style.borderRadius = '8px';
+      imageEl.style.marginBottom = '12px';
+      imageEl.style.backgroundColor = '#1e293b'; // Background color for placeholder
+      imageEl.classList.add('addon-image');
+      
       if (imageUrl) {
         imageEl.src = imageUrl;
         imageEl.alt = product.name || 'Product image';
-        imageEl.style.display = 'block';
-        imageEl.classList.add('addon-image');
-        console.log('[Boost Modal] Image set for', product.name);
+        console.log('[Boost Modal] Image set for', product.name, '- src:', imageEl.src);
       } else {
-        imageEl.style.display = 'none';
-        console.log('[Boost Modal] No image URL found for', product.name);
+        // Use placeholder image when no image is available
+        imageEl.src = getProductPlaceholderImage();
+        imageEl.alt = (product.name || 'Product') + ' - No image available';
+        console.log('[Boost Modal] Using placeholder image for', product.name);
       }
     }
     
