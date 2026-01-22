@@ -11584,18 +11584,26 @@ function updatePaymentOverview() {
           };
           console.log('[Payment Overview] ✅ Backend pricing accepted:', payNowAmount, 'DKK');
         } else {
-          // Backend pricing is incorrect - but we MUST use backend price for display
-          // CRITICAL: Payment window uses backend's order.price.amount, so UI must match it
-          // Even if backend price is wrong, we show what user will actually be charged
+          // Backend pricing is incorrect
           console.warn('[Payment Overview] ⚠️ Backend pricing appears incorrect!');
           console.warn('[Payment Overview] ⚠️ Backend shows:', orderPriceDKK, 'DKK');
           console.warn('[Payment Overview] ⚠️ Expected (calculated):', expectedPrice?.amountInDKK || 'N/A', 'DKK');
           console.warn('[Payment Overview] ⚠️ Verification:', verification);
-          console.warn('[Payment Overview] ⚠️ WARNING: Using backend price to match payment window - user will be charged:', orderPriceDKK, 'DKK');
           
-          // CRITICAL: Always use backend price so UI matches payment window
-          // The payment link API uses order.price.amount from backend, so we must display the same
-          payNowAmount = orderPriceDKK;
+          // CRITICAL: If we're not at checkout yet, show calculated price to avoid confusion
+          // Only show backend price when we're about to generate payment link (at checkout)
+          // This prevents the price from changing to incorrect value after order loads
+          const isAtCheckout = state.currentStep === 9 || state.checkoutInProgress;
+          
+          if (expectedPrice && !isAtCheckout) {
+            // Show calculated price until checkout (when we must show what will be charged)
+            payNowAmount = expectedPrice.amountInDKK;
+            console.log('[Payment Overview] ✅ Showing calculated price (backend price incorrect, not at checkout yet):', payNowAmount, 'DKK');
+          } else {
+            // At checkout or can't calculate - must show backend price to match payment window
+            payNowAmount = orderPriceDKK;
+            console.warn('[Payment Overview] ⚠️ WARNING: Using backend price to match payment window - user will be charged:', orderPriceDKK, 'DKK');
+          }
           
           // Calculate billing period based on today's date (for display)
           const currentMonth = today.getMonth();
@@ -11618,8 +11626,6 @@ function updatePaymentOverview() {
             start: today,
             end: calculatedEndDate
           };
-          
-          console.warn('[Payment Overview] ⚠️ Displaying backend price to match payment window:', payNowAmount, 'DKK');
         }
       } else {
         // No initialPaymentPeriod - use order price as-is
