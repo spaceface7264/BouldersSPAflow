@@ -3669,6 +3669,10 @@ body {
     margin-bottom: 24px;
 }
 
+.form-group-consent {
+    margin-bottom: 12px;
+}
+
 .form-row {
     display: flex;
     grid-template-columns: 1fr 1fr;
@@ -5741,7 +5745,7 @@ body {
 
 .consent-checkbox {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     cursor: pointer;
     color: var(--color-text-secondary);
     font-size: var(--font-size-base);
@@ -5749,6 +5753,7 @@ body {
     line-height: 1.5;
     margin-bottom: 0;
     transition: opacity 0.2s ease;
+    pointer-events: none;
 }
 
 .consent-checkbox:hover {
@@ -5769,6 +5774,8 @@ body {
     position: relative;
     transition: all 0.2s ease;
     background-color: transparent;
+    pointer-events: auto;
+    cursor: pointer;
 }
 
 .consent-checkbox:hover .checkmark {
@@ -5796,18 +5803,19 @@ body {
     flex: 1;
     min-width: 0;
     font-size: var(--font-size-sm);
-    align-items: flex-end;
     word-wrap: break-word;
     overflow-wrap: break-word;
     hyphens: auto;
     line-height: 1.5;
     font-weight: 400;
+    pointer-events: none;
 }
 
 .consent-checkbox a {
     color: #F401F5;
     text-decoration: underline;
     transition: color 0.2s ease;
+    pointer-events: auto;
 }
 
 .consent-checkbox a:hover {

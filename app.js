@@ -5207,6 +5207,24 @@ function updateCartTranslations() {
     smsConsent.innerHTML = sanitizeHTML(smsHtml);
   }
   
+  // Make only the checkmark clickable to toggle checkboxes (not the label text)
+  const consentCheckboxes = document.querySelectorAll('.consent-checkbox');
+  consentCheckboxes.forEach((label) => {
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    const checkmark = label.querySelector('.checkmark');
+    
+    if (checkbox && checkmark) {
+      // Prevent label clicks from toggling (handled by pointer-events: none in CSS)
+      // Only allow checkmark clicks to toggle
+      checkmark.addEventListener('click', (e) => {
+        e.stopPropagation();
+        checkbox.checked = !checkbox.checked;
+        // Trigger change event to ensure any listeners are notified
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+  });
+  
   // Payment overview labels are handled by data-i18n-key attributes in HTML
   // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
 }
