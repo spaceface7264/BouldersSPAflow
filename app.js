@@ -11562,87 +11562,54 @@ function updatePaymentOverview() {
           daysUntilStart: verification.daysUntilStart
         });
         
-        // Accept backend price if verification passes
-        // Note: Removed backendMatchesMonthlyFee check as it was causing false positives
-        // The verification logic already catches incorrect pricing
+        // CRITICAL: Always use backend price when order data exists to match payment window
+        // This ensures UI matches what user will be charged, even if backend price seems incorrect
+        // The comment says "Use the EXACT same price that backend sends to payment window"
+        payNowAmount = orderPriceDKK;
+        
+        // Log verification for debugging, but don't change the price
         if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
-          // Backend calculated correctly - use backend's price
-          payNowAmount = orderPriceDKK;
-          
-          // Always use today as start date for display, but use backend's end date if it's reasonable
-          let displayEndDate = backendEndDate;
-          if (!isBackendStartDateCorrect) {
-            // Backend start date is wrong, so recalculate end date based on today
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            const dayOfMonth = today.getDate();
-            
-            if (dayOfMonth >= 16) {
-              // Billing period extends to end of next month
-              const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-              const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-              displayEndDate = new Date(nextYear, nextMonth + 1, 0);
-            } else {
-              // Billing period is just rest of current month
-              displayEndDate = new Date(currentYear, currentMonth + 1, 0);
-            }
-            displayEndDate.setHours(0, 0, 0, 0);
-            console.log('[Payment Overview] ⚠️ Backend start date incorrect, recalculated end date:', {
-              backendStart: backendStartDate.toISOString().split('T')[0],
-              today: today.toISOString().split('T')[0],
-              daysDiff,
-              recalculatedEnd: displayEndDate.toISOString().split('T')[0]
-            });
-          }
-          
-          billingPeriod = {
-            start: today, // Always use today for display
-            end: displayEndDate
-          };
-          console.log('[Payment Overview] ✅ Backend pricing accepted:', payNowAmount, 'DKK');
+          // Backend calculated correctly
         } else {
-          // Backend pricing is incorrect
+          // Backend pricing appears incorrect, but we still use it to match payment window
           console.warn('[Payment Overview] ⚠️ Backend pricing appears incorrect!');
           console.warn('[Payment Overview] ⚠️ Backend shows:', orderPriceDKK, 'DKK');
           console.warn('[Payment Overview] ⚠️ Expected (calculated):', expectedPrice?.amountInDKK || 'N/A', 'DKK');
           console.warn('[Payment Overview] ⚠️ Price difference:', verification.priceDifference ? `${verification.priceDifference / 100} DKK` : 'N/A');
           console.warn('[Payment Overview] ⚠️ Verification:', verification);
-          
-          // Backend pricing is incorrect - show calculated price
-          // Note: Removed backendMatchesMonthlyFee check as it was causing false positives
-          // The verification logic already catches incorrect pricing
-          if (expectedPrice) {
-            // Show calculated price when backend is wrong
-            payNowAmount = expectedPrice.amountInDKK;
-            console.log('[Payment Overview] ✅ Showing calculated price (backend price incorrect):', payNowAmount, 'DKK');
-          } else {
-            // Can't calculate expected price - fallback to backend price
-            payNowAmount = orderPriceDKK;
-            console.warn('[Payment Overview] ⚠️ Cannot calculate expected price - using backend price as fallback:', orderPriceDKK, 'DKK');
-          }
-          
-          // Calculate billing period based on today's date (for display)
+          console.warn('[Payment Overview] ⚠️ NOTE: Using backend price anyway to match payment window');
+        }
+        
+        // Always use today as start date for display, but use backend's end date if it's reasonable
+        let displayEndDate = backendEndDate;
+        if (!isBackendStartDateCorrect) {
+          // Backend start date is wrong, so recalculate end date based on today
           const currentMonth = today.getMonth();
           const currentYear = today.getFullYear();
           const dayOfMonth = today.getDate();
           
-          let calculatedEndDate;
           if (dayOfMonth >= 16) {
             // Billing period extends to end of next month
             const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
             const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-            calculatedEndDate = new Date(nextYear, nextMonth + 1, 0);
+            displayEndDate = new Date(nextYear, nextMonth + 1, 0);
           } else {
             // Billing period is just rest of current month
-            calculatedEndDate = new Date(currentYear, currentMonth + 1, 0);
+            displayEndDate = new Date(currentYear, currentMonth + 1, 0);
           }
-          calculatedEndDate.setHours(0, 0, 0, 0);
-          
-          billingPeriod = {
-            start: today,
-            end: calculatedEndDate
-          };
+          displayEndDate.setHours(0, 0, 0, 0);
+          console.log('[Payment Overview] ⚠️ Backend start date incorrect, recalculated end date:', {
+            backendStart: backendStartDate.toISOString().split('T')[0],
+            today: today.toISOString().split('T')[0],
+            daysDiff,
+            recalculatedEnd: displayEndDate.toISOString().split('T')[0]
+          });
         }
+        
+        billingPeriod = {
+          start: today, // Always use today for display
+          end: displayEndDate
+        };
       } else {
         // No initialPaymentPeriod - use order price as-is
         payNowAmount = orderPriceDKK;
