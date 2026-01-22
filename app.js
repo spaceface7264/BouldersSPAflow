@@ -11702,9 +11702,8 @@ function renderCartItems() {
           const discountedText = formatPriceHalfKrone(roundToHalfKrone(displayPrice));
           priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`);
         } else {
-          priceEl.textContent = displayPrice
-            ? `${formatPriceHalfKrone(roundToHalfKrone(displayPrice))} kr`
-            : '';
+          // Always show price, including "0 kr" for free items
+          priceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr';
         }
       }
     }
