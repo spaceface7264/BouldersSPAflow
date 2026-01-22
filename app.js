@@ -11562,19 +11562,10 @@ function updatePaymentOverview() {
           daysUntilStart: verification.daysUntilStart
         });
         
-        // CRITICAL: Check if backend returned monthly fee instead of partial-month price
-        // This happens when backend ignores startDate parameter
-        const monthlyPrice = expectedPrice?.monthlyPriceInDKK || 0;
-        const backendMatchesMonthlyFee = monthlyPrice > 0 && Math.abs(orderPriceDKK - monthlyPrice) < 0.01;
-        
-        if (backendMatchesMonthlyFee) {
-          console.warn('[Payment Overview] ⚠️ Backend returned monthly fee instead of partial-month price!');
-          console.warn('[Payment Overview] ⚠️ This indicates backend ignored startDate parameter for product:', productId);
-          // Force this to be treated as incorrect pricing
-        }
-        
-        // Accept backend price only if verification passes AND it's not just the monthly fee
-        if ((verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) && !backendMatchesMonthlyFee) {
+        // Accept backend price if verification passes
+        // Note: Removed backendMatchesMonthlyFee check as it was causing false positives
+        // The verification logic already catches incorrect pricing
+        if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
           // Backend calculated correctly - use backend's price
           payNowAmount = orderPriceDKK;
           
@@ -11617,29 +11608,15 @@ function updatePaymentOverview() {
           console.warn('[Payment Overview] ⚠️ Price difference:', verification.priceDifference ? `${verification.priceDifference / 100} DKK` : 'N/A');
           console.warn('[Payment Overview] ⚠️ Verification:', verification);
           
-          // CRITICAL: If backend price matches monthly fee exactly, it's definitely wrong
-          // This happens when backend ignores startDate and returns full monthly price
-          const monthlyPrice = expectedPrice?.monthlyPriceInDKK || 0;
-          const backendMatchesMonthlyFee = monthlyPrice > 0 && Math.abs(orderPriceDKK - monthlyPrice) < 0.01;
-          
-          if (backendMatchesMonthlyFee) {
-            console.warn('[Payment Overview] ⚠️ Backend returned monthly fee instead of partial-month price!');
-            console.warn('[Payment Overview] ⚠️ This indicates backend ignored startDate parameter');
-          }
-          
-          // CRITICAL: Always show calculated price when backend price is incorrect
-          // We will block checkout if backend price is wrong, so there's no need to show incorrect price
-          // This prevents confusion and ensures users see the correct price
+          // Backend pricing is incorrect - show calculated price
+          // Note: Removed backendMatchesMonthlyFee check as it was causing false positives
+          // The verification logic already catches incorrect pricing
           if (expectedPrice) {
-            // Always show calculated price when backend is wrong (checkout will be blocked anyway)
+            // Show calculated price when backend is wrong
             payNowAmount = expectedPrice.amountInDKK;
             console.log('[Payment Overview] ✅ Showing calculated price (backend price incorrect):', payNowAmount, 'DKK');
-            if (backendMatchesMonthlyFee) {
-              console.warn('[Payment Overview] ⚠️ Backend returned monthly fee - showing calculated partial-month price instead');
-              console.warn('[Payment Overview] ⚠️ Checkout will be blocked until backend price is corrected');
-            }
           } else {
-            // Can't calculate expected price - this shouldn't happen, but fallback to backend price
+            // Can't calculate expected price - fallback to backend price
             payNowAmount = orderPriceDKK;
             console.warn('[Payment Overview] ⚠️ Cannot calculate expected price - using backend price as fallback:', orderPriceDKK, 'DKK');
           }
@@ -13485,16 +13462,15 @@ async function handleCheckout() {
               const finalExpectedPrice = orderAPI._calculateExpectedPartialMonthPrice(finalProductId, finalStartDateStr);
               const finalVerification = orderAPI._verifySubscriptionPricing(orderBeforePayment, finalProductId, finalExpectedPrice, finalToday);
               
-              // Check if backend returned monthly fee instead of partial-month price
-              const finalMonthlyPrice = finalExpectedPrice?.monthlyPriceInDKK || 0;
-              const finalBackendMatchesMonthlyFee = finalMonthlyPrice > 0 && Math.abs(finalOrderPriceDKK - finalMonthlyPrice) < 0.01;
-              
-              if ((!finalVerification.isCorrect && (!finalVerification.priceDifference || finalVerification.priceDifference > 100)) || finalBackendMatchesMonthlyFee) {
+              // Check if backend price is incorrect
+              // Note: Removed backendMatchesMonthlyFee check as it was causing false positives
+              // The verification logic already catches incorrect pricing
+              if (!finalVerification.isCorrect && (!finalVerification.priceDifference || finalVerification.priceDifference > 100)) {
                 console.error('[checkout] ❌ CRITICAL: Cannot proceed with checkout - backend price is incorrect!');
                 console.error('[checkout] ❌ Backend price:', finalOrderPriceDKK, 'DKK');
                 console.error('[checkout] ❌ Expected price:', finalExpectedPrice?.amountInDKK || 'N/A', 'DKK');
-                console.error('[checkout] ❌ Backend returned monthly fee:', finalBackendMatchesMonthlyFee);
-                console.error('[checkout] ❌ This is a backend issue - backend ignored startDate parameter');
+                console.error('[checkout] ❌ Price difference:', finalVerification.priceDifference ? `${finalVerification.priceDifference / 100} DKK` : 'N/A');
+                console.error('[checkout] ❌ This indicates a pricing mismatch - verification failed');
                 
                 // Show user-friendly error and prevent checkout
                 showToast(
