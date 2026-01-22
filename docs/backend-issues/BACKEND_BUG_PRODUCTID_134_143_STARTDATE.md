@@ -18,6 +18,11 @@ The backend **ignores the `startDate` parameter** when adding subscription items
 
 **Note**: This issue occurs during **checkout** when the order is created. It does NOT occur during payment return flows (e.g., when `error=205` is present), as those flows handle payment failures and don't proceed with checkout.
 
+**Historical Note**: In commit `72c502b` (Jan 20, 2026), this issue was not observed. This suggests either:
+1. The backend was working correctly at that time (accepting `startDate` for products 134/143)
+2. The frontend detection logic was not yet in place to catch this issue
+3. The issue is intermittent or environment-specific
+
 ## 📋 Detailed Description
 
 ### Expected Behavior
