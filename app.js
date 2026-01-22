@@ -33,7 +33,7 @@ import {
 import { stripEmailPlusTag } from './utils/string.js';
 import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
-import { getErrorMessage } from './utils/errors.js';
+import { getErrorMessage, extractErrorFields } from './utils/errors.js';
 import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
 import { highlightFieldError } from './utils/dom.js';
 import { getApiConfig } from './utils/apiConfig.js';
@@ -6424,6 +6424,14 @@ async function handleLoginSubmit(event) {
       showToast(`Rate limit exceeded. Please wait ${cooldownMessage} before trying again.`, 'error');
       console.warn(`[login] Rate limited. Cooldown set for ${secondsLeft}s (${cooldownMessage})`);
     } else {
+      // Extract and highlight error fields
+      const errorFields = extractErrorFields(error);
+      errorFields.forEach(({ fieldId }) => {
+        if (fieldId) {
+          highlightFieldError(fieldId, false);
+        }
+      });
+      
       showToast(getErrorMessage(error, 'Login'), 'error');
     }
   } finally {
@@ -8294,9 +8302,17 @@ async function handleSaveAccount() {
         switchAuthMode('login');
       }
     } else {
-      const errorMessage = error.message || 'Failed to save account. Please try again.';
+      // Extract and highlight error fields
+      const errorFields = extractErrorFields(error);
+      errorFields.forEach(({ fieldId }) => {
+        if (fieldId) {
+          highlightFieldError(fieldId, true);
+        }
+      });
+      
+      const errorMessage = getErrorMessage(error, 'Account creation') || error.message || 'Failed to save account. Please try again.';
       showSaveAccountMessage(errorMessage, 'error');
-      showToast('Failed to save account', 'error');
+      showToast(errorMessage, 'error');
     }
   } finally {
     // Reset button state
@@ -13081,6 +13097,14 @@ async function handleCheckout() {
           state.checkoutInProgress = false;
           return;
         }
+        
+        // Extract and highlight error fields
+        const errorFields = extractErrorFields(error);
+        errorFields.forEach(({ fieldId }) => {
+          if (fieldId) {
+            highlightFieldError(fieldId, false);
+          }
+        });
         
         showToast(getErrorMessage(error, 'Customer creation'), 'error');
         setCheckoutLoadingState(false);
