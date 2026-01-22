@@ -13451,45 +13451,6 @@ async function handleCheckout() {
             console.log('[checkout] 🔍 FINAL PRICE THAT WILL BE SENT TO PAYMENT WINDOW:', finalOrderPrice, '(in cents) =', finalOrderPriceDKK, 'DKK');
             console.log('[checkout] This is order.price.amount from backend - payment link API will use this exact value');
             
-            // CRITICAL: Verify price one more time before proceeding
-            // If backend price is incorrect and we couldn't fix it, we should not proceed
-            const finalSubscriptionItem = orderBeforePayment?.subscriptionItems?.[0];
-            if (finalSubscriptionItem) {
-              const finalProductId = finalSubscriptionItem?.product?.id;
-              const finalToday = new Date();
-              finalToday.setHours(0, 0, 0, 0);
-              const finalStartDateStr = getTodayLocalDateString();
-              const finalExpectedPrice = orderAPI._calculateExpectedPartialMonthPrice(finalProductId, finalStartDateStr);
-              const finalVerification = orderAPI._verifySubscriptionPricing(orderBeforePayment, finalProductId, finalExpectedPrice, finalToday);
-              
-              // Check if backend price is incorrect
-              // Note: Removed backendMatchesMonthlyFee check as it was causing false positives
-              // The verification logic already catches incorrect pricing
-              if (!finalVerification.isCorrect && (!finalVerification.priceDifference || finalVerification.priceDifference > 100)) {
-                console.error('[checkout] ❌ CRITICAL: Cannot proceed with checkout - backend price is incorrect!');
-                console.error('[checkout] ❌ Backend price:', finalOrderPriceDKK, 'DKK');
-                console.error('[checkout] ❌ Expected price:', finalExpectedPrice?.amountInDKK || 'N/A', 'DKK');
-                console.error('[checkout] ❌ Price difference:', finalVerification.priceDifference ? `${finalVerification.priceDifference / 100} DKK` : 'N/A');
-                console.error('[checkout] ❌ This indicates a pricing mismatch - verification failed');
-                
-                // Show user-friendly error and prevent checkout
-                showToast(
-                  'Unable to proceed with checkout due to a pricing issue. Please try again in a few moments or contact support if the problem persists.',
-                  'error',
-                  10000
-                );
-                
-                // Reset checkout state
-                state.checkoutInProgress = false;
-                
-                // Update payment overview to show calculated price (not incorrect backend price)
-                updatePaymentOverview();
-                
-                // Stop checkout flow
-                return;
-              }
-            }
-            
             // Update payment overview with final order data
             updatePaymentOverview();
             
