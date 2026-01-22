@@ -11530,7 +11530,15 @@ function updatePaymentOverview() {
       
       if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
+        backendStartDate.setHours(0, 0, 0, 0);
         const backendEndDate = new Date(initialPaymentPeriod.end);
+        backendEndDate.setHours(0, 0, 0, 0);
+        
+        // CRITICAL FIX: Always use today as the start date for display purposes
+        // The backend's initialPaymentPeriod.start might be incorrect (e.g., 26 days in future)
+        // but we should always show the user the actual period they're paying for (which starts today)
+        const daysDiff = Math.round((backendStartDate - today) / (1000 * 60 * 60 * 24));
+        const isBackendStartDateCorrect = daysDiff === 0 || daysDiff === 1; // Allow 0-1 day difference for timezone issues
         
         // Use verification method to check if pricing is correct
         const verification = orderAPI._verifySubscriptionPricing(
@@ -11543,9 +11551,36 @@ function updatePaymentOverview() {
         if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
           // Backend calculated correctly - use backend's price
           payNowAmount = orderPriceDKK;
+          
+          // Always use today as start date for display, but use backend's end date if it's reasonable
+          let displayEndDate = backendEndDate;
+          if (!isBackendStartDateCorrect) {
+            // Backend start date is wrong, so recalculate end date based on today
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            const dayOfMonth = today.getDate();
+            
+            if (dayOfMonth >= 16) {
+              // Billing period extends to end of next month
+              const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+              const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+              displayEndDate = new Date(nextYear, nextMonth + 1, 0);
+            } else {
+              // Billing period is just rest of current month
+              displayEndDate = new Date(currentYear, currentMonth + 1, 0);
+            }
+            displayEndDate.setHours(0, 0, 0, 0);
+            console.log('[Payment Overview] ⚠️ Backend start date incorrect, recalculated end date:', {
+              backendStart: backendStartDate.toISOString().split('T')[0],
+              today: today.toISOString().split('T')[0],
+              daysDiff,
+              recalculatedEnd: displayEndDate.toISOString().split('T')[0]
+            });
+          }
+          
           billingPeriod = {
-            start: backendStartDate,
-            end: backendEndDate
+            start: today, // Always use today for display
+            end: displayEndDate
           };
           console.log('[Payment Overview] ✅ Backend pricing accepted:', payNowAmount, 'DKK');
         } else {
@@ -11559,21 +11594,35 @@ function updatePaymentOverview() {
             // Use calculated correct price
             payNowAmount = expectedPrice.amountInDKK;
             
-            // Set billing period to today - end of month
+            // Calculate billing period based on today's date
             const currentMonth = today.getMonth();
             const currentYear = today.getFullYear();
-            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            const dayOfMonth = today.getDate();
+            
+            let calculatedEndDate;
+            if (dayOfMonth >= 16) {
+              // Billing period extends to end of next month
+              const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+              const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+              calculatedEndDate = new Date(nextYear, nextMonth + 1, 0);
+            } else {
+              // Billing period is just rest of current month
+              calculatedEndDate = new Date(currentYear, currentMonth + 1, 0);
+            }
+            calculatedEndDate.setHours(0, 0, 0, 0);
+            
             billingPeriod = {
               start: today,
-              end: lastDayOfMonth
+              end: calculatedEndDate
             };
             console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
             console.warn('[Payment Overview] ⚠️ NOTE: Using calculated price - verify against backend order price');
           } else {
             // Can't calculate expected price - use backend price as fallback
             payNowAmount = orderPriceDKK;
+            // Still use today as start date for display
             billingPeriod = {
-              start: backendStartDate,
+              start: today,
               end: backendEndDate
             };
             console.warn('[Payment Overview] ⚠️ Cannot calculate expected price - using backend price as fallback');
@@ -11582,7 +11631,30 @@ function updatePaymentOverview() {
       } else {
         // No initialPaymentPeriod - use order price as-is
         payNowAmount = orderPriceDKK;
-        console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
+        
+        // Calculate billing period based on today's date
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        const dayOfMonth = today.getDate();
+        
+        let calculatedEndDate;
+        if (dayOfMonth >= 16) {
+          // Billing period extends to end of next month
+          const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+          const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+          calculatedEndDate = new Date(nextYear, nextMonth + 1, 0);
+        } else {
+          // Billing period is just rest of current month
+          calculatedEndDate = new Date(currentYear, currentMonth + 1, 0);
+        }
+        calculatedEndDate.setHours(0, 0, 0, 0);
+        
+        billingPeriod = {
+          start: today,
+          end: calculatedEndDate
+        };
+        
+        console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod, calculated billing period)');
       }
     }
   } else {
