@@ -4388,10 +4388,17 @@ function showAddonsModal() {
   updateAddonActionButton();
   
   // Show modal with subtle animation
-  addonsModal.style.display = 'block';
+  addonsModal.style.display = 'flex';
+  addonsModal.style.alignItems = 'center';
+  addonsModal.style.justifyContent = 'center';
   addonsModal.style.opacity = '0';
   addonsModal.style.transform = 'scale(0.95)';
+  // Prevent scrolling behind modal
+  document.body.classList.add('modal-open');
   document.body.style.overflow = 'hidden';
+  document.body.style.position = 'fixed';
+  document.body.style.width = '100%';
+  document.body.style.height = '100%';
   
   // Trigger animation after a brief moment
   requestAnimationFrame(() => {
@@ -4404,7 +4411,12 @@ function showAddonsModal() {
 function hideAddonsModal() {
   if (!addonsModal) return;
   addonsModal.style.display = 'none';
+  // Restore body scrolling
+  document.body.classList.remove('modal-open');
   document.body.style.overflow = '';
+  document.body.style.position = '';
+  document.body.style.width = '';
+  document.body.style.height = '';
 }
 
 function proceedAfterAddons() {
@@ -4690,10 +4702,17 @@ async function showBoostModal() {
   updateAddonActionButton();
   
   // Show modal with subtle animation
-  addonsModal.style.display = 'block';
+  addonsModal.style.display = 'flex';
+  addonsModal.style.alignItems = 'center';
+  addonsModal.style.justifyContent = 'center';
   addonsModal.style.opacity = '0';
   addonsModal.style.transform = 'scale(0.95)';
+  // Prevent scrolling behind modal
+  document.body.classList.add('modal-open');
   document.body.style.overflow = 'hidden';
+  document.body.style.position = 'fixed';
+  document.body.style.width = '100%';
+  document.body.style.height = '100%';
   
   // Trigger animation after a brief moment
   requestAnimationFrame(() => {
