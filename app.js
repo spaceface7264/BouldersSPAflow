@@ -219,7 +219,7 @@ class BusinessUnitsAPI {
       devLog('[API] Fetching subscriptions with Accept-Language:', acceptLanguage);
 
       const data = await requestJson({ url, headers });
-      devLog('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), imageBannerText: data[0].imageBanner?.text?.substring(0, 50) } : 'empty');
+      devLog('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), externalDescription: data[0].externalDescription?.substring(0, 50) } : 'empty');
       return data;
     } catch (error) {
       console.error('Error fetching subscriptions:', error);
@@ -3073,19 +3073,19 @@ function renderProductsFromAPI() {
     const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
                      intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
     
-    // Get description - prefer imageBanner.text for campaign products, otherwise use description
-    // For campaign products, check both imageBanner.text and description fields
+    // Get description - use externalDescription if available, otherwise fall back to description
+    // Do not show product number as fallback
     let description = '';
     if (category === 'campaign') {
-      // Campaign: prefer imageBanner.text, but fall back to description if imageBanner.text is empty or single-line
-      const bannerText = product.imageBanner?.text || '';
+      // Campaign: prefer externalDescription, but fall back to description if externalDescription is empty or single-line
+      const externalDesc = product.externalDescription || '';
       const descText = product.description || '';
-      // If bannerText exists and has newlines, use it; otherwise try description
-      description = (bannerText && bannerText.includes('\n')) ? bannerText : 
+      // If externalDesc exists and has newlines, use it; otherwise try description
+      description = (externalDesc && externalDesc.includes('\n')) ? externalDesc : 
                     (descText && descText.includes('\n')) ? descText : 
-                    bannerText || descText || product.productNumber || '';
+                    externalDesc || descText || '';
     } else {
-      description = product.imageBanner?.text || product.description || product.productNumber || '';
+      description = product.externalDescription || product.description || '';
     }
     
     // Preserve line breaks from backend - escape HTML and preserve newlines
@@ -4196,10 +4196,7 @@ function ensureAddonsModal() {
   actions.appendChild(rightActions);
 
   const contentCol = document.createElement('div');
-  contentCol.style.flex = '1 1 auto';
-  contentCol.style.display = 'flex';
-  contentCol.style.flexDirection = 'column';
-  contentCol.style.minWidth = '0';
+  contentCol.className = 'addons-main';
   contentCol.appendChild(header);
   contentCol.appendChild(grid);
   contentCol.appendChild(actions);
@@ -4618,9 +4615,15 @@ function populateBoostModal() {
     }
     
     if (descriptionEl) {
-      // Get description similar to renderSubscriptionCard
-      const description = product.imageBanner?.text || product.description || product.productNumber || '';
-      descriptionEl.textContent = description;
+      // Get description - use externalDescription if available, otherwise fall back to description
+      // Do not show product number as fallback
+      const description = product.externalDescription || product.description || '';
+      if (description) {
+        descriptionEl.textContent = description;
+      } else {
+        descriptionEl.textContent = '';
+        descriptionEl.style.display = 'none';
+      }
     }
     
     if (featuresEl && product.features && Array.isArray(product.features)) {
@@ -11340,10 +11343,10 @@ function updateCartSummary() {
                            0;
       const price = priceInCents > 0 ? priceInCents / 100 : 0;
       
-      // Get imageBanner text if available
-      const bannerText = membership.imageBanner?.text || '';
-      const displayName = bannerText 
-        ? `${membership.name || 'Membership'} - ${bannerText}`
+      // Get externalDescription if available
+      const externalDesc = membership.externalDescription || '';
+      const displayName = externalDesc 
+        ? `${membership.name || 'Membership'} - ${externalDesc}`
         : membership.name || 'Membership';
       
       items.push({
@@ -11352,7 +11355,7 @@ function updateCartSummary() {
         amount: price,
         type: 'membership',
         productId: membership.id, // Store API product ID for order creation
-        imageBannerText: bannerText, // Store separately for rendering
+        externalDescription: externalDesc, // Store separately for rendering (renamed from imageBannerText)
         productName: membership.name || 'Membership', // Store original name
       });
       state.totals.membershipMonthly = price;
@@ -11627,8 +11630,8 @@ function renderCartItems() {
     const priceEl = cartItem.querySelector('[data-element="price"]');
 
     if (nameEl) {
-      // For membership items with imageBanner text, display name and banner text separately
-      if (item.type === 'membership' && item.imageBannerText) {
+      // For membership items with externalDescription, display name and description separately
+      if (item.type === 'membership' && item.externalDescription) {
         // Clear any existing content
         nameEl.innerHTML = '';
         
@@ -11641,16 +11644,16 @@ function renderCartItems() {
         productNameSpan.textContent = item.productName || item.name;
         productNameSpan.style.fontWeight = '500';
         
-        const bannerTextSpan = document.createElement('span');
+        const descTextSpan = document.createElement('span');
         // Preserve line breaks from backend - replace newlines with <br> tags
-        const bannerTextWithBreaks = item.imageBannerText.replace(/\n/g, '<br>');
-        bannerTextSpan.innerHTML = sanitizeHTML(bannerTextWithBreaks);
-        bannerTextSpan.style.fontSize = 'var(--font-size-sm)';
-        bannerTextSpan.style.color = 'var(--color-text-muted)';
-        bannerTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
+        const descTextWithBreaks = item.externalDescription.replace(/\n/g, '<br>');
+        descTextSpan.innerHTML = sanitizeHTML(descTextWithBreaks);
+        descTextSpan.style.fontSize = 'var(--font-size-sm)';
+        descTextSpan.style.color = 'var(--color-text-muted)';
+        descTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
         
         nameContainer.appendChild(productNameSpan);
-        nameContainer.appendChild(bannerTextSpan);
+        nameContainer.appendChild(descTextSpan);
         nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the name container for first item
