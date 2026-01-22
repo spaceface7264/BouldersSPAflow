@@ -11548,7 +11548,33 @@ function updatePaymentOverview() {
           today
         );
         
-        if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
+        // Log verification details for debugging
+        console.log('[Payment Overview] 🔍 Price verification:', {
+          productId,
+          orderPrice: orderPriceDKK,
+          expectedPrice: expectedPrice?.amountInDKK,
+          monthlyPrice: expectedPrice?.monthlyPriceInDKK,
+          priceDifference: verification.priceDifference,
+          priceDifferenceDKK: verification.priceDifference ? verification.priceDifference / 100 : null,
+          isCorrect: verification.isCorrect,
+          priceCorrect: verification.priceCorrect,
+          startDateCorrect: verification.startDateCorrect,
+          daysUntilStart: verification.daysUntilStart
+        });
+        
+        // CRITICAL: Check if backend returned monthly fee instead of partial-month price
+        // This happens when backend ignores startDate parameter
+        const monthlyPrice = expectedPrice?.monthlyPriceInDKK || 0;
+        const backendMatchesMonthlyFee = monthlyPrice > 0 && Math.abs(orderPriceDKK - monthlyPrice) < 0.01;
+        
+        if (backendMatchesMonthlyFee) {
+          console.warn('[Payment Overview] ⚠️ Backend returned monthly fee instead of partial-month price!');
+          console.warn('[Payment Overview] ⚠️ This indicates backend ignored startDate parameter for product:', productId);
+          // Force this to be treated as incorrect pricing
+        }
+        
+        // Accept backend price only if verification passes AND it's not just the monthly fee
+        if ((verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) && !backendMatchesMonthlyFee) {
           // Backend calculated correctly - use backend's price
           payNowAmount = orderPriceDKK;
           
@@ -11588,7 +11614,18 @@ function updatePaymentOverview() {
           console.warn('[Payment Overview] ⚠️ Backend pricing appears incorrect!');
           console.warn('[Payment Overview] ⚠️ Backend shows:', orderPriceDKK, 'DKK');
           console.warn('[Payment Overview] ⚠️ Expected (calculated):', expectedPrice?.amountInDKK || 'N/A', 'DKK');
+          console.warn('[Payment Overview] ⚠️ Price difference:', verification.priceDifference ? `${verification.priceDifference / 100} DKK` : 'N/A');
           console.warn('[Payment Overview] ⚠️ Verification:', verification);
+          
+          // CRITICAL: If backend price matches monthly fee exactly, it's definitely wrong
+          // This happens when backend ignores startDate and returns full monthly price
+          const monthlyPrice = expectedPrice?.monthlyPriceInDKK || 0;
+          const backendMatchesMonthlyFee = monthlyPrice > 0 && Math.abs(orderPriceDKK - monthlyPrice) < 0.01;
+          
+          if (backendMatchesMonthlyFee) {
+            console.warn('[Payment Overview] ⚠️ Backend returned monthly fee instead of partial-month price!');
+            console.warn('[Payment Overview] ⚠️ This indicates backend ignored startDate parameter');
+          }
           
           // CRITICAL: If we're not at checkout yet, show calculated price to avoid confusion
           // Only show backend price when we're about to generate payment link (at checkout)
@@ -11599,10 +11636,17 @@ function updatePaymentOverview() {
             // Show calculated price until checkout (when we must show what will be charged)
             payNowAmount = expectedPrice.amountInDKK;
             console.log('[Payment Overview] ✅ Showing calculated price (backend price incorrect, not at checkout yet):', payNowAmount, 'DKK');
+            if (backendMatchesMonthlyFee) {
+              console.warn('[Payment Overview] ⚠️ Backend returned monthly fee - showing calculated partial-month price instead');
+            }
           } else {
             // At checkout or can't calculate - must show backend price to match payment window
             payNowAmount = orderPriceDKK;
             console.warn('[Payment Overview] ⚠️ WARNING: Using backend price to match payment window - user will be charged:', orderPriceDKK, 'DKK');
+            if (backendMatchesMonthlyFee) {
+              console.error('[Payment Overview] ❌ CRITICAL: Backend returned monthly fee instead of partial-month price at checkout!');
+              console.error('[Payment Overview] ❌ User will be charged incorrect amount:', orderPriceDKK, 'DKK instead of', expectedPrice?.amountInDKK, 'DKK');
+            }
           }
           
           // Calculate billing period based on today's date (for display)
