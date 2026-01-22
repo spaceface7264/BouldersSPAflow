@@ -4241,7 +4241,7 @@ function populateAddonsModal() {
         <div style="font-weight:600">${addon.name}</div>
         <div>${addonPrice > 0
           ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
-          : '—'} kr</div>
+          : '—'} kr.</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
       `);
       
@@ -4387,12 +4387,13 @@ function showAddonsModal() {
   populateAddonsModal();
   updateAddonActionButton();
   
-  // Show modal with subtle animation
+  // Show modal - overlay dims immediately, only sheet animates
   addonsModal.style.display = 'flex';
   addonsModal.style.alignItems = 'center';
   addonsModal.style.justifyContent = 'center';
-  addonsModal.style.opacity = '0';
-  addonsModal.style.transform = 'scale(0.95)';
+  addonsModal.style.opacity = '1'; // Overlay appears immediately (no animation)
+  addonsModal.style.transition = 'opacity 0.2s ease'; // Quick fade for overlay only
+  
   // Prevent scrolling behind modal
   document.body.classList.add('modal-open');
   document.body.style.overflow = 'hidden';
@@ -4400,12 +4401,18 @@ function showAddonsModal() {
   document.body.style.width = '100%';
   document.body.style.height = '100%';
   
-  // Trigger animation after a brief moment
-  requestAnimationFrame(() => {
-    addonsModal.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    addonsModal.style.opacity = '1';
-    addonsModal.style.transform = 'scale(1)';
-  });
+  // Animate only the modal sheet, not the overlay
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    sheet.style.opacity = '0';
+    sheet.style.transform = 'scale(0.95)';
+    sheet.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    
+    requestAnimationFrame(() => {
+      sheet.style.opacity = '1';
+      sheet.style.transform = 'scale(1)';
+    });
+  }
 }
 
 function hideAddonsModal() {
@@ -4701,12 +4708,13 @@ async function showBoostModal() {
   populateBoostModal();
   updateAddonActionButton();
   
-  // Show modal with subtle animation
+  // Show modal - overlay dims immediately, only sheet animates
   addonsModal.style.display = 'flex';
   addonsModal.style.alignItems = 'center';
   addonsModal.style.justifyContent = 'center';
-  addonsModal.style.opacity = '0';
-  addonsModal.style.transform = 'scale(0.95)';
+  addonsModal.style.opacity = '1'; // Overlay appears immediately (no animation)
+  addonsModal.style.transition = 'opacity 0.2s ease'; // Quick fade for overlay only
+  
   // Prevent scrolling behind modal
   document.body.classList.add('modal-open');
   document.body.style.overflow = 'hidden';
@@ -4714,12 +4722,23 @@ async function showBoostModal() {
   document.body.style.width = '100%';
   document.body.style.height = '100%';
   
-  // Trigger animation after a brief moment
-  requestAnimationFrame(() => {
-    addonsModal.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    addonsModal.style.opacity = '1';
-    addonsModal.style.transform = 'scale(1)';
-  });
+  // Animate only the modal sheet, not the overlay
+  // Ensure sheet is properly positioned before animation
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    // Reset any previous transforms to ensure proper centering
+    sheet.style.position = 'absolute';
+    sheet.style.left = '50%';
+    sheet.style.top = '50%';
+    sheet.style.transform = 'translate(-50%, -50%) scale(0.95)';
+    sheet.style.opacity = '0';
+    sheet.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    
+    requestAnimationFrame(() => {
+      sheet.style.opacity = '1';
+      sheet.style.transform = 'translate(-50%, -50%) scale(1)';
+    });
+  }
 }
 
 // Expose a small API to set the image dynamically if desired
