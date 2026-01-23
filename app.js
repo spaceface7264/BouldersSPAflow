@@ -1594,6 +1594,18 @@ class OrderAPI {
         );
         
         if (fixedData) {
+          // CRITICAL: Update subscription item ID after pricing fix
+          // The pricing fix deletes and re-adds the subscription item, creating a NEW ID
+          // We must update state.subscriptionItemId with the new ID, otherwise addons will fail with ID_NOT_FOUND
+          const newSubscriptionItem = fixedData?.subscriptionItems?.[0];
+          if (newSubscriptionItem?.id) {
+            const oldSubscriptionItemId = state.subscriptionItemId;
+            state.subscriptionItemId = newSubscriptionItem.id;
+            console.log('[Step 7] ✅ Updated subscription item ID after pricing fix:', {
+              oldId: oldSubscriptionItemId,
+              newId: state.subscriptionItemId
+            });
+          }
           return fixedData;
         }
         
@@ -12161,9 +12173,36 @@ function updatePaymentOverview() {
       ? orderPriceAmount.amount / 100 
       : orderPriceAmount / 100;
     
-    console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
-    
-    if (is15DayPass) {
+    // CRITICAL: If addons are present, ALWAYS use backend order price
+    // The backend order price includes addons (if they were successfully added)
+    // Client-side calculations don't account for addons properly
+    const hasAddons = state.addonIds && state.addonIds.size > 0;
+    if (hasAddons) {
+      console.log('[Payment Overview] ✅ Addons present - using backend order price (includes addons):', orderPriceDKK, 'DKK');
+      payNowAmount = orderPriceDKK;
+      
+      // Get billing period from subscription item if available
+      if (subscriptionItem?.initialPaymentPeriod?.start) {
+        const backendStartDate = new Date(subscriptionItem.initialPaymentPeriod.start);
+        const backendEndDate = new Date(subscriptionItem.initialPaymentPeriod.end);
+        billingPeriod = {
+          start: backendStartDate,
+          end: backendEndDate
+        };
+      }
+      
+      // Update the pay now amount element
+      if (DOM.paymentPayNow) {
+        DOM.paymentPayNow.textContent = formatPriceHalfKrone(roundToHalfKrone(payNowAmount)) + ' kr.';
+      }
+      
+      // Skip the verification logic when addons are present - backend price is authoritative
+      console.log('[Payment Overview] ✅ Skipping price verification - using backend order price with addons');
+    } else {
+      // No addons - proceed with normal price verification
+      console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
+      
+      if (is15DayPass) {
       // For 15-day pass: always use full price (one-time payment)
       payNowAmount = orderPriceDKK;
       
@@ -13899,7 +13938,55 @@ async function handleCheckout() {
           if (state.addonIds && state.addonIds.size > 0) {
             console.log('[checkout] ===== ADDING ADDONS BEFORE PAYMENT LINK =====');
             console.log('[checkout] Adding', state.addonIds.size, 'addon(s) to order before payment link generation');
-            console.log('[checkout] Subscription item ID for linking:', state.subscriptionItemId);
+            
+            // CRITICAL: Verify subscription item ID exists in current order before using it
+            let validSubscriptionItemId = state.subscriptionItemId;
+            if (!validSubscriptionItemId || validSubscriptionItemId === null) {
+              console.warn('[checkout] ⚠️ Subscription item ID is missing, fetching order to get current subscription item ID...');
+              try {
+                const currentOrder = await orderAPI.getOrder(state.orderId);
+                const subscriptionItem = currentOrder?.subscriptionItems?.[0];
+                if (subscriptionItem?.id) {
+                  validSubscriptionItemId = subscriptionItem.id;
+                  state.subscriptionItemId = validSubscriptionItemId;
+                  console.log('[checkout] ✅ Retrieved subscription item ID from order:', validSubscriptionItemId);
+                } else {
+                  console.error('[checkout] ❌ No subscription item found in order - cannot link addons');
+                  throw new Error('No subscription item found in order - cannot add addons with additionTo link');
+                }
+              } catch (error) {
+                console.error('[checkout] ❌ Failed to fetch order to verify subscription item ID:', error);
+                throw new Error(`Cannot verify subscription item ID: ${error.message}`);
+              }
+            } else {
+              // Verify the subscription item ID actually exists in the order
+              try {
+                const currentOrder = await orderAPI.getOrder(state.orderId);
+                const subscriptionItemExists = currentOrder?.subscriptionItems?.some(
+                  item => item.id === validSubscriptionItemId
+                );
+                if (!subscriptionItemExists) {
+                  console.warn('[checkout] ⚠️ Stored subscription item ID not found in order, fetching current ID...');
+                  const subscriptionItem = currentOrder?.subscriptionItems?.[0];
+                  if (subscriptionItem?.id) {
+                    validSubscriptionItemId = subscriptionItem.id;
+                    state.subscriptionItemId = validSubscriptionItemId;
+                    console.log('[checkout] ✅ Updated subscription item ID to:', validSubscriptionItemId);
+                  } else {
+                    console.error('[checkout] ❌ No subscription item found in order - cannot link addons');
+                    throw new Error('No subscription item found in order - cannot add addons with additionTo link');
+                  }
+                } else {
+                  console.log('[checkout] ✅ Verified subscription item ID exists in order:', validSubscriptionItemId);
+                }
+              } catch (error) {
+                console.error('[checkout] ❌ Failed to verify subscription item ID:', error);
+                // Don't throw - try to continue with stored ID, but log the warning
+                console.warn('[checkout] ⚠️ Continuing with stored subscription item ID, but it may be invalid');
+              }
+            }
+            
+            console.log('[checkout] Subscription item ID for linking:', validSubscriptionItemId);
             
             const addonIdsArray = Array.from(state.addonIds);
             const addedAddonIds = [];
@@ -13960,19 +14047,42 @@ async function handleCheckout() {
                 
                 if (isValueCard) {
                   // Add as value card with additionTo link
-                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${state.subscriptionItemId})`);
-                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, state.subscriptionItemId);
+                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId})`);
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId);
                 } else {
                   // Add as article with additionTo link
-                  console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${state.subscriptionItemId})`);
-                  await orderAPI.addArticleItem(state.orderId, numericId, state.subscriptionItemId);
+                  console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${validSubscriptionItemId})`);
+                  await orderAPI.addArticleItem(state.orderId, numericId, validSubscriptionItemId);
                 }
                 addedAddonIds.push(addonId);
                 console.log(`[checkout] ✅ Add-on added: ${addonId}`);
               } catch (error) {
                 console.error(`[checkout] ❌ Failed to add add-on ${addonId}:`, error);
-                // Don't block checkout, but log the error
-                console.warn(`[checkout] ⚠️ Continuing despite add-on error - payment link may not include this addon`);
+                
+                // Check if error is due to invalid additionTo (ID_NOT_FOUND)
+                const errorMessage = error.message || JSON.stringify(error);
+                const isInvalidAdditionTo = errorMessage.includes('ID_NOT_FOUND') || 
+                                           errorMessage.includes('additionTo') ||
+                                           (error.payload && typeof error.payload === 'string' && error.payload.includes('ID_NOT_FOUND'));
+                
+                if (isInvalidAdditionTo) {
+                  console.error(`[checkout] ❌ CRITICAL: Invalid subscription item ID for addon ${addonId}`);
+                  console.error(`[checkout] ❌ This means the subscription item doesn't exist in the order`);
+                  console.error(`[checkout] ❌ Cannot proceed - payment window would show incorrect total`);
+                  throw new Error(`Failed to link addon ${addonId} to subscription: subscription item not found in order. Please try selecting your membership again.`);
+                }
+                
+                // Check if order is locked (403 Forbidden)
+                const isOrderLocked = error.status === 403 || errorMessage.includes('locked') || errorMessage.includes('Forbidden');
+                if (isOrderLocked) {
+                  console.error(`[checkout] ❌ CRITICAL: Order is locked (403 Forbidden) - cannot add addon ${addonId}`);
+                  console.error(`[checkout] ❌ Cannot proceed - payment window would show incorrect total`);
+                  throw new Error(`Order is locked and cannot be modified. Please start a new checkout.`);
+                }
+                
+                // For other errors, still throw to prevent incorrect payment
+                console.error(`[checkout] ❌ BLOCKING PAYMENT - Addon ${addonId} failed to add`);
+                throw new Error(`Failed to add addon ${addonId}: ${error.message || 'Unknown error'}`);
               }
             }
             
@@ -14013,6 +14123,11 @@ async function handleCheckout() {
                   console.log('[checkout] ✅ Order total with addons:', orderTotalDKK, 'DKK');
                   console.log('[checkout] ✅ Article items in order:', articleItems.length);
                   console.log('[checkout] ✅ Value card items in order:', valueCardItems.length);
+                  
+                  // CRITICAL: Update state.fullOrder with the order that includes addons
+                  // This ensures payment overview and payment link use the correct price
+                  state.fullOrder = updatedOrder;
+                  console.log('[checkout] ✅ Updated state.fullOrder with order containing addons');
                 } else {
                   console.warn(`[checkout] ⚠️ Addons not yet in order (attempt ${attempts}/${maxAttempts})`);
                   console.warn('[checkout] Expected addon IDs:', addedAddonIds);
@@ -14026,7 +14141,14 @@ async function handleCheckout() {
             
             if (!addonsVerified && addedAddonIds.length > 0) {
               console.error('[checkout] ❌ CRITICAL: Could not verify addons are in order after', maxAttempts, 'attempts');
-              console.error('[checkout] ❌ Payment window may show incorrect total without addons!');
+              console.error('[checkout] ❌ Payment window will show incorrect total without addons!');
+              console.error('[checkout] ❌ Expected addons:', addedAddonIds);
+              
+              // CRITICAL: If addons failed to add, we must prevent payment link generation
+              // The payment window will show incorrect price if addons aren't in the order
+              const errorMessage = `Failed to add addons to order. Payment cannot proceed with incorrect total. Please try again or contact support.`;
+              console.error('[checkout] ❌ BLOCKING PAYMENT LINK GENERATION - Addons not in order');
+              throw new Error(errorMessage);
             }
           }
           
@@ -14240,6 +14362,24 @@ async function handleCheckout() {
                     if (fixedVerification.isCorrect) {
                       console.log('[checkout] ✅ Successfully fixed order price before payment link generation!');
                       orderBeforePayment = fixedOrder;
+                      
+                      // CRITICAL: Update subscription item ID after pricing fix
+                      // The pricing fix deletes and re-adds the subscription item, creating a NEW ID
+                      // We must update state.subscriptionItemId with the new ID, otherwise addons will fail with ID_NOT_FOUND
+                      const newSubscriptionItem = fixedOrder?.subscriptionItems?.[0];
+                      if (newSubscriptionItem?.id) {
+                        const oldSubscriptionItemId = state.subscriptionItemId;
+                        state.subscriptionItemId = newSubscriptionItem.id;
+                        console.log('[checkout] ✅ Updated subscription item ID after pricing fix:', {
+                          oldId: oldSubscriptionItemId,
+                          newId: state.subscriptionItemId
+                        });
+                      } else {
+                        console.warn('[checkout] ⚠️ Fixed order does not have subscription item - cannot update subscriptionItemId');
+                      }
+                      
+                      // Update state.fullOrder with the fixed order
+                      state.fullOrder = fixedOrder;
                     } else {
                       console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
                       console.error('[checkout] ❌ Pricing mismatch detected');
@@ -14256,6 +14396,47 @@ async function handleCheckout() {
                 } else if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
                   console.log('[checkout] ✅ Order price is acceptable - no fix needed');
                 }
+              }
+            }
+            
+            // CRITICAL: Refresh order one final time before payment link to ensure we have latest price with addons
+            // This is especially important if addons were just added
+            if (state.addonIds && state.addonIds.size > 0) {
+              try {
+                console.log('[checkout] 🔍 Final order refresh before payment link generation...');
+                const finalOrderCheck = await orderAPI.getOrder(state.orderId);
+                state.fullOrder = finalOrderCheck;
+                orderBeforePayment = finalOrderCheck;
+                
+                const finalOrderPriceDKK = finalOrderCheck?.price?.amount 
+                  ? (typeof finalOrderCheck.price.amount === 'object' 
+                      ? finalOrderCheck.price.amount.amount / 100 
+                      : finalOrderCheck.price.amount / 100)
+                  : 0;
+                
+                // Verify addons are in the final order
+                const finalArticleItems = finalOrderCheck?.articleItems || [];
+                const finalValueCardItems = finalOrderCheck?.valueCardItems || [];
+                const finalArticleProductIds = finalArticleItems.map(item => item.product?.id).filter(Boolean);
+                const finalValueCardProductIds = finalValueCardItems.map(item => item.product?.id).filter(Boolean);
+                const finalAllProductIds = [...finalArticleProductIds, ...finalValueCardProductIds];
+                const finalAddonIdsArray = Array.from(state.addonIds);
+                const allAddonsInFinalOrder = finalAddonIdsArray.every(id => 
+                  finalAllProductIds.includes(Number(id)) || finalAllProductIds.includes(String(id))
+                );
+                
+                if (allAddonsInFinalOrder) {
+                  console.log('[checkout] ✅ Final order verification: All addons present');
+                  console.log('[checkout] ✅ Final order price with addons:', finalOrderPriceDKK, 'DKK');
+                } else {
+                  console.error('[checkout] ❌ CRITICAL: Addons missing in final order check!');
+                  console.error('[checkout] ❌ Expected addons:', finalAddonIdsArray);
+                  console.error('[checkout] ❌ Found product IDs:', finalAllProductIds);
+                  throw new Error('Addons are not present in the final order - cannot proceed with payment');
+                }
+              } catch (finalCheckError) {
+                console.error('[checkout] ❌ Error during final order check:', finalCheckError);
+                throw finalCheckError;
               }
             }
             
