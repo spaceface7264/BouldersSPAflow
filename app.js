@@ -12685,8 +12685,16 @@ function updatePaymentOverview() {
     const addonItems = state.cartItems.filter(item => item.type === 'addon');
     const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
     
-    // Total = Pay now + Addons
-    let total = payNowAmount + addonTotal;
+    // CRITICAL: Check if payNowAmount already includes addons
+    // When addons are present and we have order data, payNowAmount comes from
+    // state.fullOrder.price.amount which already includes addon prices
+    const hasAddons = state.addonIds && state.addonIds.size > 0;
+    const payNowIncludesAddons = hasAddons && hasOrderData && state.fullOrder?.price?.amount !== undefined;
+    
+    // Total calculation:
+    // - If payNowAmount already includes addons (from backend order), use it as-is
+    // - Otherwise, add addonTotal to payNowAmount
+    let total = payNowIncludesAddons ? payNowAmount : payNowAmount + addonTotal;
     
     // Apply discount if applicable
     if (state.discountApplied && state.totals.discountAmount > 0) {
@@ -12700,17 +12708,29 @@ function updatePaymentOverview() {
     // Show/hide total container based on whether addons are present
     if (addonTotal > 0) {
       totalContainer.style.display = 'block';
-      console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now:', payNowAmount, '+ Addons:', addonTotal, ')');
+      if (payNowIncludesAddons) {
+        console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now already includes addons:', payNowAmount, ')');
+      } else {
+        console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now:', payNowAmount, '+ Addons:', addonTotal, ')');
+      }
     } else {
       totalContainer.style.display = 'none';
     }
   }
   
+  // Calculate total for logging (same logic as display)
+  const addonItemsForLog = state.cartItems.filter(item => item.type === 'addon');
+  const addonTotalForLog = addonItemsForLog.reduce((sum, item) => sum + item.amount, 0);
+  const hasAddonsForLog = state.addonIds && state.addonIds.size > 0;
+  const payNowIncludesAddonsForLog = hasAddonsForLog && hasOrderData && state.fullOrder?.price?.amount !== undefined;
+  const calculatedTotal = payNowIncludesAddonsForLog ? payNowAmount : payNowAmount + addonTotalForLog;
+  
   console.log('[Payment Overview] ✅ Updated:', {
     payNow: payNowAmount,
     monthlyPayment: monthlyPaymentAmount,
     billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A',
-    total: totalEl ? (payNowAmount + (state.cartItems.filter(item => item.type === 'addon').reduce((sum, item) => sum + item.amount, 0))) : 'N/A'
+    total: totalEl ? calculatedTotal : 'N/A',
+    payNowIncludesAddons: payNowIncludesAddonsForLog
   });
 }
 
