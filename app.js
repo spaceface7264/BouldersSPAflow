@@ -6002,6 +6002,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Verify signature case is signed
     (async () => {
       try {
+        // Check if payment was already completed before signature
+        let paymentWasCompleted = false;
+        try {
+          const paymentCompleteData = sessionStorage.getItem('boulders_payment_complete_signature');
+          if (paymentCompleteData) {
+            const parsed = JSON.parse(paymentCompleteData);
+            paymentWasCompleted = parsed.paymentConfirmed === true;
+            console.log('[SignatureCase Return] Payment was completed before signature:', paymentWasCompleted);
+          }
+        } catch (e) {
+          console.warn('[SignatureCase Return] Could not check payment completion status:', e);
+        }
+        
         if (state.signatureCase && state.signatureCase.id) {
           console.log('[SignatureCase Return] Verifying signature case status...');
           const signatureCase = await signatureCaseAPI.getSignatureCase(
@@ -6010,28 +6023,50 @@ document.addEventListener('DOMContentLoaded', () => {
           );
           
           if (signatureCase && signatureCase.signed) {
-            console.log('[SignatureCase Return] ✅ Signature case is signed, continuing checkout...');
+            console.log('[SignatureCase Return] ✅ Signature case is signed');
             state.signatureCase.signed = true;
             
             // Clear signature state from sessionStorage
             try {
               sessionStorage.removeItem('boulders_checkout_signature');
+              sessionStorage.removeItem('boulders_payment_complete_signature');
             } catch (e) {
               console.warn('[SignatureCase Return] Could not clear signature state:', e);
             }
             
-            // Continue with checkout flow - trigger payment link generation
-            // We need to be on step 4 (payment step) to continue
-            state.currentStep = 4;
-            showStep(4);
-            updateStepIndicator();
-            updateNavigationButtons();
-            updateMainSubtitle();
-            
-            // Trigger checkout to continue with payment link generation
-            // The checkout button should be visible and ready
-            console.log('[SignatureCase Return] Ready to continue checkout - user can click checkout button');
-            showToast('Contract signed successfully! You can now proceed with payment.', 'success');
+            // If payment was already completed, show success page
+            if (paymentWasCompleted) {
+              console.log('[SignatureCase Return] Payment was completed before signature - showing success page');
+              state.paymentConfirmed = true;
+              state.signatureCase.signed = true;
+              
+              // Load order data and show success page
+              if (state.orderId) {
+                try {
+                  await loadOrderForConfirmation(state.orderId);
+                } catch (error) {
+                  console.error('[SignatureCase Return] Failed to load order for confirmation:', error);
+                  showToast('Contract signed successfully!', 'success');
+                }
+              } else {
+                showToast('Contract signed successfully!', 'success');
+              }
+            } else {
+              // OLD FLOW: Signature before payment (shouldn't happen now, but keep for compatibility)
+              console.log('[SignatureCase Return] Payment not completed - continuing with checkout flow');
+              // Continue with checkout flow - trigger payment link generation
+              // We need to be on step 4 (payment step) to continue
+              state.currentStep = 4;
+              showStep(4);
+              updateStepIndicator();
+              updateNavigationButtons();
+              updateMainSubtitle();
+              
+              // Trigger checkout to continue with payment link generation
+              // The checkout button should be visible and ready
+              console.log('[SignatureCase Return] Ready to continue checkout - user can click checkout button');
+              showToast('Contract signed successfully! You can now proceed with payment.', 'success');
+            }
           } else {
             console.warn('[SignatureCase Return] ⚠️ Signature case not yet signed');
             showToast('Signature is still pending. Please wait a moment and try again.', 'warning');
@@ -14153,38 +14188,8 @@ async function handleCheckout() {
             }
           }
           
-          // Check if signature case is required before generating payment link
-          // If signature case exists and has document URL, redirect to Assently first
-          console.log('[checkout] ===== CHECKING SIGNATURE CASE BEFORE PAYMENT LINK =====');
-          console.log('[checkout] Signature case state:', state.signatureCase);
-          console.log('[checkout] Has signature case:', !!state.signatureCase);
-          console.log('[checkout] Has document URL:', !!state.signatureCase?.documentUrl);
-          console.log('[checkout] Is signed:', state.signatureCase?.signed);
-          
-          if (state.signatureCase && state.signatureCase.documentUrl && !state.signatureCase.signed) {
-            console.log('[checkout] ===== SIGNATURE CASE REQUIRED =====');
-            console.log('[checkout] Signature case found, redirecting to Assently for signing...');
-            console.log('[checkout] Document URL:', state.signatureCase.documentUrl);
-            console.log('[checkout] Signature Case ID:', state.signatureCase.id);
-            
-            // Store checkout state in sessionStorage for return
-            try {
-              sessionStorage.setItem('boulders_checkout_signature', JSON.stringify({
-                orderId: state.orderId,
-                customerId: state.customerId,
-                signatureCaseId: state.signatureCase.id,
-                returnToCheckout: true,
-              }));
-            } catch (e) {
-              console.warn('[checkout] Could not save signature state to sessionStorage:', e);
-            }
-            
-            // Redirect to Assently document URL
-            window.location.href = state.signatureCase.documentUrl;
-            return; // Stop checkout flow - will resume after signature completion
-          }
-          
           // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied AND addons are added
+          // NOTE: Assently contract signing happens AFTER payment is completed, not before
           // The order should now have the discount applied, so payment link will show discounted price
           // Backend requirement: "Generate Payment Link Card" request must be made when subscription is added to cart
           // This is what triggers the payment flow according to backend team
@@ -15893,6 +15898,40 @@ async function loadOrderForConfirmation(orderId) {
     
     // Store full order object for payment overview (before building summary)
     state.fullOrder = order;
+    
+    // CRITICAL: Check for Assently contract AFTER payment is confirmed
+    // Payment must happen first, then contract signing
+    console.log('[Payment Return] ===== CHECKING ASSENTLY CONTRACT AFTER PAYMENT =====');
+    console.log('[Payment Return] Signature case state:', state.signatureCase);
+    console.log('[Payment Return] Has signature case:', !!state.signatureCase);
+    console.log('[Payment Return] Has document URL:', !!state.signatureCase?.documentUrl);
+    console.log('[Payment Return] Is signed:', state.signatureCase?.signed);
+    
+    // If signature case exists and is not signed, redirect to Assently
+    // This happens AFTER payment is completed
+    if (state.signatureCase && state.signatureCase.documentUrl && !state.signatureCase.signed) {
+      console.log('[Payment Return] ===== ASSENTLY CONTRACT REQUIRED AFTER PAYMENT =====');
+      console.log('[Payment Return] Payment confirmed, redirecting to Assently for contract signing...');
+      console.log('[Payment Return] Document URL:', state.signatureCase.documentUrl);
+      console.log('[Payment Return] Signature Case ID:', state.signatureCase.id);
+      
+      // Store payment completion state in sessionStorage for return after signature
+      try {
+        sessionStorage.setItem('boulders_payment_complete_signature', JSON.stringify({
+          orderId: state.orderId,
+          customerId: state.customerId,
+          signatureCaseId: state.signatureCase.id,
+          paymentConfirmed: true,
+          returnToSuccess: true,
+        }));
+      } catch (e) {
+        console.warn('[Payment Return] Could not save signature state to sessionStorage:', e);
+      }
+      
+      // Redirect to Assently document URL
+      window.location.href = state.signatureCase.documentUrl;
+      return; // Stop here - will resume after signature completion
+    }
     
     // Log order number fields to verify correct number is used
     console.log('[Payment Return] Order number fields:', {
