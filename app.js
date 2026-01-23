@@ -5647,11 +5647,11 @@ function handleRejectionOption1() {
       if (singlePlans) singlePlans.style.display = 'none';
       if (quantityPlans) quantityPlans.style.display = 'none';
       
-      // Focus and scroll the category into view
+      // Focus and scroll to top of the category
       setTimeout(() => {
         membershipCategory.setAttribute('tabindex', '-1');
         membershipCategory.focus();
-        membershipCategory.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        membershipCategory.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     }
     
@@ -9649,8 +9649,8 @@ function setupNewAccessStep() {
         setTimeout(() => {
           category.setAttribute('tabindex', '-1');
           category.focus();
-          // Scroll into view smoothly
-          category.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Scroll to top of expanded category item smoothly
+          category.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100); // Small delay to ensure expansion animation has started
       } else {
         currentCategory = null;
