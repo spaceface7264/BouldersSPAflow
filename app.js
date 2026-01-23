@@ -16546,13 +16546,7 @@ function determineProductTypeFromOrder() {
   
   // Priority 2: Check full order data first (from API)
   if (state.fullOrder) {
-    // Check for value card items (punch cards)
-    if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
-      console.log('[Product Type] Detected punch-card from valueCardItems');
-      return 'punch-card';
-    }
-    
-    // Check subscription items
+    // ✅ Check subscription items FIRST (subscriptions take priority)
     if (state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
       const subscriptionItem = state.fullOrder.subscriptionItems[0];
       const product = subscriptionItem?.product;
@@ -16580,6 +16574,12 @@ function determineProductTypeFromOrder() {
       // Default to membership if it's a subscription item
       console.log('[Product Type] Detected membership from subscriptionItems');
       return 'membership';
+    }
+    
+    // ✅ Only check value cards if NO subscription items exist
+    if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
+      console.log('[Product Type] Detected punch-card from valueCardItems');
+      return 'punch-card';
     }
   }
   
