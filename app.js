@@ -11497,6 +11497,12 @@ function hideCampaignWarning() {
 }
 
 function updateCartSummary() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Summary] ⏸️ Checkout in progress - skipping cart summary update to freeze prices');
+    return;
+  }
+  
   const items = [];
   state.totals.membershipMonthly = 0;
 
@@ -11671,6 +11677,12 @@ function updateCartSummary() {
 }
 
 function updateCartTotals() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Totals] ⏸️ Checkout in progress - skipping cart totals update to freeze prices');
+    return;
+  }
+  
   // Recalculate totals including discount
   const items = [];
   
@@ -11743,6 +11755,12 @@ function updateCartTotals() {
 }
 
 function renderCartItems() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Items] ⏸️ Checkout in progress - skipping cart items render to freeze prices');
+    return;
+  }
+  
   if (!templates.cartItem || !DOM.cartItems) return;
   
   // Check for campaigns and show/hide warning banner
@@ -11990,6 +12008,12 @@ function renderCartItems() {
 }
 
 function renderCartAddons() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Addons] ⏸️ Checkout in progress - skipping cart addons render to freeze prices');
+    return;
+  }
+  
   if (!templates.cartItem || !DOM.cartAddons) return;
   DOM.cartAddons.innerHTML = '';
 
@@ -12050,6 +12074,12 @@ function renderCartAddons() {
 }
 
 function renderCartTotal() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart] ⏸️ Checkout in progress - skipping cart total update to freeze prices');
+    return;
+  }
+  
   // Cart total is no longer displayed - payment overview shows calculated prices instead
   // Just update payment overview which shows the correct calculated prices
   
@@ -12101,6 +12131,13 @@ function renderCartTotal() {
  * @see docs/brp-api3-openapi.yaml - OrderOut, SubscriptionItemOut schemas
  */
 function updatePaymentOverview() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  // The backend will still process correctly, but UI stays frozen at checkout click
+  if (state.checkoutInProgress) {
+    console.log('[Payment Overview] ⏸️ Checkout in progress - skipping UI update to freeze cart prices');
+    return;
+  }
+  
   // Only show payment overview if there's a membership (subscription) in the cart
   const hasMembership = state.selectedProductType === 'membership' && state.selectedProductId;
   
@@ -12685,8 +12722,16 @@ function updatePaymentOverview() {
     const addonItems = state.cartItems.filter(item => item.type === 'addon');
     const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
     
-    // Total = Pay now + Addons
-    let total = payNowAmount + addonTotal;
+    // CRITICAL: Check if payNowAmount already includes addons
+    // When addons are present and we have order data, payNowAmount comes from
+    // state.fullOrder.price.amount which already includes addon prices
+    const hasAddons = state.addonIds && state.addonIds.size > 0;
+    const payNowIncludesAddons = hasAddons && hasOrderData && state.fullOrder?.price?.amount !== undefined;
+    
+    // Total calculation:
+    // - If payNowAmount already includes addons (from backend order), use it as-is
+    // - Otherwise, add addonTotal to payNowAmount
+    let total = payNowIncludesAddons ? payNowAmount : payNowAmount + addonTotal;
     
     // Apply discount if applicable
     if (state.discountApplied && state.totals.discountAmount > 0) {
@@ -12700,21 +12745,39 @@ function updatePaymentOverview() {
     // Show/hide total container based on whether addons are present
     if (addonTotal > 0) {
       totalContainer.style.display = 'block';
-      console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now:', payNowAmount, '+ Addons:', addonTotal, ')');
+      if (payNowIncludesAddons) {
+        console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now already includes addons:', payNowAmount, ')');
+      } else {
+        console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now:', payNowAmount, '+ Addons:', addonTotal, ')');
+      }
     } else {
       totalContainer.style.display = 'none';
     }
   }
   
+  // Calculate total for logging (same logic as display)
+  const addonItemsForLog = state.cartItems.filter(item => item.type === 'addon');
+  const addonTotalForLog = addonItemsForLog.reduce((sum, item) => sum + item.amount, 0);
+  const hasAddonsForLog = state.addonIds && state.addonIds.size > 0;
+  const payNowIncludesAddonsForLog = hasAddonsForLog && hasOrderData && state.fullOrder?.price?.amount !== undefined;
+  const calculatedTotal = payNowIncludesAddonsForLog ? payNowAmount : payNowAmount + addonTotalForLog;
+  
   console.log('[Payment Overview] ✅ Updated:', {
     payNow: payNowAmount,
     monthlyPayment: monthlyPaymentAmount,
     billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A',
-    total: totalEl ? (payNowAmount + (state.cartItems.filter(item => item.type === 'addon').reduce((sum, item) => sum + item.amount, 0))) : 'N/A'
+    total: totalEl ? calculatedTotal : 'N/A',
+    payNowIncludesAddons: payNowIncludesAddonsForLog
   });
 }
 
 function updateDiscountDisplay() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Discount Display] ⏸️ Checkout in progress - skipping discount display update to freeze prices');
+    return;
+  }
+  
   // Find or create discount display element
   let discountDisplay = DOM.discountDisplay || document.querySelector('[data-discount-display]') || document.querySelector('.discount-display');
   
