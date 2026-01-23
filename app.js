@@ -12050,6 +12050,12 @@ function renderCartAddons() {
 }
 
 function renderCartTotal() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart] ⏸️ Checkout in progress - skipping cart total update to freeze prices');
+    return;
+  }
+  
   // Cart total is no longer displayed - payment overview shows calculated prices instead
   // Just update payment overview which shows the correct calculated prices
   
@@ -12101,6 +12107,13 @@ function renderCartTotal() {
  * @see docs/brp-api3-openapi.yaml - OrderOut, SubscriptionItemOut schemas
  */
 function updatePaymentOverview() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  // The backend will still process correctly, but UI stays frozen at checkout click
+  if (state.checkoutInProgress) {
+    console.log('[Payment Overview] ⏸️ Checkout in progress - skipping UI update to freeze cart prices');
+    return;
+  }
+  
   // Only show payment overview if there's a membership (subscription) in the cart
   const hasMembership = state.selectedProductType === 'membership' && state.selectedProductId;
   
