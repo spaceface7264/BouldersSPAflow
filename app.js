@@ -15637,8 +15637,7 @@ window.checkPaymentOverview = function() {
     orderId: state.orderId,
     fullOrder: state.fullOrder,
     subscriptionItemId: state.subscriptionItemId,
-    addonIds: state.addonIds ? Array.from(state.addonIds) : []
-  };
+    addonIds: state.addonIds ? Array.from(state.addonIds) : [],
     hasFullOrder: !!state.fullOrder,
     payNow: state.fullOrder?.price?.amount ? (typeof state.fullOrder.price.amount === 'object' ? state.fullOrder.price.amount.amount / 100 : state.fullOrder.price.amount / 100) : state.totals.cartTotal,
     monthlyPayment: state.fullOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount ? state.fullOrder.subscriptionItems[0].payRecurring.price.amount / 100 : state.totals.membershipMonthly
