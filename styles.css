@@ -153,6 +153,11 @@
   
 .addons-image { display: none; }
 .addons-image img { display: none; }
+
+  .addons-grid .addon-card img {
+    flex-shrink: 0;
+    object-fit: cover;
+  }
   
   .addons-main { 
     flex: 1 1 auto; 
@@ -171,6 +176,7 @@
     overflow-y: auto; 
     flex: 1;
     min-height: 0;
+    align-items: start;
   }
   
   /* Addon Card Styles for Modal */
@@ -189,9 +195,12 @@
     box-sizing: border-box;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
-    overflow: visible;
-    min-height: auto;
-    height: auto;
+    overflow: hidden;
+    min-height: 0 !important;
+    height: fit-content !important;
+    align-items: flex-start !important;
+    align-self: start;
+    width: 100%;
   }
   
   .addons-grid .addon-card:hover:not(.selected) {
@@ -205,9 +214,13 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 16px;
-    min-height: auto;
-    flex: 0 1 auto;
+    min-height: auto !important;
+    height: auto !important;
+    flex: 0 0 auto;
+    flex-shrink: 0;
     width: 100%;
+    overflow: hidden;
+    min-width: 0;
   }
 
   .addons-grid .addon-card .plan-content-left {
@@ -218,8 +231,9 @@
     gap: 4px;
     align-items: flex-start;
     justify-content: flex-start;
-    min-height: auto;
-    overflow: visible;
+    min-height: auto !important;
+    height: auto !important;
+    overflow: hidden;
     width: 100%;
   }
   
@@ -271,28 +285,36 @@
     text-align: left;
     align-self: flex-start;
     width: 100%;
-    overflow: visible;
-    word-wrap: break-word;
+    max-width: 100%;
     overflow-wrap: break-word;
+    word-wrap: break-word;
+    hyphens: auto;
+    box-sizing: border-box;
   }
   
   .addons-grid .addon-card .plan-meta {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    flex: 1;
-  }
-  
-  .addons-grid .addon-card .plan-original {
-    font-size: var(--font-size-base);
-    color: var(--color-text-subtle);
-    text-decoration: line-through;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: hidden;
   }
   
   .addons-grid .addon-card .plan-features {
     margin: 0;
     padding: 0;
     list-style: none;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+  
+  .addons-grid .addon-card .plan-original {
+    font-size: var(--font-size-base);
+    color: var(--color-text-subtle);
+    text-decoration: line-through;
   }
   
   .addons-grid .addon-card .plan-features li {
@@ -311,6 +333,25 @@
     color: var(--color-brand-accent);
     font-weight: bold;
     font-size: var(--font-size-sm);
+  }
+  
+  /* Override any media query rules that might affect addon cards */
+  @media (min-width: 641px) {
+    .addons-grid .addon-card {
+      height: fit-content !important;
+      min-height: 0 !important;
+      align-items: flex-start !important;
+    }
+    
+    .addons-grid .addon-card .plan-info {
+      min-height: 0 !important;
+      height: auto !important;
+    }
+    
+    .addons-grid .addon-card .plan-content-left {
+      min-height: 0 !important;
+      height: auto !important;
+    }
   }
   
   .addons-grid .addon-card .plan-actions {
@@ -455,6 +496,7 @@
     .addons-grid {
       min-height: 0;
       overflow-y: auto;
+      gap: 8px;
     }
     
     .addons-actions {
@@ -468,19 +510,20 @@
     .addons-sheet { 
       width: 95vw; 
       max-height: 90vh; 
-      height: 90vh;
+      height: fit-content;
+      min-height: 0;
     }
     
     .addons-content {
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      flex: 1;
+      flex: 0 1 auto;
       min-height: 0;
     }
     
     .addons-main {
-      flex: 1;
+      flex: 0 1 auto;
       min-height: 0;
       overflow: hidden;
       display: flex;
@@ -488,10 +531,11 @@
     }
     
     .addons-grid { 
-      grid-template-columns: 1fr; 
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
       padding: 12px 16px; 
-      overflow-y: auto;
-      flex: 1;
+      gap: 12px;
+      overflow-y: visible;
+      flex: 0 1 auto;
       min-height: 0;
     }
     

@@ -4368,11 +4368,25 @@ function populateAddonsModal() {
     if (descriptionEl) descriptionEl.textContent = addon.description;
     if (featuresEl) {
       featuresEl.innerHTML = '';
-      addon.features.forEach((feature) => {
-        const li = document.createElement('li');
-        li.textContent = feature;
-        featuresEl.appendChild(li);
-      });
+      if (addon.features && Array.isArray(addon.features) && addon.features.length > 0) {
+        addon.features.forEach((feature) => {
+          const li = document.createElement('li');
+          li.textContent = feature;
+          featuresEl.appendChild(li);
+        });
+      }
+    }
+    
+    // Hide plan-meta if it's empty (no original price and no features)
+    const planMetaEl = card.querySelector('.plan-meta');
+    if (planMetaEl) {
+      const hasOriginalPrice = originalPriceEl && originalPriceEl.style.display !== 'none' && originalPriceEl.textContent.trim() !== '';
+      const hasFeatures = featuresEl && featuresEl.children.length > 0;
+      if (!hasOriginalPrice && !hasFeatures) {
+        planMetaEl.style.display = 'none';
+      } else {
+        planMetaEl.style.display = '';
+      }
     }
     
     // Make entire card clickable
