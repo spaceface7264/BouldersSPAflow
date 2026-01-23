@@ -7554,6 +7554,111 @@ main {
     color: #6b7280;
 }
 
+/* FAQ Section */
+.faq-section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 48px 16px;
+    margin-top: 32px;
+}
+
+.faq-container {
+    width: 100%;
+}
+
+.faq-title {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text-white);
+    margin-bottom: 32px;
+    text-align: center;
+}
+
+.faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.faq-item {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.faq-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.faq-question {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    transition: color 0.2s ease;
+}
+
+.faq-question:hover {
+    color: var(--color-primary);
+}
+
+.faq-question[aria-expanded="true"] {
+    color: var(--color-primary);
+}
+
+.faq-question-text {
+    flex: 1;
+    padding-right: 16px;
+}
+
+.faq-icon {
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+    color: var(--color-text-secondary);
+}
+
+.faq-question[aria-expanded="true"] .faq-icon {
+    transform: rotate(180deg);
+    color: var(--color-primary);
+}
+
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 24px;
+}
+
+.faq-item[aria-expanded="true"] .faq-answer {
+    max-height: 500px;
+    padding: 0 24px 20px 24px;
+}
+
+.faq-answer-text {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-base);
+    line-height: 1.6;
+    margin: 0;
+    padding-top: 8px;
+}
+
+/* Hide FAQ when checkout is in progress or on step 5 */
+.faq-section[data-checkout="true"],
+.faq-section[data-step-5="true"] {
+    display: none !important;
+}
+
 .receipt-info {
     display: flex;
     flex-direction: column;
