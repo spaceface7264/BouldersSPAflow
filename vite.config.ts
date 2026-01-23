@@ -16,53 +16,6 @@ const readIfExists = (file: string) => {
 const key = readIfExists('key.pem');
 const cert = readIfExists('cert.pem');
 
-// Plugin to exclude app.js from HTML processing (it's a standalone script, not a module)
-const excludeAppJsPlugin = () => ({
-  name: 'exclude-app-js',
-  // Run this plugin early to prevent Vite from processing app.js
-  enforce: 'pre',
-  // Intercept when Vite tries to load app.js - return a minimal valid module
-  // This keeps the script tag in HTML but prevents Vite from parsing the actual file
-  load(id) {
-    // Check if this is app.js (handle both relative and absolute paths)
-    if (id.includes('app.js') && !id.includes('node_modules')) {
-      try {
-        const resolvedPath = path.resolve(id);
-        const appJsPath = path.resolve(__dirname, 'app.js');
-        if (resolvedPath === appJsPath || id.endsWith('/app.js') || id === './app.js' || id.endsWith('app.js')) {
-          // Return a minimal valid ES module so Vite keeps the script tag
-          // but doesn't try to parse the actual app.js file content
-          // The actual app.js file will be served as-is from dist/
-          return '// app.js is loaded as a standalone script';
-        }
-      } catch (e) {
-        // If path resolution fails, check by string matching
-        if (id.endsWith('app.js') || id === './app.js') {
-          return '// app.js is loaded as a standalone script';
-        }
-      }
-    }
-    return null;
-  },
-  // Prevent Vite from processing app.js during import analysis
-  resolveId(id) {
-    // If app.js is being imported/resolved, mark it as external
-    if (id === './app.js' || id.endsWith('/app.js') || id.endsWith('app.js')) {
-      return { id, external: true };
-    }
-    return null;
-  },
-  // Ensure app.js script tag is preserved in the output HTML
-  transformIndexHtml(html) {
-    // Make sure app.js script tag exists (Vite might remove it if it can't process it)
-    if (!html.includes('app.js')) {
-      // Find the closing body tag and insert app.js before it
-      html = html.replace('</body>', '    <script type="module" src="./app.js"></script>\n</body>');
-    }
-    return html;
-  }
-});
-
 // Plugin to copy functions directory and postal-codes-dk.js to dist for Cloudflare Pages deployment
 const copyFunctionsPlugin = () => ({
   name: 'copy-functions',
@@ -99,59 +52,12 @@ const copyFunctionsPlugin = () => ({
       console.log(`[Vite] Copied postal-codes-dk.js to dist/`);
     }
 
-    // Copy app.js to dist root (required by index.html)
-    const appJsFile = path.resolve(__dirname, 'app.js');
-    if (fs.existsSync(appJsFile)) {
-      const distAppJsFile = path.resolve(__dirname, 'dist', 'app.js');
-      fs.copyFileSync(appJsFile, distAppJsFile);
-      console.log(`[Vite] Copied app.js to dist/`);
-    }
-
-    // Copy gtm-utils.js to dist root (required by index.html)
-    const gtmUtilsFile = path.resolve(__dirname, 'gtm-utils.js');
-    if (fs.existsSync(gtmUtilsFile)) {
-      const distGtmUtilsFile = path.resolve(__dirname, 'dist', 'gtm-utils.js');
-      fs.copyFileSync(gtmUtilsFile, distGtmUtilsFile);
-      console.log(`[Vite] Copied gtm-utils.js to dist/`);
-    }
-
-    // Copy sanitize.js to dist root (required by app.js)
-    const sanitizeFile = path.resolve(__dirname, 'sanitize.js');
-    if (fs.existsSync(sanitizeFile)) {
-      const distSanitizeFile = path.resolve(__dirname, 'dist', 'sanitize.js');
-      fs.copyFileSync(sanitizeFile, distSanitizeFile);
-      console.log(`[Vite] Copied sanitize.js to dist/`);
-    }
-
     // Copy _headers file to dist root for Cloudflare Pages
     const headersFile = path.resolve(__dirname, '_headers');
     if (fs.existsSync(headersFile)) {
       const distHeadersFile = path.resolve(__dirname, 'dist', '_headers');
       fs.copyFileSync(headersFile, distHeadersFile);
       console.log(`[Vite] Copied _headers to dist/`);
-    }
-
-    // Copy utils directory to dist (required by app.js imports)
-    const utilsDir = path.resolve(__dirname, 'utils');
-    const distUtilsDir = path.resolve(__dirname, 'dist', 'utils');
-    if (fs.existsSync(utilsDir)) {
-      const copyDir = (src: string, dest: string) => {
-        if (!fs.existsSync(dest)) {
-          fs.mkdirSync(dest, { recursive: true });
-        }
-        const entries = fs.readdirSync(src, { withFileTypes: true });
-        entries.forEach((entry: fs.Dirent) => {
-          const srcPath = path.join(src, entry.name);
-          const destPath = path.join(dest, entry.name);
-          if (entry.isDirectory()) {
-            copyDir(srcPath, destPath);
-          } else {
-            fs.copyFileSync(srcPath, destPath);
-            console.log(`[Vite] Copied ${entry.name} to dist/utils/`);
-          }
-        });
-      };
-      copyDir(utilsDir, distUtilsDir);
     }
   }
 });
@@ -173,7 +79,7 @@ const resolveBasePath = () => {
 
 export default defineConfig(({ command }) => {
   // Conditionally include Sentry plugin only in production builds with auth token
-  const plugins = [react(), excludeAppJsPlugin(), copyFunctionsPlugin()];
+  const plugins = [react(), copyFunctionsPlugin()];
 
   // Only upload source maps to Sentry if auth token is provided
   // Set SENTRY_AUTH_TOKEN in your CI/CD environment
@@ -269,10 +175,6 @@ export default defineConfig(({ command }) => {
       assetsDir: 'assets',
       // Enable source maps for better error debugging in Sentry
       sourcemap: true,
-      rollupOptions: {
-        // Exclude app.js from processing - it's a standalone script, not a module
-        external: ['./app.js', 'app.js'],
-      },
     }
   }
 })
