@@ -12289,6 +12289,7 @@ function updatePaymentOverview() {
         console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
       }
     }
+  }
   } else {
     // No order data yet - calculate price from product data
     // This allows prices to be shown before login/account creation
