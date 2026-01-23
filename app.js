@@ -12718,19 +12718,36 @@ function updatePaymentOverview() {
   const totalContainer = document.querySelector('.payment-overview-total');
   
   if (totalEl && totalContainer) {
-    // Calculate addon total
-    const addonItems = state.cartItems.filter(item => item.type === 'addon');
-    const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
+    // CRITICAL: Calculate addon total from state.addonIds (source of truth)
+    // Don't rely on state.cartItems which might not be updated yet (e.g., after login)
+    const hasAddons = state.addonIds && state.addonIds.size > 0;
+    let addonTotal = 0;
+    
+    if (hasAddons) {
+      // Calculate addon total directly from addonIds
+      state.addonIds.forEach((addonId) => {
+        const addon = findAddon(addonId);
+        if (addon) {
+          const price = getAddonPrice(addon);
+          addonTotal += roundToHalfKrone(price);
+        }
+      });
+    }
     
     // CRITICAL: Check if payNowAmount already includes addons
-    // When addons are present and we have order data, payNowAmount comes from
-    // state.fullOrder.price.amount which already includes addon prices
-    const hasAddons = state.addonIds && state.addonIds.size > 0;
-    const payNowIncludesAddons = hasAddons && hasOrderData && state.fullOrder?.price?.amount !== undefined;
+    // Only trust order price if order actually has addons in it (articleItems or valueCardItems)
+    // After login, order might be created without addons yet, so we need to check
+    const orderHasAddons = hasOrderData && state.fullOrder && (
+      (state.fullOrder.articleItems && state.fullOrder.articleItems.length > 0) ||
+      (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0)
+    );
+    
+    // Check if order price includes addons: only if order actually has addons AND we have addons in state
+    const payNowIncludesAddons = hasAddons && hasOrderData && orderHasAddons && state.fullOrder?.price?.amount !== undefined;
     
     // Total calculation:
-    // - If payNowAmount already includes addons (from backend order), use it as-is
-    // - Otherwise, add addonTotal to payNowAmount
+    // - If payNowAmount already includes addons (from backend order that has addons), use it as-is
+    // - Otherwise, add addonTotal to payNowAmount (order doesn't have addons yet, or no order data)
     let total = payNowIncludesAddons ? payNowAmount : payNowAmount + addonTotal;
     
     // Apply discount if applicable
@@ -12755,11 +12772,24 @@ function updatePaymentOverview() {
     }
   }
   
-  // Calculate total for logging (same logic as display)
-  const addonItemsForLog = state.cartItems.filter(item => item.type === 'addon');
-  const addonTotalForLog = addonItemsForLog.reduce((sum, item) => sum + item.amount, 0);
+  // Calculate total for logging (same logic as display - use state.addonIds as source of truth)
   const hasAddonsForLog = state.addonIds && state.addonIds.size > 0;
-  const payNowIncludesAddonsForLog = hasAddonsForLog && hasOrderData && state.fullOrder?.price?.amount !== undefined;
+  let addonTotalForLog = 0;
+  if (hasAddonsForLog) {
+    state.addonIds.forEach((addonId) => {
+      const addon = findAddon(addonId);
+      if (addon) {
+        const price = getAddonPrice(addon);
+        addonTotalForLog += roundToHalfKrone(price);
+      }
+    });
+  }
+  // Check if order actually has addons (same logic as display)
+  const orderHasAddonsForLog = hasOrderData && state.fullOrder && (
+    (state.fullOrder.articleItems && state.fullOrder.articleItems.length > 0) ||
+    (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0)
+  );
+  const payNowIncludesAddonsForLog = hasAddonsForLog && hasOrderData && orderHasAddonsForLog && state.fullOrder?.price?.amount !== undefined;
   const calculatedTotal = payNowIncludesAddonsForLog ? payNowAmount : payNowAmount + addonTotalForLog;
   
   console.log('[Payment Overview] ✅ Updated:', {
