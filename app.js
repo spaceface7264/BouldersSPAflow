@@ -6308,17 +6308,20 @@ function setupEventListeners() {
   DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
   DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
   DOM.privacyConsent?.addEventListener('change', () => {
-    // Save privacy consent to localStorage
+    // Save privacy consent to localStorage with timestamp
     if (DOM.privacyConsent.checked) {
       try {
+        const timestamp = new Date().toISOString(); // ISO 8601 format for API
         localStorage.setItem('boulders_privacy_consent', 'true');
-        console.log('[Privacy Consent] Saved to localStorage');
+        localStorage.setItem('boulders_privacy_consent_timestamp', timestamp);
+        console.log('[Privacy Consent] Saved to localStorage with timestamp:', timestamp);
       } catch (e) {
         console.warn('[Privacy Consent] Could not save to localStorage:', e);
       }
     } else {
       try {
         localStorage.removeItem('boulders_privacy_consent');
+        localStorage.removeItem('boulders_privacy_consent_timestamp');
         console.log('[Privacy Consent] Removed from localStorage');
       } catch (e) {
         console.warn('[Privacy Consent] Could not remove from localStorage:', e);
@@ -6327,17 +6330,20 @@ function setupEventListeners() {
     updateCheckoutButton();
   });
   DOM.termsConsent?.addEventListener('change', () => {
-    // Save terms consent to localStorage
+    // Save terms consent to localStorage with timestamp
     if (DOM.termsConsent.checked) {
       try {
+        const timestamp = new Date().toISOString(); // ISO 8601 format for API
         localStorage.setItem('boulders_terms_consent', 'true');
-        console.log('[Terms Consent] Saved to localStorage');
+        localStorage.setItem('boulders_terms_consent_timestamp', timestamp);
+        console.log('[Terms Consent] Saved to localStorage with timestamp:', timestamp);
       } catch (e) {
         console.warn('[Terms Consent] Could not save to localStorage:', e);
       }
     } else {
       try {
         localStorage.removeItem('boulders_terms_consent');
+        localStorage.removeItem('boulders_terms_consent_timestamp');
         console.log('[Terms Consent] Removed from localStorage');
       } catch (e) {
         console.warn('[Terms Consent] Could not remove from localStorage:', e);
@@ -8267,6 +8273,26 @@ async function handleSaveAccount() {
       shippingAddress.country = country; // Always DK
     }
     
+    // Get privacy/terms consent timestamp for acceptedRegistrationTerms
+    // Use timestamp from localStorage if available, otherwise use current time
+    let acceptedRegistrationTerms = null;
+    const privacyConsent = document.getElementById('privacyConsent');
+    if (privacyConsent && privacyConsent.checked) {
+      try {
+        const privacyTimestamp = localStorage.getItem('boulders_privacy_consent_timestamp');
+        if (privacyTimestamp) {
+          acceptedRegistrationTerms = privacyTimestamp;
+        } else {
+          // Fallback: use current timestamp if consent is checked but no timestamp stored
+          acceptedRegistrationTerms = new Date().toISOString();
+        }
+        console.log('[Save Account] Using acceptedRegistrationTerms timestamp:', acceptedRegistrationTerms);
+      } catch (e) {
+        console.warn('[Save Account] Could not get consent timestamp from localStorage, using current time:', e);
+        acceptedRegistrationTerms = new Date().toISOString();
+      }
+    }
+    
     const customerData = {
       email: payload.customer?.email || document.getElementById('email')?.value?.trim(),
       firstName: payload.customer?.firstName || document.getElementById('firstName')?.value?.trim(),
@@ -8283,6 +8309,8 @@ async function handleSaveAccount() {
       customerType: 1, // Required by API
       ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
       ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
+      // Include registration terms acceptance timestamp (required by API)
+      ...(acceptedRegistrationTerms && { acceptedRegistrationTerms }),
     };
     
     // Also include phone and phoneCountryCode for backward compatibility (remove if not needed)
@@ -13333,6 +13361,31 @@ async function handleCheckout() {
           shippingAddress.country = country; // Always DK
         }
         
+        // Get privacy/terms consent timestamp for acceptedRegistrationTerms
+        // Use timestamp from localStorage if available, otherwise use current time
+        let acceptedRegistrationTerms = null;
+        if (payload.consent?.privacy || payload.consent?.terms) {
+          try {
+            const privacyTimestamp = localStorage.getItem('boulders_privacy_consent_timestamp');
+            const termsTimestamp = localStorage.getItem('boulders_terms_consent_timestamp');
+            // Use the earliest timestamp if both are present, otherwise use whichever is available
+            if (privacyTimestamp && termsTimestamp) {
+              acceptedRegistrationTerms = privacyTimestamp < termsTimestamp ? privacyTimestamp : termsTimestamp;
+            } else if (privacyTimestamp) {
+              acceptedRegistrationTerms = privacyTimestamp;
+            } else if (termsTimestamp) {
+              acceptedRegistrationTerms = termsTimestamp;
+            } else {
+              // Fallback: use current timestamp if consent is checked but no timestamp stored
+              acceptedRegistrationTerms = new Date().toISOString();
+            }
+            console.log('[checkout] Using acceptedRegistrationTerms timestamp:', acceptedRegistrationTerms);
+          } catch (e) {
+            console.warn('[checkout] Could not get consent timestamp from localStorage, using current time:', e);
+            acceptedRegistrationTerms = new Date().toISOString();
+          }
+        }
+        
         const customerData = {
           email: payload.customer?.email,
           firstName: payload.customer?.firstName,
@@ -13351,6 +13404,8 @@ async function handleCheckout() {
           ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
           // Include SMS consent - API field: allowMassSendSms
           ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
+          // Include registration terms acceptance timestamp (required by API)
+          ...(acceptedRegistrationTerms && { acceptedRegistrationTerms }),
         };
         
         // Also include phone and phoneCountryCode for backward compatibility
@@ -17949,7 +18004,9 @@ function validateForm(animate = false) {
     DOM.termsConsent = document.getElementById('termsConsent');
   }
 
-  if (!DOM.privacyConsent?.checked) {
+  // Privacy consent is only required for new users (not logged-in users)
+  // Logged-in users already accepted privacy policy when creating their account
+  if (!skipPersonalValidation && !DOM.privacyConsent?.checked) {
     isValid = false;
     errors.push('Privacy consent not accepted');
     if (animate) {
@@ -19217,7 +19274,15 @@ function restoreConsentCheckboxes() {
       const savedPrivacyConsent = localStorage.getItem('boulders_privacy_consent');
       if (savedPrivacyConsent === 'true') {
         privacyConsent.checked = true;
-        console.log('[Privacy Consent] Restored from localStorage');
+        // Ensure timestamp exists - if consent is restored but timestamp is missing, create one
+        // This handles edge cases where localStorage was partially cleared
+        if (!localStorage.getItem('boulders_privacy_consent_timestamp')) {
+          const timestamp = new Date().toISOString();
+          localStorage.setItem('boulders_privacy_consent_timestamp', timestamp);
+          console.log('[Privacy Consent] Restored from localStorage, created new timestamp:', timestamp);
+        } else {
+          console.log('[Privacy Consent] Restored from localStorage with existing timestamp');
+        }
       }
     } else {
       console.warn('[Privacy Consent] Checkbox not found in DOM');
@@ -19229,7 +19294,15 @@ function restoreConsentCheckboxes() {
       const savedTermsConsent = localStorage.getItem('boulders_terms_consent');
       if (savedTermsConsent === 'true') {
         termsConsent.checked = true;
-        console.log('[Terms Consent] Restored from localStorage');
+        // Ensure timestamp exists - if consent is restored but timestamp is missing, create one
+        // This handles edge cases where localStorage was partially cleared
+        if (!localStorage.getItem('boulders_terms_consent_timestamp')) {
+          const timestamp = new Date().toISOString();
+          localStorage.setItem('boulders_terms_consent_timestamp', timestamp);
+          console.log('[Terms Consent] Restored from localStorage, created new timestamp:', timestamp);
+        } else {
+          console.log('[Terms Consent] Restored from localStorage with existing timestamp');
+        }
       }
     } else {
       console.warn('[Terms Consent] Checkbox not found in DOM');
