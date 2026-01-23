@@ -4365,7 +4365,20 @@ function populateAddonsModal() {
         ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
         : '—';
     }
-    if (descriptionEl) descriptionEl.textContent = addon.description;
+    if (descriptionEl) {
+      const description = addon.description || '';
+      if (description) {
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+      } else {
+        descriptionEl.textContent = '';
+      }
+    }
     if (featuresEl) {
       featuresEl.innerHTML = '';
       if (addon.features && Array.isArray(addon.features) && addon.features.length > 0) {
@@ -4660,7 +4673,14 @@ function populateBoostModal() {
       // Do not show product number as fallback
       const description = product.externalDescription || product.description || '';
       if (description) {
-        descriptionEl.textContent = description;
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+        descriptionEl.style.display = '';
       } else {
         descriptionEl.textContent = '';
         descriptionEl.style.display = 'none';
@@ -9301,7 +9321,20 @@ function renderAddons() {
         ? formatPriceHalfKrone(roundToHalfKrone(priceDiscounted))
         : '—';
     }
-    if (descriptionEl) descriptionEl.textContent = addon.description;
+    if (descriptionEl) {
+      const description = addon.description || '';
+      if (description) {
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+      } else {
+        descriptionEl.textContent = '';
+      }
+    }
     if (featuresEl && Array.isArray(addon.features)) {
       featuresEl.innerHTML = '';
       addon.features.forEach((feature) => {
