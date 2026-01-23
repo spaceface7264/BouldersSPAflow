@@ -52,6 +52,22 @@ const copyFunctionsPlugin = () => ({
       console.log(`[Vite] Copied postal-codes-dk.js to dist/`);
     }
 
+    // Copy app.js to dist root (required by index.html)
+    const appJsFile = path.resolve(__dirname, 'app.js');
+    if (fs.existsSync(appJsFile)) {
+      const distAppJsFile = path.resolve(__dirname, 'dist', 'app.js');
+      fs.copyFileSync(appJsFile, distAppJsFile);
+      console.log(`[Vite] Copied app.js to dist/`);
+    }
+
+    // Copy gtm-utils.js to dist root (required by index.html)
+    const gtmUtilsFile = path.resolve(__dirname, 'gtm-utils.js');
+    if (fs.existsSync(gtmUtilsFile)) {
+      const distGtmUtilsFile = path.resolve(__dirname, 'dist', 'gtm-utils.js');
+      fs.copyFileSync(gtmUtilsFile, distGtmUtilsFile);
+      console.log(`[Vite] Copied gtm-utils.js to dist/`);
+    }
+
     // Copy _headers file to dist root for Cloudflare Pages
     const headersFile = path.resolve(__dirname, '_headers');
     if (fs.existsSync(headersFile)) {
