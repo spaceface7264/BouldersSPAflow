@@ -7581,16 +7581,16 @@ main {
 }
 
 .faq-item {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 12px;
     overflow: hidden;
     transition: all 0.3s ease;
 }
 
 .faq-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
 }
 
 .faq-question {
@@ -7625,7 +7625,7 @@ main {
 .faq-icon {
     flex-shrink: 0;
     transition: transform 0.3s ease;
-    color: var(--color-text-secondary);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .faq-question[aria-expanded="true"] .faq-icon {
@@ -7646,17 +7646,50 @@ main {
 }
 
 .faq-answer-text {
-    color: var(--color-text-secondary);
+    color: rgba(255, 255, 255, 0.9);
     font-size: var(--font-size-base);
     line-height: 1.6;
     margin: 0;
     padding-top: 8px;
+    text-align: left;
 }
 
 /* Hide FAQ when checkout is in progress or on step 5 */
 .faq-section[data-checkout="true"],
 .faq-section[data-step-5="true"] {
     display: none !important;
+}
+
+/* FAQ Help Link in Cart */
+.faq-help-link-section {
+    margin: 20px 0 0 0;
+    padding: 12px 0 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.faq-help-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transition: all 0.2s ease;
+    padding: 8px 16px;
+    border-radius: 6px;
+}
+
+.faq-help-link:hover {
+    color: var(--color-primary);
+    background: rgba(244, 1, 245, 0.1);
+    text-decoration: none;
+}
+
+.faq-help-link svg {
+    flex-shrink: 0;
+    color: var(--color-primary);
 }
 
 .receipt-info {

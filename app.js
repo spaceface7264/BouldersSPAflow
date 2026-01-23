@@ -5239,7 +5239,7 @@ const translations = {
     'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
     'cart.consent.sms': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS-beskeder</a>.',
     'consent.sms.explainer': 'SMS<br><br>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
-    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
+    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
@@ -5340,7 +5340,7 @@ const translations = {
     'consent.email.explainer': 'E-mail<br><br>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.',
     'cart.consent.sms': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS Messages.</a>.',
     'consent.sms.explainer': 'SMS<br><br>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.',
-    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
+    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'cart.faqHelp': 'Questions? See FAQ', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
     'message.noProducts.membership': 'No membership options available at this time.',
@@ -10833,6 +10833,11 @@ function handleGlobalClick(event) {
     case 'go-back-step': {
       event.preventDefault();
       prevStep();
+      break;
+    }
+    case 'scroll-to-faq': {
+      event.preventDefault();
+      scrollToFAQ();
       break;
     }
     default:
@@ -20821,6 +20826,36 @@ function updateFAQVisibility() {
     // Render FAQ when showing
     renderFAQ();
   }
+}
+
+/**
+ * Scroll to FAQ section smoothly
+ */
+function scrollToFAQ() {
+  const faqSection = document.getElementById('faqSection');
+  if (!faqSection) return;
+  
+  // Force FAQ to be visible if hidden
+  if (state.checkoutInProgress) {
+    // Temporarily show FAQ even during checkout
+    faqSection.style.display = 'block';
+    faqSection.removeAttribute('data-checkout');
+  } else {
+    updateFAQVisibility();
+  }
+  
+  // Scroll to FAQ with smooth behavior
+  faqSection.scrollIntoView({ 
+    behavior: 'smooth', 
+    block: 'start' 
+  });
+  
+  // Optional: Highlight FAQ section briefly
+  faqSection.style.transition = 'background-color 0.3s ease';
+  faqSection.style.backgroundColor = 'rgba(244, 1, 245, 0.1)';
+  setTimeout(() => {
+    faqSection.style.backgroundColor = '';
+  }, 2000);
 }
 
 // Initialize FAQ accordion functionality
