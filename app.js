@@ -12758,9 +12758,6 @@ function persistOrderSnapshot(orderId) {
       selectedBusinessUnit: state.selectedBusinessUnit,
       selectedProductType: state.selectedProductType, // Store product type for restoration
       selectedProductId: state.selectedProductId, // Store product ID for restoration
-      addonIds: Array.from(state.addonIds || []), // Store selected addon IDs (convert Set to Array)
-      selectedAddonIds: state.selectedAddonIds || [], // Store selected addon IDs array
-      subscriptionAdditions: state.subscriptionAdditions || [], // Store fetched addon products
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -13627,9 +13624,6 @@ async function handleCheckout() {
           selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
           selectedProductType: state.selectedProductType, // Store product type for restoration
           selectedProductId: state.selectedProductId, // Store product ID for restoration
-          addonIds: Array.from(state.addonIds || []), // Store selected addon IDs (convert Set to Array)
-          selectedAddonIds: state.selectedAddonIds || [], // Store selected addon IDs array
-          subscriptionAdditions: state.subscriptionAdditions || [], // Store fetched addon products
         }));
       } catch (e) {
         console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -15915,39 +15909,6 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
         state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
         console.log('[Payment Failed] ✅ Restored selectedBusinessUnit:', state.selectedBusinessUnit);
       }
-      
-      // Restore addon selections
-      if (storedOrder.addonIds && Array.isArray(storedOrder.addonIds)) {
-        state.addonIds = new Set(storedOrder.addonIds);
-        console.log('[Payment Failed] ✅ Restored addonIds:', Array.from(state.addonIds));
-      }
-      if (storedOrder.selectedAddonIds && Array.isArray(storedOrder.selectedAddonIds)) {
-        state.selectedAddonIds = storedOrder.selectedAddonIds;
-        console.log('[Payment Failed] ✅ Restored selectedAddonIds:', state.selectedAddonIds);
-      }
-      if (storedOrder.subscriptionAdditions && Array.isArray(storedOrder.subscriptionAdditions)) {
-        state.subscriptionAdditions = storedOrder.subscriptionAdditions;
-        console.log('[Payment Failed] ✅ Restored subscriptionAdditions:', state.subscriptionAdditions.length, 'items');
-      }
-      
-      // Reload subscription additions if we have a productId (to ensure we have latest data)
-      if (state.selectedProductId && (state.selectedProductType === 'membership')) {
-        console.log('[Payment Failed] Reloading subscription additions for product:', state.selectedProductId);
-        loadSubscriptionAdditions(state.selectedProductId).then(() => {
-          // After reloading, restore the selected addon IDs
-          if (state.selectedAddonIds && state.selectedAddonIds.length > 0) {
-            console.log('[Payment Failed] Restoring addon selections after reload:', state.selectedAddonIds);
-            state.selectedAddonIds.forEach(addonId => {
-              state.addonIds.add(addonId);
-            });
-            // Update cart to reflect restored addons
-            updateCartSummary();
-          }
-        }).catch(err => {
-          console.warn('[Payment Failed] Could not reload subscription additions:', err);
-        });
-      }
-      
       if (storedOrder.orderId) {
         state.orderId = storedOrder.orderId;
         console.log('[Payment Failed] ✅ Restored orderId:', state.orderId);
@@ -16299,39 +16260,6 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
                 state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
                 console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
               }
-              
-              // Restore addon selections
-              if (storedOrder.addonIds && Array.isArray(storedOrder.addonIds)) {
-                state.addonIds = new Set(storedOrder.addonIds);
-                console.log('[Payment Retry] ✅ Restored addonIds:', Array.from(state.addonIds));
-              }
-              if (storedOrder.selectedAddonIds && Array.isArray(storedOrder.selectedAddonIds)) {
-                state.selectedAddonIds = storedOrder.selectedAddonIds;
-                console.log('[Payment Retry] ✅ Restored selectedAddonIds:', state.selectedAddonIds);
-              }
-              if (storedOrder.subscriptionAdditions && Array.isArray(storedOrder.subscriptionAdditions)) {
-                state.subscriptionAdditions = storedOrder.subscriptionAdditions;
-                console.log('[Payment Retry] ✅ Restored subscriptionAdditions:', state.subscriptionAdditions.length, 'items');
-              }
-              
-              // Reload subscription additions if we have a productId (to ensure we have latest data)
-              if (state.selectedProductId && (state.selectedProductType === 'membership')) {
-                console.log('[Payment Retry] Reloading subscription additions for product:', state.selectedProductId);
-                loadSubscriptionAdditions(state.selectedProductId).then(() => {
-                  // After reloading, restore the selected addon IDs
-                  if (state.selectedAddonIds && state.selectedAddonIds.length > 0) {
-                    console.log('[Payment Retry] Restoring addon selections after reload:', state.selectedAddonIds);
-                    state.selectedAddonIds.forEach(addonId => {
-                      state.addonIds.add(addonId);
-                    });
-                    // Update cart to reflect restored addons
-                    updateCartSummary();
-                  }
-                }).catch(err => {
-                  console.warn('[Payment Retry] Could not reload subscription additions:', err);
-                });
-              }
-              
               if (storedOrder.orderId) {
                 state.orderId = storedOrder.orderId;
                 console.log('[Payment Retry] ✅ Restored orderId');
