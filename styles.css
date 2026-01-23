@@ -176,7 +176,7 @@
     overflow-y: auto; 
     flex: 1;
     min-height: 0;
-    align-items: start;
+    align-items: stretch;
   }
   
   /* Addon Card Styles for Modal */
@@ -196,10 +196,9 @@
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
     overflow: hidden;
-    min-height: 0 !important;
-    height: fit-content !important;
-    align-items: flex-start !important;
-    align-self: start;
+    min-height: 0;
+    height: 100%;
+    align-items: flex-start;
     width: 100%;
   }
   
@@ -338,9 +337,9 @@
   /* Override any media query rules that might affect addon cards */
   @media (min-width: 641px) {
     .addons-grid .addon-card {
-      height: fit-content !important;
-      min-height: 0 !important;
-      align-items: flex-start !important;
+      height: 100%;
+      min-height: 0;
+      align-items: flex-start;
     }
     
     .addons-grid .addon-card .plan-info {
