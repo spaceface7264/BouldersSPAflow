@@ -115,12 +115,43 @@ const copyFunctionsPlugin = () => ({
       console.log(`[Vite] Copied gtm-utils.js to dist/`);
     }
 
+    // Copy sanitize.js to dist root (required by app.js)
+    const sanitizeFile = path.resolve(__dirname, 'sanitize.js');
+    if (fs.existsSync(sanitizeFile)) {
+      const distSanitizeFile = path.resolve(__dirname, 'dist', 'sanitize.js');
+      fs.copyFileSync(sanitizeFile, distSanitizeFile);
+      console.log(`[Vite] Copied sanitize.js to dist/`);
+    }
+
     // Copy _headers file to dist root for Cloudflare Pages
     const headersFile = path.resolve(__dirname, '_headers');
     if (fs.existsSync(headersFile)) {
       const distHeadersFile = path.resolve(__dirname, 'dist', '_headers');
       fs.copyFileSync(headersFile, distHeadersFile);
       console.log(`[Vite] Copied _headers to dist/`);
+    }
+
+    // Copy utils directory to dist (required by app.js imports)
+    const utilsDir = path.resolve(__dirname, 'utils');
+    const distUtilsDir = path.resolve(__dirname, 'dist', 'utils');
+    if (fs.existsSync(utilsDir)) {
+      const copyDir = (src: string, dest: string) => {
+        if (!fs.existsSync(dest)) {
+          fs.mkdirSync(dest, { recursive: true });
+        }
+        const entries = fs.readdirSync(src, { withFileTypes: true });
+        entries.forEach((entry: fs.Dirent) => {
+          const srcPath = path.join(src, entry.name);
+          const destPath = path.join(dest, entry.name);
+          if (entry.isDirectory()) {
+            copyDir(srcPath, destPath);
+          } else {
+            fs.copyFileSync(srcPath, destPath);
+            console.log(`[Vite] Copied ${entry.name} to dist/utils/`);
+          }
+        });
+      };
+      copyDir(utilsDir, distUtilsDir);
     }
   }
 });
