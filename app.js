@@ -9417,6 +9417,9 @@ function handlePlanSelection(selectedCard) {
   // Add selected class to clicked card
   selectedCard.classList.add('selected');
   
+  // Brief delay to let user see the selection before modal opens
+  // This provides visual feedback that the plan was selected
+  
   // Step 5: Store the selected plan and product details
   const planId = selectedCard.dataset.plan;
   const productId = selectedCard.dataset.productId || planId; // Use API product ID if available
@@ -9490,10 +9493,16 @@ function handlePlanSelection(selectedCard) {
     // Load boost products if not already loaded
     if (!state.boostProducts || state.boostProducts.length === 0) {
       loadBoostProducts().then(() => {
-        showBoostModal();
+        // Delay to let user see the selection
+        setTimeout(() => {
+          showBoostModal();
+        }, 300);
       });
     } else {
-      showBoostModal();
+      // Delay to let user see the selection
+      setTimeout(() => {
+        showBoostModal();
+      }, 300);
     }
   } else {
     // Auto-advance to next step after a short delay
@@ -9767,10 +9776,16 @@ function setupNewAccessStep() {
             // Load boost products if not already loaded
             if (!state.boostProducts || state.boostProducts.length === 0) {
               loadBoostProducts().then(() => {
-                showBoostModal();
+                // Delay to let user see the selection
+                setTimeout(() => {
+                  showBoostModal();
+                }, 300);
               });
             } else {
-              showBoostModal();
+              // Delay to let user see the selection
+              setTimeout(() => {
+                showBoostModal();
+              }, 300);
             }
           } else {
             // Clear any pending membership navigation timeout to prevent double-clicks
