@@ -19,12 +19,47 @@ const cert = readIfExists('cert.pem');
 // Plugin to exclude app.js from HTML processing (it's a standalone script, not a module)
 const excludeAppJsPlugin = () => ({
   name: 'exclude-app-js',
+  // Run this plugin early to prevent Vite from processing app.js
+  enforce: 'pre',
+  // Intercept when Vite tries to load app.js - return a minimal valid module
+  // This keeps the script tag in HTML but prevents Vite from parsing the actual file
+  load(id) {
+    // Check if this is app.js (handle both relative and absolute paths)
+    if (id.includes('app.js') && !id.includes('node_modules')) {
+      try {
+        const resolvedPath = path.resolve(id);
+        const appJsPath = path.resolve(__dirname, 'app.js');
+        if (resolvedPath === appJsPath || id.endsWith('/app.js') || id === './app.js' || id.endsWith('app.js')) {
+          // Return a minimal valid ES module so Vite keeps the script tag
+          // but doesn't try to parse the actual app.js file content
+          // The actual app.js file will be served as-is from dist/
+          return '// app.js is loaded as a standalone script';
+        }
+      } catch (e) {
+        // If path resolution fails, check by string matching
+        if (id.endsWith('app.js') || id === './app.js') {
+          return '// app.js is loaded as a standalone script';
+        }
+      }
+    }
+    return null;
+  },
+  // Prevent Vite from processing app.js during import analysis
+  resolveId(id) {
+    // If app.js is being imported/resolved, mark it as external
+    if (id === './app.js' || id.endsWith('/app.js') || id.endsWith('app.js')) {
+      return { id, external: true };
+    }
+    return null;
+  },
+  // Ensure app.js script tag is preserved in the output HTML
   transformIndexHtml(html) {
-    // Replace module script with regular script to prevent Vite from parsing it
-    return html.replace(
-      /<script type="module" src="\.\/app\.js"><\/script>/,
-      '<script src="./app.js"></script>'
-    );
+    // Make sure app.js script tag exists (Vite might remove it if it can't process it)
+    if (!html.includes('app.js')) {
+      // Find the closing body tag and insert app.js before it
+      html = html.replace('</body>', '    <script type="module" src="./app.js"></script>\n</body>');
+    }
+    return html;
   }
 });
 
@@ -203,6 +238,10 @@ export default defineConfig(({ command }) => {
       assetsDir: 'assets',
       // Enable source maps for better error debugging in Sentry
       sourcemap: true,
+      rollupOptions: {
+        // Exclude app.js from processing - it's a standalone script, not a module
+        external: ['./app.js', 'app.js'],
+      },
     }
   }
 })
