@@ -219,7 +219,7 @@ class BusinessUnitsAPI {
       devLog('[API] Fetching subscriptions with Accept-Language:', acceptLanguage);
 
       const data = await requestJson({ url, headers });
-      devLog('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), imageBannerText: data[0].imageBanner?.text?.substring(0, 50) } : 'empty');
+      devLog('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), externalDescription: data[0].externalDescription?.substring(0, 50) } : 'empty');
       return data;
     } catch (error) {
       console.error('Error fetching subscriptions:', error);
@@ -1594,6 +1594,18 @@ class OrderAPI {
         );
         
         if (fixedData) {
+          // CRITICAL: Update subscription item ID after pricing fix
+          // The pricing fix deletes and re-adds the subscription item, creating a NEW ID
+          // We must update state.subscriptionItemId with the new ID, otherwise addons will fail with ID_NOT_FOUND
+          const newSubscriptionItem = fixedData?.subscriptionItems?.[0];
+          if (newSubscriptionItem?.id) {
+            const oldSubscriptionItemId = state.subscriptionItemId;
+            state.subscriptionItemId = newSubscriptionItem.id;
+            console.log('[Step 7] ✅ Updated subscription item ID after pricing fix:', {
+              oldId: oldSubscriptionItemId,
+              newId: state.subscriptionItemId
+            });
+          }
           return fixedData;
         }
         
@@ -1896,7 +1908,7 @@ class OrderAPI {
 
   // Step 7: Add value card item (punch card) - POST /api/ver3/orders/{orderId}/items/valuecards
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
-  async addValueCardItem(orderId, productId, quantity = 1) {
+  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null) {
     try {
       const url = this.useProxy
         ? buildApiUrl({
@@ -1921,8 +1933,10 @@ class OrderAPI {
       // API Documentation requires 'valueCardProduct' field (integer, required)
       // Optional fields: receiverDetails, senderDetails, amount, externalMessage, additionTo
       // Note: quantity is handled by repeating the request or backend logic, not in payload
+      // additionTo links this value card to the parent subscription item
       const payload = {
         valueCardProduct: productId, // Required: Value card product ID (integer)
+        ...(additionTo ? { additionTo } : {}), // Link to parent subscription item if provided
         // quantity is not in API spec - backend may handle it differently
         // businessUnit is not in API spec - may be inferred from order context
       };
@@ -1948,7 +1962,7 @@ class OrderAPI {
   }
 
   // Step 7: Add article item (add-ons/extras) - POST /api/orders/{orderId}/items/articles
-  async addArticleItem(orderId, productId) {
+  async addArticleItem(orderId, productId, additionTo = null) {
     try {
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
@@ -1968,10 +1982,15 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
+      // API expects 'articleProduct' not 'productId' per OpenAPI spec
+      // additionTo links this addon to the parent subscription item
       const payload = {
-        productId,
+        articleProduct: productId, // API field name is 'articleProduct'
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
+        ...(additionTo ? { additionTo } : {}), // Link to parent subscription item if provided
       };
+      
+      console.log('[Step 7] Add article item payload:', payload);
       
       let data;
       try {
@@ -2837,6 +2856,9 @@ async function loadProductsFromAPI() {
       ? valueCardsResponse
       : (valueCardsResponse.data || valueCardsResponse.items || []);
 
+    // Store raw products before filtering (for boost product detection)
+    // This ensures boost products aren't missed if they're filtered out by display rules
+    state.allRawProducts = [...subscriptions, ...valueCards];
 
     // Filter out products that shouldn't be displayed according to OpenAPI documentation
     // Reference: docs/brp-api3-openapi.yaml - SubscriptionProductOut schema (line ~14970)
@@ -3070,19 +3092,19 @@ function renderProductsFromAPI() {
     const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
                      intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
     
-    // Get description - prefer imageBanner.text for campaign products, otherwise use description
-    // For campaign products, check both imageBanner.text and description fields
+    // Get description - use externalDescription if available, otherwise fall back to description
+    // Do not show product number as fallback
     let description = '';
     if (category === 'campaign') {
-      // Campaign: prefer imageBanner.text, but fall back to description if imageBanner.text is empty or single-line
-      const bannerText = product.imageBanner?.text || '';
+      // Campaign: prefer externalDescription, but fall back to description if externalDescription is empty or single-line
+      const externalDesc = product.externalDescription || '';
       const descText = product.description || '';
-      // If bannerText exists and has newlines, use it; otherwise try description
-      description = (bannerText && bannerText.includes('\n')) ? bannerText : 
+      // If externalDesc exists and has newlines, use it; otherwise try description
+      description = (externalDesc && externalDesc.includes('\n')) ? externalDesc : 
                     (descText && descText.includes('\n')) ? descText : 
-                    bannerText || descText || product.productNumber || '';
+                    externalDesc || descText || '';
     } else {
-      description = product.imageBanner?.text || product.description || product.productNumber || '';
+      description = product.externalDescription || product.description || '';
     }
     
     // Preserve line breaks from backend - escape HTML and preserve newlines
@@ -3992,6 +4014,7 @@ const state = {
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
   subscriptionAdditions: [], // Fetched add-ons for selected membership
+  boostProducts: [], // Products with "boostProduct" label for boost modal
   selectedProductType: null, // 'membership' or 'punch-card'
   selectedProductId: null, // The actual product ID from API
   selectedAddonIds: [], // Array of selected add-on product IDs
@@ -3999,6 +4022,7 @@ const state = {
   referenceData: {}, // Cached reference/lookup data (countries, regions, currencies, etc.)
   referenceDataLoaded: false, // Flag to track if reference data has been loaded
   subscriptionAttachedOrderId: null, // Tracks which order already has the membership attached
+  subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
   // Test mode for success page
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
@@ -4118,6 +4142,25 @@ function defaultAddonsImage() {
 </svg>`;
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
+
+function getProductPlaceholderImage() {
+  // Placeholder image for individual product cards (consistent aspect ratio)
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <defs>
+    <linearGradient id="productGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#productGrad)"/>
+  <g fill="#64748b" opacity="0.3">
+    <rect x="150" y="100" width="100" height="100" rx="8"/>
+  </g>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-size="14" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial">No image</text>
+</svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
 function ensureAddonsModal() {
   if (addonsModal) return addonsModal;
   const overlay = document.createElement('div');
@@ -4173,10 +4216,7 @@ function ensureAddonsModal() {
   actions.appendChild(rightActions);
 
   const contentCol = document.createElement('div');
-  contentCol.style.flex = '1 1 auto';
-  contentCol.style.display = 'flex';
-  contentCol.style.flexDirection = 'column';
-  contentCol.style.minWidth = '0';
+  contentCol.className = 'addons-main';
   contentCol.appendChild(header);
   contentCol.appendChild(grid);
   contentCol.appendChild(actions);
@@ -4216,11 +4256,12 @@ function populateAddonsModal() {
       const card = document.createElement('div');
       card.className = 'plan-card addon-card';
       card.style.cursor = 'pointer';
+      const addonPrice = getAddonPrice(addon);
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${addon.name}</div>
-        <div>${typeof addon.price?.discounted === 'number'
-          ? formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted))
-          : '—'} kr</div>
+        <div>${addonPrice > 0
+          ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
+          : '—'} kr.</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
       `);
       
@@ -4289,39 +4330,88 @@ function populateAddonsModal() {
       
       console.log('[Addons Modal] Image URL for', addon.name, ':', imageUrl);
       
+      // Always show image element - use placeholder if no image URL
+      imageEl.removeAttribute('style'); // Remove inline style that hides it
+      imageEl.style.display = 'block';
+      imageEl.style.visibility = 'visible';
+      imageEl.style.opacity = '1';
+      imageEl.style.width = '100%';
+      imageEl.style.height = '200px';
+      imageEl.style.minHeight = '200px';
+      imageEl.style.maxHeight = '200px';
+      imageEl.style.objectFit = 'cover';
+      imageEl.style.borderRadius = '8px';
+      imageEl.style.marginBottom = '12px';
+      imageEl.style.backgroundColor = '#1e293b'; // Background color for placeholder
+      imageEl.classList.add('addon-image');
+      
       if (imageUrl) {
         imageEl.src = imageUrl;
         imageEl.alt = addon.name || 'Addon image';
-        imageEl.removeAttribute('style'); // Remove inline style that hides it
-        imageEl.style.display = 'block';
-        imageEl.style.visibility = 'visible';
-        imageEl.style.opacity = '1';
-        imageEl.style.width = '100%';
-        imageEl.style.height = '200px';
-        imageEl.style.objectFit = 'cover';
-        imageEl.style.borderRadius = '8px';
-        imageEl.style.marginBottom = '12px';
-        imageEl.classList.add('addon-image');
         console.log('[Addons Modal] Image set for', addon.name, '- src:', imageEl.src);
         console.log('[Addons Modal] Image computed display:', window.getComputedStyle(imageEl).display);
       } else {
-        imageEl.style.display = 'none';
-        console.log('[Addons Modal] No image URL found for', addon.name);
+        // Use placeholder image when no image is available
+        imageEl.src = getProductPlaceholderImage();
+        imageEl.alt = (addon.name || 'Addon') + ' - No image available';
+        console.log('[Addons Modal] Using placeholder image for', addon.name);
       }
     } else {
       console.log('[Addons Modal] Image element not found for', addon.name);
     }
     
-    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
-    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
-    if (descriptionEl) descriptionEl.textContent = addon.description;
+    // Handle original price (only for subscription additions with discount)
+    if (originalPriceEl) {
+      const originalPrice = addon.price?.original;
+      if (typeof originalPrice === 'number' && originalPrice > 0) {
+        originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
+        originalPriceEl.style.display = '';
+      } else {
+        originalPriceEl.style.display = 'none';
+      }
+    }
+    // Use helper function for discounted/current price
+    const addonPrice = getAddonPrice(addon);
+    if (discountedPriceEl) {
+      discountedPriceEl.textContent = addonPrice > 0
+        ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
+        : '—';
+    }
+    if (descriptionEl) {
+      const description = addon.description || '';
+      if (description) {
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+      } else {
+        descriptionEl.textContent = '';
+      }
+    }
     if (featuresEl) {
       featuresEl.innerHTML = '';
-      addon.features.forEach((feature) => {
-        const li = document.createElement('li');
-        li.textContent = feature;
-        featuresEl.appendChild(li);
-      });
+      if (addon.features && Array.isArray(addon.features) && addon.features.length > 0) {
+        addon.features.forEach((feature) => {
+          const li = document.createElement('li');
+          li.textContent = feature;
+          featuresEl.appendChild(li);
+        });
+      }
+    }
+    
+    // Hide plan-meta if it's empty (no original price and no features)
+    const planMetaEl = card.querySelector('.plan-meta');
+    if (planMetaEl) {
+      const hasOriginalPrice = originalPriceEl && originalPriceEl.style.display !== 'none' && originalPriceEl.textContent.trim() !== '';
+      const hasFeatures = featuresEl && featuresEl.children.length > 0;
+      if (!hasOriginalPrice && !hasFeatures) {
+        planMetaEl.style.display = 'none';
+      } else {
+        planMetaEl.style.display = '';
+      }
     }
     
     // Make entire card clickable
@@ -4344,24 +4434,43 @@ function showAddonsModal() {
   populateAddonsModal();
   updateAddonActionButton();
   
-  // Show modal with subtle animation
-  addonsModal.style.display = 'block';
-  addonsModal.style.opacity = '0';
-  addonsModal.style.transform = 'scale(0.95)';
-  document.body.style.overflow = 'hidden';
+  // Show modal - overlay dims immediately, only sheet animates
+  addonsModal.style.display = 'flex';
+  addonsModal.style.alignItems = 'center';
+  addonsModal.style.justifyContent = 'center';
+  addonsModal.style.opacity = '1'; // Overlay appears immediately (no animation)
+  addonsModal.style.transition = 'opacity 0.2s ease'; // Quick fade for overlay only
   
-  // Trigger animation after a brief moment
-  requestAnimationFrame(() => {
-    addonsModal.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    addonsModal.style.opacity = '1';
-    addonsModal.style.transform = 'scale(1)';
-  });
+  // Prevent scrolling behind modal
+  document.body.classList.add('modal-open');
+  document.body.style.overflow = 'hidden';
+  document.body.style.position = 'fixed';
+  document.body.style.width = '100%';
+  document.body.style.height = '100%';
+  
+  // Animate only the modal sheet, not the overlay
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    sheet.style.opacity = '0';
+    sheet.style.transform = 'scale(0.95)';
+    sheet.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    
+    requestAnimationFrame(() => {
+      sheet.style.opacity = '1';
+      sheet.style.transform = 'scale(1)';
+    });
+  }
 }
 
 function hideAddonsModal() {
   if (!addonsModal) return;
   addonsModal.style.display = 'none';
+  // Restore body scrolling
+  document.body.classList.remove('modal-open');
   document.body.style.overflow = '';
+  document.body.style.position = '';
+  document.body.style.width = '';
+  document.body.style.height = '';
 }
 
 function proceedAfterAddons() {
@@ -4387,6 +4496,15 @@ function populateBoostModal() {
     return;
   }
   
+  // Ensure templates are initialized
+  if (!templates.addon) {
+    console.warn('[Boost Modal] Templates not initialized yet, initializing...');
+    templates.addon = document.getElementById('addon-card-template');
+    if (!templates.addon) {
+      console.error('[Boost Modal] Addon template not found in DOM!');
+    }
+  }
+  
   // Update title for boost modal
   if (title) {
     title.textContent = 'Boost your membership';
@@ -4397,8 +4515,11 @@ function populateBoostModal() {
   // Use products with "boostProduct" label
   const boostProducts = state.boostProducts || [];
   
+  console.log(`[Boost Modal] populateBoostModal: ${boostProducts.length} boost products to render`);
+  
   if (boostProducts.length === 0) {
     // No boost products available
+    console.warn('[Boost Modal] No boost products to display');
     const emptyMsg = document.createElement('div');
     emptyMsg.className = 'addons-empty';
     emptyMsg.textContent = 'No boost products available.';
@@ -4409,8 +4530,14 @@ function populateBoostModal() {
     return;
   }
   
+  // Check if template exists
+  if (!templates.addon) {
+    console.warn('[Boost Modal] Addon template not found, using fallback rendering');
+  }
+  
   // Render each boost product
-  boostProducts.forEach((product) => {
+  boostProducts.forEach((product, index) => {
+    console.log(`[Boost Modal] Rendering boost product ${index + 1}/${boostProducts.length}: ${product.name} (ID: ${product.id})`);
     if (!templates.addon) {
       // Fallback simple card if template missing
       const card = document.createElement('div');
@@ -4430,7 +4557,7 @@ function populateBoostModal() {
       
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${product.name || 'Boost Product'}</div>
-        <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr' : '—'}</div>
+        <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr.' : '—'}</div>
         <div class="check-circle" data-action="toggle-addon" data-addon-id="${product.id}"></div>
       `);
       
@@ -4507,25 +4634,39 @@ function populateBoostModal() {
       
       console.log('[Boost Modal] Image URL for', product.name, ':', imageUrl);
       
+      // Always show image element - use placeholder if no image URL
+      imageEl.removeAttribute('style'); // Remove inline style that hides it
+      imageEl.style.display = 'block';
+      imageEl.style.visibility = 'visible';
+      imageEl.style.opacity = '1';
+      imageEl.style.width = '100%';
+      imageEl.style.height = '200px';
+      imageEl.style.minHeight = '200px';
+      imageEl.style.maxHeight = '200px';
+      imageEl.style.objectFit = 'cover';
+      imageEl.style.borderRadius = '8px';
+      imageEl.style.marginBottom = '12px';
+      imageEl.style.backgroundColor = '#1e293b'; // Background color for placeholder
+      imageEl.classList.add('addon-image');
+      
       if (imageUrl) {
         imageEl.src = imageUrl;
         imageEl.alt = product.name || 'Product image';
-        imageEl.style.display = 'block';
-        imageEl.classList.add('addon-image');
-        console.log('[Boost Modal] Image set for', product.name);
+        console.log('[Boost Modal] Image set for', product.name, '- src:', imageEl.src);
       } else {
-        imageEl.style.display = 'none';
-        console.log('[Boost Modal] No image URL found for', product.name);
+        // Use placeholder image when no image is available
+        imageEl.src = getProductPlaceholderImage();
+        imageEl.alt = (product.name || 'Product') + ' - No image available';
+        console.log('[Boost Modal] Using placeholder image for', product.name);
       }
     }
     
-    // Extract price from product structure (similar to renderSubscriptionCard)
-    const priceInCents = product.priceWithInterval?.price?.amount || 
-                         product.price?.amount || 
-                         product.amount || 
-                         0;
-    const price = priceInCents > 0 ? priceInCents / 100 : 0;
-    const originalPrice = product.originalPrice ? product.originalPrice / 100 : null;
+    // Use helper function for consistent price extraction
+    const price = getAddonPrice(product);
+    // Handle original price if available (for products with discounts)
+    const originalPrice = product.originalPrice 
+      ? (typeof product.originalPrice === 'number' ? product.originalPrice / 100 : product.originalPrice)
+      : (product.price?.original ? product.price.original : null);
     
     if (originalPriceEl && originalPrice && originalPrice > price) {
       originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
@@ -4540,9 +4681,22 @@ function populateBoostModal() {
     }
     
     if (descriptionEl) {
-      // Get description similar to renderSubscriptionCard
-      const description = product.imageBanner?.text || product.description || product.productNumber || '';
-      descriptionEl.textContent = description;
+      // Get description - use externalDescription if available, otherwise fall back to description
+      // Do not show product number as fallback
+      const description = product.externalDescription || product.description || '';
+      if (description) {
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+        descriptionEl.style.display = '';
+      } else {
+        descriptionEl.textContent = '';
+        descriptionEl.style.display = 'none';
+      }
     }
     
     if (featuresEl && product.features && Array.isArray(product.features)) {
@@ -4571,12 +4725,34 @@ function populateBoostModal() {
     });
     
     grid.appendChild(card);
+    console.log(`[Boost Modal] ✅ Card appended for product: ${product.name}`);
   });
+  
+  console.log(`[Boost Modal] ✅ Finished rendering ${boostProducts.length} boost products`);
 }
 
 // Show boost modal (uses same modal infrastructure as addons)
 async function showBoostModal() {
   ensureAddonsModal();
+  
+  // Ensure products are loaded first
+  const hasAnyProducts = (state.allRawProducts?.length || 0) > 0 || 
+                         (state.subscriptions?.length || 0) > 0 || 
+                         (state.campaignSubscriptions?.length || 0) > 0 ||
+                         (state.dayPassSubscriptions?.length || 0) > 0 ||
+                         (state.valueCards?.length || 0) > 0;
+  
+  if (!hasAnyProducts) {
+    console.warn('[Boost Modal] No products loaded yet. Waiting for products to load...');
+    // Wait a bit and try again, or load products if business unit is selected
+    if (state.selectedBusinessUnit) {
+      await loadProductsFromAPI();
+    } else {
+      console.error('[Boost Modal] Cannot load boost products: No business unit selected');
+      showToast('Unable to load boost products. Please try again.', 'error');
+      return;
+    }
+  }
   
   // Load boost products if not already loaded
   if (!state.boostProducts || state.boostProducts.length === 0) {
@@ -4586,23 +4762,100 @@ async function showBoostModal() {
   populateBoostModal();
   updateAddonActionButton();
   
-  // Show modal with subtle animation
-  addonsModal.style.display = 'block';
-  addonsModal.style.opacity = '0';
-  addonsModal.style.transform = 'scale(0.95)';
-  document.body.style.overflow = 'hidden';
+  // Show modal - overlay dims immediately, only sheet animates
+  addonsModal.style.display = 'flex';
+  addonsModal.style.alignItems = 'center';
+  addonsModal.style.justifyContent = 'center';
+  addonsModal.style.opacity = '1'; // Overlay appears immediately (no animation)
+  addonsModal.style.transition = 'opacity 0.2s ease'; // Quick fade for overlay only
   
-  // Trigger animation after a brief moment
-  requestAnimationFrame(() => {
-    addonsModal.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    addonsModal.style.opacity = '1';
-    addonsModal.style.transform = 'scale(1)';
-  });
+  // Prevent scrolling behind modal
+  document.body.classList.add('modal-open');
+  document.body.style.overflow = 'hidden';
+  document.body.style.position = 'fixed';
+  document.body.style.width = '100%';
+  document.body.style.height = '100%';
+  
+  // Animate only the modal sheet, not the overlay
+  // Ensure sheet is properly positioned before animation
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    // Reset any previous transforms to ensure proper centering
+    sheet.style.position = 'absolute';
+    sheet.style.left = '50%';
+    sheet.style.top = '50%';
+    sheet.style.transform = 'translate(-50%, -50%) scale(0.95)';
+    sheet.style.opacity = '0';
+    sheet.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    
+    requestAnimationFrame(() => {
+      sheet.style.opacity = '1';
+      sheet.style.transform = 'translate(-50%, -50%) scale(1)';
+    });
+  }
 }
 
 // Expose a small API to set the image dynamically if desired
 // Usage: window.setAddonsUpsellImage('https://.../image.jpg')
 // Image API removed
+
+// Check if a product has the "Boost" label
+function hasBoostLabel(product) {
+  if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+    return false;
+  }
+  return product.productLabels.some(
+    label => label.name && label.name.toLowerCase() === 'boost'
+  );
+}
+
+// Load and filter products with "boostProduct" label
+async function loadBoostProducts() {
+  const boostProducts = [];
+  const seenIds = new Set();
+  
+  // Helper function to check if product has boostProduct label
+  const hasBoostProductLabel = (product) => {
+    if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+      return false;
+    }
+    return product.productLabels.some(
+      label => label.name && label.name.toLowerCase() === 'boostproduct'
+    );
+  };
+  
+  // Scan all product sources - prioritize raw products (before filtering) to catch all boost products
+  // Then also check filtered arrays in case products are in both
+  const productSources = [
+    ...(state.allRawProducts || []), // Raw products before filtering (most important)
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+    ...(state.valueCards || [])
+  ];
+  
+  console.log(`[Boost Modal] Scanning ${productSources.length} products for boostProduct label`);
+  console.log(`[Boost Modal] Raw products: ${state.allRawProducts?.length || 0}, Subscriptions: ${state.subscriptions?.length || 0}, Campaigns: ${state.campaignSubscriptions?.length || 0}, DayPass: ${state.dayPassSubscriptions?.length || 0}, ValueCards: ${state.valueCards?.length || 0}`);
+  
+  // Filter products with boostProduct label and deduplicate by ID
+  productSources.forEach((product) => {
+    if (hasBoostProductLabel(product) && product.id) {
+      const productId = String(product.id);
+      if (!seenIds.has(productId)) {
+        seenIds.add(productId);
+        boostProducts.push(product);
+        console.log(`[Boost Modal] Found boost product: ${product.name} (ID: ${product.id})`);
+      }
+    }
+  });
+  
+  state.boostProducts = boostProducts;
+  console.log(`[Boost Modal] Loaded ${boostProducts.length} boost products`);
+  if (boostProducts.length === 0) {
+    console.warn('[Boost Modal] No boost products found! Check that products have "boostProduct" label.');
+  }
+  return boostProducts;
+}
 
 // Hide Boost from the step indicator permanently and toggle Boost step panel by selection
 function applyConditionalSteps() {
@@ -4657,6 +4910,10 @@ function init() {
   
   cacheDom();
   cacheTemplates();
+  
+  // Restore privacy and terms consent from localStorage
+  restoreConsentCheckboxes();
+  
   renderCatalog();
   refreshCarousels();
   updateCartSummary();
@@ -6050,8 +6307,44 @@ function setupEventListeners() {
   });
   DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
   DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
-  DOM.privacyConsent?.addEventListener('change', updateCheckoutButton);
-  DOM.termsConsent?.addEventListener('change', updateCheckoutButton);
+  DOM.privacyConsent?.addEventListener('change', () => {
+    // Save privacy consent to localStorage
+    if (DOM.privacyConsent.checked) {
+      try {
+        localStorage.setItem('boulders_privacy_consent', 'true');
+        console.log('[Privacy Consent] Saved to localStorage');
+      } catch (e) {
+        console.warn('[Privacy Consent] Could not save to localStorage:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem('boulders_privacy_consent');
+        console.log('[Privacy Consent] Removed from localStorage');
+      } catch (e) {
+        console.warn('[Privacy Consent] Could not remove from localStorage:', e);
+      }
+    }
+    updateCheckoutButton();
+  });
+  DOM.termsConsent?.addEventListener('change', () => {
+    // Save terms consent to localStorage
+    if (DOM.termsConsent.checked) {
+      try {
+        localStorage.setItem('boulders_terms_consent', 'true');
+        console.log('[Terms Consent] Saved to localStorage');
+      } catch (e) {
+        console.warn('[Terms Consent] Could not save to localStorage:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem('boulders_terms_consent');
+        console.log('[Terms Consent] Removed from localStorage');
+      } catch (e) {
+        console.warn('[Terms Consent] Could not remove from localStorage:', e);
+      }
+    }
+    updateCheckoutButton();
+  });
 
   // Postal code auto-fill event listeners
   setupPostalCodeAutoFill();
@@ -9024,14 +9317,12 @@ function renderAddons() {
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
 
     if (nameEl) nameEl.textContent = addon.name;
+    // Handle original price (only for subscription additions with discount)
     const priceOriginal = typeof addon.price?.original === 'number'
       ? addon.price.original
-      : typeof addon.price?.amount === 'number'
-        ? addon.price.amount / 100
-        : null;
-    const priceDiscounted = typeof addon.price?.discounted === 'number'
-      ? addon.price.discounted
-      : priceOriginal;
+      : null;
+    // Use helper function for current price
+    const priceDiscounted = getAddonPrice(addon);
     if (originalPriceEl) {
       originalPriceEl.textContent = priceOriginal !== null
         ? formatPriceHalfKrone(roundToHalfKrone(priceOriginal))
@@ -9042,7 +9333,20 @@ function renderAddons() {
         ? formatPriceHalfKrone(roundToHalfKrone(priceDiscounted))
         : '—';
     }
-    if (descriptionEl) descriptionEl.textContent = addon.description;
+    if (descriptionEl) {
+      const description = addon.description || '';
+      if (description) {
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+      } else {
+        descriptionEl.textContent = '';
+      }
+    }
     if (featuresEl && Array.isArray(addon.features)) {
       featuresEl.innerHTML = '';
       addon.features.forEach((feature) => {
@@ -9158,6 +9462,9 @@ function handlePlanSelection(selectedCard) {
   // Add selected class to clicked card
   selectedCard.classList.add('selected');
   
+  // Brief delay to let user see the selection before modal opens
+  // This provides visual feedback that the plan was selected
+  
   // Step 5: Store the selected plan and product details
   const planId = selectedCard.dataset.plan;
   const productId = selectedCard.dataset.productId || planId; // Use API product ID if available
@@ -9173,6 +9480,31 @@ function handlePlanSelection(selectedCard) {
   }
   
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
+  
+  // Find the product object to check for Boost label
+  let product = null;
+  const productIdNum = typeof productId === 'string' ? parseInt(productId) : productId;
+  
+  if (isMembership) {
+    // Check all subscription types
+    const allSubscriptions = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || [])
+    ];
+    product = allSubscriptions.find(p => 
+      p.id === productId || 
+      p.id === productIdNum ||
+      String(p.id) === String(productId)
+    );
+  } else {
+    // Check value cards
+    product = (state.valueCards || []).find(p => 
+      p.id === productId || 
+      p.id === productIdNum ||
+      String(p.id) === String(productId)
+    );
+  }
   
   // GTM: Track select_item event
   trackSelectItemEvent({
@@ -9201,10 +9533,28 @@ function handlePlanSelection(selectedCard) {
   // Update cart to reflect selection
   updateCartSummary();
   
-  // Auto-advance to next step after a short delay
-  setTimeout(() => {
-    nextStep();
-  }, 500);
+  // Check if product has Boost label - if so, show modal instead of auto-advancing
+  if (product && hasBoostLabel(product)) {
+    // Load boost products if not already loaded
+    if (!state.boostProducts || state.boostProducts.length === 0) {
+      loadBoostProducts().then(() => {
+        // Delay to let user see the selection
+        setTimeout(() => {
+          showBoostModal();
+        }, 300);
+      });
+    } else {
+      // Delay to let user see the selection
+      setTimeout(() => {
+        showBoostModal();
+      }, 300);
+    }
+  } else {
+    // Auto-advance to next step after a short delay
+    setTimeout(() => {
+      nextStep();
+    }, 500);
+  }
 }
 
 function setupNewAccessStep() {
@@ -9463,23 +9813,44 @@ function setupNewAccessStep() {
           // Update cart to reflect selection
           updateCartSummary();
           
-          // Clear any pending membership navigation timeout to prevent double-clicks
-          if (pendingNavigationTimeouts.membership) {
-            clearTimeout(pendingNavigationTimeouts.membership);
-            pendingNavigationTimeouts.membership = null;
-          }
-          
-          // Reset card animation and auto-advance to next step
-          pendingNavigationTimeouts.membership = setTimeout(() => {
-            // Clear timeout reference before navigation
-            pendingNavigationTimeouts.membership = null;
+          // Check if product has Boost label - if so, show modal instead of auto-advancing
+          if (selectedProduct && hasBoostLabel(selectedProduct)) {
+            // Reset card animation
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
-            // Only navigate if we're still on step 2 (prevent stale state navigation)
-            if (state.currentStep === 2) {
-              nextStep();
+            // Load boost products if not already loaded
+            if (!state.boostProducts || state.boostProducts.length === 0) {
+              loadBoostProducts().then(() => {
+                // Delay to let user see the selection
+                setTimeout(() => {
+                  showBoostModal();
+                }, 300);
+              });
+            } else {
+              // Delay to let user see the selection
+              setTimeout(() => {
+                showBoostModal();
+              }, 300);
             }
-          }, 500);
+          } else {
+            // Clear any pending membership navigation timeout to prevent double-clicks
+            if (pendingNavigationTimeouts.membership) {
+              clearTimeout(pendingNavigationTimeouts.membership);
+              pendingNavigationTimeouts.membership = null;
+            }
+            
+            // Reset card animation and auto-advance to next step
+            pendingNavigationTimeouts.membership = setTimeout(() => {
+              // Clear timeout reference before navigation
+              pendingNavigationTimeouts.membership = null;
+              card.style.transform = 'scale(1)';
+              card.style.boxShadow = '';
+              // Only navigate if we're still on step 2 (prevent stale state navigation)
+              if (state.currentStep === 2) {
+                nextStep();
+              }
+            }, 500);
+          }
         }
     });
   });
@@ -9853,6 +10224,7 @@ function toggleAddon(addonId, checkCircle) {
   updateCartSummary();
   updateAddonSkipButton();
   updateAddonActionButton();
+  updateCheckoutButton(); // Re-evaluate checkout button state when addons change
 }
 
 function updateAddonActionButton() {
@@ -11131,10 +11503,10 @@ function updateCartSummary() {
                            0;
       const price = priceInCents > 0 ? priceInCents / 100 : 0;
       
-      // Get imageBanner text if available
-      const bannerText = membership.imageBanner?.text || '';
-      const displayName = bannerText 
-        ? `${membership.name || 'Membership'} - ${bannerText}`
+      // Get externalDescription if available
+      const externalDesc = membership.externalDescription || '';
+      const displayName = externalDesc 
+        ? `${membership.name || 'Membership'} - ${externalDesc}`
         : membership.name || 'Membership';
       
       items.push({
@@ -11143,7 +11515,7 @@ function updateCartSummary() {
         amount: price,
         type: 'membership',
         productId: membership.id, // Store API product ID for order creation
-        imageBannerText: bannerText, // Store separately for rendering
+        externalDescription: externalDesc, // Store separately for rendering (renamed from imageBannerText)
         productName: membership.name || 'Membership', // Store original name
       });
       state.totals.membershipMonthly = price;
@@ -11186,23 +11558,39 @@ function updateCartSummary() {
     });
   }
 
-  // Handle add-ons (if any were selected - currently disabled but keeping for future)
+  // Handle add-ons (boost products and subscription additions)
+  // Store addons separately to append after subscriptions
+  const addonItems = [];
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
-    items.push({
+    const price = getAddonPrice(addon);
+    addonItems.push({
       id: addon.id,
-      name: addon.name,
-      amount: roundToHalfKrone(addon.price.discounted),
+      name: addon.name || 'Add-on',
+      amount: roundToHalfKrone(price),
       type: 'addon',
+      productId: addon.id, // Store API product ID for order creation
     });
   });
 
+  // Ensure correct order: subscriptions/value cards first, then addons
+  // Items array already has subscriptions and value cards in correct order
+  // Now append addons at the end
+  items.push(...addonItems);
+
+  // CRITICAL: Explicitly sort items to ensure subscriptions come first
+  // This ensures the array order matches the display order
+  const sortedItems = [
+    ...items.filter(item => item.type === 'membership' || item.type === 'value-card'),
+    ...items.filter(item => item.type === 'addon')
+  ];
+
   // GTM: Track add_to_cart event when items are added
   const previousCartItemCount = state.cartItems?.length || 0;
-  const newCartItemCount = items.length;
+  const newCartItemCount = sortedItems.length;
   
-  state.cartItems = items;
+  state.cartItems = sortedItems;
   
   // Check for campaigns and show/hide warning banner
   if (hasCampaignInCart()) {
@@ -11232,6 +11620,9 @@ function updateCartSummary() {
 
   renderCartItems();
   renderCartTotal();
+  
+  // Update checkout button state when cart changes (addons might have been added/removed)
+  updateCheckoutButton();
   
   // If we're on step 4 and have order data, ensure payment overview is updated
   if (state.currentStep === 4 && state.orderId && !state.fullOrder) {
@@ -11284,19 +11675,34 @@ function updateCartTotals() {
     }
   });
   
-  // Add add-ons
+  // Add add-ons (boost products and subscription additions)
+  // Store addons separately to append after subscriptions
+  const addonItems = [];
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
-    items.push({
+    const price = getAddonPrice(addon);
+    addonItems.push({
       id: addon.id,
-      name: addon.name,
-      amount: roundToHalfKrone(addon.price.discounted),
+      name: addon.name || 'Add-on',
+      amount: roundToHalfKrone(price),
       type: 'addon',
     });
   });
 
-  state.cartItems = items;
+  // Ensure correct order: subscriptions/value cards first, then addons
+  // Items array already has subscriptions and value cards in correct order
+  // Now append addons at the end
+  items.push(...addonItems);
+
+  // CRITICAL: Explicitly sort items to ensure subscriptions come first
+  // This ensures the array order matches the display order
+  const sortedItems = [
+    ...items.filter(item => item.type === 'membership' || item.type === 'value-card'),
+    ...items.filter(item => item.type === 'addon')
+  ];
+
+  state.cartItems = sortedItems;
   
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
@@ -11310,8 +11716,7 @@ function updateCartTotals() {
 
 function renderCartItems() {
   if (!templates.cartItem || !DOM.cartItems) return;
-  DOM.cartItems.innerHTML = '';
-
+  
   // Check for campaigns and show/hide warning banner
   if (hasCampaignInCart()) {
     showCampaignWarning();
@@ -11319,7 +11724,8 @@ function renderCartItems() {
     hideCampaignWarning();
   }
 
-  if (!state.cartItems.length) {
+  if (!state.cartItems || !state.cartItems.length) {
+    DOM.cartItems.innerHTML = '';
     // Only show empty message if there's no gym selected either
     if (!state.selectedGymId && !state.selectedBusinessUnit) {
       const empty = document.createElement('div');
@@ -11329,6 +11735,9 @@ function renderCartItems() {
     }
     return;
   }
+  
+  // Clear DOM to ensure clean rendering order
+  DOM.cartItems.innerHTML = '';
 
   // Helper function to create Home Gym info element
   function createHomeGymInfo(selectedGym) {
@@ -11406,14 +11815,23 @@ function renderCartItems() {
     );
   }
 
-  state.cartItems.forEach((item, index) => {
+  // Separate items into two groups: subscriptions/15day pass/value cards first, then addons
+  // All subscriptions (including 15-day passes) have type 'membership', value cards have type 'value-card'
+  // CRITICAL: Filter to ensure subscriptions come first, regardless of state.cartItems order
+  const subscriptionItems = state.cartItems.filter(item => 
+    item.type === 'membership' || item.type === 'value-card'
+  );
+  const addonItems = state.cartItems.filter(item => item.type === 'addon');
+
+  // Helper function to render a single cart item
+  function renderCartItem(item, isFirstSubscriptionItem = false) {
     const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
     const nameEl = cartItem.querySelector('[data-element="name"]');
     const priceEl = cartItem.querySelector('[data-element="price"]');
 
     if (nameEl) {
-      // For membership items with imageBanner text, display name and banner text separately
-      if (item.type === 'membership' && item.imageBannerText) {
+      // For membership items with externalDescription, display name and description separately
+      if (item.type === 'membership' && item.externalDescription) {
         // Clear any existing content
         nameEl.innerHTML = '';
         
@@ -11426,28 +11844,29 @@ function renderCartItems() {
         productNameSpan.textContent = item.productName || item.name;
         productNameSpan.style.fontWeight = '500';
         
-        const bannerTextSpan = document.createElement('span');
+        const descTextSpan = document.createElement('span');
         // Preserve line breaks from backend - replace newlines with <br> tags
-        const bannerTextWithBreaks = item.imageBannerText.replace(/\n/g, '<br>');
-        bannerTextSpan.innerHTML = sanitizeHTML(bannerTextWithBreaks);
-        bannerTextSpan.style.fontSize = 'var(--font-size-sm)';
-        bannerTextSpan.style.color = 'var(--color-text-muted)';
-        bannerTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
+        const descTextWithBreaks = item.externalDescription.replace(/\n/g, '<br>');
+        descTextSpan.innerHTML = sanitizeHTML(descTextWithBreaks);
+        descTextSpan.style.fontSize = 'var(--font-size-sm)';
+        descTextSpan.style.color = 'var(--color-text-muted)';
+        descTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
         
         nameContainer.appendChild(productNameSpan);
-        nameContainer.appendChild(bannerTextSpan);
+        nameContainer.appendChild(descTextSpan);
         nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the name container for first item
-        if (index === 0 && selectedGym) {
+        if (isFirstSubscriptionItem && selectedGym) {
           const gymInfo = createHomeGymInfo(selectedGym);
           nameEl.appendChild(gymInfo);
         }
       } else {
+        // For addon items, we'll add the plus sign later in the rendering loop
         nameEl.textContent = item.name;
         
         // Add Home Gym info below the first item's name
-        if (index === 0 && selectedGym) {
+        if (isFirstSubscriptionItem && selectedGym) {
           const gymInfo = createHomeGymInfo(selectedGym);
           nameEl.appendChild(gymInfo);
         }
@@ -11484,13 +11903,60 @@ function renderCartItems() {
           const discountedText = formatPriceHalfKrone(roundToHalfKrone(displayPrice));
           priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`);
         } else {
-          priceEl.textContent = displayPrice
-            ? `${formatPriceHalfKrone(roundToHalfKrone(displayPrice))} kr`
-            : '';
+          // Always show price, including "0 kr." for free items
+          priceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
         }
       }
     }
 
+    return cartItem;
+  }
+
+  // CRITICAL: Clear DOM first to ensure clean rendering
+  DOM.cartItems.innerHTML = '';
+  
+  // CRITICAL: Render subscription/15day pass/value card items FIRST
+  // This ensures they appear at the top of the cart
+  subscriptionItems.forEach((item, index) => {
+    const cartItem = renderCartItem(item, index === 0);
+    DOM.cartItems.appendChild(cartItem);
+  });
+
+  // Add separator line after subscription items if there are addon items
+  if (subscriptionItems.length > 0 && addonItems.length > 0) {
+    const separator = document.createElement('div');
+    separator.className = 'cart-separator';
+    separator.style.height = '1px';
+    separator.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+    separator.style.margin = '12px 0';
+    separator.style.width = '100%';
+    DOM.cartItems.appendChild(separator);
+  }
+
+  // Render addon items AFTER subscriptions (at the bottom)
+  addonItems.forEach((item) => {
+    const cartItem = renderCartItem(item, false);
+    // Add plus sign before addon product names (inline, to the left) with brand accent color
+    const nameEl = cartItem.querySelector('[data-element="name"]');
+    if (nameEl) {
+      const currentText = nameEl.textContent || nameEl.innerText || '';
+      if (currentText && !currentText.trim().startsWith('+')) {
+        // Change flex direction to row for addon items so plus appears inline
+        nameEl.style.flexDirection = 'row';
+        nameEl.style.alignItems = 'center';
+        // Create a span for the plus sign with brand accent color
+        const plusSpan = document.createElement('span');
+        plusSpan.textContent = '+ ';
+        plusSpan.style.color = 'var(--color-brand-accent)';
+        plusSpan.style.marginRight = '4px';
+        // Clear and rebuild content
+        nameEl.innerHTML = '';
+        nameEl.appendChild(plusSpan);
+        const textSpan = document.createElement('span');
+        textSpan.textContent = currentText.trim();
+        nameEl.appendChild(textSpan);
+      }
+    }
     DOM.cartItems.appendChild(cartItem);
   });
 }
@@ -11544,10 +12010,10 @@ function renderCartAddons() {
       // Display price - show discounted price if different from original
       if (roundedDisplayPrice !== roundedOriginalPrice && state.discountApplied) {
         // Show original price with strikethrough and discounted price
-        priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr</span>`);
+        priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr.</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr.</span>`);
       } else {
-        // Always show price, including "0 kr" for free items
-        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr';
+        // Always show price, including "0 kr." for free items
+        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr.';
       }
     }
 
@@ -11562,31 +12028,20 @@ function renderCartTotal() {
   // Update payment overview (shows "Betales nu" and "Månedlig betaling herefter")
   updatePaymentOverview();
   
-  // Update cart total display
-  const cartTotalEl = document.querySelector('[data-summary-field="cart-total"]');
+  // Update cart total display - use already-calculated cartTotal from state
+  const cartTotalEl = document.querySelector('[data-summary-field="cart-total"]') ||
+                      document.querySelector('.cart-total .total-amount') ||
+                      document.querySelector('.total-amount');
   const cartTotalContainer = document.querySelector('.cart-total');
   
   if (cartTotalEl) {
-    // Calculate total as: Pay now amount + addon items
-    // Get addon items total (non-membership items)
-    const addonItems = state.cartItems.filter(item => item.type !== 'membership');
-    const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
-    
-    // Get "Pay now" amount from state (calculated by updatePaymentOverview)
-    const payNowAmount = state.totals.payNowAmount || 0;
-    
-    // Total = Pay now + Addons (both already rounded to half krone)
-    let total = (state.totals.payNowAmount || 0) + addonTotal;
-    
-    // Apply discount if applicable (discount should be applied to the total)
-    if (state.discountApplied && state.totals.discountAmount > 0) {
-      total = Math.max(0, total - state.totals.discountAmount);
-    }
-    
-    // Round total to half krone and format
-    // Format: "569,00 kr" or "569,50 kr" (no dot, consistent with cart items)
-    const roundedTotal = roundToHalfKrone(total);
-    cartTotalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr';
+    // Use already-calculated cartTotal (includes membership + addons - discount)
+    // state.totals.cartTotal is calculated in updateCartSummary() as: subtotal - discount
+    const total = state.totals.cartTotal || 0;
+    cartTotalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(total)) + ' kr.';
+    console.log('[Cart] Updated cart total display:', total);
+  } else {
+    console.warn('[Cart] Cart total element not found in DOM');
   }
   
   // Show/hide cart total container based on whether there are items
@@ -11718,9 +12173,36 @@ function updatePaymentOverview() {
       ? orderPriceAmount.amount / 100 
       : orderPriceAmount / 100;
     
-    console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
-    
-    if (is15DayPass) {
+    // CRITICAL: If addons are present, ALWAYS use backend order price
+    // The backend order price includes addons (if they were successfully added)
+    // Client-side calculations don't account for addons properly
+    const hasAddons = state.addonIds && state.addonIds.size > 0;
+    if (hasAddons) {
+      console.log('[Payment Overview] ✅ Addons present - using backend order price (includes addons):', orderPriceDKK, 'DKK');
+      payNowAmount = orderPriceDKK;
+      
+      // Get billing period from subscription item if available
+      if (subscriptionItem?.initialPaymentPeriod?.start) {
+        const backendStartDate = new Date(subscriptionItem.initialPaymentPeriod.start);
+        const backendEndDate = new Date(subscriptionItem.initialPaymentPeriod.end);
+        billingPeriod = {
+          start: backendStartDate,
+          end: backendEndDate
+        };
+      }
+      
+      // Update the pay now amount element
+      if (DOM.paymentPayNow) {
+        DOM.paymentPayNow.textContent = formatPriceHalfKrone(roundToHalfKrone(payNowAmount)) + ' kr.';
+      }
+      
+      // Skip the verification logic when addons are present - backend price is authoritative
+      console.log('[Payment Overview] ✅ Skipping price verification - using backend order price with addons');
+    } else {
+      // No addons - proceed with normal price verification
+      console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
+      
+      if (is15DayPass) {
       // For 15-day pass: always use full price (one-time payment)
       payNowAmount = orderPriceDKK;
       
@@ -11807,6 +12289,7 @@ function updatePaymentOverview() {
         console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
       }
     }
+  }
   } else {
     // No order data yet - calculate price from product data
     // This allows prices to be shown before login/account creation
@@ -12165,10 +12648,41 @@ function updatePaymentOverview() {
     }
   }
   
+  // Calculate and display total (Pay now + Addons)
+  const totalEl = document.querySelector('[data-summary-field="total"]');
+  const totalContainer = document.querySelector('.payment-overview-total');
+  
+  if (totalEl && totalContainer) {
+    // Calculate addon total
+    const addonItems = state.cartItems.filter(item => item.type === 'addon');
+    const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
+    
+    // Total = Pay now + Addons
+    let total = payNowAmount + addonTotal;
+    
+    // Apply discount if applicable
+    if (state.discountApplied && state.totals.discountAmount > 0) {
+      total = Math.max(0, total - state.totals.discountAmount);
+    }
+    
+    // Round and format total
+    const roundedTotal = roundToHalfKrone(total);
+    totalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
+    
+    // Show/hide total container based on whether addons are present
+    if (addonTotal > 0) {
+      totalContainer.style.display = 'block';
+      console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now:', payNowAmount, '+ Addons:', addonTotal, ')');
+    } else {
+      totalContainer.style.display = 'none';
+    }
+  }
+  
   console.log('[Payment Overview] ✅ Updated:', {
     payNow: payNowAmount,
     monthlyPayment: monthlyPaymentAmount,
-    billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A'
+    billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A',
+    total: totalEl ? (payNowAmount + (state.cartItems.filter(item => item.type === 'addon').reduce((sum, item) => sum + item.amount, 0))) : 'N/A'
   });
 }
 
@@ -12198,7 +12712,10 @@ function updateDiscountDisplay() {
       });
       state.addonIds.forEach((addonId) => {
         const addon = findAddon(addonId);
-        if (addon) items.push({ amount: addon.price.discounted });
+        if (addon) {
+          const price = getAddonPrice(addon);
+          items.push({ amount: price });
+        }
       });
       state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
     }
@@ -12455,9 +12972,17 @@ async function ensureSubscriptionAttached(context = 'auto') {
     state.fullOrder = updatedOrder;
     state.order = updatedOrder; // Also update state.order for backward compatibility
     
+    // CRITICAL: Store subscription item ID for linking addons via additionTo
+    const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
+    if (subscriptionItem?.id) {
+      state.subscriptionItemId = subscriptionItem.id;
+      console.log('[ensureSubscriptionAttached] ✅ Stored subscription item ID:', state.subscriptionItemId);
+    } else {
+      console.warn('[ensureSubscriptionAttached] ⚠️ No subscription item ID found - addons may not be linked correctly');
+    }
+    
     // Log the order price to verify it matches what will be sent to payment window
     const orderPriceDKK = updatedOrder?.price?.amount ? updatedOrder.price.amount / 100 : 0;
-    const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
     const initialPeriodStart = subscriptionItem?.initialPaymentPeriod?.start;
     console.log('[ensureSubscriptionAttached] ✅ Order data after subscription add:', {
       orderId,
@@ -12465,6 +12990,7 @@ async function ensureSubscriptionAttached(context = 'auto') {
       initialPeriodStart,
       hasSubscriptionItems: !!subscriptionItem,
       productId: subscriptionItem?.product?.id,
+      subscriptionItemId: subscriptionItem?.id,
     });
     
     // Check if signature case is required (only during checkout flow, not auto-ensure)
@@ -12677,8 +13203,10 @@ async function handleCheckout() {
   }
   
   // Validation (existing)
-  if (!validateForm(true)) {
-    showToast('Please review the highlighted fields.', 'error');
+  const validationResult = validateForm(true);
+  if (!validationResult.isValid) {
+    console.log('[checkout] Validation failed:', validationResult);
+    showToast(validationResult.message || 'Please review the highlighted fields.', 'error');
     // Animate checkout button with red flash
     if (DOM.checkoutBtn) {
       DOM.checkoutBtn.classList.remove('error-flash');
@@ -13404,6 +13932,227 @@ async function handleCheckout() {
             }
           }
           
+          // CRITICAL: Add add-ons/articles BEFORE generating payment link
+          // This ensures the order total includes addons when payment link is generated
+          // Payment link API reads order.price.amount, so addons must be added first
+          // CRITICAL: Link addons to subscription using additionTo field
+          if (state.addonIds && state.addonIds.size > 0) {
+            console.log('[checkout] ===== ADDING ADDONS BEFORE PAYMENT LINK =====');
+            console.log('[checkout] Adding', state.addonIds.size, 'addon(s) to order before payment link generation');
+            
+            // CRITICAL: Verify subscription item ID exists in current order before using it
+            let validSubscriptionItemId = state.subscriptionItemId;
+            if (!validSubscriptionItemId || validSubscriptionItemId === null) {
+              console.warn('[checkout] ⚠️ Subscription item ID is missing, fetching order to get current subscription item ID...');
+              try {
+                const currentOrder = await orderAPI.getOrder(state.orderId);
+                const subscriptionItem = currentOrder?.subscriptionItems?.[0];
+                if (subscriptionItem?.id) {
+                  validSubscriptionItemId = subscriptionItem.id;
+                  state.subscriptionItemId = validSubscriptionItemId;
+                  console.log('[checkout] ✅ Retrieved subscription item ID from order:', validSubscriptionItemId);
+                } else {
+                  console.error('[checkout] ❌ No subscription item found in order - cannot link addons');
+                  throw new Error('No subscription item found in order - cannot add addons with additionTo link');
+                }
+              } catch (error) {
+                console.error('[checkout] ❌ Failed to fetch order to verify subscription item ID:', error);
+                throw new Error(`Cannot verify subscription item ID: ${error.message}`);
+              }
+            } else {
+              // Verify the subscription item ID actually exists in the order
+              try {
+                const currentOrder = await orderAPI.getOrder(state.orderId);
+                const subscriptionItemExists = currentOrder?.subscriptionItems?.some(
+                  item => item.id === validSubscriptionItemId
+                );
+                if (!subscriptionItemExists) {
+                  console.warn('[checkout] ⚠️ Stored subscription item ID not found in order, fetching current ID...');
+                  const subscriptionItem = currentOrder?.subscriptionItems?.[0];
+                  if (subscriptionItem?.id) {
+                    validSubscriptionItemId = subscriptionItem.id;
+                    state.subscriptionItemId = validSubscriptionItemId;
+                    console.log('[checkout] ✅ Updated subscription item ID to:', validSubscriptionItemId);
+                  } else {
+                    console.error('[checkout] ❌ No subscription item found in order - cannot link addons');
+                    throw new Error('No subscription item found in order - cannot add addons with additionTo link');
+                  }
+                } else {
+                  console.log('[checkout] ✅ Verified subscription item ID exists in order:', validSubscriptionItemId);
+                }
+              } catch (error) {
+                console.error('[checkout] ❌ Failed to verify subscription item ID:', error);
+                // Don't throw - try to continue with stored ID, but log the warning
+                console.warn('[checkout] ⚠️ Continuing with stored subscription item ID, but it may be invalid');
+              }
+            }
+            
+            console.log('[checkout] Subscription item ID for linking:', validSubscriptionItemId);
+            
+            const addonIdsArray = Array.from(state.addonIds);
+            const addedAddonIds = [];
+            
+            for (const addonId of addonIdsArray) {
+              try {
+                // Determine if addon is a value card or article
+                // CRITICAL: Check if product ID exists in valueCards array (most reliable method)
+                // Value cards are loaded separately via /api/products/valuecards endpoint
+                const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+                const addon = findAddon(addonId);
+                
+                // Primary method: Check if product ID exists in state.valueCards
+                // This is the most reliable since value cards come from a different API endpoint
+                const isInValueCards = state.valueCards && state.valueCards.some(vc => {
+                  const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+                  return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+                });
+                
+                // Also check allRawProducts (includes value cards before filtering)
+                const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+                  const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+                  return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
+                         (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || 
+                          // Check if it came from valueCards endpoint by checking if it's not a subscription
+                          (!p.priceWithInterval && !p.subscriptionInterval));
+                });
+                
+                // Secondary method: Check productType field if available
+                const hasValueCardType = addon && (
+                  addon.productType === 'VALUE_CARD' ||
+                  addon.productType === 'VALUECARD' ||
+                  (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
+                );
+                
+                // Tertiary method: Check if it's from valueCards API endpoint (has value card specific fields)
+                const hasValueCardFields = addon && (
+                  addon.valueCardType !== undefined ||
+                  addon.validUntil !== undefined ||
+                  (addon.product && addon.product.valueCardType !== undefined)
+                );
+                
+                const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+                
+                console.log(`[checkout] Addon ${addonId} type detection:`, {
+                  addonId,
+                  numericId,
+                  isInValueCards,
+                  isInRawValueCards,
+                  hasValueCardType,
+                  hasValueCardFields,
+                  productType: addon?.productType || addon?.product?.productType,
+                  isValueCard,
+                  valueCardsCount: state.valueCards?.length || 0,
+                  valueCardIds: state.valueCards?.map(vc => vc.id) || [],
+                  allRawProductsCount: state.allRawProducts?.length || 0
+                });
+                
+                if (isValueCard) {
+                  // Add as value card with additionTo link
+                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId})`);
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId);
+                } else {
+                  // Add as article with additionTo link
+                  console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${validSubscriptionItemId})`);
+                  await orderAPI.addArticleItem(state.orderId, numericId, validSubscriptionItemId);
+                }
+                addedAddonIds.push(addonId);
+                console.log(`[checkout] ✅ Add-on added: ${addonId}`);
+              } catch (error) {
+                console.error(`[checkout] ❌ Failed to add add-on ${addonId}:`, error);
+                
+                // Check if error is due to invalid additionTo (ID_NOT_FOUND)
+                const errorMessage = error.message || JSON.stringify(error);
+                const isInvalidAdditionTo = errorMessage.includes('ID_NOT_FOUND') || 
+                                           errorMessage.includes('additionTo') ||
+                                           (error.payload && typeof error.payload === 'string' && error.payload.includes('ID_NOT_FOUND'));
+                
+                if (isInvalidAdditionTo) {
+                  console.error(`[checkout] ❌ CRITICAL: Invalid subscription item ID for addon ${addonId}`);
+                  console.error(`[checkout] ❌ This means the subscription item doesn't exist in the order`);
+                  console.error(`[checkout] ❌ Cannot proceed - payment window would show incorrect total`);
+                  throw new Error(`Failed to link addon ${addonId} to subscription: subscription item not found in order. Please try selecting your membership again.`);
+                }
+                
+                // Check if order is locked (403 Forbidden)
+                const isOrderLocked = error.status === 403 || errorMessage.includes('locked') || errorMessage.includes('Forbidden');
+                if (isOrderLocked) {
+                  console.error(`[checkout] ❌ CRITICAL: Order is locked (403 Forbidden) - cannot add addon ${addonId}`);
+                  console.error(`[checkout] ❌ Cannot proceed - payment window would show incorrect total`);
+                  throw new Error(`Order is locked and cannot be modified. Please start a new checkout.`);
+                }
+                
+                // For other errors, still throw to prevent incorrect payment
+                console.error(`[checkout] ❌ BLOCKING PAYMENT - Addon ${addonId} failed to add`);
+                throw new Error(`Failed to add addon ${addonId}: ${error.message || 'Unknown error'}`);
+              }
+            }
+            
+            // Refresh order and verify addons are actually in the order
+            let addonsVerified = false;
+            let attempts = 0;
+            const maxAttempts = 5;
+            
+            while (!addonsVerified && attempts < maxAttempts && addedAddonIds.length > 0) {
+              attempts++;
+              try {
+                console.log(`[checkout] Verifying addons in order (attempt ${attempts}/${maxAttempts})...`);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for backend to process
+                
+                const updatedOrder = await orderAPI.getOrder(state.orderId);
+                state.fullOrder = updatedOrder;
+                
+                // Check both article items and value card items (addons can be either type)
+                const articleItems = updatedOrder?.articleItems || [];
+                const valueCardItems = updatedOrder?.valueCardItems || [];
+                const articleProductIds = articleItems.map(item => item.product?.id).filter(Boolean);
+                const valueCardProductIds = valueCardItems.map(item => item.product?.id).filter(Boolean);
+                const allProductIds = [...articleProductIds, ...valueCardProductIds];
+                
+                // Check if all added addons are in the order (either as articles or value cards)
+                const allAddonsPresent = addedAddonIds.every(id => 
+                  allProductIds.includes(Number(id)) || allProductIds.includes(String(id))
+                );
+                
+                if (allAddonsPresent) {
+                  addonsVerified = true;
+                  const orderTotalDKK = updatedOrder?.price?.amount 
+                    ? (typeof updatedOrder.price.amount === 'object' 
+                        ? updatedOrder.price.amount.amount / 100 
+                        : updatedOrder.price.amount / 100)
+                    : 0;
+                  console.log('[checkout] ✅ All addons verified in order');
+                  console.log('[checkout] ✅ Order total with addons:', orderTotalDKK, 'DKK');
+                  console.log('[checkout] ✅ Article items in order:', articleItems.length);
+                  console.log('[checkout] ✅ Value card items in order:', valueCardItems.length);
+                  
+                  // CRITICAL: Update state.fullOrder with the order that includes addons
+                  // This ensures payment overview and payment link use the correct price
+                  state.fullOrder = updatedOrder;
+                  console.log('[checkout] ✅ Updated state.fullOrder with order containing addons');
+                } else {
+                  console.warn(`[checkout] ⚠️ Addons not yet in order (attempt ${attempts}/${maxAttempts})`);
+                  console.warn('[checkout] Expected addon IDs:', addedAddonIds);
+                  console.warn('[checkout] Article product IDs in order:', articleProductIds);
+                  console.warn('[checkout] Value card product IDs in order:', valueCardProductIds);
+                }
+              } catch (refreshError) {
+                console.warn(`[checkout] Could not verify addons (attempt ${attempts}):`, refreshError);
+              }
+            }
+            
+            if (!addonsVerified && addedAddonIds.length > 0) {
+              console.error('[checkout] ❌ CRITICAL: Could not verify addons are in order after', maxAttempts, 'attempts');
+              console.error('[checkout] ❌ Payment window will show incorrect total without addons!');
+              console.error('[checkout] ❌ Expected addons:', addedAddonIds);
+              
+              // CRITICAL: If addons failed to add, we must prevent payment link generation
+              // The payment window will show incorrect price if addons aren't in the order
+              const errorMessage = `Failed to add addons to order. Payment cannot proceed with incorrect total. Please try again or contact support.`;
+              console.error('[checkout] ❌ BLOCKING PAYMENT LINK GENERATION - Addons not in order');
+              throw new Error(errorMessage);
+            }
+          }
+          
           // Check if signature case is required before generating payment link
           // If signature case exists and has document URL, redirect to Assently first
           console.log('[checkout] ===== CHECKING SIGNATURE CASE BEFORE PAYMENT LINK =====');
@@ -13435,7 +14184,7 @@ async function handleCheckout() {
             return; // Stop checkout flow - will resume after signature completion
           }
           
-          // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied
+          // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied AND addons are added
           // The order should now have the discount applied, so payment link will show discounted price
           // Backend requirement: "Generate Payment Link Card" request must be made when subscription is added to cart
           // This is what triggers the payment flow according to backend team
@@ -13460,16 +14209,62 @@ async function handleCheckout() {
           // This is our last chance to fix backend pricing bugs before payment window shows wrong price
           try {
             console.log('[checkout] ===== FINAL ORDER PRICE VERIFICATION BEFORE PAYMENT LINK =====');
-            // Wait a bit to ensure backend has fully processed everything
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Wait a bit to ensure backend has fully processed everything (including addons)
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Increased wait time for addons to be processed
             
             let orderBeforePayment = await orderAPI.getOrder(state.orderId);
             console.log('[checkout] Initial order fetch:', {
               orderId: orderBeforePayment?.id,
               orderPrice: orderBeforePayment?.price?.amount,
               orderPriceDKK: orderBeforePayment?.price?.amount ? orderBeforePayment.price.amount / 100 : null,
-              hasSubscriptionItems: !!orderBeforePayment?.subscriptionItems?.length
+              hasSubscriptionItems: !!orderBeforePayment?.subscriptionItems?.length,
+              hasArticleItems: !!orderBeforePayment?.articleItems?.length,
+              hasValueCardItems: !!orderBeforePayment?.valueCardItems?.length,
+              articleItemsCount: orderBeforePayment?.articleItems?.length || 0,
+              valueCardItemsCount: orderBeforePayment?.valueCardItems?.length || 0,
+              articleItems: orderBeforePayment?.articleItems?.map(item => ({
+                id: item.id,
+                productId: item.product?.id,
+                productName: item.product?.name,
+                price: item.price?.amount,
+                additionTo: item.addition?.parentItemId
+              })) || [],
+              valueCardItems: orderBeforePayment?.valueCardItems?.map(item => ({
+                id: item.id,
+                productId: item.product?.id,
+                productName: item.product?.name,
+                price: item.price?.amount,
+                additionTo: item.addition?.parentItemId
+              })) || []
             });
+            
+            // Verify addons are actually in the order (check both articles and value cards)
+            if (state.addonIds && state.addonIds.size > 0) {
+              const addonIdsArray = Array.from(state.addonIds);
+              const articleItems = orderBeforePayment?.articleItems || [];
+              const valueCardItems = orderBeforePayment?.valueCardItems || [];
+              const articleProductIds = articleItems.map(item => item.product?.id).filter(Boolean);
+              const valueCardProductIds = valueCardItems.map(item => item.product?.id).filter(Boolean);
+              const allProductIds = [...articleProductIds, ...valueCardProductIds];
+              
+              console.log('[checkout] Addon verification:', {
+                expectedAddonIds: addonIdsArray,
+                articleProductIdsInOrder: articleProductIds,
+                valueCardProductIdsInOrder: valueCardProductIds,
+                allProductIdsInOrder: allProductIds,
+                allAddonsInOrder: addonIdsArray.every(id => allProductIds.includes(Number(id)) || allProductIds.includes(String(id)))
+              });
+              
+              if (!addonIdsArray.every(id => allProductIds.includes(Number(id)) || allProductIds.includes(String(id)))) {
+                console.error('[checkout] ❌ CRITICAL: Not all addons are in the order!');
+                console.error('[checkout] ❌ Expected addons:', addonIdsArray);
+                console.error('[checkout] ❌ Article addons in order:', articleProductIds);
+                console.error('[checkout] ❌ Value card addons in order:', valueCardProductIds);
+                console.error('[checkout] ❌ Payment window will show incorrect total without addons!');
+              } else {
+                console.log('[checkout] ✅ All addons are present in the order');
+              }
+            }
             
             // Verify pricing is correct for subscription items
             const subscriptionItem = orderBeforePayment?.subscriptionItems?.[0];
@@ -13568,6 +14363,24 @@ async function handleCheckout() {
                     if (fixedVerification.isCorrect) {
                       console.log('[checkout] ✅ Successfully fixed order price before payment link generation!');
                       orderBeforePayment = fixedOrder;
+                      
+                      // CRITICAL: Update subscription item ID after pricing fix
+                      // The pricing fix deletes and re-adds the subscription item, creating a NEW ID
+                      // We must update state.subscriptionItemId with the new ID, otherwise addons will fail with ID_NOT_FOUND
+                      const newSubscriptionItem = fixedOrder?.subscriptionItems?.[0];
+                      if (newSubscriptionItem?.id) {
+                        const oldSubscriptionItemId = state.subscriptionItemId;
+                        state.subscriptionItemId = newSubscriptionItem.id;
+                        console.log('[checkout] ✅ Updated subscription item ID after pricing fix:', {
+                          oldId: oldSubscriptionItemId,
+                          newId: state.subscriptionItemId
+                        });
+                      } else {
+                        console.warn('[checkout] ⚠️ Fixed order does not have subscription item - cannot update subscriptionItemId');
+                      }
+                      
+                      // Update state.fullOrder with the fixed order
+                      state.fullOrder = fixedOrder;
                     } else {
                       console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
                       console.error('[checkout] ❌ Pricing mismatch detected');
@@ -13584,6 +14397,47 @@ async function handleCheckout() {
                 } else if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
                   console.log('[checkout] ✅ Order price is acceptable - no fix needed');
                 }
+              }
+            }
+            
+            // CRITICAL: Refresh order one final time before payment link to ensure we have latest price with addons
+            // This is especially important if addons were just added
+            if (state.addonIds && state.addonIds.size > 0) {
+              try {
+                console.log('[checkout] 🔍 Final order refresh before payment link generation...');
+                const finalOrderCheck = await orderAPI.getOrder(state.orderId);
+                state.fullOrder = finalOrderCheck;
+                orderBeforePayment = finalOrderCheck;
+                
+                const finalOrderPriceDKK = finalOrderCheck?.price?.amount 
+                  ? (typeof finalOrderCheck.price.amount === 'object' 
+                      ? finalOrderCheck.price.amount.amount / 100 
+                      : finalOrderCheck.price.amount / 100)
+                  : 0;
+                
+                // Verify addons are in the final order
+                const finalArticleItems = finalOrderCheck?.articleItems || [];
+                const finalValueCardItems = finalOrderCheck?.valueCardItems || [];
+                const finalArticleProductIds = finalArticleItems.map(item => item.product?.id).filter(Boolean);
+                const finalValueCardProductIds = finalValueCardItems.map(item => item.product?.id).filter(Boolean);
+                const finalAllProductIds = [...finalArticleProductIds, ...finalValueCardProductIds];
+                const finalAddonIdsArray = Array.from(state.addonIds);
+                const allAddonsInFinalOrder = finalAddonIdsArray.every(id => 
+                  finalAllProductIds.includes(Number(id)) || finalAllProductIds.includes(String(id))
+                );
+                
+                if (allAddonsInFinalOrder) {
+                  console.log('[checkout] ✅ Final order verification: All addons present');
+                  console.log('[checkout] ✅ Final order price with addons:', finalOrderPriceDKK, 'DKK');
+                } else {
+                  console.error('[checkout] ❌ CRITICAL: Addons missing in final order check!');
+                  console.error('[checkout] ❌ Expected addons:', finalAddonIdsArray);
+                  console.error('[checkout] ❌ Found product IDs:', finalAllProductIds);
+                  throw new Error('Addons are not present in the final order - cannot proceed with payment');
+                }
+              } catch (finalCheckError) {
+                console.error('[checkout] ❌ Error during final order check:', finalCheckError);
+                throw finalCheckError;
               }
             }
             
@@ -13824,20 +14678,6 @@ async function handleCheckout() {
         }
       }
       
-      // Add add-ons/articles - can be added after payment link is generated
-      if (state.addonIds && state.addonIds.size > 0) {
-        for (const addonId of state.addonIds) {
-          try {
-            await orderAPI.addArticleItem(state.orderId, addonId);
-            console.log(`[checkout] Add-on added: ${addonId}`);
-          } catch (error) {
-            console.error(`[checkout] Failed to add add-on ${addonId}:`, error);
-            // Don't throw - payment link is already generated, just log the error
-            console.warn(`[checkout] Continuing despite add-on error - payment link already generated`);
-          }
-        }
-      }
-      
       // CRITICAL: Generate payment link if it hasn't been generated yet
       // This handles cases where user only selected punch cards or addons (no membership)
       if (!paymentLink && state.orderId) {
@@ -13851,6 +14691,67 @@ async function handleCheckout() {
         console.log('[checkout] Is Membership:', isMembership);
         console.log('[checkout] Has Value Cards:', state.valueCardQuantities?.size > 0);
         console.log('[checkout] Has Addons:', state.addonIds?.size > 0);
+        
+        // CRITICAL: Add addons BEFORE generating payment link for non-membership orders
+        // This ensures the order total includes addons when payment link is generated
+        // Note: For non-membership orders, additionTo may not be available
+        if (state.addonIds && state.addonIds.size > 0) {
+          console.log('[checkout] Adding', state.addonIds.size, 'addon(s) to order before payment link generation (non-membership)');
+          for (const addonId of state.addonIds) {
+            try {
+              // Determine if addon is a value card or article
+              const addon = findAddon(addonId);
+              const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+              
+              // Check multiple sources to identify product type (consistent with membership checkout)
+              const isInValueCards = state.valueCards && state.valueCards.some(vc => {
+                const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+                return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+              });
+              
+              // Also check allRawProducts (includes value cards before filtering)
+              const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+                const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+                return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
+                       (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || 
+                        (!p.priceWithInterval && !p.subscriptionInterval));
+              });
+              
+              const hasValueCardType = addon && (
+                addon.productType === 'VALUE_CARD' ||
+                addon.productType === 'VALUECARD' ||
+                (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
+              );
+              const hasValueCardFields = addon && (
+                addon.valueCardType !== undefined ||
+                addon.validUntil !== undefined ||
+                (addon.product && addon.product.valueCardType !== undefined)
+              );
+              
+              const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+              
+              if (isValueCard) {
+                await orderAPI.addValueCardItem(state.orderId, numericId, 1, null);
+              } else {
+                await orderAPI.addArticleItem(state.orderId, numericId, null);
+              }
+              console.log(`[checkout] ✅ Add-on added: ${addonId}`);
+            } catch (error) {
+              console.error(`[checkout] ❌ Failed to add add-on ${addonId}:`, error);
+              console.warn(`[checkout] ⚠️ Continuing despite add-on error - payment link may not include this addon`);
+            }
+          }
+          
+          // Refresh order to get updated total with addons
+          try {
+            console.log('[checkout] Refreshing order to get updated total with addons...');
+            const updatedOrder = await orderAPI.getOrder(state.orderId);
+            state.fullOrder = updatedOrder;
+            console.log('[checkout] ✅ Order refreshed with addons, new total:', updatedOrder?.price?.amount ? (typeof updatedOrder.price.amount === 'object' ? updatedOrder.price.amount.amount / 100 : updatedOrder.price.amount / 100) : 'N/A', 'DKK');
+          } catch (refreshError) {
+            console.warn('[checkout] Could not refresh order after adding addons:', refreshError);
+          }
+        }
         
         try {
           const baseUrl = getReturnUrlBase();
@@ -15889,13 +16790,7 @@ function determineProductTypeFromOrder() {
   
   // Priority 2: Check full order data first (from API)
   if (state.fullOrder) {
-    // Check for value card items (punch cards)
-    if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
-      console.log('[Product Type] Detected punch-card from valueCardItems');
-      return 'punch-card';
-    }
-    
-    // Check subscription items
+    // ✅ Check subscription items FIRST (subscriptions take priority)
     if (state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
       const subscriptionItem = state.fullOrder.subscriptionItems[0];
       const product = subscriptionItem?.product;
@@ -15923,6 +16818,12 @@ function determineProductTypeFromOrder() {
       // Default to membership if it's a subscription item
       console.log('[Product Type] Detected membership from subscriptionItems');
       return 'membership';
+    }
+    
+    // ✅ Only check value cards if NO subscription items exist
+    if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
+      console.log('[Product Type] Detected punch-card from valueCardItems');
+      return 'punch-card';
     }
   }
   
@@ -16575,6 +17476,31 @@ function createPurchaseItemElement() {
           hasItems = true;
         });
       }
+      
+      // Add article items (boost products/add-ons)
+      if (state.fullOrder.articleItems && state.fullOrder.articleItems.length > 0) {
+        state.fullOrder.articleItems.forEach(item => {
+          const node = templates.confirmationItem 
+            ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+            : createPurchaseItemElement();
+          const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+          const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
+          
+          if (nameEl) {
+            const productName = item.product?.name || item.name || 'Add-on';
+            nameEl.textContent = productName;
+          }
+          
+          if (priceEl) {
+            // Per ProductItemOut: price.amount is total price
+            const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+            priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemTotal));
+          }
+          
+          DOM.confirmationItems.appendChild(node);
+          hasItems = true;
+        });
+      }
     }
     
     // Priority 2: Fallback to state.order.items if fullOrder not available or has no items
@@ -16989,6 +17915,7 @@ function closeDetailedReceipt() {
 
 function validateForm(animate = false) {
   let isValid = true;
+  const errors = [];
   clearErrorStates();
   const skipPersonalValidation = isUserAuthenticated();
 
@@ -16997,6 +17924,7 @@ function validateForm(animate = false) {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
         isValid = false;
+        errors.push(`Missing required field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
       }
     });
@@ -17007,13 +17935,23 @@ function validateForm(animate = false) {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
         isValid = false;
+        errors.push(`Missing parent/guardian field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
       }
     });
   }
 
+  // Re-cache consent elements in case they weren't found initially
+  if (!DOM.privacyConsent) {
+    DOM.privacyConsent = document.getElementById('privacyConsent');
+  }
+  if (!DOM.termsConsent) {
+    DOM.termsConsent = document.getElementById('termsConsent');
+  }
+
   if (!DOM.privacyConsent?.checked) {
     isValid = false;
+    errors.push('Privacy consent not accepted');
     if (animate) {
       showToast('Please accept the privacy policy.', 'error');
       // Animate privacy consent checkbox
@@ -17033,6 +17971,7 @@ function validateForm(animate = false) {
 
   if (!DOM.termsConsent?.checked) {
     isValid = false;
+    errors.push('Terms consent not accepted');
     if (animate) {
       showToast('Please accept the terms and conditions.', 'error');
       // Animate terms consent checkbox
@@ -17052,7 +17991,9 @@ function validateForm(animate = false) {
 
   if (!state.paymentMethod) {
     isValid = false;
+    errors.push('Payment method not selected');
     if (animate) {
+      showToast('Please select a payment method.', 'error');
       // Animate payment method section
       const paymentMethods = document.querySelector('.payment-methods');
       if (paymentMethods) {
@@ -17068,7 +18009,24 @@ function validateForm(animate = false) {
   // Payment details are entered on the payment provider's secure page, not on our site
   // No need to validate card fields here since they won't be filled on this page
 
-  return isValid;
+  // Return detailed validation result for better debugging
+  if (!isValid) {
+    console.log('[validateForm] Validation errors:', {
+      skipPersonalValidation,
+      privacyConsentFound: !!DOM.privacyConsent,
+      privacyConsentChecked: DOM.privacyConsent?.checked,
+      termsConsentFound: !!DOM.termsConsent,
+      termsConsentChecked: DOM.termsConsent?.checked,
+      paymentMethod: state.paymentMethod,
+      errors
+    });
+  }
+
+  return {
+    isValid,
+    errors,
+    message: errors.length > 0 ? errors[0] : 'Please review the highlighted fields.'
+  };
 }
 
 function clearErrorStates() {
@@ -17096,12 +18054,48 @@ function clearErrorStates() {
 
 function updateCheckoutButton() {
   if (!DOM.checkoutBtn) return;
-  const privacyAccepted = DOM.privacyConsent?.checked ?? false;
+  
+  // Re-cache DOM elements in case they weren't found initially (e.g., when logged in and create form is hidden)
+  if (!DOM.privacyConsent) {
+    DOM.privacyConsent = document.getElementById('privacyConsent');
+  }
+  if (!DOM.termsConsent) {
+    DOM.termsConsent = document.getElementById('termsConsent');
+  }
+  
+  const isAuthenticated = isUserAuthenticated();
+  
+  // For logged-in users, privacy consent is assumed (they already have an account)
+  // For new users, check if privacy consent checkbox is checked
+  const privacyAccepted = isAuthenticated 
+    ? true 
+    : (DOM.privacyConsent?.checked ?? false);
+  
   const termsAccepted = DOM.termsConsent?.checked ?? false;
   const hasMembership = Boolean(state.membershipPlanId);
+  const hasPunchCards = state.valueCardQuantities && 
+    Array.from(state.valueCardQuantities.values()).some(qty => qty > 0);
+  const hasAddons = state.addonIds && state.addonIds.size > 0;
   const hasPayment = Boolean(state.paymentMethod);
 
-  DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasMembership && hasPayment);
+  // Enable checkout if: privacy + terms accepted, payment method selected, AND (membership OR punch cards OR addons)
+  // This matches the validation logic in handleCheckout()
+  const hasProduct = hasMembership || hasPunchCards || hasAddons;
+  DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct && hasPayment);
+  
+  console.log('[Checkout Button] State:', {
+    isAuthenticated,
+    privacyAccepted,
+    termsAccepted,
+    hasMembership,
+    hasPunchCards,
+    hasAddons,
+    hasPayment,
+    hasProduct,
+    disabled: DOM.checkoutBtn.disabled,
+    privacyConsentElement: DOM.privacyConsent ? 'found' : 'not found',
+    termsConsentElement: DOM.termsConsent ? 'found' : 'not found'
+  });
 }
 
 // Helper function to manage loading state during checkout
@@ -18166,8 +19160,83 @@ function findValueCard(id) {
 }
 
 function findAddon(id) {
-  if (!Array.isArray(state.subscriptionAdditions)) return null;
-  return state.subscriptionAdditions.find((addon) => String(addon.id) === String(id)) ?? null;
+  // First check subscription additions (traditional addons)
+  if (Array.isArray(state.subscriptionAdditions)) {
+    const addon = state.subscriptionAdditions.find((addon) => String(addon.id) === String(id));
+    if (addon) return addon;
+  }
+  
+  // Then check boost products
+  if (Array.isArray(state.boostProducts)) {
+    const boostProduct = state.boostProducts.find((product) => String(product.id) === String(id));
+    if (boostProduct) return boostProduct;
+  }
+  
+  return null;
+}
+
+// Extract price from addon (handles both subscription additions and boost products)
+function getAddonPrice(addon) {
+  if (!addon) return 0;
+  
+  // Subscription additions typically have price.discounted structure
+  if (addon.price && typeof addon.price.discounted === 'number') {
+    return addon.price.discounted;
+  }
+  
+  // Boost products use API structure similar to subscriptions
+  // Try priceWithInterval.price.amount (cents)
+  if (addon.priceWithInterval?.price?.amount) {
+    return addon.priceWithInterval.price.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try price.amount (cents)
+  if (addon.price?.amount) {
+    return addon.price.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try direct amount (cents)
+  if (addon.amount) {
+    return addon.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try direct price (already in DKK)
+  if (typeof addon.price === 'number') {
+    return addon.price;
+  }
+  
+  return 0;
+}
+
+// Privacy and Terms Consent Persistence
+function restoreConsentCheckboxes() {
+  try {
+    // Restore privacy consent - use cached DOM element if available, otherwise query
+    const privacyConsent = DOM.privacyConsent || document.getElementById('privacyConsent');
+    if (privacyConsent) {
+      const savedPrivacyConsent = localStorage.getItem('boulders_privacy_consent');
+      if (savedPrivacyConsent === 'true') {
+        privacyConsent.checked = true;
+        console.log('[Privacy Consent] Restored from localStorage');
+      }
+    } else {
+      console.warn('[Privacy Consent] Checkbox not found in DOM');
+    }
+    
+    // Restore terms consent - use cached DOM element if available, otherwise query
+    const termsConsent = DOM.termsConsent || document.getElementById('termsConsent');
+    if (termsConsent) {
+      const savedTermsConsent = localStorage.getItem('boulders_terms_consent');
+      if (savedTermsConsent === 'true') {
+        termsConsent.checked = true;
+        console.log('[Terms Consent] Restored from localStorage');
+      }
+    } else {
+      console.warn('[Terms Consent] Checkbox not found in DOM');
+    }
+  } catch (e) {
+    console.warn('[Consent] Could not restore consent checkboxes:', e);
+  }
 }
 
 // Cookie Consent Management (GDPR Compliant)

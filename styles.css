@@ -2,13 +2,27 @@
 .addons-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     z-index: 1000;
     display: none;
     isolation: isolate;
+    pointer-events: auto;
+    overflow: hidden;
+    overscroll-behavior: contain;
   }
-  .addons-overlay.is-open { display: flex; align-items: center; justify-content: center; }
-  body.modal-open { overflow: hidden; }
+  .addons-overlay.is-open { 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+  }
+  body.modal-open { 
+    overflow: hidden !important; 
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
   
 /* Loading Overlay */
 .loading-overlay {
@@ -71,14 +85,20 @@
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    background: var(--color-surface-dark);
+    background: rgba(42, 42, 42, 0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
     color: var(--color-text-secondary);
-    border-radius: 16px;
-    border: 2px solid var(--color-item-border);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
     width: min(1000px, 94vw);
     max-height: 84vh;
+    height: auto;
+    min-height: 400px;
     overflow: hidden;
-    box-shadow: 0 22px 70px rgba(0,0,0,0.55);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 1px 0 rgba(255, 255, 255, 0.2) inset;
     display: flex;
     flex-direction: column;
   }
@@ -128,10 +148,16 @@
     flex-direction: column; 
     flex: 1;
     min-height: 0;
+    overflow: hidden;
   }
   
 .addons-image { display: none; }
 .addons-image img { display: none; }
+
+  .addons-grid .addon-card img {
+    flex-shrink: 0;
+    object-fit: cover;
+  }
   
   .addons-main { 
     flex: 1 1 auto; 
@@ -139,6 +165,7 @@
     flex-direction: column; 
     min-width: 0;
     overflow: hidden;
+    min-height: 0;
   }
   
   .addons-grid { 
@@ -148,6 +175,8 @@
     padding: 16px 24px; 
     overflow-y: auto; 
     flex: 1;
+    min-height: 0;
+    align-items: stretch;
   }
   
   /* Addon Card Styles for Modal */
@@ -161,23 +190,36 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    transition: all 0.2s;
+    transition: border 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
     position: relative;
+    box-sizing: border-box;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    overflow: hidden;
+    min-height: 0;
+    height: 100%;
+    align-items: flex-start;
+    width: 100%;
   }
   
-  .addons-grid .addon-card:hover {
-    border-color: var(--color-brand-accent);
-    border: 2px solid var(--color-brand-accent);
-    transform: translateY(-2px);
+  .addons-grid .addon-card:hover:not(.selected) {
+    border: 2px solid var(--color-item-border) !important;
+    /* Override .plan-card:hover border-color rule */
   }
   
   .addons-grid .addon-card .plan-info {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
-    align-items: stretch;
+    align-items: flex-start;
     gap: 16px;
-    min-height: 100%;
+    min-height: auto !important;
+    height: auto !important;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    width: 100%;
+    overflow: hidden;
+    min-width: 0;
   }
 
   .addons-grid .addon-card .plan-content-left {
@@ -185,10 +227,13 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     align-items: flex-start;
-    justify-content: space-between;
-    min-height: 100%;
+    justify-content: flex-start;
+    min-height: auto !important;
+    height: auto !important;
+    overflow: hidden;
+    width: 100%;
   }
   
   .addons-grid .addon-card .plan-type {
@@ -196,6 +241,7 @@
     font-weight: 700;
     font-size: var(--font-size-md);
     margin: 0;
+    margin-bottom: 0;
     line-height: 1.4;
   }
   
@@ -234,28 +280,40 @@
     font-size: var(--font-size-sm);
     line-height: 1.5;
     margin: 0;
+    margin-top: 0;
     text-align: left;
     align-self: flex-start;
     width: 100%;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    hyphens: auto;
+    box-sizing: border-box;
   }
   
   .addons-grid .addon-card .plan-meta {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    flex: 1;
-  }
-  
-  .addons-grid .addon-card .plan-original {
-    font-size: var(--font-size-base);
-    color: var(--color-text-subtle);
-    text-decoration: line-through;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: hidden;
   }
   
   .addons-grid .addon-card .plan-features {
     margin: 0;
     padding: 0;
     list-style: none;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+  
+  .addons-grid .addon-card .plan-original {
+    font-size: var(--font-size-base);
+    color: var(--color-text-subtle);
+    text-decoration: line-through;
   }
   
   .addons-grid .addon-card .plan-features li {
@@ -274,6 +332,25 @@
     color: var(--color-brand-accent);
     font-weight: bold;
     font-size: var(--font-size-sm);
+  }
+  
+  /* Override any media query rules that might affect addon cards */
+  @media (min-width: 641px) {
+    .addons-grid .addon-card {
+      height: 100%;
+      min-height: 0;
+      align-items: flex-start;
+    }
+    
+    .addons-grid .addon-card .plan-info {
+      min-height: 0 !important;
+      height: auto !important;
+    }
+    
+    .addons-grid .addon-card .plan-content-left {
+      min-height: 0 !important;
+      height: auto !important;
+    }
   }
   
   .addons-grid .addon-card .plan-actions {
@@ -348,7 +425,7 @@
   }
   
   .addons-actions { 
-    display: flex; 
+    display: flex !important; 
     justify-content: space-between; 
     align-items: center; 
     gap: 12px; 
@@ -356,6 +433,11 @@
     background: var(--color-surface-dark); 
     border-top: 1px solid var(--color-item-border); 
     flex-shrink: 0;
+    flex-grow: 0;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 10;
   }
   
   .addons-hint { 
@@ -400,31 +482,69 @@
     background: var(--color-brand-accent-hover); 
   }
   
-  @media (max-width: 768px) {
-    .addons-sheet { 
-      width: 95vw; 
-      max-height: 90vh; 
-      height: 90vh;
-    }
-    
+  /* Tablet and smaller - ensure actions are visible */
+  @media (max-width: 1024px) {
     .addons-content {
-      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
       flex: 1;
       min-height: 0;
     }
     
-    .addons-grid { 
-      grid-template-columns: 1fr; 
-      padding: 12px 16px; 
+    .addons-grid {
+      min-height: 0;
       overflow-y: auto;
-      flex: 1;
+      gap: 8px;
+    }
+    
+    .addons-actions {
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .addons-sheet { 
+      width: 95vw; 
+      max-height: 90vh; 
+      height: fit-content;
+      min-height: 0;
+    }
+    
+    .addons-content {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex: 0 1 auto;
+      min-height: 0;
+    }
+    
+    .addons-main {
+      flex: 0 1 auto;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .addons-grid { 
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
+      padding: 12px 16px; 
+      gap: 12px;
+      overflow-y: visible;
+      flex: 0 1 auto;
+      min-height: 0;
     }
     
     .addons-actions { 
+      display: flex;
       flex-direction: column; 
       align-items: stretch; 
       gap: 12px; 
       flex-shrink: 0;
+      padding: 16px;
     }
     
     .addons-hint { 
@@ -448,6 +568,13 @@
     border-radius: 12px; 
     border: 1px solid #e5e7eb; 
     box-shadow: 0 1px 2px rgba(0,0,0,0.04); 
+    transition: all 0.2s ease;
+  }
+  
+  #addonMode .plan-card:hover {
+    border: 1px solid var(--color-brand-accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
   
   #addonMode .plan-card .plan-type { 
@@ -1989,6 +2116,12 @@ body {
     flex-direction: column;
     gap: 12px;
     margin-bottom: 24px;
+    min-height: 0; /* Allow flex children to shrink */
+}
+
+.category-list .category-item.expanded.selected {
+    flex: 1;
+    min-height: 0; /* Allow content to determine height */
 }
 
 .category-item {
@@ -2041,6 +2174,11 @@ body {
 .category-item.selected {
     border-color: #f0f;
     background: #1D283B;
+}
+
+.category-item.expanded.selected {
+    display: flex;
+    flex-direction: column;
 }
 
 .category-header {
@@ -2111,6 +2249,11 @@ body {
     outline: none; /* Remove default focus outline */
 }
 
+.category-item.expanded.selected .category-content {
+    max-height: none; /* Remove max-height constraint for selected items to show all content */
+    flex: 1; /* Allow content to grow to fill available space */
+}
+
 .category-item.expanded .category-content:focus {
     outline: none; /* Remove purple outline on focus */
 }
@@ -2177,6 +2320,10 @@ body {
 .category-item.expanded .plans-list {
     opacity: 1;
     transform: translateY(0);
+}
+
+.category-item.expanded.selected .plans-list {
+    max-height: none; /* Remove max-height constraint for selected items to show all content */
 }
 
 .plan-card {
@@ -2320,10 +2467,10 @@ body {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     align-items: flex-start;
-    justify-content: space-between;
-    min-height: 100%;
+    justify-content: flex-start;
+    min-height: 0;
 }
 
 .plan-type {
@@ -2333,6 +2480,7 @@ body {
     text-align: left;
     line-height: 1.4;
     margin: 0;
+    margin-bottom: 0;
 }
 
 .plan-content-right {
@@ -2372,6 +2520,7 @@ body {
     line-height: 1.5;
     white-space: normal; /* Allow wrapping, but preserve <br> tags */
     margin: 0;
+    margin-top: 0;
     text-align: left;
     align-self: flex-start;
     width: 100%;
@@ -5323,8 +5472,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 6px 0;
+    border-bottom: none;
     min-width: 0; /* Allow flex shrinking */
     gap: 12px; /* Add gap between name and price */
 }
@@ -5334,15 +5483,21 @@ body {
 }
 
 .cart-item:last-child {
-    border-bottom: none;
     padding-bottom: 0;
+}
+
+.cart-separator {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.08);
+    margin: 12px 0;
+    width: 100%;
 }
 
 /* Cart and Purchase Items - Shared Styles */
 .item-name {
-    color: var(--color-text-secondary);
+    color: rgba(255, 255, 240, 1);
     font-size: var(--font-size-base);
-    font-weight: 700;
+    font-weight: 500;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -5530,6 +5685,14 @@ body {
     color: var(--color-text-white);
     font-size: var(--font-size-base);
     font-weight: 300;
+}
+
+.payment-overview-total {
+    margin-top: 16px;
+}
+
+.payment-overview-total .payment-amount {
+    font-weight: 700;
 }
 
 .payment-overview-discount .payment-label,
