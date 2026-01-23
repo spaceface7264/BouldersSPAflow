@@ -1896,7 +1896,7 @@ class OrderAPI {
 
   // Step 7: Add value card item (punch card) - POST /api/ver3/orders/{orderId}/items/valuecards
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
-  async addValueCardItem(orderId, productId, quantity = 1) {
+  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null) {
     try {
       const url = this.useProxy
         ? buildApiUrl({
@@ -1921,8 +1921,10 @@ class OrderAPI {
       // API Documentation requires 'valueCardProduct' field (integer, required)
       // Optional fields: receiverDetails, senderDetails, amount, externalMessage, additionTo
       // Note: quantity is handled by repeating the request or backend logic, not in payload
+      // additionTo links this value card to the parent subscription item
       const payload = {
         valueCardProduct: productId, // Required: Value card product ID (integer)
+        ...(additionTo ? { additionTo } : {}), // Link to parent subscription item if provided
         // quantity is not in API spec - backend may handle it differently
         // businessUnit is not in API spec - may be inferred from order context
       };
@@ -1948,7 +1950,7 @@ class OrderAPI {
   }
 
   // Step 7: Add article item (add-ons/extras) - POST /api/orders/{orderId}/items/articles
-  async addArticleItem(orderId, productId) {
+  async addArticleItem(orderId, productId, additionTo = null) {
     try {
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
@@ -1968,10 +1970,15 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
+      // API expects 'articleProduct' not 'productId' per OpenAPI spec
+      // additionTo links this addon to the parent subscription item
       const payload = {
-        productId,
+        articleProduct: productId, // API field name is 'articleProduct'
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
+        ...(additionTo ? { additionTo } : {}), // Link to parent subscription item if provided
       };
+      
+      console.log('[Step 7] Add article item payload:', payload);
       
       let data;
       try {
@@ -4003,6 +4010,7 @@ const state = {
   referenceData: {}, // Cached reference/lookup data (countries, regions, currencies, etc.)
   referenceDataLoaded: false, // Flag to track if reference data has been loaded
   subscriptionAttachedOrderId: null, // Tracks which order already has the membership attached
+  subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
   // Test mode for success page
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
@@ -4856,6 +4864,10 @@ function init() {
   
   cacheDom();
   cacheTemplates();
+  
+  // Restore privacy and terms consent from localStorage
+  restoreConsentCheckboxes();
+  
   renderCatalog();
   refreshCarousels();
   updateCartSummary();
@@ -6249,8 +6261,44 @@ function setupEventListeners() {
   });
   DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
   DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
-  DOM.privacyConsent?.addEventListener('change', updateCheckoutButton);
-  DOM.termsConsent?.addEventListener('change', updateCheckoutButton);
+  DOM.privacyConsent?.addEventListener('change', () => {
+    // Save privacy consent to localStorage
+    if (DOM.privacyConsent.checked) {
+      try {
+        localStorage.setItem('boulders_privacy_consent', 'true');
+        console.log('[Privacy Consent] Saved to localStorage');
+      } catch (e) {
+        console.warn('[Privacy Consent] Could not save to localStorage:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem('boulders_privacy_consent');
+        console.log('[Privacy Consent] Removed from localStorage');
+      } catch (e) {
+        console.warn('[Privacy Consent] Could not remove from localStorage:', e);
+      }
+    }
+    updateCheckoutButton();
+  });
+  DOM.termsConsent?.addEventListener('change', () => {
+    // Save terms consent to localStorage
+    if (DOM.termsConsent.checked) {
+      try {
+        localStorage.setItem('boulders_terms_consent', 'true');
+        console.log('[Terms Consent] Saved to localStorage');
+      } catch (e) {
+        console.warn('[Terms Consent] Could not save to localStorage:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem('boulders_terms_consent');
+        console.log('[Terms Consent] Removed from localStorage');
+      } catch (e) {
+        console.warn('[Terms Consent] Could not remove from localStorage:', e);
+      }
+    }
+    updateCheckoutButton();
+  });
 
   // Postal code auto-fill event listeners
   setupPostalCodeAutoFill();
@@ -12822,9 +12870,17 @@ async function ensureSubscriptionAttached(context = 'auto') {
     state.fullOrder = updatedOrder;
     state.order = updatedOrder; // Also update state.order for backward compatibility
     
+    // CRITICAL: Store subscription item ID for linking addons via additionTo
+    const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
+    if (subscriptionItem?.id) {
+      state.subscriptionItemId = subscriptionItem.id;
+      console.log('[ensureSubscriptionAttached] ✅ Stored subscription item ID:', state.subscriptionItemId);
+    } else {
+      console.warn('[ensureSubscriptionAttached] ⚠️ No subscription item ID found - addons may not be linked correctly');
+    }
+    
     // Log the order price to verify it matches what will be sent to payment window
     const orderPriceDKK = updatedOrder?.price?.amount ? updatedOrder.price.amount / 100 : 0;
-    const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
     const initialPeriodStart = subscriptionItem?.initialPaymentPeriod?.start;
     console.log('[ensureSubscriptionAttached] ✅ Order data after subscription add:', {
       orderId,
@@ -12832,6 +12888,7 @@ async function ensureSubscriptionAttached(context = 'auto') {
       initialPeriodStart,
       hasSubscriptionItems: !!subscriptionItem,
       productId: subscriptionItem?.product?.id,
+      subscriptionItemId: subscriptionItem?.id,
     });
     
     // Check if signature case is required (only during checkout flow, not auto-ensure)
@@ -13044,8 +13101,10 @@ async function handleCheckout() {
   }
   
   // Validation (existing)
-  if (!validateForm(true)) {
-    showToast('Please review the highlighted fields.', 'error');
+  const validationResult = validateForm(true);
+  if (!validationResult.isValid) {
+    console.log('[checkout] Validation failed:', validationResult);
+    showToast(validationResult.message || 'Please review the highlighted fields.', 'error');
     // Animate checkout button with red flash
     if (DOM.checkoutBtn) {
       DOM.checkoutBtn.classList.remove('error-flash');
@@ -13771,6 +13830,144 @@ async function handleCheckout() {
             }
           }
           
+          // CRITICAL: Add add-ons/articles BEFORE generating payment link
+          // This ensures the order total includes addons when payment link is generated
+          // Payment link API reads order.price.amount, so addons must be added first
+          // CRITICAL: Link addons to subscription using additionTo field
+          if (state.addonIds && state.addonIds.size > 0) {
+            console.log('[checkout] ===== ADDING ADDONS BEFORE PAYMENT LINK =====');
+            console.log('[checkout] Adding', state.addonIds.size, 'addon(s) to order before payment link generation');
+            console.log('[checkout] Subscription item ID for linking:', state.subscriptionItemId);
+            
+            const addonIdsArray = Array.from(state.addonIds);
+            const addedAddonIds = [];
+            
+            for (const addonId of addonIdsArray) {
+              try {
+                // Determine if addon is a value card or article
+                // CRITICAL: Check if product ID exists in valueCards array (most reliable method)
+                // Value cards are loaded separately via /api/products/valuecards endpoint
+                const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+                const addon = findAddon(addonId);
+                
+                // Primary method: Check if product ID exists in state.valueCards
+                // This is the most reliable since value cards come from a different API endpoint
+                const isInValueCards = state.valueCards && state.valueCards.some(vc => {
+                  const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+                  return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+                });
+                
+                // Also check allRawProducts (includes value cards before filtering)
+                const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+                  const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+                  return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
+                         (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || 
+                          // Check if it came from valueCards endpoint by checking if it's not a subscription
+                          (!p.priceWithInterval && !p.subscriptionInterval));
+                });
+                
+                // Secondary method: Check productType field if available
+                const hasValueCardType = addon && (
+                  addon.productType === 'VALUE_CARD' ||
+                  addon.productType === 'VALUECARD' ||
+                  (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
+                );
+                
+                // Tertiary method: Check if it's from valueCards API endpoint (has value card specific fields)
+                const hasValueCardFields = addon && (
+                  addon.valueCardType !== undefined ||
+                  addon.validUntil !== undefined ||
+                  (addon.product && addon.product.valueCardType !== undefined)
+                );
+                
+                const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+                
+                console.log(`[checkout] Addon ${addonId} type detection:`, {
+                  addonId,
+                  numericId,
+                  isInValueCards,
+                  isInRawValueCards,
+                  hasValueCardType,
+                  hasValueCardFields,
+                  productType: addon?.productType || addon?.product?.productType,
+                  isValueCard,
+                  valueCardsCount: state.valueCards?.length || 0,
+                  valueCardIds: state.valueCards?.map(vc => vc.id) || [],
+                  allRawProductsCount: state.allRawProducts?.length || 0
+                });
+                
+                if (isValueCard) {
+                  // Add as value card with additionTo link
+                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${state.subscriptionItemId})`);
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, state.subscriptionItemId);
+                } else {
+                  // Add as article with additionTo link
+                  console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${state.subscriptionItemId})`);
+                  await orderAPI.addArticleItem(state.orderId, numericId, state.subscriptionItemId);
+                }
+                addedAddonIds.push(addonId);
+                console.log(`[checkout] ✅ Add-on added: ${addonId}`);
+              } catch (error) {
+                console.error(`[checkout] ❌ Failed to add add-on ${addonId}:`, error);
+                // Don't block checkout, but log the error
+                console.warn(`[checkout] ⚠️ Continuing despite add-on error - payment link may not include this addon`);
+              }
+            }
+            
+            // Refresh order and verify addons are actually in the order
+            let addonsVerified = false;
+            let attempts = 0;
+            const maxAttempts = 5;
+            
+            while (!addonsVerified && attempts < maxAttempts && addedAddonIds.length > 0) {
+              attempts++;
+              try {
+                console.log(`[checkout] Verifying addons in order (attempt ${attempts}/${maxAttempts})...`);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for backend to process
+                
+                const updatedOrder = await orderAPI.getOrder(state.orderId);
+                state.fullOrder = updatedOrder;
+                
+                // Check both article items and value card items (addons can be either type)
+                const articleItems = updatedOrder?.articleItems || [];
+                const valueCardItems = updatedOrder?.valueCardItems || [];
+                const articleProductIds = articleItems.map(item => item.product?.id).filter(Boolean);
+                const valueCardProductIds = valueCardItems.map(item => item.product?.id).filter(Boolean);
+                const allProductIds = [...articleProductIds, ...valueCardProductIds];
+                
+                // Check if all added addons are in the order (either as articles or value cards)
+                const allAddonsPresent = addedAddonIds.every(id => 
+                  allProductIds.includes(Number(id)) || allProductIds.includes(String(id))
+                );
+                
+                if (allAddonsPresent) {
+                  addonsVerified = true;
+                  const orderTotalDKK = updatedOrder?.price?.amount 
+                    ? (typeof updatedOrder.price.amount === 'object' 
+                        ? updatedOrder.price.amount.amount / 100 
+                        : updatedOrder.price.amount / 100)
+                    : 0;
+                  console.log('[checkout] ✅ All addons verified in order');
+                  console.log('[checkout] ✅ Order total with addons:', orderTotalDKK, 'DKK');
+                  console.log('[checkout] ✅ Article items in order:', articleItems.length);
+                  console.log('[checkout] ✅ Value card items in order:', valueCardItems.length);
+                } else {
+                  console.warn(`[checkout] ⚠️ Addons not yet in order (attempt ${attempts}/${maxAttempts})`);
+                  console.warn('[checkout] Expected addon IDs:', addedAddonIds);
+                  console.warn('[checkout] Article product IDs in order:', articleProductIds);
+                  console.warn('[checkout] Value card product IDs in order:', valueCardProductIds);
+                }
+              } catch (refreshError) {
+                console.warn(`[checkout] Could not verify addons (attempt ${attempts}):`, refreshError);
+              }
+            }
+            
+            if (!addonsVerified && addedAddonIds.length > 0) {
+              console.error('[checkout] ❌ CRITICAL: Could not verify addons are in order after', maxAttempts, 'attempts');
+              console.error('[checkout] ❌ Payment window may show incorrect total without addons!');
+            }
+          }
+          
           // Check if signature case is required before generating payment link
           // If signature case exists and has document URL, redirect to Assently first
           console.log('[checkout] ===== CHECKING SIGNATURE CASE BEFORE PAYMENT LINK =====');
@@ -13802,7 +13999,7 @@ async function handleCheckout() {
             return; // Stop checkout flow - will resume after signature completion
           }
           
-          // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied
+          // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied AND addons are added
           // The order should now have the discount applied, so payment link will show discounted price
           // Backend requirement: "Generate Payment Link Card" request must be made when subscription is added to cart
           // This is what triggers the payment flow according to backend team
@@ -13827,16 +14024,62 @@ async function handleCheckout() {
           // This is our last chance to fix backend pricing bugs before payment window shows wrong price
           try {
             console.log('[checkout] ===== FINAL ORDER PRICE VERIFICATION BEFORE PAYMENT LINK =====');
-            // Wait a bit to ensure backend has fully processed everything
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Wait a bit to ensure backend has fully processed everything (including addons)
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Increased wait time for addons to be processed
             
             let orderBeforePayment = await orderAPI.getOrder(state.orderId);
             console.log('[checkout] Initial order fetch:', {
               orderId: orderBeforePayment?.id,
               orderPrice: orderBeforePayment?.price?.amount,
               orderPriceDKK: orderBeforePayment?.price?.amount ? orderBeforePayment.price.amount / 100 : null,
-              hasSubscriptionItems: !!orderBeforePayment?.subscriptionItems?.length
+              hasSubscriptionItems: !!orderBeforePayment?.subscriptionItems?.length,
+              hasArticleItems: !!orderBeforePayment?.articleItems?.length,
+              hasValueCardItems: !!orderBeforePayment?.valueCardItems?.length,
+              articleItemsCount: orderBeforePayment?.articleItems?.length || 0,
+              valueCardItemsCount: orderBeforePayment?.valueCardItems?.length || 0,
+              articleItems: orderBeforePayment?.articleItems?.map(item => ({
+                id: item.id,
+                productId: item.product?.id,
+                productName: item.product?.name,
+                price: item.price?.amount,
+                additionTo: item.addition?.parentItemId
+              })) || [],
+              valueCardItems: orderBeforePayment?.valueCardItems?.map(item => ({
+                id: item.id,
+                productId: item.product?.id,
+                productName: item.product?.name,
+                price: item.price?.amount,
+                additionTo: item.addition?.parentItemId
+              })) || []
             });
+            
+            // Verify addons are actually in the order (check both articles and value cards)
+            if (state.addonIds && state.addonIds.size > 0) {
+              const addonIdsArray = Array.from(state.addonIds);
+              const articleItems = orderBeforePayment?.articleItems || [];
+              const valueCardItems = orderBeforePayment?.valueCardItems || [];
+              const articleProductIds = articleItems.map(item => item.product?.id).filter(Boolean);
+              const valueCardProductIds = valueCardItems.map(item => item.product?.id).filter(Boolean);
+              const allProductIds = [...articleProductIds, ...valueCardProductIds];
+              
+              console.log('[checkout] Addon verification:', {
+                expectedAddonIds: addonIdsArray,
+                articleProductIdsInOrder: articleProductIds,
+                valueCardProductIdsInOrder: valueCardProductIds,
+                allProductIdsInOrder: allProductIds,
+                allAddonsInOrder: addonIdsArray.every(id => allProductIds.includes(Number(id)) || allProductIds.includes(String(id)))
+              });
+              
+              if (!addonIdsArray.every(id => allProductIds.includes(Number(id)) || allProductIds.includes(String(id)))) {
+                console.error('[checkout] ❌ CRITICAL: Not all addons are in the order!');
+                console.error('[checkout] ❌ Expected addons:', addonIdsArray);
+                console.error('[checkout] ❌ Article addons in order:', articleProductIds);
+                console.error('[checkout] ❌ Value card addons in order:', valueCardProductIds);
+                console.error('[checkout] ❌ Payment window will show incorrect total without addons!');
+              } else {
+                console.log('[checkout] ✅ All addons are present in the order');
+              }
+            }
             
             // Verify pricing is correct for subscription items
             const subscriptionItem = orderBeforePayment?.subscriptionItems?.[0];
@@ -14191,20 +14434,6 @@ async function handleCheckout() {
         }
       }
       
-      // Add add-ons/articles - can be added after payment link is generated
-      if (state.addonIds && state.addonIds.size > 0) {
-        for (const addonId of state.addonIds) {
-          try {
-            await orderAPI.addArticleItem(state.orderId, addonId);
-            console.log(`[checkout] Add-on added: ${addonId}`);
-          } catch (error) {
-            console.error(`[checkout] Failed to add add-on ${addonId}:`, error);
-            // Don't throw - payment link is already generated, just log the error
-            console.warn(`[checkout] Continuing despite add-on error - payment link already generated`);
-          }
-        }
-      }
-      
       // CRITICAL: Generate payment link if it hasn't been generated yet
       // This handles cases where user only selected punch cards or addons (no membership)
       if (!paymentLink && state.orderId) {
@@ -14218,6 +14447,67 @@ async function handleCheckout() {
         console.log('[checkout] Is Membership:', isMembership);
         console.log('[checkout] Has Value Cards:', state.valueCardQuantities?.size > 0);
         console.log('[checkout] Has Addons:', state.addonIds?.size > 0);
+        
+        // CRITICAL: Add addons BEFORE generating payment link for non-membership orders
+        // This ensures the order total includes addons when payment link is generated
+        // Note: For non-membership orders, additionTo may not be available
+        if (state.addonIds && state.addonIds.size > 0) {
+          console.log('[checkout] Adding', state.addonIds.size, 'addon(s) to order before payment link generation (non-membership)');
+          for (const addonId of state.addonIds) {
+            try {
+              // Determine if addon is a value card or article
+              const addon = findAddon(addonId);
+              const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+              
+              // Check multiple sources to identify product type (consistent with membership checkout)
+              const isInValueCards = state.valueCards && state.valueCards.some(vc => {
+                const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+                return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+              });
+              
+              // Also check allRawProducts (includes value cards before filtering)
+              const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+                const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+                return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
+                       (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || 
+                        (!p.priceWithInterval && !p.subscriptionInterval));
+              });
+              
+              const hasValueCardType = addon && (
+                addon.productType === 'VALUE_CARD' ||
+                addon.productType === 'VALUECARD' ||
+                (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
+              );
+              const hasValueCardFields = addon && (
+                addon.valueCardType !== undefined ||
+                addon.validUntil !== undefined ||
+                (addon.product && addon.product.valueCardType !== undefined)
+              );
+              
+              const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+              
+              if (isValueCard) {
+                await orderAPI.addValueCardItem(state.orderId, numericId, 1, null);
+              } else {
+                await orderAPI.addArticleItem(state.orderId, numericId, null);
+              }
+              console.log(`[checkout] ✅ Add-on added: ${addonId}`);
+            } catch (error) {
+              console.error(`[checkout] ❌ Failed to add add-on ${addonId}:`, error);
+              console.warn(`[checkout] ⚠️ Continuing despite add-on error - payment link may not include this addon`);
+            }
+          }
+          
+          // Refresh order to get updated total with addons
+          try {
+            console.log('[checkout] Refreshing order to get updated total with addons...');
+            const updatedOrder = await orderAPI.getOrder(state.orderId);
+            state.fullOrder = updatedOrder;
+            console.log('[checkout] ✅ Order refreshed with addons, new total:', updatedOrder?.price?.amount ? (typeof updatedOrder.price.amount === 'object' ? updatedOrder.price.amount.amount / 100 : updatedOrder.price.amount / 100) : 'N/A', 'DKK');
+          } catch (refreshError) {
+            console.warn('[checkout] Could not refresh order after adding addons:', refreshError);
+          }
+        }
         
         try {
           const baseUrl = getReturnUrlBase();
@@ -17381,6 +17671,7 @@ function closeDetailedReceipt() {
 
 function validateForm(animate = false) {
   let isValid = true;
+  const errors = [];
   clearErrorStates();
   const skipPersonalValidation = isUserAuthenticated();
 
@@ -17389,6 +17680,7 @@ function validateForm(animate = false) {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
         isValid = false;
+        errors.push(`Missing required field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
       }
     });
@@ -17399,13 +17691,23 @@ function validateForm(animate = false) {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
         isValid = false;
+        errors.push(`Missing parent/guardian field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
       }
     });
   }
 
+  // Re-cache consent elements in case they weren't found initially
+  if (!DOM.privacyConsent) {
+    DOM.privacyConsent = document.getElementById('privacyConsent');
+  }
+  if (!DOM.termsConsent) {
+    DOM.termsConsent = document.getElementById('termsConsent');
+  }
+
   if (!DOM.privacyConsent?.checked) {
     isValid = false;
+    errors.push('Privacy consent not accepted');
     if (animate) {
       showToast('Please accept the privacy policy.', 'error');
       // Animate privacy consent checkbox
@@ -17425,6 +17727,7 @@ function validateForm(animate = false) {
 
   if (!DOM.termsConsent?.checked) {
     isValid = false;
+    errors.push('Terms consent not accepted');
     if (animate) {
       showToast('Please accept the terms and conditions.', 'error');
       // Animate terms consent checkbox
@@ -17444,7 +17747,9 @@ function validateForm(animate = false) {
 
   if (!state.paymentMethod) {
     isValid = false;
+    errors.push('Payment method not selected');
     if (animate) {
+      showToast('Please select a payment method.', 'error');
       // Animate payment method section
       const paymentMethods = document.querySelector('.payment-methods');
       if (paymentMethods) {
@@ -17460,7 +17765,24 @@ function validateForm(animate = false) {
   // Payment details are entered on the payment provider's secure page, not on our site
   // No need to validate card fields here since they won't be filled on this page
 
-  return isValid;
+  // Return detailed validation result for better debugging
+  if (!isValid) {
+    console.log('[validateForm] Validation errors:', {
+      skipPersonalValidation,
+      privacyConsentFound: !!DOM.privacyConsent,
+      privacyConsentChecked: DOM.privacyConsent?.checked,
+      termsConsentFound: !!DOM.termsConsent,
+      termsConsentChecked: DOM.termsConsent?.checked,
+      paymentMethod: state.paymentMethod,
+      errors
+    });
+  }
+
+  return {
+    isValid,
+    errors,
+    message: errors.length > 0 ? errors[0] : 'Please review the highlighted fields.'
+  };
 }
 
 function clearErrorStates() {
@@ -18640,6 +18962,37 @@ function getAddonPrice(addon) {
   }
   
   return 0;
+}
+
+// Privacy and Terms Consent Persistence
+function restoreConsentCheckboxes() {
+  try {
+    // Restore privacy consent - use cached DOM element if available, otherwise query
+    const privacyConsent = DOM.privacyConsent || document.getElementById('privacyConsent');
+    if (privacyConsent) {
+      const savedPrivacyConsent = localStorage.getItem('boulders_privacy_consent');
+      if (savedPrivacyConsent === 'true') {
+        privacyConsent.checked = true;
+        console.log('[Privacy Consent] Restored from localStorage');
+      }
+    } else {
+      console.warn('[Privacy Consent] Checkbox not found in DOM');
+    }
+    
+    // Restore terms consent - use cached DOM element if available, otherwise query
+    const termsConsent = DOM.termsConsent || document.getElementById('termsConsent');
+    if (termsConsent) {
+      const savedTermsConsent = localStorage.getItem('boulders_terms_consent');
+      if (savedTermsConsent === 'true') {
+        termsConsent.checked = true;
+        console.log('[Terms Consent] Restored from localStorage');
+      }
+    } else {
+      console.warn('[Terms Consent] Checkbox not found in DOM');
+    }
+  } catch (e) {
+    console.warn('[Consent] Could not restore consent checkboxes:', e);
+  }
 }
 
 // Cookie Consent Management (GDPR Compliant)
