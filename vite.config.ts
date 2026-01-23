@@ -16,6 +16,18 @@ const readIfExists = (file: string) => {
 const key = readIfExists('key.pem');
 const cert = readIfExists('cert.pem');
 
+// Plugin to exclude app.js from HTML processing (it's a standalone script, not a module)
+const excludeAppJsPlugin = () => ({
+  name: 'exclude-app-js',
+  transformIndexHtml(html) {
+    // Replace module script with regular script to prevent Vite from parsing it
+    return html.replace(
+      /<script type="module" src="\.\/app\.js"><\/script>/,
+      '<script src="./app.js"></script>'
+    );
+  }
+});
+
 // Plugin to copy functions directory and postal-codes-dk.js to dist for Cloudflare Pages deployment
 const copyFunctionsPlugin = () => ({
   name: 'copy-functions',
@@ -95,7 +107,7 @@ const resolveBasePath = () => {
 
 export default defineConfig(({ command }) => {
   // Conditionally include Sentry plugin only in production builds with auth token
-  const plugins = [react(), copyFunctionsPlugin()];
+  const plugins = [react(), excludeAppJsPlugin(), copyFunctionsPlugin()];
 
   // Only upload source maps to Sentry if auth token is provided
   // Set SENTRY_AUTH_TOKEN in your CI/CD environment
@@ -191,14 +203,6 @@ export default defineConfig(({ command }) => {
       assetsDir: 'assets',
       // Enable source maps for better error debugging in Sentry
       sourcemap: true,
-      rollupOptions: {
-        // Exclude app.js from module analysis - it's a standalone script file
-        external: ['app.js'],
-        output: {
-          // Don't try to process app.js as a module
-          format: 'es',
-        }
-      }
     }
   }
 })
