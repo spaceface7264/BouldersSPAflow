@@ -11497,6 +11497,12 @@ function hideCampaignWarning() {
 }
 
 function updateCartSummary() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Summary] ⏸️ Checkout in progress - skipping cart summary update to freeze prices');
+    return;
+  }
+  
   const items = [];
   state.totals.membershipMonthly = 0;
 
@@ -11671,6 +11677,12 @@ function updateCartSummary() {
 }
 
 function updateCartTotals() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Totals] ⏸️ Checkout in progress - skipping cart totals update to freeze prices');
+    return;
+  }
+  
   // Recalculate totals including discount
   const items = [];
   
@@ -11743,6 +11755,12 @@ function updateCartTotals() {
 }
 
 function renderCartItems() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Items] ⏸️ Checkout in progress - skipping cart items render to freeze prices');
+    return;
+  }
+  
   if (!templates.cartItem || !DOM.cartItems) return;
   
   // Check for campaigns and show/hide warning banner
@@ -11990,6 +12008,12 @@ function renderCartItems() {
 }
 
 function renderCartAddons() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Addons] ⏸️ Checkout in progress - skipping cart addons render to freeze prices');
+    return;
+  }
+  
   if (!templates.cartItem || !DOM.cartAddons) return;
   DOM.cartAddons.innerHTML = '';
 
@@ -12748,6 +12772,12 @@ function updatePaymentOverview() {
 }
 
 function updateDiscountDisplay() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Discount Display] ⏸️ Checkout in progress - skipping discount display update to freeze prices');
+    return;
+  }
+  
   // Find or create discount display element
   let discountDisplay = DOM.discountDisplay || document.querySelector('[data-discount-display]') || document.querySelector('.discount-display');
   
