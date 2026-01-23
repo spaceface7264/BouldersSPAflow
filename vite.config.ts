@@ -191,6 +191,14 @@ export default defineConfig(({ command }) => {
       assetsDir: 'assets',
       // Enable source maps for better error debugging in Sentry
       sourcemap: true,
+      rollupOptions: {
+        // Exclude app.js from module analysis - it's a standalone script file
+        external: ['app.js'],
+        output: {
+          // Don't try to process app.js as a module
+          format: 'es',
+        }
+      }
     }
   }
 })
