@@ -3129,7 +3129,7 @@ function renderProductsFromAPI() {
           </div>
         </div>
       </div>
-      <div class="check-circle"></div>
+      <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}">Select</button>
     `);
     
     return planCard;
@@ -3252,7 +3252,7 @@ function renderProductsFromAPI() {
               </div>
             </div>
           </div>
-          <div class="check-circle"></div>
+          <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}">Select</button>
           <div class="quantity-panel">
             <div class="quantity-selector">
               <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
@@ -9872,6 +9872,12 @@ function setupNewAccessStep() {
   document.querySelectorAll('.plan-card').forEach(card => {
     card.addEventListener('click', (e) => {
       // Don't handle clicks on quantity controls - let them handle their own events
+      if (e.target.closest('.quantity-selector')) {
+        return;
+      }
+      
+      // Don't handle clicks on quantity controls - let them handle their own events
+      // Select button clicks will trigger card selection
       if (e.target.closest('.quantity-selector')) {
         return;
       }

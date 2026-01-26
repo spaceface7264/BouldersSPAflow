@@ -25,12 +25,14 @@ export function sanitizeHTML(dirty, config = {}) {
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'ul', 'ol', 'li', 'a', 'img', 'table', 'tr', 'td', 'th',
       'thead', 'tbody', 'tfoot', 'pre', 'code', 'blockquote',
+      'button', // Allow button elements
       // SVG tags for icons
       'svg', 'path', 'circle', 'rect', 'line', 'polygon', 'polyline',
       'g', 'use', 'defs', 'symbol', 'title', 'desc', 'text', 'tspan'
     ],
     ALLOWED_ATTR: [
       'class', 'id', 'href', 'src', 'alt', 'title',
+      'data-action', 'data-plan-id', // Allow data attributes for buttons
       // SVG attributes
       'viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width',
       'stroke-linecap', 'stroke-linejoin', 'd', 'cx', 'cy', 'r', 'rx', 'ry',

@@ -2630,42 +2630,45 @@ body {
     overflow-wrap: break-word; /* Additional word wrapping support */
 }
 
-.plan-card .check-circle {
+/* Check-circle removed - replaced with select button for all plan cards */
+
+.plan-card .select-btn {
     position: absolute;
     bottom: 16px;
     right: 20px;
-    width: 28px;
-    height: 28px;
-    margin: 0 0 4px 0; /* Add bottom margin */
-    flex-shrink: 0;
-    border: 2px solid var(--color-item-border);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s ease;
-}
-
-.plan-card.selected .check-circle {
+    padding: 10px 20px;
     background: #f0f;
-    border-color: #f0f;
-}
-
-.check-circle::after {
-    content: '✓';
     color: white;
-    font-size: var(--font-size-md);
-    font-weight: bold;
-    opacity: 0;
-    transform: scale(0.5);
-    transition: all 0.2s ease;
+    border: none;
+    border-radius: 8px;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(240, 0, 240, 0.3);
+    z-index: 1;
 }
 
-.plan-card.selected .check-circle::after {
-    opacity: 1;
-    transform: scale(1);
+.plan-card .select-btn:hover {
+    background: #e609e6;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(240, 0, 240, 0.4);
 }
 
+.plan-card .select-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(240, 0, 240, 0.3);
+}
+
+.plan-card.selected .select-btn {
+    background: #A856F7;
+    box-shadow: 0 2px 8px rgba(168, 86, 247, 0.3);
+}
+
+.plan-card.selected .select-btn:hover {
+    background: #9333ea;
+    box-shadow: 0 4px 12px rgba(168, 86, 247, 0.4);
+}
 
 /* Larger touch targets for accessibility */
 @media (hover: none) and (pointer: coarse) {
@@ -2678,7 +2681,7 @@ body {
     .plan-card {
         min-height: auto; /* Allow cards to expand to fit content */
         height: auto; /* Allow content to determine height naturally */
-        padding: 20px 20px 50px 20px; /* Increased padding with extra bottom for check-circle */
+        padding: 20px 20px 50px 20px; /* Increased padding with extra bottom for select button */
     }
     
     .plan-description {
@@ -2690,6 +2693,13 @@ body {
     .check-circle {
         width: 32px;
         height: 32px;
+    }
+
+    .plan-card .select-btn {
+        bottom: 12px;
+        right: 20px;
+        padding: 10px 18px;
+        font-size: var(--font-size-sm);
     }
 }
 
@@ -2719,9 +2729,16 @@ body {
     }
 
     .plan-card {
-        padding: 20px 18px 50px 18px; /* Increased padding with extra bottom for check-circle */
+        padding: 20px 18px 50px 18px; /* Increased padding with extra bottom for select button */
         height: auto; /* Allow content to determine height naturally */
         min-height: auto; /* Allow content to determine minimum height */
+    }
+
+    .plan-card .select-btn {
+        bottom: 12px;
+        right: 18px;
+        padding: 8px 16px;
+        font-size: var(--font-size-sm);
     }
 
     .plan-info {
@@ -2745,13 +2762,6 @@ body {
         align-self: flex-start;
     }
 
-    .plan-card .check-circle {
-        bottom: 18px; /* Increased from 14px for better spacing */
-        right: 18px; /* Match horizontal padding */
-        width: 24px;
-        height: 24px;
-        margin: 0;
-    }
 
     .plan-type {
         font-size: var(--font-size-base);
@@ -2765,10 +2775,6 @@ body {
         font-size: var(--font-size-sm);
     }
 
-    .plan-card .check-circle {
-        width: 24px;
-        height: 24px;
-    }
 }
 
 /* Larger tablets and desktop */
@@ -2815,11 +2821,6 @@ body {
         min-height: 100%;
     }
 
-    .plan-card .check-circle {
-        bottom: 16px;
-        right: 20px;
-        margin: 0 0 4px 0; /* Add bottom margin */
-    }
 
     .plan-card:hover {
         border-color: #f0f;
@@ -2850,16 +2851,7 @@ body {
 
 /* Punch Card Plan Card Layout - Keep normal layout for the card itself */
 
-/* Keep check circle visible when selected */
-.plan-card.selected .check-circle {
-    background: #f0f;
-    border-color: #f0f;
-}
-
-.plan-card.selected .check-circle::after {
-    opacity: 1;
-    transform: scale(1);
-}
+/* Select button styling is handled in .plan-card .select-btn rules above */
 
 /* Selection state indicators - hover effect is defined in main .plan-card rule above */
 .plan-card.selected {
