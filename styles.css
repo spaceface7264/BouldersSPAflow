@@ -221,8 +221,7 @@
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
     overflow: visible;
-    min-height: auto;
-    height: auto;
+    height: 100%;
     align-items: flex-start;
     width: 100%;
     cursor: pointer;
@@ -417,7 +416,8 @@
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
-    margin-top: 8px;
+    margin-top: auto;
+    flex-shrink: 0;
   }
   
   .addons-grid .addon-card .addon-add-to-cart-btn:hover {
@@ -651,6 +651,7 @@
       padding: 10px 14px;
       font-size: 0.875rem;
       min-height: 44px; /* Better touch target */
+      margin-top: auto; /* Keep button at bottom */
     }
     
     .addons-grid .addon-card .plan-price {
