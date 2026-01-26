@@ -5804,6 +5804,41 @@ function handleRejectionOption1() {
   // Hide modal first
   hideCampaignRejectionModal();
   
+  // Clear cart when switching from campaign rejection to regular membership
+  // This prevents duplicate addons when user adds addon to campaign, gets rejected, then selects regular membership
+  console.log('[Campaign Rejection] Clearing cart before switching to regular membership');
+  
+  // Clear addon selections
+  state.addonIds.clear();
+  
+  // Clear membership plan selection
+  state.membershipPlanId = null;
+  state.selectedProductId = null;
+  state.selectedProductType = null;
+  
+  // Clear value card quantities
+  state.valueCardQuantities.clear();
+  
+  // Clear cart items
+  state.cartItems = [];
+  
+  // Reset order state
+  resetOrderStateForProductChange('campaign-rejection-to-regular-membership');
+  
+  // Update cart summary to reflect cleared state
+  updateCartSummary();
+  updateCartTotals();
+  
+  // Reset addon UI state
+  document.querySelectorAll('.addon-card.selected, .plan-card.addon-card.selected').forEach(card => {
+    card.classList.remove('selected');
+    const button = card.querySelector('[data-action="toggle-addon"]');
+    if (button) {
+      button.textContent = t('button.addToCart');
+      button.setAttribute('data-i18n-key', 'button.addToCart');
+    }
+  });
+  
   // Navigate to step 2
   state.currentStep = 2;
   showStep(2);
