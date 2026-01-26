@@ -3129,7 +3129,7 @@ function renderProductsFromAPI() {
           </div>
         </div>
       </div>
-      <div class="check-circle"></div>
+      <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
     `);
     
     return planCard;
@@ -3252,7 +3252,7 @@ function renderProductsFromAPI() {
               </div>
             </div>
           </div>
-          <div class="check-circle"></div>
+          <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
           <div class="quantity-panel">
             <div class="quantity-selector">
               <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
@@ -3286,6 +3286,8 @@ function renderProductsFromAPI() {
   // Use setTimeout to ensure DOM is ready
   setTimeout(() => {
     setupNewAccessStep();
+    // Update translations for newly rendered buttons
+    updatePageTranslations();
   }, 100);
 }
 
@@ -4262,7 +4264,8 @@ function populateAddonsModal() {
       addToCartBtn.className = 'addon-add-to-cart-btn';
       addToCartBtn.setAttribute('data-action', 'toggle-addon');
       addToCartBtn.setAttribute('data-addon-id', addon.id);
-      addToCartBtn.textContent = 'Add to cart';
+      addToCartBtn.textContent = t('button.addToCart');
+      addToCartBtn.setAttribute('data-i18n-key', 'button.addToCart');
       
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${addon.name}</div>
@@ -4422,7 +4425,8 @@ function populateAddonsModal() {
     // Update button text based on initial state
     if (addToCartBtn) {
       const isSelected = state.addonIds.has(addon.id);
-      addToCartBtn.textContent = isSelected ? 'Added!' : 'Add to cart';
+      addToCartBtn.textContent = isSelected ? t('button.added') : t('button.addToCart');
+      addToCartBtn.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
       if (isSelected) {
         card.classList.add('selected');
       }
@@ -4582,7 +4586,8 @@ function populateBoostModal() {
       
       // Update button text based on initial state
       const isSelected = state.addonIds.has(product.id);
-      addToCartBtn.textContent = isSelected ? 'Added!' : 'Add to cart';
+      addToCartBtn.textContent = isSelected ? t('button.added') : t('button.addToCart');
+      addToCartBtn.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
       if (isSelected) {
         card.classList.add('selected');
       }
@@ -4748,7 +4753,8 @@ function populateBoostModal() {
     // Update button text based on initial state
     if (addToCartBtn) {
       const isSelected = state.addonIds.has(product.id);
-      addToCartBtn.textContent = isSelected ? 'Added!' : 'Add to cart';
+      addToCartBtn.textContent = isSelected ? t('button.added') : t('button.addToCart');
+      addToCartBtn.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
       if (isSelected) {
         card.classList.add('selected');
       }
@@ -5042,7 +5048,7 @@ const translations = {
     'main.subtitle.step1': 'Vælg din hjemmehal', 'main.subtitle.step1.secondary': 'Dette er hvor du primært træner − du får adgang til alle haller.',
     'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om måneden.',
     'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
-    'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger',
+    'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger', 'button.select': 'Vælg', 'button.addToCart': 'Tilføj til kurv', 'button.added': 'Tilføjet!',
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
@@ -5115,7 +5121,7 @@ const translations = {
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a month.',
     'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
-    'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit',
+    'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit', 'button.select': 'Select', 'button.addToCart': 'Add to cart', 'button.added': 'Added!',
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
@@ -5188,7 +5194,7 @@ const translations = {
     'main.subtitle.step1': 'Wählen Sie Ihre Heimhalle', 'main.subtitle.step1.secondary': 'Hier trainieren Sie hauptsächlich − Sie haben Zugang zu allen Hallen.',
     'main.subtitle.step2': 'Wählen Sie Ihren Zugangstyp', 'main.subtitle.step2.secondary': 'Wählen Sie Mitgliedschaft, wenn Sie mindestens einmal im Monat klettern.',
     'main.subtitle.step3': 'Möchten Sie Pommes dazu?', 'main.subtitle.step4': 'Senden',
-    'button.next': 'Weiter', 'button.back': 'Zurück', 'button.continue': 'Fortsetzen', 'button.skip': 'Überspringen', 'button.complete': 'Fertig', 'button.edit': 'Bearbeiten',
+    'button.next': 'Weiter', 'button.back': 'Zurück', 'button.continue': 'Fortsetzen', 'button.skip': 'Überspringen', 'button.complete': 'Fertig', 'button.edit': 'Bearbeiten', 'button.select': 'Auswählen', 'button.addToCart': 'In den Warenkorb', 'button.added': 'Hinzugefügt!',
     'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'gym.nearest': 'Nächste',
     'form.email': 'E-Mail*', 'form.email.placeholder': 'E-Mail', 'form.password': 'Passwort*', 'form.password.placeholder': 'Passwort',
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
@@ -9876,6 +9882,12 @@ function setupNewAccessStep() {
         return;
       }
       
+      // Don't handle clicks on quantity controls - let them handle their own events
+      // Select button clicks will trigger card selection
+      if (e.target.closest('.quantity-selector')) {
+        return;
+      }
+      
       e.stopPropagation();
       
       const planId = card.dataset.plan;
@@ -10433,7 +10445,8 @@ function toggleAddon(addonId, button) {
     
     // Update button text if it's a button
     if (button && button.tagName === 'BUTTON') {
-      button.textContent = isSelected ? 'Added!' : 'Add to cart';
+      button.textContent = isSelected ? t('button.added') : t('button.addToCart');
+      button.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
     }
     
     centerPlanCard(card);
