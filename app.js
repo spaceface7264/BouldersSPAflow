@@ -13157,6 +13157,7 @@ function persistOrderSnapshot(orderId) {
       selectedBusinessUnit: state.selectedBusinessUnit,
       selectedProductType: state.selectedProductType, // Store product type for restoration
       selectedProductId: state.selectedProductId, // Store product ID for restoration
+      addonIds: Array.from(state.addonIds || []), // Store addon IDs (convert Set to Array for JSON)
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -14050,6 +14051,7 @@ async function handleCheckout() {
           selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
           selectedProductType: state.selectedProductType, // Store product type for restoration
           selectedProductId: state.selectedProductId, // Store product ID for restoration
+          addonIds: Array.from(state.addonIds || []), // Store addon IDs (convert Set to Array for JSON)
         }));
       } catch (e) {
         console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -16414,6 +16416,32 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
             console.log('[Payment Failed] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
           });
         }
+        
+        // CRITICAL: Restore addonIds from sessionStorage or rebuild from cart items
+        // This ensures addon products stay in cart when retrying payment
+        if (storedOrder.addonIds && Array.isArray(storedOrder.addonIds)) {
+          // Restore addonIds from sessionStorage (convert Array back to Set)
+          state.addonIds.clear();
+          storedOrder.addonIds.forEach(addonId => {
+            state.addonIds.add(addonId);
+          });
+          console.log('[Payment Failed] ✅ Restored addonIds from sessionStorage:', storedOrder.addonIds.length, 'addons');
+        } else {
+          // Fallback: Rebuild addonIds from cart items if not in sessionStorage
+          const addonItems = storedOrder.cartItems.filter(item => item.type === 'addon');
+          if (addonItems.length > 0) {
+            console.log('[Payment Failed] Rebuilding addonIds from cart items');
+            state.addonIds.clear();
+            addonItems.forEach(item => {
+              const addonId = item.productId || item.id;
+              if (addonId) {
+                state.addonIds.add(addonId);
+                console.log('[Payment Failed] ✅ Rebuilt addonIds: added addon', addonId);
+              }
+            });
+            console.log('[Payment Failed] ✅ Rebuilt addonIds from cart items:', state.addonIds.size, 'addons');
+          }
+        }
       }
       if (storedOrder.totals) {
         state.totals = { ...state.totals, ...storedOrder.totals };
@@ -16764,6 +16792,32 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
                     state.valueCardQuantities.set(planId, quantity);
                     console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
                   });
+                }
+                
+                // CRITICAL: Restore addonIds from sessionStorage or rebuild from cart items
+                // This ensures addon products stay in cart when retrying payment
+                if (storedOrder.addonIds && Array.isArray(storedOrder.addonIds)) {
+                  // Restore addonIds from sessionStorage (convert Array back to Set)
+                  state.addonIds.clear();
+                  storedOrder.addonIds.forEach(addonId => {
+                    state.addonIds.add(addonId);
+                  });
+                  console.log('[Payment Retry] ✅ Restored addonIds from sessionStorage:', storedOrder.addonIds.length, 'addons');
+                } else {
+                  // Fallback: Rebuild addonIds from cart items if not in sessionStorage
+                  const addonItems = storedOrder.cartItems.filter(item => item.type === 'addon');
+                  if (addonItems.length > 0) {
+                    console.log('[Payment Retry] Rebuilding addonIds from cart items');
+                    state.addonIds.clear();
+                    addonItems.forEach(item => {
+                      const addonId = item.productId || item.id;
+                      if (addonId) {
+                        state.addonIds.add(addonId);
+                        console.log('[Payment Retry] ✅ Rebuilt addonIds: added addon', addonId);
+                      }
+                    });
+                    console.log('[Payment Retry] ✅ Rebuilt addonIds from cart items:', state.addonIds.size, 'addons');
+                  }
                 }
               }
               if (storedOrder.totals) {
