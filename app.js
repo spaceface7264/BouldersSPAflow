@@ -4183,10 +4183,10 @@ function ensureAddonsModal() {
   const header = document.createElement('div');
   header.className = 'addons-header';
   const title = document.createElement('h3');
-  title.textContent = 'Add to your membership';
+  title.textContent = t('addons.modal.title');
   title.className = 'addons-title';
   const closeBtn = document.createElement('button');
-  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.setAttribute('aria-label', t('addons.modal.close'));
   closeBtn.setAttribute('type', 'button');
   closeBtn.textContent = '\u00D7';
   closeBtn.className = 'addons-close';
@@ -4201,12 +4201,12 @@ function ensureAddonsModal() {
   const actions = document.createElement('div');
   actions.className = 'addons-actions';
   const hint = document.createElement('div');
-  hint.textContent = 'Add gear now at a special price and pick it up at your next visit.';
+  hint.textContent = t('addons.modal.hint');
   hint.className = 'addons-hint';
   
   // Single dynamic button
   const actionButton = document.createElement('button');
-  actionButton.textContent = 'Skip';
+  actionButton.textContent = t('addons.modal.skip');
   actionButton.className = 'addons-action-btn';
   actionButton.addEventListener('click', () => handleAddonAction());
   
@@ -4258,23 +4258,28 @@ function populateAddonsModal() {
       card.className = 'plan-card addon-card';
       card.style.cursor = 'pointer';
       const addonPrice = getAddonPrice(addon);
+      const addToCartBtn = document.createElement('button');
+      addToCartBtn.className = 'addon-add-to-cart-btn';
+      addToCartBtn.setAttribute('data-action', 'toggle-addon');
+      addToCartBtn.setAttribute('data-addon-id', addon.id);
+      addToCartBtn.textContent = 'Add to cart';
+      
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${addon.name}</div>
         <div>${addonPrice > 0
           ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
           : '—'} kr.</div>
-        <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
       `);
+      card.appendChild(addToCartBtn);
       
       // Make entire card clickable
       card.addEventListener('click', (e) => {
-        // Don't trigger if clicking the check circle itself
-        const checkCircle = card.querySelector('.check-circle');
-        if (e.target === checkCircle || checkCircle.contains(e.target)) {
+        // Don't trigger if clicking the button itself
+        if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
           return;
         }
-        // Toggle the addon
-        if (addon.id) toggleAddon(addon.id, checkCircle);
+        // Toggle the addon when clicking anywhere on the card
+        if (addon.id) toggleAddon(addon.id, addToCartBtn);
       });
       
       grid.appendChild(card);
@@ -4284,13 +4289,15 @@ function populateAddonsModal() {
   // Use existing add-on template for consistency
   addons.forEach((addon) => {
     const card = templates.addon.content.firstElementChild.cloneNode(true);
-    const checkCircle = card.querySelector('[data-action="toggle-addon"]');
-    if (checkCircle) checkCircle.dataset.addonId = addon.id;
+    const addToCartBtn = card.querySelector('[data-action="toggle-addon"]');
+    if (addToCartBtn) addToCartBtn.dataset.addonId = addon.id;
     const nameEl = card.querySelector('[data-element="name"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
     const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
+    const imageEl = card.querySelector('[data-element="image"]');
+    const imageBannerEl = card.querySelector('[data-element="imageBanner"]');
     if (nameEl) nameEl.textContent = addon.name;
     // Extract and display product image
     if (imageEl) {
@@ -4337,9 +4344,7 @@ function populateAddonsModal() {
       imageEl.style.visibility = 'visible';
       imageEl.style.opacity = '1';
       imageEl.style.width = '100%';
-      imageEl.style.height = '200px';
-      imageEl.style.minHeight = '200px';
-      imageEl.style.maxHeight = '200px';
+      // Height is controlled by CSS (.addons-grid .addon-card img) - 400px desktop, 250px mobile
       imageEl.style.objectFit = 'cover';
       imageEl.style.borderRadius = '8px';
       imageEl.style.marginBottom = '12px';
@@ -4356,6 +4361,15 @@ function populateAddonsModal() {
         imageEl.src = getProductPlaceholderImage();
         imageEl.alt = (addon.name || 'Addon') + ' - No image available';
         console.log('[Addons Modal] Using placeholder image for', addon.name);
+      }
+      
+      // Display image banner text if available
+      if (imageBannerEl && addon.imageBanner?.text) {
+        imageBannerEl.textContent = addon.imageBanner.text;
+        imageBannerEl.style.display = 'block';
+        console.log('[Addons Modal] Image banner text set for', addon.name, ':', addon.imageBanner.text);
+      } else if (imageBannerEl) {
+        imageBannerEl.style.display = 'none';
       }
     } else {
       console.log('[Addons Modal] Image element not found for', addon.name);
@@ -4403,27 +4417,26 @@ function populateAddonsModal() {
       }
     }
     
-    // Hide plan-meta if it's empty (no original price and no features)
-    const planMetaEl = card.querySelector('.plan-meta');
-    if (planMetaEl) {
-      const hasOriginalPrice = originalPriceEl && originalPriceEl.style.display !== 'none' && originalPriceEl.textContent.trim() !== '';
-      const hasFeatures = featuresEl && featuresEl.children.length > 0;
-      if (!hasOriginalPrice && !hasFeatures) {
-        planMetaEl.style.display = 'none';
-      } else {
-        planMetaEl.style.display = '';
+    // Features are now directly in the card, no plan-meta container
+    
+    // Update button text based on initial state
+    if (addToCartBtn) {
+      const isSelected = state.addonIds.has(addon.id);
+      addToCartBtn.textContent = isSelected ? 'Added!' : 'Add to cart';
+      if (isSelected) {
+        card.classList.add('selected');
       }
     }
     
     // Make entire card clickable
     card.style.cursor = 'pointer';
     card.addEventListener('click', (e) => {
-      // Don't trigger if clicking the check circle itself
-      if (e.target === checkCircle || checkCircle.contains(e.target)) {
+      // Don't trigger if clicking the button itself (let button handle its own click)
+      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
         return;
       }
-      // Toggle the addon
-      if (addon.id) toggleAddon(addon.id, checkCircle);
+      // Toggle the addon when clicking anywhere on the card
+      if (addon.id) toggleAddon(addon.id, addToCartBtn);
     });
     
     grid.appendChild(card);
@@ -4508,7 +4521,7 @@ function populateBoostModal() {
   
   // Update title for boost modal
   if (title) {
-    title.textContent = 'Boost your membership';
+    title.textContent = t('addons.modal.boost.title');
   }
   
   grid.innerHTML = '';
@@ -4523,7 +4536,7 @@ function populateBoostModal() {
     console.warn('[Boost Modal] No boost products to display');
     const emptyMsg = document.createElement('div');
     emptyMsg.className = 'addons-empty';
-    emptyMsg.textContent = 'No boost products available.';
+    emptyMsg.textContent = t('addons.modal.empty');
     emptyMsg.style.textAlign = 'center';
     emptyMsg.style.padding = '2rem';
     emptyMsg.style.color = 'var(--color-text-secondary, #6b7280)';
@@ -4556,19 +4569,32 @@ function populateBoostModal() {
                        product.currency || 
                        'DKK';
       
+      const addToCartBtn = document.createElement('button');
+      addToCartBtn.className = 'addon-add-to-cart-btn';
+      addToCartBtn.setAttribute('data-action', 'toggle-addon');
+      addToCartBtn.setAttribute('data-addon-id', product.id);
+      
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${product.name || 'Boost Product'}</div>
         <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr.' : '—'}</div>
-        <div class="check-circle" data-action="toggle-addon" data-addon-id="${product.id}"></div>
       `);
+      card.appendChild(addToCartBtn);
+      
+      // Update button text based on initial state
+      const isSelected = state.addonIds.has(product.id);
+      addToCartBtn.textContent = isSelected ? 'Added!' : 'Add to cart';
+      if (isSelected) {
+        card.classList.add('selected');
+      }
       
       // Make entire card clickable
       card.addEventListener('click', (e) => {
-        const checkCircle = card.querySelector('.check-circle');
-        if (e.target === checkCircle || checkCircle.contains(e.target)) {
+        // Don't trigger if clicking the button itself
+        if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
           return;
         }
-        if (product.id) toggleAddon(product.id, checkCircle);
+        // Toggle the addon when clicking anywhere on the card
+        if (product.id) toggleAddon(product.id, addToCartBtn);
       });
       
       // Ensure card is visible
@@ -4581,11 +4607,12 @@ function populateBoostModal() {
     
     // Use existing add-on template
     const card = templates.addon.content.firstElementChild.cloneNode(true);
-    const checkCircle = card.querySelector('[data-action="toggle-addon"]');
-    if (checkCircle) checkCircle.dataset.addonId = product.id;
+    const addToCartBtn = card.querySelector('[data-action="toggle-addon"]');
+    if (addToCartBtn) addToCartBtn.dataset.addonId = product.id;
     
     const nameEl = card.querySelector('[data-element="name"]');
     const imageEl = card.querySelector('[data-element="image"]');
+    const imageBannerEl = card.querySelector('[data-element="imageBanner"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
     const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
     const descriptionEl = card.querySelector('[data-element="description"]');
@@ -4641,9 +4668,7 @@ function populateBoostModal() {
       imageEl.style.visibility = 'visible';
       imageEl.style.opacity = '1';
       imageEl.style.width = '100%';
-      imageEl.style.height = '200px';
-      imageEl.style.minHeight = '200px';
-      imageEl.style.maxHeight = '200px';
+      // Height is controlled by CSS (.addons-grid .addon-card img) - 400px desktop, 250px mobile
       imageEl.style.objectFit = 'cover';
       imageEl.style.borderRadius = '8px';
       imageEl.style.marginBottom = '12px';
@@ -4659,6 +4684,15 @@ function populateBoostModal() {
         imageEl.src = getProductPlaceholderImage();
         imageEl.alt = (product.name || 'Product') + ' - No image available';
         console.log('[Boost Modal] Using placeholder image for', product.name);
+      }
+      
+      // Display image banner text if available
+      if (imageBannerEl && product.imageBanner?.text) {
+        imageBannerEl.textContent = product.imageBanner.text;
+        imageBannerEl.style.display = 'block';
+        console.log('[Boost Modal] Image banner text set for', product.name, ':', product.imageBanner.text);
+      } else if (imageBannerEl) {
+        imageBannerEl.style.display = 'none';
       }
     }
     
@@ -4711,19 +4745,29 @@ function populateBoostModal() {
       featuresEl.innerHTML = '';
     }
     
+    // Update button text based on initial state
+    if (addToCartBtn) {
+      const isSelected = state.addonIds.has(product.id);
+      addToCartBtn.textContent = isSelected ? 'Added!' : 'Add to cart';
+      if (isSelected) {
+        card.classList.add('selected');
+      }
+    }
+    
     // Make entire card clickable
     card.style.cursor = 'pointer';
+    card.addEventListener('click', (e) => {
+      // Don't trigger if clicking the button itself (let button handle its own click)
+      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
+        return;
+      }
+      // Toggle the addon when clicking anywhere on the card
+      if (product.id) toggleAddon(product.id, addToCartBtn);
+    });
     
     // Ensure card is visible (fix opacity: 0 issue)
     card.style.opacity = '1';
     card.style.visibility = 'visible';
-    
-    card.addEventListener('click', (e) => {
-      if (e.target === checkCircle || checkCircle.contains(e.target)) {
-        return;
-      }
-      if (product.id) toggleAddon(product.id, checkCircle);
-    });
     
     grid.appendChild(card);
     console.log(`[Boost Modal] ✅ Card appended for product: ${product.name}`);
@@ -5044,6 +5088,13 @@ const translations = {
     'cookie.category.marketing.title': 'Marketing Cookies', 'cookie.category.marketing.desc': 'Disse cookies bruges til at levere annoncer og spore kampagneeffektivitet.',
     'cookie.category.functional.title': 'Funktionelle Cookies', 'cookie.category.functional.desc': 'Disse cookies muliggør forbedret funktionalitet og personalisering, såsom at huske dine præferencer.',
     'addons.intro': 'Forbedre din klatreoplevelse med vores add-on produkter.',
+    'addons.modal.title': 'Tilføj til dit medlemskab',
+    'addons.modal.boost.title': 'Boost dit medlemskab',
+    'addons.modal.hint': 'Tilføj udstyr nu til en særlig pris og hent det ved dit næste besøg.',
+    'addons.modal.skip': 'Spring over',
+    'addons.modal.continue': 'Fortsæt',
+    'addons.modal.close': 'Luk',
+    'addons.modal.empty': 'Ingen boost produkter tilgængelige.',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
@@ -5110,6 +5161,13 @@ const translations = {
     'cookie.category.marketing.title': 'Marketing Cookies', 'cookie.category.marketing.desc': 'These cookies are used to deliver advertisements and track campaign effectiveness.',
     'cookie.category.functional.title': 'Functional Cookies', 'cookie.category.functional.desc': 'These cookies enable enhanced functionality and personalization, such as remembering your preferences.',
     'addons.intro': 'Enhance your climbing experience with our add-on products.',
+    'addons.modal.title': 'Add to your membership',
+    'addons.modal.boost.title': 'Boost your membership',
+    'addons.modal.hint': 'Add gear now at a special price and pick it up at your next visit.',
+    'addons.modal.skip': 'Skip',
+    'addons.modal.continue': 'Continue',
+    'addons.modal.close': 'Close',
+    'addons.modal.empty': 'No boost products available.',
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
@@ -5176,6 +5234,13 @@ const translations = {
     'cookie.category.marketing.title': 'Marketing-Cookies', 'cookie.category.marketing.desc': 'Diese Cookies werden verwendet, um Werbung zu liefern und die Kampagneneffektivität zu verfolgen.',
     'cookie.category.functional.title': 'Funktionale Cookies', 'cookie.category.functional.desc': 'Diese Cookies ermöglichen erweiterte Funktionalität und Personalisierung, z. B. das Speichern Ihrer Einstellungen.',
     'addons.intro': 'Verbessern Sie Ihr Klettererlebnis mit unseren Add-on-Produkten.',
+    'addons.modal.title': 'Zu Ihrer Mitgliedschaft hinzufügen',
+    'addons.modal.boost.title': 'Ihre Mitgliedschaft boosten',
+    'addons.modal.hint': 'Fügen Sie jetzt Ausrüstung zu einem Sonderpreis hinzu und holen Sie sie bei Ihrem nächsten Besuch ab.',
+    'addons.modal.skip': 'Überspringen',
+    'addons.modal.continue': 'Weiter',
+    'addons.modal.close': 'Schließen',
+    'addons.modal.empty': 'Keine Boost-Produkte verfügbar.',
     'terms.tab.membership': 'Mitgliedschaft / 15 Tage', 'terms.tab.punchcard': 'Stempelkarte',
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
@@ -5259,6 +5324,9 @@ function updatePageTranslations() {
   
   // Update cookie banner translations (needs special handling for HTML content)
   updateCookieBannerTranslations();
+  
+  // Update addon modal translations
+  updateAddonModalTranslations();
   
   // Update step labels
   const stepLabels = document.querySelectorAll('.step-label');
@@ -5572,6 +5640,53 @@ function updateHeadsUpTranslations() {
   
   const selectedGymLabel = document.querySelector('.selected-gym-label');
   if (selectedGymLabel) selectedGymLabel.textContent = t('header.selectedGym');
+}
+
+// Update addon modal translations
+function updateAddonModalTranslations() {
+  if (!addonsModal) return;
+  
+  // Update title - check current title to determine if it's boost or regular modal
+  const title = addonsModal.querySelector('.addons-title');
+  if (title) {
+    // Check if current title matches boost title (in any language) or check state
+    const currentTitle = title.textContent.trim();
+    // If modal is visible and showing boost products, use boost title
+    // Otherwise use regular addon title
+    // We'll update based on what's currently displayed
+    const grid = addonsModal.querySelector('[data-modal-addons-grid]');
+    const hasBoostProducts = grid && Array.from(grid.querySelectorAll('[data-plan-id]')).some(card => {
+      const planId = card.dataset.planId;
+      return state.boostProducts?.some(p => p.id === planId);
+    });
+    
+    if (hasBoostProducts) {
+      title.textContent = t('addons.modal.boost.title');
+    } else {
+      title.textContent = t('addons.modal.title');
+    }
+  }
+  
+  // Update close button aria-label
+  const closeBtn = addonsModal.querySelector('.addons-close');
+  if (closeBtn) {
+    closeBtn.setAttribute('aria-label', t('addons.modal.close'));
+  }
+  
+  // Update hint text
+  const hint = addonsModal.querySelector('.addons-hint');
+  if (hint) {
+    hint.textContent = t('addons.modal.hint');
+  }
+  
+  // Update action button
+  updateAddonActionButton();
+  
+  // Update empty message if present
+  const emptyMsg = addonsModal.querySelector('.addons-empty');
+  if (emptyMsg) {
+    emptyMsg.textContent = t('addons.modal.empty');
+  }
 }
 
 // Change language and reload products
@@ -10302,17 +10417,25 @@ function selectMembershipPlan(planId) {
   }
 }
 
-function toggleAddon(addonId, checkCircle) {
+function toggleAddon(addonId, button) {
+  if (!addonId) return;
+  
   if (state.addonIds.has(addonId)) {
     state.addonIds.delete(addonId);
   } else {
     state.addonIds.add(addonId);
   }
 
-  const card = checkCircle.closest('.plan-card');
+  const card = button?.closest('.addon-card') || button?.closest('.plan-card');
   if (card) {
     const isSelected = state.addonIds.has(addonId);
     card.classList.toggle('selected', isSelected);
+    
+    // Update button text if it's a button
+    if (button && button.tagName === 'BUTTON') {
+      button.textContent = isSelected ? 'Added!' : 'Add to cart';
+    }
+    
     centerPlanCard(card);
   }
 
@@ -10329,10 +10452,10 @@ function updateAddonActionButton() {
   const hasSelectedAddons = state.addonIds.size > 0;
   
   if (hasSelectedAddons) {
-    actionButton.textContent = 'Continue';
+    actionButton.textContent = t('addons.modal.continue');
     actionButton.className = 'addons-action-btn addons-continue';
   } else {
-    actionButton.textContent = 'Skip';
+    actionButton.textContent = t('addons.modal.skip');
     actionButton.className = 'addons-action-btn addons-skip';
   }
 }
