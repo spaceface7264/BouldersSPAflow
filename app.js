@@ -4258,15 +4258,29 @@ function populateAddonsModal() {
       card.className = 'plan-card addon-card';
       card.style.cursor = 'pointer';
       const addonPrice = getAddonPrice(addon);
+      const addToCartBtn = document.createElement('button');
+      addToCartBtn.className = 'addon-add-to-cart-btn';
+      addToCartBtn.setAttribute('data-action', 'toggle-addon');
+      addToCartBtn.setAttribute('data-addon-id', addon.id);
+      addToCartBtn.textContent = 'Add to cart';
+      
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${addon.name}</div>
         <div>${addonPrice > 0
           ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
           : '—'} kr.</div>
-        <button class="addon-add-to-cart-btn" data-action="toggle-addon" data-addon-id="${addon.id}">Add to cart</button>
       `);
+      card.appendChild(addToCartBtn);
       
-      // Button click is handled by data-action="toggle-addon" in handleGlobalClick
+      // Make entire card clickable
+      card.addEventListener('click', (e) => {
+        // Don't trigger if clicking the button itself
+        if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
+          return;
+        }
+        // Toggle the addon when clicking anywhere on the card
+        if (addon.id) toggleAddon(addon.id, addToCartBtn);
+      });
       
       grid.appendChild(card);
     });
@@ -4414,7 +4428,16 @@ function populateAddonsModal() {
       }
     }
     
-    // Remove card click handler - only button handles clicks now
+    // Make entire card clickable
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', (e) => {
+      // Don't trigger if clicking the button itself (let button handle its own click)
+      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
+        return;
+      }
+      // Toggle the addon when clicking anywhere on the card
+      if (addon.id) toggleAddon(addon.id, addToCartBtn);
+    });
     
     grid.appendChild(card);
   });
@@ -4546,20 +4569,33 @@ function populateBoostModal() {
                        product.currency || 
                        'DKK';
       
+      const addToCartBtn = document.createElement('button');
+      addToCartBtn.className = 'addon-add-to-cart-btn';
+      addToCartBtn.setAttribute('data-action', 'toggle-addon');
+      addToCartBtn.setAttribute('data-addon-id', product.id);
+      
       card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${product.name || 'Boost Product'}</div>
         <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr.' : '—'}</div>
-        <button class="addon-add-to-cart-btn" data-action="toggle-addon" data-addon-id="${product.id}">Add to cart</button>
       `);
+      card.appendChild(addToCartBtn);
       
       // Update button text based on initial state
-      if (addToCartBtn) {
-        const isSelected = state.addonIds.has(product.id);
-        addToCartBtn.textContent = isSelected ? 'Remove from cart' : 'Add to cart';
-        if (isSelected) {
-          card.classList.add('selected');
-        }
+      const isSelected = state.addonIds.has(product.id);
+      addToCartBtn.textContent = isSelected ? 'Added!' : 'Add to cart';
+      if (isSelected) {
+        card.classList.add('selected');
       }
+      
+      // Make entire card clickable
+      card.addEventListener('click', (e) => {
+        // Don't trigger if clicking the button itself
+        if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
+          return;
+        }
+        // Toggle the addon when clicking anywhere on the card
+        if (product.id) toggleAddon(product.id, addToCartBtn);
+      });
       
       // Ensure card is visible
       card.style.opacity = '1';
@@ -4717,6 +4753,17 @@ function populateBoostModal() {
         card.classList.add('selected');
       }
     }
+    
+    // Make entire card clickable
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', (e) => {
+      // Don't trigger if clicking the button itself (let button handle its own click)
+      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
+        return;
+      }
+      // Toggle the addon when clicking anywhere on the card
+      if (product.id) toggleAddon(product.id, addToCartBtn);
+    });
     
     // Ensure card is visible (fix opacity: 0 issue)
     card.style.opacity = '1';
