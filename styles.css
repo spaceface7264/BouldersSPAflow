@@ -5495,7 +5495,7 @@ body {
 
 /* Cart and Purchase Items - Shared Styles */
 .item-name {
-    color: rgba(255, 255, 240, 1);
+    color: var(--color-text-white);
     font-size: var(--font-size-base);
     font-weight: 500;
     display: flex;
