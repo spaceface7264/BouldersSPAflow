@@ -12980,8 +12980,35 @@ function updatePaymentOverview() {
       (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0)
     );
     
-    // Check if order price includes addons: only if order actually has addons AND we have addons in state
-    const payNowIncludesAddons = hasAddons && hasOrderData && orderHasAddons && state.fullOrder?.price?.amount !== undefined;
+    // CRITICAL: Verify that order addons match state addons to ensure order price includes them
+    // This prevents double-counting when retrying payment (order already has addons from previous attempt)
+    let orderAddonsMatchState = false;
+    if (hasAddons && orderHasAddons) {
+      const orderArticleProductIds = (state.fullOrder.articleItems || []).map(item => item.product?.id).filter(Boolean);
+      const orderValueCardProductIds = (state.fullOrder.valueCardItems || []).map(item => item.product?.id).filter(Boolean);
+      const orderAllProductIds = [...orderArticleProductIds, ...orderValueCardProductIds];
+      const stateAddonIdsArray = Array.from(state.addonIds);
+      
+      // Check if all state addons are in the order
+      orderAddonsMatchState = stateAddonIdsArray.length > 0 && 
+        stateAddonIdsArray.every(id => {
+          const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+          return orderAllProductIds.includes(Number(numericId)) || 
+                 orderAllProductIds.includes(String(numericId)) ||
+                 orderAllProductIds.includes(numericId);
+        });
+      
+      console.log('[Payment Overview] Addon matching:', {
+        stateAddonIds: stateAddonIdsArray,
+        orderProductIds: orderAllProductIds,
+        orderAddonsMatchState
+      });
+    }
+    
+    // Check if order price includes addons: only if order actually has addons AND they match state addons
+    // This ensures we don't double-count when retrying payment (order already has addons)
+    const payNowIncludesAddons = hasAddons && hasOrderData && orderHasAddons && 
+                                  orderAddonsMatchState && state.fullOrder?.price?.amount !== undefined;
     
     // Total calculation:
     // - If payNowAmount already includes addons (from backend order that has addons), use it as-is
@@ -13027,7 +13054,26 @@ function updatePaymentOverview() {
     (state.fullOrder.articleItems && state.fullOrder.articleItems.length > 0) ||
     (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0)
   );
-  const payNowIncludesAddonsForLog = hasAddonsForLog && hasOrderData && orderHasAddonsForLog && state.fullOrder?.price?.amount !== undefined;
+  
+  // Verify that order addons match state addons (same logic as display)
+  let orderAddonsMatchStateForLog = false;
+  if (hasAddonsForLog && orderHasAddonsForLog) {
+    const orderArticleProductIds = (state.fullOrder.articleItems || []).map(item => item.product?.id).filter(Boolean);
+    const orderValueCardProductIds = (state.fullOrder.valueCardItems || []).map(item => item.product?.id).filter(Boolean);
+    const orderAllProductIds = [...orderArticleProductIds, ...orderValueCardProductIds];
+    const stateAddonIdsArray = Array.from(state.addonIds);
+    
+    orderAddonsMatchStateForLog = stateAddonIdsArray.length > 0 && 
+      stateAddonIdsArray.every(id => {
+        const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+        return orderAllProductIds.includes(Number(numericId)) || 
+               orderAllProductIds.includes(String(numericId)) ||
+               orderAllProductIds.includes(numericId);
+      });
+  }
+  
+  const payNowIncludesAddonsForLog = hasAddonsForLog && hasOrderData && orderHasAddonsForLog && 
+                                      orderAddonsMatchStateForLog && state.fullOrder?.price?.amount !== undefined;
   const calculatedTotal = payNowIncludesAddonsForLog ? payNowAmount : payNowAmount + addonTotalForLog;
   
   console.log('[Payment Overview] ✅ Updated:', {
@@ -14377,15 +14423,41 @@ async function handleCheckout() {
             
             console.log('[checkout] Subscription item ID for linking:', validSubscriptionItemId);
             
+            // CRITICAL: Check if addons already exist in the order before adding them
+            // This prevents duplicate addons when retrying payment after failure
+            let existingAddonIds = [];
+            try {
+              const currentOrder = await orderAPI.getOrder(state.orderId);
+              const existingArticleItems = currentOrder?.articleItems || [];
+              const existingValueCardItems = currentOrder?.valueCardItems || [];
+              const existingArticleProductIds = existingArticleItems.map(item => item.product?.id).filter(Boolean);
+              const existingValueCardProductIds = existingValueCardItems.map(item => item.product?.id).filter(Boolean);
+              existingAddonIds = [...existingArticleProductIds, ...existingValueCardProductIds];
+              console.log('[checkout] Existing addons in order:', existingAddonIds);
+            } catch (error) {
+              console.warn('[checkout] Could not check existing addons in order:', error);
+            }
+            
             const addonIdsArray = Array.from(state.addonIds);
             const addedAddonIds = [];
             
             for (const addonId of addonIdsArray) {
               try {
+                // CRITICAL: Skip if addon already exists in order (prevents duplicate addons on retry)
+                const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+                const addonAlreadyExists = existingAddonIds.includes(Number(numericId)) || 
+                                          existingAddonIds.includes(String(numericId)) ||
+                                          existingAddonIds.includes(numericId);
+                
+                if (addonAlreadyExists) {
+                  console.log(`[checkout] ⏭️ Skipping addon ${addonId} - already exists in order`);
+                  addedAddonIds.push(addonId); // Mark as "added" since it's already in order
+                  continue;
+                }
+                
                 // Determine if addon is a value card or article
                 // CRITICAL: Check if product ID exists in valueCards array (most reliable method)
                 // Value cards are loaded separately via /api/products/valuecards endpoint
-                const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
                 const addon = findAddon(addonId);
                 
                 // Primary method: Check if product ID exists in state.valueCards
@@ -15084,12 +15156,37 @@ async function handleCheckout() {
         // This ensures the order total includes addons when payment link is generated
         // Note: For non-membership orders, additionTo may not be available
         if (state.addonIds && state.addonIds.size > 0) {
+          // CRITICAL: Check if addons already exist in the order before adding them
+          // This prevents duplicate addons when retrying payment after failure
+          let existingAddonIds = [];
+          try {
+            const currentOrder = await orderAPI.getOrder(state.orderId);
+            const existingArticleItems = currentOrder?.articleItems || [];
+            const existingValueCardItems = currentOrder?.valueCardItems || [];
+            const existingArticleProductIds = existingArticleItems.map(item => item.product?.id).filter(Boolean);
+            const existingValueCardProductIds = existingValueCardItems.map(item => item.product?.id).filter(Boolean);
+            existingAddonIds = [...existingArticleProductIds, ...existingValueCardProductIds];
+            console.log('[checkout] Existing addons in order (non-membership):', existingAddonIds);
+          } catch (error) {
+            console.warn('[checkout] Could not check existing addons in order:', error);
+          }
+          
           console.log('[checkout] Adding', state.addonIds.size, 'addon(s) to order before payment link generation (non-membership)');
           for (const addonId of state.addonIds) {
             try {
+              // CRITICAL: Skip if addon already exists in order (prevents duplicate addons on retry)
+              const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+              const addonAlreadyExists = existingAddonIds.includes(Number(numericId)) || 
+                                        existingAddonIds.includes(String(numericId)) ||
+                                        existingAddonIds.includes(numericId);
+              
+              if (addonAlreadyExists) {
+                console.log(`[checkout] ⏭️ Skipping addon ${addonId} - already exists in order (non-membership)`);
+                continue;
+              }
+              
               // Determine if addon is a value card or article
               const addon = findAddon(addonId);
-              const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
               
               // Check multiple sources to identify product type (consistent with membership checkout)
               const isInValueCards = state.valueCards && state.valueCards.some(vc => {
@@ -16968,7 +17065,11 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           setTimeout(() => {
             // Refresh login UI to ensure profile information is displayed
             refreshLoginUI();
-            updateCartSummary();
+            
+            // CRITICAL: Update cart summary and totals to ensure addons are displayed
+            updateCartTotals(); // This calls renderCartItems() and renderCartTotal()
+            updateCartSummary(); // This ensures cart items are properly calculated
+            renderCartAddons(); // Explicitly render addons section
             
             // If order exists, fetch full order data for payment overview
             if (state.orderId) {
