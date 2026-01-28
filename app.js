@@ -46,8 +46,6 @@ import {
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
 
-const VALUE_CARD_PUNCH_MULTIPLIER = 10;
-
 /**
  * Gets today's date in YYYY-MM-DD format using local time (not UTC).
  * This ensures we always send the user's local "today" date to the backend.
@@ -9305,11 +9303,11 @@ function syncPunchCardQuantityUI(card, planId) {
   const pricePerUnit = parseInt(card.dataset.price) || 1200;
   const total = pricePerUnit * quantity;
   
-  // Find the quantity panel (now a sibling of the card)
-  const panel = card.nextElementSibling;
-  if (!panel || !panel.classList.contains('quantity-panel')) return;
+  // Quantity panel is INSIDE the plan-card (child), not a sibling
+  const panel = card.querySelector('.quantity-panel');
+  if (!panel) return;
   
-  const quantityValue = panel.querySelector('[data-element="quantityValue"]');
+  const quantityValue = panel.querySelector('.quantity-value') || panel.querySelector('[data-element="quantityValue"]');
   const quantityTotal = panel.querySelector('[data-element="quantityTotal"]');
   const decrementBtn = panel.querySelector('[data-action="decrement-quantity"]');
   const incrementBtn = panel.querySelector('[data-action="increment-quantity"]');
@@ -9321,8 +9319,9 @@ function syncPunchCardQuantityUI(card, planId) {
   if (decrementBtn) decrementBtn.disabled = quantity <= 1;
   if (incrementBtn) incrementBtn.disabled = quantity >= 5;
   
-  // Update cart when quantity changes
+  // Update cart and value card summary when quantity changes
   updateCartSummary();
+  updateValueCardSummary();
 }
 
 // Scroll to top function with multiple approaches
@@ -9912,14 +9911,9 @@ function setupNewAccessStep() {
   // Plan selection
   document.querySelectorAll('.plan-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      // Don't handle clicks on quantity controls - let them handle their own events
-      if (e.target.closest('.quantity-selector')) {
-        return;
-      }
-      
-      // Don't handle clicks on quantity controls - let them handle their own events
-      // Select button clicks will trigger card selection
-      if (e.target.closest('.quantity-selector')) {
+      // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
+      // This prevents clicks on +/- and Continue from toggling/deselecting the card.
+      if (e.target.closest('.quantity-panel')) {
         return;
       }
       
@@ -10007,57 +10001,60 @@ function setupNewAccessStep() {
         state.selectedAddonIds = [];
       }
       
-      // Handle punch cards differently - show quantity selector
-      if (category === 'punchcard') {
+      // Handle punch cards differently - show quantity selector and allow multi-quantity.
+      // Detect punch cards either by category OR by planId format (punch-<id>) to avoid conflicts.
+      const isPunchCardCategory = category === 'punchcard';
+      const isPunchCardPlan = typeof planId === 'string' && planId.startsWith('punch-');
+      if (isPunchCardCategory || isPunchCardPlan) {
           // Initialize quantity to 1 for this specific punch card type
           if (!state.valueCardQuantities.has(planId)) {
             state.valueCardQuantities.set(planId, 1);
           }
+
+          // Enforce \"one type of value card\" rule:
+          // Clear quantities for all other punch card types so only the selected type remains.
+          Array.from(state.valueCardQuantities.keys()).forEach((key) => {
+            if (key !== planId && typeof key === 'string' && key.startsWith('punch-')) {
+              state.valueCardQuantities.delete(key);
+            }
+          });
           
-          // Clear quantity for the other punch card type when switching
-          const otherPunchCardId = planId === 'adult-punch' ? 'junior-punch' : 'adult-punch';
-          if (state.valueCardQuantities.has(otherPunchCardId)) {
-            state.valueCardQuantities.delete(otherPunchCardId);
-          }
-          
-          // Show quantity panel (now a sibling element)
-          card.classList.add('has-quantity');
-          const panel = card.nextElementSibling;
-          if (panel && panel.classList.contains('quantity-panel')) {
-            panel.classList.add('show');
-            panel.style.display = 'block';
-            syncPunchCardQuantityUI(card, planId);
-            
-            // Auto-scroll removed - will be revisited later
-          }
-          
-          // Grey out the other punch card type
-          const otherPunchCard = document.querySelector(`[data-plan="${otherPunchCardId}"]`);
-          if (otherPunchCard) {
-            otherPunchCard.classList.add('disabled');
-          }
-          
+          // Show quantity panel for the selected card and hide it for others
+          // Quantity panel is INSIDE each plan-card (child), not a sibling
+          const punchCardCards = document.querySelectorAll('[data-category="punchcard"] .plan-card');
+          punchCardCards.forEach((punchCard) => {
+            const punchPanel = punchCard.querySelector('.quantity-panel');
+            if (punchCard === card) {
+              punchCard.classList.add('has-quantity');
+              if (punchPanel) {
+                punchPanel.classList.add('show');
+                punchPanel.style.display = 'flex'; /* row layout: quantity left, Continue right */
+                const continueBtn = punchPanel.querySelector('.continue-btn');
+                if (continueBtn) continueBtn.style.display = '';
+              }
+            } else {
+              punchCard.classList.remove('has-quantity', 'selected', 'disabled');
+              if (punchPanel) {
+                punchPanel.classList.remove('show');
+                punchPanel.style.display = 'none';
+                const continueBtn = punchPanel.querySelector('.continue-btn');
+                if (continueBtn) continueBtn.style.display = 'none';
+              }
+            }
+          });
+
+          // Visually disable all other punch card types so it's clear only one type can be active
+          punchCardCards.forEach((punchCard) => {
+            if (punchCard !== card) {
+              punchCard.classList.add('disabled');
+            }
+          });
+
+          // Sync UI for the selected punch card (also updates cart and summary)
+          syncPunchCardQuantityUI(card, planId);
+
           // Update access heads-up
           updateAccessHeadsUp(card);
-          
-          // Update cart to reflect selection
-          updateCartSummary();
-          
-          // Clear any pending punchcard navigation timeout to prevent double-clicks
-          if (pendingNavigationTimeouts.punchcard) {
-            clearTimeout(pendingNavigationTimeouts.punchcard);
-            pendingNavigationTimeouts.punchcard = null;
-          }
-          
-          // Auto-advance to next step after a short delay
-          pendingNavigationTimeouts.punchcard = setTimeout(() => {
-            // Clear timeout reference before navigation
-            pendingNavigationTimeouts.punchcard = null;
-            // Only navigate if we're still on step 2 (prevent stale state navigation)
-            if (state.currentStep === 2) {
-              nextStep();
-            }
-          }, 500);
         } else {
           // Membership - update access heads-up
           updateAccessHeadsUp(card);
@@ -10268,6 +10265,16 @@ function handleGlobalClick(event) {
   }
 
   switch (action) {
+    case 'select-plan': {
+      // Normalize plan selection so both the card and its "Select" button behave the same.
+      // Delegate to the card click handler by triggering a click on the closest plan card.
+      const card = actionable.closest('.plan-card');
+      if (card) {
+        event.preventDefault();
+        card.click();
+      }
+      break;
+    }
     case 'select-membership': {
       const planId = actionable.dataset.planId;
       if (planId) selectMembershipPlan(planId);
@@ -10282,9 +10289,9 @@ function handleGlobalClick(event) {
       event.stopPropagation();
       const planId = actionable.dataset.planId;
       if (planId && planId.includes('punch')) {
-        // Find the card that contains this quantity panel
+        // Quantity panel is inside the plan-card; find the card that contains it
         const panel = actionable.closest('.quantity-panel');
-        const card = panel ? panel.previousElementSibling : null;
+        const card = panel ? panel.closest('.plan-card') : null;
         if (card && card.classList.contains('plan-card') && card.classList.contains('selected')) {
           const current = state.valueCardQuantities.get(planId) || 1;
           if (current < 5) { // Max 5 punch cards of the same type
@@ -10302,9 +10309,9 @@ function handleGlobalClick(event) {
       event.stopPropagation();
       const planId = actionable.dataset.planId;
       if (planId && planId.includes('punch')) {
-        // Find the card that contains this quantity panel
+        // Quantity panel is inside the plan-card; find the card that contains it
         const panel = actionable.closest('.quantity-panel');
-        const card = panel ? panel.previousElementSibling : null;
+        const card = panel ? panel.closest('.plan-card') : null;
         if (card && card.classList.contains('plan-card') && card.classList.contains('selected')) {
           const current = state.valueCardQuantities.get(planId) || 1;
           if (current > 1) { // Min 1 punch card
@@ -10692,15 +10699,18 @@ function updateValueCardSummary() {
     (sum, qty) => sum + qty,
     0,
   );
-  const totalPunches = totalQuantity * VALUE_CARD_PUNCH_MULTIPLIER;
-  const entryLabel = totalPunches === 1 ? 'entry' : 'entries';
+  // IMPORTANT: We cannot reliably know how many punches each card contains from the API.
+  // Some punch cards have different numbers of punches, so instead of assuming a fixed
+  // multiplier (e.g. 10 punches per card), we show the number of cards selected.
+  const totalCards = totalQuantity;
+  const entryLabel = totalCards === 1 ? 'card' : 'cards';
 
-  DOM.valueCardPunches.textContent = totalPunches.toString();
+  DOM.valueCardPunches.textContent = totalCards.toString();
   DOM.valueCardContinueBtn.disabled = totalQuantity <= 0;
   if (DOM.valueCardEntryLabel) {
     DOM.valueCardEntryLabel.textContent = entryLabel;
   }
-  DOM.valueCardContinueBtn.setAttribute('aria-label', `Continue with ${totalPunches} ${entryLabel}`);
+  DOM.valueCardContinueBtn.setAttribute('aria-label', `Continue with ${totalCards} ${entryLabel}`);
 }
 
 function handleValueCardContinue() {
@@ -18832,21 +18842,25 @@ function prevStep() {
         // Select the previously selected card
         selectedCard.classList.add('selected');
         
-        // If it's a punch card, restore quantity panel and disabled state
-        const category = selectedCard.closest('.category-item').dataset.category;
-        if (category === 'punchcard' && state.valueCardQuantities.has(state.membershipPlanId)) {
+        // If it's a value card with quantity, restore quantity panel and disabled state.
+        // Quantity panel is INSIDE the plan-card (child), not a sibling.
+        if (state.valueCardQuantities.has(state.membershipPlanId)) {
           selectedCard.classList.add('has-quantity');
-          const panel = selectedCard.nextElementSibling;
-          if (panel && panel.classList.contains('quantity-panel')) {
+          const panel = selectedCard.querySelector('.quantity-panel');
+          if (panel) {
             panel.classList.add('show');
-            panel.style.display = 'block';
+            panel.style.display = 'flex'; /* row layout: quantity left, Continue right */
+            const continueBtn = panel.querySelector('.continue-btn');
+            if (continueBtn) continueBtn.style.display = '';
+            const qtySelector = panel.querySelector('.quantity-selector');
+            if (qtySelector) qtySelector.style.display = 'flex';
             syncPunchCardQuantityUI(selectedCard, state.membershipPlanId);
           }
-          
-          // Grey out the other punch card type
-          const otherPunchCard = document.querySelector(`[data-plan="${state.membershipPlanId === 'adult-punch' ? 'junior-punch' : 'adult-punch'}"]`);
-          if (otherPunchCard) {
-            otherPunchCard.classList.add('disabled');
+          // Grey out the other punch card type (same category)
+          const category = selectedCard.closest('.category-item').dataset.category;
+          if (category === 'punchcard') {
+            const otherPunchCard = document.querySelector(`[data-plan="${state.membershipPlanId === 'adult-punch' ? 'junior-punch' : 'adult-punch'}"]`);
+            if (otherPunchCard) otherPunchCard.classList.add('disabled');
           }
         }
         
