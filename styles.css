@@ -5665,6 +5665,29 @@ body {
     text-align: right;
 }
 
+/* Cart item right side: punches above price (value-card) */
+.cart-item-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.cart-item-quantity {
+    font-size: var(--font-size-base);
+    color: var(--color-text-white);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.cart-item-punches {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
 /* Home Gym Info */
 .home-gym-info {
     display: flex;

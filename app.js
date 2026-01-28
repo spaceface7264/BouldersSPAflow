@@ -5116,7 +5116,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
+    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
@@ -5189,7 +5189,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
+    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
@@ -5262,7 +5262,7 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis',
+    'cart.title': 'Warenkorb', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
@@ -11923,14 +11923,19 @@ function updateCartSummary() {
         // Extract price from API structure (cents to DKK)
         const priceInCents = valueCard.price?.amount || valueCard.amount || 0;
         const price = priceInCents / 100;
-        
+        const punchesPerCard = getPunchesPerCard(valueCard);
+        const totalPunches = punchesPerCard != null ? quantity * punchesPerCard : null;
+        const productName = valueCard.name || 'Punch Card';
+        // Name only on left; ×N and total punches shown on the right
         items.push({
           id: valueCard.id,
-          name: `${valueCard.name || 'Punch Card'} ×${quantity}`,
+          name: productName,
           amount: roundToHalfKrone(price * quantity),
           type: 'value-card',
           quantity: quantity,
           productId: valueCard.id, // Store API product ID for order creation
+          punchesPerCard: punchesPerCard ?? undefined,
+          totalPunches: totalPunches ?? undefined,
         });
       }
     });
@@ -12261,6 +12266,26 @@ function renderCartItems() {
           nameEl.appendChild(gymInfo);
         }
       }
+    }
+    
+    // Value-card: show ×N, total punches, and price on the right (stacked)
+    if (item.type === 'value-card' && priceEl) {
+      const rightWrapper = document.createElement('div');
+      rightWrapper.className = 'cart-item-right';
+      if (item.quantity > 1) {
+        const quantitySpan = document.createElement('span');
+        quantitySpan.className = 'cart-item-quantity';
+        quantitySpan.textContent = `×${item.quantity}`;
+        rightWrapper.appendChild(quantitySpan);
+      }
+      if (item.totalPunches != null && item.totalPunches > 0) {
+        const punchesSpan = document.createElement('span');
+        punchesSpan.className = 'cart-item-punches';
+        punchesSpan.textContent = item.totalPunches === 1 ? t('cart.punch.one') : `${item.totalPunches} ${t('cart.punch.label')}`;
+        rightWrapper.appendChild(punchesSpan);
+      }
+      priceEl.parentNode.insertBefore(rightWrapper, priceEl);
+      rightWrapper.appendChild(priceEl);
     }
     
     // Hide price for membership items (price already shown in Monthly fee section)
@@ -19683,6 +19708,33 @@ function findValueCard(id) {
   ];
   
   return allValueCards.find((plan) => String(plan.id) === normalizedId) ?? null;
+}
+
+/**
+ * Get number of punches per card for a value card product.
+ * API ValueCardProductOut does not expose this; we parse from name/description.
+ * Supports e.g. "10 Klip", "Klippekort: 10 Klip + 2 Extra", "10 clips".
+ * @param {Object} product - Value card product (name, description, etc.)
+ * @returns {number|null} Punches per card, or null if unknown
+ */
+function getPunchesPerCard(product) {
+  if (!product) return null;
+  const name = (product.name || '').trim();
+  const desc = (product.description || product.externalDescription || '').trim();
+  const text = `${name} ${desc}`;
+  if (!text) return null;
+  // Main count: "10 Klip", "10 klip", "10 clips", "10 Clips"
+  const mainMatch = text.match(/(\d+)\s*(?:klip|clips?)\b/i);
+  const main = mainMatch ? parseInt(mainMatch[1], 10) : null;
+  // Optional extra: "+ 2 Extra", "+ 2 ekstra"
+  const extraMatch = text.match(/\+\s*(\d+)\s*(?:extra|ekstra)?/i);
+  const extra = extraMatch ? parseInt(extraMatch[1], 10) : 0;
+  if (main != null && !Number.isNaN(main)) {
+    return main + (Number.isNaN(extra) ? 0 : extra);
+  }
+  // Fallback: first number in text (e.g. "Klippekort 5" → 5)
+  const anyNum = text.match(/\b(\d+)\b/);
+  return anyNum ? parseInt(anyNum[1], 10) : null;
 }
 
 function findAddon(id) {
