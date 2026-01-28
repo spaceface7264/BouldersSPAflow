@@ -10076,14 +10076,20 @@ function setupNewAccessStep() {
         card
       });
       
-      // Step 5: If membership is selected, fetch add-ons immediately
-      // Value cards (even in campaign category) should not fetch add-ons
+      // Step 5: If membership is selected, fetch add-ons immediately.
+      // Value cards (even in campaign category) should not fetch or keep add-ons.
       if (isMembership && productId) {
         loadSubscriptionAdditions(productId);
       } else {
-        // Clear add-ons if punch card is selected
+        // Switching to a value card (punch card) – clear all addon state so cart is \"restarted\"
+        // This avoids leftover addons from a previously selected membership.
         state.subscriptionAdditions = [];
         state.selectedAddonIds = [];
+        if (state.addonIds && state.addonIds.size > 0) {
+          state.addonIds.clear();
+          updateAddonSkipButton();
+          updateAddonActionButton();
+        }
       }
       
       // Handle value cards (punch cards) differently - show quantity selector and allow multi-quantity.
@@ -12256,8 +12262,20 @@ function renderCartItems() {
           const gymInfo = createHomeGymInfo(selectedGym);
           nameEl.appendChild(gymInfo);
         }
+      } else if (item.type === 'value-card') {
+        // Punch cards: product name only in main row; Total + price go in a row below
+        nameEl.innerHTML = '';
+        const productNameSpan = document.createElement('span');
+        productNameSpan.textContent = item.name;
+        productNameSpan.style.fontWeight = '500';
+        nameEl.appendChild(productNameSpan);
+        
+        if (isFirstSubscriptionItem && selectedGym) {
+          const gymInfo = createHomeGymInfo(selectedGym);
+          nameEl.appendChild(gymInfo);
+        }
       } else {
-        // For addon items, we'll add the plus sign later in the rendering loop
+        // For addon items and other types, we'll add the plus sign later in the rendering loop
         nameEl.textContent = item.name;
         
         // Add Home Gym info below the first item's name
@@ -12268,8 +12286,9 @@ function renderCartItems() {
       }
     }
     
-    // Value-card: show ×N, total punches, and price on the right (stacked)
+    // Value-card: show ×N and total punches on the right; price moves to total row below
     if (item.type === 'value-card' && priceEl) {
+      priceEl.style.display = 'none'; // Price shown in cart-item-total-row below
       const rightWrapper = document.createElement('div');
       rightWrapper.className = 'cart-item-right';
       if (item.quantity > 1) {
@@ -12278,12 +12297,7 @@ function renderCartItems() {
         quantitySpan.textContent = `×${item.quantity}`;
         rightWrapper.appendChild(quantitySpan);
       }
-      if (item.totalPunches != null && item.totalPunches > 0) {
-        const punchesSpan = document.createElement('span');
-        punchesSpan.className = 'cart-item-punches';
-        punchesSpan.textContent = item.totalPunches === 1 ? t('cart.punch.one') : `${item.totalPunches} ${t('cart.punch.label')}`;
-        rightWrapper.appendChild(punchesSpan);
-      }
+      /* Total punches shown only in cart-item-total-row below, not duplicated on the right */
       priceEl.parentNode.insertBefore(rightWrapper, priceEl);
       rightWrapper.appendChild(priceEl);
     }
@@ -12292,7 +12306,7 @@ function renderCartItems() {
     if (priceEl) {
       if (item.type === 'membership') {
         priceEl.style.display = 'none';
-      } else {
+      } else if (item.type !== 'value-card') {
         // Calculate discounted price for this item
         let displayPrice = item.amount;
         let originalPrice = item.amount;
@@ -12335,6 +12349,28 @@ function renderCartItems() {
   subscriptionItems.forEach((item, index) => {
     const cartItem = renderCartItem(item, index === 0);
     DOM.cartItems.appendChild(cartItem);
+    // Value-card: add Total (X klip) + price in a row below the cart-item
+    if (item.type === 'value-card') {
+      const totalRow = document.createElement('div');
+      totalRow.className = 'cart-item-total-row';
+      const labelSpan = document.createElement('span');
+      const punches = item.totalPunches != null && item.totalPunches > 0 ? item.totalPunches : 0;
+      labelSpan.textContent = punches === 1 ? `Total (${t('cart.punch.one')})` : `Total (${punches} ${t('cart.punch.label')})`;
+      labelSpan.className = 'cart-total-label';
+      totalRow.appendChild(labelSpan);
+      const priceSpan = document.createElement('span');
+      let displayPrice = item.amount;
+      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
+        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
+        const itemDiscount = item.amount * discountRatio;
+        displayPrice = Math.max(0, item.amount - itemDiscount);
+        if (state.totals.discountAmount >= state.totals.subtotal) displayPrice = 0;
+      }
+      priceSpan.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
+      priceSpan.className = 'cart-item-total-price';
+      totalRow.appendChild(priceSpan);
+      DOM.cartItems.appendChild(totalRow);
+    }
   });
 
   // Add separator line after subscription items if there are addon items

@@ -5688,6 +5688,32 @@ body {
     white-space: nowrap;
 }
 
+.cart-total-label {
+    font-size: var(--font-size-base);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    color: var(--color-text-white);
+}
+
+/* Total row below value-card cart item: "Total (X klip)" left, price right */
+.cart-item-total-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 26px 0 0;
+    margin-top: 2px;
+    width: 100%;
+}
+
+.cart-item-total-row .cart-item-total-price {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: white;
+    white-space: nowrap;
+}
+
 /* Home Gym Info */
 .home-gym-info {
     display: flex;
