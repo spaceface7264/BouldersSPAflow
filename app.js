@@ -3047,11 +3047,30 @@ async function loadProductsFromAPI() {
       return true;
     });
     
+    // Separate value cards: those with "PublicCampaign" go to Campaign category
+    // Value cards with "PublicCampaign" should appear in Campaign, not in Punch Card category
+    const campaignValueCards = valueCards.filter(product => {
+      // Check if product has "PublicCampaign" label
+      const hasPublicCampaignLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === 'publiccampaign'
+      );
+      return hasPublicCampaignLabel;
+    });
+    
+    // Regular value cards (without "PublicCampaign") go to Punch Card category
+    const regularValueCards = valueCards.filter(product => {
+      const hasPublicCampaignLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === 'publiccampaign'
+      );
+      return !hasPublicCampaignLabel;
+    });
+    
     // Store in state
     state.campaignSubscriptions = campaignSubscriptions;
+    state.campaignValueCards = campaignValueCards; // Value cards for Campaign category
     state.subscriptions = membershipSubscriptions;
     state.dayPassSubscriptions = dayPassSubscriptions;
-    state.valueCards = valueCards;
+    state.valueCards = regularValueCards; // Only non-campaign value cards go to Punch Card category
 
 
     // Re-render the membership plans with API data
@@ -3133,24 +3152,96 @@ function renderProductsFromAPI() {
     return planCard;
   };
   
-  // Render campaign subscriptions into the campaign category
+  // Helper function to render value card (punch card) products
+  const renderValueCard = (product, category = 'punchcard') => {
+    const planCard = document.createElement('div');
+    planCard.className = 'plan-card';
+    // Use numeric ID from API
+    const productId = product.id;
+    planCard.dataset.plan = `punch-${productId}`; // For backward compatibility
+    planCard.dataset.productId = productId; // Store API product ID (numeric)
+    planCard.dataset.category = category;
+    
+    // Extract price from API structure: price.amount is in cents/øre (e.g., 77500 = 775.00 DKK)
+    const priceInCents = product.price?.amount || product.amount || 0;
+    const price = priceInCents / 100; // Convert from cents to main currency unit
+    planCard.dataset.price = price;
+    
+    // Value cards are one-time purchases, so no interval unit needed
+    const description = product.description || product.productNumber || '';
+    
+    // Preserve line breaks from backend
+    const descriptionHtml = description 
+      ? description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>')
+      : '';
+    
+    planCard.innerHTML = sanitizeHTML(`
+      <div class="plan-info">
+        <div class="plan-content-left">
+          <div class="plan-type">${product.name || 'Punch Card'}</div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
+        </div>
+        <div class="plan-content-right">
+          <div class="plan-price">
+            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
+            <span class="price-unit">kr</span>
+          </div>
+        </div>
+      </div>
+      <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+      <div class="quantity-panel">
+        <div class="quantity-selector">
+          <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
+          <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
+          <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+        </div>
+        <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+      </div>
+    `);
+    
+    return planCard;
+  };
+  
+  // Render campaign subscriptions and value cards into the campaign category
   const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
   const campaignPlansList = document.querySelector('[data-category="campaign"] .plans-list');
   
   if (campaignCategoryItem) {
+    // Check if we have any campaign products (subscriptions or value cards)
+    const hasCampaignSubscriptions = state.campaignSubscriptions && state.campaignSubscriptions.length > 0;
+    const hasCampaignValueCards = state.campaignValueCards && state.campaignValueCards.length > 0;
+    const hasCampaignProducts = hasCampaignSubscriptions || hasCampaignValueCards;
+    
     // Hide campaign category if no products
-    if (!state.campaignSubscriptions || state.campaignSubscriptions.length === 0) {
+    if (!hasCampaignProducts) {
       campaignCategoryItem.style.display = 'none';
     } else {
       // Show category and render products
       campaignCategoryItem.style.display = '';
       if (campaignPlansList) {
         campaignPlansList.innerHTML = '';
-        state.campaignSubscriptions.forEach((product) => {
-          const planCard = renderSubscriptionCard(product, 'campaign');
-          // Event listeners will be set up by setupNewAccessStep()
-          campaignPlansList.appendChild(planCard);
-        });
+        
+        // Render campaign subscriptions first
+        if (hasCampaignSubscriptions) {
+          state.campaignSubscriptions.forEach((product) => {
+            const planCard = renderSubscriptionCard(product, 'campaign');
+            // Event listeners will be set up by setupNewAccessStep()
+            campaignPlansList.appendChild(planCard);
+          });
+        }
+        
+        // Render campaign value cards
+        if (hasCampaignValueCards) {
+          state.campaignValueCards.forEach((product) => {
+            const planCard = renderValueCard(product, 'campaign');
+            // Event listeners will be set up by setupNewAccessStep()
+            campaignPlansList.appendChild(planCard);
+          });
+        }
       }
     }
   }
@@ -3207,60 +3298,15 @@ function renderProductsFromAPI() {
   }
 
   // Render value cards (punch cards) into the punchcard category
+  // Note: Only regular value cards (without "PublicCampaign") are shown here
+  // Value cards with "PublicCampaign" are shown in the Campaign category
   const punchCardPlansList = document.querySelector('[data-category="punchcard"] .plans-list');
   if (punchCardPlansList) {
     punchCardPlansList.innerHTML = '';
     
-    if (state.valueCards.length > 0) {
+    if (state.valueCards && state.valueCards.length > 0) {
       state.valueCards.forEach((product) => {
-        const planCard = document.createElement('div');
-        planCard.className = 'plan-card';
-        // Use numeric ID from API
-        const productId = product.id;
-        planCard.dataset.plan = `punch-${productId}`; // For backward compatibility
-        planCard.dataset.productId = productId; // Store API product ID (numeric)
-        
-        // Extract price from API structure: price.amount is in cents/øre (e.g., 77500 = 775.00 DKK)
-        const priceInCents = product.price?.amount || product.amount || 0;
-        const price = priceInCents / 100; // Convert from cents to main currency unit
-        planCard.dataset.price = price;
-        
-        // Value cards are one-time purchases, so no interval unit needed
-        const description = product.description || product.productNumber || '';
-        
-        // Preserve line breaks from backend
-        const descriptionHtml = description 
-          ? description
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/\n/g, '<br>')
-          : '';
-        
-        planCard.innerHTML = sanitizeHTML(`
-          <div class="plan-info">
-            <div class="plan-content-left">
-              <div class="plan-type">${product.name || 'Punch Card'}</div>
-              ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-            </div>
-            <div class="plan-content-right">
-              <div class="plan-price">
-                <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
-                <span class="price-unit">kr</span>
-              </div>
-            </div>
-          </div>
-          <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
-          <div class="quantity-panel">
-            <div class="quantity-selector">
-              <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
-              <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
-              <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
-            </div>
-            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
-          </div>
-        `);
-        
+        const planCard = renderValueCard(product, 'punchcard');
         // Event listeners will be set up by setupNewAccessStep()
         punchCardPlansList.appendChild(planCard);
       });
@@ -4010,7 +4056,8 @@ const state = {
   // Email tracking to prevent duplicate account creation
   createdEmails: new Set(), // Track emails that have been used to create accounts in this session
   // Step 5: Store fetched products from API
-  campaignSubscriptions: [], // Fetched campaign products (with "PublicCampaign" label)
+  campaignSubscriptions: [], // Fetched campaign subscription products (with "PublicCampaign" label)
+  campaignValueCards: [], // Fetched campaign value card products (with "PublicCampaign" label)
   subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15 Day Pass")
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
@@ -4880,11 +4927,12 @@ async function loadBoostProducts() {
     ...(state.subscriptions || []),
     ...(state.campaignSubscriptions || []),
     ...(state.dayPassSubscriptions || []),
-    ...(state.valueCards || [])
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || []) // Include campaign value cards
   ];
   
   console.log(`[Boost Modal] Scanning ${productSources.length} products for boostProduct label`);
-  console.log(`[Boost Modal] Raw products: ${state.allRawProducts?.length || 0}, Subscriptions: ${state.subscriptions?.length || 0}, Campaigns: ${state.campaignSubscriptions?.length || 0}, DayPass: ${state.dayPassSubscriptions?.length || 0}, ValueCards: ${state.valueCards?.length || 0}`);
+  console.log(`[Boost Modal] Raw products: ${state.allRawProducts?.length || 0}, Subscriptions: ${state.subscriptions?.length || 0}, Campaigns: ${state.campaignSubscriptions?.length || 0}, DayPass: ${state.dayPassSubscriptions?.length || 0}, ValueCards: ${state.valueCards?.length || 0}, CampaignValueCards: ${state.campaignValueCards?.length || 0}`);
   
   // Filter products with boostProduct label and deduplicate by ID
   productSources.forEach((product) => {
@@ -9718,7 +9766,11 @@ function handlePlanSelection(selectedCard) {
   // Step 5: Store the selected plan and product details
   const planId = selectedCard.dataset.plan;
   const productId = selectedCard.dataset.productId || planId; // Use API product ID if available
-  const isMembership = category === 'campaign' || category === 'membership' || category === '15daypass';
+  
+  // Determine if this is a value card (punch card) by checking if planId starts with "punch-"
+  // Value cards can appear in Campaign category too, so we check the planId format, not just category
+  const isValueCard = typeof planId === 'string' && planId.startsWith('punch-');
+  const isMembership = !isValueCard && (category === 'campaign' || category === 'membership' || category === '15daypass');
   
   const previousProductId = state.selectedProductId;
   const previousPlanId = state.membershipPlanId;
@@ -9748,8 +9800,12 @@ function handlePlanSelection(selectedCard) {
       String(p.id) === String(productId)
     );
   } else {
-    // Check value cards
-    product = (state.valueCards || []).find(p => 
+    // Check value cards - include both regular and campaign value cards
+    const allValueCards = [
+      ...(state.valueCards || []),
+      ...(state.campaignValueCards || [])
+    ];
+    product = allValueCards.find(p => 
       p.id === productId || 
       p.id === productIdNum ||
       String(p.id) === String(productId)
@@ -9772,6 +9828,24 @@ function handlePlanSelection(selectedCard) {
     // Clear add-ons if punch card is selected
     state.subscriptionAdditions = [];
     state.selectedAddonIds = [];
+  }
+  
+  // Handle value cards (punch cards) - initialize quantity and show quantity panel
+  // Value cards can appear in both 'punchcard' and 'campaign' categories
+  if (!isMembership && typeof planId === 'string' && planId.startsWith('punch-')) {
+    // Initialize quantity to 1 for this specific punch card type
+    if (!state.valueCardQuantities.has(planId)) {
+      state.valueCardQuantities.set(planId, 1);
+    }
+    
+    // Show quantity panel (now a sibling element)
+    selectedCard.classList.add('has-quantity');
+    const panel = selectedCard.nextElementSibling;
+    if (panel && panel.classList.contains('quantity-panel')) {
+      panel.classList.add('show');
+      panel.style.display = 'block';
+      syncPunchCardQuantityUI(selectedCard, planId);
+    }
   }
   
   // Update access heads-up display
@@ -9964,11 +10038,17 @@ function setupNewAccessStep() {
       const previousPlanId = state.membershipPlanId;
       state.membershipPlanId = planId; // Keep for backward compatibility
       state.selectedProductId = productId; // Store API product ID
-      // Determine product type based on category
-      if (category === 'campaign' || category === 'membership' || category === '15daypass') {
-        state.selectedProductType = 'membership'; // All are subscription products
+      
+      // Determine if this is a value card (punch card) by checking if planId starts with "punch-"
+      // Value cards can appear in Campaign category too, so we check the planId format, not just category
+      const isValueCardProduct = typeof planId === 'string' && planId.startsWith('punch-');
+      const isMembership = !isValueCardProduct && (category === 'campaign' || category === 'membership' || category === '15daypass');
+      
+      // Determine product type based on planId format, not just category
+      if (isMembership) {
+        state.selectedProductType = 'membership'; // Subscription products
       } else {
-        state.selectedProductType = 'punch-card';
+        state.selectedProductType = 'punch-card'; // Value card products
       }
 
       if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
@@ -9976,8 +10056,12 @@ function setupNewAccessStep() {
       }
 
       // GTM: Track select_item for API-driven plan cards
+      // Include both subscriptions and value cards for campaign category
       const productPoolByCategory = {
-        campaign: state.campaignSubscriptions || [],
+        campaign: [
+          ...(state.campaignSubscriptions || []),
+          ...(state.campaignValueCards || [])
+        ],
         membership: state.subscriptions || [],
         '15daypass': state.dayPassSubscriptions || [],
         punchcard: state.valueCards || []
@@ -9988,12 +10072,13 @@ function setupNewAccessStep() {
         product: selectedProduct,
         productId,
         category,
-        type: category === 'punchcard' ? 'punch-card' : 'membership',
+        type: isMembership ? 'membership' : 'punch-card',
         card
       });
       
-      // Step 5: If campaign, membership, or 15 Day Pass is selected, fetch add-ons immediately
-      if ((category === 'campaign' || category === 'membership' || category === '15daypass') && productId) {
+      // Step 5: If membership is selected, fetch add-ons immediately
+      // Value cards (even in campaign category) should not fetch add-ons
+      if (isMembership && productId) {
         loadSubscriptionAdditions(productId);
       } else {
         // Clear add-ons if punch card is selected
@@ -10001,11 +10086,9 @@ function setupNewAccessStep() {
         state.selectedAddonIds = [];
       }
       
-      // Handle punch cards differently - show quantity selector and allow multi-quantity.
-      // Detect punch cards either by category OR by planId format (punch-<id>) to avoid conflicts.
-      const isPunchCardCategory = category === 'punchcard';
-      const isPunchCardPlan = typeof planId === 'string' && planId.startsWith('punch-');
-      if (isPunchCardCategory || isPunchCardPlan) {
+      // Handle value cards (punch cards) differently - show quantity selector and allow multi-quantity.
+      // Value cards can appear in both 'punchcard' and 'campaign' categories (planId starts with 'punch-')
+      if (isValueCardProduct) {
           // Initialize quantity to 1 for this specific punch card type
           if (!state.valueCardQuantities.has(planId)) {
             state.valueCardQuantities.set(planId, 1);
@@ -11823,7 +11906,14 @@ function updateCartSummary() {
       
       // Find the product by ID - check both the stored productId and planId format
       const productId = state.selectedProductId || planId.replace('punch-', '');
-      const valueCard = state.valueCards.find(p => 
+      
+      // Check both regular and campaign value cards
+      const allValueCards = [
+        ...(state.valueCards || []),
+        ...(state.campaignValueCards || [])
+      ];
+      
+      const valueCard = allValueCards.find(p => 
         p.id === productId || 
         p.id === parseInt(productId) ||
         planId.includes(String(p.id))
@@ -14402,9 +14492,13 @@ async function handleCheckout() {
                 const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
                 const addon = findAddon(addonId);
                 
-                // Primary method: Check if product ID exists in state.valueCards
+                // Primary method: Check if product ID exists in valueCards (both regular and campaign)
                 // This is the most reliable since value cards come from a different API endpoint
-                const isInValueCards = state.valueCards && state.valueCards.some(vc => {
+                const allValueCards = [
+                  ...(state.valueCards || []),
+                  ...(state.campaignValueCards || [])
+                ];
+                const isInValueCards = allValueCards.some(vc => {
                   const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
                   return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
                 });
@@ -16850,6 +16944,14 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
               }
             }
             
+            // CRITICAL: Verify cart was restored before proceeding
+            if (!state.cartItems || state.cartItems.length === 0) {
+              console.error('[Payment Retry] ⚠️ WARNING: Cart is still empty after restoration attempt!');
+              console.error('[Payment Retry] Stored order data:', orderData ? 'exists' : 'missing');
+            } else {
+              console.log('[Payment Retry] ✅ Cart successfully restored with', state.cartItems.length, 'items');
+            }
+            
             // CRITICAL: Restore customer profile data to show full profile info
             if (customerData) {
               try {
@@ -16925,11 +17027,19 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           updateNavigationButtons();
           updateMainSubtitle();
           
+          // CRITICAL: Update cart immediately after restoration to ensure it's displayed
+          // Then update again after DOM is ready to ensure proper rendering
+          console.log('[Payment Retry] Cart items after restoration:', state.cartItems?.length || 0, 'items');
+          updateCartSummary();
+          
           // CRITICAL: Update cart and payment overview after DOM is ready
           // Use setTimeout to ensure showStep(4) has finished rendering
           setTimeout(() => {
             // Refresh login UI to ensure profile information is displayed
             refreshLoginUI();
+            
+            // Update cart again to ensure it's displayed (in case showStep(4) cleared it)
+            console.log('[Payment Retry] Updating cart after showStep(4) - cart items:', state.cartItems?.length || 0, 'items');
             updateCartSummary();
             
             // If order exists, fetch full order data for payment overview
@@ -16950,7 +17060,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
               // Update payment overview with current state data
               updatePaymentOverview();
             }
-          }, 100);
+          }, 200); // Increased timeout to ensure showStep(4) has fully completed
           
           scrollToTop();
       };
@@ -18964,8 +19074,10 @@ function showStep(stepNumber) {
   if (stepNumber === 4) {
     // Use setTimeout to ensure DOM is ready
     setTimeout(() => {
-      // CRITICAL: Restore cart from sessionStorage if empty
-      if ((!state.cartItems || state.cartItems.length === 0) && state.orderId) {
+      // CRITICAL: Restore cart from sessionStorage if empty OR if we're retrying payment
+      // Check both conditions: empty cart OR payment retry scenario (orderId exists but cart might be empty)
+      const needsRestore = (!state.cartItems || state.cartItems.length === 0) && state.orderId;
+      if (needsRestore) {
         try {
           const orderData = sessionStorage.getItem('boulders_checkout_order');
           if (orderData) {
@@ -19563,8 +19675,14 @@ function findMembershipPlan(id) {
 function findValueCard(id) {
   const rawId = String(id ?? '');
   const normalizedId = rawId.startsWith('punch-') ? rawId.replace('punch-', '') : rawId;
-  if (!Array.isArray(state.valueCards)) return null;
-  return state.valueCards.find((plan) => String(plan.id) === normalizedId) ?? null;
+  
+  // Check both regular and campaign value cards
+  const allValueCards = [
+    ...(Array.isArray(state.valueCards) ? state.valueCards : []),
+    ...(Array.isArray(state.campaignValueCards) ? state.campaignValueCards : [])
+  ];
+  
+  return allValueCards.find((plan) => String(plan.id) === normalizedId) ?? null;
 }
 
 function findAddon(id) {
