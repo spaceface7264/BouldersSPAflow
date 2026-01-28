@@ -10693,7 +10693,9 @@ function enforceValueCardAvailability() {
 }
 
 function updateValueCardSummary() {
-  if (!DOM.valueCardPunches || !DOM.valueCardContinueBtn) return;
+  // This summary is used by the legacy "quantity mode" UI and by newer flows.
+  // Treat DOM hooks as optional so modern punch-card UI can call this safely.
+  if (!state.valueCardQuantities) return;
 
   const totalQuantity = Array.from(state.valueCardQuantities.values()).reduce(
     (sum, qty) => sum + qty,
@@ -10705,12 +10707,16 @@ function updateValueCardSummary() {
   const totalCards = totalQuantity;
   const entryLabel = totalCards === 1 ? 'card' : 'cards';
 
-  DOM.valueCardPunches.textContent = totalCards.toString();
-  DOM.valueCardContinueBtn.disabled = totalQuantity <= 0;
+  if (DOM.valueCardPunches) {
+    DOM.valueCardPunches.textContent = totalCards.toString();
+  }
+  if (DOM.valueCardContinueBtn) {
+    DOM.valueCardContinueBtn.disabled = totalQuantity <= 0;
+    DOM.valueCardContinueBtn.setAttribute('aria-label', `Continue with ${totalCards} ${entryLabel}`);
+  }
   if (DOM.valueCardEntryLabel) {
     DOM.valueCardEntryLabel.textContent = entryLabel;
   }
-  DOM.valueCardContinueBtn.setAttribute('aria-label', `Continue with ${totalCards} ${entryLabel}`);
 }
 
 function handleValueCardContinue() {
