@@ -5660,24 +5660,9 @@ function updateCartTranslations() {
     smsConsent.innerHTML = sanitizeHTML(smsHtml);
   }
   
-  // Make only the checkmark clickable to toggle checkboxes (not the label text)
-  const consentCheckboxes = document.querySelectorAll('.consent-checkbox');
-  consentCheckboxes.forEach((label) => {
-    const checkbox = label.querySelector('input[type="checkbox"]');
-    const checkmark = label.querySelector('.checkmark');
-    
-    if (checkbox && checkmark) {
-      // Prevent label clicks from toggling (handled by pointer-events: none in CSS)
-      // Only allow checkmark clicks to toggle
-      checkmark.addEventListener('click', (e) => {
-        e.stopPropagation();
-        checkbox.checked = !checkbox.checked;
-        // Trigger change event to ensure any listeners are notified
-        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-    }
-  });
-  
+  // Consent checkmark toggle is handled via event delegation in setupEventListeners()
+  // so it works on initial load even when initLanguageSwitcher() returns early (e.g. no language switcher in DOM).
+
   // Payment overview labels are handled by data-i18n-key attributes in HTML
   // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
 }
@@ -6723,6 +6708,20 @@ function setupEventListeners() {
   
   // Terms modal handlers
   document.addEventListener('click', (e) => {
+    // Consent checkbox checkmark (event delegation – works on initial load even if updateCartTranslations ran late)
+    const consentCheckmark = e.target.closest('.consent-checkbox .checkmark');
+    if (consentCheckmark) {
+      const label = consentCheckmark.closest('.consent-checkbox');
+      const checkbox = label && label.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        e.preventDefault();
+        e.stopPropagation();
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return;
+    }
+
     if (e.target.closest('[data-action="open-terms"]')) {
       e.preventDefault();
       const termsType = e.target.closest('[data-action="open-terms"]').dataset.termsType;
