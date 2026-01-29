@@ -199,6 +199,14 @@
     padding: 12px;
   }
 
+  /* Description: wrap at word boundaries only (no mid-word breaks) */
+  .addon-card .plan-description {
+    overflow-wrap: normal;
+    word-wrap: normal;
+    word-break: normal;
+    hyphens: none;
+  }
+
   .addons-grid .addon-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -276,9 +284,10 @@
     text-align: left;
     width: 100%;
     max-width: 100%;
-    overflow-wrap: break-word;
-    word-wrap: break-word;
-    hyphens: auto;
+    overflow-wrap: normal;
+    word-wrap: normal;
+    word-break: normal;
+    hyphens: none;
     box-sizing: border-box;
     white-space: normal;
   }
