@@ -13362,10 +13362,31 @@ function clearStoredOrderData(reason = 'manual') {
 function resetOrderStateForProductChange(reason = 'product-change') {
   const hadOrderData = Boolean(state.orderId || state.fullOrder || state.paymentLink || state.paymentLinkGenerated);
   const hadDiscount = Boolean(state.discountApplied || state.discountCode);
+
+  // Always clear cart when switching product/plan (subscription ↔ 15-day ↔ punch card ↔ different subscription)
+  // So addons and other cart state never carry over to a new product
+  console.log(`[checkout] Resetting order state (${reason})`);
+  state.addonIds.clear();
+  state.cartItems = [];
+  state.valueCardQuantities.clear();
+
+  // Deselect addon cards in UI so they match cleared addonIds
+  document.querySelectorAll('.addon-card.selected, .plan-card.addon-card.selected').forEach((card) => {
+    card.classList.remove('selected');
+    const button = card.querySelector('[data-action="toggle-addon"]');
+    if (button) {
+      button.textContent = t('button.addToCart');
+      button.setAttribute('data-i18n-key', 'button.addToCart');
+    }
+  });
+
+  updateCartSummary();
+
+  // Clear order/discount state only when we had order or discount
   if (!hadOrderData && !hadDiscount) {
     return;
   }
-  console.log(`[checkout] Resetting order state (${reason})`);
+
   state.order = null;
   state.fullOrder = null;
   state.orderId = null;
