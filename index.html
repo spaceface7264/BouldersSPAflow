@@ -715,7 +715,7 @@
 
                                 <div class="cart-items" data-component="cart-items"></div>
                                 
-                                <!-- Payment Overview -->
+                                <!-- Payment Overview (subscription pricing: monthly, pay now) – below subscription, above addons -->
                                 <div class="payment-overview" style="display: none;">
                                     <div class="payment-overview-item">
                                         <span class="payment-label" data-i18n-key="cart.monthlyFee">Monthly fee:</span>
@@ -733,6 +733,13 @@
                                         </div>
                                         <div class="payment-overview-bound-until" data-summary-field="payment-bound-until" style="display: none;"></div>
                                     </div>
+                                </div>
+                                
+                                <!-- Addon items (below subscription pricing, above total) -->
+                                <div class="cart-addon-items" data-component="cart-addon-items"></div>
+                                
+                                <!-- Cart total (below addons) -->
+                                <div class="payment-overview payment-overview-total-wrap" style="display: none;">
                                     <div class="payment-overview-item payment-overview-total" style="display: none;">
                                         <div class="payment-overview-paynow-row">
                                             <span class="payment-label" data-i18n-key="cart.total">Total:</span>

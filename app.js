@@ -6464,7 +6464,8 @@ function cacheDom() {
   DOM.valueCardContinueBtn = document.querySelector('[data-action="continue-value-cards"]');
   DOM.valueCardEntryLabel = document.querySelector('[data-entry-label]');
   DOM.cartItems = document.querySelector('[data-component="cart-items"]');
-  DOM.paymentOverview = document.querySelector('.payment-overview');
+  DOM.cartAddonItems = document.querySelector('[data-component="cart-addon-items"]');
+  DOM.paymentOverview = document.querySelector('.payment-overview:not(.payment-overview-total-wrap)');
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
   DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
@@ -12131,6 +12132,10 @@ function renderCartItems() {
 
   if (!state.cartItems || !state.cartItems.length) {
     DOM.cartItems.innerHTML = '';
+    if (DOM.cartAddonItems) {
+      DOM.cartAddonItems.innerHTML = '';
+      DOM.cartAddonItems.style.display = 'none';
+    }
     // Only show empty message if there's no gym selected either
     if (!state.selectedGymId && !state.selectedBusinessUnit) {
       const empty = document.createElement('div');
@@ -12220,9 +12225,10 @@ function renderCartItems() {
     );
   }
 
-  // Separate items into two groups: subscriptions/15day pass/value cards first, then addons
-  // All subscriptions (including 15-day passes) have type 'membership', value cards have type 'value-card'
-  // CRITICAL: Filter to ensure subscriptions come first, regardless of state.cartItems order
+  // Display order: (1) access type first (subscription / punch card / 15 day) with pricing,
+  // (2) addon products, (3) total (payment overview is next sibling in DOM).
+  // Separate items into two groups: subscriptions/15day pass/value cards first, then addons.
+  // All subscriptions (including 15-day passes) have type 'membership', value cards have type 'value-card'.
   const subscriptionItems = state.cartItems.filter(item => 
     item.type === 'membership' || item.type === 'value-card'
   );
@@ -12347,9 +12353,9 @@ function renderCartItems() {
 
   // CRITICAL: Clear DOM first to ensure clean rendering
   DOM.cartItems.innerHTML = '';
-  
-  // CRITICAL: Render subscription/15day pass/value card items FIRST
-  // This ensures they appear at the top of the cart
+
+  // Render subscription/15day pass/value card items ONLY (access type first, with pricing)
+  // Payment overview (Månedlig betaling, Betal nu) is next in DOM; then addons; then total
   subscriptionItems.forEach((item, index) => {
     const cartItem = renderCartItem(item, index === 0);
     DOM.cartItems.appendChild(cartItem);
@@ -12377,43 +12383,37 @@ function renderCartItems() {
     }
   });
 
-  // Add separator line after subscription items if there are addon items
-  if (subscriptionItems.length > 0 && addonItems.length > 0) {
-    const separator = document.createElement('div');
-    separator.className = 'cart-separator';
-    separator.style.height = '1px';
-    separator.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-    separator.style.margin = '12px 0';
-    separator.style.width = '100%';
-    DOM.cartItems.appendChild(separator);
-  }
-
-  // Render addon items AFTER subscriptions (at the bottom)
-  addonItems.forEach((item) => {
-    const cartItem = renderCartItem(item, false);
-    // Add plus sign before addon product names (inline, to the left) with brand accent color
-    const nameEl = cartItem.querySelector('[data-element="name"]');
-    if (nameEl) {
-      const currentText = nameEl.textContent || nameEl.innerText || '';
-      if (currentText && !currentText.trim().startsWith('+')) {
-        // Change flex direction to row for addon items so plus appears inline
-        nameEl.style.flexDirection = 'row';
-        nameEl.style.alignItems = 'center';
-        // Create a span for the plus sign with brand accent color
-        const plusSpan = document.createElement('span');
-        plusSpan.textContent = '+ ';
-        plusSpan.style.color = 'var(--color-brand-accent)';
-        plusSpan.style.marginRight = '4px';
-        // Clear and rebuild content
-        nameEl.innerHTML = '';
-        nameEl.appendChild(plusSpan);
-        const textSpan = document.createElement('span');
-        textSpan.textContent = currentText.trim();
-        nameEl.appendChild(textSpan);
-      }
+  // Render addon items in separate container (below payment overview, above total)
+  if (DOM.cartAddonItems) {
+    DOM.cartAddonItems.innerHTML = '';
+    if (addonItems.length > 0) {
+      DOM.cartAddonItems.style.display = 'block';
+      addonItems.forEach((item) => {
+        const cartItem = renderCartItem(item, false);
+        // Add plus sign before addon product names (inline, to the left) with brand accent color
+        const nameEl = cartItem.querySelector('[data-element="name"]');
+        if (nameEl) {
+          const currentText = nameEl.textContent || nameEl.innerText || '';
+          if (currentText && !currentText.trim().startsWith('+')) {
+            nameEl.style.flexDirection = 'row';
+            nameEl.style.alignItems = 'center';
+            const plusSpan = document.createElement('span');
+            plusSpan.textContent = '+ ';
+            plusSpan.style.color = 'var(--color-brand-accent)';
+            plusSpan.style.marginRight = '4px';
+            nameEl.innerHTML = '';
+            nameEl.appendChild(plusSpan);
+            const textSpan = document.createElement('span');
+            textSpan.textContent = currentText.trim();
+            nameEl.appendChild(textSpan);
+          }
+        }
+        DOM.cartAddonItems.appendChild(cartItem);
+      });
+    } else {
+      DOM.cartAddonItems.style.display = 'none';
     }
-    DOM.cartItems.appendChild(cartItem);
-  });
+  }
 }
 
 function renderCartAddons() {
@@ -12572,8 +12572,10 @@ function updatePaymentOverview() {
   }
   
   if (!hasMembership) {
-    // Hide payment overview if no membership
+    // Hide payment overview and total wrapper if no membership
     DOM.paymentOverview.style.display = 'none';
+    const totalWrap = document.querySelector('.payment-overview-total-wrap');
+    if (totalWrap) totalWrap.style.display = 'none';
     return;
   }
   
@@ -13168,9 +13170,11 @@ function updatePaymentOverview() {
     const roundedTotal = roundToHalfKrone(total);
     totalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
     
-    // Show/hide total container based on whether addons are present
+    // Show/hide total container (and its wrapper) based on whether addons are present
+    const totalWrap = totalContainer.closest('.payment-overview-total-wrap');
     if (addonTotal > 0) {
       totalContainer.style.display = 'block';
+      if (totalWrap) totalWrap.style.display = 'block';
       if (payNowIncludesAddons) {
         console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now already includes addons:', payNowAmount, ')');
       } else {
@@ -13178,6 +13182,7 @@ function updatePaymentOverview() {
       }
     } else {
       totalContainer.style.display = 'none';
+      if (totalWrap) totalWrap.style.display = 'none';
     }
   }
   

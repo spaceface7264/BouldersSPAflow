@@ -5646,6 +5646,12 @@ body {
     width: 100%;
 }
 
+.cart-addon-items {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 /* Cart and Purchase Items - Shared Styles */
 .item-name {
     color: var(--color-text-white);
