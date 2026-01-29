@@ -5092,7 +5092,7 @@ const translations = {
     'category.punchcard.desc': 'Du kan købe 1 type klippekort ad gangen. Hvert indgang bruger et klip på dit klippekort. Kortet er gyldigt i 5 år og giver ikke medlemsfordele. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen.',
     'header.selectedGym': 'Valgt hal:', 'gym.headsUp': 'Hjemmehal valgt:', 'access.headsUp': 'Adgangstype valgt:',
     'main.subtitle.step1': 'Vælg din hjemmehal', 'main.subtitle.step1.secondary': 'Dette er hvor du primært træner − du får adgang til alle haller.',
-    'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om måneden.',
+    'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen.',
     'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
     'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger', 'button.select': 'Vælg', 'button.addToCart': 'Tilføj til kurv', 'button.added': 'Tilføjet!',
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
@@ -5165,7 +5165,7 @@ const translations = {
     'category.punchcard.desc': 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym.',
     'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
-    'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a month.',
+    'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
     'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
     'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit', 'button.select': 'Select', 'button.addToCart': 'Add to cart', 'button.added': 'Added!',
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
@@ -7691,9 +7691,13 @@ function openTermsModal(termsType) {
     const title = currentLang === 'da' ? 'Vilkår og Betingelser' : 'Terms and Conditions';
     DOM.termsModalTitle.textContent = title;
     
-    // Show membership tab by default
-    state.currentModalTab = 'membership';
-    switchTermsTab('membership');
+    // Show Punch Card tab by default when punch card is in cart; otherwise Membership
+    const hasPunchCardInCart = state.selectedProductType === 'punch-card' &&
+      state.valueCardQuantities &&
+      Array.from(state.valueCardQuantities.values()).some((q) => q > 0);
+    const defaultTab = hasPunchCardInCart ? 'punchcard' : 'membership';
+    state.currentModalTab = defaultTab;
+    switchTermsTab(defaultTab);
     
     // Store original content for search
     const currentTab = state.currentModalTab || 'membership';
