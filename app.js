@@ -4165,8 +4165,6 @@ function isMembershipSelected() {
 
 // Interstitial Add-ons Modal (shown after selecting membership on step 2)
 let addonsModal = null;
-let addonsModalImageCol = null;
-let addonsModalImageEl = null;
 function defaultAddonsImage() {
   // Simple dark gradient SVG placeholder with label
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
