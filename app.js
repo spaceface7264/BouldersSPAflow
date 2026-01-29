@@ -46,8 +46,6 @@ import {
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
 
-const VALUE_CARD_PUNCH_MULTIPLIER = 10;
-
 /**
  * Gets today's date in YYYY-MM-DD format using local time (not UTC).
  * This ensures we always send the user's local "today" date to the backend.
@@ -5118,7 +5116,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
+    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
@@ -5191,7 +5189,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
+    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
@@ -5264,7 +5262,7 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis',
+    'cart.title': 'Warenkorb', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
@@ -9353,11 +9351,11 @@ function syncPunchCardQuantityUI(card, planId) {
   const pricePerUnit = parseInt(card.dataset.price) || 1200;
   const total = pricePerUnit * quantity;
   
-  // Find the quantity panel (now a sibling of the card)
-  const panel = card.nextElementSibling;
-  if (!panel || !panel.classList.contains('quantity-panel')) return;
+  // Quantity panel is INSIDE the plan-card (child), not a sibling
+  const panel = card.querySelector('.quantity-panel');
+  if (!panel) return;
   
-  const quantityValue = panel.querySelector('[data-element="quantityValue"]');
+  const quantityValue = panel.querySelector('.quantity-value') || panel.querySelector('[data-element="quantityValue"]');
   const quantityTotal = panel.querySelector('[data-element="quantityTotal"]');
   const decrementBtn = panel.querySelector('[data-action="decrement-quantity"]');
   const incrementBtn = panel.querySelector('[data-action="increment-quantity"]');
@@ -9369,8 +9367,9 @@ function syncPunchCardQuantityUI(card, planId) {
   if (decrementBtn) decrementBtn.disabled = quantity <= 1;
   if (incrementBtn) incrementBtn.disabled = quantity >= 5;
   
-  // Update cart when quantity changes
+  // Update cart and value card summary when quantity changes
   updateCartSummary();
+  updateValueCardSummary();
 }
 
 // Scroll to top function with multiple approaches
@@ -9986,14 +9985,9 @@ function setupNewAccessStep() {
   // Plan selection
   document.querySelectorAll('.plan-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      // Don't handle clicks on quantity controls - let them handle their own events
-      if (e.target.closest('.quantity-selector')) {
-        return;
-      }
-      
-      // Don't handle clicks on quantity controls - let them handle their own events
-      // Select button clicks will trigger card selection
-      if (e.target.closest('.quantity-selector')) {
+      // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
+      // This prevents clicks on +/- and Continue from toggling/deselecting the card.
+      if (e.target.closest('.quantity-panel')) {
         return;
       }
       
@@ -10082,69 +10076,74 @@ function setupNewAccessStep() {
         card
       });
       
-      // Step 5: If membership is selected, fetch add-ons immediately
-      // Value cards (even in campaign category) should not fetch add-ons
+      // Step 5: If membership is selected, fetch add-ons immediately.
+      // Value cards (even in campaign category) should not fetch or keep add-ons.
       if (isMembership && productId) {
         loadSubscriptionAdditions(productId);
       } else {
-        // Clear add-ons if punch card is selected
+        // Switching to a value card (punch card) – clear all addon state so cart is \"restarted\"
+        // This avoids leftover addons from a previously selected membership.
         state.subscriptionAdditions = [];
         state.selectedAddonIds = [];
+        if (state.addonIds && state.addonIds.size > 0) {
+          state.addonIds.clear();
+          updateAddonSkipButton();
+          updateAddonActionButton();
+        }
       }
       
-      // Handle value cards (punch cards) differently - show quantity selector
-      // Value cards can appear in both 'punchcard' and 'campaign' categories
-      // Check if it's a value card by checking if planId starts with 'punch-'
+      // Handle value cards (punch cards) differently - show quantity selector and allow multi-quantity.
+      // Value cards can appear in both 'punchcard' and 'campaign' categories (planId starts with 'punch-')
       if (isValueCardProduct) {
           // Initialize quantity to 1 for this specific punch card type
           if (!state.valueCardQuantities.has(planId)) {
             state.valueCardQuantities.set(planId, 1);
           }
+
+          // Enforce \"one type of value card\" rule:
+          // Clear quantities for all other punch card types so only the selected type remains.
+          Array.from(state.valueCardQuantities.keys()).forEach((key) => {
+            if (key !== planId && typeof key === 'string' && key.startsWith('punch-')) {
+              state.valueCardQuantities.delete(key);
+            }
+          });
           
-          // Clear quantity for the other punch card type when switching
-          const otherPunchCardId = planId === 'adult-punch' ? 'junior-punch' : 'adult-punch';
-          if (state.valueCardQuantities.has(otherPunchCardId)) {
-            state.valueCardQuantities.delete(otherPunchCardId);
-          }
-          
-          // Show quantity panel (now a sibling element)
-          card.classList.add('has-quantity');
-          const panel = card.nextElementSibling;
-          if (panel && panel.classList.contains('quantity-panel')) {
-            panel.classList.add('show');
-            panel.style.display = 'block';
-            syncPunchCardQuantityUI(card, planId);
-            
-            // Auto-scroll removed - will be revisited later
-          }
-          
-          // Grey out the other punch card type
-          const otherPunchCard = document.querySelector(`[data-plan="${otherPunchCardId}"]`);
-          if (otherPunchCard) {
-            otherPunchCard.classList.add('disabled');
-          }
-          
+          // Show quantity panel for the selected card and hide it for others
+          // Quantity panel is INSIDE each plan-card (child), not a sibling
+          const punchCardCards = document.querySelectorAll('[data-category="punchcard"] .plan-card');
+          punchCardCards.forEach((punchCard) => {
+            const punchPanel = punchCard.querySelector('.quantity-panel');
+            if (punchCard === card) {
+              punchCard.classList.add('has-quantity');
+              if (punchPanel) {
+                punchPanel.classList.add('show');
+                punchPanel.style.display = 'flex'; /* row layout: quantity left, Continue right */
+                const continueBtn = punchPanel.querySelector('.continue-btn');
+                if (continueBtn) continueBtn.style.display = '';
+              }
+            } else {
+              punchCard.classList.remove('has-quantity', 'selected', 'disabled');
+              if (punchPanel) {
+                punchPanel.classList.remove('show');
+                punchPanel.style.display = 'none';
+                const continueBtn = punchPanel.querySelector('.continue-btn');
+                if (continueBtn) continueBtn.style.display = 'none';
+              }
+            }
+          });
+
+          // Visually disable all other punch card types so it's clear only one type can be active
+          punchCardCards.forEach((punchCard) => {
+            if (punchCard !== card) {
+              punchCard.classList.add('disabled');
+            }
+          });
+
+          // Sync UI for the selected punch card (also updates cart and summary)
+          syncPunchCardQuantityUI(card, planId);
+
           // Update access heads-up
           updateAccessHeadsUp(card);
-          
-          // Update cart to reflect selection
-          updateCartSummary();
-          
-          // Clear any pending punchcard navigation timeout to prevent double-clicks
-          if (pendingNavigationTimeouts.punchcard) {
-            clearTimeout(pendingNavigationTimeouts.punchcard);
-            pendingNavigationTimeouts.punchcard = null;
-          }
-          
-          // Auto-advance to next step after a short delay
-          pendingNavigationTimeouts.punchcard = setTimeout(() => {
-            // Clear timeout reference before navigation
-            pendingNavigationTimeouts.punchcard = null;
-            // Only navigate if we're still on step 2 (prevent stale state navigation)
-            if (state.currentStep === 2) {
-              nextStep();
-            }
-          }, 500);
         } else {
           // Membership - update access heads-up
           updateAccessHeadsUp(card);
@@ -10355,6 +10354,16 @@ function handleGlobalClick(event) {
   }
 
   switch (action) {
+    case 'select-plan': {
+      // Normalize plan selection so both the card and its "Select" button behave the same.
+      // Delegate to the card click handler by triggering a click on the closest plan card.
+      const card = actionable.closest('.plan-card');
+      if (card) {
+        event.preventDefault();
+        card.click();
+      }
+      break;
+    }
     case 'select-membership': {
       const planId = actionable.dataset.planId;
       if (planId) selectMembershipPlan(planId);
@@ -10369,9 +10378,9 @@ function handleGlobalClick(event) {
       event.stopPropagation();
       const planId = actionable.dataset.planId;
       if (planId && planId.includes('punch')) {
-        // Find the card that contains this quantity panel
+        // Quantity panel is inside the plan-card; find the card that contains it
         const panel = actionable.closest('.quantity-panel');
-        const card = panel ? panel.previousElementSibling : null;
+        const card = panel ? panel.closest('.plan-card') : null;
         if (card && card.classList.contains('plan-card') && card.classList.contains('selected')) {
           const current = state.valueCardQuantities.get(planId) || 1;
           if (current < 5) { // Max 5 punch cards of the same type
@@ -10389,9 +10398,9 @@ function handleGlobalClick(event) {
       event.stopPropagation();
       const planId = actionable.dataset.planId;
       if (planId && planId.includes('punch')) {
-        // Find the card that contains this quantity panel
+        // Quantity panel is inside the plan-card; find the card that contains it
         const panel = actionable.closest('.quantity-panel');
-        const card = panel ? panel.previousElementSibling : null;
+        const card = panel ? panel.closest('.plan-card') : null;
         if (card && card.classList.contains('plan-card') && card.classList.contains('selected')) {
           const current = state.valueCardQuantities.get(planId) || 1;
           if (current > 1) { // Min 1 punch card
@@ -10773,21 +10782,30 @@ function enforceValueCardAvailability() {
 }
 
 function updateValueCardSummary() {
-  if (!DOM.valueCardPunches || !DOM.valueCardContinueBtn) return;
+  // This summary is used by the legacy "quantity mode" UI and by newer flows.
+  // Treat DOM hooks as optional so modern punch-card UI can call this safely.
+  if (!state.valueCardQuantities) return;
 
   const totalQuantity = Array.from(state.valueCardQuantities.values()).reduce(
     (sum, qty) => sum + qty,
     0,
   );
-  const totalPunches = totalQuantity * VALUE_CARD_PUNCH_MULTIPLIER;
-  const entryLabel = totalPunches === 1 ? 'entry' : 'entries';
+  // IMPORTANT: We cannot reliably know how many punches each card contains from the API.
+  // Some punch cards have different numbers of punches, so instead of assuming a fixed
+  // multiplier (e.g. 10 punches per card), we show the number of cards selected.
+  const totalCards = totalQuantity;
+  const entryLabel = totalCards === 1 ? 'card' : 'cards';
 
-  DOM.valueCardPunches.textContent = totalPunches.toString();
-  DOM.valueCardContinueBtn.disabled = totalQuantity <= 0;
+  if (DOM.valueCardPunches) {
+    DOM.valueCardPunches.textContent = totalCards.toString();
+  }
+  if (DOM.valueCardContinueBtn) {
+    DOM.valueCardContinueBtn.disabled = totalQuantity <= 0;
+    DOM.valueCardContinueBtn.setAttribute('aria-label', `Continue with ${totalCards} ${entryLabel}`);
+  }
   if (DOM.valueCardEntryLabel) {
     DOM.valueCardEntryLabel.textContent = entryLabel;
   }
-  DOM.valueCardContinueBtn.setAttribute('aria-label', `Continue with ${totalPunches} ${entryLabel}`);
 }
 
 function handleValueCardContinue() {
@@ -11911,14 +11929,19 @@ function updateCartSummary() {
         // Extract price from API structure (cents to DKK)
         const priceInCents = valueCard.price?.amount || valueCard.amount || 0;
         const price = priceInCents / 100;
-        
+        const punchesPerCard = getPunchesPerCard(valueCard);
+        const totalPunches = punchesPerCard != null ? quantity * punchesPerCard : null;
+        const productName = valueCard.name || 'Punch Card';
+        // Name only on left; ×N and total punches shown on the right
         items.push({
           id: valueCard.id,
-          name: `${valueCard.name || 'Punch Card'} ×${quantity}`,
+          name: productName,
           amount: roundToHalfKrone(price * quantity),
           type: 'value-card',
           quantity: quantity,
           productId: valueCard.id, // Store API product ID for order creation
+          punchesPerCard: punchesPerCard ?? undefined,
+          totalPunches: totalPunches ?? undefined,
         });
       }
     });
@@ -12239,8 +12262,20 @@ function renderCartItems() {
           const gymInfo = createHomeGymInfo(selectedGym);
           nameEl.appendChild(gymInfo);
         }
+      } else if (item.type === 'value-card') {
+        // Punch cards: product name only in main row; Total + price go in a row below
+        nameEl.innerHTML = '';
+        const productNameSpan = document.createElement('span');
+        productNameSpan.textContent = item.name;
+        productNameSpan.style.fontWeight = '500';
+        nameEl.appendChild(productNameSpan);
+        
+        if (isFirstSubscriptionItem && selectedGym) {
+          const gymInfo = createHomeGymInfo(selectedGym);
+          nameEl.appendChild(gymInfo);
+        }
       } else {
-        // For addon items, we'll add the plus sign later in the rendering loop
+        // For addon items and other types, we'll add the plus sign later in the rendering loop
         nameEl.textContent = item.name;
         
         // Add Home Gym info below the first item's name
@@ -12251,11 +12286,27 @@ function renderCartItems() {
       }
     }
     
+    // Value-card: show ×N and total punches on the right; price moves to total row below
+    if (item.type === 'value-card' && priceEl) {
+      priceEl.style.display = 'none'; // Price shown in cart-item-total-row below
+      const rightWrapper = document.createElement('div');
+      rightWrapper.className = 'cart-item-right';
+      if (item.quantity > 1) {
+        const quantitySpan = document.createElement('span');
+        quantitySpan.className = 'cart-item-quantity';
+        quantitySpan.textContent = `×${item.quantity}`;
+        rightWrapper.appendChild(quantitySpan);
+      }
+      /* Total punches shown only in cart-item-total-row below, not duplicated on the right */
+      priceEl.parentNode.insertBefore(rightWrapper, priceEl);
+      rightWrapper.appendChild(priceEl);
+    }
+    
     // Hide price for membership items (price already shown in Monthly fee section)
     if (priceEl) {
       if (item.type === 'membership') {
         priceEl.style.display = 'none';
-      } else {
+      } else if (item.type !== 'value-card') {
         // Calculate discounted price for this item
         let displayPrice = item.amount;
         let originalPrice = item.amount;
@@ -12298,6 +12349,28 @@ function renderCartItems() {
   subscriptionItems.forEach((item, index) => {
     const cartItem = renderCartItem(item, index === 0);
     DOM.cartItems.appendChild(cartItem);
+    // Value-card: add Total (X klip) + price in a row below the cart-item
+    if (item.type === 'value-card') {
+      const totalRow = document.createElement('div');
+      totalRow.className = 'cart-item-total-row';
+      const labelSpan = document.createElement('span');
+      const punches = item.totalPunches != null && item.totalPunches > 0 ? item.totalPunches : 0;
+      labelSpan.textContent = punches === 1 ? `Total (${t('cart.punch.one')})` : `Total (${punches} ${t('cart.punch.label')})`;
+      labelSpan.className = 'cart-total-label';
+      totalRow.appendChild(labelSpan);
+      const priceSpan = document.createElement('span');
+      let displayPrice = item.amount;
+      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
+        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
+        const itemDiscount = item.amount * discountRatio;
+        displayPrice = Math.max(0, item.amount - itemDiscount);
+        if (state.totals.discountAmount >= state.totals.subtotal) displayPrice = 0;
+      }
+      priceSpan.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
+      priceSpan.className = 'cart-item-total-price';
+      totalRow.appendChild(priceSpan);
+      DOM.cartItems.appendChild(totalRow);
+    }
   });
 
   // Add separator line after subscription items if there are addon items
@@ -18946,21 +19019,25 @@ function prevStep() {
         // Select the previously selected card
         selectedCard.classList.add('selected');
         
-        // If it's a punch card, restore quantity panel and disabled state
-        const category = selectedCard.closest('.category-item').dataset.category;
-        if (category === 'punchcard' && state.valueCardQuantities.has(state.membershipPlanId)) {
+        // If it's a value card with quantity, restore quantity panel and disabled state.
+        // Quantity panel is INSIDE the plan-card (child), not a sibling.
+        if (state.valueCardQuantities.has(state.membershipPlanId)) {
           selectedCard.classList.add('has-quantity');
-          const panel = selectedCard.nextElementSibling;
-          if (panel && panel.classList.contains('quantity-panel')) {
+          const panel = selectedCard.querySelector('.quantity-panel');
+          if (panel) {
             panel.classList.add('show');
-            panel.style.display = 'block';
+            panel.style.display = 'flex'; /* row layout: quantity left, Continue right */
+            const continueBtn = panel.querySelector('.continue-btn');
+            if (continueBtn) continueBtn.style.display = '';
+            const qtySelector = panel.querySelector('.quantity-selector');
+            if (qtySelector) qtySelector.style.display = 'flex';
             syncPunchCardQuantityUI(selectedCard, state.membershipPlanId);
           }
-          
-          // Grey out the other punch card type
-          const otherPunchCard = document.querySelector(`[data-plan="${state.membershipPlanId === 'adult-punch' ? 'junior-punch' : 'adult-punch'}"]`);
-          if (otherPunchCard) {
-            otherPunchCard.classList.add('disabled');
+          // Grey out the other punch card type (same category)
+          const category = selectedCard.closest('.category-item').dataset.category;
+          if (category === 'punchcard') {
+            const otherPunchCard = document.querySelector(`[data-plan="${state.membershipPlanId === 'adult-punch' ? 'junior-punch' : 'adult-punch'}"]`);
+            if (otherPunchCard) otherPunchCard.classList.add('disabled');
           }
         }
         
@@ -19667,6 +19744,33 @@ function findValueCard(id) {
   ];
   
   return allValueCards.find((plan) => String(plan.id) === normalizedId) ?? null;
+}
+
+/**
+ * Get number of punches per card for a value card product.
+ * API ValueCardProductOut does not expose this; we parse from name/description.
+ * Supports e.g. "10 Klip", "Klippekort: 10 Klip + 2 Extra", "10 clips".
+ * @param {Object} product - Value card product (name, description, etc.)
+ * @returns {number|null} Punches per card, or null if unknown
+ */
+function getPunchesPerCard(product) {
+  if (!product) return null;
+  const name = (product.name || '').trim();
+  const desc = (product.description || product.externalDescription || '').trim();
+  const text = `${name} ${desc}`;
+  if (!text) return null;
+  // Main count: "10 Klip", "10 klip", "10 clips", "10 Clips"
+  const mainMatch = text.match(/(\d+)\s*(?:klip|clips?)\b/i);
+  const main = mainMatch ? parseInt(mainMatch[1], 10) : null;
+  // Optional extra: "+ 2 Extra", "+ 2 ekstra"
+  const extraMatch = text.match(/\+\s*(\d+)\s*(?:extra|ekstra)?/i);
+  const extra = extraMatch ? parseInt(extraMatch[1], 10) : 0;
+  if (main != null && !Number.isNaN(main)) {
+    return main + (Number.isNaN(extra) ? 0 : extra);
+  }
+  // Fallback: first number in text (e.g. "Klippekort 5" → 5)
+  const anyNum = text.match(/\b(\d+)\b/);
+  return anyNum ? parseInt(anyNum[1], 10) : null;
 }
 
 function findAddon(id) {

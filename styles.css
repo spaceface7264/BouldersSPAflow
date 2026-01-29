@@ -2661,6 +2661,12 @@ body {
     box-shadow: 0 2px 6px rgba(240, 0, 240, 0.3);
 }
 
+.plan-card.has-quantity .select-btn {
+    /* When quantity panel is active, hide the original Select button
+       so the panel (with Continue) takes over that affordance */
+    display: none;
+}
+
 .plan-card.selected .select-btn {
     background: #A856F7;
     box-shadow: 0 2px 8px rgba(168, 86, 247, 0.3);
@@ -2872,24 +2878,56 @@ body {
     box-shadow: none;
 }
 
-/* Quantity Panel Container - Separate element below card */
-.quantity-panel {
+/* Quantity Panel - Replaces Select button in place; does not affect plan-info or price */
+.plan-card .quantity-panel {
     display: none;
-    padding: 16px;
-    background: rgba(15, 23, 42, 0.8);
-    border-top: #f0f 1px solid;
-    border-bottom: #f0f 1px solid;
-    border-radius: 12px;
-    border: 1px solid rgba(240, 0, 240, 0.2);
-    position: relative;
-    z-index: 1;
-    animation: slideDown 0.3s ease-out;
-    width: 100%;
+    position: absolute;
+    bottom: 16px;
+    right: 20px;
+    flex: none;
+    padding: 10px 12px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(240, 0, 240, 0.3);
+    border-radius: 10px;
+    z-index: 2;
+    animation: slideDown 0.25s ease-out;
     box-sizing: border-box;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    gap: 8px;
 }
 
-.quantity-panel.show {
-    display: block;
+.plan-card .quantity-panel.show {
+    display: flex;
+}
+
+/* Continue button in quantity panel - same look as Select button */
+.plan-card .quantity-panel .continue-btn {
+    padding: 10px 20px;
+    background: #f0f;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(240, 0, 240, 0.3);
+    white-space: nowrap;
+    width: auto;
+    flex-shrink: 0;
+}
+
+.plan-card .quantity-panel .continue-btn:hover {
+    background: #e609e6;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(240, 0, 240, 0.4);
+}
+
+.plan-card .quantity-panel .continue-btn:active {
+    transform: translateY(0);
 }
 
 /* Quantity Header */
@@ -2920,11 +2958,17 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 12px;
     padding: 8px 12px;
-    background: var(--color-card-fill);
-    border-radius: 12px;
-    width: 100%;
+    /* Slightly darker than panel background for better contrast */
+    background: #e5e7eb; /* gray-200 */
+    border-radius: 10px;
+    width: auto;
+    max-width: 100%;
+}
+
+/* Inside quantity panel: no extra margin; panel gap handles spacing */
+.plan-card .quantity-panel .quantity-selector {
+    margin-bottom: 0;
 }
 
 /* Quantity Controls Group */
@@ -2960,10 +3004,10 @@ body {
 .quantity-btn {
     width: 36px;
     height: 36px;
-    border: 2px solid var(--color-item-border);
+    border: 2px solid #94a3b8; /* gray-400 for clearer outline */
     border-radius: 8px;
     background: transparent;
-    color: #cbd5e1;
+    color: #1f2937; /* dark text for high contrast */
     font-size: var(--font-size-lg);
     font-weight: 600;
     line-height: 1;
@@ -2986,8 +3030,18 @@ body {
 }
 
 .quantity-btn:disabled {
-    opacity: 0.3;
+    /* Keep visible but slightly muted */
+    opacity: 0.6;
     cursor: not-allowed;
+}
+
+/* Quantity value in the middle of the selector */
+.quantity-value {
+    min-width: 32px;
+    text-align: center;
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: #111827; /* very dark for strong contrast on light bg */
 }
 
 .quantity-btn.plus {
@@ -5609,6 +5663,55 @@ body {
     white-space: nowrap; /* Prevent price from wrapping */
     flex-shrink: 0; /* Don't shrink the price */
     text-align: right;
+}
+
+/* Cart item right side: punches above price (value-card) */
+.cart-item-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.cart-item-quantity {
+    font-size: var(--font-size-base);
+    color: var(--color-text-white);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.cart-item-punches {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.cart-total-label {
+    font-size: var(--font-size-base);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    color: var(--color-text-white);
+}
+
+/* Total row below value-card cart item: "Total (X klip)" left, price right */
+.cart-item-total-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 26px 0 0;
+    margin-top: 2px;
+    width: 100%;
+}
+
+.cart-item-total-row .cart-item-total-price {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: white;
+    white-space: nowrap;
 }
 
 /* Home Gym Info */
