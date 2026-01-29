@@ -112,6 +112,7 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 16px;
+    grid-auto-rows: minmax(min-content, auto); /* row height from content, never smaller */
     padding: 16px 24px;
     overflow-y: auto;
     overflow-x: hidden;
@@ -120,7 +121,7 @@
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y; /* allow vertical scroll only on touch */
     align-content: start;
-    align-items: start; /* cards use natural height – prevents stretch/overflow on iPad */
+    align-items: start; /* cards use natural height on all breakpoints – no stretch/overflow */
     contain: layout; /* isolate layout for stable scrolling */
   }
 
@@ -167,7 +168,7 @@
     z-index: 1;
   }
 
-  /* Addon card – flex column; height from content so description stays inside card */
+  /* Addon card – flex column; height from content so description always fits inside */
   .addons-grid .addon-card {
     background: var(--color-surface-dark);
     color: var(--color-text-secondary);
@@ -178,8 +179,8 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    min-height: 0; /* allow shrink in single-column; with align-items: start on grid, row doesn't force stretch */
-    height: auto; /* natural height from content */
+    min-height: min-content; /* never smaller than content – keeps description inside card */
+    height: auto;
     position: relative;
     box-sizing: border-box;
     -webkit-backface-visibility: hidden;
@@ -445,11 +446,10 @@
     background: var(--color-brand-accent-hover);
   }
 
-  /* Tablet: multi-column grid when space allows */
+  /* Tablet: multi-column grid when space allows – keep align-items: start so cards don't stretch/overflow */
   @media (min-width: 640px) {
     .addons-grid {
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      align-items: stretch;
     }
 
     .addons-grid .addon-card img,
