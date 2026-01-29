@@ -1,4 +1,4 @@
-/* Add-ons Modal (class-based) */
+/* Add-ons / Boost Modal (class-based) – structured for reliable layout across devices */
 .addons-overlay {
     position: fixed;
     inset: 0;
@@ -11,19 +11,544 @@
     pointer-events: auto;
     overflow: hidden;
     overscroll-behavior: contain;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
-  .addons-overlay.is-open { 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
+  .addons-overlay.is-open {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    min-height: 0;
   }
-  body.modal-open { 
-    overflow: hidden !important; 
+  body.modal-open {
+    overflow: hidden !important;
     position: fixed;
     width: 100%;
     height: 100%;
   }
-  
+
+  .addons-sheet {
+    position: relative;
+    flex: 0 1 auto;
+    max-height: 84vh; /* fallback for browsers that don't support min() */
+    max-height: min(84vh, calc(100vh - 2rem));
+    min-height: 0;
+    background: rgba(42, 42, 42, 0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    color: var(--color-text-secondary);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    width: 94vw; /* fallback for older browsers */
+    width: min(1000px, 94vw);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+                0 1px 0 rgba(255, 255, 255, 0.2) inset;
+  }
+
+  .addons-header {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--color-item-border);
+  }
+  .addons-title {
+    margin: 0;
+    text-align: center;
+    font-size: var(--font-size-xl);
+    letter-spacing: 0.02em;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+  }
+  .addons-close {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: var(--font-size-2xl);
+    line-height: 24px;
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+  }
+  .addons-close:hover {
+    background: var(--color-item-border);
+    color: var(--color-brand-accent);
+  }
+
+  .addons-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .addons-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .addons-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 16px 24px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y; /* allow vertical scroll only on touch */
+    align-content: start;
+    contain: layout; /* isolate layout for stable scrolling */
+  }
+
+  .addons-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--color-text-muted, #6b7280);
+    font-size: var(--font-size-base);
+  }
+
+  .addons-image { display: none; }
+  .addons-image img { display: none; }
+
+  .addons-grid .addon-card .addon-image-container {
+    position: relative;
+    width: 100%;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+
+  .addons-grid .addon-card img,
+  .addons-grid .addon-card .addon-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 280px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .addons-grid .addon-card .addon-image-banner {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--color-adult);
+    color: var(--color-text-white);
+    border-radius: 0 0 8px 8px;
+    padding: 10px 12px;
+    text-align: center;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    z-index: 1;
+  }
+
+  /* Addon card – flex column; description/features live in scrollable body so long text is never cut off */
+  .addons-grid .addon-card {
+    background: var(--color-surface-dark);
+    color: var(--color-text-secondary);
+    border-radius: 12px;
+    border: 2px solid var(--color-item-border);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    position: relative;
+    box-sizing: border-box;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    align-items: stretch;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  /* Card body: wraps description + features so card always grows to fit all text (modal and in-page) */
+  .addon-card .addon-card-body {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .addon-card .plan-info {
+    padding: 12px;
+  }
+
+  .addons-grid .addon-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  .addons-grid .addon-card:hover:not(.selected) {
+    border-color: var(--color-item-border);
+  }
+
+  /* plan-info: row with name/description left, price right – prevent overflow */
+  .addons-grid .addon-card .plan-info {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex: 0 0 auto;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .addons-grid .addon-card .plan-content-left {
+    flex: 1 1 0%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .addons-grid .addon-card .plan-type {
+    color: var(--color-text-secondary);
+    font-weight: 700;
+    font-size: var(--font-size-md);
+    margin: 0;
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+  }
+
+  .addons-grid .addon-card .plan-content-right {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 4px;
+  }
+
+  .addons-grid .addon-card .plan-price {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .addons-grid .addon-card .plan-price .price-amount {
+    color: var(--color-brand-accent);
+    font-size: var(--font-size-2xl);
+    line-height: 28px;
+    font-weight: 700;
+  }
+
+  .addons-grid .addon-card .plan-price .price-unit {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-base);
+  }
+
+  .addons-grid .addon-card .plan-description {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    margin: 0;
+    text-align: left;
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    hyphens: auto;
+    box-sizing: border-box;
+    white-space: normal;
+  }
+
+  .addons-grid .addon-card .plan-features {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .addons-grid .addon-card .plan-original {
+    font-size: var(--font-size-base);
+    color: var(--color-text-subtle);
+    text-decoration: line-through;
+  }
+
+  .addons-grid .addon-card .plan-features li {
+    margin: 4px 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    line-height: 1.4;
+    position: relative;
+    padding-left: 20px;
+  }
+
+  .addons-grid .addon-card .plan-features li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: var(--color-brand-accent);
+    font-weight: bold;
+    font-size: var(--font-size-sm);
+  }
+
+  .addons-grid .addon-card .plan-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: auto;
+    padding-top: 8px;
+  }
+
+  .addons-grid .addon-card .select-btn {
+    background: var(--color-brand-accent);
+    color: var(--color-button-primary);
+    border: none;
+    border-radius: 999px;
+    padding: 8px 20px;
+    cursor: pointer;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+
+  .addons-grid .addon-card .select-btn:hover {
+    background: var(--color-brand-accent-hover);
+    transform: scale(1.02);
+  }
+
+  .addons-grid .addon-card .select-btn.selected {
+    background: var(--color-success);
+  }
+
+  .addons-grid .addon-card .addon-add-to-cart-btn {
+    width: 100%;
+    padding: 12px 16px;
+    min-height: 44px;
+    background: var(--color-brand-accent);
+    color: var(--color-button-primary);
+    border: none;
+    border-radius: 8px;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: auto;
+    flex-shrink: 0;
+    box-sizing: border-box;
+  }
+
+  .addons-grid .addon-card .addon-add-to-cart-btn:hover {
+    background: var(--color-brand-accent-hover);
+    transform: translateY(-1px);
+  }
+
+  .addons-grid .addon-card.selected .addon-add-to-cart-btn {
+    background: var(--color-text-muted);
+  }
+
+  .addons-grid .addon-card.selected .addon-add-to-cart-btn:hover {
+    background: var(--color-text-subtle);
+  }
+
+  .addons-grid .addon-card.selected {
+    border: 2px solid var(--color-brand-accent);
+  }
+
+  .addons-actions {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px;
+    background: var(--color-surface-dark);
+    border-top: 1px solid var(--color-item-border);
+    visibility: visible;
+    opacity: 1;
+  }
+
+  .addons-hint {
+    opacity: 0.75;
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    color: var(--color-text-muted);
+  }
+
+  .addons-actions .addons-actions-right {
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .addons-action-btn {
+    padding: 10px 16px;
+    min-height: 44px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    transition: all 0.2s ease;
+    min-width: 100px;
+    box-sizing: border-box;
+  }
+
+  .addons-action-btn.addons-skip {
+    border: 1px solid var(--color-item-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+  }
+  .addons-action-btn.addons-skip:hover {
+    background: var(--color-item-border);
+    border-color: var(--color-brand-accent);
+  }
+
+  .addons-action-btn.addons-continue {
+    border: none;
+    background: var(--color-brand-accent);
+    color: var(--color-button-primary);
+  }
+  .addons-action-btn.addons-continue:hover {
+    background: var(--color-brand-accent-hover);
+  }
+
+  /* Tablet: multi-column grid when space allows */
+  @media (min-width: 640px) {
+    .addons-grid {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      align-items: stretch;
+    }
+
+    .addons-grid .addon-card img,
+    .addons-grid .addon-card .addon-image {
+      max-height: 320px;
+    }
+  }
+
+  /* Desktop: larger images, sheet max height */
+  @media (min-width: 1024px) {
+    .addons-grid .addon-card img,
+    .addons-grid .addon-card .addon-image {
+      max-height: 400px;
+    }
+  }
+
+  /* Small viewports: compact sheet and single column */
+  @media (max-width: 768px) {
+    .addons-sheet {
+      width: 95vw;
+      max-height: 95vh;
+    }
+
+    .addons-header {
+      padding: 16px 20px 12px;
+    }
+
+    .addons-title {
+      font-size: 1.125rem;
+    }
+
+    .addons-content {
+      max-height: none;
+    }
+
+    .addons-grid {
+      padding: 12px 16px;
+      gap: 12px;
+    }
+
+    .addons-grid .addon-card {
+      padding: 12px;
+      gap: 10px;
+    }
+
+    .addons-grid .addon-card img,
+    .addons-grid .addon-card .addon-image {
+      max-height: 240px;
+    }
+
+    .addons-grid .addon-card .addon-image-banner {
+      padding: 8px 12px;
+      font-size: 0.875rem;
+    }
+
+    .addons-grid .addon-card .plan-info {
+      gap: 8px;
+    }
+
+    .addons-grid .addon-card .addon-add-to-cart-btn {
+      padding: 10px 14px;
+      font-size: 0.875rem;
+      min-height: 44px;
+    }
+
+    .addons-grid .addon-card .plan-price .price-amount {
+      font-size: var(--font-size-xl);
+      line-height: 24px;
+    }
+
+    .addons-actions {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .addons-hint {
+      text-align: center;
+      font-size: 0.875rem;
+    }
+
+    .addons-actions .addons-actions-right {
+      width: 100%;
+    }
+
+    .addons-skip,
+    .addons-continue {
+      flex: 1;
+      min-height: 44px;
+    }
+  }
+
+  /* Very small devices: reduce image height so card fits viewport */
+  @media (max-width: 380px) {
+    .addons-grid .addon-card img,
+    .addons-grid .addon-card .addon-image {
+      max-height: 200px;
+    }
+
+    .addons-grid {
+      padding: 10px 12px;
+      gap: 10px;
+    }
+
+    .addons-grid .addon-card {
+      padding: 10px;
+    }
+  }
+
 /* Loading Overlay */
 .loading-overlay {
     position: fixed;
@@ -79,591 +604,7 @@
         transform: rotate(360deg);
     }
 }
-   
-  .addons-sheet {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(42, 42, 42, 0.85);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    color: var(--color-text-secondary);
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    width: min(1000px, 94vw);
-    max-height: 84vh;
-    height: auto;
-    min-height: 400px;
-    overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 
-                0 0 0 1px rgba(255, 255, 255, 0.1) inset,
-                0 1px 0 rgba(255, 255, 255, 0.2) inset;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .addons-header { 
-    display: flex; 
-    justify-content: center; 
-    align-items: center; 
-    position: relative; 
-    padding: 20px 24px 12px; 
-    border-bottom: 1px solid var(--color-item-border); 
-  }
-  .addons-title { 
-    margin: 0; 
-    text-align: center; 
-    font-size: var(--font-size-xl); 
-    letter-spacing: .2px; 
-    font-weight: 700; 
-    color: var(--color-text-secondary); 
-  }
-  .addons-close { 
-    position: absolute; 
-    right: 12px; 
-    top: 50%; 
-    transform: translateY(-50%); 
-    font-size: var(--font-size-2xl); 
-    line-height: 24px; 
-    background: transparent; 
-    border: none; 
-    color: var(--color-text-secondary); 
-    cursor: pointer; 
-    width: 32px; 
-    height: 32px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    border-radius: 6px; 
-    transition: all .2s; 
-  }
-  .addons-close:hover { 
-    background: var(--color-item-border); 
-    color: var(--color-brand-accent); 
-  }
-  
-  .addons-content { 
-    display: flex; 
-    flex-direction: column; 
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-  
-.addons-image { display: none; }
-.addons-image img { display: none; }
 
-  .addons-grid .addon-card .addon-image-container {
-    position: relative;
-    width: 100%;
-    flex-shrink: 0;
-  }
-  
-  .addons-grid .addon-card img,
-  .addons-grid .addon-card .addon-image {
-    flex-shrink: 0;
-    object-fit: cover;
-    height: 400px !important;
-    width: 100%;
-    display: block;
-  }
-  
-  .addons-grid .addon-card .addon-image-banner {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--color-adult);
-    color: var(--color-text-white);
-    border-radius: 0 0 12px 12px;
-    padding: 12px 16px;
-    text-align: center;
-    font-size: var(--font-size-base);
-    font-weight: 700;
-    z-index: 1;
-  }
-  
-  .addons-main { 
-    flex: 1 1 auto; 
-    display: flex; 
-    flex-direction: column; 
-    min-width: 0;
-    overflow: hidden;
-    min-height: 0;
-  }
-  
-  .addons-grid { 
-    display: grid; 
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
-    gap: 16px; 
-    padding: 16px 24px; 
-    overflow-y: auto; 
-    flex: 1;
-    min-height: 0;
-    align-items: stretch;
-  }
-  
-  /* Addon Card Styles for Modal */
-  .addons-grid .addon-card {
-    background: var(--color-surface-dark);
-    color: var(--color-text-secondary);
-    border-radius: 12px;
-    border: 2px solid var(--color-item-border);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    transition: border 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-    position: relative;
-    box-sizing: border-box;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-    overflow: visible;
-    height: 100%;
-    align-items: flex-start;
-    width: 100%;
-    cursor: pointer;
-  }
-  
-  .addons-grid .addon-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-  
-  .addons-grid .addon-card:hover:not(.selected) {
-    border: 2px solid var(--color-item-border) !important;
-    /* Override .plan-card:hover border-color rule */
-  }
-  
-  .addons-grid .addon-card .plan-info {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    min-height: auto !important;
-    height: auto !important;
-    flex: 0 0 auto;
-    flex-shrink: 0;
-    width: 100%;
-    overflow: visible;
-    min-width: 0;
-  }
-
-  .addons-grid .addon-card .plan-content-left {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    align-items: flex-start;
-    justify-content: flex-start;
-    min-height: auto !important;
-    height: auto !important;
-    overflow: visible;
-    width: 100%;
-  }
-  
-  .addons-grid .addon-card .plan-type {
-    color: var(--color-text-secondary);
-    font-weight: 700;
-    font-size: var(--font-size-md);
-    margin: 0;
-    margin-bottom: 0;
-    line-height: 1.4;
-  }
-  
-  .addons-grid .addon-card .plan-content-right {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    justify-content: flex-start;
-    gap: 4px;
-    align-self: flex-start;
-  }
-  
-  .addons-grid .addon-card .plan-price {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    margin: 0;
-    white-space: nowrap;
-  }
-  
-  .addons-grid .addon-card .plan-price .price-amount {
-    color: var(--color-brand-accent);
-    font-size: var(--font-size-2xl);
-    line-height: 28px;
-    font-weight: 700;
-  }
-  
-  .addons-grid .addon-card .plan-price .price-unit {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-base);
-  }
-  
-  .addons-grid .addon-card .plan-description {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-    line-height: 1.5;
-    margin: 0;
-    margin-top: 0;
-    text-align: left;
-    align-self: flex-start;
-    width: 100%;
-    max-width: 100%;
-    overflow: visible;
-    overflow-wrap: break-word;
-    word-wrap: break-word;
-    hyphens: auto;
-    box-sizing: border-box;
-    white-space: normal;
-  }
-  
-  .addons-grid .addon-card .plan-features {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    flex: 0 0 auto !important;
-    min-height: auto !important;
-    height: auto !important;
-    overflow: visible;
-  }
-  
-  .addons-grid .addon-card .plan-original {
-    font-size: var(--font-size-base);
-    color: var(--color-text-subtle);
-    text-decoration: line-through;
-  }
-  
-  .addons-grid .addon-card .plan-features li {
-    margin: 4px 0;
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    line-height: 18px;
-    position: relative;
-    padding-left: 20px;
-  }
-  
-  .addons-grid .addon-card .plan-features li::before {
-    content: "✓";
-    position: absolute;
-    left: 0;
-    color: var(--color-brand-accent);
-    font-weight: bold;
-    font-size: var(--font-size-sm);
-  }
-  
-  /* Override any media query rules that might affect addon cards */
-  @media (min-width: 641px) {
-    .addons-grid .addon-card {
-      height: 100%;
-      min-height: 0;
-      align-items: flex-start;
-    }
-    
-    .addons-grid .addon-card .plan-info {
-      min-height: 0 !important;
-      height: auto !important;
-    }
-    
-    .addons-grid .addon-card .plan-content-left {
-      min-height: 0 !important;
-      height: auto !important;
-    }
-  }
-  
-  .addons-grid .addon-card .plan-actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: auto;
-    padding-top: 8px;
-  }
-  
-  .addons-grid .addon-card .select-btn {
-    background: var(--color-brand-accent);
-    color: var(--color-button-primary);
-    border: none;
-    border-radius: 999px;
-    padding: 8px 20px;
-    cursor: pointer;
-    font-size: var(--font-size-base);
-    font-weight: 600;
-    transition: all 0.2s;
-  }
-  
-  .addons-grid .addon-card .select-btn:hover {
-    background: var(--color-brand-accent-hover);
-    transform: scale(1.02);
-  }
-  
-  .addons-grid .addon-card .select-btn.selected {
-    background: var(--color-success);
-  }
-  
-  /* Addon Modal Add to Cart Button */
-  .addons-grid .addon-card .addon-add-to-cart-btn {
-    width: 100%;
-    padding: 12px 16px;
-    background: var(--color-brand-accent);
-    color: var(--color-button-primary);
-    border: none;
-    border-radius: 8px;
-    font-size: var(--font-size-base);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    margin-top: auto;
-    flex-shrink: 0;
-  }
-  
-  .addons-grid .addon-card .addon-add-to-cart-btn:hover {
-    background: var(--color-brand-accent-hover);
-    transform: translateY(-1px);
-  }
-  
-  .addons-grid .addon-card.selected .addon-add-to-cart-btn {
-    background: var(--color-text-muted);
-  }
-  
-  .addons-grid .addon-card.selected .addon-add-to-cart-btn:hover {
-    background: var(--color-text-subtle);
-  }
-  
-  /* Override inherited borders for selected addon cards */
-  .addons-grid .addon-card.selected {
-    border: 2px solid var(--color-brand-accent);
-  }
-  
-  .addons-actions { 
-    display: flex !important; 
-    justify-content: space-between; 
-    align-items: center; 
-    gap: 12px; 
-    padding: 16px 24px; 
-    background: var(--color-surface-dark); 
-    border-top: 1px solid var(--color-item-border); 
-    flex-shrink: 0;
-    flex-grow: 0;
-    visibility: visible !important;
-    opacity: 1 !important;
-    position: relative;
-    z-index: 10;
-  }
-  
-  .addons-hint { 
-    opacity: .75; 
-    font-size: var(--font-size-sm); 
-    line-height: 18px; 
-    color: var(--color-text-muted); 
-  }
-  
-  .addons-actions .addons-actions-right { 
-    display: flex; 
-    gap: 12px; 
-    flex-shrink: 0; 
-  }
-  
-  .addons-action-btn { 
-    padding: 10px 16px; 
-    border-radius: 10px; 
-    cursor: pointer; 
-    font-size: var(--font-size-base); 
-    font-weight: 600; 
-    transition: all .2s; 
-    min-width: 100px;
-  }
-  
-  .addons-action-btn.addons-skip { 
-    border: 1px solid var(--color-item-border); 
-    background: transparent; 
-    color: var(--color-text-secondary); 
-  }
-  .addons-action-btn.addons-skip:hover { 
-    background: var(--color-item-border); 
-    border-color: var(--color-brand-accent); 
-  }
-  
-  .addons-action-btn.addons-continue { 
-    border: none; 
-    background: var(--color-brand-accent); 
-    color: var(--color-button-primary); 
-  }
-  .addons-action-btn.addons-continue:hover { 
-    background: var(--color-brand-accent-hover); 
-  }
-  
-  /* Tablet and smaller - ensure actions are visible */
-  @media (max-width: 1024px) {
-    .addons-content {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      flex: 1;
-      min-height: 0;
-    }
-    
-    .addons-grid {
-      min-height: 0;
-      overflow-y: auto;
-      gap: 8px;
-    }
-    
-    .addons-actions {
-      display: flex !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-    }
-  }
-  
-  @media (max-width: 768px) {
-    .addons-sheet { 
-      width: 95vw; 
-      max-height: 95vh; 
-      height: auto;
-      min-height: 0;
-      top: 50%;
-      transform: translate(-50%, -50%);
-    }
-    
-    .addons-header {
-      padding: 16px 20px 12px;
-      flex-shrink: 0;
-    }
-    
-    .addons-title {
-      font-size: 1.125rem;
-    }
-    
-    .addons-content {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      flex: 1 1 auto;
-      min-height: 0;
-      max-height: calc(95vh - 160px); /* Account for header and actions */
-    }
-    
-    .addons-main {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    .addons-grid { 
-      grid-template-columns: 1fr; 
-      padding: 12px 16px; 
-      gap: 16px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      flex: 1 1 auto;
-      min-height: 0;
-      -webkit-overflow-scrolling: touch;
-    }
-    
-    .addons-grid .addon-card {
-      height: auto;
-      min-height: auto;
-      max-height: none;
-      overflow: visible;
-      align-items: stretch;
-    }
-    
-    .addons-grid .addon-card .plan-info {
-      flex-wrap: wrap;
-      gap: 12px;
-      overflow: visible;
-    }
-    
-    .addons-grid .addon-card .plan-content-left {
-      flex: 1 1 100%;
-      min-width: 0;
-      overflow: visible;
-    }
-    
-    .addons-grid .addon-card .plan-content-right {
-      flex: 0 0 auto;
-      width: auto;
-    }
-    
-    .addons-grid .addon-card .plan-description {
-      display: block;
-      overflow: visible;
-      text-overflow: clip;
-      max-height: none;
-      white-space: normal;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-    }
-    
-    .addons-actions { 
-      display: flex;
-      flex-direction: column; 
-      align-items: stretch; 
-      gap: 12px; 
-      flex-shrink: 0;
-      padding: 16px;
-      border-top: 1px solid var(--color-item-border);
-    }
-    
-    .addons-hint { 
-      text-align: center;
-      font-size: 0.875rem;
-      line-height: 1.4;
-    }
-    
-    .addons-actions .addons-actions-right { 
-      width: 100%; 
-    }
-    
-    .addons-skip, 
-    .addons-continue { 
-      flex: 1;
-      min-height: 44px; /* Better touch target */
-    }
-    
-    .addons-grid .addon-card img,
-    .addons-grid .addon-card .addon-image {
-      height: 300px !important;
-    }
-    
-    .addons-grid .addon-card .addon-image-banner {
-      padding: 8px 12px;
-      font-size: 0.875rem;
-    }
-    
-    .addons-grid .addon-card .plan-features {
-      max-height: none;
-      overflow: visible;
-    }
-    
-    .addons-grid .addon-card .plan-features li {
-      margin: 6px 0;
-      line-height: 1.5;
-    }
-    
-    .addons-grid .addon-card .addon-add-to-cart-btn {
-      padding: 10px 14px;
-      font-size: 0.875rem;
-      min-height: 44px; /* Better touch target */
-      margin-top: auto; /* Keep button at bottom */
-    }
-    
-    .addons-grid .addon-card .plan-price {
-      font-size: 1.5rem;
-    }
-    
-    .addons-grid .addon-card .plan-price .price-amount {
-      font-size: var(--font-size-xl);
-      line-height: 24px;
-    }
-  }
-  
   /* Card parity for inline container */
   #addonMode .plan-card { 
     background: #f8fafc; 

@@ -4392,7 +4392,7 @@ function populateAddonsModal() {
       imageEl.style.visibility = 'visible';
       imageEl.style.opacity = '1';
       imageEl.style.width = '100%';
-      // Height is controlled by CSS (.addons-grid .addon-card img) - 400px desktop, 250px mobile
+      // Image size controlled by CSS (.addons-grid .addon-card img max-height by breakpoint)
       imageEl.style.objectFit = 'cover';
       imageEl.style.borderRadius = '8px';
       imageEl.style.marginBottom = '12px';
@@ -4586,9 +4586,6 @@ function populateBoostModal() {
     const emptyMsg = document.createElement('div');
     emptyMsg.className = 'addons-empty';
     emptyMsg.textContent = t('addons.modal.empty');
-    emptyMsg.style.textAlign = 'center';
-    emptyMsg.style.padding = '2rem';
-    emptyMsg.style.color = 'var(--color-text-secondary, #6b7280)';
     grid.appendChild(emptyMsg);
     return;
   }
@@ -4718,7 +4715,7 @@ function populateBoostModal() {
       imageEl.style.visibility = 'visible';
       imageEl.style.opacity = '1';
       imageEl.style.width = '100%';
-      // Height is controlled by CSS (.addons-grid .addon-card img) - 400px desktop, 250px mobile
+      // Image size controlled by CSS (.addons-grid .addon-card img max-height by breakpoint)
       imageEl.style.objectFit = 'cover';
       imageEl.style.borderRadius = '8px';
       imageEl.style.marginBottom = '12px';

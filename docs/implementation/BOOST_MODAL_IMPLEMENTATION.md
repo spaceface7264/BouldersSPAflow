@@ -116,3 +116,7 @@ The boost modal relies on:
 - This ensures boost products aren't missed if they're filtered out by display rules
 - The modal uses the same infrastructure as the addons modal
 - Products are deduplicated by ID before being displayed
+
+## Testing
+
+For cross-device and cross-browser layout checks, see [BOOST_MODAL_LAYOUT_TESTING.md](../testing/BOOST_MODAL_LAYOUT_TESTING.md).
