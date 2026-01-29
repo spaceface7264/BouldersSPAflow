@@ -6614,18 +6614,6 @@ main {
     }
 }
 
-/* Footer Note */
-.footer-note {
-    margin-top: 16px;
-    text-align: center;
-    color: #9CA3AF;
-    font-size: var(--font-size-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-}
-
 /* Card Payment Form */
 .card-payment-form {
     margin: 20px 0;
