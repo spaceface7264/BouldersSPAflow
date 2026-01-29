@@ -27,6 +27,7 @@
     height: 100%;
   }
 
+  /* Sheet: positioned by overlay flex (no inline position/left/top/translate – JS only animates opacity + scale) */
   .addons-sheet {
     position: relative;
     flex: 0 1 auto;

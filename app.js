@@ -4526,7 +4526,16 @@ function showAddonsModal() {
 function hideAddonsModal() {
   if (!addonsModal) return;
   addonsModal.style.display = 'none';
-  // Restore body scrolling
+  // Clear sheet inline styles so next open uses CSS only (no legacy position/transform)
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    sheet.style.position = '';
+    sheet.style.left = '';
+    sheet.style.top = '';
+    sheet.style.transform = '';
+    sheet.style.opacity = '';
+    sheet.style.transition = '';
+  }
   document.body.classList.remove('modal-open');
   document.body.style.overflow = '';
   document.body.style.position = '';
@@ -4850,40 +4859,42 @@ async function showBoostModal() {
     await loadBoostProducts();
   }
   
-  populateBoostModal();
-  updateAddonActionButton();
-  
-  // Show modal - overlay dims immediately, only sheet animates
+  // Show modal first so sheet container is in layout (CSS: flex centering, no inline position)
   addonsModal.style.display = 'flex';
   addonsModal.style.alignItems = 'center';
   addonsModal.style.justifyContent = 'center';
-  addonsModal.style.opacity = '1'; // Overlay appears immediately (no animation)
-  addonsModal.style.transition = 'opacity 0.2s ease'; // Quick fade for overlay only
-  
-  // Prevent scrolling behind modal
+  addonsModal.style.opacity = '1';
+  addonsModal.style.transition = 'opacity 0.2s ease';
+
   document.body.classList.add('modal-open');
   document.body.style.overflow = 'hidden';
   document.body.style.position = 'fixed';
   document.body.style.width = '100%';
   document.body.style.height = '100%';
-  
-  // Animate only the modal sheet, not the overlay
-  // Ensure sheet is properly positioned before animation
+
   const sheet = addonsModal.querySelector('.addons-sheet');
   if (sheet) {
-    // Reset any previous transforms to ensure proper centering
-    sheet.style.position = 'absolute';
-    sheet.style.left = '50%';
-    sheet.style.top = '50%';
-    sheet.style.transform = 'translate(-50%, -50%) scale(0.95)';
+    // Rely on CSS for positioning (no position/left/top/translate – avoids conflicts on some devices)
+    sheet.style.position = '';
+    sheet.style.left = '';
+    sheet.style.top = '';
     sheet.style.opacity = '0';
+    sheet.style.transform = 'scale(0.95)';
     sheet.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    
-    requestAnimationFrame(() => {
-      sheet.style.opacity = '1';
-      sheet.style.transform = 'translate(-50%, -50%) scale(1)';
-    });
   }
+
+  // Let sheet render/layout first, then populate cards, then animate
+  requestAnimationFrame(() => {
+    populateBoostModal();
+    updateAddonActionButton();
+
+    if (sheet) {
+      requestAnimationFrame(() => {
+        sheet.style.opacity = '1';
+        sheet.style.transform = 'scale(1)';
+      });
+    }
+  });
 }
 
 // Expose a small API to set the image dynamically if desired
