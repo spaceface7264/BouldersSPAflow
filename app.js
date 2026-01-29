@@ -5089,7 +5089,7 @@ const translations = {
     'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Løbende abonnement, ubegrænset adgang', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': 'Midlertidig adgangspas', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': '10 indgange, delbart fysisk kort',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Få 15 dages ubegrænset adgang til alle haller. Perfekt til at prøve klatring eller et kortvarigt besøg.',
-    'category.punchcard.desc': 'Du kan købe 1 type klippekort ad gangen. Hvert indgang bruger et klip på dit klippekort. Kortet er gyldigt i 5 år og giver ikke medlemsfordele. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen.',
+    'category.punchcard.desc': 'Du kan købe 1 type klippekort ad gangen. Hver indgang bruger et klip på dit klippekort. Kortet er gyldigt i 5 år og giver ikke medlemsfordele. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen.',
     'header.selectedGym': 'Valgt hal:', 'gym.headsUp': 'Hjemmehal valgt:', 'access.headsUp': 'Adgangstype valgt:',
     'main.subtitle.step1': 'Vælg din hjemmehal', 'main.subtitle.step1.secondary': 'Dette er hvor du primært træner − du får adgang til alle haller.',
     'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen.',
@@ -5660,24 +5660,9 @@ function updateCartTranslations() {
     smsConsent.innerHTML = sanitizeHTML(smsHtml);
   }
   
-  // Make only the checkmark clickable to toggle checkboxes (not the label text)
-  const consentCheckboxes = document.querySelectorAll('.consent-checkbox');
-  consentCheckboxes.forEach((label) => {
-    const checkbox = label.querySelector('input[type="checkbox"]');
-    const checkmark = label.querySelector('.checkmark');
-    
-    if (checkbox && checkmark) {
-      // Prevent label clicks from toggling (handled by pointer-events: none in CSS)
-      // Only allow checkmark clicks to toggle
-      checkmark.addEventListener('click', (e) => {
-        e.stopPropagation();
-        checkbox.checked = !checkbox.checked;
-        // Trigger change event to ensure any listeners are notified
-        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-      });
-    }
-  });
-  
+  // Consent checkmark toggle is handled via event delegation in setupEventListeners()
+  // so it works on initial load even when initLanguageSwitcher() returns early (e.g. no language switcher in DOM).
+
   // Payment overview labels are handled by data-i18n-key attributes in HTML
   // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
 }
@@ -6464,7 +6449,8 @@ function cacheDom() {
   DOM.valueCardContinueBtn = document.querySelector('[data-action="continue-value-cards"]');
   DOM.valueCardEntryLabel = document.querySelector('[data-entry-label]');
   DOM.cartItems = document.querySelector('[data-component="cart-items"]');
-  DOM.paymentOverview = document.querySelector('.payment-overview');
+  DOM.cartAddonItems = document.querySelector('[data-component="cart-addon-items"]');
+  DOM.paymentOverview = document.querySelector('.payment-overview:not(.payment-overview-total-wrap)');
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
   DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
@@ -6722,6 +6708,20 @@ function setupEventListeners() {
   
   // Terms modal handlers
   document.addEventListener('click', (e) => {
+    // Consent checkbox checkmark (event delegation – works on initial load even if updateCartTranslations ran late)
+    const consentCheckmark = e.target.closest('.consent-checkbox .checkmark');
+    if (consentCheckmark) {
+      const label = consentCheckmark.closest('.consent-checkbox');
+      const checkbox = label && label.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        e.preventDefault();
+        e.stopPropagation();
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return;
+    }
+
     if (e.target.closest('[data-action="open-terms"]')) {
       e.preventDefault();
       const termsType = e.target.closest('[data-action="open-terms"]').dataset.termsType;
@@ -12131,6 +12131,10 @@ function renderCartItems() {
 
   if (!state.cartItems || !state.cartItems.length) {
     DOM.cartItems.innerHTML = '';
+    if (DOM.cartAddonItems) {
+      DOM.cartAddonItems.innerHTML = '';
+      DOM.cartAddonItems.style.display = 'none';
+    }
     // Only show empty message if there's no gym selected either
     if (!state.selectedGymId && !state.selectedBusinessUnit) {
       const empty = document.createElement('div');
@@ -12220,9 +12224,10 @@ function renderCartItems() {
     );
   }
 
-  // Separate items into two groups: subscriptions/15day pass/value cards first, then addons
-  // All subscriptions (including 15-day passes) have type 'membership', value cards have type 'value-card'
-  // CRITICAL: Filter to ensure subscriptions come first, regardless of state.cartItems order
+  // Display order: (1) access type first (subscription / punch card / 15 day) with pricing,
+  // (2) addon products, (3) total (payment overview is next sibling in DOM).
+  // Separate items into two groups: subscriptions/15day pass/value cards first, then addons.
+  // All subscriptions (including 15-day passes) have type 'membership', value cards have type 'value-card'.
   const subscriptionItems = state.cartItems.filter(item => 
     item.type === 'membership' || item.type === 'value-card'
   );
@@ -12347,9 +12352,9 @@ function renderCartItems() {
 
   // CRITICAL: Clear DOM first to ensure clean rendering
   DOM.cartItems.innerHTML = '';
-  
-  // CRITICAL: Render subscription/15day pass/value card items FIRST
-  // This ensures they appear at the top of the cart
+
+  // Render subscription/15day pass/value card items ONLY (access type first, with pricing)
+  // Payment overview (Månedlig betaling, Betal nu) is next in DOM; then addons; then total
   subscriptionItems.forEach((item, index) => {
     const cartItem = renderCartItem(item, index === 0);
     DOM.cartItems.appendChild(cartItem);
@@ -12377,43 +12382,37 @@ function renderCartItems() {
     }
   });
 
-  // Add separator line after subscription items if there are addon items
-  if (subscriptionItems.length > 0 && addonItems.length > 0) {
-    const separator = document.createElement('div');
-    separator.className = 'cart-separator';
-    separator.style.height = '1px';
-    separator.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-    separator.style.margin = '12px 0';
-    separator.style.width = '100%';
-    DOM.cartItems.appendChild(separator);
-  }
-
-  // Render addon items AFTER subscriptions (at the bottom)
-  addonItems.forEach((item) => {
-    const cartItem = renderCartItem(item, false);
-    // Add plus sign before addon product names (inline, to the left) with brand accent color
-    const nameEl = cartItem.querySelector('[data-element="name"]');
-    if (nameEl) {
-      const currentText = nameEl.textContent || nameEl.innerText || '';
-      if (currentText && !currentText.trim().startsWith('+')) {
-        // Change flex direction to row for addon items so plus appears inline
-        nameEl.style.flexDirection = 'row';
-        nameEl.style.alignItems = 'center';
-        // Create a span for the plus sign with brand accent color
-        const plusSpan = document.createElement('span');
-        plusSpan.textContent = '+ ';
-        plusSpan.style.color = 'var(--color-brand-accent)';
-        plusSpan.style.marginRight = '4px';
-        // Clear and rebuild content
-        nameEl.innerHTML = '';
-        nameEl.appendChild(plusSpan);
-        const textSpan = document.createElement('span');
-        textSpan.textContent = currentText.trim();
-        nameEl.appendChild(textSpan);
-      }
+  // Render addon items in separate container (below payment overview, above total)
+  if (DOM.cartAddonItems) {
+    DOM.cartAddonItems.innerHTML = '';
+    if (addonItems.length > 0) {
+      DOM.cartAddonItems.style.display = 'block';
+      addonItems.forEach((item) => {
+        const cartItem = renderCartItem(item, false);
+        // Add plus sign before addon product names (inline, to the left) with brand accent color
+        const nameEl = cartItem.querySelector('[data-element="name"]');
+        if (nameEl) {
+          const currentText = nameEl.textContent || nameEl.innerText || '';
+          if (currentText && !currentText.trim().startsWith('+')) {
+            nameEl.style.flexDirection = 'row';
+            nameEl.style.alignItems = 'center';
+            const plusSpan = document.createElement('span');
+            plusSpan.textContent = '+ ';
+            plusSpan.style.color = 'var(--color-brand-accent)';
+            plusSpan.style.marginRight = '4px';
+            nameEl.innerHTML = '';
+            nameEl.appendChild(plusSpan);
+            const textSpan = document.createElement('span');
+            textSpan.textContent = currentText.trim();
+            nameEl.appendChild(textSpan);
+          }
+        }
+        DOM.cartAddonItems.appendChild(cartItem);
+      });
+    } else {
+      DOM.cartAddonItems.style.display = 'none';
     }
-    DOM.cartItems.appendChild(cartItem);
-  });
+  }
 }
 
 function renderCartAddons() {
@@ -12572,8 +12571,10 @@ function updatePaymentOverview() {
   }
   
   if (!hasMembership) {
-    // Hide payment overview if no membership
+    // Hide payment overview and total wrapper if no membership
     DOM.paymentOverview.style.display = 'none';
+    const totalWrap = document.querySelector('.payment-overview-total-wrap');
+    if (totalWrap) totalWrap.style.display = 'none';
     return;
   }
   
@@ -13168,9 +13169,11 @@ function updatePaymentOverview() {
     const roundedTotal = roundToHalfKrone(total);
     totalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
     
-    // Show/hide total container based on whether addons are present
+    // Show/hide total container (and its wrapper) based on whether addons are present
+    const totalWrap = totalContainer.closest('.payment-overview-total-wrap');
     if (addonTotal > 0) {
       totalContainer.style.display = 'block';
+      if (totalWrap) totalWrap.style.display = 'block';
       if (payNowIncludesAddons) {
         console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now already includes addons:', payNowAmount, ')');
       } else {
@@ -13178,6 +13181,7 @@ function updatePaymentOverview() {
       }
     } else {
       totalContainer.style.display = 'none';
+      if (totalWrap) totalWrap.style.display = 'none';
     }
   }
   
@@ -13358,10 +13362,31 @@ function clearStoredOrderData(reason = 'manual') {
 function resetOrderStateForProductChange(reason = 'product-change') {
   const hadOrderData = Boolean(state.orderId || state.fullOrder || state.paymentLink || state.paymentLinkGenerated);
   const hadDiscount = Boolean(state.discountApplied || state.discountCode);
+
+  // Always clear cart when switching product/plan (subscription ↔ 15-day ↔ punch card ↔ different subscription)
+  // So addons and other cart state never carry over to a new product
+  console.log(`[checkout] Resetting order state (${reason})`);
+  state.addonIds.clear();
+  state.cartItems = [];
+  state.valueCardQuantities.clear();
+
+  // Deselect addon cards in UI so they match cleared addonIds
+  document.querySelectorAll('.addon-card.selected, .plan-card.addon-card.selected').forEach((card) => {
+    card.classList.remove('selected');
+    const button = card.querySelector('[data-action="toggle-addon"]');
+    if (button) {
+      button.textContent = t('button.addToCart');
+      button.setAttribute('data-i18n-key', 'button.addToCart');
+    }
+  });
+
+  updateCartSummary();
+
+  // Clear order/discount state only when we had order or discount
   if (!hadOrderData && !hadDiscount) {
     return;
   }
-  console.log(`[checkout] Resetting order state (${reason})`);
+
   state.order = null;
   state.fullOrder = null;
   state.orderId = null;
