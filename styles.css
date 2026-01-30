@@ -741,12 +741,13 @@ body {
 /* Header Auth Indicator */
 .header-auth-indicator {
     display: none;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
     flex-shrink: 0;
     position: absolute;
-    left: 20px;
+    right: 20px;
+    left: auto;
 }
 
 .header-auth-text {
@@ -838,6 +839,26 @@ body {
         min-width: 90px;
     }
     
+    /* Header auth: stack vertically, truncate email */
+    .header-auth-indicator {
+        right: 12px;
+        gap: 4px;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+    
+    .header-auth-email {
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .header-logout-btn {
+        padding: 4px 10px;
+        font-size: 10px;
+    }
+    
     .main {
         padding: 0px 12px 0 12px; /* Match mobile padding pattern */
         padding-top: calc(48px + 0px); /* Minimal space for fixed header on tablet */
@@ -905,6 +926,24 @@ body {
         font-size: 13px;
         padding: 4px 8px;
         min-width: 70px;
+    }
+    
+    /* Header auth: stacked, compact */
+    .header-auth-indicator {
+        right: 8px;
+        gap: 4px;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+    
+    .header-auth-email {
+        max-width: 85px;
+        font-size: 10px;
+    }
+    
+    .header-logout-btn {
+        padding: 4px 8px;
+        font-size: 10px;
     }
     
     .main {
