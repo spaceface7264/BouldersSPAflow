@@ -4505,6 +4505,9 @@ function populateAddonsModal() {
       const hasDescription = (addon.description || '').trim().length > 0;
       descToggle.style.display = hasDescription ? '' : 'none';
       if (hasDescription) {
+        const descId = 'addon-desc-' + (addon.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggle.setAttribute('aria-controls', descId);
         descToggle.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
         descToggle.title = t('addons.modal.showDescription') || 'Show full description';
       }
@@ -4866,6 +4869,9 @@ function populateBoostModal() {
       const descText = (product.externalDescription || product.description || '').trim();
       descToggleBoost.style.display = descText.length > 0 ? '' : 'none';
       if (descText.length > 0) {
+        const descId = 'addon-desc-boost-' + (product.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggleBoost.setAttribute('aria-controls', descId);
         descToggleBoost.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
         descToggleBoost.title = t('addons.modal.showDescription') || 'Show full description';
       }
@@ -9755,6 +9761,26 @@ function renderAddons() {
         descriptionEl.textContent = '';
       }
     }
+    const descToggleAddonsStep = card.querySelector('.addon-card-description-toggle');
+    if (descToggleAddonsStep) {
+      const hasDesc = (addon.description || '').trim().length > 0;
+      descToggleAddonsStep.style.display = hasDesc ? '' : 'none';
+      if (hasDesc) {
+        const descId = 'addon-desc-' + (addon.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggleAddonsStep.setAttribute('aria-controls', descId);
+        descToggleAddonsStep.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
+        descToggleAddonsStep.title = t('addons.modal.showDescription') || 'Show full description';
+      }
+      descToggleAddonsStep.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const expanded = card.classList.toggle('expanded');
+        descToggleAddonsStep.setAttribute('aria-expanded', String(expanded));
+        descToggleAddonsStep.setAttribute('aria-label', expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description'));
+        descToggleAddonsStep.title = expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description');
+      });
+    }
     if (featuresEl && Array.isArray(addon.features)) {
       featuresEl.innerHTML = '';
       addon.features.forEach((feature) => {
@@ -9778,6 +9804,8 @@ function renderAddons() {
     (mainRow || card).addEventListener('click', (e) => {
       if (buttonEl && (e.target === buttonEl || buttonEl.contains(e.target))) return;
       if (thumbWrapper && (e.target === thumbWrapper || thumbWrapper.contains(e.target))) return;
+      const descToggleEl = card.querySelector('.addon-card-description-toggle');
+      if (descToggleEl && (e.target === descToggleEl || descToggleEl.contains(e.target))) return;
       centerPlanCard(card);
     });
 

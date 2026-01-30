@@ -137,7 +137,7 @@
   /* Addon card – list layout only (main row + expandable details) */
   .addon-card .addon-card-main {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 16px;
     width: 100%;
     min-width: 0;
