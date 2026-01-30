@@ -8750,55 +8750,8 @@ async function handleSaveAccount() {
         showToast('You are already logged in with this email.', 'error');
         return;
       }
-      
-      // Check if we've already created an account with this email in this session
-      if (state.createdEmails.has(email)) {
-        showSaveAccountMessage('An account with this email address has already been created in this session. Please log in instead.', 'error');
-        showToast('Account already created. Please log in.', 'error');
-        switchAuthMode('login', email);
-        return;
-      }
-      
-      // Check localStorage for previously created emails
-      try {
-        const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
-        if (storedEmails.includes(email)) {
-          showSaveAccountMessage('An account with this email address already exists. Please log in instead.', 'error');
-          showToast('Account already exists. Please log in.', 'error');
-          switchAuthMode('login', email);
-          return;
-        }
-      } catch (e) {
-        console.warn('[Save Account] Could not check localStorage:', e);
-      }
-      
-      // If the backend allows duplicate creation when password matches, prevent it by probing login.
-      const passwordForExistingCheck = customerData.password || document.getElementById('password')?.value;
-      if (passwordForExistingCheck) {
-        try {
-          await authAPI.login(email, passwordForExistingCheck, { saveTokens: false });
-          showSaveAccountMessage('An account with this email address already exists. Please log in instead.', 'error');
-          showToast('Account already exists. Please log in.', 'error');
-          switchAuthMode('login', email);
-          return;
-        } catch (probeError) {
-          const probeMessage = probeError?.message || '';
-          const isInvalidCredentials =
-            probeMessage.includes('Login failed: 401') ||
-            probeMessage.includes('INVALID_CREDENTIALS');
-          if (!isInvalidCredentials) {
-            throw probeError;
-          }
-        }
-      }
 
-      // Note: We don't check via login for non-matching passwords because the API returns INVALID_CREDENTIALS
-      // for both "account doesn't exist" and "wrong password" for security reasons.
-      // We rely on:
-      // 1. Session tracking (state.createdEmails)
-      // 2. localStorage tracking
-      // 3. API duplicate detection (which will catch it during account creation)
-      console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API.');
+      console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
     
     console.log('[Save Account] Creating customer account...');
@@ -8988,22 +8941,31 @@ async function handleSaveAccount() {
       showToast('Please enter a valid email address.', 'error');
       highlightFieldError('email', true);
     } else if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
-      const email = document.getElementById('email')?.value?.trim() || '';
-      const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
-      showSaveAccountMessage(duplicateMessage, 'error');
-      showToast('Account already exists. Please log in.', 'error');
-      
-      // Highlight the email field
-      const emailInput = document.getElementById('email');
-      if (emailInput) {
-        emailInput.closest('.form-group')?.classList.add('error');
-      }
-      
-      // Switch to login view and populate email field
-      if (email) {
-        switchAuthMode('login', email);
+      const emailVal = document.getElementById('email')?.value?.trim()?.toLowerCase() || '';
+      const password = customerData?.password || document.getElementById('password')?.value;
+      if (emailVal && password) {
+        try {
+          await authAPI.login(emailVal, password, { saveTokens: true });
+          await syncAuthenticatedCustomerState();
+          showSaveAccountMessage('Account saved successfully! You are now logged in.', 'success');
+          showToast('Account saved successfully!', 'success');
+          refreshLoginUI();
+        } catch (loginErr) {
+          const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+          showSaveAccountMessage(duplicateMessage, 'error');
+          showToast('Account already exists. Please log in.', 'error');
+          const emailInput = document.getElementById('email');
+          if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+          switchAuthMode('login', emailVal);
+        }
       } else {
-        switchAuthMode('login');
+        const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+        showSaveAccountMessage(duplicateMessage, 'error');
+        showToast('Account already exists. Please log in.', 'error');
+        const emailInput = document.getElementById('email');
+        if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+        if (emailVal) switchAuthMode('login', emailVal);
+        else switchAuthMode('login');
       }
     } else {
       // Extract and highlight error fields
@@ -14121,29 +14083,7 @@ async function handleCheckout() {
             }
             // Skip account creation and proceed
           } else {
-            // Check if email was already used to create an account
-            if (state.createdEmails.has(email)) {
-              throw new Error('An account with this email address has already been created. Please log in instead.');
-            }
-            
-            // Check localStorage
-            try {
-              const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
-              if (storedEmails.includes(email)) {
-                throw new Error('An account with this email address already exists. Please log in instead.');
-              }
-            } catch (e) {
-              console.warn('[checkout] Could not check localStorage:', e);
-            }
-            
-            // Note: We don't check via login because the API returns INVALID_CREDENTIALS 
-            // for both "account doesn't exist" and "wrong password" for security reasons.
-            // We rely on:
-            // 1. Session tracking (state.createdEmails)
-            // 2. localStorage tracking
-            // 3. API duplicate detection (which will catch it during account creation)
-            console.log('[checkout] Proceeding with account creation. Duplicate detection will be handled by API.');
-            
+            console.log('[checkout] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
             customer = await authAPI.createCustomer(customerData);
             
             // Track this email as used
@@ -14328,43 +14268,69 @@ async function handleCheckout() {
         }
       } catch (error) {
         console.error('[checkout] Customer creation failed:', error);
-        
-        // Handle duplicate email error specifically
+        let duplicateResolvedWithLogin = false;
+
+        // Handle duplicate email error: try login with provided credentials and continue on success
         if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
-          const email = payload.customer?.email?.trim() || '';
-          const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
-          showToast(duplicateMessage, 'error');
-          
-          // Highlight the email field
-          const emailInput = document.getElementById('email');
-          if (emailInput) {
-            emailInput.closest('.form-group')?.classList.add('error');
-          }
-          
-          // Switch to login view and populate email field
-          if (email) {
-            switchAuthMode('login', email);
+          const emailVal = (payload.customer?.email?.trim() || '').toLowerCase();
+          const password = payload.customer?.password || customerData?.password;
+          if (emailVal && password) {
+            try {
+              await authAPI.login(emailVal, password, { saveTokens: true });
+              await syncAuthenticatedCustomerState();
+              customerId = state.customerId || getTokenMetadata()?.username || getTokenMetadata()?.userName;
+              if (customerId) state.customerId = String(customerId);
+              try {
+                sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
+                  id: customerId,
+                  firstName: payload.customer?.firstName,
+                  lastName: payload.customer?.lastName,
+                  email: payload.customer?.email,
+                  primaryGym: payload.customer?.primaryGym,
+                }));
+              } catch (e) {
+                console.warn('[checkout] Could not save customer to sessionStorage:', e);
+              }
+              await ensureOrderCreated('profile-create');
+              await ensureSubscriptionAttached('profile-create');
+              duplicateResolvedWithLogin = true;
+            } catch (loginErr) {
+              const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+              showToast(duplicateMessage, 'error');
+              const emailInput = document.getElementById('email');
+              if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+              if (emailVal) switchAuthMode('login', emailVal);
+              else switchAuthMode('login');
+              setCheckoutLoadingState(false);
+              state.checkoutInProgress = false;
+              return;
+            }
           } else {
-            switchAuthMode('login');
+            const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+            showToast(duplicateMessage, 'error');
+            const emailInput = document.getElementById('email');
+            if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+            if (emailVal) switchAuthMode('login', emailVal);
+            else switchAuthMode('login');
+            setCheckoutLoadingState(false);
+            state.checkoutInProgress = false;
+            return;
           }
-          
+        }
+
+        if (!duplicateResolvedWithLogin) {
+          // Extract and highlight error fields
+          const errorFields = extractErrorFields(error);
+          errorFields.forEach(({ fieldId }) => {
+            if (fieldId) {
+              highlightFieldError(fieldId, false);
+            }
+          });
+          showToast(getErrorMessage(error, 'Customer creation'), 'error');
           setCheckoutLoadingState(false);
           state.checkoutInProgress = false;
           return;
         }
-        
-        // Extract and highlight error fields
-        const errorFields = extractErrorFields(error);
-        errorFields.forEach(({ fieldId }) => {
-          if (fieldId) {
-            highlightFieldError(fieldId, false);
-          }
-        });
-        
-        showToast(getErrorMessage(error, 'Customer creation'), 'error');
-        setCheckoutLoadingState(false);
-        state.checkoutInProgress = false;
-        return;
       }
     } else {
       // User is logged in, get customer ID from token or state
