@@ -6054,66 +6054,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
   const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
   
-  // Check for signature case test URL
-  const signatureCaseTest = urlParams.get('test') === 'signature';
-  const signatureCaseId = urlParams.get('signatureCaseId');
-  const signatureCustomerId = urlParams.get('customerId');
-  
-  // Test mode for signature case UI (for member 71153 or any customer)
-  const testSignatureCaseUI = urlParams.get('testSignatureCase') === 'true';
-  const testMemberNumber = urlParams.get('memberNumber');
-  const testSignatureStatus = urlParams.get('signatureStatus') || 'pending'; // 'pending' or 'signed'
-  
   if (testSuccess) {
     console.log('[Test Mode] Test success page mode enabled for product type:', testProductType);
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
-  }
-  
-  // Test mode for signature case UI
-  if (testSignatureCaseUI) {
-    console.log('[Test Mode] Signature case UI test mode enabled');
-    console.log('[Test Mode] Member number:', testMemberNumber);
-    console.log('[Test Mode] Signature status:', testSignatureStatus);
-    state.testMode = true;
-    state.testProductType = testProductType || 'membership';
-    
-    // Set customer ID if member number provided
-    if (testMemberNumber) {
-      state.customerId = testMemberNumber;
-    }
-    
-    // Mock signature case in state for UI testing
-    state.signatureCase = {
-      id: 'test-123',
-      documentUrl: 'https://app.assently.com/sign/test-document',
-      signed: testSignatureStatus === 'signed',
-      subscriptionBookingId: 'test-booking-123',
-      subscriptionId: 'test-subscription-123',
-    };
-    
-    // Set up mock order data for success page
-    state.order = {
-      number: 'TEST-12345',
-      date: new Date(),
-      items: [
-        { name: state.testProductType === 'membership' ? 'Membership' : state.testProductType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
-      ],
-      total: 469,
-      memberName: 'Test User',
-      membershipNumber: testMemberNumber || 'TEST-12345',
-      membershipType: state.testProductType === 'membership' ? 'Medlemskab' : state.testProductType === '15daypass' ? '15 Day Pass' : 'Punch Card',
-      primaryGym: 'Boulders Aarhus Nord',
-      membershipPrice: 469,
-    };
-    state.orderId = 'TEST-12345';
-    state.paymentConfirmed = true;
-    state.paymentFailed = false;
-    state.paymentPending = false;
-    
-    console.log('[Test Mode] Mock signature case set:', state.signatureCase);
-    console.log('[Test Mode] Mock order set:', state.order);
   }
   
   if (testPaymentFailed) {
@@ -6188,7 +6133,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // If in test mode, navigate directly to success page
-  if (testSuccess || testSignatureCaseUI) {
+  if (testSuccess) {
     console.log('[Test Mode] Navigating to success page for testing');
     state.currentStep = TOTAL_STEPS;
     
@@ -6331,177 +6276,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Always load order first; error params are handled after we verify payment state
     loadOrderForConfirmation(parseInt(orderId, 10));
-  }
-  
-  // Handle signature case completion redirect
-  // Usage: ?signature=complete&orderId=123&customerId=456
-  const signatureComplete = urlParams.get('signature') === 'complete';
-  const signatureOrderId = urlParams.get('orderId');
-  const signatureCustomerIdParam = urlParams.get('customerId');
-  
-  if (signatureComplete && signatureOrderId && signatureCustomerIdParam) {
-    console.log('[SignatureCase Return] Detected signature completion return');
-    console.log('[SignatureCase Return] Order ID:', signatureOrderId);
-    console.log('[SignatureCase Return] Customer ID:', signatureCustomerIdParam);
-    
-    // Restore checkout state from sessionStorage
-    try {
-      const signatureState = sessionStorage.getItem('boulders_checkout_signature');
-      if (signatureState) {
-        const parsed = JSON.parse(signatureState);
-        state.orderId = parsed.orderId || parseInt(signatureOrderId, 10);
-        state.customerId = parsed.customerId || signatureCustomerIdParam;
-        state.signatureCase = {
-          ...state.signatureCase,
-          id: parsed.signatureCaseId || state.signatureCase?.id,
-        };
-        console.log('[SignatureCase Return] Restored state from sessionStorage');
-      }
-    } catch (e) {
-      console.warn('[SignatureCase Return] Could not restore state from sessionStorage:', e);
-      state.orderId = parseInt(signatureOrderId, 10);
-      state.customerId = signatureCustomerIdParam;
-    }
-    
-    // Verify signature case is signed
-    (async () => {
-      try {
-        if (state.signatureCase && state.signatureCase.id) {
-          console.log('[SignatureCase Return] Verifying signature case status...');
-          const signatureCase = await signatureCaseAPI.getSignatureCase(
-            parseInt(state.customerId, 10),
-            state.signatureCase.id
-          );
-          
-          if (signatureCase && signatureCase.signed) {
-            console.log('[SignatureCase Return] ✅ Signature case is signed, continuing checkout...');
-            state.signatureCase.signed = true;
-            
-            // Clear signature state from sessionStorage
-            try {
-              sessionStorage.removeItem('boulders_checkout_signature');
-            } catch (e) {
-              console.warn('[SignatureCase Return] Could not clear signature state:', e);
-            }
-            
-            // Continue with checkout flow - trigger payment link generation
-            // We need to be on step 4 (payment step) to continue
-            state.currentStep = 4;
-            showStep(4);
-            updateStepIndicator();
-            updateNavigationButtons();
-            updateMainSubtitle();
-            
-            // Trigger checkout to continue with payment link generation
-            // The checkout button should be visible and ready
-            console.log('[SignatureCase Return] Ready to continue checkout - user can click checkout button');
-            showToast('Contract signed successfully! You can now proceed with payment.', 'success');
-          } else {
-            console.warn('[SignatureCase Return] ⚠️ Signature case not yet signed');
-            showToast('Signature is still pending. Please wait a moment and try again.', 'warning');
-          }
-        } else {
-          console.warn('[SignatureCase Return] ⚠️ Signature case ID not found in state');
-          showToast('Could not verify signature status. Please try again.', 'error');
-        }
-      } catch (error) {
-        console.error('[SignatureCase Return] ❌ Failed to verify signature:', error);
-        showToast('Could not verify signature status. Please contact support.', 'error');
-      }
-    })();
-  }
-  
-  // Handle signature case test URL
-  // Usage: ?test=signature&customerId=123&signatureCaseId=456
-  // Or: ?test=signature&customerId=123 (to list all signature cases)
-  if (signatureCaseTest) {
-    console.log('[SignatureCase Test] Test mode detected');
-    console.log('[SignatureCase Test] Customer ID:', signatureCustomerId);
-    console.log('[SignatureCase Test] Signature Case ID:', signatureCaseId);
-    
-    // Ensure user is authenticated
-    if (!isUserAuthenticated()) {
-      console.error('[SignatureCase Test] User must be authenticated to test signature cases');
-      alert('Please log in first to test signature cases. Use the login form on step 3.');
-      return;
-    }
-    
-    // Run test asynchronously
-    (async () => {
-      try {
-        if (signatureCaseId && signatureCustomerId) {
-          // Test: Get specific signature case
-          console.log('[SignatureCase Test] Testing getSignatureCase...');
-          const signatureCase = await signatureCaseAPI.getSignatureCase(
-            parseInt(signatureCustomerId, 10),
-            parseInt(signatureCaseId, 10)
-          );
-          console.log('[SignatureCase Test] ✅ Signature case retrieved:', signatureCase);
-          alert(`Signature Case Test: Success!\n\nID: ${signatureCase.id}\nSigned: ${signatureCase.signed}\nDocument URL: ${signatureCase.documentUrl || 'N/A'}\n\nCheck console for full details.`);
-        } else if (signatureCustomerId) {
-          // Test: List all signature cases
-          console.log('[SignatureCase Test] Testing listSignatureCases...');
-          const signatureCases = await signatureCaseAPI.listSignatureCases(
-            parseInt(signatureCustomerId, 10)
-          );
-          console.log('[SignatureCase Test] ✅ Signature cases retrieved:', signatureCases);
-          alert(`Signature Case Test: Success!\n\nFound ${signatureCases.length} signature case(s).\n\nCheck console for full details.`);
-        } else {
-          console.error('[SignatureCase Test] Missing required parameters');
-          alert('Signature Case Test: Missing parameters!\n\nUsage:\n- ?test=signature&customerId=123&signatureCaseId=456 (get specific)\n- ?test=signature&customerId=123 (list all)');
-        }
-      } catch (error) {
-        console.error('[SignatureCase Test] ❌ Test failed:', error);
-        alert(`Signature Case Test: Failed!\n\nError: ${error.message}\n\nCheck console for details.`);
-      }
-    })();
-  }
-  
-  
-  // Handle signature case test URL
-  // Usage: ?test=signature&customerId=123&signatureCaseId=456
-  // Or: ?test=signature&customerId=123 (to list all signature cases)
-  if (signatureCaseTest) {
-    console.log('[SignatureCase Test] Test mode detected');
-    console.log('[SignatureCase Test] Customer ID:', signatureCustomerId);
-    console.log('[SignatureCase Test] Signature Case ID:', signatureCaseId);
-    
-    // Ensure user is authenticated
-    if (!isUserAuthenticated()) {
-      console.error('[SignatureCase Test] User must be authenticated to test signature cases');
-      alert('Please log in first to test signature cases. Use the login form on step 3.');
-      return;
-    }
-    
-    // Run test asynchronously
-    (async () => {
-      try {
-        if (signatureCaseId && signatureCustomerId) {
-          // Test: Get specific signature case
-          console.log('[SignatureCase Test] Testing getSignatureCase...');
-          const signatureCase = await signatureCaseAPI.getSignatureCase(
-            parseInt(signatureCustomerId, 10),
-            parseInt(signatureCaseId, 10)
-          );
-          console.log('[SignatureCase Test] ✅ Signature case retrieved:', signatureCase);
-          alert(`Signature Case Test: Success!\n\nID: ${signatureCase.id}\nSigned: ${signatureCase.signed}\nDocument URL: ${signatureCase.documentUrl || 'N/A'}\n\nCheck console for full details.`);
-        } else if (signatureCustomerId) {
-          // Test: List all signature cases
-          console.log('[SignatureCase Test] Testing listSignatureCases...');
-          const signatureCases = await signatureCaseAPI.listSignatureCases(
-            parseInt(signatureCustomerId, 10)
-          );
-          console.log('[SignatureCase Test] ✅ Signature cases retrieved:', signatureCases);
-          alert(`Signature Case Test: Success!\n\nFound ${signatureCases.length} signature case(s).\n\nCheck console for full details.`);
-        } else {
-          console.error('[SignatureCase Test] Missing required parameters');
-          alert('Signature Case Test: Missing parameters!\n\nUsage:\n- ?test=signature&customerId=123&signatureCaseId=456 (get specific)\n- ?test=signature&customerId=123 (list all)');
-        }
-      } catch (error) {
-        console.error('[SignatureCase Test] ❌ Test failed:', error);
-        alert(`Signature Case Test: Failed!\n\nError: ${error.message}\n\nCheck console for details.`);
-      }
-    })();
   }
   
   // Step 6: Validate tokens on app load
@@ -13655,41 +13429,6 @@ async function ensureSubscriptionAttached(context = 'auto') {
       subscriptionItemId: subscriptionItem?.id,
     });
     
-    // Check if signature case is required (only during checkout flow, not auto-ensure)
-    if (context === 'checkout-flow' && subscriptionItem) {
-      console.log('[ensureSubscriptionAttached] ===== CHECKING FOR SIGNATURE CASE REQUIREMENT =====');
-      console.log('[ensureSubscriptionAttached] Context:', context);
-      console.log('[ensureSubscriptionAttached] Subscription item:', subscriptionItem);
-      console.log('[ensureSubscriptionAttached] Subscription item ID:', subscriptionItem?.id);
-      console.log('[ensureSubscriptionAttached] Customer ID:', state.customerId);
-      
-      try {
-        const signatureCase = await createSignatureCaseIfRequired(orderId, subscriptionItem);
-        if (signatureCase && signatureCase.documentUrl) {
-          // Store signature case info for redirect handling
-          console.log('[ensureSubscriptionAttached] ✅ Signature case required - will redirect to Assently');
-          console.log('[ensureSubscriptionAttached] Signature case stored in state:', state.signatureCase);
-          // Don't redirect here - let checkout flow handle it
-          // The signature case is stored in state.signatureCase
-        } else if (signatureCase === null) {
-          console.log('[ensureSubscriptionAttached] ℹ️ Signature case not required (subscription does not need signing)');
-        } else {
-          console.warn('[ensureSubscriptionAttached] ⚠️ Signature case created but no document URL:', signatureCase);
-        }
-      } catch (error) {
-        console.error('[ensureSubscriptionAttached] ❌ Signature case creation failed:', error);
-        console.warn('[ensureSubscriptionAttached] Continuing checkout despite signature case error');
-        // Continue checkout even if signature case creation fails
-      }
-    } else {
-      if (context !== 'checkout-flow') {
-        console.log(`[ensureSubscriptionAttached] Skipping signature case check - context is '${context}', not 'checkout-flow'`);
-      }
-      if (!subscriptionItem) {
-        console.warn('[ensureSubscriptionAttached] Skipping signature case check - no subscription item');
-      }
-    }
-    
     updatePaymentOverview();
     console.log(`[checkout] Order updated with subscriptionItems for payment overview`);
     
@@ -13705,85 +13444,6 @@ async function ensureSubscriptionAttached(context = 'auto') {
     throw error;
   } finally {
     subscriptionAttachPromise = null;
-  }
-}
-
-// Create signature case for subscription if required
-// Returns signature case object if created, null if not required, throws error on failure
-async function createSignatureCaseIfRequired(orderId, subscriptionItem) {
-  console.log('[SignatureCase] ===== CREATE SIGNATURE CASE IF REQUIRED =====');
-  console.log('[SignatureCase] Order ID:', orderId);
-  console.log('[SignatureCase] Subscription item:', subscriptionItem);
-  console.log('[SignatureCase] Subscription item ID:', subscriptionItem?.id);
-  console.log('[SignatureCase] Customer ID:', state.customerId);
-  
-  try {
-    if (!state.customerId) {
-      console.warn('[SignatureCase] ❌ Cannot create signature case - customer ID missing');
-      return null;
-    }
-
-    if (!subscriptionItem) {
-      console.warn('[SignatureCase] ❌ Cannot create signature case - subscription item missing');
-      return null;
-    }
-    
-    // Try multiple ways to get subscription booking ID
-    const subscriptionBookingId = subscriptionItem.id || 
-                                   subscriptionItem.subscriptionBookingId || 
-                                   subscriptionItem.subscriptionBooking?.id ||
-                                   subscriptionItem.bookingId;
-    
-    if (!subscriptionBookingId) {
-      console.warn('[SignatureCase] ❌ Cannot create signature case - subscription booking ID missing');
-      console.warn('[SignatureCase] Subscription item keys:', Object.keys(subscriptionItem));
-      return null;
-    }
-    
-    console.log('[SignatureCase] ✅ Using subscription booking ID:', subscriptionBookingId);
-
-    // Build redirect URL for after signature completion
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const baseUrl = isLocal
-      ? 'https://join.boulders.dk'
-      : window.location.origin.replace('http://', 'https://');
-    const redirectUrl = `${baseUrl}${window.location.pathname}?signature=complete&orderId=${orderId}&customerId=${state.customerId}`;
-
-    console.log('[SignatureCase] Creating signature case for subscription booking:', subscriptionItem.id);
-    console.log('[SignatureCase] Redirect URL:', redirectUrl);
-
-    // Create signature case - API returns null (204) if not required
-    console.log('[SignatureCase] Calling API to create signature case...');
-    const signatureCase = await signatureCaseAPI.createSignatureCase(
-      parseInt(state.customerId, 10),
-      {
-        subscriptionBooking: subscriptionBookingId,
-        redirectUrl: redirectUrl,
-        subscriptionSigner: 'USER_AND_PAYER', // Default - both user and payer must sign
-      }
-    );
-
-    if (!signatureCase) {
-      console.log('[SignatureCase] Subscription does not require a signature case (204 response)');
-      return null;
-    }
-
-    // Store signature case in state
-    state.signatureCase = {
-      id: signatureCase.id,
-      documentUrl: signatureCase.documentUrl,
-      signed: signatureCase.signed || false,
-      subscriptionBookingId: subscriptionBookingId,
-      subscriptionId: signatureCase.subscription || null,
-    };
-
-    console.log('[SignatureCase] ✅ Signature case created:', state.signatureCase);
-    return signatureCase;
-  } catch (error) {
-    console.error('[SignatureCase] Failed to create signature case:', error);
-    // Don't throw - allow checkout to continue even if signature case creation fails
-    // The backend will handle this case
-    return null;
   }
 }
 
@@ -14848,37 +14508,6 @@ async function handleCheckout() {
               console.error('[checkout] ❌ BLOCKING PAYMENT LINK GENERATION - Addons not in order');
               throw new Error(errorMessage);
             }
-          }
-          
-          // Check if signature case is required before generating payment link
-          // If signature case exists and has document URL, redirect to Assently first
-          console.log('[checkout] ===== CHECKING SIGNATURE CASE BEFORE PAYMENT LINK =====');
-          console.log('[checkout] Signature case state:', state.signatureCase);
-          console.log('[checkout] Has signature case:', !!state.signatureCase);
-          console.log('[checkout] Has document URL:', !!state.signatureCase?.documentUrl);
-          console.log('[checkout] Is signed:', state.signatureCase?.signed);
-          
-          if (state.signatureCase && state.signatureCase.documentUrl && !state.signatureCase.signed) {
-            console.log('[checkout] ===== SIGNATURE CASE REQUIRED =====');
-            console.log('[checkout] Signature case found, redirecting to Assently for signing...');
-            console.log('[checkout] Document URL:', state.signatureCase.documentUrl);
-            console.log('[checkout] Signature Case ID:', state.signatureCase.id);
-            
-            // Store checkout state in sessionStorage for return
-            try {
-              sessionStorage.setItem('boulders_checkout_signature', JSON.stringify({
-                orderId: state.orderId,
-                customerId: state.customerId,
-                signatureCaseId: state.signatureCase.id,
-                returnToCheckout: true,
-              }));
-            } catch (e) {
-              console.warn('[checkout] Could not save signature state to sessionStorage:', e);
-            }
-            
-            // Redirect to Assently document URL
-            window.location.href = state.signatureCase.documentUrl;
-            return; // Stop checkout flow - will resume after signature completion
           }
           
           // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied AND addons are added
@@ -17741,9 +17370,6 @@ function renderConfirmationView() {
     console.warn('[Confirmation] Unknown product type or section not found:', productType);
   }
   
-  // Display signature case information if contract was signed
-  displaySignatureCaseInfo();
-
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
   // Use API data only - no fallbacks to state.order or calculated values
@@ -17881,171 +17507,6 @@ function renderConfirmationView() {
     }
   }
   
-// Display signature case information on confirmation page
-async function displaySignatureCaseInfo() {
-  const signatureCaseInfo = document.getElementById('signatureCaseInfo');
-  const signatureCaseStatus = document.getElementById('signatureCaseStatus');
-  const viewContractLink = document.getElementById('viewContractLink');
-  
-  if (!signatureCaseInfo) {
-    return; // Element doesn't exist, skip
-  }
-  
-  console.log('[Confirmation] ===== CHECKING FOR SIGNATURE CASE =====');
-  console.log('[Confirmation] Signature case in state:', state.signatureCase);
-  console.log('[Confirmation] Customer ID:', state.customerId);
-  console.log('[Confirmation] Full order:', state.fullOrder);
-  console.log('[Confirmation] Test mode:', state.testMode);
-  
-  // Try to find signature case - check state first, then try to fetch from API
-  let signatureCaseToDisplay = null;
-  let signatureCaseId = null;
-  
-  // In test mode, use state directly without API calls
-  if (state.testMode && state.signatureCase && state.signatureCase.id) {
-    console.log('[Confirmation] Test mode: Using mock signature case from state');
-    signatureCaseToDisplay = state.signatureCase;
-  }
-  // Check state first (non-test mode)
-  else if (state.signatureCase && state.signatureCase.id) {
-    signatureCaseId = state.signatureCase.id;
-    console.log('[Confirmation] Found signature case ID in state:', signatureCaseId);
-  }
-  
-  // If we have customer ID, try to list signature cases to find one for this order
-  // Skip API calls in test mode
-  if (!signatureCaseToDisplay && !signatureCaseId && state.customerId && state.orderId && !state.testMode) {
-    try {
-      console.log('[Confirmation] Listing signature cases to find one for this order...');
-      const signatureCases = await signatureCaseAPI.listSignatureCases(parseInt(state.customerId, 10));
-      console.log('[Confirmation] Found signature cases:', signatureCases);
-      
-      // Find signature case for this order
-      const orderSignatureCase = signatureCases.find(sc => 
-        sc.order?.id === state.orderId || 
-        sc.order?.orderId === state.orderId ||
-        String(sc.order?.id) === String(state.orderId)
-      );
-      
-      if (orderSignatureCase) {
-        signatureCaseId = orderSignatureCase.id;
-        signatureCaseToDisplay = orderSignatureCase;
-        console.log('[Confirmation] Found signature case for this order:', orderSignatureCase);
-      }
-    } catch (error) {
-      console.warn('[Confirmation] Could not list signature cases:', error);
-    }
-  }
-  
-  // Fetch signature case details if we have an ID (skip in test mode)
-  if (signatureCaseId && !signatureCaseToDisplay && state.customerId && !state.testMode) {
-    try {
-      console.log('[Confirmation] Fetching signature case details...');
-      signatureCaseToDisplay = await signatureCaseAPI.getSignatureCase(
-        parseInt(state.customerId, 10),
-        signatureCaseId
-      );
-      console.log('[Confirmation] Signature case retrieved:', signatureCaseToDisplay);
-    } catch (error) {
-      console.warn('[Confirmation] Could not fetch signature case:', error);
-    }
-  }
-  
-  // Display signature case info if we have it
-  if (signatureCaseToDisplay) {
-    console.log('[Confirmation] ✅ Displaying signature case info');
-    signatureCaseInfo.style.display = 'block';
-    
-          const signContractBtn = document.getElementById('signContractBtn');
-          
-          if (signatureCaseToDisplay.signed) {
-            if (signatureCaseStatus) {
-              signatureCaseStatus.textContent = 'Signed';
-              signatureCaseStatus.style.color = '#22d3ee';
-            }
-            
-            // Show link to view contract if documentUrl is available
-            if (signatureCaseToDisplay.documentUrl && viewContractLink) {
-              viewContractLink.href = signatureCaseToDisplay.documentUrl;
-              viewContractLink.style.display = 'inline-flex';
-              viewContractLink.textContent = 'View Contract';
-            }
-            
-            // Hide sign button
-            if (signContractBtn) {
-              signContractBtn.style.display = 'none';
-            }
-          } else {
-            // Contract is pending - show sign button
-            if (signatureCaseStatus) {
-              signatureCaseStatus.textContent = 'Pending';
-              signatureCaseStatus.style.color = '#fbbf24';
-            }
-            
-            // Hide view link
-            if (viewContractLink) {
-              viewContractLink.style.display = 'none';
-            }
-            
-            // Show sign button if documentUrl is available
-            if (signatureCaseToDisplay.documentUrl && signContractBtn) {
-              signContractBtn.style.display = 'inline-flex';
-              signContractBtn.onclick = (e) => {
-                e.preventDefault();
-                console.log('[Confirmation] Redirecting to contract signing:', signatureCaseToDisplay.documentUrl);
-                window.location.href = signatureCaseToDisplay.documentUrl;
-              };
-            } else if (signContractBtn) {
-              signContractBtn.style.display = 'none';
-            }
-          }
-  } else if (state.signatureCase) {
-    // Fallback: Use state data if API fetch failed
-    console.log('[Confirmation] Using signature case from state (API fetch failed)');
-    signatureCaseInfo.style.display = 'block';
-    
-    const signContractBtn = document.getElementById('signContractBtn');
-    
-    if (state.signatureCase.signed) {
-      if (signatureCaseStatus) {
-        signatureCaseStatus.textContent = 'Signed';
-        signatureCaseStatus.style.color = '#22d3ee';
-      }
-      if (state.signatureCase.documentUrl && viewContractLink) {
-        viewContractLink.href = state.signatureCase.documentUrl;
-        viewContractLink.style.display = 'inline-flex';
-        viewContractLink.textContent = 'View Contract';
-      }
-      if (signContractBtn) {
-        signContractBtn.style.display = 'none';
-      }
-    } else {
-      // Pending - show sign button
-      if (signatureCaseStatus) {
-        signatureCaseStatus.textContent = 'Pending';
-        signatureCaseStatus.style.color = '#fbbf24';
-      }
-      if (viewContractLink) {
-        viewContractLink.style.display = 'none';
-      }
-      if (state.signatureCase.documentUrl && signContractBtn) {
-        signContractBtn.style.display = 'inline-flex';
-        signContractBtn.onclick = (e) => {
-          e.preventDefault();
-          console.log('[Confirmation] Redirecting to contract signing:', state.signatureCase.documentUrl);
-          window.location.href = state.signatureCase.documentUrl;
-        };
-      } else if (signContractBtn) {
-        signContractBtn.style.display = 'none';
-      }
-    }
-  } else {
-    // No signature case - hide the section
-    console.log('[Confirmation] No signature case found - hiding section');
-    signatureCaseInfo.style.display = 'none';
-  }
-}
-
 // Helper function to create purchase item element if template not available
 function createPurchaseItemElement() {
   const item = document.createElement('div');
