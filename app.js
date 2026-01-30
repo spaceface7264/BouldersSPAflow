@@ -4165,8 +4165,7 @@ function isMembershipSelected() {
 
 // Interstitial Add-ons Modal (shown after selecting membership on step 2)
 let addonsModal = null;
-let addonsModalImageCol = null;
-let addonsModalImageEl = null;
+let addonLightbox = null; // full-size image overlay (z-index above modal)
 function defaultAddonsImage() {
   // Simple dark gradient SVG placeholder with label
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
@@ -4283,8 +4282,46 @@ function ensureAddonsModal() {
   
   document.body.appendChild(overlay);
 
+  // Single lightbox for addon images (appended to body, above modal)
+  if (!addonLightbox) {
+    const lb = document.createElement('div');
+    lb.className = 'addon-lightbox';
+    lb.setAttribute('role', 'dialog');
+    lb.setAttribute('aria-modal', 'true');
+    lb.setAttribute('aria-label', t('addons.modal.close') || 'Close image');
+    lb.innerHTML = '<button type="button" class="addon-lightbox-close" aria-label="' + (t('addons.modal.close') || 'Close') + '">×</button><img class="addon-lightbox-img" alt="" />';
+    const lbImg = lb.querySelector('.addon-lightbox-img');
+    const lbClose = lb.querySelector('.addon-lightbox-close');
+    lbClose.addEventListener('click', (e) => { e.stopPropagation(); closeAddonLightbox(); });
+    lb.addEventListener('click', () => closeAddonLightbox());
+    lbImg.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && addonLightbox && addonLightbox.classList.contains('addon-lightbox--active')) closeAddonLightbox(); });
+    document.body.appendChild(lb);
+    addonLightbox = lb;
+  }
+
   addonsModal = overlay;
   return addonsModal;
+}
+
+function openAddonLightbox(imageSrc, focusReturnEl) {
+  if (!addonLightbox) ensureAddonsModal();
+  const img = addonLightbox.querySelector('.addon-lightbox-img');
+  const closeBtn = addonLightbox.querySelector('.addon-lightbox-close');
+  if (img) img.src = imageSrc || '';
+  addonLightbox._focusReturn = focusReturnEl || null;
+  addonLightbox.classList.add('addon-lightbox--active');
+  addonLightbox.style.display = 'flex';
+  if (closeBtn) closeBtn.focus();
+}
+
+function closeAddonLightbox() {
+  if (!addonLightbox) return;
+  addonLightbox.classList.remove('addon-lightbox--active');
+  addonLightbox.style.display = 'none';
+  const ret = addonLightbox._focusReturn;
+  if (ret && typeof ret.focus === 'function') ret.focus();
+  addonLightbox._focusReturn = null;
 }
 
 function populateAddonsModal() {
@@ -4334,11 +4371,12 @@ function populateAddonsModal() {
     });
     return;
   }
-  // Use existing add-on template for consistency
-  addons.forEach((addon) => {
+  // Use existing add-on template for consistency (list layout: main row + expandable details)
+  addons.forEach((addon, index) => {
     const card = templates.addon.content.firstElementChild.cloneNode(true);
     const addToCartBtn = card.querySelector('[data-action="toggle-addon"]');
     if (addToCartBtn) addToCartBtn.dataset.addonId = addon.id;
+    const thumbWrapper = card.querySelector('.addon-card-thumb') || card.querySelector('[data-action="open-lightbox"]');
     const nameEl = card.querySelector('[data-element="name"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
     const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
@@ -4392,7 +4430,7 @@ function populateAddonsModal() {
       imageEl.style.visibility = 'visible';
       imageEl.style.opacity = '1';
       imageEl.style.width = '100%';
-      // Height is controlled by CSS (.addons-grid .addon-card img) - 400px desktop, 250px mobile
+      // Image size controlled by CSS (.addons-grid .addon-card img max-height by breakpoint)
       imageEl.style.objectFit = 'cover';
       imageEl.style.borderRadius = '8px';
       imageEl.style.marginBottom = '12px';
@@ -4419,6 +4457,14 @@ function populateAddonsModal() {
       } else if (imageBannerEl) {
         imageBannerEl.style.display = 'none';
       }
+      if (thumbWrapper && imageEl) {
+        thumbWrapper.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (imageEl.src) openAddonLightbox(imageEl.src, imageEl);
+        });
+      }
+      imageEl.style.width = '';
+      imageEl.style.marginBottom = '';
     } else {
       console.log('[Addons Modal] Image element not found for', addon.name);
     }
@@ -4454,6 +4500,26 @@ function populateAddonsModal() {
         descriptionEl.textContent = '';
       }
     }
+    const descToggle = card.querySelector('.addon-card-description-toggle');
+    if (descToggle) {
+      const hasDescription = (addon.description || '').trim().length > 0;
+      descToggle.style.display = hasDescription ? '' : 'none';
+      if (hasDescription) {
+        const descId = 'addon-desc-' + (addon.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggle.setAttribute('aria-controls', descId);
+        descToggle.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
+        descToggle.title = t('addons.modal.showDescription') || 'Show full description';
+      }
+      descToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const expanded = card.classList.toggle('expanded');
+        descToggle.setAttribute('aria-expanded', String(expanded));
+        descToggle.setAttribute('aria-label', expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description'));
+        descToggle.title = expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description');
+      });
+    }
     if (featuresEl) {
       featuresEl.innerHTML = '';
       if (addon.features && Array.isArray(addon.features) && addon.features.length > 0) {
@@ -4477,14 +4543,13 @@ function populateAddonsModal() {
       }
     }
     
-    // Make entire card clickable
+    const mainRow = card.querySelector('.addon-card-main');
     card.style.cursor = 'pointer';
-    card.addEventListener('click', (e) => {
-      // Don't trigger if clicking the button itself (let button handle its own click)
-      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
-        return;
-      }
-      // Toggle the addon when clicking anywhere on the card
+    (mainRow || card).addEventListener('click', (e) => {
+      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) return;
+      if (thumbWrapper && (e.target === thumbWrapper || thumbWrapper.contains(e.target))) return;
+      const descToggleEl = card.querySelector('.addon-card-description-toggle');
+      if (descToggleEl && (e.target === descToggleEl || descToggleEl.contains(e.target))) return;
       if (addon.id) toggleAddon(addon.id, addToCartBtn);
     });
     
@@ -4528,7 +4593,16 @@ function showAddonsModal() {
 function hideAddonsModal() {
   if (!addonsModal) return;
   addonsModal.style.display = 'none';
-  // Restore body scrolling
+  // Clear sheet inline styles so next open uses CSS only (no legacy position/transform)
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    sheet.style.position = '';
+    sheet.style.left = '';
+    sheet.style.top = '';
+    sheet.style.transform = '';
+    sheet.style.opacity = '';
+    sheet.style.transition = '';
+  }
   document.body.classList.remove('modal-open');
   document.body.style.overflow = '';
   document.body.style.position = '';
@@ -4586,9 +4660,6 @@ function populateBoostModal() {
     const emptyMsg = document.createElement('div');
     emptyMsg.className = 'addons-empty';
     emptyMsg.textContent = t('addons.modal.empty');
-    emptyMsg.style.textAlign = 'center';
-    emptyMsg.style.padding = '2rem';
-    emptyMsg.style.color = 'var(--color-text-secondary, #6b7280)';
     grid.appendChild(emptyMsg);
     return;
   }
@@ -4660,6 +4731,7 @@ function populateBoostModal() {
     const addToCartBtn = card.querySelector('[data-action="toggle-addon"]');
     if (addToCartBtn) addToCartBtn.dataset.addonId = product.id;
     
+    const thumbWrapper = card.querySelector('.addon-card-thumb') || card.querySelector('[data-action="open-lightbox"]');
     const nameEl = card.querySelector('[data-element="name"]');
     const imageEl = card.querySelector('[data-element="image"]');
     const imageBannerEl = card.querySelector('[data-element="imageBanner"]');
@@ -4718,7 +4790,7 @@ function populateBoostModal() {
       imageEl.style.visibility = 'visible';
       imageEl.style.opacity = '1';
       imageEl.style.width = '100%';
-      // Height is controlled by CSS (.addons-grid .addon-card img) - 400px desktop, 250px mobile
+      // Image size controlled by CSS (.addons-grid .addon-card img max-height by breakpoint)
       imageEl.style.objectFit = 'cover';
       imageEl.style.borderRadius = '8px';
       imageEl.style.marginBottom = '12px';
@@ -4744,6 +4816,15 @@ function populateBoostModal() {
       } else if (imageBannerEl) {
         imageBannerEl.style.display = 'none';
       }
+      if (thumbWrapper && imageEl) {
+        thumbWrapper.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (imageEl.src) openAddonLightbox(imageEl.src, imageEl);
+        });
+      }
+      // List layout: thumb size from CSS (64px / 40px mobile), no large-image inline styles
+      imageEl.style.width = '';
+      imageEl.style.marginBottom = '';
     }
     
     // Use helper function for consistent price extraction
@@ -4783,6 +4864,26 @@ function populateBoostModal() {
         descriptionEl.style.display = 'none';
       }
     }
+    const descToggleBoost = card.querySelector('.addon-card-description-toggle');
+    if (descToggleBoost) {
+      const descText = (product.externalDescription || product.description || '').trim();
+      descToggleBoost.style.display = descText.length > 0 ? '' : 'none';
+      if (descText.length > 0) {
+        const descId = 'addon-desc-boost-' + (product.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggleBoost.setAttribute('aria-controls', descId);
+        descToggleBoost.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
+        descToggleBoost.title = t('addons.modal.showDescription') || 'Show full description';
+      }
+      descToggleBoost.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const expanded = card.classList.toggle('expanded');
+        descToggleBoost.setAttribute('aria-expanded', String(expanded));
+        descToggleBoost.setAttribute('aria-label', expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description'));
+        descToggleBoost.title = expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description');
+      });
+    }
     
     if (featuresEl && product.features && Array.isArray(product.features)) {
       featuresEl.innerHTML = '';
@@ -4805,14 +4906,15 @@ function populateBoostModal() {
       }
     }
     
-    // Make entire card clickable
+    // Main row click toggles add to cart (expand button and thumbnail have their own handlers)
     card.style.cursor = 'pointer';
-    card.addEventListener('click', (e) => {
-      // Don't trigger if clicking the button itself (let button handle its own click)
-      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
-        return;
-      }
-      // Toggle the addon when clicking anywhere on the card
+    const mainRow = card.querySelector('.addon-card-main');
+    const cardClickTarget = mainRow || card;
+    cardClickTarget.addEventListener('click', (e) => {
+      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) return;
+      if (thumbWrapper && (e.target === thumbWrapper || thumbWrapper.contains(e.target))) return;
+      const descToggleEl = card.querySelector('.addon-card-description-toggle');
+      if (descToggleEl && (e.target === descToggleEl || descToggleEl.contains(e.target))) return;
       if (product.id) toggleAddon(product.id, addToCartBtn);
     });
     
@@ -4855,40 +4957,42 @@ async function showBoostModal() {
     await loadBoostProducts();
   }
   
-  populateBoostModal();
-  updateAddonActionButton();
-  
-  // Show modal - overlay dims immediately, only sheet animates
+  // Show modal first so sheet container is in layout (CSS: flex centering, no inline position)
   addonsModal.style.display = 'flex';
   addonsModal.style.alignItems = 'center';
   addonsModal.style.justifyContent = 'center';
-  addonsModal.style.opacity = '1'; // Overlay appears immediately (no animation)
-  addonsModal.style.transition = 'opacity 0.2s ease'; // Quick fade for overlay only
-  
-  // Prevent scrolling behind modal
+  addonsModal.style.opacity = '1';
+  addonsModal.style.transition = 'opacity 0.2s ease';
+
   document.body.classList.add('modal-open');
   document.body.style.overflow = 'hidden';
   document.body.style.position = 'fixed';
   document.body.style.width = '100%';
   document.body.style.height = '100%';
-  
-  // Animate only the modal sheet, not the overlay
-  // Ensure sheet is properly positioned before animation
+
   const sheet = addonsModal.querySelector('.addons-sheet');
   if (sheet) {
-    // Reset any previous transforms to ensure proper centering
-    sheet.style.position = 'absolute';
-    sheet.style.left = '50%';
-    sheet.style.top = '50%';
-    sheet.style.transform = 'translate(-50%, -50%) scale(0.95)';
+    // Rely on CSS for positioning (no position/left/top/translate – avoids conflicts on some devices)
+    sheet.style.position = '';
+    sheet.style.left = '';
+    sheet.style.top = '';
     sheet.style.opacity = '0';
+    sheet.style.transform = 'scale(0.95)';
     sheet.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    
-    requestAnimationFrame(() => {
-      sheet.style.opacity = '1';
-      sheet.style.transform = 'translate(-50%, -50%) scale(1)';
-    });
   }
+
+  // Let sheet render/layout first, then populate cards, then animate
+  requestAnimationFrame(() => {
+    populateBoostModal();
+    updateAddonActionButton();
+
+    if (sheet) {
+      requestAnimationFrame(() => {
+        sheet.style.opacity = '1';
+        sheet.style.transform = 'scale(1)';
+      });
+    }
+  });
 }
 
 // Expose a small API to set the image dynamically if desired
@@ -5146,6 +5250,8 @@ const translations = {
     'addons.modal.skip': 'Spring over',
     'addons.modal.continue': 'Fortsæt',
     'addons.modal.close': 'Luk',
+    'addons.modal.showDescription': 'Vis fuld beskrivelse',
+    'addons.modal.collapseDescription': 'Skjul beskrivelse',
     'addons.modal.empty': 'Ingen boost produkter tilgængelige.',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
@@ -5219,6 +5325,8 @@ const translations = {
     'addons.modal.skip': 'Skip',
     'addons.modal.continue': 'Continue',
     'addons.modal.close': 'Close',
+    'addons.modal.showDescription': 'Show full description',
+    'addons.modal.collapseDescription': 'Collapse description',
     'addons.modal.empty': 'No boost products available.',
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
@@ -5292,6 +5400,8 @@ const translations = {
     'addons.modal.skip': 'Überspringen',
     'addons.modal.continue': 'Weiter',
     'addons.modal.close': 'Schließen',
+    'addons.modal.showDescription': 'Vollständige Beschreibung anzeigen',
+    'addons.modal.collapseDescription': 'Beschreibung einklappen',
     'addons.modal.empty': 'Keine Boost-Produkte verfügbar.',
     'terms.tab.membership': 'Mitgliedschaft / 15 Tage', 'terms.tab.punchcard': 'Stempelkarte',
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
@@ -9607,9 +9717,10 @@ function renderAddons() {
     return;
   }
 
-  addons.forEach((addon) => {
+  addons.forEach((addon, index) => {
     const card = templates.addon.content.firstElementChild.cloneNode(true);
     card.dataset.planId = addon.id;
+    const thumbWrapper = card.querySelector('.addon-card-thumb') || card.querySelector('[data-action="open-lightbox"]');
 
     const nameEl = card.querySelector('[data-element="name"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
@@ -9617,6 +9728,7 @@ function renderAddons() {
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
+    const imageEl = card.querySelector('[data-element="image"]');
 
     if (nameEl) nameEl.textContent = addon.name;
     // Handle original price (only for subscription additions with discount)
@@ -9649,6 +9761,26 @@ function renderAddons() {
         descriptionEl.textContent = '';
       }
     }
+    const descToggleAddonsStep = card.querySelector('.addon-card-description-toggle');
+    if (descToggleAddonsStep) {
+      const hasDesc = (addon.description || '').trim().length > 0;
+      descToggleAddonsStep.style.display = hasDesc ? '' : 'none';
+      if (hasDesc) {
+        const descId = 'addon-desc-' + (addon.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggleAddonsStep.setAttribute('aria-controls', descId);
+        descToggleAddonsStep.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
+        descToggleAddonsStep.title = t('addons.modal.showDescription') || 'Show full description';
+      }
+      descToggleAddonsStep.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const expanded = card.classList.toggle('expanded');
+        descToggleAddonsStep.setAttribute('aria-expanded', String(expanded));
+        descToggleAddonsStep.setAttribute('aria-label', expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description'));
+        descToggleAddonsStep.title = expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description');
+      });
+    }
     if (featuresEl && Array.isArray(addon.features)) {
       featuresEl.innerHTML = '';
       addon.features.forEach((feature) => {
@@ -9661,8 +9793,21 @@ function renderAddons() {
       buttonEl.dataset.addonId = addon.id;
       buttonEl.textContent = addon.cta ?? 'Select Add-on';
     }
+    if (thumbWrapper && imageEl && imageEl.src) {
+      thumbWrapper.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAddonLightbox(imageEl.src, imageEl);
+      });
+    }
 
-    card.addEventListener('click', () => centerPlanCard(card));
+    const mainRow = card.querySelector('.addon-card-main');
+    (mainRow || card).addEventListener('click', (e) => {
+      if (buttonEl && (e.target === buttonEl || buttonEl.contains(e.target))) return;
+      if (thumbWrapper && (e.target === thumbWrapper || thumbWrapper.contains(e.target))) return;
+      const descToggleEl = card.querySelector('.addon-card-description-toggle');
+      if (descToggleEl && (e.target === descToggleEl || descToggleEl.contains(e.target))) return;
+      centerPlanCard(card);
+    });
 
     DOM.addonPlans.appendChild(card);
   });
