@@ -5875,15 +5875,22 @@ async function changeLanguage(languageCode) {
   }
 }
 
-// Update language switcher UI to show active language
+// Update language switcher UI to show active language (trigger label + dropdown item states)
 function updateLanguageSwitcherUI() {
   const switcher = document.getElementById('languageSwitcher');
   if (!switcher) return;
   
+  const currentLang = state.language || DEFAULT_LANGUAGE;
+  const info = SUPPORTED_LANGUAGES[currentLang];
+  const triggerFlag = document.getElementById('languageSwitcherTriggerFlag');
+  const triggerName = document.getElementById('languageSwitcherTriggerName');
+  if (triggerFlag) triggerFlag.textContent = info?.flag ?? '🇩🇰';
+  if (triggerName) triggerName.textContent = currentLang === 'da-DK' ? 'DA' : currentLang === 'en-GB' ? 'EN' : 'DE';
+  
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
     const langCode = btn.dataset.lang;
-    if (langCode === state.language) {
+    if (langCode === currentLang) {
       btn.classList.add('active');
       btn.setAttribute('aria-pressed', 'true');
     } else {
@@ -5893,29 +5900,68 @@ function updateLanguageSwitcherUI() {
   });
 }
 
-// Initialize language switcher
+// Guard so dropdown listeners are only attached once (initLanguageSwitcher is called from DOMContentLoaded and from init())
+let languageSwitcherListenersBound = false;
+
+// Initialize language switcher (dropdown: trigger toggles panel, items change language)
 function initLanguageSwitcher() {
   const switcher = document.getElementById('languageSwitcher');
   if (!switcher) return;
   
-  // Set initial language
+  const trigger = document.getElementById('languageSwitcherTrigger');
+  const dropdown = document.getElementById('languageDropdown');
+  
+  // Set initial language and UI (run every time)
   const currentLang = state.language || DEFAULT_LANGUAGE;
   document.documentElement.lang = currentLang.split('-')[0];
   updateLanguageSwitcherUI();
-  
-  // Update page translations on initial load
   updatePageTranslations();
   
-  // Add click handlers to language buttons
+  // Attach dropdown open/close and item handlers only once to avoid double-toggle
+  if (languageSwitcherListenersBound) return;
+  if (!trigger || !dropdown) return;
+  languageSwitcherListenersBound = true;
+  
+  function openDropdown() {
+    switcher.classList.add('open');
+    dropdown.setAttribute('aria-hidden', 'false');
+    trigger.setAttribute('aria-expanded', 'true');
+  }
+  
+  function closeDropdown() {
+    switcher.classList.remove('open');
+    dropdown.setAttribute('aria-hidden', 'true');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+  
+  function toggleDropdown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const isOpen = switcher.classList.contains('open');
+    if (isOpen) closeDropdown();
+    else openDropdown();
+  }
+  
+  trigger.addEventListener('click', toggleDropdown);
+  
+  // Click on dropdown item: change language and close
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       const langCode = btn.dataset.lang;
       if (langCode && langCode !== state.language) {
         await changeLanguage(langCode);
       }
+      closeDropdown();
     });
+  });
+  
+  // Close on click outside
+  document.addEventListener('click', (e) => {
+    if (switcher.contains(e.target)) return;
+    closeDropdown();
   });
 }
 
@@ -6798,9 +6844,18 @@ function setupEventListeners() {
     });
   }
   
-  // Close modal on Escape key
+  // Close modal on Escape key (and language dropdown)
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      const languageSwitcher = document.getElementById('languageSwitcher');
+      if (languageSwitcher && languageSwitcher.classList.contains('open')) {
+        languageSwitcher.classList.remove('open');
+        const dropdown = document.getElementById('languageDropdown');
+        const trigger = document.getElementById('languageSwitcherTrigger');
+        if (dropdown) dropdown.setAttribute('aria-hidden', 'true');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        return;
+      }
       if (DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
         closeForgotPasswordModal();
       }

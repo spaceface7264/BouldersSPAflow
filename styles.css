@@ -815,7 +815,109 @@ body {
     letter-spacing: 0.5px;
 }
 
-/* Language Switcher - Styles are defined later in the file (around line 5625) */
+/* Language Switcher in Header (dropdown) */
+.header .language-switcher {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    position: absolute;
+    left: 20px;
+}
+
+.header .language-switcher-trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: var(--font-size-xs);
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+.header .language-switcher-trigger:hover {
+    border-color: var(--color-brand-accent);
+    color: #fff;
+    background-color: rgba(244, 1, 245, 0.15);
+}
+
+.header .language-switcher.open .language-switcher-trigger {
+    border-color: var(--color-brand-accent);
+    color: #fff;
+    background-color: rgba(244, 1, 245, 0.2);
+}
+
+.header .language-switcher .language-chevron {
+    font-size: 10px;
+    opacity: 0.9;
+    transition: transform 0.2s ease;
+    margin-left: 2px;
+}
+
+.header .language-switcher.open .language-chevron {
+    transform: rotate(180deg);
+}
+
+.header .language-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    min-width: 100%;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    background: rgba(26, 26, 26, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+}
+
+.header .language-switcher.open .language-dropdown {
+    display: flex;
+}
+
+.header .language-dropdown .language-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: var(--font-size-xs);
+    text-align: left;
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.header .language-dropdown .language-btn:hover {
+    background-color: rgba(244, 1, 245, 0.15);
+    color: #fff;
+}
+
+.header .language-dropdown .language-btn.active {
+    background-color: rgba(244, 1, 245, 0.2);
+    color: #fff;
+}
+
+.header .language-switcher .language-flag {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.header .language-switcher .language-name {
+    font-weight: 600;
+    font-size: var(--font-size-xs);
+}
 
 /* Mobile Header Styles */
 @media (max-width: 768px) {
@@ -837,6 +939,26 @@ body {
         font-size: var(--font-size-base);
         padding: 6px 10px;
         min-width: 90px;
+    }
+    
+    /* Header language switcher (dropdown) - compact on tablet */
+    .header .language-switcher {
+        left: 12px;
+    }
+    
+    .header .language-switcher-trigger {
+        padding: 5px 8px;
+        font-size: 11px;
+        gap: 4px;
+    }
+    
+    .header .language-switcher .language-flag {
+        font-size: 12px;
+    }
+    
+    .header .language-dropdown .language-btn {
+        padding: 6px 10px;
+        font-size: 11px;
     }
     
     /* Header auth: stack vertically, truncate email */
@@ -926,6 +1048,26 @@ body {
         font-size: 13px;
         padding: 4px 8px;
         min-width: 70px;
+    }
+    
+    /* Header language switcher (dropdown) - compact on small screens */
+    .header .language-switcher {
+        left: 8px;
+    }
+    
+    .header .language-switcher-trigger {
+        padding: 4px 6px;
+        font-size: 10px;
+        gap: 4px;
+    }
+    
+    .header .language-switcher .language-flag {
+        font-size: 11px;
+    }
+    
+    .header .language-dropdown .language-btn {
+        padding: 6px 10px;
+        font-size: 10px;
     }
     
     /* Header auth: stacked, compact */
