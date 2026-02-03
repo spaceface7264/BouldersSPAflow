@@ -951,10 +951,18 @@ body {
         min-width: 90px;
     }
     
-    /* Header right group + language (dropdown) - compact on tablet */
+    /* Header: language left, auth right on tablet/mobile */
     .header-right {
+        left: 12px;
         right: 12px;
+        width: auto;
+        justify-content: space-between;
         gap: 8px;
+    }
+    
+    .header .language-dropdown {
+        left: 0;
+        right: auto;
     }
     
     .header .language-switcher-trigger {
@@ -1060,10 +1068,18 @@ body {
         min-width: 70px;
     }
     
-    /* Header right group + language (dropdown) - compact on small screens */
+    /* Header: language left, auth right (same as tablet) */
     .header-right {
+        left: 8px;
         right: 8px;
+        width: auto;
+        justify-content: space-between;
         gap: 6px;
+    }
+    
+    .header .language-dropdown {
+        left: 0;
+        right: auto;
     }
     
     .header .language-switcher-trigger {
