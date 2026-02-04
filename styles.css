@@ -645,11 +645,14 @@
     background: linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%);
     color: #1F2837;
     text-align: center;
-    padding: 10px 16px;
+    padding: 8px 16px;
     font-size: var(--font-size-sm);
     font-weight: 500;
-    position: relative;
-    z-index: 1001;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
 }
 
 .beta-notice-text {
