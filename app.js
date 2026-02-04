@@ -3144,9 +3144,9 @@ function renderProductsFromAPI() {
           </div>
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
-      </div>
-      <div class="plan-footer">
-        <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
+        <div class="plan-card-actions">
+          <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
+        </div>
       </div>
     `);
     
@@ -3190,9 +3190,9 @@ function renderProductsFromAPI() {
           </div>
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
-      </div>
-      <div class="plan-footer">
-        <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+        <div class="plan-card-actions">
+          <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+        </div>
       </div>
       <div class="quantity-panel">
         <div class="quantity-selector">

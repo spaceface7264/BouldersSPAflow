@@ -2680,7 +2680,7 @@ body {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
-    align-items: stretch;
+    align-items: flex-start;
     gap: 20px; /* Increased gap for better spacing */
     padding-right: 0;
     min-height: 100%;
@@ -2717,7 +2717,15 @@ body {
     padding-top: 0;
 }
 
-/* Footer: button aligned right at bottom of card */
+/* Top right: Select button */
+.plan-card-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    align-self: flex-start;
+}
+
 .plan-footer {
     display: flex;
     flex-direction: row;
