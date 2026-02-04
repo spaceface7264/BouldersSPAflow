@@ -2774,6 +2774,9 @@ body {
 /* Check-circle removed - replaced with select button for all plan cards */
 
 .plan-card .select-btn {
+    position: absolute;
+    top: 20px;
+    right: 24px;
     padding: 10px 20px;
     background: #f0f;
     color: white;
@@ -3011,9 +3014,12 @@ body {
     box-shadow: none;
 }
 
-/* Quantity Panel - Same position as Select button (top right, inside plan-card-actions) */
+/* Quantity Panel - Overlays card (top right), does not push content */
 .plan-card .quantity-panel {
     display: none;
+    position: absolute;
+    top: 20px;
+    right: 24px;
     flex: none;
     flex-direction: column;
     align-items: flex-end;
@@ -3040,9 +3046,17 @@ body {
     white-space: nowrap;
 }
 
-/* Continue button in quantity panel - same look as Select button */
+/* Quantity selector and Continue button span same width */
+.plan-card .quantity-panel .quantity-selector {
+    align-self: stretch;
+}
+
+/* Continue button in quantity panel - same width as selector */
 .plan-card .quantity-panel .continue-btn {
     display: inline-block;
+    align-self: stretch;
+    width: 100%;
+    box-sizing: border-box;
     padding: 10px 20px;
     background: #f0f;
     color: white;
@@ -3054,8 +3068,6 @@ body {
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px rgba(240, 0, 240, 0.3);
     white-space: nowrap;
-    width: auto;
-    flex-shrink: 0;
 }
 
 .plan-card .quantity-panel .continue-btn:hover {
