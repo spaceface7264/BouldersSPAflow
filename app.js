@@ -3192,15 +3192,15 @@ function renderProductsFromAPI() {
         </div>
         <div class="plan-card-actions">
           <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+          <div class="quantity-panel">
+            <div class="quantity-selector">
+              <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
+              <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
+              <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+            </div>
+            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+          </div>
         </div>
-      </div>
-      <div class="quantity-panel">
-        <div class="quantity-selector">
-          <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
-          <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
-          <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
-        </div>
-        <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
       </div>
     `);
     
@@ -10121,12 +10121,14 @@ function handlePlanSelection(selectedCard) {
       state.valueCardQuantities.set(planId, 1);
     }
     
-    // Show quantity panel (now a sibling element)
+    // Show quantity panel (inside plan-card-actions)
     selectedCard.classList.add('has-quantity');
-    const panel = selectedCard.nextElementSibling;
-    if (panel && panel.classList.contains('quantity-panel')) {
+    const panel = selectedCard.querySelector('.quantity-panel');
+    if (panel) {
       panel.classList.add('show');
-      panel.style.display = 'block';
+      panel.style.display = 'flex';
+      const continueBtn = panel.querySelector('.continue-btn');
+      if (continueBtn) continueBtn.style.display = '';
       syncPunchCardQuantityUI(selectedCard, planId);
     }
   }

@@ -3011,12 +3011,9 @@ body {
     box-shadow: none;
 }
 
-/* Quantity Panel - Replaces Select button in place; does not affect plan-info or price */
+/* Quantity Panel - Same position as Select button (top right, inside plan-card-actions) */
 .plan-card .quantity-panel {
     display: none;
-    position: absolute;
-    bottom: 16px;
-    right: 20px;
     flex: none;
     padding: 10px 12px;
     background: rgba(15, 23, 42, 0.95);
@@ -3038,6 +3035,7 @@ body {
 
 /* Continue button in quantity panel - same look as Select button */
 .plan-card .quantity-panel .continue-btn {
+    display: inline-block;
     padding: 10px 20px;
     background: #f0f;
     color: white;
