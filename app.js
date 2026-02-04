@@ -3104,10 +3104,11 @@ function renderProductsFromAPI() {
                      product.currency || 
                      'DKK';
     
-    // Determine price unit from interval
+    // Determine price unit: 15-day pass is one-time payment (kr), others use interval (kr/mo, kr/year)
+    const is15DayPass = category === '15daypass';
     const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
-    const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
-                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
+    const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
+                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3137,16 +3138,16 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
-          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-        </div>
-        <div class="plan-content-right">
           <div class="plan-price">
             <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">${priceUnit}</span>
           </div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
+        </div>
+        <div class="plan-card-actions">
+          <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
         </div>
       </div>
-      <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
     `);
     
     return planCard;
@@ -3183,23 +3184,24 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Punch Card'}</div>
-          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-        </div>
-        <div class="plan-content-right">
           <div class="plan-price">
             <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">kr</span>
           </div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
-      </div>
-      <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
-      <div class="quantity-panel">
-        <div class="quantity-selector">
-          <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
-          <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
-          <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+        <div class="plan-card-actions">
+          <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+          <div class="quantity-panel">
+            <span class="quantity-panel-label" data-i18n-key="quantity.label">Choose quantity</span>
+            <div class="quantity-selector">
+              <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
+              <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
+              <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+            </div>
+            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+          </div>
         </div>
-        <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
       </div>
     `);
     
@@ -5221,6 +5223,7 @@ const translations = {
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'quantity.label': 'Vælg antal',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
@@ -5296,6 +5299,7 @@ const translations = {
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
@@ -5371,6 +5375,7 @@ const translations = {
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
     'cart.title': 'Warenkorb', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
@@ -10120,12 +10125,14 @@ function handlePlanSelection(selectedCard) {
       state.valueCardQuantities.set(planId, 1);
     }
     
-    // Show quantity panel (now a sibling element)
+    // Show quantity panel (inside plan-card-actions)
     selectedCard.classList.add('has-quantity');
-    const panel = selectedCard.nextElementSibling;
-    if (panel && panel.classList.contains('quantity-panel')) {
+    const panel = selectedCard.querySelector('.quantity-panel');
+    if (panel) {
       panel.classList.add('show');
-      panel.style.display = 'block';
+      panel.style.display = 'flex';
+      const continueBtn = panel.querySelector('.continue-btn');
+      if (continueBtn) continueBtn.style.display = '';
       syncPunchCardQuantityUI(selectedCard, planId);
     }
   }
@@ -18012,7 +18019,8 @@ function renderConfirmationView() {
     }
     
     if (price !== null) {
-      membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(price))}/month`;
+      const formatted = formatCurrencyHalfKrone(roundToHalfKrone(price));
+      membershipPrice.textContent = productType === '15daypass' ? formatted : `${formatted}/month`;
     } else {
       membershipPrice.textContent = '—';
     }
