@@ -648,11 +648,6 @@
     padding: 8px 16px;
     font-size: var(--font-size-sm);
     font-weight: 500;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 9999;
 }
 
 .beta-notice-text {
