@@ -626,7 +626,7 @@
       --color-buttons-secondary: #1F2837;
       --color-button-primary: #fff;
       --color-text-secondary: #D1D5DB;
-      
+
       /* Font Sizes */
       --font-size-xs: 10px;        /* Step labels, small captions */
       --font-size-sm: 12px;        /* Small descriptions, footnotes, step indicators */
@@ -640,6 +640,32 @@
       --font-size-5xl: 48px;       /* Hero headings, large display text */
   }
 
+/* Beta Notice Bar */
+.beta-notice-bar {
+    background: linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%);
+    color: #1F2837;
+    text-align: center;
+    padding: 10px 16px;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    position: relative;
+    z-index: 1001;
+}
+
+.beta-notice-text {
+    display: inline-block;
+}
+
+.beta-notice-bar a {
+    color: #1F2837;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.beta-notice-bar a:hover {
+    color: #000;
+}
 
 * {
     margin: 0;
