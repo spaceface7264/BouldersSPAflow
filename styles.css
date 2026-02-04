@@ -3015,6 +3015,9 @@ body {
 .plan-card .quantity-panel {
     display: none;
     flex: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
     padding: 10px 12px;
     background: rgba(15, 23, 42, 0.95);
     border: 1px solid rgba(240, 0, 240, 0.3);
@@ -3022,15 +3025,19 @@ body {
     z-index: 2;
     animation: slideDown 0.25s ease-out;
     box-sizing: border-box;
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: nowrap;
-    white-space: nowrap;
-    gap: 8px;
 }
 
 .plan-card .quantity-panel.show {
     display: flex;
+}
+
+/* Label above quantity controls for clearer UX */
+.plan-card .quantity-panel .quantity-panel-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    line-height: 1.3;
+    margin: 0;
+    white-space: nowrap;
 }
 
 /* Continue button in quantity panel - same look as Select button */
