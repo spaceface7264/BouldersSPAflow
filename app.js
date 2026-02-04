@@ -3104,10 +3104,11 @@ function renderProductsFromAPI() {
                      product.currency || 
                      'DKK';
     
-    // Determine price unit from interval
+    // Determine price unit: 15-day pass is one-time payment (kr), others use interval (kr/mo, kr/year)
+    const is15DayPass = category === '15daypass';
     const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
-    const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
-                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
+    const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
+                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3137,16 +3138,16 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
-          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-        </div>
-        <div class="plan-content-right">
           <div class="plan-price">
             <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">${priceUnit}</span>
           </div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
       </div>
-      <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
+      <div class="plan-footer">
+        <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
+      </div>
     `);
     
     return planCard;
@@ -3183,16 +3184,16 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Punch Card'}</div>
-          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-        </div>
-        <div class="plan-content-right">
           <div class="plan-price">
             <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">kr</span>
           </div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
       </div>
-      <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+      <div class="plan-footer">
+        <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+      </div>
       <div class="quantity-panel">
         <div class="quantity-selector">
           <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
@@ -18012,7 +18013,8 @@ function renderConfirmationView() {
     }
     
     if (price !== null) {
-      membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(price))}/month`;
+      const formatted = formatCurrencyHalfKrone(roundToHalfKrone(price));
+      membershipPrice.textContent = productType === '15daypass' ? formatted : `${formatted}/month`;
     } else {
       membershipPrice.textContent = '—';
     }
