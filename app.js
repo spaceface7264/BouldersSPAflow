@@ -5836,6 +5836,46 @@ function updateAddonModalTranslations() {
   }
 }
 
+// Refresh open footer modals when language changes (footer modals follow header language)
+function refreshOpenFooterModals() {
+  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  
+  if (DOM.termsModal && DOM.termsModal.style.display === 'flex') {
+    if (state.currentModalType === 'terms' && state.currentModalTab) {
+      switchTermsTab(state.currentModalTab);
+    } else if (state.currentModalType) {
+      const content = termsContent[state.currentModalType]?.[langCode] || termsContent[state.currentModalType]?.da || '<p>Content not available.</p>';
+      const termsTitles = {
+        privacy: t('footer.policies.privacy'),
+        cookie: t('footer.policies.cookie'),
+        'email-consent': 'E-mail',
+        'sms-consent': 'SMS',
+      };
+      const title = termsTitles[state.currentModalType] || 'Terms and Conditions';
+      if (DOM.termsModalTitle) DOM.termsModalTitle.textContent = title;
+      state.termsOriginalContent = content;
+      if (DOM.termsModalContent) {
+        DOM.termsModalContent.innerHTML = sanitizeHTML(content);
+        DOM.termsModalContent.scrollTop = 0;
+      }
+      if (DOM.termsSearchInput) {
+        DOM.termsSearchInput.value = '';
+        if (DOM.termsSearchClear) DOM.termsSearchClear.style.display = 'none';
+      }
+    }
+  }
+  
+  if (DOM.dataPolicyModal && DOM.dataPolicyModal.style.display === 'flex') {
+    const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
+    state.dataPolicyOriginalContent = content;
+    if (DOM.dataPolicyModalContent) {
+      DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
+      DOM.dataPolicyModalContent.scrollTop = 0;
+    }
+    clearDataPolicySearch();
+  }
+}
+
 // Change language and reload products
 async function changeLanguage(languageCode) {
   if (!SUPPORTED_LANGUAGES[languageCode]) {
@@ -5856,6 +5896,9 @@ async function changeLanguage(languageCode) {
   // Update all page translations
   updatePageTranslations();
   
+  // Refresh open footer modals so they show the new language (based on header switcher)
+  refreshOpenFooterModals();
+  
   // Reload products if we're on step 2 or later
   if (state.currentStep >= 2 && state.selectedBusinessUnit) {
     console.log('[Language] Reloading products with language:', languageCode);
@@ -5875,15 +5918,22 @@ async function changeLanguage(languageCode) {
   }
 }
 
-// Update language switcher UI to show active language
+// Update language switcher UI to show active language (trigger label + dropdown item states)
 function updateLanguageSwitcherUI() {
   const switcher = document.getElementById('languageSwitcher');
   if (!switcher) return;
   
+  const currentLang = state.language || DEFAULT_LANGUAGE;
+  const info = SUPPORTED_LANGUAGES[currentLang];
+  const triggerFlag = document.getElementById('languageSwitcherTriggerFlag');
+  const triggerName = document.getElementById('languageSwitcherTriggerName');
+  if (triggerFlag) triggerFlag.textContent = info?.flag ?? '🇩🇰';
+  if (triggerName) triggerName.textContent = currentLang === 'da-DK' ? 'DA' : currentLang === 'en-GB' ? 'EN' : 'DE';
+  
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
     const langCode = btn.dataset.lang;
-    if (langCode === state.language) {
+    if (langCode === currentLang) {
       btn.classList.add('active');
       btn.setAttribute('aria-pressed', 'true');
     } else {
@@ -5893,29 +5943,68 @@ function updateLanguageSwitcherUI() {
   });
 }
 
-// Initialize language switcher
+// Guard so dropdown listeners are only attached once (initLanguageSwitcher is called from DOMContentLoaded and from init())
+let languageSwitcherListenersBound = false;
+
+// Initialize language switcher (dropdown: trigger toggles panel, items change language)
 function initLanguageSwitcher() {
   const switcher = document.getElementById('languageSwitcher');
   if (!switcher) return;
   
-  // Set initial language
+  const trigger = document.getElementById('languageSwitcherTrigger');
+  const dropdown = document.getElementById('languageDropdown');
+  
+  // Set initial language and UI (run every time)
   const currentLang = state.language || DEFAULT_LANGUAGE;
   document.documentElement.lang = currentLang.split('-')[0];
   updateLanguageSwitcherUI();
-  
-  // Update page translations on initial load
   updatePageTranslations();
   
-  // Add click handlers to language buttons
+  // Attach dropdown open/close and item handlers only once to avoid double-toggle
+  if (languageSwitcherListenersBound) return;
+  if (!trigger || !dropdown) return;
+  languageSwitcherListenersBound = true;
+  
+  function openDropdown() {
+    switcher.classList.add('open');
+    dropdown.setAttribute('aria-hidden', 'false');
+    trigger.setAttribute('aria-expanded', 'true');
+  }
+  
+  function closeDropdown() {
+    switcher.classList.remove('open');
+    dropdown.setAttribute('aria-hidden', 'true');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+  
+  function toggleDropdown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const isOpen = switcher.classList.contains('open');
+    if (isOpen) closeDropdown();
+    else openDropdown();
+  }
+  
+  trigger.addEventListener('click', toggleDropdown);
+  
+  // Click on dropdown item: change language and close
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       const langCode = btn.dataset.lang;
       if (langCode && langCode !== state.language) {
         await changeLanguage(langCode);
       }
+      closeDropdown();
     });
+  });
+  
+  // Close on click outside
+  document.addEventListener('click', (e) => {
+    if (switcher.contains(e.target)) return;
+    closeDropdown();
   });
 }
 
@@ -6627,8 +6716,9 @@ function cacheDom() {
   DOM.dataPolicyModalContent = document.getElementById('dataPolicyModalContent');
   DOM.dataPolicyModalLoading = document.getElementById('dataPolicyModalLoading');
   DOM.dataPolicyModalClose = document.getElementById('dataPolicyModalClose');
-  DOM.dataPolicyModalLangDa = document.getElementById('dataPolicyModalLangDa');
-  DOM.dataPolicyModalLangEn = document.getElementById('dataPolicyModalLangEn');
+  DOM.dataPolicyModalSearch = document.getElementById('dataPolicyModalSearch');
+  DOM.dataPolicySearchInput = document.getElementById('dataPolicySearchInput');
+  DOM.dataPolicySearchClear = document.getElementById('dataPolicySearchClear');
   
   // Store current modal state
   state.currentModalType = null;
@@ -6798,9 +6888,18 @@ function setupEventListeners() {
     });
   }
   
-  // Close modal on Escape key
+  // Close modal on Escape key (and language dropdown)
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      const languageSwitcher = document.getElementById('languageSwitcher');
+      if (languageSwitcher && languageSwitcher.classList.contains('open')) {
+        languageSwitcher.classList.remove('open');
+        const dropdown = document.getElementById('languageDropdown');
+        const trigger = document.getElementById('languageSwitcherTrigger');
+        if (dropdown) dropdown.setAttribute('aria-hidden', 'true');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        return;
+      }
       if (DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
         closeForgotPasswordModal();
       }
@@ -6862,16 +6961,12 @@ function setupEventListeners() {
       switchTermsTab(tabType);
     }
     
-    // Language switching in data policy modal
-    if (e.target.closest('#dataPolicyModalLangDa') || e.target.closest('#dataPolicyModalLangEn')) {
-      const langBtn = e.target.closest('.language-btn');
-      const lang = langBtn.dataset.lang;
-      switchModalLanguage('privacy', lang);
-    }
-    
     // Search clear button
     if (e.target.closest('#termsSearchClear')) {
       clearTermsSearch();
+    }
+    if (e.target.closest('#dataPolicySearchClear')) {
+      clearDataPolicySearch();
     }
     
     if (e.target === DOM.termsModalClose || e.target.closest('#termsModalClose')) {
@@ -6912,12 +7007,18 @@ function setupEventListeners() {
     DOM.termsSearchInput.addEventListener('input', (e) => {
       performTermsSearch(e.target.value);
     });
-    
-    // Handle Enter key to prevent form submission
     DOM.termsSearchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      }
+      if (e.key === 'Enter') e.preventDefault();
+    });
+  }
+  
+  // Data policy modal search
+  if (DOM.dataPolicySearchInput) {
+    DOM.dataPolicySearchInput.addEventListener('input', (e) => {
+      performDataPolicySearch(e.target.value);
+    });
+    DOM.dataPolicySearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
     });
   }
   
@@ -7778,23 +7879,22 @@ function openTermsModal(termsType) {
     'sms-consent': 'SMS',
   };
   
+  // Show search for all content types (terms, cookie, email-consent, sms-consent)
+  if (DOM.termsModalSearch) {
+    DOM.termsModalSearch.style.display = 'block';
+    if (DOM.termsSearchInput) {
+      const placeholder = currentLang === 'da' || (currentLang && currentLang.startsWith('da'))
+        ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
+        : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
+      DOM.termsSearchInput.placeholder = placeholder;
+    }
+  }
+  
   // Handle 'terms' type with tabs
   if (termsType === 'terms') {
     // Show tabs
     if (DOM.termsModalTabs) {
       DOM.termsModalTabs.style.display = 'flex';
-    }
-    
-    // Show search
-    if (DOM.termsModalSearch) {
-      DOM.termsModalSearch.style.display = 'block';
-      // Update placeholder based on language
-      if (DOM.termsSearchInput) {
-        const placeholder = currentLang === 'da' 
-          ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
-          : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
-        DOM.termsSearchInput.placeholder = placeholder;
-      }
     }
     
     // Set title based on language
@@ -7814,11 +7914,7 @@ function openTermsModal(termsType) {
     const content = termsContent[currentTab]?.[currentLang] || termsContent[currentTab]?.da || '';
     state.termsOriginalContent = content;
   } else {
-    // Hide search for non-tabbed content
-    if (DOM.termsModalSearch) {
-      DOM.termsModalSearch.style.display = 'none';
-    }
-    // Hide tabs for other types
+    // Hide tabs for other types (search stays visible for all)
     if (DOM.termsModalTabs) {
       DOM.termsModalTabs.style.display = 'none';
     }
@@ -8011,6 +8107,91 @@ function clearTermsSearch() {
   }
 }
 
+// Data policy modal search (same algorithm as terms search)
+function performDataPolicySearch(searchQuery) {
+  if (!DOM.dataPolicyModalContent || !state.dataPolicyOriginalContent) return;
+  
+  const query = searchQuery.trim().toLowerCase();
+  
+  if (DOM.dataPolicySearchClear) {
+    DOM.dataPolicySearchClear.style.display = query ? 'flex' : 'none';
+  }
+  
+  if (!query) {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+    return;
+  }
+
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+  
+  function highlightText(node, searchText) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      const matches = text.match(regex);
+      if (matches && matches.length > 0) {
+        const parts = text.split(regex);
+        const fragment = document.createDocumentFragment();
+        parts.forEach((part, index) => {
+          if (part.toLowerCase() === searchText.toLowerCase()) {
+            const highlight = document.createElement('span');
+            highlight.className = 'search-highlight';
+            highlight.textContent = part;
+            fragment.appendChild(highlight);
+          } else if (part) {
+            fragment.appendChild(document.createTextNode(part));
+          }
+        });
+        return fragment;
+      }
+      return null;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return null;
+      const clone = node.cloneNode(false);
+      let hasMatch = false;
+      Array.from(node.childNodes).forEach(child => {
+        const result = highlightText(child, searchText);
+        if (result) {
+          clone.appendChild(result);
+          hasMatch = true;
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          if (child.textContent.toLowerCase().includes(searchText)) {
+            clone.appendChild(child.cloneNode(true));
+            hasMatch = true;
+          }
+        } else if (child.nodeType === Node.TEXT_NODE) {
+          clone.appendChild(child.cloneNode(true));
+        }
+      });
+      return hasMatch ? clone : null;
+    }
+    return null;
+  }
+
+  const highlightedContent = highlightText(tempDiv, query);
+  if (highlightedContent) {
+    DOM.dataPolicyModalContent.innerHTML = '';
+    DOM.dataPolicyModalContent.appendChild(highlightedContent);
+  } else {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML('<div class="search-no-results">No results found for "' + searchQuery + '"</div>');
+  }
+  const firstHighlight = DOM.dataPolicyModalContent.querySelector('.search-highlight');
+  if (firstHighlight) {
+    firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function clearDataPolicySearch() {
+  if (!DOM.dataPolicySearchInput || !DOM.dataPolicyModalContent) return;
+  DOM.dataPolicySearchInput.value = '';
+  if (DOM.dataPolicySearchClear) DOM.dataPolicySearchClear.style.display = 'none';
+  if (state.dataPolicyOriginalContent) {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+    DOM.dataPolicyModalContent.scrollTop = 0;
+  }
+}
+
 // Legacy function - language is now managed by state.language
 // This function is kept for backward compatibility but does nothing
 function updateLanguageSwitcher(modalType, lang) {
@@ -8085,17 +8266,8 @@ function switchModalLanguage(modalType, lang) {
         }
       }
     }
-  } else if (modalType === 'privacy') {
-    // Update data policy content
-    // Convert da-DK to da, en-GB to en for content lookup
-    const langCode = lang.split('-')[0];
-    const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
-    
-    if (DOM.dataPolicyModalContent) {
-      DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
-      DOM.dataPolicyModalContent.scrollTop = 0;
-    }
   }
+  // Privacy/data policy modal no longer has its own language switcher; language follows header (see refreshOpenFooterModals in changeLanguage).
 }
 
 function openDataPolicyModal() {
@@ -8103,25 +8275,29 @@ function openDataPolicyModal() {
   
   state.currentModalType = 'privacy';
   
-  // Language is managed by state.language - translations handled by updatePageTranslations
   updatePageTranslations();
   
-  // Convert da-DK to da, en-GB to en for content lookup
   const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
   const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
   
-  // Set content
   DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
+  state.dataPolicyOriginalContent = content;
   
-  // Show modal
+  // Show and reset search (same as T&C modal)
+  if (DOM.dataPolicyModalSearch) DOM.dataPolicyModalSearch.style.display = 'block';
+  if (DOM.dataPolicySearchInput) {
+    DOM.dataPolicySearchInput.value = '';
+    const isDa = (state.language || DEFAULT_LANGUAGE).startsWith('da');
+    DOM.dataPolicySearchInput.placeholder = isDa
+      ? (DOM.dataPolicySearchInput.dataset?.placeholderDa || 'Søg...')
+      : (DOM.dataPolicySearchInput.dataset?.placeholderEn || 'Search...');
+  }
+  if (DOM.dataPolicySearchClear) DOM.dataPolicySearchClear.style.display = 'none';
+  
   DOM.dataPolicyModal.style.display = 'flex';
   DOM.dataPolicyModalContent.style.display = 'block';
-  if (DOM.dataPolicyModalLoading) {
-    DOM.dataPolicyModalLoading.style.display = 'none';
-  }
+  if (DOM.dataPolicyModalLoading) DOM.dataPolicyModalLoading.style.display = 'none';
   document.body.classList.add('modal-open');
-  
-  // Scroll to top of modal content
   DOM.dataPolicyModalContent.scrollTop = 0;
 }
 
@@ -8154,15 +8330,10 @@ function closeTermsModal() {
 function closeDataPolicyModal() {
   if (!DOM.dataPolicyModal) return;
   
-  // Clear content
-  if (DOM.dataPolicyModalContent) {
-    DOM.dataPolicyModalContent.innerHTML = '';
-  }
-  
-  // Reset state
+  if (DOM.dataPolicyModalContent) DOM.dataPolicyModalContent.innerHTML = '';
+  clearDataPolicySearch();
+  state.dataPolicyOriginalContent = null;
   state.currentModalType = null;
-  
-  // Hide modal
   DOM.dataPolicyModal.style.display = 'none';
   document.body.classList.remove('modal-open');
 }

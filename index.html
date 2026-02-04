@@ -134,10 +134,24 @@
                     <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="logo-image" data-action="go-to-step-1" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
                     <div class="logo-fallback" data-action="go-to-step-1">BOULDERS</div>
                 </div>
-                <!-- Auth Indicator Section -->
-                <div class="header-auth-indicator" id="headerAuthIndicator" style="display: none;">
-                    <span class="header-auth-email" id="headerAuthEmail">-</span>
-                    <button type="button" class="header-logout-btn" id="headerLogoutBtn" data-action="logout">Log out</button>
+                <!-- Right group: language + auth (language first so dropdown and account sit together) -->
+                <div class="header-right">
+                    <div class="language-switcher" id="languageSwitcher">
+                        <button type="button" class="language-switcher-trigger" id="languageSwitcherTrigger" aria-haspopup="true" aria-expanded="false" aria-label="Select language">
+                            <span class="language-flag" id="languageSwitcherTriggerFlag">🇩🇰</span>
+                            <span class="language-name" id="languageSwitcherTriggerName">DA</span>
+                            <span class="language-chevron" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="language-dropdown" id="languageDropdown" role="menu" aria-hidden="true">
+                            <button type="button" class="language-btn" role="menuitem" data-lang="da-DK" aria-label="Dansk"><span class="language-flag">🇩🇰</span><span class="language-name">DA</span></button>
+                            <button type="button" class="language-btn" role="menuitem" data-lang="en-GB" aria-label="English"><span class="language-flag">🇬🇧</span><span class="language-name">EN</span></button>
+                            <button type="button" class="language-btn" role="menuitem" data-lang="de-DE" aria-label="Deutsch"><span class="language-flag">🇩🇪</span><span class="language-name">DE</span></button>
+                        </div>
+                    </div>
+                    <div class="header-auth-indicator" id="headerAuthIndicator" style="display: none;">
+                        <span class="header-auth-email" id="headerAuthEmail">-</span>
+                        <button type="button" class="header-logout-btn" id="headerLogoutBtn" data-action="logout">Log out</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1189,16 +1203,21 @@
             <div class="terms-modal-header">
                 <h3 class="terms-modal-title">Data Policy</h3>
                 <div class="terms-modal-header-actions">
-                    <div class="terms-modal-language-switcher">
-                        <button class="language-btn active" data-lang="da" id="dataPolicyModalLangDa">DA</button>
-                        <button class="language-btn" data-lang="en" id="dataPolicyModalLangEn">EN</button>
-                    </div>
                     <button class="terms-modal-close" id="dataPolicyModalClose" aria-label="Close">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 6L6 18M6 6l12 12"/>
                         </svg>
                     </button>
                 </div>
+            </div>
+            <!-- Search (same as T&C modal) -->
+            <div class="terms-modal-search" id="dataPolicyModalSearch">
+                <input type="text" id="dataPolicySearchInput" placeholder="Search..." class="terms-search-input" data-placeholder-da="Søg..." data-placeholder-en="Search...">
+                <button class="terms-search-clear" id="dataPolicySearchClear" style="display: none;" aria-label="Clear search">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
             </div>
             <div class="terms-modal-body">
                 <div class="terms-modal-loading" id="dataPolicyModalLoading" style="display: none;">
@@ -1276,21 +1295,6 @@
         <div class="footer-bottom">
             <div class="footer-bottom-content">
                 <p><span data-i18n-key="footer.copyright">© 2026 Boulders. All rights reserved.</span> <a href="https://boulders.dk" target="_blank" rel="noopener noreferrer">boulders.dk</a></p>
-                <!-- Language Switcher -->
-                <div class="language-switcher" id="languageSwitcher">
-                    <button type="button" class="language-btn" data-lang="da-DK" aria-label="Switch to Danish">
-                        <span class="language-flag">🇩🇰</span>
-                        <span class="language-name">DA</span>
-                    </button>
-                    <button type="button" class="language-btn" data-lang="en-GB" aria-label="Switch to English">
-                        <span class="language-flag">🇬🇧</span>
-                        <span class="language-name">EN</span>
-                    </button>
-                    <button type="button" class="language-btn" data-lang="de-DE" aria-label="Switch to German">
-                        <span class="language-flag">🇩🇪</span>
-                        <span class="language-name">DE</span>
-                    </button>
-                </div>
             </div>
         </div>
     </footer>
