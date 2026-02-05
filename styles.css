@@ -7654,6 +7654,47 @@ main {
     text-align: left;
 }
 
+/* FAQ opening hours table (step 1 gyms) – only when expanded */
+.faq-item--with-table[aria-expanded="true"] .faq-answer {
+    max-height: 720px;
+}
+
+.faq-opening-hours-intro {
+    margin: 0 0 12px 0;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: var(--font-size-base);
+    line-height: 1.5;
+}
+
+.faq-opening-hours-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.faq-opening-hours-table thead th {
+    text-align: left;
+    padding: 8px 12px 8px 0;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.faq-opening-hours-table tbody td {
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.faq-opening-hours-table .faq-oh-name {
+    font-weight: 500;
+}
+
+.faq-opening-hours-table .faq-oh-hours {
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.85);
+}
+
 /* Hide FAQ when checkout is in progress or on step 5 */
 .faq-section[data-checkout="true"],
 .faq-section[data-step-5="true"] {
