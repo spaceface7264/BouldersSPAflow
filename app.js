@@ -3550,6 +3550,11 @@ async function loadGymsFromAPI() {
     // Re-setup event listeners for new gym items
     setupGymEventListeners();
     
+    // Re-render FAQ when on step 1 so opening hours table uses API gym list (and API opening hours if present)
+    if (state.currentStep === 1) {
+      renderFAQ();
+    }
+    
   } catch (error) {
     console.error('Failed to load gyms from API:', error);
     
@@ -5113,6 +5118,7 @@ function init() {
   
   cacheDom();
   cacheTemplates();
+  initFAQ();
   
   // Restore privacy and terms consent from localStorage
   restoreConsentCheckboxes();
@@ -5123,6 +5129,7 @@ function init() {
   initAuthModeToggle();
   updateCheckoutButton();
   setupEventListeners();
+  updateFAQVisibility(); // Initialize FAQ visibility
   // Apply conditional visibility for Boost on load
   applyConditionalSteps();
   updateStepIndicator();
@@ -5173,6 +5180,11 @@ function hideLoadingOverlay() {
     }
     if (mainContent) {
       mainContent.style.display = '';
+      // Update FAQ visibility after main is shown
+      setTimeout(() => {
+        updateFAQVisibility();
+        initFAQ();
+      }, 100);
     }
     
     // Hide loading overlay with fade out
@@ -5232,7 +5244,7 @@ const translations = {
     'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
     'cart.consent.sms': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS-beskeder</a>.',
     'consent.sms.explainer': 'SMS<br><br>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
-    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
+    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
@@ -5265,6 +5277,52 @@ const translations = {
     'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagnebebegrænsninger. Du kan oprette et almindeligt medlemskab. Kontakt support hvis du tror dette er en fejl.',
     'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
     'modal.campaignRejection.option2': 'Kontakt support',
+    'faq.title': 'Ofte stillede spørgsmål',
+    'faq.gyms.openingHours.q': 'Hvad er åbningstiderne?',
+    'faq.gyms.openingHours.a': 'Åbningstiderne varierer mellem hallerne. Du kan finde de aktuelle åbningstider på vores hjemmeside eller ved at kontakte den specifikke hal.',
+    'faq.gyms.openingHours.intro': 'Alle Boulders har åbent fra morgen til aften 361 dage om året:',
+    'faq.gyms.openingHours.tableName': 'Hal',
+    'faq.gyms.openingHours.tableOpen': 'Åben',
+    'faq.gyms.access.q': 'Hvordan får jeg adgang til hallerne?',
+    'faq.gyms.access.a': 'Efter gennemført køb, besøger du din valgte hal og henter dit adgangkort. Kortet er din nøgle til Boulders, som du scanner for at åbne lågerne.',
+    'faq.gyms.events.q': 'Er der begivenheder og aktiviteter?',
+    'faq.gyms.events.a': 'Ja! Vi afholder regelmæssigt begivenheder, konkurrencer og sociale aktiviteter på tværs af alle vores haller. Tjek vores hjemmeside eller app for at se kommende begivenheder.',
+    'faq.gyms.gettingStarted.q': 'Hvordan kommer jeg godt i gang?',
+    'faq.gyms.gettingStarted.a': 'Der er mange måder at komme godt i gang på. Vi anbefaler at deltage på et introhold eller et Fundamentals hold. Det er ikke nødvendigt at starte på et hold, men det kan være meget rart — og en rigtig god måde at kickstarte det sociale. Mange starter alene og finder hurtigt fællesskab i vores inkluderende klatrekultur. Du kan også læse vores kom-godt-igang guide.',
+    'faq.membership.included.q': 'Hvad er inkluderet i mit medlemskab?',
+    'faq.membership.included.a': 'Dit medlemskab inkluderer gratis introhold, ubegrænset adgang til alle Boulders haller, brug af alle klatreområder og faciliteter, samt adgang til begivenheder og aktiviteter og gratis +1 til Late Night Boulders.',
+    'faq.membership.blocLife.q': 'Hvad er Bloc Life?',
+    'faq.membership.blocLife.a': 'Bloc Life er Boulders\' medlemsfordelsprogram. Når du er medlem, er du automatisk en del af det. Jo længere du er medlem, jo flere fordele får du – rabatter på klatregrej, kaffe, snacks og eksklusiv adgang til nye haller. Fordele og niveauer opdateres automatisk.',
+    'faq.membership.terms.q': 'Hvad er vilkårene og betingelserne?',
+    'faq.membership.terms.a': 'Medlemskabet er et løbende abonnement med automatisk fornyelse. Der er ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden plus 1 måned. Du kan læse de fulde vilkår og betingelser ved at klikke på linket i kurven.',
+    'faq.membership.bindingPeriod.q': 'Er der bindingsperiode?',
+    'faq.membership.bindingPeriod.a': 'Der er ikke bindingsperiode på Boulders\' medlemskaber uden for kampagner. Du kan til enhver tid melde dig ud med varsel på løbende måned plus en måned. Opretter du medlemskab på en prisnedsat kampagne, vil der være 3 måneders binding.',
+    'faq.membership.freeze.q': 'Kan jeg fryse mit medlemskab?',
+    'faq.membership.freeze.a': 'Ja, du kan fryse dit medlemskab i 1–3 måneder af gangen, op til 3 gange om året for 49 kr pr. gang. Du betaler ikke, mens du er i bero, og genaktivering er gratis. Frysning kan ikke aktiveres i bindingsperiode.',
+    'faq.membership.cancellation.q': 'Hvordan opsiger jeg mit medlemskab?',
+    'faq.membership.cancellation.a': 'Du kan opsige dit medlemskab når som helst med en kort varsel, som er resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
+    'faq.15daypass.howItWorks.q': 'Hvordan virker 15-dages kortet?',
+    'faq.15daypass.howItWorks.a': '15-dages kortet giver dig 15 dages ubegrænset adgang til alle Boulders haller fra den dag, du aktiverer det. Det er perfekt til at prøve klatring eller et kortvarigt besøg.',
+    'faq.15daypass.validity.q': 'Hvor længe er kortet gyldigt?',
+    'faq.15daypass.validity.a': '15-dages kortet er gyldigt i 15 dage fra aktiveringsdatoen. Du har ubegrænset adgang til alle haller, samt fri leje af klatresko, i denne periode.',
+    'faq.15daypass.access.q': 'Hvilken adgang får jeg med kortet?',
+    'faq.15daypass.access.a': 'Med 15-dages kortet får du ubegrænset adgang til alle Boulders haller, alle klatreområder og faciliteter i 15 dage. kortet kan ikke konverteres til et fuldt medlemskab.',
+    'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
+    'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 5 år og kan deles med andre.',
+    'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
+    'faq.punchcard.convert.a': 'Klippekort kan altid konverteres til et medlemskab ved at sende en mail til medlem@boulders.dk.',
+    'faq.punchcard.remainingClips.q': 'Hvad gør jeg med resterende klip på mit klippekort?',
+    'faq.punchcard.remainingClips.a': 'Hvis du stadig har klip på dit klippekort, men er klar til medlemskab, kan du få det ombyttet til medlemskab. For ombytning skal du sende en mail til medlem@boulders.dk. Eller giv det som gave til en, der fortjener det.',
+    'faq.punchcard.multiple.q': 'Kan jeg have flere klippekort?',
+    'faq.punchcard.multiple.a': 'Du kan have ubegrænset antal klippekort tilknyttet din profil.',
+    'faq.productChoice.difference.q': 'Hvad er forskellen mellem medlemskab, 15-dages pas og klippekort?',
+    'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 5 år og kan deles med andre.',
+    'faq.productChoice.membershipBest.q': 'Hvornår vælger jeg medlemskab?',
+    'faq.productChoice.membershipBest.a': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen. Du får ubegrænset adgang til alle haller, ingen tilmeldings- eller opsigelsesgebyrer, og du kan opsige når som helst med kort varsel.',
+    'faq.productChoice.15daypassBest.q': 'Hvornår skal jeg vælge 15-dages kortet?',
+    'faq.productChoice.15daypassBest.a': 'Vælg 15-dages kortet hvis du vil prøve klatring eller kun har brug for adgang i en kort periode. Du får 15 dages ubegrænset adgang til alle haller + lejesko, fra den dag, du aktiverer det.',
+    'faq.productChoice.punchcardBest.q': 'Hvornår vælger jeg klippekort?',
+    'faq.productChoice.punchcardBest.a': 'Vælg klippekort hvis du klatrer en gang imellem eller vil dele adgang med andre. Du får 10 (medmindre andet er angivet) indgange til alle haller, kortet er gyldigt i 5 år, og du kan genopfylde inden for 14 dage efter sidste klip og få 100 kr rabat.',
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
@@ -5308,7 +5366,7 @@ const translations = {
     'consent.email.explainer': 'E-mail<br><br>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.',
     'cart.consent.sms': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS Messages.</a>.',
     'consent.sms.explainer': 'SMS<br><br>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.',
-    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
+    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'cart.faqHelp': 'Questions? See FAQ', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
     'message.noProducts.membership': 'No membership options available at this time.',
@@ -5341,6 +5399,51 @@ const translations = {
     'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.',
     'modal.campaignRejection.option1': 'Regular Membership',
     'modal.campaignRejection.option2': 'Contact Support',
+    'faq.title': 'Frequently Asked Questions',
+    'faq.gyms.openingHours.q': 'What are the opening hours?',
+    'faq.gyms.openingHours.intro': 'All Boulders are open from morning to evening 361 days a year:',
+    'faq.gyms.openingHours.tableName': 'Gym',
+    'faq.gyms.openingHours.tableOpen': 'Open',
+    'faq.gyms.access.q': 'How do I access the gyms?',
+    'faq.gyms.access.a': 'After completed purchase, visit the selected gym, and pick up your access card. The card is your key to Boulders, which you scan when you arrive, to unlock the gates.',
+    'faq.gyms.events.q': 'Are there events and activities?',
+    'faq.gyms.events.a': 'Yes! We regularly host events, competitions, and social activities across all our gyms. Check our website to see upcoming events.',
+    'faq.gyms.gettingStarted.q': 'How do I get started?',
+    'faq.gyms.gettingStarted.a': 'There are many ways to get started. We recommend joining an Intro or a Fundamentals class. You don\'t have to start with a class, but it\'s a great way to meet people. Many start on their own and quickly find a community in our inclusive climbing culture. You can also read our getting-started guide.',
+    'faq.membership.included.q': 'What is included in my membership?',
+    'faq.membership.included.a': 'Your membership includes free intro class, unlimited access to all Boulders gyms, use of all climbing areas and facilities, and access to events and activities.',
+    'faq.membership.blocLife.q': 'What is Bloc Life?',
+    'faq.membership.blocLife.a': 'Bloc Life is Boulders\' membership loyalty program. When you\'re a member, you\'re automatically part of it. The longer you\'re a member, the more benefits you get – discounts on gear, coffee, snacks, and exclusive access to new gyms. Benefits and tiers update automatically.',
+    'faq.membership.terms.q': 'What are the terms and conditions?',
+    'faq.membership.terms.a': 'Membership is an ongoing subscription with automatic renewal. There are no signup or cancellation fees. Notice period is the rest of the month plus 1 month. You can read the full terms and conditions by clicking the link in the cart.',
+    'faq.membership.bindingPeriod.q': 'Is there a commitment period?',
+    'faq.membership.bindingPeriod.a': 'There is no commitment period on Boulders memberships outside of campaigns. You can cancel anytime with notice for the rest of the current month plus one month. If you sign up on a discounted campaign, there is a 3-month commitment period.',
+    'faq.membership.freeze.q': 'Can I freeze my membership?',
+    'faq.membership.freeze.a': 'Yes. You can freeze your membership for 1–3 months at a time, up to 3 times a year, for 49 kr per freeze. You are not charged while frozen, and reactivation is free. Freezing cannot be activated during a commitment period.',
+    'faq.membership.cancellation.q': 'How do I cancel my membership?',
+    'faq.membership.cancellation.a': 'You can cancel your membership at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
+    'faq.15daypass.howItWorks.q': 'How does the 15 day pass work?',
+    'faq.15daypass.howItWorks.a': 'The 15 day pass gives you 15 days of unlimited access to all Boulders gyms from the day you activate it. It\'s perfect for trying out climbing or a short-term visit.',
+    'faq.15daypass.validity.q': 'How long is the pass valid?',
+    'faq.15daypass.validity.a': 'The 15 day pass is valid for 15 days from the activation date. You have unlimited access to all gyms during this period.',
+    'faq.15daypass.access.q': 'What access do I get with the pass?',
+    'faq.15daypass.access.a': 'With the 15 day pass, you get unlimited access to all Boulders gyms, all climbing areas and facilities for 15 days. The pass cannot be converted to a full membership.',
+    'faq.punchcard.howItWorks.q': 'How does the punch card work?',
+    'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 5 years and can be shared with others.',
+    'faq.punchcard.convert.q': 'Can I convert my punch card to a membership?',
+    'faq.punchcard.convert.a': 'Yes, you can convert your punch card to a membership. Contact us at medlem@boulders.dk if you want to convert your punch card to a membership.',
+    'faq.punchcard.remainingClips.q': 'What do I do with remaining clips on my punch card?',
+    'faq.punchcard.remainingClips.a': 'If you still have punches left but are ready for a membership, you can have it converted to a membership. To convert, email medlem@boulders.dk. Or give the remaining clips as a gift to someone who deserves it.',
+    'faq.punchcard.multiple.q': 'Can I have multiple punch cards?',
+    'faq.punchcard.multiple.a': 'Yes you can have unlimited punch cards on your profile.',
+    'faq.productChoice.difference.q': 'What is the difference between membership, 15 day pass, and punch card?',
+    'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15 day pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 5 years, and can be shared with others.',
+    'faq.productChoice.membershipBest.q': 'When should I choose membership?',
+    'faq.productChoice.membershipBest.a': 'Choose membership if you plan to climb at least once a week. You get unlimited access to all gyms, no signup or cancellation fees, and you can cancel anytime with short notice.',
+    'faq.productChoice.15daypassBest.q': 'When should I choose the 15 day pass?',
+    'faq.productChoice.15daypassBest.a': 'Choose the 15 day pass if you want to try climbing or only need short-term access. You get 15 days of unlimited access to all gyms from the day you activate it. The pass is valid for 15 days from the activation date.',
+    'faq.productChoice.punchcardBest.q': 'When should I choose a punch card?',
+    'faq.productChoice.punchcardBest.a': 'Choose a punch card if you climb occasionally or want to share access with others. You get 10 entries to all gyms, unless anything else is specified, the card is valid for 5 years, and you can refill within 14 days after your last clip for 100 kr off.',
   },
   'de-DE': {
     'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
@@ -5542,6 +5645,9 @@ function updatePageTranslations() {
   
   // Update heads-up displays
   updateHeadsUpTranslations();
+  
+  // Re-render FAQ with new language
+  renderFAQ();
   
   // Update terms tabs if modal is open
   const termsTabs = document.querySelectorAll('.terms-tab[data-i18n-key]');
@@ -6660,6 +6766,8 @@ function cacheDom() {
   DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
   DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
+  DOM.faqSection = document.getElementById('faqSection');
+  DOM.faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
   DOM.privacyConsent = document.getElementById('privacyConsent');
   DOM.termsConsent = document.getElementById('termsConsent');
@@ -10773,6 +10881,11 @@ function handleGlobalClick(event) {
       prevStep();
       break;
     }
+    case 'scroll-to-faq': {
+      event.preventDefault();
+      scrollToFAQ();
+      break;
+    }
     default:
       break;
   }
@@ -12806,6 +12919,9 @@ function renderCartTotal() {
   // Update discount display if discount is applied
   updateDiscountDisplay();
   
+  // Update FAQ based on cart contents
+  renderFAQ();
+  
   console.log('[Cart] Updated cart display (subtotal:', state.totals.subtotal, 'discount:', state.totals.discountAmount, ')');
 }
 
@@ -13631,6 +13747,7 @@ function clearStoredOrderData(reason = 'manual') {
   state.paymentLink = null;
   state.paymentLinkGenerated = false;
   state.checkoutInProgress = false;
+  updateFAQVisibility(); // Show FAQ again when order data is cleared
   state.cartItems = [];
   state.totals = {
     cartTotal: 0,
@@ -14082,6 +14199,9 @@ async function handleCheckout() {
   
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
+  
+  // Hide FAQ section when checkout starts
+  updateFAQVisibility();
 
   // GTM: Track begin_checkout event
   if (window.GTM && window.GTM.trackBeginCheckout && state.cartItems && state.cartItems.length > 0) {
@@ -16003,6 +16123,7 @@ async function handleCheckout() {
     console.error('[checkout] Unexpected error:', error);
     showToast(getErrorMessage(error, 'Checkout'), 'error');
     state.checkoutInProgress = false; // Reset on error
+    updateFAQVisibility(); // Show FAQ again if checkout fails
     setCheckoutLoadingState(false);
   }
 }
@@ -19402,6 +19523,9 @@ function showStep(stepNumber) {
     }
   }
   
+  // Update FAQ visibility based on current step
+  updateFAQVisibility();
+  
   // Update selected gym display when showing step 2
   if (stepNumber === 2) {
     // Use setTimeout to ensure DOM is ready
@@ -20622,4 +20746,300 @@ function initCookieBanner() {
   setTimeout(() => {
     showCookieBanner();
   }, 1000);
+}
+
+// Static opening hours fallback when API does not return openingHours (e.g. /api/reference/business-units).
+// Keys match gym names from API or partial match; values shown in "Open" column.
+const OPENING_HOURS_FALLBACK = {
+  'Boulders Aarhus City': '08 - 23',
+  'Boulders Aarhus Nord': '10 - 22',
+  'Boulders Aarhus Syd': '10 - 22',
+  'Boulders Odense': '10 - 22',
+  'Boulders KBH Sydhavn': '08 - 23',
+  'Boulders KBH Valby': '09 - 22',
+  'Boulders KBH Hvidovre': '10 - 22',
+  'Boulders KBH Amager': '10 - 22',
+  'Boulders Aarhus Aaby': '08 - 23',
+  'Boulders KBH Vanløse': '08 - 23',
+  'Boulders Aalborg': '10 - 22',
+  // Partial keys for API name variants
+  'Aarhus City': '08 - 23',
+  'Aarhus Nord': '10 - 22',
+  'Aarhus Syd': '10 - 22',
+  'Odense': '10 - 22',
+  'Sydhavn': '08 - 23',
+  'Valby': '09 - 22',
+  'Hvidovre': '10 - 22',
+  'Amager': '10 - 22',
+  'Aaby': '08 - 23',
+  'Vanløse': '08 - 23',
+  'Aalborg': '10 - 22'
+};
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  const s = String(str);
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Get opening hours string for a gym: from API (openingHours / opening_hours) or static fallback.
+ * @param {{ name: string, openingHours?: string, opening_hours?: string }} gym
+ * @returns {string}
+ */
+function getGymOpeningHours(gym) {
+  const fromApi = gym.openingHours || gym.opening_hours || gym.openingHoursText;
+  if (fromApi && String(fromApi).trim()) return String(fromApi).trim();
+  const name = (gym.name || '').trim();
+  if (OPENING_HOURS_FALLBACK[name]) return OPENING_HOURS_FALLBACK[name];
+  for (const [key, hours] of Object.entries(OPENING_HOURS_FALLBACK)) {
+    if (name.includes(key) || key.includes(name)) return hours;
+  }
+  return '';
+}
+
+/**
+ * Build HTML for the FAQ "What are the opening hours?" answer: intro + table from API gyms or fallback.
+ * Uses gymsWithDistances when available; otherwise static list from OPENING_HOURS_FALLBACK.
+ * @returns {string}
+ */
+function getOpeningHoursAnswerHtml() {
+  const intro = t('faq.gyms.openingHours.intro');
+  const tableName = t('faq.gyms.openingHours.tableName');
+  const tableOpen = t('faq.gyms.openingHours.tableOpen');
+  const fullNameKeys = ['Boulders Aarhus City', 'Boulders Aarhus Nord', 'Boulders Aarhus Syd', 'Boulders Odense', 'Boulders KBH Sydhavn', 'Boulders KBH Valby', 'Boulders KBH Hvidovre', 'Boulders KBH Amager', 'Boulders Aarhus Aaby', 'Boulders KBH Vanløse', 'Boulders Aalborg'];
+  const gyms = Array.isArray(gymsWithDistances) && gymsWithDistances.length > 0
+    ? gymsWithDistances
+    : fullNameKeys.map(name => ({ name, _fallback: true }));
+  const rows = gyms.map(gym => {
+    const name = gym.name || gym;
+    const hours = (typeof gym === 'object' && !gym._fallback ? getGymOpeningHours(gym) : OPENING_HOURS_FALLBACK[name]) || '—';
+    return `<tr><td class="faq-oh-name">${escapeHtml(name)}</td><td class="faq-oh-hours">${escapeHtml(hours)}</td></tr>`;
+  }).join('');
+  return `<p class="faq-opening-hours-intro">${escapeHtml(intro)}</p><table class="faq-opening-hours-table" aria-label="${escapeHtml(tableOpen)}"><thead><tr><th scope="col">${escapeHtml(tableName)}</th><th scope="col">${escapeHtml(tableOpen)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// FAQ Data Structure
+const FAQ_DATA = {
+  gyms: [
+    { q: 'faq.gyms.openingHours.q', a: 'faq.gyms.openingHours.a' },
+    { q: 'faq.gyms.access.q', a: 'faq.gyms.access.a' },
+    { q: 'faq.gyms.events.q', a: 'faq.gyms.events.a' },
+    { q: 'faq.gyms.gettingStarted.q', a: 'faq.gyms.gettingStarted.a' }
+  ],
+  productChoice: [
+    { q: 'faq.productChoice.difference.q', a: 'faq.productChoice.difference.a' },
+    { q: 'faq.productChoice.membershipBest.q', a: 'faq.productChoice.membershipBest.a' },
+    { q: 'faq.productChoice.15daypassBest.q', a: 'faq.productChoice.15daypassBest.a' },
+    { q: 'faq.productChoice.punchcardBest.q', a: 'faq.productChoice.punchcardBest.a' }
+  ],
+  membership: [
+    { q: 'faq.membership.included.q', a: 'faq.membership.included.a' },
+    { q: 'faq.membership.blocLife.q', a: 'faq.membership.blocLife.a' },
+    { q: 'faq.membership.terms.q', a: 'faq.membership.terms.a' },
+    { q: 'faq.membership.bindingPeriod.q', a: 'faq.membership.bindingPeriod.a' },
+    { q: 'faq.membership.freeze.q', a: 'faq.membership.freeze.a' },
+    { q: 'faq.membership.cancellation.q', a: 'faq.membership.cancellation.a' }
+  ],
+  '15daypass': [
+    { q: 'faq.15daypass.howItWorks.q', a: 'faq.15daypass.howItWorks.a' },
+    { q: 'faq.15daypass.validity.q', a: 'faq.15daypass.validity.a' },
+    { q: 'faq.15daypass.access.q', a: 'faq.15daypass.access.a' }
+  ],
+  'punch-card': [
+    { q: 'faq.punchcard.howItWorks.q', a: 'faq.punchcard.howItWorks.a' },
+    { q: 'faq.punchcard.convert.q', a: 'faq.punchcard.convert.a' },
+    { q: 'faq.punchcard.remainingClips.q', a: 'faq.punchcard.remainingClips.a' },
+    { q: 'faq.punchcard.multiple.q', a: 'faq.punchcard.multiple.a' }
+  ]
+};
+
+/**
+ * Determine which FAQ categories should be shown based on current step and cart.
+ * Step 1: gyms only. Step 2–3: product choice (help choose product). Step 4: contextual to cart.
+ * @returns {string[]} Array of FAQ category keys to display
+ */
+function getActiveFAQs() {
+  const step = state.currentStep;
+
+  // Step 1: gym info only
+  if (step === 1) {
+    return ['gyms'];
+  }
+
+  // Step 2 or 3: help users choose the right product (differences between membership, 15-day pass, punch card)
+  if (step === 2 || step === 3) {
+    return ['productChoice'];
+  }
+
+  // Step 4 (cart): only FAQs for the selected product type (no gyms)
+  if (step === 4) {
+    const productType = determineProductTypeFromOrder();
+    if (productType === '15daypass') return ['15daypass'];
+    if (productType === 'membership') return ['membership'];
+    if (productType === 'punch-card') return ['punch-card'];
+    return [];
+  }
+
+  return [];
+}
+
+/**
+ * Render FAQ HTML based on active categories
+ */
+function renderFAQ() {
+  if (!DOM.faqSection) {
+    DOM.faqSection = document.getElementById('faqSection');
+    if (!DOM.faqSection) return;
+  }
+  
+  const faqList = DOM.faqSection.querySelector('.faq-list');
+  if (!faqList) return;
+  
+  // Get active FAQ categories
+  const activeCategories = getActiveFAQs();
+  
+  // Clear existing FAQ items
+  faqList.innerHTML = '';
+  
+  // Render FAQs for each active category
+  activeCategories.forEach(categoryKey => {
+    const categoryFAQs = FAQ_DATA[categoryKey];
+    if (!categoryFAQs) return;
+    
+    categoryFAQs.forEach(faq => {
+      const faqItem = document.createElement('div');
+      faqItem.className = 'faq-item';
+      faqItem.setAttribute('aria-expanded', 'false');
+      const isOpeningHours = categoryKey === 'gyms' && faq.a === 'faq.gyms.openingHours.a';
+      const answerContent = isOpeningHours ? getOpeningHoursAnswerHtml() : t(faq.a);
+      const answerTag = isOpeningHours ? 'div' : 'p';
+      const answerClass = isOpeningHours ? 'faq-answer-text faq-opening-hours' : 'faq-answer-text';
+      if (isOpeningHours) faqItem.classList.add('faq-item--with-table');
+      faqItem.innerHTML = `
+        <button class="faq-question" type="button" aria-expanded="false">
+          <span class="faq-question-text">${t(faq.q)}</span>
+          <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <div class="faq-answer">
+          <${answerTag} class="${answerClass}">${answerContent}</${answerTag}>
+        </div>
+      `;
+      
+      faqList.appendChild(faqItem);
+    });
+  });
+  
+  // Reinitialize accordion functionality for new FAQ items
+  initFAQ();
+}
+
+// Update FAQ section visibility
+function updateFAQVisibility() {
+  if (!DOM.faqSection) {
+    // Retry to find FAQ section if not cached yet
+    DOM.faqSection = document.getElementById('faqSection');
+    if (!DOM.faqSection) return;
+  }
+  
+  // Hide FAQ if checkout is in progress or on step 5 (success page)
+  const shouldHide = state.checkoutInProgress || state.currentStep === TOTAL_STEPS;
+  
+  if (shouldHide) {
+    DOM.faqSection.style.display = 'none';
+    DOM.faqSection.setAttribute('data-checkout', 'true');
+    DOM.faqSection.setAttribute('data-step-5', state.currentStep === TOTAL_STEPS ? 'true' : 'false');
+  } else {
+    // Show FAQ on steps 1-4 when checkout is not in progress
+    DOM.faqSection.style.display = 'block';
+    DOM.faqSection.removeAttribute('data-checkout');
+    DOM.faqSection.removeAttribute('data-step-5');
+    // Render FAQ when showing
+    renderFAQ();
+  }
+}
+
+/**
+ * Scroll to FAQ section smoothly
+ */
+function scrollToFAQ() {
+  const faqSection = document.getElementById('faqSection');
+  if (!faqSection) return;
+  
+  // Force FAQ to be visible if hidden
+  if (state.checkoutInProgress) {
+    // Temporarily show FAQ even during checkout
+    faqSection.style.display = 'block';
+    faqSection.removeAttribute('data-checkout');
+  } else {
+    updateFAQVisibility();
+  }
+  
+  // Scroll to FAQ with smooth behavior
+  faqSection.scrollIntoView({ 
+    behavior: 'smooth', 
+    block: 'start' 
+  });
+  
+  // Optional: Highlight FAQ section briefly
+  faqSection.style.transition = 'background-color 0.3s ease';
+  faqSection.style.backgroundColor = 'rgba(244, 1, 245, 0.1)';
+  setTimeout(() => {
+    faqSection.style.backgroundColor = '';
+  }, 2000);
+}
+
+// Initialize FAQ accordion functionality
+function initFAQ() {
+  if (!DOM.faqQuestions || DOM.faqQuestions.length === 0) {
+    // Retry after DOM is fully loaded
+    setTimeout(() => {
+      DOM.faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
+      if (DOM.faqQuestions.length > 0) {
+        setupFAQAccordion();
+      }
+    }, 100);
+    return;
+  }
+  
+  setupFAQAccordion();
+}
+
+function setupFAQAccordion() {
+  // Get fresh references to FAQ questions
+  const faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
+  if (faqQuestions.length === 0) return;
+  
+  faqQuestions.forEach((questionBtn) => {
+    // Check if already has listener (avoid duplicates)
+    if (questionBtn.dataset.faqInitialized === 'true') return;
+    questionBtn.dataset.faqInitialized = 'true';
+    
+    questionBtn.addEventListener('click', () => {
+      const faqItem = questionBtn.closest('.faq-item');
+      const isExpanded = questionBtn.getAttribute('aria-expanded') === 'true';
+      
+      // Close all other FAQ items
+      faqQuestions.forEach((otherBtn) => {
+        if (otherBtn !== questionBtn) {
+          const otherItem = otherBtn.closest('.faq-item');
+          otherBtn.setAttribute('aria-expanded', 'false');
+          if (otherItem) {
+            otherItem.setAttribute('aria-expanded', 'false');
+          }
+        }
+      });
+      
+      // Toggle current item
+      questionBtn.setAttribute('aria-expanded', !isExpanded);
+      if (faqItem) {
+        faqItem.setAttribute('aria-expanded', !isExpanded);
+      }
+    });
+  });
+  
+  // Update DOM reference
+  DOM.faqQuestions = faqQuestions;
 }

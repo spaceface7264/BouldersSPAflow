@@ -7554,6 +7554,185 @@ main {
     color: #6b7280;
 }
 
+/* FAQ Section */
+.faq-section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 48px 16px;
+    margin-top: 32px;
+}
+
+.faq-container {
+    width: 100%;
+}
+
+.faq-title {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text-white);
+    margin-bottom: 32px;
+    text-align: center;
+}
+
+.faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.faq-item {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.faq-item:hover {
+    background: rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.faq-question {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    transition: color 0.2s ease;
+}
+
+.faq-question:hover {
+    color: var(--color-primary);
+}
+
+.faq-question[aria-expanded="true"] {
+    color: var(--color-primary);
+}
+
+.faq-question-text {
+    flex: 1;
+    padding-right: 16px;
+}
+
+.faq-icon {
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.faq-question[aria-expanded="true"] .faq-icon {
+    transform: rotate(180deg);
+    color: var(--color-primary);
+}
+
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 24px;
+}
+
+.faq-item[aria-expanded="true"] .faq-answer {
+    max-height: 500px;
+    padding: 0 24px 20px 24px;
+}
+
+.faq-answer-text {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: var(--font-size-base);
+    line-height: 1.6;
+    margin: 0;
+    padding-top: 8px;
+    text-align: left;
+}
+
+/* FAQ opening hours table (step 1 gyms) – only when expanded */
+.faq-item--with-table[aria-expanded="true"] .faq-answer {
+    max-height: 720px;
+}
+
+.faq-opening-hours-intro {
+    margin: 0 0 12px 0;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: var(--font-size-base);
+    line-height: 1.5;
+}
+
+.faq-opening-hours-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.faq-opening-hours-table thead th {
+    text-align: left;
+    padding: 8px 12px 8px 0;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.faq-opening-hours-table tbody td {
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.faq-opening-hours-table .faq-oh-name {
+    font-weight: 500;
+}
+
+.faq-opening-hours-table .faq-oh-hours {
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Hide FAQ when checkout is in progress or on step 5 */
+.faq-section[data-checkout="true"],
+.faq-section[data-step-5="true"] {
+    display: none !important;
+}
+
+/* FAQ Help Link in Cart */
+.faq-help-link-section {
+    margin: 20px 0 0 0;
+    padding: 12px 0 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.faq-help-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transition: all 0.2s ease;
+    padding: 8px 16px;
+    border-radius: 6px;
+}
+
+.faq-help-link:hover {
+    color: var(--color-primary);
+    background: rgba(244, 1, 245, 0.1);
+    text-decoration: none;
+}
+
+.faq-help-link svg {
+    flex-shrink: 0;
+    color: var(--color-primary);
+}
+
 .receipt-info {
     display: flex;
     flex-direction: column;
