@@ -5422,6 +5422,9 @@ const translations = {
     'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagnebebegrænsninger. Du kan oprette et almindeligt medlemskab. Kontakt support hvis du tror dette er en fejl.',
     'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
     'modal.campaignRejection.option2': 'Kontakt support',
+    'modal.paymentRedirectInfo.title': 'Viderestilling til betaling',
+    'modal.paymentRedirectInfo.message': 'Du viderestilles til betalingsvinduet. Der vil blive vist et beløb på 0,01 kr. pga. en teknisk justering for en gratis tillægsordning.',
+    'modal.paymentRedirectInfo.continue': 'Fortsæt til betaling',
     'faq.title': 'Ofte stillede spørgsmål',
     'faq.gyms.openingHours.q': 'Hvad er åbningstiderne?',
     'faq.gyms.openingHours.a': 'Åbningstiderne varierer mellem hallerne. Du kan finde de aktuelle åbningstider på vores hjemmeside eller ved at kontakte den specifikke hal.',
@@ -5544,6 +5547,9 @@ const translations = {
     'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.',
     'modal.campaignRejection.option1': 'Regular Membership',
     'modal.campaignRejection.option2': 'Contact Support',
+    'modal.paymentRedirectInfo.title': 'Redirect to payment',
+    'modal.paymentRedirectInfo.message': 'You will be redirected to the payment window. A charge of 0,01 kr will appear due to a technical adjustment for a free add-on.',
+    'modal.paymentRedirectInfo.continue': 'Continue to payment',
     'faq.title': 'Frequently Asked Questions',
     'faq.gyms.openingHours.q': 'What are the opening hours?',
     'faq.gyms.openingHours.intro': 'All Boulders are open from morning to evening 361 days a year:',
@@ -5665,6 +5671,9 @@ const translations = {
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
+    'modal.paymentRedirectInfo.title': 'Weiterleitung zur Zahlung',
+    'modal.paymentRedirectInfo.message': 'Sie werden zum Zahlungsfenster weitergeleitet. Es wird ein Betrag von 0,01 kr aufgrund einer technischen Anpassung für ein kostenloses Add-on angezeigt.',
+    'modal.paymentRedirectInfo.continue': 'Weiter zur Zahlung',
   },
 };
 
@@ -6281,6 +6290,24 @@ function showCampaignRejectionModal() {
 
 function hideCampaignRejectionModal() {
   const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function showPaymentRedirectInfoModal() {
+  const modal = document.getElementById('paymentRedirectInfoModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    setTimeout(() => {
+      const btn = document.getElementById('paymentRedirectInfoContinue');
+      if (btn) btn.focus();
+    }, 100);
+  }
+}
+
+function hidePaymentRedirectInfoModal() {
+  const modal = document.getElementById('paymentRedirectInfoModal');
   if (modal) {
     modal.style.display = 'none';
   }
@@ -7247,6 +7274,15 @@ function setupEventListeners() {
     if (e.target.closest('#campaignRejectionModalClose')) {
       hideCampaignRejectionModal();
     }
+    
+    // Payment redirect info modal (0,01 kr workaround)
+    if (e.target.closest('#paymentRedirectInfoContinue')) {
+      hidePaymentRedirectInfoModal();
+      handleCheckout();
+    }
+    if (e.target.closest('#paymentRedirectInfoModalClose')) {
+      hidePaymentRedirectInfoModal();
+    }
   });
   
   // Close campaign rejection modal when clicking outside
@@ -7255,6 +7291,16 @@ function setupEventListeners() {
     campaignRejectionModal.addEventListener('click', (e) => {
       if (e.target === campaignRejectionModal) {
         hideCampaignRejectionModal();
+      }
+    });
+  }
+  
+  // Close payment redirect info modal when clicking outside
+  const paymentRedirectInfoModal = document.getElementById('paymentRedirectInfoModal');
+  if (paymentRedirectInfoModal) {
+    paymentRedirectInfoModal.addEventListener('click', (e) => {
+      if (e.target === paymentRedirectInfoModal) {
+        hidePaymentRedirectInfoModal();
       }
     });
   }
@@ -10971,7 +11017,7 @@ function handleGlobalClick(event) {
     }
     case 'submit-checkout': {
       event.preventDefault();
-      handleCheckout();
+      handleCheckoutClick();
       break;
     }
     case 'continue-value-cards': {
@@ -14351,6 +14397,14 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
   }
   
   return defaultMs;
+}
+
+function handleCheckoutClick() {
+  if (hasFreeValueCardAddon()) {
+    showPaymentRedirectInfoModal();
+    return;
+  }
+  handleCheckout();
 }
 
 async function handleCheckout() {
@@ -20486,6 +20540,32 @@ function getAddonPriceInCents(addon) {
   if (addon.price && typeof addon.price.discounted === 'number') return Math.round(addon.price.discounted * 100);
   const dkk = getAddonPrice(addon);
   return Math.round(dkk * 100);
+}
+
+// True if cart has at least one addon that is a value card with price 0 (triggers 0,01 kr workaround)
+function hasFreeValueCardAddon() {
+  if (!state.addonIds || state.addonIds.size === 0) return false;
+  const allValueCards = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
+  for (const addonId of state.addonIds) {
+    const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+    const addon = findAddon(addonId);
+    const isInValueCards = allValueCards.some(vc => {
+      const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+      return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+    });
+    const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+      const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+      return (pId === numericId || String(p.id) === String(addonId)) &&
+        (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || (!p.priceWithInterval && !p.subscriptionInterval));
+    });
+    const hasValueCardType = addon && (addon.productType === 'VALUE_CARD' || addon.productType === 'VALUECARD' ||
+      (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD')));
+    const hasValueCardFields = addon && (addon.valueCardType !== undefined || addon.validUntil !== undefined ||
+      (addon.product && addon.product.valueCardType !== undefined));
+    const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+    if (isValueCard && getAddonPriceInCents(addon) <= 0) return true;
+  }
+  return false;
 }
 
 // Privacy and Terms Consent Persistence
