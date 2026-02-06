@@ -1950,15 +1950,16 @@ class OrderAPI {
         amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
       }
       
-      // Backend requires amount. BRP often uses Currency shape { amount (cents), currency }.
+      // Amount: integer (cents). Omit for free (0) – OpenAPI says "Only applicable to AMOUNT value cards with zero price";
+      // sending 0 or Currency object may cause 403/500, so for free addons omit amount.
       const amountNum = typeof amount === 'number' && !Number.isNaN(amount) ? Math.round(amount) : 0;
       const payload = {
         valueCardProduct: productId,
-        amount: { amount: amountNum, currency: 'DKK' },
+        ...(amountNum > 0 ? { amount: amountNum } : {}),
         ...(additionTo != null ? { additionTo } : {}),
       };
       if (amountNum <= 0) {
-        console.warn('[Step 7] Value card amount is 0 – product price may be missing for product', productId, 'addon may need price.discounted or price.amount');
+        console.log('[Step 7] Value card free (0) – omitting amount from payload for product', productId);
       }
       console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
       
