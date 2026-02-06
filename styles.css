@@ -4728,8 +4728,9 @@ body {
 .terms-modal-content {
     background-color: #1a1a1a;
     border: 1px solid #374151;
-    border-radius: 12px;
+    border-radius: 6px;
     width: 100%;
+    padding: 12px 0 6px 0;
     max-width: 900px;
     max-height: 90vh;
     display: flex;
@@ -5020,134 +5021,198 @@ body {
     font-style: italic;
 }
 
-/* Campaign Rejection Modal */
-.campaign-rejection-content {
-    padding: 32px;
-}
 
-/* Payment redirect info modal (0,01 kr): match other info modals (e.g. forgot-password 500px) */
-#paymentRedirectInfoModal .terms-modal-content {
-    max-width: 500px;
+/* ==========================================================================
+   Info modals (campaign rejection + payment redirect)
+   Shared styling for #campaignRejectionModal and #paymentRedirectInfoModal.
+   ========================================================================== */
+:is(#campaignRejectionModal, #paymentRedirectInfoModal).terms-modal {
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    animation: fadeIn 0.25s ease-out;
 }
-#paymentRedirectInfoModal .campaign-rejection-actions {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-content {
+    position: relative;
+    background: linear-gradient(180deg, #1f1f1f 0%, #1a1a1a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+        0 24px 48px rgba(0, 0, 0, 0.4),
+        0 12px 24px rgba(0, 0, 0, 0.3);
+    animation: fadeInSlide 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-header {
     display: flex;
-    flex-direction: column;
-    grid-template-columns: unset;
+    align-items: center;
+    justify-content: center;
+    border-bottom: none;
 }
-#paymentRedirectInfoModal .campaign-rejection-btn {
-    max-width: 100%;
-}
-
-.campaign-rejection-message {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-md);
-    margin-bottom: 32px;
-    line-height: 1.7;
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-title {
     text-align: center;
+    flex: 1;
+    padding-right: 40px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
 }
-
-.campaign-rejection-actions {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-header-actions {
+    position: absolute;
+    top: 0px;
+    right: 6px;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-close {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
     display: flex;
-    gap: 16px;
-    flex-direction: column;
-    width: 100%;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    border-radius: 10px;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-close:hover {
+    color: var(--color-text-secondary);
+    background: rgba(255, 255, 255, 0.08);
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-close:focus {
+    outline: 2px solid #F401F5;
+    outline-offset: 2px;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-close svg {
+    width: 18px;
+    height: 18px;
 }
 
-.campaign-rejection-btn {
-    width: 100%;
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-content {
+    padding: 0px 32px 32px 32px;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-message {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-lg);
+    margin-bottom: 32px;
+    line-height: 1.65;
+    text-align: center;
+    letter-spacing: 0.01em;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    justify-content: center;
+    align-items: center;
+    width: auto;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn {
+    width: auto;
+    min-width: 160px;
     padding: 16px 32px;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     font-size: var(--font-size-md);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
     text-align: center;
     min-height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
-
-.campaign-rejection-btn-primary {
-    background-color: #F401F5;
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-primary {
+    background: linear-gradient(180deg, #F401F5 0%, #D401D5 100%);
     color: white;
-    box-shadow: 0 4px 12px rgba(244, 1, 245, 0.3);
+    border: none;
+    box-shadow: 0 4px 14px rgba(244, 1, 245, 0.35);
 }
-
-.campaign-rejection-btn-primary:hover {
-    background-color: #D401D5;
-    box-shadow: 0 6px 16px rgba(244, 1, 245, 0.4);
-    transform: translateY(-1px);
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-primary:hover {
+    background: linear-gradient(180deg, #FF1AFF 0%, #E401E5 100%);
+    box-shadow: 0 6px 20px rgba(244, 1, 245, 0.45);
+    transform: translateY(-2px);
 }
-
-.campaign-rejection-btn-primary:active {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-primary:active {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.3);
+    box-shadow: 0 2px 10px rgba(244, 1, 245, 0.3);
 }
-
-.campaign-rejection-btn-secondary {
-    background-color: transparent;
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-secondary {
+    background-color: rgba(255, 255, 255, 0.04);
     color: var(--color-text-secondary);
-    border: 1px solid var(--color-item-border);
+    border: 1px solid rgba(255, 255, 255, 0.12);
 }
-
-.campaign-rejection-btn-secondary:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-    border-color: var(--color-text-muted);
-    transform: translateY(-1px);
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
 }
-
-.campaign-rejection-btn-secondary:active {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-secondary:active {
     transform: translateY(0);
 }
-
-.campaign-rejection-btn:focus {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn:focus {
     outline: 2px solid #F401F5;
     outline-offset: 2px;
 }
-
-.campaign-rejection-btn:disabled {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;
 }
 
-/* Desktop: Side-by-side buttons */
+/* Payment redirect only: narrower modal, single full-width button */
+#paymentRedirectInfoModal .terms-modal-content {
+    max-width: 500px;
+}
+#paymentRedirectInfoModal .campaign-rejection-btn {
+    max-width: 100%;
+}
+
 @media (min-width: 640px) {
-    .campaign-rejection-actions {
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-actions {
         flex-direction: row;
-        gap: 16px;
     }
-    
-    .campaign-rejection-btn {
-        flex: 1;
-        min-width: 0;
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-content {
+        padding: 12px 40px 32px 40px;
     }
-    
-    .campaign-rejection-content {
-        padding: 40px;
-    }
-    
-    .campaign-rejection-message {
-        font-size: var(--font-size-lg);
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-message {
+        font-size: var(--font-size-base);
         margin-bottom: 40px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-title {
+        font-size: var(--font-size-md);
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn {
+        padding: 18px 36px;
+    }
+}
+@media (min-width: 1024px) {
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-content {
+        padding: 56px 48px 48px 48px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-actions {
+        gap: 20px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-message {
+        font-size: 15px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn {
+        padding: 18px 40px;
+        font-size: var(--font-size-base);
     }
 }
 
-/* Large desktop: Better spacing */
-@media (min-width: 1024px) {
-    .campaign-rejection-content {
-        padding: 48px;
+@media (max-width: 639px) {
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-content {
+        padding: 32px 24px 24px 24px;
     }
-    
-    .campaign-rejection-actions {
-        gap: 20px;
-    }
-    
-    .campaign-rejection-btn {
-        padding: 18px 40px;
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-message {
         font-size: var(--font-size-md);
+        margin-bottom: 28px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn {
+        min-width: 140px;
+        padding: 14px 24px;
+        min-height: 48px;
     }
 }
 
@@ -8905,129 +8970,6 @@ main {
     line-height: 1.5;
     margin: 0;
     flex: 1;
-}
-
-/* Campaign Rejection Modal */
-.campaign-rejection-content {
-    padding: 32px;
-}
-
-.campaign-rejection-message {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-md);
-    margin-bottom: 32px;
-    line-height: 1.7;
-    text-align: center;
-}
-
-.campaign-rejection-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    margin-top: 44px;
-    gap: 16px;
-    flex-direction: column;
-    width: 100%;
-}
-
-.campaign-rejection-btn {
-    width: 100%;
-    padding: 16px 32px;
-    border: none;
-    border-radius: 8px;
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: center;
-    min-height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.campaign-rejection-btn-primary {
-    background-color: #F401F5;
-    color: white;
-}
-
-.campaign-rejection-btn-primary:hover {
-    background-color: #D401D5;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(244, 1, 245, 0.4);
-}
-
-.campaign-rejection-btn-primary:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.3);
-}
-
-.campaign-rejection-btn-secondary {
-    background-color: var(--color-background-secondary);
-    border: 2px solid var(--color-brand-accent);
-}
-
-.campaign-rejection-btn-secondary:hover {
-    border: 2px solid var(--color-brand-accent);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.3);
-
-}
-
-.campaign-rejection-btn-secondary:active {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.campaign-rejection-btn:focus {
-    outline: 2px solid #F401F5;
-    outline-offset: 2px;
-}
-
-.campaign-rejection-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-
-@media (max-width: 768px) {
-    .campaign-rejection-content {
-        padding: 24px;
-    }
-    
-    .campaign-rejection-message {
-        font-size: var(--font-size-base);
-        margin-bottom: 24px;
-    }
-    
-    .campaign-rejection-actions {
-        gap: 12px;
-    }
-    
-    .campaign-rejection-btn {
-        padding: 14px 24px;
-        font-size: var(--font-size-base);
-        min-height: 48px;
-    }
-}
-
-@media (max-width: 480px) {
-    .campaign-rejection-content {
-        padding: 20px;
-    }
-    
-    .campaign-rejection-message {
-        font-size: var(--font-size-sm);
-        margin-bottom: 20px;
-    }
-    
-    .campaign-rejection-actions {
-        gap: 10px;
-    }
-    
-    .campaign-rejection-btn {
-        padding: 12px 20px;
-        font-size: var(--font-size-sm);
-        min-height: 44px;
-    }
 }
 
 /* Hide parent/guardian toggle section */
