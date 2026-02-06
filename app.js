@@ -1950,11 +1950,11 @@ class OrderAPI {
         amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
       }
       
-      // Backend requires amount. Try both integer (per OpenAPI) and Currency object (some BRP endpoints use { amount, currency }).
+      // Backend requires amount. BRP often uses Currency shape { amount (cents), currency }.
       const amountNum = typeof amount === 'number' && !Number.isNaN(amount) ? Math.round(amount) : 0;
       const payload = {
         valueCardProduct: productId,
-        amount: amountNum,
+        amount: { amount: amountNum, currency: 'DKK' },
         ...(additionTo != null ? { additionTo } : {}),
       };
       if (amountNum <= 0) {
