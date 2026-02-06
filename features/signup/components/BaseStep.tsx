@@ -28,7 +28,7 @@ export const BaseStep: React.FC<BaseStepProps> = ({
   nextButtonText = 'Continue',
   prevButtonText = 'Back',
 }) => {
-  const { nextStep, prevStep, canProceedToNext } = useSignupStore();
+  const { nextStep, prevStep, canProceedToNext, draft } = useSignupStore();
 
   const handleNext = () => {
     if (onNext) {
@@ -46,7 +46,10 @@ export const BaseStep: React.FC<BaseStepProps> = ({
     }
   };
 
-  const isFirstStep = stepId === 'personal';
+  // The first step of the signup flow depends on whether the user
+  // pre-selected a plan on the hero page.
+  const flowFirstStep = draft.membership ? 'personal' : 'membership';
+  const isFirstStep = stepId === flowFirstStep;
   const isLastStep = stepId === 'success';
   const canGoNext = canProceed && (canProceedToNext() || onNext);
 

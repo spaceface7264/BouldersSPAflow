@@ -5,6 +5,7 @@ import { SignupRoutes } from '../features/signup/routes';
 import { Stepper } from '../shared/ui';
 import { useSignupStore } from '../features/signup/state';
 import { AuthIndicator } from '../features/signup/components/AuthIndicator';
+import { Hero } from '../src/components/Hero';
 import '../shared/styles/tokens.css';
 
 // Create a client
@@ -24,7 +25,7 @@ const DynamicSubtitle: React.FC = () => {
   const getSubtitle = (step: string) => {
     switch (step) {
       case 'personal':
-        return 'Tell us about yourself to personalize your experience';
+        return 'Tell us about yourself to get started';
       case 'membership':
         return 'Choose your access type';
       case 'addons':
@@ -47,7 +48,8 @@ const DynamicSubtitle: React.FC = () => {
   );
 };
 
-const AppContent: React.FC = () => {
+// Signup flow layout with header, stepper, and step content
+const SignupLayout: React.FC = () => {
   const { steps, currentStep } = useSignupStore();
 
   return (
@@ -56,7 +58,7 @@ const AppContent: React.FC = () => {
       <header className="bg-gray-900 text-white py-6">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+            <a href="/" className="flex items-center space-x-4 no-underline">
               <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
                 <span className="text-gray-900 font-bold text-lg">B</span>
               </div>
@@ -64,7 +66,7 @@ const AppContent: React.FC = () => {
                 <h1 className="text-2xl font-bold">BOULDERS</h1>
                 <p className="text-gray-300 text-sm">Join Your Bouldering Network</p>
               </div>
-            </div>
+            </a>
             <div className="flex items-center">
               <AuthIndicator />
             </div>
@@ -92,14 +94,20 @@ const AppContent: React.FC = () => {
       {/* Main Content */}
       <main className="py-8">
         <div className="container mx-auto px-4">
-          <Routes>
-            <Route path="/signup/*" element={<SignupRoutes />} />
-            <Route path="/" element={<Navigate to="/signup" replace />} />
-            <Route path="*" element={<Navigate to="/signup" replace />} />
-          </Routes>
+          <SignupRoutes />
         </div>
       </main>
     </div>
+  );
+};
+
+const AppContent: React.FC = () => {
+  return (
+    <Routes>
+      <Route path="/" element={<Hero />} />
+      <Route path="/signup/*" element={<SignupLayout />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 };
 

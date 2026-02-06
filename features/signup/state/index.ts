@@ -104,9 +104,10 @@ export const useSignupStore = create<SignupState>()(
         const state = get();
         const stepIndex = STEPS.findIndex(s => s.id === step);
         const currentIndex = STEPS.findIndex(s => s.id === state.currentStep);
-        
-        // Can access current step or any previous step
-        return stepIndex <= currentIndex;
+
+        // Can access current step, any previous step, or any completed step
+        const stepObj = state.steps.find(s => s.id === step);
+        return stepIndex <= currentIndex || (stepObj?.isCompleted ?? false);
       },
 
       canProceedToNext: () => {

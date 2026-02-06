@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { personalInfoSchema, type PersonalInfoFormData } from '../schemas';
@@ -8,7 +9,8 @@ import { Input, Select, Button } from '../../../shared/ui';
 import { COUNTRIES, GENDERS, EXPERIENCE_LEVELS } from '../../../shared/constants';
 
 export const PersonalInfoStep: React.FC = () => {
-  const { updateDraft, nextStep } = useSignupStore();
+  const { updateDraft, nextStep, draft } = useSignupStore();
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -32,6 +34,16 @@ export const PersonalInfoStep: React.FC = () => {
     }
   };
 
+  const handleBack = () => {
+    if (draft.membership) {
+      // User came from hero with a pre-selected plan -- go back to hero
+      navigate('/');
+    } else {
+      // User came from the membership step
+      navigate('/signup/membership');
+    }
+  };
+
   return (
     <BaseStep
       stepId="personal"
@@ -39,9 +51,32 @@ export const PersonalInfoStep: React.FC = () => {
       description="Please provide your personal details to continue"
       canProceed={isValid}
       onNext={handleSubmit(onSubmit)}
+      onPrev={handleBack}
       nextButtonText={isSubmitting ? 'Saving...' : 'Continue'}
+      prevButtonText="Change Plan"
       showNavigation={false}
     >
+      {/* Selected plan summary banner */}
+      {draft.membership && (
+        <div className="mb-6 flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg px-4 py-3">
+          <div className="flex items-center space-x-3">
+            <svg className="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+            <span className="text-sm font-medium text-purple-900">
+              Selected: {draft.membership.planId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} &mdash; {draft.membership.totalPrice}kr
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleBack}
+            className="text-sm text-purple-600 hover:text-purple-800 font-medium underline"
+          >
+            Change
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Input
