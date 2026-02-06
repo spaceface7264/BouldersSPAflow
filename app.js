@@ -1906,7 +1906,7 @@ class OrderAPI {
 
   // Step 7: Add value card item (punch card) - POST /api/ver3/orders/{orderId}/items/valuecards
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
-  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null) {
+  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null, amountInCentsFromCaller = null) {
     try {
       const url = this.useProxy
         ? buildApiUrl({
@@ -1928,15 +1928,32 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      // API Documentation requires 'valueCardProduct' field (integer, required)
-      // Optional fields: receiverDetails, senderDetails, amount, externalMessage, additionTo
-      // Note: quantity is handled by repeating the request or backend logic, not in payload
-      // additionTo links this value card to the parent subscription item
+      // Resolve amount (price in cents). Backend may require 'amount' (FIELD_MANDATORY).
+      let amount = 0;
+      if (amountInCentsFromCaller != null && typeof amountInCentsFromCaller === 'number' && !Number.isNaN(amountInCentsFromCaller)) {
+        amount = Math.round(amountInCentsFromCaller);
+      } else {
+        const allValueCards = [
+          ...(state.valueCards || []),
+          ...(state.campaignValueCards || []),
+        ];
+        const valueCardProduct = allValueCards.find(p =>
+          p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)
+        ) || (state.allRawProducts || []).find(p =>
+          (p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)) &&
+          (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || p.valueCardType !== undefined)
+        );
+        const priceObj = valueCardProduct?.price;
+        const amountInCents = priceObj != null
+          ? (typeof priceObj === 'object' && 'amount' in priceObj ? priceObj.amount : Number(priceObj))
+          : (valueCardProduct?.amount != null ? valueCardProduct.amount : 0);
+        amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
+      }
+      
       const payload = {
-        valueCardProduct: productId, // Required: Value card product ID (integer)
-        ...(additionTo ? { additionTo } : {}), // Link to parent subscription item if provided
-        // quantity is not in API spec - backend may handle it differently
-        // businessUnit is not in API spec - may be inferred from order context
+        valueCardProduct: productId,
+        amount,
+        ...(additionTo != null ? { additionTo } : {}),
       };
       
       console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
@@ -15220,9 +15237,10 @@ async function handleCheckout() {
                 });
                 
                 if (isValueCard) {
-                  // Add as value card with additionTo link
-                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId})`);
-                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId);
+                  // Add as value card with additionTo link. Pass amount (cents) so API FIELD_MANDATORY is satisfied.
+                  const amountCents = getAddonPriceInCents(addon);
+                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId}), amount: ${amountCents} cents`);
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId, amountCents);
                 } else {
                   // Add as article with additionTo link
                   console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${validSubscriptionItemId})`);
@@ -20441,6 +20459,16 @@ function getAddonPrice(addon) {
   }
   
   return 0;
+}
+
+// Addon price in cents (for API payloads that require amount)
+function getAddonPriceInCents(addon) {
+  if (!addon) return 0;
+  if (addon.priceWithInterval?.price?.amount != null) return Math.round(Number(addon.priceWithInterval.price.amount));
+  if (addon.price?.amount != null) return Math.round(Number(addon.price.amount));
+  if (addon.amount != null) return Math.round(Number(addon.amount));
+  const dkk = getAddonPrice(addon);
+  return Math.round(dkk * 100);
 }
 
 // Privacy and Terms Consent Persistence
