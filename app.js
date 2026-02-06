@@ -3221,9 +3221,11 @@ function renderProductsFromAPI() {
     // Hide campaign category if no products
     if (!hasCampaignProducts) {
       campaignCategoryItem.style.display = 'none';
+      stopCampaignCountdown();
     } else {
       // Show category and render products
       campaignCategoryItem.style.display = '';
+      startCampaignCountdown();
       if (campaignPlansList) {
         campaignPlansList.innerHTML = '';
         
@@ -4065,6 +4067,8 @@ const state = {
   // Step 5: Store fetched products from API
   campaignSubscriptions: [], // Fetched campaign subscription products (with "PublicCampaign" label)
   campaignValueCards: [], // Fetched campaign value card products (with "PublicCampaign" label)
+  campaignEndDate: null, // ISO string or Date for countdown; if null, uses end of current month
+  cartCountdownEndTime: null, // timestamp (ms) when 15-min cart timer expires; set when cart gets items
   subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15 Day Pass")
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
@@ -4095,6 +4099,124 @@ let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
 let loginCooldownUntil = 0;
+let campaignCountdownIntervalId = null;
+let cartTimerCountdownIntervalId = null;
+const CART_COUNTDOWN_MINUTES = 15;
+
+// Campaign countdown end date: set here when API doesn't send Omsætningsperiode. Use ISO string or null for "end of current month".
+const CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK = '2026-02-16'; // e.g. '2026-02-15T23:59:59.999' or '2026-02-15'
+
+function getCampaignCountdownEndDate() {
+  const fromState = state.campaignEndDate;
+  if (fromState) {
+    const d = typeof fromState === 'string' ? new Date(fromState) : fromState;
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK) {
+    const d = new Date(CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return end;
+}
+
+function updateCampaignCountdown() {
+  const el = document.getElementById('campaignCountdown');
+  const valueEl = document.getElementById('campaignCountdownValue');
+  const endDate = getCampaignCountdownEndDate();
+  const now = new Date();
+  const diff = endDate.getTime() - now.getTime();
+  const timeLeft = diff > 0;
+  const parts = timeLeft ? (() => {
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+    const p = [];
+    if (days > 0) p.push(days + (days === 1 ? 'd' : 'd'));
+    p.push(String(hours).padStart(2, '0') + 'h', String(minutes).padStart(2, '0') + 'm', String(seconds).padStart(2, '0') + 's');
+    return p.join(' ');
+  })() : '';
+  if (!timeLeft) {
+    if (el) el.style.display = 'none';
+    if (campaignCountdownIntervalId) {
+      clearInterval(campaignCountdownIntervalId);
+      campaignCountdownIntervalId = null;
+    }
+    return;
+  }
+  if (valueEl) valueEl.textContent = parts;
+  if (el) el.style.display = '';
+}
+
+function startCampaignCountdown() {
+  if (campaignCountdownIntervalId) {
+    clearInterval(campaignCountdownIntervalId);
+    campaignCountdownIntervalId = null;
+  }
+  updateCampaignCountdown();
+  campaignCountdownIntervalId = setInterval(updateCampaignCountdown, 1000);
+}
+
+function stopCampaignCountdown() {
+  if (campaignCountdownIntervalId) {
+    clearInterval(campaignCountdownIntervalId);
+    campaignCountdownIntervalId = null;
+  }
+  const el = document.getElementById('campaignCountdown');
+  if (el) el.style.display = 'none';
+}
+
+function updateCartTimerCountdown() {
+  const el = document.getElementById('cartTimerCountdown');
+  const valueEl = document.getElementById('cartTimerCountdownValue');
+  if (!el || !valueEl) return;
+  const endTime = state.cartCountdownEndTime;
+  if (endTime == null) {
+    el.style.display = 'none';
+    return;
+  }
+  const now = Date.now();
+  const diff = endTime - now;
+  if (diff <= 0) {
+    el.style.display = 'none';
+    state.cartCountdownEndTime = null;
+    if (cartTimerCountdownIntervalId) {
+      clearInterval(cartTimerCountdownIntervalId);
+      cartTimerCountdownIntervalId = null;
+    }
+    return;
+  }
+  const totalSeconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  valueEl.textContent = minutes + ':' + String(seconds).padStart(2, '0');
+  valueEl.setAttribute('aria-label', minutes + ' ' + (minutes === 1 ? 'minute' : 'minutes') + ' ' + seconds + ' ' + (seconds === 1 ? 'second' : 'seconds'));
+  el.dataset.urgent = totalSeconds <= 300 ? 'true' : 'false';
+  el.dataset.critical = totalSeconds <= 120 ? 'true' : 'false';
+  el.style.display = '';
+}
+
+function startCartTimerCountdown() {
+  if (cartTimerCountdownIntervalId) {
+    clearInterval(cartTimerCountdownIntervalId);
+    cartTimerCountdownIntervalId = null;
+  }
+  state.cartCountdownEndTime = Date.now() + CART_COUNTDOWN_MINUTES * 60 * 1000;
+  updateCartTimerCountdown();
+  cartTimerCountdownIntervalId = setInterval(updateCartTimerCountdown, 1000);
+}
+
+function stopCartTimerCountdown() {
+  if (cartTimerCountdownIntervalId) {
+    clearInterval(cartTimerCountdownIntervalId);
+    cartTimerCountdownIntervalId = null;
+  }
+  state.cartCountdownEndTime = null;
+  const el = document.getElementById('cartTimerCountdown');
+  if (el) el.style.display = 'none';
+}
 
 function isUserAuthenticated() {
   return typeof window.getAccessToken === 'function' && Boolean(window.getAccessToken());
@@ -5204,7 +5326,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
     'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
@@ -5234,7 +5356,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
@@ -5326,7 +5448,7 @@ const translations = {
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
+    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
@@ -5356,7 +5478,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
@@ -5447,7 +5569,7 @@ const translations = {
   },
   'de-DE': {
     'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.campaign.endsIn': 'Endet in', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
     'category.membership.desc': 'Mitgliedschaft ist ein laufendes Abonnement mit automatischer Verlängerung. Keine Anmelde- oder Kündigungsgebühren. Kündigungsfrist ist der Rest des Monats + 1 Monat.',
     'category.15daypass.desc': 'Erhalten Sie 15 Tage unbegrenzten Zugang zu allen Hallen. Perfekt zum Ausprobieren des Kletterns oder für einen kurzen Besuch.',
     'category.punchcard.desc': 'Sie können jeweils 1 Art von Stempelkarte kaufen. Jeder Eintritt verwendet einen Stempel auf Ihrer Stempelkarte. Die Karte ist 5 Jahre gültig und beinhaltet keine Mitgliedschaftsvorteile. Füllen Sie innerhalb von 14 Tagen nach Ihrem letzten Stempel nach und erhalten Sie 100 kr Rabatt in der Halle.',
@@ -5477,7 +5599,7 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
@@ -12195,33 +12317,19 @@ function hasCampaignInCart() {
     return true;
   }
   
-  // Check if any cart item's productId exists in campaignSubscriptions
-  if (state.cartItems && state.cartItems.length > 0 && state.campaignSubscriptions) {
-    return state.cartItems.some(item => {
-      if (!item.productId) return false;
-      const productIdNum = typeof item.productId === 'string' 
-        ? parseInt(item.productId) 
-        : item.productId;
-      return state.campaignSubscriptions.some(campaign => 
-        campaign.id === item.productId || 
-        campaign.id === productIdNum ||
-        String(campaign.id) === String(item.productId)
-      );
-    });
+  // Check if any cart item's productId exists in campaign subscriptions or campaign value cards
+  const isCampaignProduct = (id) => {
+    const num = typeof id === 'string' ? parseInt(id, 10) : id;
+    const inSubs = state.campaignSubscriptions?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
+    const inCards = state.campaignValueCards?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
+    return inSubs || inCards;
+  };
+  if (state.cartItems && state.cartItems.length > 0) {
+    if (state.cartItems.some(item => item.productId && isCampaignProduct(item.productId))) return true;
   }
-  
-  // Check if selectedProductId is in campaignSubscriptions
-  if (state.selectedProductId && state.campaignSubscriptions) {
-    const productIdNum = typeof state.selectedProductId === 'string' 
-      ? parseInt(state.selectedProductId) 
-      : state.selectedProductId;
-    return state.campaignSubscriptions.some(campaign => 
-      campaign.id === state.selectedProductId || 
-      campaign.id === productIdNum ||
-      String(campaign.id) === String(state.selectedProductId)
-    );
-  }
-  
+
+  if (state.selectedProductId && isCampaignProduct(state.selectedProductId)) return true;
+
   return false;
 }
 
@@ -12389,7 +12497,18 @@ function updateCartSummary() {
   } else {
     hideCampaignWarning();
   }
-  
+
+  // 15-minute cart timer: only for carts with PublicCampaign products
+  const cartTimerEl = document.getElementById('cartTimerCountdown');
+  if (cartTimerEl) {
+    if (hasCampaignInCart()) {
+      if (state.cartCountdownEndTime == null) startCartTimerCountdown();
+      else updateCartTimerCountdown();
+    } else {
+      stopCartTimerCountdown();
+    }
+  }
+
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   

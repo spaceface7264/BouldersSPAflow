@@ -263,6 +263,10 @@
                                     <div class="category-info">
                                         <div class="category-title" data-i18n-key="category.campaign">Campaign</div>
                                         <div class="category-subtitle" data-i18n-key="category.campaign.subtitle">Limited time offers</div>
+                                        <div class="campaign-countdown" id="campaignCountdown" aria-live="polite" style="display: none;">
+                                            <span class="campaign-countdown-label" data-i18n-key="category.campaign.endsIn">Ends in</span>
+                                            <span class="campaign-countdown-value" id="campaignCountdownValue">--</span>
+                                        </div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
@@ -688,8 +692,13 @@
                                         </svg>
                                     </button>
                                 </div>
-                                
-
+                                <div class="cart-timer-countdown" id="cartTimerCountdown" aria-live="polite" style="display: none;" role="status">
+                                    <span class="cart-timer-countdown-icon" aria-hidden="true">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    </span>
+                                    <span class="cart-timer-countdown-label" data-i18n-key="cart.timeToComplete">Time left to complete:</span>
+                                    <span class="cart-timer-countdown-value" id="cartTimerCountdownValue" aria-label="15 minutes 0 seconds">15:00</span>
+                                </div>
                                 
                                 <!-- Cart Items -->
                                 <template id="cart-item-template">
