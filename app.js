@@ -13226,8 +13226,50 @@ function updatePaymentOverview() {
       today.setHours(0, 0, 0, 0);
       const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
-      
-      if (initialPaymentPeriod?.start) {
+      const dayOfMonth = today.getDate();
+      const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
+        p => String(p.id) === String(productId)
+      );
+      // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
+      const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
+
+      if (isFirstMonthFreeCampaign) {
+        if (dayOfMonth < 16) {
+          payNowAmount = 0;
+          if (initialPaymentPeriod?.start) {
+            billingPeriod = {
+              start: new Date(initialPaymentPeriod.start),
+              end: new Date(initialPaymentPeriod.end)
+            };
+          } else {
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+          }
+          console.log('[Payment Overview] ✅ First month free campaign (date < 16): 0 kr from API');
+        } else {
+          payNowAmount = expectedPrice ? expectedPrice.amountInDKK : orderPriceDKK;
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          if (expectedPrice?.includesNextMonth) {
+            const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+            const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+            billingPeriod = {
+              start: today,
+              end: new Date(nextYear, nextMonth + 1, 0)
+            };
+          } else {
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+          }
+          console.log('[Payment Overview] ✅ First month free campaign (date >= 16): rest-of-month price:', payNowAmount, 'DKK');
+        }
+      } else if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
         const backendEndDate = new Date(initialPaymentPeriod.end);
         
@@ -13340,9 +13382,26 @@ function updatePaymentOverview() {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
-          
+          const dayOfMonth = today.getDate();
+          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
+            p => String(p.id) === String(membership.id)
+          );
+          const productNameForCampaign = (membership.name || '').toLowerCase();
+          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
+            /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
+          );
+
+          if (isFirstMonthFreeCampaignNoOrder && dayOfMonth < 16) {
+            payNowAmount = 0;
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+            console.log('[Payment Overview] ✅ First month free campaign (no order, date < 16): 0 kr');
+          } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
-          if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
             if (expectedPrice) {
               payNowAmount = expectedPrice.amountInDKK;
