@@ -1950,12 +1950,16 @@ class OrderAPI {
         amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
       }
       
+      // Backend requires amount. Try both integer (per OpenAPI) and Currency object (some BRP endpoints use { amount, currency }).
+      const amountNum = typeof amount === 'number' && !Number.isNaN(amount) ? Math.round(amount) : 0;
       const payload = {
         valueCardProduct: productId,
-        amount,
+        amount: amountNum,
         ...(additionTo != null ? { additionTo } : {}),
       };
-      
+      if (amountNum <= 0) {
+        console.warn('[Step 7] Value card amount is 0 – product price may be missing for product', productId, 'addon may need price.discounted or price.amount');
+      }
       console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
       
       let data;
@@ -15238,9 +15242,18 @@ async function handleCheckout() {
                 
                 if (isValueCard) {
                   // Add as value card with additionTo link. Pass amount (cents) so API FIELD_MANDATORY is satisfied.
-                  const amountCents = getAddonPriceInCents(addon);
+                  let amountCents = getAddonPriceInCents(addon);
+                  if (amountCents <= 0) {
+                    const allVc = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
+                    const vcProduct = allVc.find(p => p.id === numericId || String(p.id) === String(addonId));
+                    const priceObj = vcProduct?.price;
+                    if (priceObj != null) {
+                      amountCents = typeof priceObj === 'object' && 'amount' in priceObj ? Math.round(Number(priceObj.amount)) : Math.round(Number(priceObj));
+                    }
+                    if (vcProduct?.amount != null) amountCents = Math.round(Number(vcProduct.amount));
+                  }
                   console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId}), amount: ${amountCents} cents`);
-                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId, amountCents);
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId, amountCents > 0 ? amountCents : null);
                 } else {
                   // Add as article with additionTo link
                   console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${validSubscriptionItemId})`);
@@ -20467,6 +20480,8 @@ function getAddonPriceInCents(addon) {
   if (addon.priceWithInterval?.price?.amount != null) return Math.round(Number(addon.priceWithInterval.price.amount));
   if (addon.price?.amount != null) return Math.round(Number(addon.price.amount));
   if (addon.amount != null) return Math.round(Number(addon.amount));
+  // Subscription additions often have price.discounted in DKK
+  if (addon.price && typeof addon.price.discounted === 'number') return Math.round(addon.price.discounted * 100);
   const dkk = getAddonPrice(addon);
   return Math.round(dkk * 100);
 }
