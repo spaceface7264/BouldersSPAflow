@@ -1950,17 +1950,18 @@ class OrderAPI {
         amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
       }
       
-      // Amount: integer (cents). Omit for free (0) – OpenAPI says "Only applicable to AMOUNT value cards with zero price";
-      // sending 0 or Currency object may cause 403/500, so for free addons omit amount.
+      // Backend requires amount (FIELD_MANDATORY) and may reject/500 on amount: 0. Send integer (cents).
       const amountNum = typeof amount === 'number' && !Number.isNaN(amount) ? Math.round(amount) : 0;
+      // Workaround: backend often rejects amount 0 for free value cards; send 1 øre so request succeeds.
+      const amountToSend = amountNum > 0 ? amountNum : 1;
+      if (amountNum === 0) {
+        console.warn('[Step 7] Value card is free (0) – sending amount: 1 (1 øre) as workaround until backend accepts amount: 0');
+      }
       const payload = {
         valueCardProduct: productId,
-        ...(amountNum > 0 ? { amount: amountNum } : {}),
+        amount: amountToSend,
         ...(additionTo != null ? { additionTo } : {}),
       };
-      if (amountNum <= 0) {
-        console.log('[Step 7] Value card free (0) – omitting amount from payload for product', productId);
-      }
       console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
       
       let data;
