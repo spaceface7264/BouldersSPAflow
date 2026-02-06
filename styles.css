@@ -5025,6 +5025,19 @@ body {
     padding: 32px;
 }
 
+/* Payment redirect info modal (0,01 kr): match other info modals (e.g. forgot-password 500px) */
+#paymentRedirectInfoModal .terms-modal-content {
+    max-width: 500px;
+}
+#paymentRedirectInfoModal .campaign-rejection-actions {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: unset;
+}
+#paymentRedirectInfoModal .campaign-rejection-btn {
+    max-width: 100%;
+}
+
 .campaign-rejection-message {
     color: var(--color-text-secondary);
     font-size: var(--font-size-md);
