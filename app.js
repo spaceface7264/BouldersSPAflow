@@ -5090,7 +5090,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Kampagner og begrænsede tilbud. Slå til mens de er her.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
     'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
@@ -5136,6 +5136,60 @@ const translations = {
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
+    'confirmation.title': 'SUCCES!',
+    'confirmation.message': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.membership': 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.15daypass': 'Din 15-dages pas er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.orderDetails': 'Ordredetaljer',
+    'confirmation.orderNumber': 'Ordrenummer:',
+    'confirmation.date': 'Dato:',
+    'confirmation.total': 'Total:',
+    'confirmation.showReceipt': 'Vis detaljeret kvittering',
+    'confirmation.receipt.title': 'Ordrebekræftelse',
+    'confirmation.receipt.order': 'Ordre',
+    'confirmation.receipt.orderOverview': 'Ordreoversigt',
+    'confirmation.receipt.subtotal': 'Subtotal:',
+    'confirmation.receipt.discount': 'Rabat:',
+    'confirmation.receipt.total': 'TOTALT:',
+    'confirmation.receipt.vatInclusive': 'inkl. moms (25%):',
+    'confirmation.receipt.payments': 'Betalinger',
+    'confirmation.receipt.paymentMethod': 'Betalingsmetode:',
+    'confirmation.receipt.amountPaid': 'Betalt beløb:',
+    'confirmation.receipt.transactionId': 'Transaktions-id:',
+    'confirmation.receipt.sellerInfo': 'Sælgers oplysninger',
+    'confirmation.receipt.sellerName': 'Sælgerens navn:',
+    'confirmation.receipt.address': 'Adresse:',
+    'confirmation.receipt.cvr': 'CVR-nummer:',
+    'confirmation.receipt.phone': 'Telefon:',
+    'confirmation.receipt.email': 'E-mail:',
+    'confirmation.receipt.customerInfo': 'Kundens informationer',
+    'confirmation.receipt.customerName': 'Kundens navn:',
+    'confirmation.receipt.valueCardsPurchased': 'Købte værdikort',
+    'confirmation.receipt.close': 'LUK',
+    'confirmation.primaryGym': 'Hjemmehal:',
+    'confirmation.membershipType': 'Type:',
+    'confirmation.monthlyPrice': 'Månedlig pris:',
+    'confirmation.15daypassDetails': '15-dages pas detaljer',
+    'confirmation.passType': 'Pastype:',
+    'confirmation.validFrom': 'Gyldig fra:',
+    'confirmation.validUntil': 'Gyldig til:',
+    'confirmation.punchCardDetails': 'Klippekort detaljer',
+    'confirmation.name': 'Navn:',
+    'confirmation.cardType': 'Korttype:',
+    'confirmation.quantity': 'Antal:',
+    'confirmation.nextStepsTitle': 'Hvad sker der nu?',
+    'confirmation.nextStep1': 'E-mail bekræftelse sendt til din indbakke',
+    'confirmation.nextStep2.membership': 'Medlemskabsaktivering og automatisk fornyelse',
+    'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
+    'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
+    'confirmation.nextStep3.membership': 'Hent dit medlemskabskort i centeret',
+    'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge dit pas',
+    'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
+    'confirmation.pending.title': 'Betaling afventer',
+    'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
+    'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
     'footer.terms.title': 'Vilkår og Betingelser', 'footer.terms.all': 'Vilkår og Betingelser', 'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab', 'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
     'footer.policies.title': 'Politikker', 'footer.policies.privacy': 'Privatlivspolitik', 'footer.policies.cookie': 'Cookiepolitik', 'footer.rights': 'Alle rettigheder forbeholdes', 'footer.copyright': '© 2026 Boulders. Alle rettigheder forbeholdes.',
     'cookie.banner.title': 'Vi bruger cookies', 'cookie.banner.description': 'Vi bruger cookies til at forbedre din browsingoplevelse, analysere trafik på sitet og personalisere indhold. Ved at klikke på "Accepter alle" giver du samtykke til vores brug af cookies. Du kan administrere dine præferencer eller læse mere i vores <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookiepolitik</a>.', 'cookie.banner.accept': 'Accepter alle', 'cookie.banner.reject': 'Afvis alle', 'cookie.banner.settings': 'Tilpas',
@@ -5216,7 +5270,7 @@ const translations = {
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
+    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
@@ -5262,6 +5316,60 @@ const translations = {
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
+    'confirmation.title': 'SUCCESS!',
+    'confirmation.message': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.15daypass': 'Your 15 day pass has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.orderDetails': 'Order Details',
+    'confirmation.orderNumber': 'Order Number:',
+    'confirmation.date': 'Date:',
+    'confirmation.total': 'Total:',
+    'confirmation.showReceipt': 'Show detailed receipt',
+    'confirmation.receipt.title': 'Order confirmation',
+    'confirmation.receipt.order': 'Order',
+    'confirmation.receipt.orderOverview': 'Order overview',
+    'confirmation.receipt.subtotal': 'Subtotal:',
+    'confirmation.receipt.discount': 'Discount:',
+    'confirmation.receipt.total': 'TOTAL:',
+    'confirmation.receipt.vatInclusive': 'including VAT (25%):',
+    'confirmation.receipt.payments': 'Payments',
+    'confirmation.receipt.paymentMethod': 'Payment method:',
+    'confirmation.receipt.amountPaid': 'Amount paid:',
+    'confirmation.receipt.transactionId': 'Transaction ID:',
+    'confirmation.receipt.sellerInfo': 'Seller information',
+    'confirmation.receipt.sellerName': 'Seller name:',
+    'confirmation.receipt.address': 'Address:',
+    'confirmation.receipt.cvr': 'CVR number:',
+    'confirmation.receipt.phone': 'Phone:',
+    'confirmation.receipt.email': 'Email:',
+    'confirmation.receipt.customerInfo': 'Customer information',
+    'confirmation.receipt.customerName': 'Customer name:',
+    'confirmation.receipt.valueCardsPurchased': 'Value cards purchased',
+    'confirmation.receipt.close': 'CLOSE',
+    'confirmation.primaryGym': 'Primary Gym:',
+    'confirmation.membershipType': 'Type:',
+    'confirmation.monthlyPrice': 'Monthly Price:',
+    'confirmation.15daypassDetails': '15 Day Pass Details',
+    'confirmation.passType': 'Pass Type:',
+    'confirmation.validFrom': 'Valid From:',
+    'confirmation.validUntil': 'Valid Until:',
+    'confirmation.punchCardDetails': 'Punch Card Details',
+    'confirmation.name': 'Name:',
+    'confirmation.cardType': 'Card Type:',
+    'confirmation.quantity': 'Quantity:',
+    'confirmation.nextStepsTitle': 'What happens next?',
+    'confirmation.nextStep1': 'Email confirmation sent to your inbox',
+    'confirmation.nextStep2.membership': 'Membership activation & auto-renewal setup',
+    'confirmation.nextStep2.15daypass': 'Your pass is active and ready to use',
+    'confirmation.nextStep2.punchcard': 'Your punch card is ready to use',
+    'confirmation.nextStep3.membership': 'Pick up your membership card at the gym',
+    'confirmation.nextStep3.15daypass': 'Visit the gym to start using your pass',
+    'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
+    'confirmation.pending.title': 'Payment Pending',
+    'confirmation.pending.message': 'Your payment is being processed. We\'re waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #',
+    'confirmation.pending.stillProcessing': 'Payment is still being processed. Please check back in a few minutes or contact support if you\'ve completed payment. Order #',
     'footer.terms.title': 'Terms and Conditions', 'footer.terms.all': 'Terms and Conditions', 'footer.terms.membership': 'Terms and Conditions for Membership', 'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
     'footer.policies.title': 'Policies', 'footer.policies.privacy': 'Privacy Policy', 'footer.policies.cookie': 'Cookie Policy', 'footer.rights': 'All rights reserved', 'footer.copyright': '© 2026 Boulders. All rights reserved.',
     'cookie.banner.title': 'We use cookies', 'cookie.banner.description': 'We use cookies to enhance your browsing experience, analyze site traffic, and personalize content. By clicking "Accept All", you consent to our use of cookies. You can manage your preferences or learn more in our <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie Policy</a>.', 'cookie.banner.accept': 'Accept All', 'cookie.banner.reject': 'Reject All', 'cookie.banner.settings': 'Customize',
@@ -5414,6 +5522,60 @@ const translations = {
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
+    'confirmation.title': 'ERFOLG!',
+    'confirmation.message': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.membership': 'Ihre Mitgliedschaft wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.15daypass': 'Ihr 15-Tage-Pass wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.punchcard': 'Ihre Stempelkarte wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.generic': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.orderDetails': 'Bestelldetails',
+    'confirmation.orderNumber': 'Bestellnummer:',
+    'confirmation.date': 'Datum:',
+    'confirmation.total': 'Gesamt:',
+    'confirmation.showReceipt': 'Detaillierte Quittung anzeigen',
+    'confirmation.receipt.title': 'Bestellbestätigung',
+    'confirmation.receipt.order': 'Bestellung',
+    'confirmation.receipt.orderOverview': 'Bestellübersicht',
+    'confirmation.receipt.subtotal': 'Zwischensumme:',
+    'confirmation.receipt.discount': 'Rabatt:',
+    'confirmation.receipt.total': 'GESAMT:',
+    'confirmation.receipt.vatInclusive': 'inkl. MwSt. (25%):',
+    'confirmation.receipt.payments': 'Zahlungen',
+    'confirmation.receipt.paymentMethod': 'Zahlungsmethode:',
+    'confirmation.receipt.amountPaid': 'Bezahlter Betrag:',
+    'confirmation.receipt.transactionId': 'Transaktions-ID:',
+    'confirmation.receipt.sellerInfo': 'Verkäuferinformationen',
+    'confirmation.receipt.sellerName': 'Verkäufername:',
+    'confirmation.receipt.address': 'Adresse:',
+    'confirmation.receipt.cvr': 'CVR-Nummer:',
+    'confirmation.receipt.phone': 'Telefon:',
+    'confirmation.receipt.email': 'E-Mail:',
+    'confirmation.receipt.customerInfo': 'Kundeninformationen',
+    'confirmation.receipt.customerName': 'Kundenname:',
+    'confirmation.receipt.valueCardsPurchased': 'Gekaufte Wertkarten',
+    'confirmation.receipt.close': 'SCHLIESSEN',
+    'confirmation.primaryGym': 'Heimhalle:',
+    'confirmation.membershipType': 'Typ:',
+    'confirmation.monthlyPrice': 'Monatlicher Preis:',
+    'confirmation.15daypassDetails': '15-Tage-Pass Details',
+    'confirmation.passType': 'Passtyp:',
+    'confirmation.validFrom': 'Gültig von:',
+    'confirmation.validUntil': 'Gültig bis:',
+    'confirmation.punchCardDetails': 'Stempelkarten-Details',
+    'confirmation.name': 'Name:',
+    'confirmation.cardType': 'Kartentyp:',
+    'confirmation.quantity': 'Menge:',
+    'confirmation.nextStepsTitle': 'Was passiert als Nächstes?',
+    'confirmation.nextStep1': 'E-Mail-Bestätigung an Ihren Posteingang gesendet',
+    'confirmation.nextStep2.membership': 'Mitgliedschaftsaktivierung und automatische Verlängerung',
+    'confirmation.nextStep2.15daypass': 'Ihr Pass ist aktiv und einsatzbereit',
+    'confirmation.nextStep2.punchcard': 'Ihre Stempelkarte ist einsatzbereit',
+    'confirmation.nextStep3.membership': 'Holen Sie Ihre Mitgliedskarte in der Halle ab',
+    'confirmation.nextStep3.15daypass': 'Besuchen Sie die Halle, um Ihren Pass zu nutzen',
+    'confirmation.nextStep3.punchcard': 'Besuchen Sie die Halle, um Ihre Stempel zu nutzen',
+    'confirmation.pending.title': 'Zahlung ausstehend',
+    'confirmation.pending.message': 'Ihre Zahlung wird bearbeitet. Wir warten auf die Bestätigung des Zahlungsanbieters. Ihre Mitgliedschaft wird nach Bestätigung der Zahlung aktiviert. Bestellung #',
+    'confirmation.pending.stillProcessing': 'Die Zahlung wird noch bearbeitet. Bitte schauen Sie in einigen Minuten erneut vorbei oder kontaktieren Sie den Support, wenn Sie die Zahlung abgeschlossen haben. Bestellung #',
   },
 };
 
@@ -17268,19 +17430,17 @@ function showPaymentPendingMessage(order, orderId) {
   const successTitle = document.querySelector('.success-title');
   const successMessage = document.querySelector('.success-message');
   const successBadge = document.querySelector('.success-badge');
+  const displayOrderId = orderId || order?.number || order?.id || 'N/A';
   
   if (successTitle) {
-    // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
     successTitle.removeAttribute('data-i18n-key');
-    successTitle.textContent = 'Payment Pending';
+    successTitle.textContent = t('confirmation.pending.title');
     successTitle.style.color = '#f59e0b'; // Orange/amber color
   }
   
   if (successMessage) {
-    // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
     successMessage.removeAttribute('data-i18n-key');
-    const displayOrderId = orderId || order?.number || order?.id || 'N/A';
-    successMessage.textContent = `Your payment is being processed. We're waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #${displayOrderId}`;
+    successMessage.textContent = t('confirmation.pending.message') + displayOrderId;
     successMessage.style.color = '#6b7280'; // Gray color
   }
   
@@ -17363,10 +17523,9 @@ function showPaymentPendingMessage(order, orderId) {
       } else if (pollCount >= maxPolls) {
         console.warn('[Payment Pending] ⚠️ Payment still not confirmed after 2 minutes. Stopping auto-poll.');
         clearInterval(pollInterval);
-        // Update message to tell user to check back later
         if (successMessage) {
           const displayOrderId = orderId || updatedOrder?.number || updatedOrder?.id || 'N/A';
-          successMessage.textContent = `Payment is still being processed. Please check back in a few minutes or contact support if you've completed payment. Order #${displayOrderId}`;
+          successMessage.textContent = t('confirmation.pending.stillProcessing') + displayOrderId;
         }
       }
     } catch (error) {
@@ -17552,46 +17711,40 @@ function renderConfirmationView() {
     productLabels: state.fullOrder?.subscriptionItems?.[0]?.product?.productLabels
   });
 
-  // Update success message based on product type
+  // Update success message based on product type (use translation keys so language switch works)
   const successMessage = document.querySelector('.success-message');
   if (successMessage) {
-    if (productType === 'membership') {
-      successMessage.textContent = 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.';
-    } else if (productType === '15daypass') {
-      successMessage.textContent = 'Din 15-dages pas er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.';
-    } else if (productType === 'punch-card') {
-      successMessage.textContent = 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.';
-    } else {
-      // Fallback to generic message
-      successMessage.textContent = 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.';
-    }
+    const messageKey = productType === 'membership' ? 'confirmation.message.membership'
+      : productType === '15daypass' ? 'confirmation.message.15daypass'
+      : productType === 'punch-card' ? 'confirmation.message.punchcard'
+      : 'confirmation.message.generic';
+    successMessage.setAttribute('data-i18n-key', messageKey);
+    successMessage.textContent = t(messageKey);
   }
 
-  // Update "What happens next?" steps based on product type
+  // Update "What happens next?" steps based on product type (use translation keys)
   const nextStep1 = document.getElementById('nextStep1');
   const nextStep2 = document.getElementById('nextStep2');
   const nextStep3 = document.getElementById('nextStep3');
   
   if (nextStep1) {
-    // First step is always the same (email confirmation)
-    nextStep1.textContent = 'E-mail bekræftelse sendt til din indbakke';
+    nextStep1.setAttribute('data-i18n-key', 'confirmation.nextStep1');
+    nextStep1.textContent = t('confirmation.nextStep1');
   }
   
   if (nextStep2 && nextStep3) {
-    if (productType === 'membership') {
-      nextStep2.textContent = 'Medlemskabsaktivering og automatisk fornyelse';
-      nextStep3.textContent = 'Hent dit medlemskabskort i centeret';
-    } else if (productType === '15daypass') {
-      nextStep2.textContent = 'Dit pas er aktivt og klar til brug';
-      nextStep3.textContent = 'Besøg centeret for at begynde at bruge dit pas';
-    } else if (productType === 'punch-card') {
-      nextStep2.textContent = 'Dit klippekort er klar til brug';
-      nextStep3.textContent = 'Besøg centeret for at begynde at bruge dine klip';
-    } else {
-      // Fallback to membership steps
-      nextStep2.textContent = 'Medlemskabsaktivering og automatisk fornyelse';
-      nextStep3.textContent = 'Hent dit medlemskabskort i centeret';
-    }
+    const step2Key = productType === 'membership' ? 'confirmation.nextStep2.membership'
+      : productType === '15daypass' ? 'confirmation.nextStep2.15daypass'
+      : productType === 'punch-card' ? 'confirmation.nextStep2.punchcard'
+      : 'confirmation.nextStep2.membership';
+    const step3Key = productType === 'membership' ? 'confirmation.nextStep3.membership'
+      : productType === '15daypass' ? 'confirmation.nextStep3.15daypass'
+      : productType === 'punch-card' ? 'confirmation.nextStep3.punchcard'
+      : 'confirmation.nextStep3.membership';
+    nextStep2.setAttribute('data-i18n-key', step2Key);
+    nextStep2.textContent = t(step2Key);
+    nextStep3.setAttribute('data-i18n-key', step3Key);
+    nextStep3.textContent = t(step3Key);
   }
 
   // Hide all sections first - use !important to override any CSS

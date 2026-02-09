@@ -898,14 +898,14 @@
                         <div class="confirmation-left">
                             <!-- Order Details Card -->
                             <div class="confirmation-card">
-                                <h3 class="card-title">Order Details</h3>
+                                <h3 class="card-title" data-i18n-key="confirmation.orderDetails">Order Details</h3>
                                 <div class="order-info">
                                     <div class="order-item">
-                                        <span class="order-label">Order Number:</span>
+                                        <span class="order-label" data-i18n-key="confirmation.orderNumber">Order Number:</span>
                                         <span class="order-value" data-summary-field="order-number">—</span>
                                     </div>
                                     <div class="order-item">
-                                        <span class="order-label">Date:</span>
+                                        <span class="order-label" data-i18n-key="confirmation.date">Date:</span>
                                         <span class="order-value" data-summary-field="order-date">—</span>
                                     </div>
                                 </div>
@@ -920,11 +920,11 @@
                                 <div class="purchase-items" data-component="confirmation-items"></div>
                                 
                                 <div class="order-total">
-                                    <span class="total-label">Total:</span>
+                                    <span class="total-label" data-i18n-key="confirmation.total">Total:</span>
                                     <span class="total-amount" data-summary-field="order-total">0,00 kr</span>
                                 </div>
                                 
-                                <button class="receipt-btn" id="showDetailedReceiptBtn" data-action="show-detailed-receipt" style="margin-top: 20px;">
+                                <button class="receipt-btn" id="showDetailedReceiptBtn" data-action="show-detailed-receipt" data-i18n-key="confirmation.showReceipt" style="margin-top: 20px;">
                                     Vis detaljeret kvittering
                                 </button>
                             </div>
@@ -941,10 +941,10 @@
                                                 <line x1="16" y1="17" x2="8" y2="17"></line>
                                                 <polyline points="10 9 9 9 8 9"></polyline>
                                             </svg>
-                                            <h2>Ordrebekræftelse</h2>
+                                            <h2 data-i18n-key="confirmation.receipt.title">Ordrebekræftelse</h2>
                                         </div>
                                         <div class="receipt-header-right">
-                                            <span class="receipt-order-number">Ordre <span id="receiptOrderNumber">—</span></span>
+                                            <span class="receipt-order-number"><span data-i18n-key="confirmation.receipt.order">Ordre</span> <span id="receiptOrderNumber">—</span></span>
                                             <span class="receipt-date" id="receiptDate">—</span>
                                         </div>
                                     </div>
@@ -953,36 +953,36 @@
                                         <div class="receipt-section">
                                             <div class="receipt-columns">
                                                 <div class="receipt-column">
-                                                    <h3>Ordreoversigt</h3>
+                                                    <h3 data-i18n-key="confirmation.receipt.orderOverview">Ordreoversigt</h3>
                                                     <div class="receipt-row">
-                                                        <span>Subtotal:</span>
+                                                        <span data-i18n-key="confirmation.receipt.subtotal">Subtotal:</span>
                                                         <span id="receiptSubtotal">—</span>
                                                     </div>
                                                     <div class="receipt-row">
-                                                        <span>Rabat:</span>
+                                                        <span data-i18n-key="confirmation.receipt.discount">Rabat:</span>
                                                         <span id="receiptDiscount">—</span>
                                                     </div>
                                                     <div class="receipt-row receipt-total">
-                                                        <span>TOTALT:</span>
+                                                        <span data-i18n-key="confirmation.receipt.total">TOTALT:</span>
                                                         <span id="receiptTotal">—</span>
                                                     </div>
                                                     <div class="receipt-vat">
-                                                        inklusiv moms (25%): <span id="receiptVat">—</span>
+                                                        <span data-i18n-key="confirmation.receipt.vatInclusive">inklusiv moms (25%):</span> <span id="receiptVat">—</span>
                                                     </div>
                                                 </div>
                                                 
                                                 <div class="receipt-column">
-                                                    <h3>Betalinger</h3>
+                                                    <h3 data-i18n-key="confirmation.receipt.payments">Betalinger</h3>
                                                     <div class="receipt-row">
-                                                        <span>Betalingsmetode:</span>
+                                                        <span data-i18n-key="confirmation.receipt.paymentMethod">Betalingsmetode:</span>
                                                         <span id="receiptPaymentMethod">—</span>
                                                     </div>
                                                     <div class="receipt-row">
-                                                        <span>Betalt beløb:</span>
+                                                        <span data-i18n-key="confirmation.receipt.amountPaid">Betalt beløb:</span>
                                                         <span id="receiptAmountPaid">—</span>
                                                     </div>
                                                     <div class="receipt-row">
-                                                        <span>Transaktions-id:</span>
+                                                        <span data-i18n-key="confirmation.receipt.transactionId">Transaktions-id:</span>
                                                         <span id="receiptTransactionId">—</span>
                                                     </div>
                                                 </div>
@@ -992,30 +992,30 @@
                                         <div class="receipt-section">
                                             <div class="receipt-columns">
                                                 <div class="receipt-column">
-                                                    <h3>Sælgers oplysninger</h3>
+                                                    <h3 data-i18n-key="confirmation.receipt.sellerInfo">Sælgers oplysninger</h3>
                                                     <div class="receipt-info" id="receiptSellerInfo">
-                                                        <div><strong>Sælgerens navn:</strong> <span id="receiptSellerName">—</span></div>
-                                                        <div><strong>Adresse:</strong> <span id="receiptSellerAddress">—</span></div>
-                                                        <div><strong>CVR-nummer:</strong> <span id="receiptSellerCVR">—</span></div>
-                                                        <div><strong>Telefon:</strong> <span id="receiptSellerPhone">—</span></div>
-                                                        <div><strong>E-mail:</strong> <span id="receiptSellerEmail">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.sellerName">Sælgerens navn:</strong> <span id="receiptSellerName">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.address">Adresse:</strong> <span id="receiptSellerAddress">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.cvr">CVR-nummer:</strong> <span id="receiptSellerCVR">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.phone">Telefon:</strong> <span id="receiptSellerPhone">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.email">E-mail:</strong> <span id="receiptSellerEmail">—</span></div>
                                                     </div>
                                                 </div>
                                                 
                                                 <div class="receipt-column">
-                                                    <h3>Kundens informationer</h3>
+                                                    <h3 data-i18n-key="confirmation.receipt.customerInfo">Kundens informationer</h3>
                                                     <div class="receipt-info" id="receiptCustomerInfo">
-                                                        <div><strong>Kundens navn:</strong> <span id="receiptCustomerName">—</span></div>
-                                                        <div><strong>Adresse:</strong> <span id="receiptCustomerAddress">—</span></div>
-                                                        <div><strong>Telefon:</strong> <span id="receiptCustomerPhone">—</span></div>
-                                                        <div><strong>E-mail:</strong> <span id="receiptCustomerEmail">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.customerName">Kundens navn:</strong> <span id="receiptCustomerName">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.address">Adresse:</strong> <span id="receiptCustomerAddress">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.phone">Telefon:</strong> <span id="receiptCustomerPhone">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.email">E-mail:</strong> <span id="receiptCustomerEmail">—</span></div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                         
                                         <div class="receipt-section">
-                                            <h3>Købte værdikort</h3>
+                                            <h3 data-i18n-key="confirmation.receipt.valueCardsPurchased">Købte værdikort</h3>
                                             <div class="receipt-items" id="receiptItems">
                                                 <!-- Items will be populated here -->
                                             </div>
@@ -1023,7 +1023,7 @@
                                     </div>
                                     
                                     <div class="receipt-footer">
-                                        <button class="receipt-close-btn" id="closeReceiptBtn" data-action="close-detailed-receipt">LUK</button>
+                                        <button class="receipt-close-btn" id="closeReceiptBtn" data-action="close-detailed-receipt" data-i18n-key="confirmation.receipt.close">LUK</button>
                                     </div>
                                 </div>
                             </div>
@@ -1042,15 +1042,15 @@
                                         <span class="membership-value" data-summary-field="membership-number">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Type:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.membershipType">Type:</span>
                                         <span class="membership-value" data-summary-field="membership-type">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Primary Gym:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.primaryGym">Primary Gym:</span>
                                         <span class="membership-value" data-summary-field="primary-gym">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Monthly Price:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.monthlyPrice">Monthly Price:</span>
                                         <span class="membership-value" data-summary-field="membership-price">0,00 kr</span>
                                     </div>
                                 </div>
@@ -1058,26 +1058,26 @@
                             
                             <!-- 15 Day Pass Details Card -->
                             <div class="confirmation-card" id="confirmation15DayPassSection" style="display: none;">
-                                <h3 class="card-title">15 Day Pass Details</h3>
+                                <h3 class="card-title" data-i18n-key="confirmation.15daypassDetails">15 Day Pass Details</h3>
                                 <div class="membership-info">
                                     <div class="membership-item">
                                         <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
                                         <span class="membership-value" data-summary-field="member-name">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Pass Type:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.passType">Pass Type:</span>
                                         <span class="membership-value" data-summary-field="pass-type">15 Day Pass</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Primary Gym:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.primaryGym">Primary Gym:</span>
                                         <span class="membership-value" data-summary-field="primary-gym">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Valid From:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.validFrom">Valid From:</span>
                                         <span class="membership-value" data-summary-field="pass-start-date">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Valid Until:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.validUntil">Valid Until:</span>
                                         <span class="membership-value" data-summary-field="pass-end-date">—</span>
                                     </div>
                                 </div>
@@ -1085,22 +1085,22 @@
                             
                             <!-- Punch Card Details Card -->
                             <div class="confirmation-card" id="confirmationPunchCardSection" style="display: none;">
-                                <h3 class="card-title">Punch Card Details</h3>
+                                <h3 class="card-title" data-i18n-key="confirmation.punchCardDetails">Punch Card Details</h3>
                                 <div class="membership-info">
                                     <div class="membership-item">
-                                        <span class="membership-label">Navn:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.name">Navn:</span>
                                         <span class="membership-value" data-summary-field="member-name">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Card Type:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.cardType">Card Type:</span>
                                         <span class="membership-value" data-summary-field="punch-card-type">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Quantity:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.quantity">Quantity:</span>
                                         <span class="membership-value" data-summary-field="punch-card-quantity">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Valid Until:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.validUntil">Valid Until:</span>
                                         <span class="membership-value" data-summary-field="punch-card-expiry">—</span>
                                     </div>
                                 </div>
@@ -1111,7 +1111,7 @@
                         <div class="confirmation-right">
                             <!-- Next Steps -->
                         <div class="next-steps">
-                                <h3 class="steps-title">What happens next?</h3>
+                                <h3 class="steps-title" data-i18n-key="confirmation.nextStepsTitle">What happens next?</h3>
                                 <ul class="steps-list">
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -1120,7 +1120,7 @@
                                                 <path d="M22 6L12 13 2 6"/>
                                             </svg>
                                         </div>
-                                        <span id="nextStep1">Email confirmation sent to your inbox</span>
+                                        <span id="nextStep1" data-i18n-key="confirmation.nextStep1">Email confirmation sent to your inbox</span>
                                     </li>
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -1129,7 +1129,7 @@
                                                 <path d="M22 4L12 14.01l-3-3"/>
                                             </svg>
                                         </div>
-                                        <span id="nextStep2">Membership activation & auto-renewal setup</span>
+                                        <span id="nextStep2" data-i18n-key="confirmation.nextStep2.membership">Membership activation & auto-renewal setup</span>
                                     </li>
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -1139,7 +1139,7 @@
                                                 <path d="M12 22.08V12"/>
                                             </svg>
                                         </div>
-                                        <span id="nextStep3">Pick up your membership card at the gym</span>
+                                        <span id="nextStep3" data-i18n-key="confirmation.nextStep3.membership">Pick up your membership card at the gym</span>
                                     </li>
                             </ul>
                         </div>
