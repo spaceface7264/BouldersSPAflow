@@ -1906,7 +1906,7 @@ class OrderAPI {
 
   // Step 7: Add value card item (punch card) - POST /api/ver3/orders/{orderId}/items/valuecards
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
-  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null) {
+  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null, amountInCentsFromCaller = null) {
     try {
       const url = this.useProxy
         ? buildApiUrl({
@@ -1928,17 +1928,40 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      // API Documentation requires 'valueCardProduct' field (integer, required)
-      // Optional fields: receiverDetails, senderDetails, amount, externalMessage, additionTo
-      // Note: quantity is handled by repeating the request or backend logic, not in payload
-      // additionTo links this value card to the parent subscription item
-      const payload = {
-        valueCardProduct: productId, // Required: Value card product ID (integer)
-        ...(additionTo ? { additionTo } : {}), // Link to parent subscription item if provided
-        // quantity is not in API spec - backend may handle it differently
-        // businessUnit is not in API spec - may be inferred from order context
-      };
+      // Resolve amount (price in cents). Backend may require 'amount' (FIELD_MANDATORY).
+      let amount = 0;
+      if (amountInCentsFromCaller != null && typeof amountInCentsFromCaller === 'number' && !Number.isNaN(amountInCentsFromCaller)) {
+        amount = Math.round(amountInCentsFromCaller);
+      } else {
+        const allValueCards = [
+          ...(state.valueCards || []),
+          ...(state.campaignValueCards || []),
+        ];
+        const valueCardProduct = allValueCards.find(p =>
+          p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)
+        ) || (state.allRawProducts || []).find(p =>
+          (p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)) &&
+          (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || p.valueCardType !== undefined)
+        );
+        const priceObj = valueCardProduct?.price;
+        const amountInCents = priceObj != null
+          ? (typeof priceObj === 'object' && 'amount' in priceObj ? priceObj.amount : Number(priceObj))
+          : (valueCardProduct?.amount != null ? valueCardProduct.amount : 0);
+        amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
+      }
       
+      // Backend requires amount (FIELD_MANDATORY) and may reject/500 on amount: 0. Send integer (cents).
+      const amountNum = typeof amount === 'number' && !Number.isNaN(amount) ? Math.round(amount) : 0;
+      // Workaround: backend often rejects amount 0 for free value cards; send 1 øre so request succeeds.
+      const amountToSend = amountNum > 0 ? amountNum : 1;
+      if (amountNum === 0) {
+        console.warn('[Step 7] Value card is free (0) – sending amount: 1 (1 øre) as workaround until backend accepts amount: 0');
+      }
+      const payload = {
+        valueCardProduct: productId,
+        amount: amountToSend,
+        ...(additionTo != null ? { additionTo } : {}),
+      };
       console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
       
       let data;
@@ -3064,7 +3087,20 @@ async function loadProductsFromAPI() {
       );
       return !hasPublicCampaignLabel;
     });
-    
+
+    // Sort all product lists by price high to low (price in cents for consistent comparison)
+    const getProductPriceCents = (product) => {
+      const amount = product.priceWithInterval?.price?.amount ?? product.price?.amount ?? product.amount;
+      if (amount == null) return 0;
+      return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
+    };
+    const byPriceHighToLow = (a, b) => getProductPriceCents(b) - getProductPriceCents(a);
+    campaignSubscriptions.sort(byPriceHighToLow);
+    campaignValueCards.sort(byPriceHighToLow);
+    membershipSubscriptions.sort(byPriceHighToLow);
+    dayPassSubscriptions.sort(byPriceHighToLow);
+    regularValueCards.sort(byPriceHighToLow);
+
     // Store in state
     state.campaignSubscriptions = campaignSubscriptions;
     state.campaignValueCards = campaignValueCards; // Value cards for Campaign category
@@ -3221,9 +3257,11 @@ function renderProductsFromAPI() {
     // Hide campaign category if no products
     if (!hasCampaignProducts) {
       campaignCategoryItem.style.display = 'none';
+      stopCampaignCountdown();
     } else {
       // Show category and render products
       campaignCategoryItem.style.display = '';
+      startCampaignCountdown();
       if (campaignPlansList) {
         campaignPlansList.innerHTML = '';
         
@@ -4065,6 +4103,7 @@ const state = {
   // Step 5: Store fetched products from API
   campaignSubscriptions: [], // Fetched campaign subscription products (with "PublicCampaign" label)
   campaignValueCards: [], // Fetched campaign value card products (with "PublicCampaign" label)
+  campaignEndDate: null, // ISO string or Date for countdown; if null, uses end of current month
   subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15 Day Pass")
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
@@ -4095,6 +4134,72 @@ let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
 let loginCooldownUntil = 0;
+let campaignCountdownIntervalId = null;
+
+// Campaign countdown end date: set here when API doesn't send Omsætningsperiode. Use ISO string or null for "end of current month".
+const CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK = '2026-02-16'; // e.g. '2026-02-15T23:59:59.999' or '2026-02-15'
+
+function getCampaignCountdownEndDate() {
+  const fromState = state.campaignEndDate;
+  if (fromState) {
+    const d = typeof fromState === 'string' ? new Date(fromState) : fromState;
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK) {
+    const d = new Date(CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return end;
+}
+
+function updateCampaignCountdown() {
+  const el = document.getElementById('campaignCountdown');
+  const valueEl = document.getElementById('campaignCountdownValue');
+  const endDate = getCampaignCountdownEndDate();
+  const now = new Date();
+  const diff = endDate.getTime() - now.getTime();
+  const timeLeft = diff > 0;
+  const parts = timeLeft ? (() => {
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+    const p = [];
+    if (days > 0) p.push(days + (days === 1 ? 'd' : 'd'));
+    p.push(String(hours).padStart(2, '0') + 'h', String(minutes).padStart(2, '0') + 'm', String(seconds).padStart(2, '0') + 's');
+    return p.join(' ');
+  })() : '';
+  if (!timeLeft) {
+    if (el) el.style.display = 'none';
+    if (campaignCountdownIntervalId) {
+      clearInterval(campaignCountdownIntervalId);
+      campaignCountdownIntervalId = null;
+    }
+    return;
+  }
+  if (valueEl) valueEl.textContent = parts;
+  if (el) el.style.display = '';
+}
+
+function startCampaignCountdown() {
+  if (campaignCountdownIntervalId) {
+    clearInterval(campaignCountdownIntervalId);
+    campaignCountdownIntervalId = null;
+  }
+  updateCampaignCountdown();
+  campaignCountdownIntervalId = setInterval(updateCampaignCountdown, 1000);
+}
+
+function stopCampaignCountdown() {
+  if (campaignCountdownIntervalId) {
+    clearInterval(campaignCountdownIntervalId);
+    campaignCountdownIntervalId = null;
+  }
+  const el = document.getElementById('campaignCountdown');
+  if (el) el.style.display = 'none';
+}
 
 function isUserAuthenticated() {
   return typeof window.getAccessToken === 'function' && Boolean(window.getAccessToken());
@@ -5204,7 +5309,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
     'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
@@ -5234,7 +5339,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
@@ -5274,9 +5379,16 @@ const translations = {
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
     'modal.loading': 'Indlæser...',
     'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
-    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagnebebegrænsninger. Du kan oprette et almindeligt medlemskab. Kontakt support hvis du tror dette er en fejl.',
+    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes at du har forladt betalingsvinduet uden at gennenmføre, et eksisterende abonnementer eller kampagnebegrænsning. Kontakt support hvis du tror dette er en fejl. Du kan stadig oprette et almindeligt medlemskab.',
     'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
     'modal.campaignRejection.option2': 'Kontakt support',
+    'modal.paymentRedirectInfo.title': 'Klar til betaling',
+    'modal.paymentRedirectInfo.message': 'Du sendes videre til betalingssiden og bliver opkrævet 0,01 kr som en teknisk løsning på det gratis kaffekort.',
+    'modal.paymentRedirectInfo.continue': 'Fortsæt til betaling',
+    'modal.cartOfferExpired.title': 'Tilbuddet er udløbet',
+    'modal.cartOfferExpired.message': 'Tiden til at gennemføre dit køb er udløbet. Du kan stadig forsøge at betale til den viste pris, eller gå tilbage og vælge et andet medlemskab.',
+    'modal.cartOfferExpired.continue': 'Fortsæt til betaling',
+    'modal.cartOfferExpired.chooseOther': 'Vælg andet tilbud',
     'faq.title': 'Ofte stillede spørgsmål',
     'faq.gyms.openingHours.q': 'Hvad er åbningstiderne?',
     'faq.gyms.openingHours.a': 'Åbningstiderne varierer mellem hallerne. Du kan finde de aktuelle åbningstider på vores hjemmeside eller ved at kontakte den specifikke hal.',
@@ -5326,7 +5438,7 @@ const translations = {
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
+    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
@@ -5356,7 +5468,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
@@ -5396,9 +5508,16 @@ const translations = {
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
     'modal.loading': 'Loading...',
     'modal.campaignRejection.title': 'Campaign Not Available',
-    'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.',
+    'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. If you believe this is a mistake, contact support. You can still sign up for a regular membership.',
     'modal.campaignRejection.option1': 'Regular Membership',
     'modal.campaignRejection.option2': 'Contact Support',
+    'modal.paymentRedirectInfo.title': 'Ready for payment',
+    'modal.paymentRedirectInfo.message': "You'll be taken to the payment page. It may show 0,01 kr because of a free item in your cart – you won't be charged more.",
+    'modal.paymentRedirectInfo.continue': 'Continue to payment',
+    'modal.cartOfferExpired.title': 'Offer expired',
+    'modal.cartOfferExpired.message': 'The time to complete your purchase has run out. You can still try to pay at the price shown, or go back and choose another membership.',
+    'modal.cartOfferExpired.continue': 'Continue to payment',
+    'modal.cartOfferExpired.chooseOther': 'Choose another offer',
     'faq.title': 'Frequently Asked Questions',
     'faq.gyms.openingHours.q': 'What are the opening hours?',
     'faq.gyms.openingHours.intro': 'All Boulders are open from morning to evening 361 days a year:',
@@ -5447,7 +5566,7 @@ const translations = {
   },
   'de-DE': {
     'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.campaign.endsIn': 'Endet in', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
     'category.membership.desc': 'Mitgliedschaft ist ein laufendes Abonnement mit automatischer Verlängerung. Keine Anmelde- oder Kündigungsgebühren. Kündigungsfrist ist der Rest des Monats + 1 Monat.',
     'category.15daypass.desc': 'Erhalten Sie 15 Tage unbegrenzten Zugang zu allen Hallen. Perfekt zum Ausprobieren des Kletterns oder für einen kurzen Besuch.',
     'category.punchcard.desc': 'Sie können jeweils 1 Art von Stempelkarte kaufen. Jeder Eintritt verwendet einen Stempel auf Ihrer Stempelkarte. Die Karte ist 5 Jahre gültig und beinhaltet keine Mitgliedschaftsvorteile. Füllen Sie innerhalb von 14 Tagen nach Ihrem letzten Stempel nach und erhalten Sie 100 kr Rabatt in der Halle.',
@@ -5477,7 +5596,7 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
@@ -5520,6 +5639,9 @@ const translations = {
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
+    'modal.paymentRedirectInfo.title': 'Bereit zur Zahlung',
+    'modal.paymentRedirectInfo.message': 'Sie werden zur Zahlungsseite weitergeleitet. Dort kann 0,01 kr angezeigt werden, da ein kostenloses Add-on im Warenkorb liegt – es fallen keine weiteren Kosten an.',
+    'modal.paymentRedirectInfo.continue': 'Weiter zur Zahlung',
   },
 };
 
@@ -6136,6 +6258,24 @@ function showCampaignRejectionModal() {
 
 function hideCampaignRejectionModal() {
   const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function showPaymentRedirectInfoModal() {
+  const modal = document.getElementById('paymentRedirectInfoModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    setTimeout(() => {
+      const btn = document.getElementById('paymentRedirectInfoContinue');
+      if (btn) btn.focus();
+    }, 100);
+  }
+}
+
+function hidePaymentRedirectInfoModal() {
+  const modal = document.getElementById('paymentRedirectInfoModal');
   if (modal) {
     modal.style.display = 'none';
   }
@@ -7102,6 +7242,15 @@ function setupEventListeners() {
     if (e.target.closest('#campaignRejectionModalClose')) {
       hideCampaignRejectionModal();
     }
+    
+    // Payment redirect info modal (0,01 kr workaround)
+    if (e.target.closest('#paymentRedirectInfoContinue')) {
+      hidePaymentRedirectInfoModal();
+      handleCheckout();
+    }
+    if (e.target.closest('#paymentRedirectInfoModalClose')) {
+      hidePaymentRedirectInfoModal();
+    }
   });
   
   // Close campaign rejection modal when clicking outside
@@ -7110,6 +7259,16 @@ function setupEventListeners() {
     campaignRejectionModal.addEventListener('click', (e) => {
       if (e.target === campaignRejectionModal) {
         hideCampaignRejectionModal();
+      }
+    });
+  }
+  
+  // Close payment redirect info modal when clicking outside
+  const paymentRedirectInfoModal = document.getElementById('paymentRedirectInfoModal');
+  if (paymentRedirectInfoModal) {
+    paymentRedirectInfoModal.addEventListener('click', (e) => {
+      if (e.target === paymentRedirectInfoModal) {
+        hidePaymentRedirectInfoModal();
       }
     });
   }
@@ -10826,7 +10985,7 @@ function handleGlobalClick(event) {
     }
     case 'submit-checkout': {
       event.preventDefault();
-      handleCheckout();
+      handleCheckoutClick();
       break;
     }
     case 'continue-value-cards': {
@@ -12195,33 +12354,19 @@ function hasCampaignInCart() {
     return true;
   }
   
-  // Check if any cart item's productId exists in campaignSubscriptions
-  if (state.cartItems && state.cartItems.length > 0 && state.campaignSubscriptions) {
-    return state.cartItems.some(item => {
-      if (!item.productId) return false;
-      const productIdNum = typeof item.productId === 'string' 
-        ? parseInt(item.productId) 
-        : item.productId;
-      return state.campaignSubscriptions.some(campaign => 
-        campaign.id === item.productId || 
-        campaign.id === productIdNum ||
-        String(campaign.id) === String(item.productId)
-      );
-    });
+  // Check if any cart item's productId exists in campaign subscriptions or campaign value cards
+  const isCampaignProduct = (id) => {
+    const num = typeof id === 'string' ? parseInt(id, 10) : id;
+    const inSubs = state.campaignSubscriptions?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
+    const inCards = state.campaignValueCards?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
+    return inSubs || inCards;
+  };
+  if (state.cartItems && state.cartItems.length > 0) {
+    if (state.cartItems.some(item => item.productId && isCampaignProduct(item.productId))) return true;
   }
-  
-  // Check if selectedProductId is in campaignSubscriptions
-  if (state.selectedProductId && state.campaignSubscriptions) {
-    const productIdNum = typeof state.selectedProductId === 'string' 
-      ? parseInt(state.selectedProductId) 
-      : state.selectedProductId;
-    return state.campaignSubscriptions.some(campaign => 
-      campaign.id === state.selectedProductId || 
-      campaign.id === productIdNum ||
-      String(campaign.id) === String(state.selectedProductId)
-    );
-  }
-  
+
+  if (state.selectedProductId && isCampaignProduct(state.selectedProductId)) return true;
+
   return false;
 }
 
@@ -12389,7 +12534,7 @@ function updateCartSummary() {
   } else {
     hideCampaignWarning();
   }
-  
+
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   
@@ -13107,8 +13252,50 @@ function updatePaymentOverview() {
       today.setHours(0, 0, 0, 0);
       const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
-      
-      if (initialPaymentPeriod?.start) {
+      const dayOfMonth = today.getDate();
+      const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
+        p => String(p.id) === String(productId)
+      );
+      // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
+      const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
+
+      if (isFirstMonthFreeCampaign) {
+        if (dayOfMonth < 16) {
+          payNowAmount = 0;
+          if (initialPaymentPeriod?.start) {
+            billingPeriod = {
+              start: new Date(initialPaymentPeriod.start),
+              end: new Date(initialPaymentPeriod.end)
+            };
+          } else {
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+          }
+          console.log('[Payment Overview] ✅ First month free campaign (date < 16): 0 kr from API');
+        } else {
+          payNowAmount = expectedPrice ? expectedPrice.amountInDKK : orderPriceDKK;
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          if (expectedPrice?.includesNextMonth) {
+            const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+            const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+            billingPeriod = {
+              start: today,
+              end: new Date(nextYear, nextMonth + 1, 0)
+            };
+          } else {
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+          }
+          console.log('[Payment Overview] ✅ First month free campaign (date >= 16): rest-of-month price:', payNowAmount, 'DKK');
+        }
+      } else if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
         const backendEndDate = new Date(initialPaymentPeriod.end);
         
@@ -13221,9 +13408,26 @@ function updatePaymentOverview() {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
-          
+          const dayOfMonth = today.getDate();
+          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
+            p => String(p.id) === String(membership.id)
+          );
+          const productNameForCampaign = (membership.name || '').toLowerCase();
+          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
+            /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
+          );
+
+          if (isFirstMonthFreeCampaignNoOrder && dayOfMonth < 16) {
+            payNowAmount = 0;
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+            console.log('[Payment Overview] ✅ First month free campaign (no order, date < 16): 0 kr');
+          } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
-          if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
             if (expectedPrice) {
               payNowAmount = expectedPrice.amountInDKK;
@@ -14152,6 +14356,14 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
   return defaultMs;
 }
 
+function handleCheckoutClick() {
+  if (hasFreeValueCardAddon()) {
+    showPaymentRedirectInfoModal();
+    return;
+  }
+  handleCheckout();
+}
+
 async function handleCheckout() {
   // Prevent multiple simultaneous checkout attempts
   if (state.checkoutInProgress) {
@@ -15042,9 +15254,19 @@ async function handleCheckout() {
                 });
                 
                 if (isValueCard) {
-                  // Add as value card with additionTo link
-                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId})`);
-                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId);
+                  // Add as value card with additionTo link. Pass amount (cents) so API FIELD_MANDATORY is satisfied.
+                  let amountCents = getAddonPriceInCents(addon);
+                  if (amountCents <= 0) {
+                    const allVc = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
+                    const vcProduct = allVc.find(p => p.id === numericId || String(p.id) === String(addonId));
+                    const priceObj = vcProduct?.price;
+                    if (priceObj != null) {
+                      amountCents = typeof priceObj === 'object' && 'amount' in priceObj ? Math.round(Number(priceObj.amount)) : Math.round(Number(priceObj));
+                    }
+                    if (vcProduct?.amount != null) amountCents = Math.round(Number(vcProduct.amount));
+                  }
+                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId}), amount: ${amountCents} cents`);
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId, amountCents > 0 ? amountCents : null);
                 } else {
                   // Add as article with additionTo link
                   console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${validSubscriptionItemId})`);
@@ -20263,6 +20485,44 @@ function getAddonPrice(addon) {
   }
   
   return 0;
+}
+
+// Addon price in cents (for API payloads that require amount)
+function getAddonPriceInCents(addon) {
+  if (!addon) return 0;
+  if (addon.priceWithInterval?.price?.amount != null) return Math.round(Number(addon.priceWithInterval.price.amount));
+  if (addon.price?.amount != null) return Math.round(Number(addon.price.amount));
+  if (addon.amount != null) return Math.round(Number(addon.amount));
+  // Subscription additions often have price.discounted in DKK
+  if (addon.price && typeof addon.price.discounted === 'number') return Math.round(addon.price.discounted * 100);
+  const dkk = getAddonPrice(addon);
+  return Math.round(dkk * 100);
+}
+
+// True if cart has at least one addon that is a value card with price 0 (triggers 0,01 kr workaround)
+function hasFreeValueCardAddon() {
+  if (!state.addonIds || state.addonIds.size === 0) return false;
+  const allValueCards = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
+  for (const addonId of state.addonIds) {
+    const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+    const addon = findAddon(addonId);
+    const isInValueCards = allValueCards.some(vc => {
+      const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+      return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+    });
+    const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+      const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+      return (pId === numericId || String(p.id) === String(addonId)) &&
+        (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || (!p.priceWithInterval && !p.subscriptionInterval));
+    });
+    const hasValueCardType = addon && (addon.productType === 'VALUE_CARD' || addon.productType === 'VALUECARD' ||
+      (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD')));
+    const hasValueCardFields = addon && (addon.valueCardType !== undefined || addon.validUntil !== undefined ||
+      (addon.product && addon.product.valueCardType !== undefined));
+    const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+    if (isValueCard && getAddonPriceInCents(addon) <= 0) return true;
+  }
+  return false;
 }
 
 // Privacy and Terms Consent Persistence
