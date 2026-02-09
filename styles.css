@@ -223,6 +223,7 @@
     margin: 0;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     flex: 1;
@@ -231,6 +232,7 @@
   .addon-card.expanded .addon-card-content .plan-description {
     display: block;
     -webkit-line-clamp: unset;
+    line-clamp: unset;
     -webkit-box-orient: unset;
     overflow: visible;
   }
@@ -738,6 +740,17 @@ body {
     transform: translateX(-50%);
 }
 
+/* Header right group: language + auth */
+.header-right {
+    position: absolute;
+    right: 20px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
 /* Header Auth Indicator */
 .header-auth-indicator {
     display: none;
@@ -745,9 +758,6 @@ body {
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
-    position: absolute;
-    right: 20px;
-    left: auto;
 }
 
 .header-auth-text {
@@ -815,7 +825,109 @@ body {
     letter-spacing: 0.5px;
 }
 
-/* Language Switcher - Styles are defined later in the file (around line 5625) */
+/* Language Switcher in Header (dropdown) – inside .header-right */
+.header .language-switcher {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.header .language-switcher-trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: var(--font-size-xs);
+    background-color: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+.header .language-switcher-trigger:hover {
+    border-color: var(--color-brand-accent);
+    color: #fff;
+    background-color: rgba(244, 1, 245, 0.15);
+}
+
+.header .language-switcher.open .language-switcher-trigger {
+    border-color: var(--color-brand-accent);
+    color: #fff;
+    background-color: rgba(244, 1, 245, 0.2);
+}
+
+.header .language-switcher .language-chevron {
+    font-size: 10px;
+    opacity: 0.9;
+    transition: transform 0.2s ease;
+    margin-left: 2px;
+}
+
+.header .language-switcher.open .language-chevron {
+    transform: rotate(180deg);
+}
+
+.header .language-dropdown {
+    position: absolute;
+    top: 100%;
+    left: auto;
+    right: 0;
+    margin-top: 4px;
+    min-width: 100%;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    background: rgba(26, 26, 26, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+}
+
+.header .language-switcher.open .language-dropdown {
+    display: flex;
+}
+
+.header .language-dropdown .language-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: var(--font-size-xs);
+    text-align: left;
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.header .language-dropdown .language-btn:hover {
+    background-color: rgba(244, 1, 245, 0.15);
+    color: #fff;
+}
+
+.header .language-dropdown .language-btn.active {
+    background-color: rgba(244, 1, 245, 0.2);
+    color: #fff;
+}
+
+.header .language-switcher .language-flag {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.header .language-switcher .language-name {
+    font-weight: 600;
+    font-size: var(--font-size-xs);
+}
 
 /* Mobile Header Styles */
 @media (max-width: 768px) {
@@ -839,9 +951,37 @@ body {
         min-width: 90px;
     }
     
+    /* Header: language left, auth right on tablet/mobile */
+    .header-right {
+        left: 12px;
+        right: 12px;
+        width: auto;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    
+    .header .language-dropdown {
+        left: 0;
+        right: auto;
+    }
+    
+    .header .language-switcher-trigger {
+        padding: 5px 8px;
+        font-size: 11px;
+        gap: 4px;
+    }
+    
+    .header .language-switcher .language-flag {
+        font-size: 12px;
+    }
+    
+    .header .language-dropdown .language-btn {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+    
     /* Header auth: stack vertically, truncate email */
     .header-auth-indicator {
-        right: 12px;
         gap: 4px;
         flex-direction: column;
         align-items: flex-end;
@@ -928,9 +1068,37 @@ body {
         min-width: 70px;
     }
     
+    /* Header: language left, auth right (same as tablet) */
+    .header-right {
+        left: 8px;
+        right: 8px;
+        width: auto;
+        justify-content: space-between;
+        gap: 6px;
+    }
+    
+    .header .language-dropdown {
+        left: 0;
+        right: auto;
+    }
+    
+    .header .language-switcher-trigger {
+        padding: 4px 6px;
+        font-size: 10px;
+        gap: 4px;
+    }
+    
+    .header .language-switcher .language-flag {
+        font-size: 11px;
+    }
+    
+    .header .language-dropdown .language-btn {
+        padding: 6px 10px;
+        font-size: 10px;
+    }
+    
     /* Header auth: stacked, compact */
     .header-auth-indicator {
-        right: 8px;
         gap: 4px;
         flex-direction: column;
         align-items: flex-end;
@@ -1907,7 +2075,7 @@ body {
     display: none !important;
 }
 
-/* Gym Heads-up Display */
+/* Gym Heads-up Display – on top visually, but pointer-events: none so header buttons stay clickable */
 .gym-heads-up {
     position: fixed;
     top: 20px;
@@ -1917,6 +2085,7 @@ body {
     border-radius: 12px;
     padding: 12px 16px;
     z-index: 1000;
+    pointer-events: none;
     opacity: 0;
     transform: translateY(-10px);
     transition: all 0.3s ease;
@@ -1949,7 +2118,7 @@ body {
     font-weight: 600;
 }
 
-/* Access Type Heads-up Display */
+/* Access Type Heads-up Display – on top visually, but pointer-events: none so header buttons stay clickable */
 .access-heads-up {
     position: fixed;
     top: 20px;
@@ -1959,6 +2128,7 @@ body {
     border-radius: 12px;
     padding: 12px 16px;
     z-index: 1000;
+    pointer-events: none;
     opacity: 0;
     transform: translateY(-10px);
     transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -2222,7 +2392,122 @@ body {
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
 }
 
+.campaign-countdown {
+    margin-top: 8px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
 
+.campaign-countdown-label {
+    color: var(--color-text-muted);
+}
+
+.campaign-countdown-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: rgba(34, 197, 94, 0.95);
+}
+
+.cart-campaign-countdown {
+    margin: 8px 0;
+    padding: 8px 12px;
+    font-size: var(--font-size-sm);
+    background: rgba(34, 197, 94, 0.08);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cart-campaign-countdown-label {
+    color: var(--color-text-muted);
+}
+
+.cart-campaign-countdown-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: rgba(34, 197, 94, 0.95);
+}
+
+.cart-timer-countdown {
+    margin: 10px 0;
+    padding: 10px 14px;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.cart-timer-countdown-icon {
+    display: inline-flex;
+    color: rgba(34, 197, 94, 0.95);
+    flex-shrink: 0;
+}
+
+.cart-timer-countdown-label {
+    color: var(--color-text);
+    font-weight: 500;
+}
+
+.cart-timer-countdown-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 1.05em;
+    letter-spacing: 0.02em;
+    color: rgba(34, 197, 94, 0.95);
+}
+
+/* Urgency: under 5 minutes */
+.cart-timer-countdown[data-urgent="true"] {
+    background: rgba(234, 179, 8, 0.14);
+    border-color: rgba(234, 179, 8, 0.4);
+    animation: cart-timer-pulse 2s ease-in-out infinite;
+}
+
+.cart-timer-countdown[data-urgent="true"] .cart-timer-countdown-icon,
+.cart-timer-countdown[data-urgent="true"] .cart-timer-countdown-value {
+    color: rgba(202, 138, 4, 0.95);
+}
+
+/* Critical: under 2 minutes */
+.cart-timer-countdown[data-critical="true"] {
+    background: rgba(220, 38, 38, 0.12);
+    border-color: rgba(220, 38, 38, 0.45);
+    animation: cart-timer-pulse 1s ease-in-out infinite;
+}
+
+.cart-timer-countdown[data-critical="true"] .cart-timer-countdown-icon,
+.cart-timer-countdown[data-critical="true"] .cart-timer-countdown-value {
+    color: rgba(185, 28, 28, 0.95);
+}
+
+@keyframes cart-timer-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 transparent; }
+    50% { opacity: 1; box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.15); }
+}
+
+.cart-timer-countdown[data-critical="true"] {
+    animation-name: cart-timer-pulse-critical;
+}
+
+@keyframes cart-timer-pulse-critical {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.2); }
+    50% { opacity: 1; box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.25); }
+}
 
 .category-item.selected {
     border-color: #f0f;
@@ -2388,6 +2673,7 @@ body {
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
+    flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
     padding: 20px 24px; /* Increased padding for comfortable spacing */
@@ -2509,7 +2795,7 @@ body {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
-    align-items: stretch;
+    align-items: flex-start;
     gap: 20px; /* Increased gap for better spacing */
     padding-right: 0;
     min-height: 100%;
@@ -2544,6 +2830,24 @@ body {
     justify-content: flex-end;
     align-self: flex-start;
     padding-top: 0;
+}
+
+/* Top right: Select button */
+.plan-card-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    align-self: flex-start;
+}
+
+.plan-footer {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: auto;
+    padding-top: 12px;
 }
 
 .plan-price {
@@ -2586,8 +2890,8 @@ body {
 
 .plan-card .select-btn {
     position: absolute;
-    bottom: 16px;
-    right: 20px;
+    top: 20px;
+    right: 24px;
     padding: 10px 20px;
     background: #f0f;
     color: white;
@@ -2654,8 +2958,6 @@ body {
     }
 
     .plan-card .select-btn {
-        bottom: 12px;
-        right: 20px;
         padding: 10px 18px;
         font-size: var(--font-size-sm);
     }
@@ -2693,8 +2995,6 @@ body {
     }
 
     .plan-card .select-btn {
-        bottom: 12px;
-        right: 18px;
         padding: 8px 16px;
         font-size: var(--font-size-sm);
     }
@@ -2829,13 +3129,16 @@ body {
     box-shadow: none;
 }
 
-/* Quantity Panel - Replaces Select button in place; does not affect plan-info or price */
+/* Quantity Panel - Overlays card (top right), does not push content */
 .plan-card .quantity-panel {
     display: none;
     position: absolute;
-    bottom: 16px;
-    right: 20px;
+    top: 20px;
+    right: 24px;
     flex: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
     padding: 10px 12px;
     background: rgba(15, 23, 42, 0.95);
     border: 1px solid rgba(240, 0, 240, 0.3);
@@ -2843,19 +3146,32 @@ body {
     z-index: 2;
     animation: slideDown 0.25s ease-out;
     box-sizing: border-box;
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: nowrap;
-    white-space: nowrap;
-    gap: 8px;
 }
 
 .plan-card .quantity-panel.show {
     display: flex;
 }
 
-/* Continue button in quantity panel - same look as Select button */
+/* Label above quantity controls for clearer UX */
+.plan-card .quantity-panel .quantity-panel-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    line-height: 1.3;
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* Quantity selector and Continue button span same width */
+.plan-card .quantity-panel .quantity-selector {
+    align-self: stretch;
+}
+
+/* Continue button in quantity panel - same width as selector */
 .plan-card .quantity-panel .continue-btn {
+    display: inline-block;
+    align-self: stretch;
+    width: 100%;
+    box-sizing: border-box;
     padding: 10px 20px;
     background: #f0f;
     color: white;
@@ -2867,8 +3183,6 @@ body {
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px rgba(240, 0, 240, 0.3);
     white-space: nowrap;
-    width: auto;
-    flex-shrink: 0;
 }
 
 .plan-card .quantity-panel .continue-btn:hover {
@@ -4414,8 +4728,9 @@ body {
 .terms-modal-content {
     background-color: #1a1a1a;
     border: 1px solid #374151;
-    border-radius: 12px;
+    border-radius: 6px;
     width: 100%;
+    padding: 12px 0 6px 0;
     max-width: 900px;
     max-height: 90vh;
     display: flex;
@@ -4706,121 +5021,198 @@ body {
     font-style: italic;
 }
 
-/* Campaign Rejection Modal */
-.campaign-rejection-content {
-    padding: 32px;
-}
 
-.campaign-rejection-message {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-md);
-    margin-bottom: 32px;
-    line-height: 1.7;
-    text-align: center;
+/* ==========================================================================
+   Info modals (campaign rejection + payment redirect)
+   Shared styling for #campaignRejectionModal and #paymentRedirectInfoModal.
+   ========================================================================== */
+:is(#campaignRejectionModal, #paymentRedirectInfoModal).terms-modal {
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    animation: fadeIn 0.25s ease-out;
 }
-
-.campaign-rejection-actions {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-content {
+    position: relative;
+    background: linear-gradient(180deg, #1f1f1f 0%, #1a1a1a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+        0 24px 48px rgba(0, 0, 0, 0.4),
+        0 12px 24px rgba(0, 0, 0, 0.3);
+    animation: fadeInSlide 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-header {
     display: flex;
-    gap: 16px;
-    flex-direction: column;
-    width: 100%;
+    align-items: center;
+    justify-content: center;
+    border-bottom: none;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-title {
+    text-align: center;
+    flex: 1;
+    padding-right: 40px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-header-actions {
+    position: absolute;
+    top: 0px;
+    right: 6px;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-close {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    border-radius: 10px;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-close:hover {
+    color: var(--color-text-secondary);
+    background: rgba(255, 255, 255, 0.08);
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-close:focus {
+    outline: 2px solid #F401F5;
+    outline-offset: 2px;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-close svg {
+    width: 18px;
+    height: 18px;
 }
 
-.campaign-rejection-btn {
-    width: 100%;
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-content {
+    padding: 0px 32px 32px 32px;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-message {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-lg);
+    margin-bottom: 32px;
+    line-height: 1.65;
+    text-align: center;
+    letter-spacing: 0.01em;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    justify-content: center;
+    align-items: center;
+    width: auto;
+}
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn {
+    width: auto;
+    min-width: 160px;
     padding: 16px 32px;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     font-size: var(--font-size-md);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
     text-align: center;
     min-height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
-
-.campaign-rejection-btn-primary {
-    background-color: #F401F5;
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-primary {
+    background: linear-gradient(180deg, #F401F5 0%, #D401D5 100%);
     color: white;
-    box-shadow: 0 4px 12px rgba(244, 1, 245, 0.3);
+    border: none;
+    box-shadow: 0 4px 14px rgba(244, 1, 245, 0.35);
 }
-
-.campaign-rejection-btn-primary:hover {
-    background-color: #D401D5;
-    box-shadow: 0 6px 16px rgba(244, 1, 245, 0.4);
-    transform: translateY(-1px);
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-primary:hover {
+    background: linear-gradient(180deg, #FF1AFF 0%, #E401E5 100%);
+    box-shadow: 0 6px 20px rgba(244, 1, 245, 0.45);
+    transform: translateY(-2px);
 }
-
-.campaign-rejection-btn-primary:active {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-primary:active {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.3);
+    box-shadow: 0 2px 10px rgba(244, 1, 245, 0.3);
 }
-
-.campaign-rejection-btn-secondary {
-    background-color: transparent;
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-secondary {
+    background-color: rgba(255, 255, 255, 0.04);
     color: var(--color-text-secondary);
-    border: 1px solid var(--color-item-border);
+    border: 1px solid rgba(255, 255, 255, 0.12);
 }
-
-.campaign-rejection-btn-secondary:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-    border-color: var(--color-text-muted);
-    transform: translateY(-1px);
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
 }
-
-.campaign-rejection-btn-secondary:active {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn-secondary:active {
     transform: translateY(0);
 }
-
-.campaign-rejection-btn:focus {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn:focus {
     outline: 2px solid #F401F5;
     outline-offset: 2px;
 }
-
-.campaign-rejection-btn:disabled {
+:is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;
 }
 
-/* Desktop: Side-by-side buttons */
+/* Payment redirect only: narrower modal, single full-width button */
+#paymentRedirectInfoModal .terms-modal-content {
+    max-width: 500px;
+}
+#paymentRedirectInfoModal .campaign-rejection-btn {
+    max-width: 100%;
+}
+
 @media (min-width: 640px) {
-    .campaign-rejection-actions {
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-actions {
         flex-direction: row;
-        gap: 16px;
     }
-    
-    .campaign-rejection-btn {
-        flex: 1;
-        min-width: 0;
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-content {
+        padding: 12px 40px 32px 40px;
     }
-    
-    .campaign-rejection-content {
-        padding: 40px;
-    }
-    
-    .campaign-rejection-message {
-        font-size: var(--font-size-lg);
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-message {
+        font-size: var(--font-size-base);
         margin-bottom: 40px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .terms-modal-title {
+        font-size: var(--font-size-md);
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn {
+        padding: 18px 36px;
+    }
+}
+@media (min-width: 1024px) {
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-content {
+        padding: 56px 48px 48px 48px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-actions {
+        gap: 20px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-message {
+        font-size: 15px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn {
+        padding: 18px 40px;
+        font-size: var(--font-size-base);
     }
 }
 
-/* Large desktop: Better spacing */
-@media (min-width: 1024px) {
-    .campaign-rejection-content {
-        padding: 48px;
+@media (max-width: 639px) {
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-content {
+        padding: 32px 24px 24px 24px;
     }
-    
-    .campaign-rejection-actions {
-        gap: 20px;
-    }
-    
-    .campaign-rejection-btn {
-        padding: 18px 40px;
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-message {
         font-size: var(--font-size-md);
+        margin-bottom: 28px;
+    }
+    :is(#campaignRejectionModal, #paymentRedirectInfoModal) .campaign-rejection-btn {
+        min-width: 140px;
+        padding: 14px 24px;
+        min-height: 48px;
     }
 }
 
@@ -5880,6 +6272,7 @@ body {
 
 /* Discount Code */
 .discount-section {
+    margin-top: 20px;
     margin-bottom: 20px;
 }
 
@@ -6414,27 +6807,6 @@ main {
     background-color: rgba(244, 1, 245, 0.15);
 }
 
-.footer-bottom .language-switcher {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.footer-bottom .language-btn {
-    padding: 6px 10px;
-    font-size: var(--font-size-xs);
-}
-
-.footer-bottom .language-flag {
-    font-size: 14px;
-    line-height: 1;
-}
-
-.footer-bottom .language-name {
-    font-weight: 600;
-    font-size: var(--font-size-xs);
-}
-
 /* =================================
    MOBILE & TABLET FOOTER
    ================================= */
@@ -6508,10 +6880,6 @@ main {
         text-align: center;
         font-size: var(--font-size-xs);
         line-height: 1.5;
-    }
-    
-    .footer-bottom .language-switcher {
-        justify-content: center;
     }
 }
 
@@ -7378,6 +7746,185 @@ main {
     margin-top: 8px;
     font-size: var(--font-size-sm);
     color: #6b7280;
+}
+
+/* FAQ Section */
+.faq-section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 48px 16px;
+    margin-top: 32px;
+}
+
+.faq-container {
+    width: 100%;
+}
+
+.faq-title {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-text-white);
+    margin-bottom: 32px;
+    text-align: center;
+}
+
+.faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.faq-item {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.faq-item:hover {
+    background: rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.faq-question {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: var(--color-text-white);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    transition: color 0.2s ease;
+}
+
+.faq-question:hover {
+    color: var(--color-primary);
+}
+
+.faq-question[aria-expanded="true"] {
+    color: var(--color-primary);
+}
+
+.faq-question-text {
+    flex: 1;
+    padding-right: 16px;
+}
+
+.faq-icon {
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.faq-question[aria-expanded="true"] .faq-icon {
+    transform: rotate(180deg);
+    color: var(--color-primary);
+}
+
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 24px;
+}
+
+.faq-item[aria-expanded="true"] .faq-answer {
+    max-height: 500px;
+    padding: 0 24px 20px 24px;
+}
+
+.faq-answer-text {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: var(--font-size-base);
+    line-height: 1.6;
+    margin: 0;
+    padding-top: 8px;
+    text-align: left;
+}
+
+/* FAQ opening hours table (step 1 gyms) – only when expanded */
+.faq-item--with-table[aria-expanded="true"] .faq-answer {
+    max-height: 720px;
+}
+
+.faq-opening-hours-intro {
+    margin: 0 0 12px 0;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: var(--font-size-base);
+    line-height: 1.5;
+}
+
+.faq-opening-hours-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.faq-opening-hours-table thead th {
+    text-align: left;
+    padding: 8px 12px 8px 0;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.faq-opening-hours-table tbody td {
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.faq-opening-hours-table .faq-oh-name {
+    font-weight: 500;
+}
+
+.faq-opening-hours-table .faq-oh-hours {
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Hide FAQ when checkout is in progress or on step 5 */
+.faq-section[data-checkout="true"],
+.faq-section[data-step-5="true"] {
+    display: none !important;
+}
+
+/* FAQ Help Link in Cart */
+.faq-help-link-section {
+    margin: 20px 0 0 0;
+    padding: 12px 0 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.faq-help-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transition: all 0.2s ease;
+    padding: 8px 16px;
+    border-radius: 6px;
+}
+
+.faq-help-link:hover {
+    color: var(--color-primary);
+    background: rgba(244, 1, 245, 0.1);
+    text-decoration: none;
+}
+
+.faq-help-link svg {
+    flex-shrink: 0;
+    color: var(--color-primary);
 }
 
 .receipt-info {
@@ -8423,129 +8970,6 @@ main {
     line-height: 1.5;
     margin: 0;
     flex: 1;
-}
-
-/* Campaign Rejection Modal */
-.campaign-rejection-content {
-    padding: 32px;
-}
-
-.campaign-rejection-message {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-md);
-    margin-bottom: 32px;
-    line-height: 1.7;
-    text-align: center;
-}
-
-.campaign-rejection-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    margin-top: 44px;
-    gap: 16px;
-    flex-direction: column;
-    width: 100%;
-}
-
-.campaign-rejection-btn {
-    width: 100%;
-    padding: 16px 32px;
-    border: none;
-    border-radius: 8px;
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: center;
-    min-height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.campaign-rejection-btn-primary {
-    background-color: #F401F5;
-    color: white;
-}
-
-.campaign-rejection-btn-primary:hover {
-    background-color: #D401D5;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(244, 1, 245, 0.4);
-}
-
-.campaign-rejection-btn-primary:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.3);
-}
-
-.campaign-rejection-btn-secondary {
-    background-color: var(--color-background-secondary);
-    border: 2px solid var(--color-brand-accent);
-}
-
-.campaign-rejection-btn-secondary:hover {
-    border: 2px solid var(--color-brand-accent);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.3);
-
-}
-
-.campaign-rejection-btn-secondary:active {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.campaign-rejection-btn:focus {
-    outline: 2px solid #F401F5;
-    outline-offset: 2px;
-}
-
-.campaign-rejection-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-
-@media (max-width: 768px) {
-    .campaign-rejection-content {
-        padding: 24px;
-    }
-    
-    .campaign-rejection-message {
-        font-size: var(--font-size-base);
-        margin-bottom: 24px;
-    }
-    
-    .campaign-rejection-actions {
-        gap: 12px;
-    }
-    
-    .campaign-rejection-btn {
-        padding: 14px 24px;
-        font-size: var(--font-size-base);
-        min-height: 48px;
-    }
-}
-
-@media (max-width: 480px) {
-    .campaign-rejection-content {
-        padding: 20px;
-    }
-    
-    .campaign-rejection-message {
-        font-size: var(--font-size-sm);
-        margin-bottom: 20px;
-    }
-    
-    .campaign-rejection-actions {
-        gap: 10px;
-    }
-    
-    .campaign-rejection-btn {
-        padding: 12px 20px;
-        font-size: var(--font-size-sm);
-        min-height: 44px;
-    }
 }
 
 /* Hide parent/guardian toggle section */

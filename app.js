@@ -1906,7 +1906,7 @@ class OrderAPI {
 
   // Step 7: Add value card item (punch card) - POST /api/ver3/orders/{orderId}/items/valuecards
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
-  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null) {
+  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null, amountInCentsFromCaller = null) {
     try {
       const url = this.useProxy
         ? buildApiUrl({
@@ -1928,17 +1928,40 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      // API Documentation requires 'valueCardProduct' field (integer, required)
-      // Optional fields: receiverDetails, senderDetails, amount, externalMessage, additionTo
-      // Note: quantity is handled by repeating the request or backend logic, not in payload
-      // additionTo links this value card to the parent subscription item
-      const payload = {
-        valueCardProduct: productId, // Required: Value card product ID (integer)
-        ...(additionTo ? { additionTo } : {}), // Link to parent subscription item if provided
-        // quantity is not in API spec - backend may handle it differently
-        // businessUnit is not in API spec - may be inferred from order context
-      };
+      // Resolve amount (price in cents). Backend may require 'amount' (FIELD_MANDATORY).
+      let amount = 0;
+      if (amountInCentsFromCaller != null && typeof amountInCentsFromCaller === 'number' && !Number.isNaN(amountInCentsFromCaller)) {
+        amount = Math.round(amountInCentsFromCaller);
+      } else {
+        const allValueCards = [
+          ...(state.valueCards || []),
+          ...(state.campaignValueCards || []),
+        ];
+        const valueCardProduct = allValueCards.find(p =>
+          p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)
+        ) || (state.allRawProducts || []).find(p =>
+          (p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)) &&
+          (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || p.valueCardType !== undefined)
+        );
+        const priceObj = valueCardProduct?.price;
+        const amountInCents = priceObj != null
+          ? (typeof priceObj === 'object' && 'amount' in priceObj ? priceObj.amount : Number(priceObj))
+          : (valueCardProduct?.amount != null ? valueCardProduct.amount : 0);
+        amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
+      }
       
+      // Backend requires amount (FIELD_MANDATORY) and may reject/500 on amount: 0. Send integer (cents).
+      const amountNum = typeof amount === 'number' && !Number.isNaN(amount) ? Math.round(amount) : 0;
+      // Workaround: backend often rejects amount 0 for free value cards; send 1 øre so request succeeds.
+      const amountToSend = amountNum > 0 ? amountNum : 1;
+      if (amountNum === 0) {
+        console.warn('[Step 7] Value card is free (0) – sending amount: 1 (1 øre) as workaround until backend accepts amount: 0');
+      }
+      const payload = {
+        valueCardProduct: productId,
+        amount: amountToSend,
+        ...(additionTo != null ? { additionTo } : {}),
+      };
       console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
       
       let data;
@@ -2858,7 +2881,20 @@ async function loadProductsFromAPI() {
       );
       return !hasPublicCampaignLabel;
     });
-    
+
+    // Sort all product lists by price high to low (price in cents for consistent comparison)
+    const getProductPriceCents = (product) => {
+      const amount = product.priceWithInterval?.price?.amount ?? product.price?.amount ?? product.amount;
+      if (amount == null) return 0;
+      return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
+    };
+    const byPriceHighToLow = (a, b) => getProductPriceCents(b) - getProductPriceCents(a);
+    campaignSubscriptions.sort(byPriceHighToLow);
+    campaignValueCards.sort(byPriceHighToLow);
+    membershipSubscriptions.sort(byPriceHighToLow);
+    dayPassSubscriptions.sort(byPriceHighToLow);
+    regularValueCards.sort(byPriceHighToLow);
+
     // Store in state
     state.campaignSubscriptions = campaignSubscriptions;
     state.campaignValueCards = campaignValueCards; // Value cards for Campaign category
@@ -2898,10 +2934,11 @@ function renderProductsFromAPI() {
                      product.currency || 
                      'DKK';
     
-    // Determine price unit from interval
+    // Determine price unit: 15-day pass is one-time payment (kr), others use interval (kr/mo, kr/year)
+    const is15DayPass = category === '15daypass';
     const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
-    const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
-                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
+    const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
+                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -2931,16 +2968,16 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
-          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-        </div>
-        <div class="plan-content-right">
           <div class="plan-price">
             <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">${priceUnit}</span>
           </div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
+        </div>
+        <div class="plan-card-actions">
+          <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
         </div>
       </div>
-      <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
     `);
     
     return planCard;
@@ -2977,23 +3014,24 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Punch Card'}</div>
-          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-        </div>
-        <div class="plan-content-right">
           <div class="plan-price">
             <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">kr</span>
           </div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
-      </div>
-      <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
-      <div class="quantity-panel">
-        <div class="quantity-selector">
-          <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
-          <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
-          <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+        <div class="plan-card-actions">
+          <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+          <div class="quantity-panel">
+            <span class="quantity-panel-label" data-i18n-key="quantity.label">Choose quantity</span>
+            <div class="quantity-selector">
+              <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
+              <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
+              <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+            </div>
+            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+          </div>
         </div>
-        <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
       </div>
     `);
     
@@ -3013,9 +3051,11 @@ function renderProductsFromAPI() {
     // Hide campaign category if no products
     if (!hasCampaignProducts) {
       campaignCategoryItem.style.display = 'none';
+      stopCampaignCountdown();
     } else {
       // Show category and render products
       campaignCategoryItem.style.display = '';
+      startCampaignCountdown();
       if (campaignPlansList) {
         campaignPlansList.innerHTML = '';
         
@@ -3341,6 +3381,11 @@ async function loadGymsFromAPI() {
     
     // Re-setup event listeners for new gym items
     setupGymEventListeners();
+    
+    // Re-render FAQ when on step 1 so opening hours table uses API gym list (and API opening hours if present)
+    if (state.currentStep === 1) {
+      renderFAQ();
+    }
     
   } catch (error) {
     console.error('Failed to load gyms from API:', error);
@@ -3852,6 +3897,7 @@ const state = {
   // Step 5: Store fetched products from API
   campaignSubscriptions: [], // Fetched campaign subscription products (with "PublicCampaign" label)
   campaignValueCards: [], // Fetched campaign value card products (with "PublicCampaign" label)
+  campaignEndDate: null, // ISO string or Date for countdown; if null, uses end of current month
   subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15 Day Pass")
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
@@ -3874,6 +3920,72 @@ let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
 let loginCooldownUntil = 0;
+let campaignCountdownIntervalId = null;
+
+// Campaign countdown end date: set here when API doesn't send Omsætningsperiode. Use ISO string or null for "end of current month".
+const CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK = '2026-02-16'; // e.g. '2026-02-15T23:59:59.999' or '2026-02-15'
+
+function getCampaignCountdownEndDate() {
+  const fromState = state.campaignEndDate;
+  if (fromState) {
+    const d = typeof fromState === 'string' ? new Date(fromState) : fromState;
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK) {
+    const d = new Date(CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return end;
+}
+
+function updateCampaignCountdown() {
+  const el = document.getElementById('campaignCountdown');
+  const valueEl = document.getElementById('campaignCountdownValue');
+  const endDate = getCampaignCountdownEndDate();
+  const now = new Date();
+  const diff = endDate.getTime() - now.getTime();
+  const timeLeft = diff > 0;
+  const parts = timeLeft ? (() => {
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+    const p = [];
+    if (days > 0) p.push(days + (days === 1 ? 'd' : 'd'));
+    p.push(String(hours).padStart(2, '0') + 'h', String(minutes).padStart(2, '0') + 'm', String(seconds).padStart(2, '0') + 's');
+    return p.join(' ');
+  })() : '';
+  if (!timeLeft) {
+    if (el) el.style.display = 'none';
+    if (campaignCountdownIntervalId) {
+      clearInterval(campaignCountdownIntervalId);
+      campaignCountdownIntervalId = null;
+    }
+    return;
+  }
+  if (valueEl) valueEl.textContent = parts;
+  if (el) el.style.display = '';
+}
+
+function startCampaignCountdown() {
+  if (campaignCountdownIntervalId) {
+    clearInterval(campaignCountdownIntervalId);
+    campaignCountdownIntervalId = null;
+  }
+  updateCampaignCountdown();
+  campaignCountdownIntervalId = setInterval(updateCampaignCountdown, 1000);
+}
+
+function stopCampaignCountdown() {
+  if (campaignCountdownIntervalId) {
+    clearInterval(campaignCountdownIntervalId);
+    campaignCountdownIntervalId = null;
+  }
+  const el = document.getElementById('campaignCountdown');
+  if (el) el.style.display = 'none';
+}
 
 function isUserAuthenticated() {
   return typeof window.getAccessToken === 'function' && Boolean(window.getAccessToken());
@@ -4897,6 +5009,7 @@ function init() {
   
   cacheDom();
   cacheTemplates();
+  initFAQ();
   
   // Restore privacy and terms consent from localStorage
   restoreConsentCheckboxes();
@@ -4907,6 +5020,7 @@ function init() {
   initAuthModeToggle();
   updateCheckoutButton();
   setupEventListeners();
+  updateFAQVisibility(); // Initialize FAQ visibility
   // Apply conditional visibility for Boost on load
   applyConditionalSteps();
   updateStepIndicator();
@@ -4957,6 +5071,11 @@ function hideLoadingOverlay() {
     }
     if (mainContent) {
       mainContent.style.display = '';
+      // Update FAQ visibility after main is shown
+      setTimeout(() => {
+        updateFAQVisibility();
+        initFAQ();
+      }, 100);
     }
     
     // Hide loading overlay with fade out
@@ -4976,7 +5095,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
     'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
@@ -5006,7 +5125,8 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'quantity.label': 'Vælg antal',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
@@ -5015,7 +5135,7 @@ const translations = {
     'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
     'cart.consent.sms': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS-beskeder</a>.',
     'consent.sms.explainer': 'SMS<br><br>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
-    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
+    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
@@ -5045,13 +5165,66 @@ const translations = {
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
     'modal.loading': 'Indlæser...',
     'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
-    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes eksisterende abonnementer eller kampagnebebegrænsninger. Du kan oprette et almindeligt medlemskab. Kontakt support hvis du tror dette er en fejl.',
+    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes at du har forladt betalingsvinduet uden at gennenmføre, et eksisterende abonnementer eller kampagnebegrænsning. Kontakt support hvis du tror dette er en fejl. Du kan stadig oprette et almindeligt medlemskab.',
     'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
     'modal.campaignRejection.option2': 'Kontakt support',
+    'modal.paymentRedirectInfo.title': 'Klar til betaling',
+    'modal.paymentRedirectInfo.message': 'Du sendes videre til betalingssiden og bliver opkrævet 0,01 kr som en teknisk løsning på det gratis kaffekort.',
+    'modal.paymentRedirectInfo.continue': 'Fortsæt til betaling',
+    'modal.cartOfferExpired.title': 'Tilbuddet er udløbet',
+    'modal.cartOfferExpired.message': 'Tiden til at gennemføre dit køb er udløbet. Du kan stadig forsøge at betale til den viste pris, eller gå tilbage og vælge et andet medlemskab.',
+    'modal.cartOfferExpired.continue': 'Fortsæt til betaling',
+    'modal.cartOfferExpired.chooseOther': 'Vælg andet tilbud',
+    'faq.title': 'Ofte stillede spørgsmål',
+    'faq.gyms.openingHours.q': 'Hvad er åbningstiderne?',
+    'faq.gyms.openingHours.a': 'Åbningstiderne varierer mellem hallerne. Du kan finde de aktuelle åbningstider på vores hjemmeside eller ved at kontakte den specifikke hal.',
+    'faq.gyms.openingHours.intro': 'Alle Boulders har åbent fra morgen til aften 361 dage om året:',
+    'faq.gyms.openingHours.tableName': 'Hal',
+    'faq.gyms.openingHours.tableOpen': 'Åben',
+    'faq.gyms.access.q': 'Hvordan får jeg adgang til hallerne?',
+    'faq.gyms.access.a': 'Efter gennemført køb, besøger du din valgte hal og henter dit adgangkort. Kortet er din nøgle til Boulders, som du scanner for at åbne lågerne.',
+    'faq.gyms.events.q': 'Er der begivenheder og aktiviteter?',
+    'faq.gyms.events.a': 'Ja! Vi afholder regelmæssigt begivenheder, konkurrencer og sociale aktiviteter på tværs af alle vores haller. Tjek vores hjemmeside eller app for at se kommende begivenheder.',
+    'faq.gyms.gettingStarted.q': 'Hvordan kommer jeg godt i gang?',
+    'faq.gyms.gettingStarted.a': 'Der er mange måder at komme godt i gang på. Vi anbefaler at deltage på et introhold eller et Fundamentals hold. Det er ikke nødvendigt at starte på et hold, men det kan være meget rart — og en rigtig god måde at kickstarte det sociale. Mange starter alene og finder hurtigt fællesskab i vores inkluderende klatrekultur. Du kan også læse vores kom-godt-igang guide.',
+    'faq.membership.included.q': 'Hvad er inkluderet i mit medlemskab?',
+    'faq.membership.included.a': 'Dit medlemskab inkluderer gratis introhold, ubegrænset adgang til alle Boulders haller, brug af alle klatreområder og faciliteter, samt adgang til begivenheder og aktiviteter og gratis +1 til Late Night Boulders.',
+    'faq.membership.blocLife.q': 'Hvad er Bloc Life?',
+    'faq.membership.blocLife.a': 'Bloc Life er Boulders\' medlemsfordelsprogram. Når du er medlem, er du automatisk en del af det. Jo længere du er medlem, jo flere fordele får du – rabatter på klatregrej, kaffe, snacks og eksklusiv adgang til nye haller. Fordele og niveauer opdateres automatisk.',
+    'faq.membership.terms.q': 'Hvad er vilkårene og betingelserne?',
+    'faq.membership.terms.a': 'Medlemskabet er et løbende abonnement med automatisk fornyelse. Der er ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden plus 1 måned. Du kan læse de fulde vilkår og betingelser ved at klikke på linket i kurven.',
+    'faq.membership.bindingPeriod.q': 'Er der bindingsperiode?',
+    'faq.membership.bindingPeriod.a': 'Der er ikke bindingsperiode på Boulders\' medlemskaber uden for kampagner. Du kan til enhver tid melde dig ud med varsel på løbende måned plus en måned. Opretter du medlemskab på en prisnedsat kampagne, vil der være 3 måneders binding.',
+    'faq.membership.freeze.q': 'Kan jeg fryse mit medlemskab?',
+    'faq.membership.freeze.a': 'Ja, du kan fryse dit medlemskab i 1–3 måneder af gangen, op til 3 gange om året for 49 kr pr. gang. Du betaler ikke, mens du er i bero, og genaktivering er gratis. Frysning kan ikke aktiveres i bindingsperiode.',
+    'faq.membership.cancellation.q': 'Hvordan opsiger jeg mit medlemskab?',
+    'faq.membership.cancellation.a': 'Du kan opsige dit medlemskab når som helst med en kort varsel, som er resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
+    'faq.15daypass.howItWorks.q': 'Hvordan virker 15-dages kortet?',
+    'faq.15daypass.howItWorks.a': '15-dages kortet giver dig 15 dages ubegrænset adgang til alle Boulders haller fra den dag, du aktiverer det. Det er perfekt til at prøve klatring eller et kortvarigt besøg.',
+    'faq.15daypass.validity.q': 'Hvor længe er kortet gyldigt?',
+    'faq.15daypass.validity.a': '15-dages kortet er gyldigt i 15 dage fra aktiveringsdatoen. Du har ubegrænset adgang til alle haller, samt fri leje af klatresko, i denne periode.',
+    'faq.15daypass.access.q': 'Hvilken adgang får jeg med kortet?',
+    'faq.15daypass.access.a': 'Med 15-dages kortet får du ubegrænset adgang til alle Boulders haller, alle klatreområder og faciliteter i 15 dage. kortet kan ikke konverteres til et fuldt medlemskab.',
+    'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
+    'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 5 år og kan deles med andre.',
+    'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
+    'faq.punchcard.convert.a': 'Klippekort kan altid konverteres til et medlemskab ved at sende en mail til medlem@boulders.dk.',
+    'faq.punchcard.remainingClips.q': 'Hvad gør jeg med resterende klip på mit klippekort?',
+    'faq.punchcard.remainingClips.a': 'Hvis du stadig har klip på dit klippekort, men er klar til medlemskab, kan du få det ombyttet til medlemskab. For ombytning skal du sende en mail til medlem@boulders.dk. Eller giv det som gave til en, der fortjener det.',
+    'faq.punchcard.multiple.q': 'Kan jeg have flere klippekort?',
+    'faq.punchcard.multiple.a': 'Du kan have ubegrænset antal klippekort tilknyttet din profil.',
+    'faq.productChoice.difference.q': 'Hvad er forskellen mellem medlemskab, 15-dages pas og klippekort?',
+    'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 5 år og kan deles med andre.',
+    'faq.productChoice.membershipBest.q': 'Hvornår vælger jeg medlemskab?',
+    'faq.productChoice.membershipBest.a': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen. Du får ubegrænset adgang til alle haller, ingen tilmeldings- eller opsigelsesgebyrer, og du kan opsige når som helst med kort varsel.',
+    'faq.productChoice.15daypassBest.q': 'Hvornår skal jeg vælge 15-dages kortet?',
+    'faq.productChoice.15daypassBest.a': 'Vælg 15-dages kortet hvis du vil prøve klatring eller kun har brug for adgang i en kort periode. Du får 15 dages ubegrænset adgang til alle haller + lejesko, fra den dag, du aktiverer det.',
+    'faq.productChoice.punchcardBest.q': 'Hvornår vælger jeg klippekort?',
+    'faq.productChoice.punchcardBest.a': 'Vælg klippekort hvis du klatrer en gang imellem eller vil dele adgang med andre. Du får 10 (medmindre andet er angivet) indgange til alle haller, kortet er gyldigt i 5 år, og du kan genopfylde inden for 14 dage efter sidste klip og få 100 kr rabat.',
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
+    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
@@ -5081,7 +5254,8 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
@@ -5090,7 +5264,7 @@ const translations = {
     'consent.email.explainer': 'E-mail<br><br>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.',
     'cart.consent.sms': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS Messages.</a>.',
     'consent.sms.explainer': 'SMS<br><br>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.',
-    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
+    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'cart.faqHelp': 'Questions? See FAQ', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
     'message.noProducts.membership': 'No membership options available at this time.',
@@ -5120,13 +5294,65 @@ const translations = {
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
     'modal.loading': 'Loading...',
     'modal.campaignRejection.title': 'Campaign Not Available',
-    'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.',
+    'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. If you believe this is a mistake, contact support. You can still sign up for a regular membership.',
     'modal.campaignRejection.option1': 'Regular Membership',
     'modal.campaignRejection.option2': 'Contact Support',
+    'modal.paymentRedirectInfo.title': 'Ready for payment',
+    'modal.paymentRedirectInfo.message': "You'll be taken to the payment page. It may show 0,01 kr because of a free item in your cart – you won't be charged more.",
+    'modal.paymentRedirectInfo.continue': 'Continue to payment',
+    'modal.cartOfferExpired.title': 'Offer expired',
+    'modal.cartOfferExpired.message': 'The time to complete your purchase has run out. You can still try to pay at the price shown, or go back and choose another membership.',
+    'modal.cartOfferExpired.continue': 'Continue to payment',
+    'modal.cartOfferExpired.chooseOther': 'Choose another offer',
+    'faq.title': 'Frequently Asked Questions',
+    'faq.gyms.openingHours.q': 'What are the opening hours?',
+    'faq.gyms.openingHours.intro': 'All Boulders are open from morning to evening 361 days a year:',
+    'faq.gyms.openingHours.tableName': 'Gym',
+    'faq.gyms.openingHours.tableOpen': 'Open',
+    'faq.gyms.access.q': 'How do I access the gyms?',
+    'faq.gyms.access.a': 'After completed purchase, visit the selected gym, and pick up your access card. The card is your key to Boulders, which you scan when you arrive, to unlock the gates.',
+    'faq.gyms.events.q': 'Are there events and activities?',
+    'faq.gyms.events.a': 'Yes! We regularly host events, competitions, and social activities across all our gyms. Check our website to see upcoming events.',
+    'faq.gyms.gettingStarted.q': 'How do I get started?',
+    'faq.gyms.gettingStarted.a': 'There are many ways to get started. We recommend joining an Intro or a Fundamentals class. You don\'t have to start with a class, but it\'s a great way to meet people. Many start on their own and quickly find a community in our inclusive climbing culture. You can also read our getting-started guide.',
+    'faq.membership.included.q': 'What is included in my membership?',
+    'faq.membership.included.a': 'Your membership includes free intro class, unlimited access to all Boulders gyms, use of all climbing areas and facilities, and access to events and activities.',
+    'faq.membership.blocLife.q': 'What is Bloc Life?',
+    'faq.membership.blocLife.a': 'Bloc Life is Boulders\' membership loyalty program. When you\'re a member, you\'re automatically part of it. The longer you\'re a member, the more benefits you get – discounts on gear, coffee, snacks, and exclusive access to new gyms. Benefits and tiers update automatically.',
+    'faq.membership.terms.q': 'What are the terms and conditions?',
+    'faq.membership.terms.a': 'Membership is an ongoing subscription with automatic renewal. There are no signup or cancellation fees. Notice period is the rest of the month plus 1 month. You can read the full terms and conditions by clicking the link in the cart.',
+    'faq.membership.bindingPeriod.q': 'Is there a commitment period?',
+    'faq.membership.bindingPeriod.a': 'There is no commitment period on Boulders memberships outside of campaigns. You can cancel anytime with notice for the rest of the current month plus one month. If you sign up on a discounted campaign, there is a 3-month commitment period.',
+    'faq.membership.freeze.q': 'Can I freeze my membership?',
+    'faq.membership.freeze.a': 'Yes. You can freeze your membership for 1–3 months at a time, up to 3 times a year, for 49 kr per freeze. You are not charged while frozen, and reactivation is free. Freezing cannot be activated during a commitment period.',
+    'faq.membership.cancellation.q': 'How do I cancel my membership?',
+    'faq.membership.cancellation.a': 'You can cancel your membership at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
+    'faq.15daypass.howItWorks.q': 'How does the 15 day pass work?',
+    'faq.15daypass.howItWorks.a': 'The 15 day pass gives you 15 days of unlimited access to all Boulders gyms from the day you activate it. It\'s perfect for trying out climbing or a short-term visit.',
+    'faq.15daypass.validity.q': 'How long is the pass valid?',
+    'faq.15daypass.validity.a': 'The 15 day pass is valid for 15 days from the activation date. You have unlimited access to all gyms during this period.',
+    'faq.15daypass.access.q': 'What access do I get with the pass?',
+    'faq.15daypass.access.a': 'With the 15 day pass, you get unlimited access to all Boulders gyms, all climbing areas and facilities for 15 days. The pass cannot be converted to a full membership.',
+    'faq.punchcard.howItWorks.q': 'How does the punch card work?',
+    'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 5 years and can be shared with others.',
+    'faq.punchcard.convert.q': 'Can I convert my punch card to a membership?',
+    'faq.punchcard.convert.a': 'Yes, you can convert your punch card to a membership. Contact us at medlem@boulders.dk if you want to convert your punch card to a membership.',
+    'faq.punchcard.remainingClips.q': 'What do I do with remaining clips on my punch card?',
+    'faq.punchcard.remainingClips.a': 'If you still have punches left but are ready for a membership, you can have it converted to a membership. To convert, email medlem@boulders.dk. Or give the remaining clips as a gift to someone who deserves it.',
+    'faq.punchcard.multiple.q': 'Can I have multiple punch cards?',
+    'faq.punchcard.multiple.a': 'Yes you can have unlimited punch cards on your profile.',
+    'faq.productChoice.difference.q': 'What is the difference between membership, 15 day pass, and punch card?',
+    'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15 day pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 5 years, and can be shared with others.',
+    'faq.productChoice.membershipBest.q': 'When should I choose membership?',
+    'faq.productChoice.membershipBest.a': 'Choose membership if you plan to climb at least once a week. You get unlimited access to all gyms, no signup or cancellation fees, and you can cancel anytime with short notice.',
+    'faq.productChoice.15daypassBest.q': 'When should I choose the 15 day pass?',
+    'faq.productChoice.15daypassBest.a': 'Choose the 15 day pass if you want to try climbing or only need short-term access. You get 15 days of unlimited access to all gyms from the day you activate it. The pass is valid for 15 days from the activation date.',
+    'faq.productChoice.punchcardBest.q': 'When should I choose a punch card?',
+    'faq.productChoice.punchcardBest.a': 'Choose a punch card if you climb occasionally or want to share access with others. You get 10 entries to all gyms, unless anything else is specified, the card is valid for 5 years, and you can refill within 14 days after your last clip for 100 kr off.',
   },
   'de-DE': {
     'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.campaign.endsIn': 'Endet in', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
     'category.membership.desc': 'Mitgliedschaft ist ein laufendes Abonnement mit automatischer Verlängerung. Keine Anmelde- oder Kündigungsgebühren. Kündigungsfrist ist der Rest des Monats + 1 Monat.',
     'category.15daypass.desc': 'Erhalten Sie 15 Tage unbegrenzten Zugang zu allen Hallen. Perfekt zum Ausprobieren des Kletterns oder für einen kurzen Besuch.',
     'category.punchcard.desc': 'Sie können jeweils 1 Art von Stempelkarte kaufen. Jeder Eintritt verwendet einen Stempel auf Ihrer Stempelkarte. Die Karte ist 5 Jahre gültig und beinhaltet keine Mitgliedschaftsvorteile. Füllen Sie innerhalb von 14 Tagen nach Ihrem letzten Stempel nach und erhalten Sie 100 kr Rabatt in der Halle.',
@@ -5156,7 +5382,8 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
@@ -5198,6 +5425,9 @@ const translations = {
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
+    'modal.paymentRedirectInfo.title': 'Bereit zur Zahlung',
+    'modal.paymentRedirectInfo.message': 'Sie werden zur Zahlungsseite weitergeleitet. Dort kann 0,01 kr angezeigt werden, da ein kostenloses Add-on im Warenkorb liegt – es fallen keine weiteren Kosten an.',
+    'modal.paymentRedirectInfo.continue': 'Weiter zur Zahlung',
   },
 };
 
@@ -5323,6 +5553,9 @@ function updatePageTranslations() {
   
   // Update heads-up displays
   updateHeadsUpTranslations();
+  
+  // Re-render FAQ with new language
+  renderFAQ();
   
   // Update terms tabs if modal is open
   const termsTabs = document.querySelectorAll('.terms-tab[data-i18n-key]');
@@ -5622,6 +5855,46 @@ function updateAddonModalTranslations() {
   }
 }
 
+// Refresh open footer modals when language changes (footer modals follow header language)
+function refreshOpenFooterModals() {
+  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  
+  if (DOM.termsModal && DOM.termsModal.style.display === 'flex') {
+    if (state.currentModalType === 'terms' && state.currentModalTab) {
+      switchTermsTab(state.currentModalTab);
+    } else if (state.currentModalType) {
+      const content = termsContent[state.currentModalType]?.[langCode] || termsContent[state.currentModalType]?.da || '<p>Content not available.</p>';
+      const termsTitles = {
+        privacy: t('footer.policies.privacy'),
+        cookie: t('footer.policies.cookie'),
+        'email-consent': 'E-mail',
+        'sms-consent': 'SMS',
+      };
+      const title = termsTitles[state.currentModalType] || 'Terms and Conditions';
+      if (DOM.termsModalTitle) DOM.termsModalTitle.textContent = title;
+      state.termsOriginalContent = content;
+      if (DOM.termsModalContent) {
+        DOM.termsModalContent.innerHTML = sanitizeHTML(content);
+        DOM.termsModalContent.scrollTop = 0;
+      }
+      if (DOM.termsSearchInput) {
+        DOM.termsSearchInput.value = '';
+        if (DOM.termsSearchClear) DOM.termsSearchClear.style.display = 'none';
+      }
+    }
+  }
+  
+  if (DOM.dataPolicyModal && DOM.dataPolicyModal.style.display === 'flex') {
+    const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
+    state.dataPolicyOriginalContent = content;
+    if (DOM.dataPolicyModalContent) {
+      DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
+      DOM.dataPolicyModalContent.scrollTop = 0;
+    }
+    clearDataPolicySearch();
+  }
+}
+
 // Change language and reload products
 async function changeLanguage(languageCode) {
   if (!SUPPORTED_LANGUAGES[languageCode]) {
@@ -5642,6 +5915,9 @@ async function changeLanguage(languageCode) {
   // Update all page translations
   updatePageTranslations();
   
+  // Refresh open footer modals so they show the new language (based on header switcher)
+  refreshOpenFooterModals();
+  
   // Reload products if we're on step 2 or later
   if (state.currentStep >= 2 && state.selectedBusinessUnit) {
     console.log('[Language] Reloading products with language:', languageCode);
@@ -5661,15 +5937,22 @@ async function changeLanguage(languageCode) {
   }
 }
 
-// Update language switcher UI to show active language
+// Update language switcher UI to show active language (trigger label + dropdown item states)
 function updateLanguageSwitcherUI() {
   const switcher = document.getElementById('languageSwitcher');
   if (!switcher) return;
   
+  const currentLang = state.language || DEFAULT_LANGUAGE;
+  const info = SUPPORTED_LANGUAGES[currentLang];
+  const triggerFlag = document.getElementById('languageSwitcherTriggerFlag');
+  const triggerName = document.getElementById('languageSwitcherTriggerName');
+  if (triggerFlag) triggerFlag.textContent = info?.flag ?? '🇩🇰';
+  if (triggerName) triggerName.textContent = currentLang === 'da-DK' ? 'DA' : currentLang === 'en-GB' ? 'EN' : 'DE';
+  
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
     const langCode = btn.dataset.lang;
-    if (langCode === state.language) {
+    if (langCode === currentLang) {
       btn.classList.add('active');
       btn.setAttribute('aria-pressed', 'true');
     } else {
@@ -5679,29 +5962,68 @@ function updateLanguageSwitcherUI() {
   });
 }
 
-// Initialize language switcher
+// Guard so dropdown listeners are only attached once (initLanguageSwitcher is called from DOMContentLoaded and from init())
+let languageSwitcherListenersBound = false;
+
+// Initialize language switcher (dropdown: trigger toggles panel, items change language)
 function initLanguageSwitcher() {
   const switcher = document.getElementById('languageSwitcher');
   if (!switcher) return;
   
-  // Set initial language
+  const trigger = document.getElementById('languageSwitcherTrigger');
+  const dropdown = document.getElementById('languageDropdown');
+  
+  // Set initial language and UI (run every time)
   const currentLang = state.language || DEFAULT_LANGUAGE;
   document.documentElement.lang = currentLang.split('-')[0];
   updateLanguageSwitcherUI();
-  
-  // Update page translations on initial load
   updatePageTranslations();
   
-  // Add click handlers to language buttons
+  // Attach dropdown open/close and item handlers only once to avoid double-toggle
+  if (languageSwitcherListenersBound) return;
+  if (!trigger || !dropdown) return;
+  languageSwitcherListenersBound = true;
+  
+  function openDropdown() {
+    switcher.classList.add('open');
+    dropdown.setAttribute('aria-hidden', 'false');
+    trigger.setAttribute('aria-expanded', 'true');
+  }
+  
+  function closeDropdown() {
+    switcher.classList.remove('open');
+    dropdown.setAttribute('aria-hidden', 'true');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+  
+  function toggleDropdown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const isOpen = switcher.classList.contains('open');
+    if (isOpen) closeDropdown();
+    else openDropdown();
+  }
+  
+  trigger.addEventListener('click', toggleDropdown);
+  
+  // Click on dropdown item: change language and close
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       const langCode = btn.dataset.lang;
       if (langCode && langCode !== state.language) {
         await changeLanguage(langCode);
       }
+      closeDropdown();
     });
+  });
+  
+  // Close on click outside
+  document.addEventListener('click', (e) => {
+    if (switcher.contains(e.target)) return;
+    closeDropdown();
   });
 }
 
@@ -5722,6 +6044,24 @@ function showCampaignRejectionModal() {
 
 function hideCampaignRejectionModal() {
   const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function showPaymentRedirectInfoModal() {
+  const modal = document.getElementById('paymentRedirectInfoModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    setTimeout(() => {
+      const btn = document.getElementById('paymentRedirectInfoContinue');
+      if (btn) btn.focus();
+    }, 100);
+  }
+}
+
+function hidePaymentRedirectInfoModal() {
+  const modal = document.getElementById('paymentRedirectInfoModal');
   if (modal) {
     modal.style.display = 'none';
   }
@@ -6126,6 +6466,8 @@ function cacheDom() {
   DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
   DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
+  DOM.faqSection = document.getElementById('faqSection');
+  DOM.faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
   DOM.privacyConsent = document.getElementById('privacyConsent');
   DOM.termsConsent = document.getElementById('termsConsent');
@@ -6187,8 +6529,9 @@ function cacheDom() {
   DOM.dataPolicyModalContent = document.getElementById('dataPolicyModalContent');
   DOM.dataPolicyModalLoading = document.getElementById('dataPolicyModalLoading');
   DOM.dataPolicyModalClose = document.getElementById('dataPolicyModalClose');
-  DOM.dataPolicyModalLangDa = document.getElementById('dataPolicyModalLangDa');
-  DOM.dataPolicyModalLangEn = document.getElementById('dataPolicyModalLangEn');
+  DOM.dataPolicyModalSearch = document.getElementById('dataPolicyModalSearch');
+  DOM.dataPolicySearchInput = document.getElementById('dataPolicySearchInput');
+  DOM.dataPolicySearchClear = document.getElementById('dataPolicySearchClear');
   
   // Store current modal state
   state.currentModalType = null;
@@ -6358,9 +6701,18 @@ function setupEventListeners() {
     });
   }
   
-  // Close modal on Escape key
+  // Close modal on Escape key (and language dropdown)
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      const languageSwitcher = document.getElementById('languageSwitcher');
+      if (languageSwitcher && languageSwitcher.classList.contains('open')) {
+        languageSwitcher.classList.remove('open');
+        const dropdown = document.getElementById('languageDropdown');
+        const trigger = document.getElementById('languageSwitcherTrigger');
+        if (dropdown) dropdown.setAttribute('aria-hidden', 'true');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        return;
+      }
       if (DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
         closeForgotPasswordModal();
       }
@@ -6422,16 +6774,12 @@ function setupEventListeners() {
       switchTermsTab(tabType);
     }
     
-    // Language switching in data policy modal
-    if (e.target.closest('#dataPolicyModalLangDa') || e.target.closest('#dataPolicyModalLangEn')) {
-      const langBtn = e.target.closest('.language-btn');
-      const lang = langBtn.dataset.lang;
-      switchModalLanguage('privacy', lang);
-    }
-    
     // Search clear button
     if (e.target.closest('#termsSearchClear')) {
       clearTermsSearch();
+    }
+    if (e.target.closest('#dataPolicySearchClear')) {
+      clearDataPolicySearch();
     }
     
     if (e.target === DOM.termsModalClose || e.target.closest('#termsModalClose')) {
@@ -6454,6 +6802,15 @@ function setupEventListeners() {
     if (e.target.closest('#campaignRejectionModalClose')) {
       hideCampaignRejectionModal();
     }
+    
+    // Payment redirect info modal (0,01 kr workaround)
+    if (e.target.closest('#paymentRedirectInfoContinue')) {
+      hidePaymentRedirectInfoModal();
+      handleCheckout();
+    }
+    if (e.target.closest('#paymentRedirectInfoModalClose')) {
+      hidePaymentRedirectInfoModal();
+    }
   });
   
   // Close campaign rejection modal when clicking outside
@@ -6466,18 +6823,34 @@ function setupEventListeners() {
     });
   }
   
+  // Close payment redirect info modal when clicking outside
+  const paymentRedirectInfoModal = document.getElementById('paymentRedirectInfoModal');
+  if (paymentRedirectInfoModal) {
+    paymentRedirectInfoModal.addEventListener('click', (e) => {
+      if (e.target === paymentRedirectInfoModal) {
+        hidePaymentRedirectInfoModal();
+      }
+    });
+  }
+  
   
   // Search input live update
   if (DOM.termsSearchInput) {
     DOM.termsSearchInput.addEventListener('input', (e) => {
       performTermsSearch(e.target.value);
     });
-    
-    // Handle Enter key to prevent form submission
     DOM.termsSearchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      }
+      if (e.key === 'Enter') e.preventDefault();
+    });
+  }
+  
+  // Data policy modal search
+  if (DOM.dataPolicySearchInput) {
+    DOM.dataPolicySearchInput.addEventListener('input', (e) => {
+      performDataPolicySearch(e.target.value);
+    });
+    DOM.dataPolicySearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
     });
   }
   
@@ -7338,23 +7711,22 @@ function openTermsModal(termsType) {
     'sms-consent': 'SMS',
   };
   
+  // Show search for all content types (terms, cookie, email-consent, sms-consent)
+  if (DOM.termsModalSearch) {
+    DOM.termsModalSearch.style.display = 'block';
+    if (DOM.termsSearchInput) {
+      const placeholder = currentLang === 'da' || (currentLang && currentLang.startsWith('da'))
+        ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
+        : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
+      DOM.termsSearchInput.placeholder = placeholder;
+    }
+  }
+  
   // Handle 'terms' type with tabs
   if (termsType === 'terms') {
     // Show tabs
     if (DOM.termsModalTabs) {
       DOM.termsModalTabs.style.display = 'flex';
-    }
-    
-    // Show search
-    if (DOM.termsModalSearch) {
-      DOM.termsModalSearch.style.display = 'block';
-      // Update placeholder based on language
-      if (DOM.termsSearchInput) {
-        const placeholder = currentLang === 'da' 
-          ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
-          : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
-        DOM.termsSearchInput.placeholder = placeholder;
-      }
     }
     
     // Set title based on language
@@ -7374,11 +7746,7 @@ function openTermsModal(termsType) {
     const content = termsContent[currentTab]?.[currentLang] || termsContent[currentTab]?.da || '';
     state.termsOriginalContent = content;
   } else {
-    // Hide search for non-tabbed content
-    if (DOM.termsModalSearch) {
-      DOM.termsModalSearch.style.display = 'none';
-    }
-    // Hide tabs for other types
+    // Hide tabs for other types (search stays visible for all)
     if (DOM.termsModalTabs) {
       DOM.termsModalTabs.style.display = 'none';
     }
@@ -7571,6 +7939,91 @@ function clearTermsSearch() {
   }
 }
 
+// Data policy modal search (same algorithm as terms search)
+function performDataPolicySearch(searchQuery) {
+  if (!DOM.dataPolicyModalContent || !state.dataPolicyOriginalContent) return;
+  
+  const query = searchQuery.trim().toLowerCase();
+  
+  if (DOM.dataPolicySearchClear) {
+    DOM.dataPolicySearchClear.style.display = query ? 'flex' : 'none';
+  }
+  
+  if (!query) {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+    return;
+  }
+
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+  
+  function highlightText(node, searchText) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      const matches = text.match(regex);
+      if (matches && matches.length > 0) {
+        const parts = text.split(regex);
+        const fragment = document.createDocumentFragment();
+        parts.forEach((part, index) => {
+          if (part.toLowerCase() === searchText.toLowerCase()) {
+            const highlight = document.createElement('span');
+            highlight.className = 'search-highlight';
+            highlight.textContent = part;
+            fragment.appendChild(highlight);
+          } else if (part) {
+            fragment.appendChild(document.createTextNode(part));
+          }
+        });
+        return fragment;
+      }
+      return null;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return null;
+      const clone = node.cloneNode(false);
+      let hasMatch = false;
+      Array.from(node.childNodes).forEach(child => {
+        const result = highlightText(child, searchText);
+        if (result) {
+          clone.appendChild(result);
+          hasMatch = true;
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          if (child.textContent.toLowerCase().includes(searchText)) {
+            clone.appendChild(child.cloneNode(true));
+            hasMatch = true;
+          }
+        } else if (child.nodeType === Node.TEXT_NODE) {
+          clone.appendChild(child.cloneNode(true));
+        }
+      });
+      return hasMatch ? clone : null;
+    }
+    return null;
+  }
+
+  const highlightedContent = highlightText(tempDiv, query);
+  if (highlightedContent) {
+    DOM.dataPolicyModalContent.innerHTML = '';
+    DOM.dataPolicyModalContent.appendChild(highlightedContent);
+  } else {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML('<div class="search-no-results">No results found for "' + searchQuery + '"</div>');
+  }
+  const firstHighlight = DOM.dataPolicyModalContent.querySelector('.search-highlight');
+  if (firstHighlight) {
+    firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function clearDataPolicySearch() {
+  if (!DOM.dataPolicySearchInput || !DOM.dataPolicyModalContent) return;
+  DOM.dataPolicySearchInput.value = '';
+  if (DOM.dataPolicySearchClear) DOM.dataPolicySearchClear.style.display = 'none';
+  if (state.dataPolicyOriginalContent) {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+    DOM.dataPolicyModalContent.scrollTop = 0;
+  }
+}
+
 // Legacy function - language is now managed by state.language
 // This function is kept for backward compatibility but does nothing
 function updateLanguageSwitcher(modalType, lang) {
@@ -7645,17 +8098,8 @@ function switchModalLanguage(modalType, lang) {
         }
       }
     }
-  } else if (modalType === 'privacy') {
-    // Update data policy content
-    // Convert da-DK to da, en-GB to en for content lookup
-    const langCode = lang.split('-')[0];
-    const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
-    
-    if (DOM.dataPolicyModalContent) {
-      DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
-      DOM.dataPolicyModalContent.scrollTop = 0;
-    }
   }
+  // Privacy/data policy modal no longer has its own language switcher; language follows header (see refreshOpenFooterModals in changeLanguage).
 }
 
 function openDataPolicyModal() {
@@ -7663,25 +8107,29 @@ function openDataPolicyModal() {
   
   state.currentModalType = 'privacy';
   
-  // Language is managed by state.language - translations handled by updatePageTranslations
   updatePageTranslations();
   
-  // Convert da-DK to da, en-GB to en for content lookup
   const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
   const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
   
-  // Set content
   DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
+  state.dataPolicyOriginalContent = content;
   
-  // Show modal
+  // Show and reset search (same as T&C modal)
+  if (DOM.dataPolicyModalSearch) DOM.dataPolicyModalSearch.style.display = 'block';
+  if (DOM.dataPolicySearchInput) {
+    DOM.dataPolicySearchInput.value = '';
+    const isDa = (state.language || DEFAULT_LANGUAGE).startsWith('da');
+    DOM.dataPolicySearchInput.placeholder = isDa
+      ? (DOM.dataPolicySearchInput.dataset?.placeholderDa || 'Søg...')
+      : (DOM.dataPolicySearchInput.dataset?.placeholderEn || 'Search...');
+  }
+  if (DOM.dataPolicySearchClear) DOM.dataPolicySearchClear.style.display = 'none';
+  
   DOM.dataPolicyModal.style.display = 'flex';
   DOM.dataPolicyModalContent.style.display = 'block';
-  if (DOM.dataPolicyModalLoading) {
-    DOM.dataPolicyModalLoading.style.display = 'none';
-  }
+  if (DOM.dataPolicyModalLoading) DOM.dataPolicyModalLoading.style.display = 'none';
   document.body.classList.add('modal-open');
-  
-  // Scroll to top of modal content
   DOM.dataPolicyModalContent.scrollTop = 0;
 }
 
@@ -7714,15 +8162,10 @@ function closeTermsModal() {
 function closeDataPolicyModal() {
   if (!DOM.dataPolicyModal) return;
   
-  // Clear content
-  if (DOM.dataPolicyModalContent) {
-    DOM.dataPolicyModalContent.innerHTML = '';
-  }
-  
-  // Reset state
+  if (DOM.dataPolicyModalContent) DOM.dataPolicyModalContent.innerHTML = '';
+  clearDataPolicySearch();
+  state.dataPolicyOriginalContent = null;
   state.currentModalType = null;
-  
-  // Hide modal
   DOM.dataPolicyModal.style.display = 'none';
   document.body.classList.remove('modal-open');
 }
@@ -9509,12 +9952,14 @@ function handlePlanSelection(selectedCard) {
       state.valueCardQuantities.set(planId, 1);
     }
     
-    // Show quantity panel (now a sibling element)
+    // Show quantity panel (inside plan-card-actions)
     selectedCard.classList.add('has-quantity');
-    const panel = selectedCard.nextElementSibling;
-    if (panel && panel.classList.contains('quantity-panel')) {
+    const panel = selectedCard.querySelector('.quantity-panel');
+    if (panel) {
       panel.classList.add('show');
-      panel.style.display = 'block';
+      panel.style.display = 'flex';
+      const continueBtn = panel.querySelector('.continue-btn');
+      if (continueBtn) continueBtn.style.display = '';
       syncPunchCardQuantityUI(selectedCard, planId);
     }
   }
@@ -10100,7 +10545,7 @@ function handleGlobalClick(event) {
     }
     case 'submit-checkout': {
       event.preventDefault();
-      handleCheckout();
+      handleCheckoutClick();
       break;
     }
     case 'continue-value-cards': {
@@ -10153,6 +10598,11 @@ function handleGlobalClick(event) {
     case 'go-back-step': {
       event.preventDefault();
       prevStep();
+      break;
+    }
+    case 'scroll-to-faq': {
+      event.preventDefault();
+      scrollToFAQ();
       break;
     }
     default:
@@ -11464,33 +11914,19 @@ function hasCampaignInCart() {
     return true;
   }
   
-  // Check if any cart item's productId exists in campaignSubscriptions
-  if (state.cartItems && state.cartItems.length > 0 && state.campaignSubscriptions) {
-    return state.cartItems.some(item => {
-      if (!item.productId) return false;
-      const productIdNum = typeof item.productId === 'string' 
-        ? parseInt(item.productId) 
-        : item.productId;
-      return state.campaignSubscriptions.some(campaign => 
-        campaign.id === item.productId || 
-        campaign.id === productIdNum ||
-        String(campaign.id) === String(item.productId)
-      );
-    });
+  // Check if any cart item's productId exists in campaign subscriptions or campaign value cards
+  const isCampaignProduct = (id) => {
+    const num = typeof id === 'string' ? parseInt(id, 10) : id;
+    const inSubs = state.campaignSubscriptions?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
+    const inCards = state.campaignValueCards?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
+    return inSubs || inCards;
+  };
+  if (state.cartItems && state.cartItems.length > 0) {
+    if (state.cartItems.some(item => item.productId && isCampaignProduct(item.productId))) return true;
   }
-  
-  // Check if selectedProductId is in campaignSubscriptions
-  if (state.selectedProductId && state.campaignSubscriptions) {
-    const productIdNum = typeof state.selectedProductId === 'string' 
-      ? parseInt(state.selectedProductId) 
-      : state.selectedProductId;
-    return state.campaignSubscriptions.some(campaign => 
-      campaign.id === state.selectedProductId || 
-      campaign.id === productIdNum ||
-      String(campaign.id) === String(state.selectedProductId)
-    );
-  }
-  
+
+  if (state.selectedProductId && isCampaignProduct(state.selectedProductId)) return true;
+
   return false;
 }
 
@@ -11658,7 +12094,7 @@ function updateCartSummary() {
   } else {
     hideCampaignWarning();
   }
-  
+
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   
@@ -12188,6 +12624,9 @@ function renderCartTotal() {
   // Update discount display if discount is applied
   updateDiscountDisplay();
   
+  // Update FAQ based on cart contents
+  renderFAQ();
+  
   console.log('[Cart] Updated cart display (subtotal:', state.totals.subtotal, 'discount:', state.totals.discountAmount, ')');
 }
 
@@ -12373,8 +12812,50 @@ function updatePaymentOverview() {
       today.setHours(0, 0, 0, 0);
       const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
-      
-      if (initialPaymentPeriod?.start) {
+      const dayOfMonth = today.getDate();
+      const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
+        p => String(p.id) === String(productId)
+      );
+      // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
+      const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
+
+      if (isFirstMonthFreeCampaign) {
+        if (dayOfMonth < 16) {
+          payNowAmount = 0;
+          if (initialPaymentPeriod?.start) {
+            billingPeriod = {
+              start: new Date(initialPaymentPeriod.start),
+              end: new Date(initialPaymentPeriod.end)
+            };
+          } else {
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+          }
+          console.log('[Payment Overview] ✅ First month free campaign (date < 16): 0 kr from API');
+        } else {
+          payNowAmount = expectedPrice ? expectedPrice.amountInDKK : orderPriceDKK;
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          if (expectedPrice?.includesNextMonth) {
+            const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+            const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+            billingPeriod = {
+              start: today,
+              end: new Date(nextYear, nextMonth + 1, 0)
+            };
+          } else {
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+          }
+          console.log('[Payment Overview] ✅ First month free campaign (date >= 16): rest-of-month price:', payNowAmount, 'DKK');
+        }
+      } else if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
         const backendEndDate = new Date(initialPaymentPeriod.end);
         
@@ -12487,9 +12968,26 @@ function updatePaymentOverview() {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
-          
+          const dayOfMonth = today.getDate();
+          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
+            p => String(p.id) === String(membership.id)
+          );
+          const productNameForCampaign = (membership.name || '').toLowerCase();
+          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
+            /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
+          );
+
+          if (isFirstMonthFreeCampaignNoOrder && dayOfMonth < 16) {
+            payNowAmount = 0;
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+            console.log('[Payment Overview] ✅ First month free campaign (no order, date < 16): 0 kr');
+          } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
-          if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
             if (expectedPrice) {
               payNowAmount = expectedPrice.amountInDKK;
@@ -13013,6 +13511,7 @@ function clearStoredOrderData(reason = 'manual') {
   state.paymentLink = null;
   state.paymentLinkGenerated = false;
   state.checkoutInProgress = false;
+  updateFAQVisibility(); // Show FAQ again when order data is cleared
   state.cartItems = [];
   state.totals = {
     cartTotal: 0,
@@ -13303,6 +13802,14 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
   return defaultMs;
 }
 
+function handleCheckoutClick() {
+  if (hasFreeValueCardAddon()) {
+    showPaymentRedirectInfoModal();
+    return;
+  }
+  handleCheckout();
+}
+
 async function handleCheckout() {
   // Prevent multiple simultaneous checkout attempts
   if (state.checkoutInProgress) {
@@ -13350,6 +13857,9 @@ async function handleCheckout() {
   
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
+  
+  // Hide FAQ section when checkout starts
+  updateFAQVisibility();
 
   // GTM: Track begin_checkout event
   if (window.GTM && window.GTM.trackBeginCheckout && state.cartItems && state.cartItems.length > 0) {
@@ -14191,9 +14701,19 @@ async function handleCheckout() {
                 });
                 
                 if (isValueCard) {
-                  // Add as value card with additionTo link
-                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId})`);
-                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId);
+                  // Add as value card with additionTo link. Pass amount (cents) so API FIELD_MANDATORY is satisfied.
+                  let amountCents = getAddonPriceInCents(addon);
+                  if (amountCents <= 0) {
+                    const allVc = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
+                    const vcProduct = allVc.find(p => p.id === numericId || String(p.id) === String(addonId));
+                    const priceObj = vcProduct?.price;
+                    if (priceObj != null) {
+                      amountCents = typeof priceObj === 'object' && 'amount' in priceObj ? Math.round(Number(priceObj.amount)) : Math.round(Number(priceObj));
+                    }
+                    if (vcProduct?.amount != null) amountCents = Math.round(Number(vcProduct.amount));
+                  }
+                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId}), amount: ${amountCents} cents`);
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId, amountCents > 0 ? amountCents : null);
                 } else {
                   // Add as article with additionTo link
                   console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${validSubscriptionItemId})`);
@@ -15247,6 +15767,7 @@ async function handleCheckout() {
     console.error('[checkout] Unexpected error:', error);
     showToast(getErrorMessage(error, 'Checkout'), 'error');
     state.checkoutInProgress = false; // Reset on error
+    updateFAQVisibility(); // Show FAQ again if checkout fails
     setCheckoutLoadingState(false);
   }
 }
@@ -17260,7 +17781,8 @@ function renderConfirmationView() {
     }
     
     if (price !== null) {
-      membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(price))}/month`;
+      const formatted = formatCurrencyHalfKrone(roundToHalfKrone(price));
+      membershipPrice.textContent = productType === '15daypass' ? formatted : `${formatted}/month`;
     } else {
       membershipPrice.textContent = '—';
     }
@@ -18477,6 +18999,9 @@ function showStep(stepNumber) {
     }
   }
   
+  // Update FAQ visibility based on current step
+  updateFAQVisibility();
+  
   // Update selected gym display when showing step 2
   if (stepNumber === 2) {
     // Use setTimeout to ensure DOM is ready
@@ -19216,6 +19741,44 @@ function getAddonPrice(addon) {
   return 0;
 }
 
+// Addon price in cents (for API payloads that require amount)
+function getAddonPriceInCents(addon) {
+  if (!addon) return 0;
+  if (addon.priceWithInterval?.price?.amount != null) return Math.round(Number(addon.priceWithInterval.price.amount));
+  if (addon.price?.amount != null) return Math.round(Number(addon.price.amount));
+  if (addon.amount != null) return Math.round(Number(addon.amount));
+  // Subscription additions often have price.discounted in DKK
+  if (addon.price && typeof addon.price.discounted === 'number') return Math.round(addon.price.discounted * 100);
+  const dkk = getAddonPrice(addon);
+  return Math.round(dkk * 100);
+}
+
+// True if cart has at least one addon that is a value card with price 0 (triggers 0,01 kr workaround)
+function hasFreeValueCardAddon() {
+  if (!state.addonIds || state.addonIds.size === 0) return false;
+  const allValueCards = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
+  for (const addonId of state.addonIds) {
+    const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+    const addon = findAddon(addonId);
+    const isInValueCards = allValueCards.some(vc => {
+      const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+      return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+    });
+    const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+      const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+      return (pId === numericId || String(p.id) === String(addonId)) &&
+        (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || (!p.priceWithInterval && !p.subscriptionInterval));
+    });
+    const hasValueCardType = addon && (addon.productType === 'VALUE_CARD' || addon.productType === 'VALUECARD' ||
+      (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD')));
+    const hasValueCardFields = addon && (addon.valueCardType !== undefined || addon.validUntil !== undefined ||
+      (addon.product && addon.product.valueCardType !== undefined));
+    const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+    if (isValueCard && getAddonPriceInCents(addon) <= 0) return true;
+  }
+  return false;
+}
+
 // Privacy and Terms Consent Persistence
 function restoreConsentCheckboxes() {
   try {
@@ -19697,4 +20260,300 @@ function initCookieBanner() {
   setTimeout(() => {
     showCookieBanner();
   }, 1000);
+}
+
+// Static opening hours fallback when API does not return openingHours (e.g. /api/reference/business-units).
+// Keys match gym names from API or partial match; values shown in "Open" column.
+const OPENING_HOURS_FALLBACK = {
+  'Boulders Aarhus City': '08 - 23',
+  'Boulders Aarhus Nord': '10 - 22',
+  'Boulders Aarhus Syd': '10 - 22',
+  'Boulders Odense': '10 - 22',
+  'Boulders KBH Sydhavn': '08 - 23',
+  'Boulders KBH Valby': '09 - 22',
+  'Boulders KBH Hvidovre': '10 - 22',
+  'Boulders KBH Amager': '10 - 22',
+  'Boulders Aarhus Aaby': '08 - 23',
+  'Boulders KBH Vanløse': '08 - 23',
+  'Boulders Aalborg': '10 - 22',
+  // Partial keys for API name variants
+  'Aarhus City': '08 - 23',
+  'Aarhus Nord': '10 - 22',
+  'Aarhus Syd': '10 - 22',
+  'Odense': '10 - 22',
+  'Sydhavn': '08 - 23',
+  'Valby': '09 - 22',
+  'Hvidovre': '10 - 22',
+  'Amager': '10 - 22',
+  'Aaby': '08 - 23',
+  'Vanløse': '08 - 23',
+  'Aalborg': '10 - 22'
+};
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  const s = String(str);
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Get opening hours string for a gym: from API (openingHours / opening_hours) or static fallback.
+ * @param {{ name: string, openingHours?: string, opening_hours?: string }} gym
+ * @returns {string}
+ */
+function getGymOpeningHours(gym) {
+  const fromApi = gym.openingHours || gym.opening_hours || gym.openingHoursText;
+  if (fromApi && String(fromApi).trim()) return String(fromApi).trim();
+  const name = (gym.name || '').trim();
+  if (OPENING_HOURS_FALLBACK[name]) return OPENING_HOURS_FALLBACK[name];
+  for (const [key, hours] of Object.entries(OPENING_HOURS_FALLBACK)) {
+    if (name.includes(key) || key.includes(name)) return hours;
+  }
+  return '';
+}
+
+/**
+ * Build HTML for the FAQ "What are the opening hours?" answer: intro + table from API gyms or fallback.
+ * Uses gymsWithDistances when available; otherwise static list from OPENING_HOURS_FALLBACK.
+ * @returns {string}
+ */
+function getOpeningHoursAnswerHtml() {
+  const intro = t('faq.gyms.openingHours.intro');
+  const tableName = t('faq.gyms.openingHours.tableName');
+  const tableOpen = t('faq.gyms.openingHours.tableOpen');
+  const fullNameKeys = ['Boulders Aarhus City', 'Boulders Aarhus Nord', 'Boulders Aarhus Syd', 'Boulders Odense', 'Boulders KBH Sydhavn', 'Boulders KBH Valby', 'Boulders KBH Hvidovre', 'Boulders KBH Amager', 'Boulders Aarhus Aaby', 'Boulders KBH Vanløse', 'Boulders Aalborg'];
+  const gyms = Array.isArray(gymsWithDistances) && gymsWithDistances.length > 0
+    ? gymsWithDistances
+    : fullNameKeys.map(name => ({ name, _fallback: true }));
+  const rows = gyms.map(gym => {
+    const name = gym.name || gym;
+    const hours = (typeof gym === 'object' && !gym._fallback ? getGymOpeningHours(gym) : OPENING_HOURS_FALLBACK[name]) || '—';
+    return `<tr><td class="faq-oh-name">${escapeHtml(name)}</td><td class="faq-oh-hours">${escapeHtml(hours)}</td></tr>`;
+  }).join('');
+  return `<p class="faq-opening-hours-intro">${escapeHtml(intro)}</p><table class="faq-opening-hours-table" aria-label="${escapeHtml(tableOpen)}"><thead><tr><th scope="col">${escapeHtml(tableName)}</th><th scope="col">${escapeHtml(tableOpen)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// FAQ Data Structure
+const FAQ_DATA = {
+  gyms: [
+    { q: 'faq.gyms.openingHours.q', a: 'faq.gyms.openingHours.a' },
+    { q: 'faq.gyms.access.q', a: 'faq.gyms.access.a' },
+    { q: 'faq.gyms.events.q', a: 'faq.gyms.events.a' },
+    { q: 'faq.gyms.gettingStarted.q', a: 'faq.gyms.gettingStarted.a' }
+  ],
+  productChoice: [
+    { q: 'faq.productChoice.difference.q', a: 'faq.productChoice.difference.a' },
+    { q: 'faq.productChoice.membershipBest.q', a: 'faq.productChoice.membershipBest.a' },
+    { q: 'faq.productChoice.15daypassBest.q', a: 'faq.productChoice.15daypassBest.a' },
+    { q: 'faq.productChoice.punchcardBest.q', a: 'faq.productChoice.punchcardBest.a' }
+  ],
+  membership: [
+    { q: 'faq.membership.included.q', a: 'faq.membership.included.a' },
+    { q: 'faq.membership.blocLife.q', a: 'faq.membership.blocLife.a' },
+    { q: 'faq.membership.terms.q', a: 'faq.membership.terms.a' },
+    { q: 'faq.membership.bindingPeriod.q', a: 'faq.membership.bindingPeriod.a' },
+    { q: 'faq.membership.freeze.q', a: 'faq.membership.freeze.a' },
+    { q: 'faq.membership.cancellation.q', a: 'faq.membership.cancellation.a' }
+  ],
+  '15daypass': [
+    { q: 'faq.15daypass.howItWorks.q', a: 'faq.15daypass.howItWorks.a' },
+    { q: 'faq.15daypass.validity.q', a: 'faq.15daypass.validity.a' },
+    { q: 'faq.15daypass.access.q', a: 'faq.15daypass.access.a' }
+  ],
+  'punch-card': [
+    { q: 'faq.punchcard.howItWorks.q', a: 'faq.punchcard.howItWorks.a' },
+    { q: 'faq.punchcard.convert.q', a: 'faq.punchcard.convert.a' },
+    { q: 'faq.punchcard.remainingClips.q', a: 'faq.punchcard.remainingClips.a' },
+    { q: 'faq.punchcard.multiple.q', a: 'faq.punchcard.multiple.a' }
+  ]
+};
+
+/**
+ * Determine which FAQ categories should be shown based on current step and cart.
+ * Step 1: gyms only. Step 2–3: product choice (help choose product). Step 4: contextual to cart.
+ * @returns {string[]} Array of FAQ category keys to display
+ */
+function getActiveFAQs() {
+  const step = state.currentStep;
+
+  // Step 1: gym info only
+  if (step === 1) {
+    return ['gyms'];
+  }
+
+  // Step 2 or 3: help users choose the right product (differences between membership, 15-day pass, punch card)
+  if (step === 2 || step === 3) {
+    return ['productChoice'];
+  }
+
+  // Step 4 (cart): only FAQs for the selected product type (no gyms)
+  if (step === 4) {
+    const productType = determineProductTypeFromOrder();
+    if (productType === '15daypass') return ['15daypass'];
+    if (productType === 'membership') return ['membership'];
+    if (productType === 'punch-card') return ['punch-card'];
+    return [];
+  }
+
+  return [];
+}
+
+/**
+ * Render FAQ HTML based on active categories
+ */
+function renderFAQ() {
+  if (!DOM.faqSection) {
+    DOM.faqSection = document.getElementById('faqSection');
+    if (!DOM.faqSection) return;
+  }
+  
+  const faqList = DOM.faqSection.querySelector('.faq-list');
+  if (!faqList) return;
+  
+  // Get active FAQ categories
+  const activeCategories = getActiveFAQs();
+  
+  // Clear existing FAQ items
+  faqList.innerHTML = '';
+  
+  // Render FAQs for each active category
+  activeCategories.forEach(categoryKey => {
+    const categoryFAQs = FAQ_DATA[categoryKey];
+    if (!categoryFAQs) return;
+    
+    categoryFAQs.forEach(faq => {
+      const faqItem = document.createElement('div');
+      faqItem.className = 'faq-item';
+      faqItem.setAttribute('aria-expanded', 'false');
+      const isOpeningHours = categoryKey === 'gyms' && faq.a === 'faq.gyms.openingHours.a';
+      const answerContent = isOpeningHours ? getOpeningHoursAnswerHtml() : t(faq.a);
+      const answerTag = isOpeningHours ? 'div' : 'p';
+      const answerClass = isOpeningHours ? 'faq-answer-text faq-opening-hours' : 'faq-answer-text';
+      if (isOpeningHours) faqItem.classList.add('faq-item--with-table');
+      faqItem.innerHTML = `
+        <button class="faq-question" type="button" aria-expanded="false">
+          <span class="faq-question-text">${t(faq.q)}</span>
+          <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <div class="faq-answer">
+          <${answerTag} class="${answerClass}">${answerContent}</${answerTag}>
+        </div>
+      `;
+      
+      faqList.appendChild(faqItem);
+    });
+  });
+  
+  // Reinitialize accordion functionality for new FAQ items
+  initFAQ();
+}
+
+// Update FAQ section visibility
+function updateFAQVisibility() {
+  if (!DOM.faqSection) {
+    // Retry to find FAQ section if not cached yet
+    DOM.faqSection = document.getElementById('faqSection');
+    if (!DOM.faqSection) return;
+  }
+  
+  // Hide FAQ if checkout is in progress or on step 5 (success page)
+  const shouldHide = state.checkoutInProgress || state.currentStep === TOTAL_STEPS;
+  
+  if (shouldHide) {
+    DOM.faqSection.style.display = 'none';
+    DOM.faqSection.setAttribute('data-checkout', 'true');
+    DOM.faqSection.setAttribute('data-step-5', state.currentStep === TOTAL_STEPS ? 'true' : 'false');
+  } else {
+    // Show FAQ on steps 1-4 when checkout is not in progress
+    DOM.faqSection.style.display = 'block';
+    DOM.faqSection.removeAttribute('data-checkout');
+    DOM.faqSection.removeAttribute('data-step-5');
+    // Render FAQ when showing
+    renderFAQ();
+  }
+}
+
+/**
+ * Scroll to FAQ section smoothly
+ */
+function scrollToFAQ() {
+  const faqSection = document.getElementById('faqSection');
+  if (!faqSection) return;
+  
+  // Force FAQ to be visible if hidden
+  if (state.checkoutInProgress) {
+    // Temporarily show FAQ even during checkout
+    faqSection.style.display = 'block';
+    faqSection.removeAttribute('data-checkout');
+  } else {
+    updateFAQVisibility();
+  }
+  
+  // Scroll to FAQ with smooth behavior
+  faqSection.scrollIntoView({ 
+    behavior: 'smooth', 
+    block: 'start' 
+  });
+  
+  // Optional: Highlight FAQ section briefly
+  faqSection.style.transition = 'background-color 0.3s ease';
+  faqSection.style.backgroundColor = 'rgba(244, 1, 245, 0.1)';
+  setTimeout(() => {
+    faqSection.style.backgroundColor = '';
+  }, 2000);
+}
+
+// Initialize FAQ accordion functionality
+function initFAQ() {
+  if (!DOM.faqQuestions || DOM.faqQuestions.length === 0) {
+    // Retry after DOM is fully loaded
+    setTimeout(() => {
+      DOM.faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
+      if (DOM.faqQuestions.length > 0) {
+        setupFAQAccordion();
+      }
+    }, 100);
+    return;
+  }
+  
+  setupFAQAccordion();
+}
+
+function setupFAQAccordion() {
+  // Get fresh references to FAQ questions
+  const faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
+  if (faqQuestions.length === 0) return;
+  
+  faqQuestions.forEach((questionBtn) => {
+    // Check if already has listener (avoid duplicates)
+    if (questionBtn.dataset.faqInitialized === 'true') return;
+    questionBtn.dataset.faqInitialized = 'true';
+    
+    questionBtn.addEventListener('click', () => {
+      const faqItem = questionBtn.closest('.faq-item');
+      const isExpanded = questionBtn.getAttribute('aria-expanded') === 'true';
+      
+      // Close all other FAQ items
+      faqQuestions.forEach((otherBtn) => {
+        if (otherBtn !== questionBtn) {
+          const otherItem = otherBtn.closest('.faq-item');
+          otherBtn.setAttribute('aria-expanded', 'false');
+          if (otherItem) {
+            otherItem.setAttribute('aria-expanded', 'false');
+          }
+        }
+      });
+      
+      // Toggle current item
+      questionBtn.setAttribute('aria-expanded', !isExpanded);
+      if (faqItem) {
+        faqItem.setAttribute('aria-expanded', !isExpanded);
+      }
+    });
+  });
+  
+  // Update DOM reference
+  DOM.faqQuestions = faqQuestions;
 }
