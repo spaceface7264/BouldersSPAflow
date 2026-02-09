@@ -3087,7 +3087,20 @@ async function loadProductsFromAPI() {
       );
       return !hasPublicCampaignLabel;
     });
-    
+
+    // Sort all product lists by price high to low (price in cents for consistent comparison)
+    const getProductPriceCents = (product) => {
+      const amount = product.priceWithInterval?.price?.amount ?? product.price?.amount ?? product.amount;
+      if (amount == null) return 0;
+      return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
+    };
+    const byPriceHighToLow = (a, b) => getProductPriceCents(b) - getProductPriceCents(a);
+    campaignSubscriptions.sort(byPriceHighToLow);
+    campaignValueCards.sort(byPriceHighToLow);
+    membershipSubscriptions.sort(byPriceHighToLow);
+    dayPassSubscriptions.sort(byPriceHighToLow);
+    regularValueCards.sort(byPriceHighToLow);
+
     // Store in state
     state.campaignSubscriptions = campaignSubscriptions;
     state.campaignValueCards = campaignValueCards; // Value cards for Campaign category
@@ -4091,7 +4104,6 @@ const state = {
   campaignSubscriptions: [], // Fetched campaign subscription products (with "PublicCampaign" label)
   campaignValueCards: [], // Fetched campaign value card products (with "PublicCampaign" label)
   campaignEndDate: null, // ISO string or Date for countdown; if null, uses end of current month
-  cartCountdownEndTime: null, // timestamp (ms) when 15-min cart timer expires; set when cart gets items
   subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15 Day Pass")
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
@@ -4123,8 +4135,6 @@ let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
 let loginCooldownUntil = 0;
 let campaignCountdownIntervalId = null;
-let cartTimerCountdownIntervalId = null;
-const CART_COUNTDOWN_MINUTES = 15;
 
 // Campaign countdown end date: set here when API doesn't send Omsætningsperiode. Use ISO string or null for "end of current month".
 const CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK = '2026-02-16'; // e.g. '2026-02-15T23:59:59.999' or '2026-02-15'
@@ -4188,56 +4198,6 @@ function stopCampaignCountdown() {
     campaignCountdownIntervalId = null;
   }
   const el = document.getElementById('campaignCountdown');
-  if (el) el.style.display = 'none';
-}
-
-function updateCartTimerCountdown() {
-  const el = document.getElementById('cartTimerCountdown');
-  const valueEl = document.getElementById('cartTimerCountdownValue');
-  if (!el || !valueEl) return;
-  const endTime = state.cartCountdownEndTime;
-  if (endTime == null) {
-    el.style.display = 'none';
-    return;
-  }
-  const now = Date.now();
-  const diff = endTime - now;
-  if (diff <= 0) {
-    el.style.display = 'none';
-    state.cartCountdownEndTime = null;
-    if (cartTimerCountdownIntervalId) {
-      clearInterval(cartTimerCountdownIntervalId);
-      cartTimerCountdownIntervalId = null;
-    }
-    return;
-  }
-  const totalSeconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  valueEl.textContent = minutes + ':' + String(seconds).padStart(2, '0');
-  valueEl.setAttribute('aria-label', minutes + ' ' + (minutes === 1 ? 'minute' : 'minutes') + ' ' + seconds + ' ' + (seconds === 1 ? 'second' : 'seconds'));
-  el.dataset.urgent = totalSeconds <= 300 ? 'true' : 'false';
-  el.dataset.critical = totalSeconds <= 120 ? 'true' : 'false';
-  el.style.display = '';
-}
-
-function startCartTimerCountdown() {
-  if (cartTimerCountdownIntervalId) {
-    clearInterval(cartTimerCountdownIntervalId);
-    cartTimerCountdownIntervalId = null;
-  }
-  state.cartCountdownEndTime = Date.now() + CART_COUNTDOWN_MINUTES * 60 * 1000;
-  updateCartTimerCountdown();
-  cartTimerCountdownIntervalId = setInterval(updateCartTimerCountdown, 1000);
-}
-
-function stopCartTimerCountdown() {
-  if (cartTimerCountdownIntervalId) {
-    clearInterval(cartTimerCountdownIntervalId);
-    cartTimerCountdownIntervalId = null;
-  }
-  state.cartCountdownEndTime = null;
-  const el = document.getElementById('cartTimerCountdown');
   if (el) el.style.display = 'none';
 }
 
@@ -5425,6 +5385,10 @@ const translations = {
     'modal.paymentRedirectInfo.title': 'Klar til betaling',
     'modal.paymentRedirectInfo.message': 'Du sendes videre til betalingssiden og bliver opkrævet 0,01 kr som en teknisk løsning på det gratis kaffekort.',
     'modal.paymentRedirectInfo.continue': 'Fortsæt til betaling',
+    'modal.cartOfferExpired.title': 'Tilbuddet er udløbet',
+    'modal.cartOfferExpired.message': 'Tiden til at gennemføre dit køb er udløbet. Du kan stadig forsøge at betale til den viste pris, eller gå tilbage og vælge et andet medlemskab.',
+    'modal.cartOfferExpired.continue': 'Fortsæt til betaling',
+    'modal.cartOfferExpired.chooseOther': 'Vælg andet tilbud',
     'faq.title': 'Ofte stillede spørgsmål',
     'faq.gyms.openingHours.q': 'Hvad er åbningstiderne?',
     'faq.gyms.openingHours.a': 'Åbningstiderne varierer mellem hallerne. Du kan finde de aktuelle åbningstider på vores hjemmeside eller ved at kontakte den specifikke hal.',
@@ -5550,6 +5514,10 @@ const translations = {
     'modal.paymentRedirectInfo.title': 'Ready for payment',
     'modal.paymentRedirectInfo.message': "You'll be taken to the payment page. It may show 0,01 kr because of a free item in your cart – you won't be charged more.",
     'modal.paymentRedirectInfo.continue': 'Continue to payment',
+    'modal.cartOfferExpired.title': 'Offer expired',
+    'modal.cartOfferExpired.message': 'The time to complete your purchase has run out. You can still try to pay at the price shown, or go back and choose another membership.',
+    'modal.cartOfferExpired.continue': 'Continue to payment',
+    'modal.cartOfferExpired.chooseOther': 'Choose another offer',
     'faq.title': 'Frequently Asked Questions',
     'faq.gyms.openingHours.q': 'What are the opening hours?',
     'faq.gyms.openingHours.intro': 'All Boulders are open from morning to evening 361 days a year:',
@@ -12565,17 +12533,6 @@ function updateCartSummary() {
     showCampaignWarning();
   } else {
     hideCampaignWarning();
-  }
-
-  // 15-minute cart timer: only for carts with PublicCampaign products
-  const cartTimerEl = document.getElementById('cartTimerCountdown');
-  if (cartTimerEl) {
-    if (hasCampaignInCart()) {
-      if (state.cartCountdownEndTime == null) startCartTimerCountdown();
-      else updateCartTimerCountdown();
-    } else {
-      stopCartTimerCountdown();
-    }
   }
 
   // Calculate subtotal (before discount) - round to half krone

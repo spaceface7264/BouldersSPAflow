@@ -692,14 +692,6 @@
                                         </svg>
                                     </button>
                                 </div>
-                                <div class="cart-timer-countdown" id="cartTimerCountdown" aria-live="polite" style="display: none;" role="status">
-                                    <span class="cart-timer-countdown-icon" aria-hidden="true">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                    </span>
-                                    <span class="cart-timer-countdown-label" data-i18n-key="cart.timeToComplete">Time left to complete:</span>
-                                    <span class="cart-timer-countdown-value" id="cartTimerCountdownValue" aria-label="15 minutes 0 seconds">15:00</span>
-                                </div>
-                                
                                 <!-- Cart Items -->
                                 <template id="cart-item-template">
                                     <div class="cart-item" data-cart-item>
@@ -1305,6 +1297,31 @@
                     <p class="campaign-rejection-message" data-i18n-key="modal.paymentRedirectInfo.message">You'll be taken to the payment page. It may show 0,01 kr because of a free item in your cart – you won't be charged more.</p>
                     <div class="campaign-rejection-actions">
                         <button type="button" class="campaign-rejection-btn campaign-rejection-btn-primary" id="paymentRedirectInfoContinue" data-i18n-key="modal.paymentRedirectInfo.continue">Continue to payment</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cart offer expired (15-min timer ran out) -->
+    <div class="terms-modal" id="cartOfferExpiredModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" data-i18n-key="modal.cartOfferExpired.title">Offer expired</h3>
+                <div class="terms-modal-header-actions">
+                    <button type="button" class="terms-modal-close" id="cartOfferExpiredModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="campaign-rejection-content">
+                    <p class="campaign-rejection-message" data-i18n-key="modal.cartOfferExpired.message">The time to complete your purchase has run out. You can still try to pay at the price shown, or go back and choose another membership.</p>
+                    <div class="campaign-rejection-actions">
+                        <button type="button" class="campaign-rejection-btn campaign-rejection-btn-primary" id="cartOfferExpiredContinue" data-i18n-key="modal.cartOfferExpired.continue">Continue to payment</button>
+                        <button type="button" class="campaign-rejection-btn campaign-rejection-btn-secondary" id="cartOfferExpiredChooseOther" data-i18n-key="modal.cartOfferExpired.chooseOther">Choose another offer</button>
                     </div>
                 </div>
             </div>
