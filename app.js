@@ -1950,16 +1950,11 @@ class OrderAPI {
         amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
       }
       
-      // Backend requires amount (FIELD_MANDATORY) and may reject/500 on amount: 0. Send integer (cents).
+      // Send amount in cents (integer). Backend accepts 0 for free value cards.
       const amountNum = typeof amount === 'number' && !Number.isNaN(amount) ? Math.round(amount) : 0;
-      // Workaround: backend often rejects amount 0 for free value cards; send 1 øre so request succeeds.
-      const amountToSend = amountNum > 0 ? amountNum : 1;
-      if (amountNum === 0) {
-        console.warn('[Step 7] Value card is free (0) – sending amount: 1 (1 øre) as workaround until backend accepts amount: 0');
-      }
       const payload = {
         valueCardProduct: productId,
-        amount: amountToSend,
+        amount: amountNum,
         ...(additionTo != null ? { additionTo } : {}),
       };
       console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
@@ -5168,9 +5163,6 @@ const translations = {
     'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes at du har forladt betalingsvinduet uden at gennenmføre, et eksisterende abonnementer eller kampagnebegrænsning. Kontakt support hvis du tror dette er en fejl. Du kan stadig oprette et almindeligt medlemskab.',
     'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
     'modal.campaignRejection.option2': 'Kontakt support',
-    'modal.paymentRedirectInfo.title': 'Klar til betaling',
-    'modal.paymentRedirectInfo.message': 'Du sendes videre til betalingssiden og bliver opkrævet 0,01 kr som en teknisk løsning på det gratis kaffekort.',
-    'modal.paymentRedirectInfo.continue': 'Fortsæt til betaling',
     'modal.cartOfferExpired.title': 'Tilbuddet er udløbet',
     'modal.cartOfferExpired.message': 'Tiden til at gennemføre dit køb er udløbet. Du kan stadig forsøge at betale til den viste pris, eller gå tilbage og vælge et andet medlemskab.',
     'modal.cartOfferExpired.continue': 'Fortsæt til betaling',
@@ -5297,9 +5289,6 @@ const translations = {
     'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. If you believe this is a mistake, contact support. You can still sign up for a regular membership.',
     'modal.campaignRejection.option1': 'Regular Membership',
     'modal.campaignRejection.option2': 'Contact Support',
-    'modal.paymentRedirectInfo.title': 'Ready for payment',
-    'modal.paymentRedirectInfo.message': "You'll be taken to the payment page. It may show 0,01 kr because of a free item in your cart – you won't be charged more.",
-    'modal.paymentRedirectInfo.continue': 'Continue to payment',
     'modal.cartOfferExpired.title': 'Offer expired',
     'modal.cartOfferExpired.message': 'The time to complete your purchase has run out. You can still try to pay at the price shown, or go back and choose another membership.',
     'modal.cartOfferExpired.continue': 'Continue to payment',
@@ -5425,9 +5414,6 @@ const translations = {
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
-    'modal.paymentRedirectInfo.title': 'Bereit zur Zahlung',
-    'modal.paymentRedirectInfo.message': 'Sie werden zur Zahlungsseite weitergeleitet. Dort kann 0,01 kr angezeigt werden, da ein kostenloses Add-on im Warenkorb liegt – es fallen keine weiteren Kosten an.',
-    'modal.paymentRedirectInfo.continue': 'Weiter zur Zahlung',
   },
 };
 
@@ -6044,24 +6030,6 @@ function showCampaignRejectionModal() {
 
 function hideCampaignRejectionModal() {
   const modal = document.getElementById('campaignRejectionModal');
-  if (modal) {
-    modal.style.display = 'none';
-  }
-}
-
-function showPaymentRedirectInfoModal() {
-  const modal = document.getElementById('paymentRedirectInfoModal');
-  if (modal) {
-    modal.style.display = 'flex';
-    setTimeout(() => {
-      const btn = document.getElementById('paymentRedirectInfoContinue');
-      if (btn) btn.focus();
-    }, 100);
-  }
-}
-
-function hidePaymentRedirectInfoModal() {
-  const modal = document.getElementById('paymentRedirectInfoModal');
   if (modal) {
     modal.style.display = 'none';
   }
@@ -6803,14 +6771,6 @@ function setupEventListeners() {
       hideCampaignRejectionModal();
     }
     
-    // Payment redirect info modal (0,01 kr workaround)
-    if (e.target.closest('#paymentRedirectInfoContinue')) {
-      hidePaymentRedirectInfoModal();
-      handleCheckout();
-    }
-    if (e.target.closest('#paymentRedirectInfoModalClose')) {
-      hidePaymentRedirectInfoModal();
-    }
   });
   
   // Close campaign rejection modal when clicking outside
@@ -6822,17 +6782,6 @@ function setupEventListeners() {
       }
     });
   }
-  
-  // Close payment redirect info modal when clicking outside
-  const paymentRedirectInfoModal = document.getElementById('paymentRedirectInfoModal');
-  if (paymentRedirectInfoModal) {
-    paymentRedirectInfoModal.addEventListener('click', (e) => {
-      if (e.target === paymentRedirectInfoModal) {
-        hidePaymentRedirectInfoModal();
-      }
-    });
-  }
-  
   
   // Search input live update
   if (DOM.termsSearchInput) {
@@ -13803,10 +13752,6 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
 }
 
 function handleCheckoutClick() {
-  if (hasFreeValueCardAddon()) {
-    showPaymentRedirectInfoModal();
-    return;
-  }
   handleCheckout();
 }
 
@@ -19751,32 +19696,6 @@ function getAddonPriceInCents(addon) {
   if (addon.price && typeof addon.price.discounted === 'number') return Math.round(addon.price.discounted * 100);
   const dkk = getAddonPrice(addon);
   return Math.round(dkk * 100);
-}
-
-// True if cart has at least one addon that is a value card with price 0 (triggers 0,01 kr workaround)
-function hasFreeValueCardAddon() {
-  if (!state.addonIds || state.addonIds.size === 0) return false;
-  const allValueCards = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
-  for (const addonId of state.addonIds) {
-    const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
-    const addon = findAddon(addonId);
-    const isInValueCards = allValueCards.some(vc => {
-      const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
-      return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
-    });
-    const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
-      const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
-      return (pId === numericId || String(p.id) === String(addonId)) &&
-        (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || (!p.priceWithInterval && !p.subscriptionInterval));
-    });
-    const hasValueCardType = addon && (addon.productType === 'VALUE_CARD' || addon.productType === 'VALUECARD' ||
-      (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD')));
-    const hasValueCardFields = addon && (addon.valueCardType !== undefined || addon.validUntil !== undefined ||
-      (addon.product && addon.product.valueCardType !== undefined));
-    const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
-    if (isValueCard && getAddonPriceInCents(addon) <= 0) return true;
-  }
-  return false;
 }
 
 // Privacy and Terms Consent Persistence
