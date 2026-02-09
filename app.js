@@ -2401,13 +2401,20 @@ class PaymentAPI {
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
       // API Response structure from backend example: { "url": "..." }
-      // Response is direct, not nested in data object
-      const paymentLink = data.url || 
-                         data.data?.url || 
-                         data.data?.paymentLink || 
-                         data.data?.link ||
-                         data.paymentLink || 
-                         data.link;
+      // We only use the payment provider URL. We do NOT redirect to Assently/signature case URLs.
+      const rawLink = data.url ||
+                     data.data?.url ||
+                     data.data?.paymentLink ||
+                     data.data?.link ||
+                     data.paymentLink ||
+                     data.link;
+      const isAssentlyUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
+      if (rawLink && isAssentlyUrl(rawLink)) {
+        console.error('[Step 9] ❌ API returned Assently/signature URL instead of payment link – refusing to use it');
+        console.error('[Step 9] URL was:', rawLink);
+        throw new Error('Payment link API returned a signature URL (Assently). Backend should return the payment provider URL only.');
+      }
+      const paymentLink = rawLink;
       
       if (!paymentLink) {
         console.error('[Step 9] ❌ No payment link in response!');
@@ -13810,6 +13817,7 @@ async function handleCheckout() {
 
     // Step 3: Add items to order and generate payment link
     // Backend requirement: Generate Payment Link Card immediately after subscription is added to cart
+    // Note: We do not use Assently or any separate e-signature step. Checkout goes straight to payment.
     let paymentLink = null;
     
     try {
@@ -15170,8 +15178,14 @@ async function handleCheckout() {
     console.log('[checkout] paymentLink truthy?', !!paymentLink);
     console.log('[checkout] state.paymentLink:', state.paymentLink);
     
-    if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
-      // Redirect to payment provider
+    const isAssentlyUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
+    if (paymentLink && isAssentlyUrl(paymentLink)) {
+      console.error('[checkout] ❌ Refusing to redirect to Assently – API returned signature URL instead of payment link');
+      showToast('Unable to open payment. Please try again or contact support.', 'error');
+      state.checkoutInProgress = false;
+      setCheckoutLoadingState(false);
+    } else if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
+      // Redirect to payment provider (never to Assently)
       console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
       console.log('[checkout] Payment link URL:', paymentLink);
       showToast('Redirecting to secure payment...', 'info');
@@ -15203,13 +15217,13 @@ async function handleCheckout() {
       console.error('[checkout] This means the API did not return a valid payment URL');
       console.error('[checkout] The payment provider might be embedded or the API response structure changed');
       
-      // Check if payment link is in state (maybe it was set elsewhere)
-      if (state.paymentLink && (state.paymentLink.startsWith('http://') || state.paymentLink.startsWith('https://'))) {
+      // Check if payment link is in state (maybe it was set elsewhere) – but never use Assently URL
+      const stateLink = state.paymentLink;
+      if (stateLink && (stateLink.startsWith('http://') || stateLink.startsWith('https://')) && !/assently\.com/i.test(stateLink)) {
         console.log('[checkout] Found payment link in state, using that instead');
-        paymentLink = state.paymentLink;
         showToast('Redirecting to secure payment...', 'info');
         setTimeout(() => {
-          window.location.replace(paymentLink);
+          window.location.replace(stateLink);
         }, 500);
       } else {
         // No valid payment link - this is an error
