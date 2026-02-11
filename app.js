@@ -5887,21 +5887,10 @@ function updateCartTranslations() {
     discountInput.placeholder = t('cart.discount.placeholder');
   }
   
-  // Payment method section
-  const paymentTitle = document.querySelector('.payment-title[data-i18n-key]');
-  if (paymentTitle) {
-    paymentTitle.textContent = t('cart.paymentMethod');
-  }
-  
-  const paymentRedirect = document.querySelector('.payment-methods p[data-i18n-key]');
+  // Payment redirect text (payment method selection removed)
+  const paymentRedirect = document.querySelector('p[data-i18n-key="cart.paymentRedirect"]');
   if (paymentRedirect) {
     paymentRedirect.textContent = t('cart.paymentRedirect');
-  }
-  
-  // Card payment label
-  const cardPaymentLabel = document.querySelector('#cardPayment + label span[data-i18n-key="cart.cardPayment"]');
-  if (cardPaymentLabel) {
-    cardPaymentLabel.textContent = t('cart.cardPayment');
   }
   
   // Checkout button
@@ -8442,6 +8431,15 @@ function refreshLoginUI() {
   if (DOM.loginStatus) {
     DOM.loginStatus.style.display = authenticated ? 'block' : 'none';
   }
+
+  // Ensure checkout button state is correct after auth change (e.g. after creating profile, logout)
+  // Always reset any stuck "Processing..." state - covers logout, auth expiry, and interrupted checkout
+  if (state.checkoutInProgress) {
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState(false);
+  } else {
+    updateCheckoutButton();
+  }
   
   // Update name display (order: 1)
   if (DOM.loginStatusName && DOM.loginStatusNameRow) {
@@ -9098,6 +9096,9 @@ async function handleSaveAccount() {
     // Reset button state
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save Account';
+    // Ensure checkout button is not stuck in Processing (user may have switched flows)
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState(false);
   }
 }
 
@@ -13677,6 +13678,9 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   state.discountApplied = false;
   state.discountCode = null;
 
+  // Re-enable logout button and reset checkout button if they were disabled during checkout
+  setCheckoutLoadingState(false);
+
   if (DOM.discountInput) {
     DOM.discountInput.disabled = false;
     DOM.discountInput.value = '';
@@ -13977,19 +13981,9 @@ async function handleCheckout() {
     }
   }
 
+  // Payment method UI removed - use card by default
   if (!state.paymentMethod) {
-    showToast('Choose a payment method to continue.', 'error');
-    // Animate checkout button with red flash
-    if (DOM.checkoutBtn) {
-      DOM.checkoutBtn.classList.remove('error-flash');
-      void DOM.checkoutBtn.offsetWidth;
-      DOM.checkoutBtn.classList.add('error-flash');
-      setTimeout(() => {
-        DOM.checkoutBtn.classList.remove('error-flash');
-      }, 600);
-    }
-    state.checkoutInProgress = false; // Reset on validation error
-    return;
+    state.paymentMethod = 'card';
   }
 
   // Set loading state
@@ -18578,20 +18572,9 @@ function validateForm(animate = false) {
     }
   }
 
+  // Payment method UI removed - always use card; ensure default for API
   if (!state.paymentMethod) {
-    isValid = false;
-    errors.push('Payment method not selected');
-    if (animate) {
-      showToast('Please select a payment method.', 'error');
-      // Animate payment method section
-      const paymentMethods = document.querySelector('.payment-methods');
-      if (paymentMethods) {
-        paymentMethods.style.animation = 'shake 0.5s ease-in-out';
-        setTimeout(() => {
-          paymentMethods.style.animation = '';
-        }, 500);
-      }
-    }
+    state.paymentMethod = 'card';
   }
 
   // Card fields validation REMOVED - users are redirected to payment provider
@@ -18606,7 +18589,6 @@ function validateForm(animate = false) {
       privacyConsentChecked: DOM.privacyConsent?.checked,
       termsConsentFound: !!DOM.termsConsent,
       termsConsentChecked: DOM.termsConsent?.checked,
-      paymentMethod: state.paymentMethod,
       errors
     });
   }
@@ -18665,12 +18647,16 @@ function updateCheckoutButton() {
   const hasPunchCards = state.valueCardQuantities && 
     Array.from(state.valueCardQuantities.values()).some(qty => qty > 0);
   const hasAddons = state.addonIds && state.addonIds.size > 0;
-  const hasPayment = Boolean(state.paymentMethod);
 
-  // Enable checkout if: privacy + terms accepted, payment method selected, AND (membership OR punch cards OR addons)
-  // This matches the validation logic in handleCheckout()
+  // Payment method UI removed - always use card; ensure default is set for API
+  if (!state.paymentMethod) {
+    state.paymentMethod = 'card';
+  }
+
+  // Enable checkout if: privacy + terms accepted, AND (membership OR punch cards OR addons)
+  // Payment method no longer required from UI - card is used by default
   const hasProduct = hasMembership || hasPunchCards || hasAddons;
-  DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct && hasPayment);
+  DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
   
   console.log('[Checkout Button] State:', {
     isAuthenticated,
@@ -18679,7 +18665,6 @@ function updateCheckoutButton() {
     hasMembership,
     hasPunchCards,
     hasAddons,
-    hasPayment,
     hasProduct,
     disabled: DOM.checkoutBtn.disabled,
     privacyConsentElement: DOM.privacyConsent ? 'found' : 'not found',
@@ -18696,9 +18681,15 @@ function setCheckoutLoadingState(isLoading) {
   if (isLoading) {
     DOM.checkoutBtn.textContent = 'Processing...';
     DOM.checkoutBtn.classList.add('loading');
+    // Disable logout to prevent user logging out while redirecting to payment
+    const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+    if (headerLogoutBtn) headerLogoutBtn.disabled = true;
   } else {
     DOM.checkoutBtn.textContent = 'Checkout';
     DOM.checkoutBtn.classList.remove('loading');
+    // Re-enable logout when checkout flow ends
+    const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+    if (headerLogoutBtn) headerLogoutBtn.disabled = false;
     // Re-validate button state based on form
     updateCheckoutButton();
   }
