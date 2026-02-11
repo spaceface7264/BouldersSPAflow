@@ -787,39 +787,10 @@
                                     </label>
                                 </div>
                                 
-                                <!-- Payment Methods -->
-                                <div class="payment-methods">
-                                    <h4 class="payment-title" data-i18n-key="cart.paymentMethod">Choose payment method</h4>
-                                    <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem; margin-top: 0.5rem;" data-i18n-key="cart.paymentRedirect">
-                                        You will be redirected to our secure payment provider to complete your payment.
-                                    </p>
-                                    
-                                    <div class="payment-option">
-                                        <input type="radio" id="cardPayment" name="paymentMethod" value="card" data-api-field="payment.method">
-                                        <label for="cardPayment" class="payment-label">
-                                            <div class="payment-icon">
-                                                <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
-                                                    <rect x="1" y="3" width="22" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
-                                                    <path d="M1 7h22" stroke="currentColor" stroke-width="2"/>
-                                                </svg>
-                                            </div>
-                                            <span data-i18n-key="cart.cardPayment">Card payment</span>
-                                        </label>
-                                    </div>
-                                    
-                                    <div class="payment-option">
-                                        <input type="radio" id="applePay" name="paymentMethod" value="apple" data-api-field="payment.method">
-                                        <label for="applePay" class="payment-label">
-                                            <div class="payment-icon">
-                                                <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
-                                                    <path d="M12 2C8.5 2 6 4.5 6 8c0 3.5 2.5 6 6 6s6-2.5 6-6c0-3.5-2.5-6-6-6z" stroke="currentColor" stroke-width="2"/>
-                                                    <path d="M12 6v4l2 2" stroke="currentColor" stroke-width="2"/>
-                                                </svg>
-                                            </div>
-                                            <span>Apple Pay</span>
-                                        </label>
-                                    </div>
-                                </div>
+                                <!-- Payment Methods - REMOVED: Users are redirected to payment provider for card entry -->
+                                <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem; margin-top: 0.5rem;" data-i18n-key="cart.paymentRedirect">
+                                    You will be redirected to our secure payment provider to complete your payment.
+                                </p>
                                 
                                 <!-- Card Payment Form - REMOVED: Users are redirected to payment provider -->
                                 <!-- This form is not used - payment is handled by external payment provider -->
