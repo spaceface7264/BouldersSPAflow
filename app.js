@@ -6704,6 +6704,10 @@ function cacheDom() {
   DOM.dataPolicySearchInput = document.getElementById('dataPolicySearchInput');
   DOM.dataPolicySearchClear = document.getElementById('dataPolicySearchClear');
   
+  // Cookie Declaration modal
+  DOM.cookieDeclarationModal = document.getElementById('cookieDeclarationModal');
+  DOM.cookieDeclarationModalClose = document.getElementById('cookieDeclarationModalClose');
+  
   // Store current modal state
   state.currentModalType = null;
   state.currentModalTab = null;
@@ -6915,11 +6919,18 @@ function setupEventListeners() {
       return;
     }
 
+    if (e.target.closest('[data-action="open-cookie-declaration"]')) {
+      e.preventDefault();
+      openCookieDeclarationModal();
+    }
+    
     if (e.target.closest('[data-action="open-terms"]')) {
       e.preventDefault();
       const termsType = e.target.closest('[data-action="open-terms"]').dataset.termsType;
       if (termsType === 'privacy') {
         openDataPolicyModal();
+      } else if (termsType === 'cookie') {
+        openCookieDeclarationModal();
       } else if (termsType === 'email-consent') {
         openTermsModal('email-consent');
       } else if (termsType === 'sms-consent') {
@@ -6955,6 +6966,10 @@ function setupEventListeners() {
     
     if (e.target === DOM.termsModalClose || e.target.closest('#termsModalClose')) {
       closeTermsModal();
+    }
+    
+    if (e.target === DOM.cookieDeclarationModalClose || e.target.closest('#cookieDeclarationModalClose')) {
+      closeCookieDeclarationModal();
     }
     
     if (e.target === DOM.dataPolicyModalClose || e.target.closest('#dataPolicyModalClose')) {
@@ -7024,6 +7039,15 @@ function setupEventListeners() {
     });
   }
   
+  // Close cookie declaration modal when clicking outside
+  if (DOM.cookieDeclarationModal) {
+    DOM.cookieDeclarationModal.addEventListener('click', (e) => {
+      if (e.target === DOM.cookieDeclarationModal) {
+        closeCookieDeclarationModal();
+      }
+    });
+  }
+  
   // Close modals on Escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -7032,6 +7056,9 @@ function setupEventListeners() {
       }
       if (DOM.dataPolicyModal && DOM.dataPolicyModal.style.display !== 'none') {
         closeDataPolicyModal();
+      }
+      if (DOM.cookieDeclarationModal && DOM.cookieDeclarationModal.style.display !== 'none') {
+        closeCookieDeclarationModal();
       }
       const receiptModal = document.getElementById('detailedReceiptModal');
       if (receiptModal && receiptModal.style.display !== 'none') {
@@ -8319,6 +8346,18 @@ function closeDataPolicyModal() {
   state.dataPolicyOriginalContent = null;
   state.currentModalType = null;
   DOM.dataPolicyModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
+}
+
+function openCookieDeclarationModal() {
+  if (!DOM.cookieDeclarationModal) return;
+  DOM.cookieDeclarationModal.style.display = 'flex';
+  document.body.classList.add('modal-open');
+}
+
+function closeCookieDeclarationModal() {
+  if (!DOM.cookieDeclarationModal) return;
+  DOM.cookieDeclarationModal.style.display = 'none';
   document.body.classList.remove('modal-open');
 }
 
