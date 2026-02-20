@@ -1243,6 +1243,27 @@
         </div>
     </div>
 
+    <!-- Cookie Declaration Modal -->
+    <div class="terms-modal" id="cookieDeclarationModal" style="display: none;" role="dialog" aria-labelledby="cookieDeclarationModalTitle" aria-modal="true">
+        <div class="terms-modal-content cookie-declaration-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" id="cookieDeclarationModalTitle" data-i18n-key="footer.policies.cookie">Cookie Policy</h3>
+                <div class="terms-modal-header-actions">
+                    <button class="terms-modal-close" id="cookieDeclarationModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="terms-modal-content-text cookie-declaration-content" id="cookieDeclarationContent">
+                    <script id="CookieDeclaration" src="https://consent.cookiebot.com/31a4df3e-7adc-432b-8c8c-30c07e1d0f93/cd.js" type="text/javascript" async></script>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Campaign Rejection Modal -->
     <div class="terms-modal" id="campaignRejectionModal" style="display: none;">
         <div class="terms-modal-content">
@@ -1316,17 +1337,17 @@
                         </a>
                     </li>
                     <li>
+                        <a href="#" data-action="open-cookie-declaration" data-i18n-key="footer.policies.cookie">
+                            Cookie Policy
+                        </a>
+                    </li>
+                    <li>
                         <button type="button" class="footer-cookie-settings-link" id="cookieSettingsButton" data-i18n-key="cookie.settings.button">
                             Cookie Settings
                         </button>
                     </li>
                 </ul>
             </div>
-        </div>
-        
-        <div class="footer-cookie-declaration">
-            <h4 data-i18n-key="footer.policies.cookie">Cookie Policy</h4>
-            <script id="CookieDeclaration" src="https://consent.cookiebot.com/31a4df3e-7adc-432b-8c8c-30c07e1d0f93/cd.js" type="text/javascript" async></script>
         </div>
         
         <div class="footer-bottom">

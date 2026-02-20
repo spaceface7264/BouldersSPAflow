@@ -6811,55 +6811,46 @@ main {
     cursor: pointer;
 }
 
-/* Cookie Declaration (Cookiebot) - replaces static cookie policy */
-.footer-cookie-declaration {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px 20px 16px;
-    border-top: 1px solid var(--color-item-border);
+/* Cookie Declaration modal (Cookiebot) */
+.cookie-declaration-modal-content .terms-modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
 }
 
-.footer-cookie-declaration h4 {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    margin: 0 0 12px 0;
-}
-
-.footer-cookie-declaration .CybotCookiebotDialogBody,
-.footer-cookie-declaration table,
-.footer-cookie-declaration .cookie-declaration-table {
+.cookie-declaration-content,
+.cookie-declaration-content .CybotCookiebotDialogBody,
+.cookie-declaration-content table {
     color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-sm);
     line-height: 1.5;
 }
 
-.footer-cookie-declaration table,
-.footer-cookie-declaration th,
-.footer-cookie-declaration td {
+.cookie-declaration-content table,
+.cookie-declaration-content th,
+.cookie-declaration-content td {
     border: 1px solid var(--color-item-border);
     padding: 8px 12px;
     text-align: left;
 }
 
-.footer-cookie-declaration table {
+.cookie-declaration-content table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 8px;
+    margin: 12px 0;
 }
 
-.footer-cookie-declaration th {
+.cookie-declaration-content th {
     background: rgba(255, 255, 255, 0.05);
     color: var(--color-text-secondary);
     font-weight: 600;
 }
 
-.footer-cookie-declaration a {
+.cookie-declaration-content a {
     color: var(--color-brand-accent);
     text-decoration: none;
 }
 
-.footer-cookie-declaration a:hover {
+.cookie-declaration-content a:hover {
     text-decoration: underline;
 }
 
