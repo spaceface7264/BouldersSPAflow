@@ -2665,6 +2665,74 @@ body {
     max-height: none; /* Remove max-height constraint for selected items to show all content */
 }
 
+/* 15-day pass: activation date section */
+.activation-date-section {
+    padding: 16px 20px 20px;
+    border-top: 1px solid var(--color-item-border);
+    margin-top: 0;
+}
+
+.activation-date-section[hidden] {
+    display: none !important;
+}
+
+.activation-date-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: #e2e8f0;
+    margin: 0 0 12px 0;
+}
+
+.activation-date-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.activation-date-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    color: #cbd5e1;
+}
+
+.activation-date-option input[type="radio"] {
+    accent-color: var(--color-accent, #a855f7);
+    cursor: pointer;
+}
+
+.activation-date-picker-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.activation-date-picker-wrap[hidden] {
+    display: none !important;
+}
+
+.activation-date-picker-wrap input[type="date"] {
+    padding: 10px 12px;
+    border: 1px solid var(--color-item-border);
+    border-radius: 8px;
+    background: #13191f;
+    color: #e2e8f0;
+    font-size: var(--font-size-sm);
+}
+
+.activation-date-hint {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.activation-date-section .activation-date-continue {
+    margin-top: 4px;
+    width: 100%;
+}
+
 .plan-card {
     background: #13191f;
     border-radius: 0;
@@ -6197,6 +6265,20 @@ body {
 
 .payment-overview-paynow-row .payment-label-period {
     flex-shrink: 0;
+}
+
+.payment-overview-paynow-row .change-date-link {
+    background: none;
+    border: none;
+    color: var(--color-accent, #a855f7);
+    cursor: pointer;
+    font-size: inherit;
+    padding: 0 0 0 4px;
+    text-decoration: underline;
+}
+
+.payment-overview-paynow-row .change-date-link:hover {
+    color: #c084fc;
     margin-left: 0;
     vertical-align: baseline;
     display: inline;
@@ -6727,7 +6809,58 @@ main {
     padding: 0;
     margin: 0;
     cursor: pointer;
-    font-family: inherit;
+}
+
+/* Cookie Declaration (Cookiebot) - replaces static cookie policy */
+.footer-cookie-declaration {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 20px 16px;
+    border-top: 1px solid var(--color-item-border);
+}
+
+.footer-cookie-declaration h4 {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    margin: 0 0 12px 0;
+}
+
+.footer-cookie-declaration .CybotCookiebotDialogBody,
+.footer-cookie-declaration table,
+.footer-cookie-declaration .cookie-declaration-table {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    line-height: 1.5;
+}
+
+.footer-cookie-declaration table,
+.footer-cookie-declaration th,
+.footer-cookie-declaration td {
+    border: 1px solid var(--color-item-border);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.footer-cookie-declaration table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+}
+
+.footer-cookie-declaration th {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-text-secondary);
+    font-weight: 600;
+}
+
+.footer-cookie-declaration a {
+    color: var(--color-brand-accent);
+    text-decoration: none;
+}
+
+.footer-cookie-declaration a:hover {
+    text-decoration: underline;
 }
 
 /* Footer Bottom */
