@@ -1396,7 +1396,8 @@ class OrderAPI {
 
   // Step 7: Add subscription item (membership) - POST /api/ver3/orders/{orderId}/items/subscriptions
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
-  async addSubscriptionItem(orderId, productId) {
+  // @param {string} [startDateOverride] - Optional start date YYYY-MM-DD. For 15-day pass, use state.subscriptionStartDate or today.
+  async addSubscriptionItem(orderId, productId, startDateOverride) {
     try {
       const url = this.useProxy
         ? buildApiUrl({
@@ -1443,10 +1444,11 @@ class OrderAPI {
       const subscriberId = state.customerId ? Number(state.customerId) : null;
       const birthDate = getSubscriberBirthDate();
       
-      // Set start date to today so membership starts immediately
+      // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
-      // Use local date (not UTC) to ensure we always send the user's local "today"
-      const startDate = getTodayLocalDateString(); // e.g., "2026-01-05" (local date)
+      const startDate = (startDateOverride && /^\d{4}-\d{2}-\d{2}$/.test(startDateOverride))
+        ? startDateOverride
+        : getTodayLocalDateString();
       
       // Pricing calculation: When startDate is on day 16 or later, price includes:
       // - Rest of current month (prorated) + Full next month
@@ -1616,6 +1618,43 @@ class OrderAPI {
     } catch (error) {
       console.error('[Step 7] Add subscription item error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Delete subscription item from order. Used when user changes 15-day pass activation date.
+   * @param {string|number} orderId - Order ID
+   * @param {number} subscriptionItemId - Subscription item ID to delete
+   * @returns {Promise<boolean>} true if deleted, false if failed
+   */
+  async deleteSubscriptionItem(orderId, subscriptionItemId) {
+    try {
+      const deleteUrl = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`,
+          })
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`;
+
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      await requestJson({
+        url: deleteUrl,
+        method: 'DELETE',
+        headers: {
+          'Accept-Language': getAcceptLanguageHeader(),
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        },
+        expectJson: false,
+      });
+      return true;
+    } catch (error) {
+      if (error.status === 403) {
+        console.warn('[OrderAPI] Cannot delete subscription item (403) - order may be locked');
+      } else {
+        console.warn('[OrderAPI] Failed to delete subscription item:', error);
+      }
+      return false;
     }
   }
 
@@ -3906,6 +3945,8 @@ const state = {
   referenceDataLoaded: false, // Flag to track if reference data has been loaded
   subscriptionAttachedOrderId: null, // Tracks which order already has the membership attached
   subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
+  // 15-day pass: activation date (null = today, or YYYY-MM-DD string for future start)
+  subscriptionStartDate: null,
   // Test mode for success page
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
@@ -5036,14 +5077,7 @@ function init() {
     locationBtn.classList.add('active');
   }
   
-  // Initialize cookie banner
-  initCookieBanner();
-  
-  // Check if consent already exists and load GTM if consented
-  const existingConsent = getCookieConsent();
-  if (existingConsent) {
-    loadGTMIfConsented();
-  }
+  // Cookie consent handled by Cookiebot (see index.html). Footer "Cookie Settings" triggers Cookiebot.renew().
   
   // Geolocation must be triggered by user gesture to avoid browser blocks.
   
@@ -5122,6 +5156,13 @@ const translations = {
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
+    'activationDate.label': 'Hvornår vil du aktivere dit pas?',
+    'activationDate.now': 'Aktiver nu',
+    'activationDate.later': 'Aktiver på en bestemt dato',
+    'activationDate.pickLabel': 'Vælg aktiveringsdato',
+    'activationDate.hint': 'Vælg en dato i dag eller i fremtiden.',
+    'activationDate.change': 'Ændre',
+    'activationDate.changeFailed': 'Kunne ikke ændre datoen. Gennemfør din køb eller start forfra.',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
@@ -5274,6 +5315,13 @@ const translations = {
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
+    'activationDate.label': 'When do you want to activate your pass?',
+    'activationDate.now': 'Activate now',
+    'activationDate.later': 'Activate on specific date',
+    'activationDate.pickLabel': 'Select activation date',
+    'activationDate.hint': 'Select a date today or in the future.',
+    'activationDate.change': 'Change',
+    'activationDate.changeFailed': 'Unable to change date. Please complete your purchase or start over.',
     'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
@@ -5453,6 +5501,13 @@ const translations = {
     'category.membership.desc': 'Mitgliedschaft ist ein laufendes Abonnement mit automatischer Verlängerung. Keine Anmelde- oder Kündigungsgebühren. Kündigungsfrist ist der Rest des Monats + 1 Monat.',
     'category.15daypass.desc': 'Erhalten Sie 15 Tage unbegrenzten Zugang zu allen Hallen. Perfekt zum Ausprobieren des Kletterns oder für einen kurzen Besuch.',
     'category.punchcard.desc': 'Sie können jeweils 1 Art von Stempelkarte kaufen. Jeder Eintritt verwendet einen Stempel auf Ihrer Stempelkarte. Die Karte ist 5 Jahre gültig und beinhaltet keine Mitgliedschaftsvorteile. Füllen Sie innerhalb von 14 Tagen nach Ihrem letzten Stempel nach und erhalten Sie 100 kr Rabatt in der Halle.',
+    'activationDate.label': 'Wann möchten Sie Ihren Pass aktivieren?',
+    'activationDate.now': 'Sofort aktivieren',
+    'activationDate.later': 'An einem bestimmten Datum aktivieren',
+    'activationDate.pickLabel': 'Aktivierungsdatum auswählen',
+    'activationDate.hint': 'Wählen Sie ein Datum heute oder in der Zukunft.',
+    'activationDate.change': 'Ändern',
+    'activationDate.changeFailed': 'Datum konnte nicht geändert werden. Bitte schließen Sie Ihren Kauf ab oder starten Sie neu.',
     'header.selectedGym': 'Ausgewählte Halle:', 'gym.headsUp': 'Heimhalle ausgewählt:', 'access.headsUp': 'Zugangstyp ausgewählt:',
     'main.subtitle.step1': 'Wählen Sie Ihre Heimhalle', 'main.subtitle.step1.secondary': 'Hier trainieren Sie hauptsächlich − Sie haben Zugang zu allen Hallen.',
     'main.subtitle.step2': 'Wählen Sie Ihren Zugangstyp', 'main.subtitle.step2.secondary': 'Wählen Sie Mitgliedschaft, wenn Sie mindestens einmal im Monat klettern.',
@@ -5647,9 +5702,6 @@ function updatePageTranslations() {
       element.placeholder = translation;
     }
   });
-  
-  // Update cookie banner translations (needs special handling for HTML content)
-  updateCookieBannerTranslations();
   
   // Update addon modal translations
   updateAddonModalTranslations();
@@ -6287,8 +6339,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize language switcher (must be early to set language before API calls)
   initLanguageSwitcher();
   
-  // Set up cookie settings button (ensure it works even if footer loads late)
-  setupCookieSettingsButton();
+  // Set up Cookiebot "Cookie Settings" button - reopens Cookiebot consent dialog
+  setupCookiebotSettingsButton();
   
   // Check URL parameters for test mode and payment return
   const urlParams = new URLSearchParams(window.location.search);
@@ -9974,6 +10026,45 @@ function trackSelectItemEvent({ product, productId, category, type, card }) {
   }
 }
 
+/**
+ * Updates the 15-day pass activation date section visibility and state.
+ * Shows when a 15-day pass plan is selected; hides otherwise.
+ */
+function updateActivationDateSection(category) {
+  const section = document.getElementById('activationDateSection');
+  const pickerWrap = document.getElementById('activationDatePickerWrap');
+  const dateInput = document.getElementById('activationDateInput');
+  const nowRadio = document.getElementById('activationDateNow');
+
+  if (!section || !pickerWrap || !dateInput) return;
+
+  const is15DayPass = category === '15daypass';
+  const categoryItem = document.querySelector('[data-category="15daypass"]');
+  const hasSelectedPlan = categoryItem?.querySelector('.plan-card.selected');
+
+  if (is15DayPass && hasSelectedPlan) {
+    section.hidden = false;
+    section.setAttribute('aria-hidden', 'false');
+    dateInput.min = getTodayLocalDateString();
+    if (nowRadio?.checked) {
+      state.subscriptionStartDate = null;
+      pickerWrap.hidden = true;
+    } else {
+      pickerWrap.hidden = false;
+      if (dateInput.value) {
+        state.subscriptionStartDate = dateInput.value;
+      } else {
+        dateInput.value = getTodayLocalDateString();
+        state.subscriptionStartDate = dateInput.value;
+      }
+    }
+  } else {
+    section.hidden = true;
+    section.setAttribute('aria-hidden', 'true');
+    state.subscriptionStartDate = null;
+  }
+}
+
 function handlePlanSelection(selectedCard) {
   // Remove selected class from all plan cards in the same category
   const category = selectedCard.closest('.category-item').dataset.category;
@@ -10233,6 +10324,14 @@ function setupNewAccessStep() {
         c.classList.remove('selected', 'has-quantity', 'disabled');
       });
       
+      // Hide 15-day pass activation date section when clearing selections
+      const activationSection = document.getElementById('activationDateSection');
+      if (activationSection) {
+        activationSection.hidden = true;
+        activationSection.setAttribute('aria-hidden', 'true');
+      }
+      state.subscriptionStartDate = null;
+      
       // Clear all punch card quantities when making a new selection
       state.valueCardQuantities.clear();
       
@@ -10383,6 +10482,15 @@ function setupNewAccessStep() {
           
           // Update cart to reflect selection
           updateCartSummary();
+          
+          // 15-day pass: show activation date section, don't auto-advance
+          if (category === '15daypass') {
+            state.subscriptionStartDate = null;
+            updateActivationDateSection('15daypass');
+            card.style.transform = 'scale(1)';
+            card.style.boxShadow = '';
+            return;
+          }
           
           // Check if product has Boost label - if so, show modal instead of auto-advancing
           if (selectedProduct && hasBoostLabel(selectedProduct)) {
@@ -10665,9 +10773,52 @@ function handleGlobalClick(event) {
       handleValueCardContinue();
       break;
     }
+    case 'set-activation-now': {
+      state.subscriptionStartDate = null;
+      const pickerWrap = document.getElementById('activationDatePickerWrap');
+      if (pickerWrap) pickerWrap.hidden = true;
+      break;
+    }
+    case 'set-activation-date': {
+      const pickerWrap = document.getElementById('activationDatePickerWrap');
+      const dateInput = document.getElementById('activationDateInput');
+      if (pickerWrap) pickerWrap.hidden = false;
+      if (dateInput) {
+        dateInput.min = getTodayLocalDateString();
+        if (!dateInput.value) {
+          dateInput.value = getTodayLocalDateString();
+        }
+        state.subscriptionStartDate = dateInput.value;
+      }
+      break;
+    }
+    case 'activation-date-change': {
+      const dateInput = document.getElementById('activationDateInput');
+      if (dateInput && dateInput.value) {
+        state.subscriptionStartDate = dateInput.value;
+      }
+      break;
+    }
+    case 'activation-date-continue': {
+      event.preventDefault();
+      const dateInput = document.getElementById('activationDateInput');
+      const pickRadio = document.getElementById('activationDatePick');
+      if (pickRadio?.checked && dateInput?.value) {
+        state.subscriptionStartDate = dateInput.value;
+      } else {
+        state.subscriptionStartDate = null;
+      }
+      if (state.currentStep === 2) nextStep();
+      break;
+    }
     case 'edit-cart': {
       event.preventDefault();
       handleEditCart();
+      break;
+    }
+    case 'change-activation-date': {
+      event.preventDefault();
+      handleChangeActivationDate();
       break;
     }
     case 'show-detailed-receipt': {
@@ -11071,6 +11222,25 @@ function handleEditCart() {
   updateStepIndicator();
   updateNavigationButtons();
   updateMainSubtitle();
+}
+
+async function handleChangeActivationDate() {
+  // Delete subscription item so we can re-add with new date when user returns
+  const orderId = state.orderId;
+  const subscriptionItemId = state.subscriptionItemId;
+  if (orderId && subscriptionItemId) {
+    const deleted = await orderAPI.deleteSubscriptionItem(orderId, subscriptionItemId);
+    if (deleted) {
+      state.subscriptionAttachedOrderId = null;
+      state.subscriptionItemId = null;
+    } else {
+      showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
+      return;
+    }
+  } else {
+    state.subscriptionAttachedOrderId = null;
+  }
+  handleEditCart();
 }
 
 function handlePaymentChange(event) {
@@ -12899,14 +13069,18 @@ function updatePaymentOverview() {
       // For 15-day pass: always use full price (one-time payment)
       payNowAmount = orderPriceDKK;
       
-      // Set valid until date (15 days from today)
+      // Use selected activation date or today; end = start + 15 days
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const validUntil = new Date(today);
+      const startDate = state.subscriptionStartDate
+        ? new Date(state.subscriptionStartDate + 'T12:00:00')
+        : today;
+      startDate.setHours(0, 0, 0, 0);
+      const validUntil = new Date(startDate);
       validUntil.setDate(validUntil.getDate() + 15);
       
       billingPeriod = {
-        start: today,
+        start: startDate,
         end: validUntil,
         is15DayPass: true
       };
@@ -13062,14 +13236,18 @@ function updatePaymentOverview() {
           const priceInCents = membership.priceWithInterval?.price?.amount || 0;
           payNowAmount = priceInCents / 100;
           
-          // Set valid until date (15 days from today)
+          // Use selected activation date or today; end = start + 15 days
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const validUntil = new Date(today);
+          const startDate = state.subscriptionStartDate
+            ? new Date(state.subscriptionStartDate + 'T12:00:00')
+            : today;
+          startDate.setHours(0, 0, 0, 0);
+          const validUntil = new Date(startDate);
           validUntil.setDate(validUntil.getDate() + 15);
           
           billingPeriod = {
-            start: today,
+            start: startDate,
             end: validUntil,
             is15DayPass: true
           };
@@ -13260,8 +13438,18 @@ function updatePaymentOverview() {
   // Prepare billing period text
   let billingPeriodText = '';
   if (is15DayPass && billingPeriod?.is15DayPass) {
-    // For 15-day pass: show "Valid until [date 15 days in future]"
-    billingPeriodText = `${t('cart.validUntil')} ${formatDateDMY(billingPeriod.end)}`;
+    // For 15-day pass: show date range (start - end); or "Valid until" when start is today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDate = billingPeriod.start;
+    const startStr = startDate ? (startDate.toISOString ? startDate.toISOString().slice(0, 10) : '') : '';
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const startIsToday = !startDate || startStr === todayStr;
+    if (startIsToday) {
+      billingPeriodText = `${t('cart.validUntil')} ${formatDateDMY(billingPeriod.end)}`;
+    } else {
+      billingPeriodText = `${formatDateDMY(billingPeriod.start)} - ${formatDateDMY(billingPeriod.end)}`;
+    }
   } else if (billingPeriod) {
     // Regular membership: show billing period dates only
     billingPeriodText = `${formatDateDMY(billingPeriod.start)} - ${formatDateDMY(billingPeriod.end)}`;
@@ -13317,7 +13505,11 @@ function updatePaymentOverview() {
           label.parentNode.insertBefore(periodElement, DOM.payNow);
         }
       }
-      periodElement.textContent = `(${billingPeriodText})`;
+      if (is15DayPass) {
+        periodElement.innerHTML = `(${billingPeriodText}) <button type="button" class="change-date-link" data-action="change-activation-date">${t('activationDate.change')}</button>`;
+      } else {
+        periodElement.textContent = `(${billingPeriodText})`;
+      }
     } else if (payNowRow) {
       // Hide period element if no billing period text
       const periodElement = payNowRow.querySelector('.payment-label-period');
@@ -13609,6 +13801,7 @@ function persistOrderSnapshot(orderId) {
       selectedBusinessUnit: state.selectedBusinessUnit,
       selectedProductType: state.selectedProductType, // Store product type for restoration
       selectedProductId: state.selectedProductId, // Store product ID for restoration
+      subscriptionStartDate: state.subscriptionStartDate, // 15-day pass activation date
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -13669,6 +13862,7 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   state.fullOrder = null;
   state.orderId = null;
   state.subscriptionAttachedOrderId = null;
+  state.subscriptionStartDate = null;
   state.paymentLink = null;
   state.paymentLinkGenerated = false;
   state.checkoutInProgress = false;
@@ -13788,8 +13982,12 @@ async function ensureSubscriptionAttached(context = 'auto') {
   subscriptionAttachPromise = (async () => {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
+    // 15-day pass: use selected activation date; others use today
+    const is15DayPass = typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-');
+    const startDate = is15DayPass ? (state.subscriptionStartDate || getTodayLocalDateString()) : undefined;
+    
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
-    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId, startDate);
     state.subscriptionAttachedOrderId = orderId;
     
     // CRITICAL: Use the order from addSubscriptionItem response if available (has correct price after re-add)
@@ -16244,6 +16442,7 @@ async function loadOrderForConfirmation(orderId) {
       if (orderData) {
         storedOrder = JSON.parse(orderData);
         if (storedOrder.membershipPlanId) state.membershipPlanId = storedOrder.membershipPlanId;
+        if (storedOrder.subscriptionStartDate != null) state.subscriptionStartDate = storedOrder.subscriptionStartDate;
         if (storedOrder.cartItems) state.cartItems = storedOrder.cartItems;
         if (storedOrder.totals) state.totals = storedOrder.totals;
         if (storedOrder.selectedBusinessUnit) state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
@@ -16828,6 +17027,9 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           }
         }
       }
+      if (storedOrder.subscriptionStartDate != null) {
+        state.subscriptionStartDate = storedOrder.subscriptionStartDate;
+      }
       if (storedOrder.selectedBusinessUnit) {
         state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
         console.log('[Payment Failed] ✅ Restored selectedBusinessUnit:', state.selectedBusinessUnit);
@@ -17182,6 +17384,9 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
               if (storedOrder.selectedBusinessUnit) {
                 state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
                 console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
+              }
+              if (storedOrder.subscriptionStartDate != null) {
+                state.subscriptionStartDate = storedOrder.subscriptionStartDate;
               }
               if (storedOrder.orderId) {
                 state.orderId = storedOrder.orderId;
@@ -19048,6 +19253,25 @@ function prevStep() {
         
         // Show heads-up for previously selected access type
         updateAccessHeadsUp(selectedCard);
+        
+        // 15-day pass: show activation date section if restoring selection
+        const category = selectedCard.closest('.category-item')?.dataset?.category;
+        if (category === '15daypass') {
+          updateActivationDateSection('15daypass');
+          // Restore activation date UI state
+          const nowRadio = document.getElementById('activationDateNow');
+          const pickRadio = document.getElementById('activationDatePick');
+          const dateInput = document.getElementById('activationDateInput');
+          const pickerWrap = document.getElementById('activationDatePickerWrap');
+          if (state.subscriptionStartDate && pickRadio && dateInput && pickerWrap) {
+            pickRadio.checked = true;
+            dateInput.value = state.subscriptionStartDate;
+            pickerWrap.hidden = false;
+          } else if (nowRadio && pickerWrap) {
+            nowRadio.checked = true;
+            pickerWrap.hidden = true;
+          }
+        }
       }
     }
 }
@@ -19229,6 +19453,9 @@ function showStep(stepNumber) {
             }
             if (storedOrder.selectedBusinessUnit && !state.selectedBusinessUnit) {
               state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+            }
+            if (storedOrder.subscriptionStartDate != null) {
+              state.subscriptionStartDate = storedOrder.subscriptionStartDate;
             }
           }
         } catch (e) {
@@ -19889,440 +20116,20 @@ function restoreConsentCheckboxes() {
   }
 }
 
-// Cookie Consent Management (GDPR Compliant)
-const COOKIE_CONSENT_KEY = 'boulders_cookie_consent';
-const COOKIE_CONSENT_EXPIRY_DAYS = 365;
+// Cookiebot integration - footer "Cookie Settings" button reopens Cookiebot consent dialog
+function setupCookiebotSettingsButton() {
+  const settingsButton = document.getElementById('cookieSettingsButton');
+  if (!settingsButton) return;
 
-// Cookie categories
-const COOKIE_CATEGORIES = {
-  essential: 'essential',
-  analytics: 'analytics',
-  marketing: 'marketing',
-  functional: 'functional'
-};
-
-function getCookieConsent() {
-  try {
-    const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
-    if (!consent) return null;
-    
-    const consentData = JSON.parse(consent);
-    // Check if consent has expired (older than 1 year)
-    const consentDate = new Date(consentData.timestamp);
-    const expiryDate = new Date(consentDate);
-    expiryDate.setDate(expiryDate.getDate() + COOKIE_CONSENT_EXPIRY_DAYS);
-    
-    if (new Date() > expiryDate) {
-      localStorage.removeItem(COOKIE_CONSENT_KEY);
-      return null;
-    }
-    
-    return consentData;
-  } catch (e) {
-    console.warn('[Cookie Consent] Error reading consent:', e);
-    return null;
-  }
-}
-
-function setCookieConsent(accepted, categories = null) {
-  try {
-    // If categories provided, use granular consent
-    // If accepted is boolean and no categories, use simple accept/reject
-    let consentData;
-    
-    if (categories !== null && typeof categories === 'object') {
-      // Granular consent
-      consentData = {
-        accepted: true, // User has made a choice
-        categories: {
-          essential: true, // Always true
-          analytics: categories.analytics || false,
-          marketing: categories.marketing || false,
-          functional: categories.functional || false
-        },
-        timestamp: new Date().toISOString(),
-        version: '2.0',
-        granular: true
-      };
+  settingsButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof Cookiebot !== 'undefined' && typeof Cookiebot.renew === 'function') {
+      Cookiebot.renew();
     } else {
-      // Simple accept/reject all
-      consentData = {
-        accepted: accepted,
-        categories: accepted ? {
-          essential: true,
-          analytics: accepted,
-          marketing: accepted,
-          functional: accepted
-        } : {
-          essential: true,
-          analytics: false,
-          marketing: false,
-          functional: false
-        },
-        timestamp: new Date().toISOString(),
-        version: '2.0',
-        granular: false
-      };
+      console.warn('[Cookiebot] Cookiebot.renew() not available - Cookiebot may not be loaded yet');
     }
-    
-    localStorage.setItem(COOKIE_CONSENT_KEY, JSON.stringify(consentData));
-    
-    // Load or unload tracking scripts based on consent
-    const hasAnalytics = consentData.categories?.analytics || false;
-    const hasMarketing = consentData.categories?.marketing || false;
-    
-    if (hasAnalytics || hasMarketing) {
-      loadGTMIfConsented();
-    } else {
-      unloadGTM();
-    }
-    
-    // Dispatch custom event for other scripts to listen to
-    window.dispatchEvent(new CustomEvent('cookieConsentChanged', {
-      detail: consentData
-    }));
-    
-    console.log('[Cookie Consent] Consent saved:', consentData);
-  } catch (e) {
-    console.error('[Cookie Consent] Error saving consent:', e);
-  }
-}
-
-function getCookieCategoryConsent(category) {
-  const consent = getCookieConsent();
-  if (!consent) return false;
-  
-  // Essential cookies are always true
-  if (category === COOKIE_CATEGORIES.essential) return true;
-  
-  return consent.categories?.[category] || false;
-}
-
-// Load Google Tag Manager conditionally based on consent
-function loadGTMIfConsented() {
-  // Check if GTM is already loaded
-  if (window.GTM_LOADED) return;
-  
-  // Check consent for analytics or marketing (GTM typically uses both)
-  const consent = getCookieConsent();
-  if (!consent) return;
-  
-  const hasAnalytics = getCookieCategoryConsent(COOKIE_CATEGORIES.analytics);
-  const hasMarketing = getCookieCategoryConsent(COOKIE_CATEGORIES.marketing);
-  
-  // Only load GTM if user consented to analytics or marketing
-  if (hasAnalytics || hasMarketing) {
-    const containerId = window.GTM_CONTAINER_ID || 'GTM-KHB92N9P';
-    
-    // Load GTM script
-    (function(w,d,s,l,i){
-      if (w[l] && w[l].length > 0 && w[l][0].event === 'gtm.js') {
-        // Already initialized, just load the script
-        var f=d.getElementsByTagName(s)[0],
-        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
-        j.async=true;
-        j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
-        f.parentNode.insertBefore(j,f);
-      } else {
-        // Initialize and load
-        w[l]=w[l]||[];
-        w[l].push({'gtm.start': new Date().getTime(), event:'gtm.js'});
-        var f=d.getElementsByTagName(s)[0],
-        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
-        j.async=true;
-        j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;
-        f.parentNode.insertBefore(j,f);
-      }
-    })(window,document,'script','dataLayer',containerId);
-    
-    // Show noscript iframe
-    const noscript = document.getElementById('gtmNoscript');
-    if (noscript) {
-      noscript.style.display = 'block';
-    }
-    
-    window.GTM_LOADED = true;
-    console.log('[Cookie Consent] GTM loaded with consent for analytics:', hasAnalytics, 'marketing:', hasMarketing);
-  }
-}
-
-// Unload GTM if consent is withdrawn
-function unloadGTM() {
-  // Remove GTM script
-  const gtmScript = document.querySelector('script[src*="googletagmanager.com/gtm.js"]');
-  if (gtmScript) {
-    gtmScript.remove();
-  }
-  
-  // Hide noscript iframe
-  const noscript = document.getElementById('gtmNoscript');
-  if (noscript) {
-    noscript.style.display = 'none';
-  }
-  
-  // Clear dataLayer (optional - you may want to keep it for essential tracking)
-  // window.dataLayer = [];
-  
-  window.GTM_LOADED = false;
-  console.log('[Cookie Consent] GTM unloaded');
-}
-
-function showCookieBanner() {
-  const banner = document.getElementById('cookieBanner');
-  if (!banner) return;
-  
-  // Update translations
-  updateCookieBannerTranslations();
-  
-  // Show banner with animation
-  banner.style.display = 'block';
-  // Use requestAnimationFrame to ensure display is set before adding class
-  requestAnimationFrame(() => {
-    banner.classList.add('show');
   });
-}
-
-function hideCookieBanner() {
-  const banner = document.getElementById('cookieBanner');
-  if (!banner) return;
-  
-  banner.classList.remove('show');
-  // Wait for animation to complete before hiding
-  setTimeout(() => {
-    banner.style.display = 'none';
-  }, 300);
-}
-
-function updateCookieBannerTranslations() {
-  const banner = document.getElementById('cookieBanner');
-  if (!banner) return;
-  
-  const title = banner.querySelector('.cookie-banner-title');
-  const description = banner.querySelector('.cookie-banner-description');
-  const acceptBtn = document.getElementById('cookieBannerAccept');
-  const rejectBtn = document.getElementById('cookieBannerReject');
-  const settingsBtn = document.getElementById('cookieBannerSettings');
-  const settingsButton = document.getElementById('cookieSettingsButton');
-  
-  if (title) {
-    title.textContent = t('cookie.banner.title');
-  }
-  
-  if (description) {
-    const descriptionText = t('cookie.banner.description');
-    // Parse HTML from translation (for the link)
-    description.innerHTML = sanitizeHTML(descriptionText);
-    // Re-attach event listener to the link
-    const link = description.querySelector('.cookie-banner-link');
-    if (link) {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        openTermsModal('cookie');
-      });
-    }
-  }
-  
-  if (acceptBtn) {
-    acceptBtn.textContent = t('cookie.banner.accept');
-  }
-  
-  if (rejectBtn) {
-    rejectBtn.textContent = t('cookie.banner.reject');
-  }
-  
-  if (settingsBtn) {
-    settingsBtn.textContent = t('cookie.banner.settings');
-  }
-  
-  // Update settings panel translations
-  const settingsPanel = document.getElementById('cookieSettingsPanel');
-  if (settingsPanel) {
-    const settingsTitle = settingsPanel.querySelector('.cookie-settings-title');
-    const settingsDesc = settingsPanel.querySelector('.cookie-settings-description');
-    const saveBtn = document.getElementById('cookieSettingsSave');
-    
-    if (settingsTitle) {
-      settingsTitle.textContent = t('cookie.settings.title');
-    }
-    
-    if (settingsDesc) {
-      settingsDesc.textContent = t('cookie.settings.description');
-    }
-    
-    if (saveBtn) {
-      saveBtn.textContent = t('cookie.settings.save');
-    }
-    
-    // Update category translations
-    const categories = settingsPanel.querySelectorAll('.cookie-category');
-    categories.forEach(category => {
-      const titleEl = category.querySelector('.cookie-category-title');
-      const descEl = category.querySelector('.cookie-category-desc');
-      const checkbox = category.querySelector('input[type="checkbox"]');
-      
-      if (titleEl && checkbox) {
-        const categoryKey = checkbox.id.replace('cookie', '').toLowerCase();
-        titleEl.textContent = t(`cookie.category.${categoryKey}.title`);
-        if (descEl) {
-          descEl.textContent = t(`cookie.category.${categoryKey}.desc`);
-        }
-      }
-    });
-  }
-  
-  if (settingsButton) {
-    const span = settingsButton.querySelector('span');
-    if (span) {
-      span.textContent = t('cookie.settings.button');
-    }
-  }
-}
-
-function showCookieSettings() {
-  const banner = document.getElementById('cookieBanner');
-  const settingsPanel = document.getElementById('cookieSettingsPanel');
-  if (!banner || !settingsPanel) return;
-  
-  // Load current consent preferences
-  const consent = getCookieConsent();
-  if (consent && consent.categories) {
-    const analyticsCheckbox = document.getElementById('cookieAnalytics');
-    const marketingCheckbox = document.getElementById('cookieMarketing');
-    const functionalCheckbox = document.getElementById('cookieFunctional');
-    
-    if (analyticsCheckbox) analyticsCheckbox.checked = consent.categories.analytics || false;
-    if (marketingCheckbox) marketingCheckbox.checked = consent.categories.marketing || false;
-    if (functionalCheckbox) functionalCheckbox.checked = consent.categories.functional || false;
-  }
-  
-  // Show banner if hidden
-  if (!banner.classList.contains('show')) {
-    showCookieBanner();
-  }
-  
-  // Show settings panel
-  settingsPanel.style.display = 'block';
-  // Scroll settings panel into view
-  setTimeout(() => {
-    settingsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, 100);
-}
-
-function hideCookieSettings() {
-  const settingsPanel = document.getElementById('cookieSettingsPanel');
-  if (settingsPanel) {
-    settingsPanel.style.display = 'none';
-  }
-}
-
-function setupCookieSettingsButton() {
-  const settingsButton = document.getElementById('cookieSettingsButton');
-  
-  if (settingsButton) {
-    // Remove any existing listeners by cloning (prevents duplicates)
-    const newButton = settingsButton.cloneNode(true);
-    if (settingsButton.parentNode) {
-      settingsButton.parentNode.replaceChild(newButton, settingsButton);
-    }
-    
-    newButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      console.log('[Cookie Settings] Footer button clicked');
-      showCookieBanner();
-      // Small delay to ensure banner is visible before showing settings
-      setTimeout(() => {
-        showCookieSettings();
-      }, 100);
-    });
-    
-    console.log('[Cookie Settings] Footer button listener attached');
-  } else {
-    // Button might not be loaded yet, try again after a short delay
-    setTimeout(() => {
-      const retryButton = document.getElementById('cookieSettingsButton');
-      if (retryButton) {
-        setupCookieSettingsButton();
-      } else {
-        console.warn('[Cookie Settings] Footer button not found after retry');
-      }
-    }, 500);
-  }
-}
-
-function initCookieBanner() {
-  const banner = document.getElementById('cookieBanner');
-  if (!banner) return;
-  
-  // Always set up event listeners (even if consent exists, user should be able to change settings)
-  const acceptBtn = document.getElementById('cookieBannerAccept');
-  const rejectBtn = document.getElementById('cookieBannerReject');
-  const settingsBtn = document.getElementById('cookieBannerSettings');
-  const settingsCloseBtn = document.getElementById('cookieSettingsClose');
-  const settingsSaveBtn = document.getElementById('cookieSettingsSave');
-  const settingsButton = document.getElementById('cookieSettingsButton');
-  
-  if (acceptBtn) {
-    acceptBtn.addEventListener('click', () => {
-      setCookieConsent(true);
-      hideCookieSettings();
-      hideCookieBanner();
-    });
-  }
-  
-  if (rejectBtn) {
-    rejectBtn.addEventListener('click', () => {
-      setCookieConsent(false);
-      hideCookieSettings();
-      hideCookieBanner();
-    });
-  }
-  
-  if (settingsBtn) {
-    settingsBtn.addEventListener('click', () => {
-      showCookieSettings();
-    });
-  }
-  
-  if (settingsCloseBtn) {
-    settingsCloseBtn.addEventListener('click', () => {
-      hideCookieSettings();
-    });
-  }
-  
-  if (settingsSaveBtn) {
-    settingsSaveBtn.addEventListener('click', () => {
-      const analyticsCheckbox = document.getElementById('cookieAnalytics');
-      const marketingCheckbox = document.getElementById('cookieMarketing');
-      const functionalCheckbox = document.getElementById('cookieFunctional');
-      
-      const categories = {
-        analytics: analyticsCheckbox ? analyticsCheckbox.checked : false,
-        marketing: marketingCheckbox ? marketingCheckbox.checked : false,
-        functional: functionalCheckbox ? functionalCheckbox.checked : false
-      };
-      
-      setCookieConsent(true, categories);
-      hideCookieSettings();
-      hideCookieBanner();
-    });
-  }
-  
-  // Cookie settings button (always visible in footer) - ALWAYS set up listener
-  setupCookieSettingsButton();
-  
-  // Check if consent has already been given
-  const consent = getCookieConsent();
-  if (consent) {
-    // Consent already given, don't show banner on load
-    // But settings button should still be available (listener already set up above)
-    return;
-  }
-  
-  // Show banner after a short delay to let page load
-  setTimeout(() => {
-    showCookieBanner();
-  }, 1000);
 }
 
 // Static opening hours fallback when API does not return openingHours (e.g. /api/reference/business-units).

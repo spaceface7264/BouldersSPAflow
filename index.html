@@ -14,6 +14,27 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
 
+    <!-- Cookiebot - Must load first to set consent before GTM/tracking -->
+    <script id="Cookiebot" src="https://consent.cookiebot.com/uc.js" data-cbid="31a4df3e-7adc-432b-8c8c-30c07e1d0f93" data-blockingmode="auto" type="text/javascript"></script>
+
+    <!-- Google Consent Mode v2 - Must precede GTM. Cookiebot updates consent when user accepts/rejects. -->
+    <script data-cookieconsent="ignore">
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag("consent", "default", {
+        ad_personalization: "denied",
+        ad_storage: "denied",
+        ad_user_data: "denied",
+        analytics_storage: "denied",
+        functionality_storage: "denied",
+        personalization_storage: "denied",
+        security_storage: "granted",
+        wait_for_update: 500,
+      });
+      gtag("set", "ads_data_redaction", true);
+      gtag("set", "url_passthrough", false);
+    </script>
+
     <!-- Sentry Error Monitoring - Load from CDN and initialize immediately -->
     <script src="https://browser.sentry-cdn.com/7.91.0/bundle.min.js" crossorigin="anonymous"></script>
     <script>
@@ -99,14 +120,11 @@
       })();
     </script>
 
-    <!-- Google Tag Manager - Loaded conditionally after consent -->
+    <!-- Google Tag Manager - Cookiebot blocks until statistics consent; Consent Mode gates tags -->
     <script>
-      window.dataLayer = window.dataLayer || [];
-      // GTM Container ID - Web container for boulders.dk
       window.GTM_CONTAINER_ID = window.GTM_CONTAINER_ID || 'GTM-KHB92N9P';
-      // GTM will be loaded conditionally after cookie consent is checked
-      window.GTM_LOADED = false;
     </script>
+    <script data-cookieconsent="statistics" src="https://www.googletagmanager.com/gtm.js?id=GTM-KHB92N9P" async></script>
     <!-- End Google Tag Manager -->
 </head>
 <body>
@@ -314,6 +332,26 @@
                                     </div>
                                     <div class="plans-list">
                                         <!-- Products will be loaded from API -->
+                                    </div>
+                                    <!-- Activation date choice (shown when a 15-day pass plan is selected) -->
+                                    <div class="activation-date-section" id="activationDateSection" hidden aria-hidden="true">
+                                        <p class="activation-date-label" id="activationDateLabel" data-i18n-key="activationDate.label">When do you want to activate your pass?</p>
+                                        <div class="activation-date-options" role="radiogroup" aria-labelledby="activationDateLabel">
+                                            <label class="activation-date-option">
+                                                <input type="radio" name="activationDate" value="now" id="activationDateNow" checked data-action="set-activation-now">
+                                                <span data-i18n-key="activationDate.now">Activate now</span>
+                                            </label>
+                                            <label class="activation-date-option">
+                                                <input type="radio" name="activationDate" value="date" id="activationDatePick" data-action="set-activation-date">
+                                                <span data-i18n-key="activationDate.later">Activate on specific date</span>
+                                            </label>
+                                        </div>
+                                        <div class="activation-date-picker-wrap" id="activationDatePickerWrap" hidden>
+                                            <label for="activationDateInput" class="sr-only" data-i18n-key="activationDate.pickLabel">Select activation date</label>
+                                            <input type="date" id="activationDateInput" min="" data-action="activation-date-change" aria-describedby="activationDateHint">
+                                            <span class="activation-date-hint" id="activationDateHint" data-i18n-key="activationDate.hint">Select a date today or in the future.</span>
+                                        </div>
+                                        <button type="button" class="select-btn activation-date-continue" data-action="activation-date-continue" data-i18n-key="button.continue">Continue</button>
                                     </div>
                                 </div>
                             </div>
@@ -1278,17 +1316,17 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#" data-action="open-terms" data-terms-type="cookie" data-i18n-key="footer.policies.cookie">
-                            Cookie Policy
-                        </a>
-                    </li>
-                    <li>
                         <button type="button" class="footer-cookie-settings-link" id="cookieSettingsButton" data-i18n-key="cookie.settings.button">
                             Cookie Settings
                         </button>
                     </li>
                 </ul>
             </div>
+        </div>
+        
+        <div class="footer-cookie-declaration">
+            <h4 data-i18n-key="footer.policies.cookie">Cookie Policy</h4>
+            <script id="CookieDeclaration" src="https://consent.cookiebot.com/31a4df3e-7adc-432b-8c8c-30c07e1d0f93/cd.js" type="text/javascript" async></script>
         </div>
         
         <div class="footer-bottom">
@@ -1315,109 +1353,6 @@
     </script>
     <script type="module" src="./app.js"></script>
 
-    <!-- Cookie Consent Banner -->
-    <div class="cookie-banner" id="cookieBanner" style="display: none;" role="dialog" aria-labelledby="cookieBannerTitle" aria-describedby="cookieBannerDescription">
-        <div class="cookie-banner-content">
-            <div class="cookie-banner-text">
-                <h3 class="cookie-banner-title" id="cookieBannerTitle" data-i18n-key="cookie.banner.title">We use cookies</h3>
-                <p class="cookie-banner-description" id="cookieBannerDescription" data-i18n-key="cookie.banner.description">
-                    We use cookies to enhance your browsing experience, analyze site traffic, and personalize content. By clicking "Accept All", you consent to our use of cookies. You can manage your preferences or learn more in our <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie Policy</a>.
-                </p>
-            </div>
-            <div class="cookie-banner-actions">
-                <button type="button" class="cookie-banner-btn cookie-banner-btn-settings" id="cookieBannerSettings" data-i18n-key="cookie.banner.settings">
-                    Customize
-                </button>
-                <button type="button" class="cookie-banner-btn cookie-banner-btn-secondary" id="cookieBannerReject" data-i18n-key="cookie.banner.reject">
-                    Reject All
-                </button>
-                <button type="button" class="cookie-banner-btn cookie-banner-btn-primary" id="cookieBannerAccept" data-i18n-key="cookie.banner.accept">
-                    Accept All
-                </button>
-            </div>
-        </div>
-        
-        <!-- Cookie Settings Panel (initially hidden) -->
-        <div class="cookie-settings-panel" id="cookieSettingsPanel" style="display: none;">
-            <div class="cookie-settings-header">
-                <h4 class="cookie-settings-title" data-i18n-key="cookie.settings.title">Cookie Preferences</h4>
-                <button type="button" class="cookie-settings-close" id="cookieSettingsClose" aria-label="Close settings">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="cookie-settings-content">
-                <p class="cookie-settings-description" data-i18n-key="cookie.settings.description">
-                    Manage your cookie preferences. You can enable or disable different types of cookies below. Essential cookies cannot be disabled as they are necessary for the website to function.
-                </p>
-                
-                <div class="cookie-categories">
-                    <!-- Essential Cookies (always enabled) -->
-                    <div class="cookie-category">
-                        <div class="cookie-category-header">
-                            <div class="cookie-category-info">
-                                <h5 class="cookie-category-title" data-i18n-key="cookie.category.essential.title">Essential Cookies</h5>
-                                <p class="cookie-category-desc" data-i18n-key="cookie.category.essential.desc">These cookies are necessary for the website to function and cannot be disabled.</p>
-                            </div>
-                            <label class="cookie-toggle">
-                                <input type="checkbox" id="cookieEssential" checked disabled>
-                                <span class="cookie-toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- Analytics Cookies -->
-                    <div class="cookie-category">
-                        <div class="cookie-category-header">
-                            <div class="cookie-category-info">
-                                <h5 class="cookie-category-title" data-i18n-key="cookie.category.analytics.title">Analytics Cookies</h5>
-                                <p class="cookie-category-desc" data-i18n-key="cookie.category.analytics.desc">These cookies help us understand how visitors interact with our website by collecting and reporting information anonymously.</p>
-                            </div>
-                            <label class="cookie-toggle">
-                                <input type="checkbox" id="cookieAnalytics">
-                                <span class="cookie-toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- Marketing Cookies -->
-                    <div class="cookie-category">
-                        <div class="cookie-category-header">
-                            <div class="cookie-category-info">
-                                <h5 class="cookie-category-title" data-i18n-key="cookie.category.marketing.title">Marketing Cookies</h5>
-                                <p class="cookie-category-desc" data-i18n-key="cookie.category.marketing.desc">These cookies are used to deliver advertisements and track campaign effectiveness.</p>
-                            </div>
-                            <label class="cookie-toggle">
-                                <input type="checkbox" id="cookieMarketing">
-                                <span class="cookie-toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- Functional Cookies -->
-                    <div class="cookie-category">
-                        <div class="cookie-category-header">
-                            <div class="cookie-category-info">
-                                <h5 class="cookie-category-title" data-i18n-key="cookie.category.functional.title">Functional Cookies</h5>
-                                <p class="cookie-category-desc" data-i18n-key="cookie.category.functional.desc">These cookies enable enhanced functionality and personalization, such as remembering your preferences.</p>
-                            </div>
-                            <label class="cookie-toggle">
-                                <input type="checkbox" id="cookieFunctional">
-                                <span class="cookie-toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="cookie-settings-actions">
-                <button type="button" class="cookie-banner-btn cookie-banner-btn-secondary" id="cookieSettingsSave" data-i18n-key="cookie.settings.save">
-                    Save Preferences
-                </button>
-            </div>
-        </div>
-    </div>
-    
 
 </body>
 </html>
