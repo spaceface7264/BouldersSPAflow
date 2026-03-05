@@ -4310,6 +4310,10 @@ body {
     gap: 16px;
 }
 
+.form-row .form-group {
+    margin-bottom: 12px;
+}
+
 .form-group label {
     display: none;
     margin-bottom: 8px;
@@ -4319,6 +4323,17 @@ body {
 
 .form-group label.consent-checkbox {
     display: flex;
+}
+
+.form-group label[for="dateOfBirth"],
+.form-group label[for="parentDateOfBirth"] {
+    display: block;
+    margin-bottom: 4px;
+    margin-left: 8px;
+    font-weight: 100;
+    border-radius: 8px;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
 }
 
 .form-group input,
@@ -5353,7 +5368,7 @@ body {
 .date-input {
     width: 100%;
     padding-right: 40px;
-    color: var(--color-text-secondary);
+    color: white;
     background-color: var(--color-buttons-secondary);
     border: 1px solid var(--color-item-border);
     border-radius: 8px;
@@ -5399,11 +5414,11 @@ body {
 
 /* Style the calendar popup/dropdown */
 .date-input::-webkit-datetime-edit {
-    color: var(--color-text-secondary);
+    color: white;
 }
 
 .date-input::-webkit-datetime-edit-fields-wrapper {
-    color: var(--color-text-secondary);
+    color: white;
 }
 
 .date-input::-webkit-datetime-edit-text {
@@ -5414,7 +5429,7 @@ body {
 .date-input::-webkit-datetime-edit-month-field,
 .date-input::-webkit-datetime-edit-day-field,
 .date-input::-webkit-datetime-edit-year-field {
-    color: var(--color-text-secondary);
+    color: white;
     padding: 0 2px;
 }
 
