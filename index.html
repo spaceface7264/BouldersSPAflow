@@ -2,8 +2,8 @@
 <html lang="da">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulders - Bliv Medlem</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Join Boulders ⎸ Your Bouldering Network</title>
     <link rel="shortcut icon" type="image/png" href="./favicon.png">
     <link rel="icon" type="image/png" href="./favicon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="./favicon.png">
@@ -13,26 +13,127 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
-    
-    <!-- Google Tag Manager -->
-    <script>
+
+    <!-- Cookiebot - Must load first to set consent before GTM/tracking -->
+    <script id="Cookiebot" src="https://consent.cookiebot.com/uc.js" data-cbid="31a4df3e-7adc-432b-8c8c-30c07e1d0f93" data-blockingmode="manual" type="text/javascript" async></script>
+
+    <!-- Google Consent Mode v2 - Must precede GTM. Cookiebot updates consent when user accepts/rejects. -->
+    <script data-cookieconsent="ignore">
       window.dataLayer = window.dataLayer || [];
-      // GTM Container ID - Web container for boulders.dk
-      window.GTM_CONTAINER_ID = window.GTM_CONTAINER_ID || 'GTM-KHB92N9P';
+      function gtag(){dataLayer.push(arguments);}
+      gtag("consent", "default", {
+        ad_personalization: "denied",
+        ad_storage: "denied",
+        ad_user_data: "denied",
+        analytics_storage: "denied",
+        functionality_storage: "denied",
+        personalization_storage: "denied",
+        security_storage: "granted",
+        wait_for_update: 500,
+      });
+      gtag("set", "ads_data_redaction", true);
+      gtag("set", "url_passthrough", false);
     </script>
+
+    <!-- Sentry Error Monitoring - Load from CDN and initialize immediately -->
+    <script src="https://browser.sentry-cdn.com/7.91.0/bundle.min.js" crossorigin="anonymous"></script>
     <script>
-      (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-      new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-      j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-      'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-      })(window,document,'script','dataLayer',window.GTM_CONTAINER_ID);
+      // Initialize Sentry immediately - runs synchronously before any modules
+      (function() {
+        if (typeof Sentry !== 'undefined') {
+          try {
+            const isProduction = window.location.hostname === 'join.boulders.dk';
+            
+            Sentry.init({
+              dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
+              environment: isProduction ? 'production' : 'development',
+              sendDefaultPii: true,
+              sampleRate: 1.0,
+              tracesSampleRate: 0.1,
+              debug: !isProduction, // Only enable debug in development
+              release: 'join-boulders-dk@' + (new Date().toISOString().split('T')[0]), // Release tracking
+              // Filter out common non-critical errors
+              ignoreErrors: [
+                // Browser extensions
+                'top.GLOBALS',
+                'chrome-extension://',
+                'moz-extension://',
+                'safari-extension://',
+                // Network errors that are expected
+                'NetworkError',
+                'Failed to fetch',
+                'Network request failed',
+                // User cancellations
+                'AbortError',
+                'User cancelled',
+                // Common browser quirks
+                'ResizeObserver loop limit exceeded',
+                'Non-Error promise rejection captured',
+                // Script errors from extensions
+                /^Script error\.?$/,
+                /^Javascript error: Script error\.?$/,
+              ],
+              beforeSend(event, hint) {
+                // Only log in development
+                if (!isProduction) {
+                  console.log('[Sentry] Capturing:', event.message || event.exception?.values?.[0]?.value);
+                }
+                return event;
+              },
+            });
+            
+            // Verify initialization
+            const hub = Sentry.getCurrentHub();
+            const client = hub.getClient();
+            if (client) {
+              if (!isProduction) {
+                console.log('[Sentry] ✅ Initialized in', client.getOptions()?.environment, 'mode');
+              }
+            } else {
+              console.error('[Sentry] ❌ Initialization failed');
+            }
+            
+            // Make available globally
+            window.Sentry = Sentry;
+            
+            // Test function for debugging (available in all environments)
+            window.testSentry = function() {
+              const testHub = Sentry.getCurrentHub();
+              const testClient = testHub.getClient();
+              
+              if (!testClient) {
+                console.error('[Sentry Test] ❌ Client not found');
+                return;
+              }
+              
+              console.log('[Sentry Test] Sending test events...');
+              Sentry.captureException(new Error('Test error - ' + new Date().toISOString()));
+              Sentry.captureMessage('Test message - ' + new Date().toISOString(), 'info');
+              console.log('[Sentry Test] ✅ Test events sent - check dashboard in 5-10 seconds');
+            };
+          } catch (e) {
+            console.error('[Sentry] ❌ Initialization error:', e);
+          }
+        } else {
+          console.error('[Sentry] ❌ Sentry SDK not loaded');
+        }
+      })();
     </script>
+
+    <!-- Google Tag Manager - Cookiebot blocks until statistics consent; Consent Mode gates tags -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-KHB92N9P');</script>
     <!-- End Google Tag Manager -->
 </head>
 <body>
-    <!-- Google Tag Manager (noscript) -->
-    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KHB92N9P"
-    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- Google Tag Manager (noscript) - Only shown if consent given -->
+    <noscript id="gtmNoscript" style="display: none;">
+      <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KHB92N9P"
+      height="0" width="0" style="display:none;visibility:hidden"></iframe>
+    </noscript>
     <!-- End Google Tag Manager (noscript) -->
     
     <!-- GTM Utilities -->
@@ -49,20 +150,27 @@
             <div class="header-content">
                 <!-- Logo Section -->
                 <div class="logo-section">
-                    <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-                    <div class="logo-fallback">BOULDERS</div>
+                    <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="logo-image" data-action="go-to-step-1" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                    <div class="logo-fallback" data-action="go-to-step-1">BOULDERS</div>
                 </div>
-                
-                <!-- Language Switcher -->
-                <div class="language-switcher" id="languageSwitcher">
-                    <button type="button" class="language-btn" data-lang="da-DK" aria-label="Switch to Danish">
-                        <span class="language-flag">🇩🇰</span>
-                        <span class="language-name">DA</span>
-                    </button>
-                    <button type="button" class="language-btn" data-lang="en-GB" aria-label="Switch to English">
-                        <span class="language-flag">🇬🇧</span>
-                        <span class="language-name">EN</span>
-                    </button>
+                <!-- Right group: language + auth (language first so dropdown and account sit together) -->
+                <div class="header-right">
+                    <div class="language-switcher" id="languageSwitcher">
+                        <button type="button" class="language-switcher-trigger" id="languageSwitcherTrigger" aria-haspopup="true" aria-expanded="false" aria-label="Select language">
+                            <span class="language-flag" id="languageSwitcherTriggerFlag">🇩🇰</span>
+                            <span class="language-name" id="languageSwitcherTriggerName">DA</span>
+                            <span class="language-chevron" aria-hidden="true">▼</span>
+                        </button>
+                        <div class="language-dropdown" id="languageDropdown" role="menu" aria-hidden="true">
+                            <button type="button" class="language-btn" role="menuitem" data-lang="da-DK" aria-label="Dansk"><span class="language-flag">🇩🇰</span><span class="language-name">DA</span></button>
+                            <button type="button" class="language-btn" role="menuitem" data-lang="en-GB" aria-label="English"><span class="language-flag">🇬🇧</span><span class="language-name">EN</span></button>
+                            <button type="button" class="language-btn" role="menuitem" data-lang="de-DE" aria-label="Deutsch"><span class="language-flag">🇩🇪</span><span class="language-name">DE</span></button>
+                        </div>
+                    </div>
+                    <div class="header-auth-indicator" id="headerAuthIndicator" style="display: none;">
+                        <span class="header-auth-email" id="headerAuthEmail">-</span>
+                        <button type="button" class="header-logout-btn" id="headerLogoutBtn" data-action="logout">Log out</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -174,6 +282,10 @@
                                     <div class="category-info">
                                         <div class="category-title" data-i18n-key="category.campaign">Campaign</div>
                                         <div class="category-subtitle" data-i18n-key="category.campaign.subtitle">Limited time offers</div>
+                                        <div class="campaign-countdown" id="campaignCountdown" aria-live="polite" style="display: none;">
+                                            <span class="campaign-countdown-label" data-i18n-key="category.campaign.endsIn">Ends in</span>
+                                            <span class="campaign-countdown-value" id="campaignCountdownValue">--</span>
+                                        </div>
                                     </div>
                                     <i data-lucide="chevron-down" class="category-icon"></i>
                                 </div>
@@ -221,6 +333,26 @@
                                     </div>
                                     <div class="plans-list">
                                         <!-- Products will be loaded from API -->
+                                    </div>
+                                    <!-- Activation date choice (shown when a 15-day pass plan is selected) -->
+                                    <div class="activation-date-section" id="activationDateSection" hidden aria-hidden="true">
+                                        <p class="activation-date-label" id="activationDateLabel" data-i18n-key="activationDate.label">When do you want to activate your pass?</p>
+                                        <div class="activation-date-options" role="radiogroup" aria-labelledby="activationDateLabel">
+                                            <label class="activation-date-option">
+                                                <input type="radio" name="activationDate" value="now" id="activationDateNow" checked data-action="set-activation-now">
+                                                <span data-i18n-key="activationDate.now">Activate now</span>
+                                            </label>
+                                            <label class="activation-date-option">
+                                                <input type="radio" name="activationDate" value="date" id="activationDatePick" data-action="set-activation-date">
+                                                <span data-i18n-key="activationDate.later">Activate on specific date</span>
+                                            </label>
+                                        </div>
+                                        <div class="activation-date-picker-wrap" id="activationDatePickerWrap" hidden>
+                                            <label for="activationDateInput" class="sr-only" data-i18n-key="activationDate.pickLabel">Select activation date</label>
+                                            <input type="date" id="activationDateInput" min="" data-action="activation-date-change" aria-describedby="activationDateHint">
+                                            <span class="activation-date-hint" id="activationDateHint" data-i18n-key="activationDate.hint">Select a date today or in the future.</span>
+                                        </div>
+                                        <button type="button" class="select-btn activation-date-continue" data-action="activation-date-continue" data-i18n-key="button.continue">Continue</button>
                                     </div>
                                 </div>
                             </div>
@@ -325,7 +457,6 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                            <button type="button" class="login-btn" data-action="logout">Log out</button>
                                         </div>
                                     </div>
 
@@ -457,7 +588,36 @@
                              
                             <div class="form-group">
                                 <label for="password" data-i18n-key="form.password.create">Password*</label>
-                                <input type="password" id="password" name="password" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="customer.password" required minlength="8">
+                               <input type="password" id="password" name="password" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="customer.password" required minlength="6">
+                            </div>
+                            
+                          
+                            
+                            <!-- Marketing Consent -->
+                            <div class="form-group form-group-consent">
+                                <label class="consent-checkbox">
+                                    <input type="checkbox" id="marketingConsent" data-api-field="consent.marketing" checked>
+                                    <span class="checkmark"></span>
+                                    <span class="consent-text" data-i18n-key="cart.consent.marketing">I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.</span>
+                                </label>
+                            </div>
+                            
+                            <!-- SMS Consent -->
+                            <div class="form-group form-group-consent">
+                                <label class="consent-checkbox">
+                                    <input type="checkbox" id="smsConsent" data-api-field="consent.sms" checked>
+                                    <span class="checkmark"></span>
+                                    <span class="consent-text" data-i18n-key="cart.consent.sms">I want to receive SMS messages. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.</span>
+                                </label>
+                            </div>
+                            
+                              <!-- Privacy Policy Consent -->
+                              <div class="form-group form-group-consent">
+                                <label class="consent-checkbox">
+                                    <input type="checkbox" id="privacyConsent" data-api-field="consent.privacy" required>
+                                    <span class="checkmark"></span>
+                                    <span class="consent-text" data-i18n-key="cart.consent.privacy">I accept the <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Privacy Policy</a></span>
+                                </label>
                             </div>
                             
                             <!-- Save Account Button -->
@@ -538,7 +698,7 @@
                                 
                                 <div class="form-group">
                                     <label for="parentPassword" data-i18n-key="form.password.create">Password*</label>
-                                    <input type="password" id="parentPassword" name="parentPassword" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="guardian.password" required minlength="8">
+                                   <input type="password" id="parentPassword" name="parentPassword" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="guardian.password" required minlength="6">
                                 </div>
                                 
                                 <div class="form-group">
@@ -571,7 +731,6 @@
                                         </svg>
                                     </button>
                                 </div>
-                                
                                 <!-- Cart Items -->
                                 <template id="cart-item-template">
                                     <div class="cart-item" data-cart-item>
@@ -580,39 +739,47 @@
                                     </div>
                                 </template>
 
-                                <!-- Add-on Card Template for modal and in-page rendering -->
+                                <!-- Add-on Card Template: list row + expandable details (modal redesign) -->
                                 <template id="addon-card-template">
                                     <div class="plan-card addon-card" data-plan-id>
-                                        <div class="plan-info">
-                                            <div class="plan-content-left">
-                                                <div class="plan-type" data-element="name">Add-on</div>
-                                                <div class="plan-description" data-element="description"></div>
+                                        <div class="addon-card-main" role="button" tabindex="0">
+                                            <div class="addon-card-thumb" data-action="open-lightbox" role="img">
+                                                <img data-element="image" alt="" />
                                             </div>
-                                            <div class="plan-content-right">
-                                                <span data-element="originalPrice"></span>
-                                                <div class="plan-price">
-                                                    <span class="price-amount" data-element="discountedPrice">0</span>
-                                                    <span class="price-unit">kr</span>
+                                            <div class="addon-card-content">
+                                                <div class="plan-type" data-element="name">Add-on</div>
+                                                <div class="addon-card-description-wrap">
+                                                    <div class="plan-description" data-element="description"></div>
+                                                </div>
+                                            </div>
+                                            <div class="addon-card-actions">
+                                                <div class="addon-card-price">
+                                                    <span class="addon-original-price" data-element="originalPrice"></span>
+                                                    <div class="plan-price">
+                                                        <span class="price-amount" data-element="discountedPrice">0</span>
+                                                        <span class="price-unit">kr</span>
+                                                    </div>
+                                                </div>
+                                                <div class="addon-card-actions-row">
+                                                    <button class="addon-add-to-cart-btn" data-action="toggle-addon" data-i18n-key="button.addToCart">Add to cart</button>
+                                                    <button type="button" class="addon-card-description-toggle" aria-expanded="false" aria-label="Show full description" title="Show full description">▼</button>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="plan-meta">
-                                            <div class="plan-original" style="text-decoration: line-through; opacity: .6;">
-                                                
-                                            </div>
-                                            <ul class="plan-features" data-element="features"></ul>
-                                        </div>
-                                        <div class="check-circle" data-action="toggle-addon"></div>
                                     </div>
                                 </template>
 
                                 <div class="cart-items" data-component="cart-items"></div>
                                 
-                                <!-- Payment Overview -->
+                                <!-- Payment Overview (subscription pricing: monthly, pay now) – below subscription, above addons -->
                                 <div class="payment-overview" style="display: none;">
                                     <div class="payment-overview-item">
                                         <span class="payment-label" data-i18n-key="cart.monthlyFee">Monthly fee:</span>
                                         <span class="payment-amount" data-summary-field="monthly-payment">0,00 kr./md</span>
+                                    </div>
+                                    <div class="payment-overview-item payment-overview-discount" style="display: none;">
+                                        <span class="payment-label" data-i18n-key="cart.discountAmount">Discount:</span>
+                                        <span class="payment-amount" data-summary-field="discount-amount">-0,00 kr.</span>
                                     </div>
                                     <div class="payment-overview-item payment-overview-paynow">
                                         <div class="payment-overview-paynow-row">
@@ -621,6 +788,19 @@
                                             <span class="payment-amount" data-summary-field="pay-now">0,00 kr.</span>
                                         </div>
                                         <div class="payment-overview-bound-until" data-summary-field="payment-bound-until" style="display: none;"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Addon items (below subscription pricing, above total) -->
+                                <div class="cart-addon-items" data-component="cart-addon-items"></div>
+                                
+                                <!-- Cart total (below addons) -->
+                                <div class="payment-overview payment-overview-total-wrap" style="display: none;">
+                                    <div class="payment-overview-item payment-overview-total" style="display: none;">
+                                        <div class="payment-overview-paynow-row">
+                                            <span class="payment-label" data-i18n-key="cart.total">Total:</span>
+                                            <span class="payment-amount" data-summary-field="total">0,00 kr.</span>
+                                        </div>
                                     </div>
                                 </div>
                                 
@@ -634,6 +814,7 @@
                                         <input type="text" placeholder="" class="discount-input" data-i18n-placeholder="cart.discount.placeholder">
                                         <button type="button" class="apply-discount-btn" data-i18n-key="button.apply">Apply</button>
                                     </div>
+                                    <div class="discount-display" data-discount-display style="display: none;"></div>
                                 </div>
                                 
                                 <!-- Consents -->
@@ -643,47 +824,12 @@
                                         <span class="checkmark"></span>
                                         <span class="consent-text" data-i18n-key="cart.consent.terms">I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a></span>
                                     </label>
-                                    
-                                    <label class="consent-checkbox">
-                                        <input type="checkbox" id="marketingConsent" data-api-field="consent.marketing" checked>
-                                        <span class="checkmark"></span>
-                                        <span class="consent-text" data-i18n-key="cart.consent.marketing">I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.</span>
-                                    </label>
                                 </div>
                                 
-                                <!-- Payment Methods -->
-                                <div class="payment-methods">
-                                    <h4 class="payment-title" data-i18n-key="cart.paymentMethod">Choose payment method</h4>
-                                    <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem; margin-top: 0.5rem;" data-i18n-key="cart.paymentRedirect">
-                                        You will be redirected to our secure payment provider to complete your payment.
-                                    </p>
-                                    
-                                    <div class="payment-option">
-                                        <input type="radio" id="cardPayment" name="paymentMethod" value="card" data-api-field="payment.method">
-                                        <label for="cardPayment" class="payment-label">
-                                            <div class="payment-icon">
-                                                <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
-                                                    <rect x="1" y="3" width="22" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
-                                                    <path d="M1 7h22" stroke="currentColor" stroke-width="2"/>
-                                                </svg>
-                                            </div>
-                                            <span data-i18n-key="cart.cardPayment">Card payment</span>
-                                        </label>
-                                    </div>
-                                    
-                                    <div class="payment-option">
-                                        <input type="radio" id="applePay" name="paymentMethod" value="apple" data-api-field="payment.method">
-                                        <label for="applePay" class="payment-label">
-                                            <div class="payment-icon">
-                                                <svg width="24" height="16" viewBox="0 0 24 16" fill="none">
-                                                    <path d="M12 2C8.5 2 6 4.5 6 8c0 3.5 2.5 6 6 6s6-2.5 6-6c0-3.5-2.5-6-6-6z" stroke="currentColor" stroke-width="2"/>
-                                                    <path d="M12 6v4l2 2" stroke="currentColor" stroke-width="2"/>
-                                                </svg>
-                                            </div>
-                                            <span>Apple Pay</span>
-                                        </label>
-                                    </div>
-                                </div>
+                                <!-- Payment Methods - REMOVED: Users are redirected to payment provider for card entry -->
+                                <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem; margin-top: 0.5rem;" data-i18n-key="cart.paymentRedirect">
+                                    You will be redirected to our secure payment provider to complete your payment.
+                                </p>
                                 
                                 <!-- Card Payment Form - REMOVED: Users are redirected to payment provider -->
                                 <!-- This form is not used - payment is handled by external payment provider -->
@@ -691,15 +837,48 @@
                                     <!-- Form removed - users are redirected to payment provider for card entry -->
                                 </div>
                                 
+                                <!-- Campaign Warning Banner -->
+                                <div class="campaign-warning-banner" id="campaignWarningBanner" style="display: none;" role="alert">
+                                    <div class="campaign-warning-icon">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                        </svg>
+                                    </div>
+                                    <p class="campaign-warning-message" data-i18n-key="cart.campaignWarning.message">
+                                        Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing campaigns later.
+                                    </p>
+                                </div>
+                                                                <!-- Campaign Warning Banner -->
+                                <div class="campaign-warning-banner" id="campaignWarningBanner" style="display: none;" role="alert">
+                                    <div class="campaign-warning-icon">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                        </svg>
+                                    </div>
+                                    <p class="campaign-warning-message" data-i18n-key="cart.campaignWarning.message">
+                                        If you proceed to payment without completing the purchase, you may be blocked from purchasing campaigns later.
+                                    </p>
+                                </div>
+                                
                                 <!-- Checkout Button -->
                                 <button class="checkout-btn" data-action="submit-checkout" disabled data-i18n-key="cart.checkout">
                                     Checkout
                                 </button>
                                 
-                                <!-- Footer Note -->
-                                <div class="footer-note">
-                                    <span class="certified-icon">✓</span>
-                                    Certified safe trade with danish e-mærket
+                                <!-- FAQ Help Link -->
+                                <div class="faq-help-link-section">
+                                    <a href="#faqSection" class="faq-help-link" data-action="scroll-to-faq">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                        </svg>
+                                        <span data-i18n-key="cart.faqHelp">Questions? See FAQ</span>
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -729,14 +908,14 @@
                         <div class="confirmation-left">
                             <!-- Order Details Card -->
                             <div class="confirmation-card">
-                                <h3 class="card-title">Order Details</h3>
+                                <h3 class="card-title" data-i18n-key="confirmation.orderDetails">Order Details</h3>
                                 <div class="order-info">
                                     <div class="order-item">
-                                        <span class="order-label">Order Number:</span>
+                                        <span class="order-label" data-i18n-key="confirmation.orderNumber">Order Number:</span>
                                         <span class="order-value" data-summary-field="order-number">—</span>
                                     </div>
                                     <div class="order-item">
-                                        <span class="order-label">Date:</span>
+                                        <span class="order-label" data-i18n-key="confirmation.date">Date:</span>
                                         <span class="order-value" data-summary-field="order-date">—</span>
                                     </div>
                                 </div>
@@ -751,14 +930,118 @@
                                 <div class="purchase-items" data-component="confirmation-items"></div>
                                 
                                 <div class="order-total">
-                                    <span class="total-label">Total:</span>
+                                    <span class="total-label" data-i18n-key="confirmation.total">Total:</span>
                                     <span class="total-amount" data-summary-field="order-total">0,00 kr</span>
+                                </div>
+                                
+                                <button class="receipt-btn" id="showDetailedReceiptBtn" data-action="show-detailed-receipt" data-i18n-key="confirmation.showReceipt" style="margin-top: 20px;">
+                                    Vis detaljeret kvittering
+                                </button>
+                            </div>
+                            
+                            <!-- Detailed Receipt Modal -->
+                            <div class="receipt-modal" id="detailedReceiptModal" style="display: none;">
+                                <div class="receipt-modal-content">
+                                    <div class="receipt-header">
+                                        <div class="receipt-header-left">
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                                <polyline points="10 9 9 9 8 9"></polyline>
+                                            </svg>
+                                            <h2 data-i18n-key="confirmation.receipt.title">Ordrebekræftelse</h2>
+                                        </div>
+                                        <div class="receipt-header-right">
+                                            <span class="receipt-order-number"><span data-i18n-key="confirmation.receipt.order">Ordre</span> <span id="receiptOrderNumber">—</span></span>
+                                            <span class="receipt-date" id="receiptDate">—</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="receipt-body">
+                                        <div class="receipt-section">
+                                            <div class="receipt-columns">
+                                                <div class="receipt-column">
+                                                    <h3 data-i18n-key="confirmation.receipt.orderOverview">Ordreoversigt</h3>
+                                                    <div class="receipt-row">
+                                                        <span data-i18n-key="confirmation.receipt.subtotal">Subtotal:</span>
+                                                        <span id="receiptSubtotal">—</span>
+                                                    </div>
+                                                    <div class="receipt-row">
+                                                        <span data-i18n-key="confirmation.receipt.discount">Rabat:</span>
+                                                        <span id="receiptDiscount">—</span>
+                                                    </div>
+                                                    <div class="receipt-row receipt-total">
+                                                        <span data-i18n-key="confirmation.receipt.total">TOTALT:</span>
+                                                        <span id="receiptTotal">—</span>
+                                                    </div>
+                                                    <div class="receipt-vat">
+                                                        <span data-i18n-key="confirmation.receipt.vatInclusive">inklusiv moms (25%):</span> <span id="receiptVat">—</span>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="receipt-column">
+                                                    <h3 data-i18n-key="confirmation.receipt.payments">Betalinger</h3>
+                                                    <div class="receipt-row">
+                                                        <span data-i18n-key="confirmation.receipt.paymentMethod">Betalingsmetode:</span>
+                                                        <span id="receiptPaymentMethod">—</span>
+                                                    </div>
+                                                    <div class="receipt-row">
+                                                        <span data-i18n-key="confirmation.receipt.amountPaid">Betalt beløb:</span>
+                                                        <span id="receiptAmountPaid">—</span>
+                                                    </div>
+                                                    <div class="receipt-row">
+                                                        <span data-i18n-key="confirmation.receipt.transactionId">Transaktions-id:</span>
+                                                        <span id="receiptTransactionId">—</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="receipt-section">
+                                            <div class="receipt-columns">
+                                                <div class="receipt-column">
+                                                    <h3 data-i18n-key="confirmation.receipt.sellerInfo">Sælgers oplysninger</h3>
+                                                    <div class="receipt-info" id="receiptSellerInfo">
+                                                        <div><strong data-i18n-key="confirmation.receipt.sellerName">Sælgerens navn:</strong> <span id="receiptSellerName">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.address">Adresse:</strong> <span id="receiptSellerAddress">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.cvr">CVR-nummer:</strong> <span id="receiptSellerCVR">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.phone">Telefon:</strong> <span id="receiptSellerPhone">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.email">E-mail:</strong> <span id="receiptSellerEmail">—</span></div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div class="receipt-column">
+                                                    <h3 data-i18n-key="confirmation.receipt.customerInfo">Kundens informationer</h3>
+                                                    <div class="receipt-info" id="receiptCustomerInfo">
+                                                        <div><strong data-i18n-key="confirmation.receipt.customerName">Kundens navn:</strong> <span id="receiptCustomerName">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.address">Adresse:</strong> <span id="receiptCustomerAddress">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.phone">Telefon:</strong> <span id="receiptCustomerPhone">—</span></div>
+                                                        <div><strong data-i18n-key="confirmation.receipt.email">E-mail:</strong> <span id="receiptCustomerEmail">—</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="receipt-section">
+                                            <h3 data-i18n-key="confirmation.receipt.valueCardsPurchased">Købte værdikort</h3>
+                                            <div class="receipt-items" id="receiptItems">
+                                                <!-- Items will be populated here -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="receipt-footer">
+                                        <button class="receipt-close-btn" id="closeReceiptBtn" data-action="close-detailed-receipt" data-i18n-key="confirmation.receipt.close">LUK</button>
+                                    </div>
                                 </div>
                             </div>
                             
-                            <!-- Membership Details Card -->
-                            <div class="confirmation-card">
+                            <!-- Membership Details Card (for regular memberships) -->
+                            <div class="confirmation-card" id="confirmationMembershipSection" style="display: none;">
                                 <h3 class="card-title" data-i18n-key="cart.membershipDetails">Membership Details</h3>
+                                
                                 <div class="membership-info">
                                     <div class="membership-item">
                                         <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
@@ -769,44 +1052,76 @@
                                         <span class="membership-value" data-summary-field="membership-number">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Type:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.membershipType">Type:</span>
                                         <span class="membership-value" data-summary-field="membership-type">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Primary Gym:</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.primaryGym">Primary Gym:</span>
                                         <span class="membership-value" data-summary-field="primary-gym">—</span>
                                     </div>
                                     <div class="membership-item">
-                                        <span class="membership-label">Monthly Price:</span>
-                                        <span class="membership-value" data-summary-field="membership-price">0,00 kr/month</span>
+                                        <span class="membership-label" data-i18n-key="confirmation.monthlyPrice">Monthly Price:</span>
+                                        <span class="membership-value" data-summary-field="membership-price">0,00 kr</span>
                                     </div>
                                 </div>
-                                
-                                <button class="login-btn" data-action="open-login">Log in</button>
+                            </div>
+                            
+                            <!-- 15 Day Pass Details Card -->
+                            <div class="confirmation-card" id="confirmation15DayPassSection" style="display: none;">
+                                <h3 class="card-title" data-i18n-key="confirmation.15daypassDetails">15 Day Pass Details</h3>
+                                <div class="membership-info">
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
+                                        <span class="membership-value" data-summary-field="member-name">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="confirmation.passType">Pass Type:</span>
+                                        <span class="membership-value" data-summary-field="pass-type">15 Day Pass</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="confirmation.primaryGym">Primary Gym:</span>
+                                        <span class="membership-value" data-summary-field="primary-gym">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="confirmation.validFrom">Valid From:</span>
+                                        <span class="membership-value" data-summary-field="pass-start-date">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="confirmation.validUntil">Valid Until:</span>
+                                        <span class="membership-value" data-summary-field="pass-end-date">—</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Punch Card Details Card -->
+                            <div class="confirmation-card" id="confirmationPunchCardSection" style="display: none;">
+                                <h3 class="card-title" data-i18n-key="confirmation.punchCardDetails">Punch Card Details</h3>
+                                <div class="membership-info">
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="confirmation.name">Navn:</span>
+                                        <span class="membership-value" data-summary-field="member-name">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="confirmation.cardType">Card Type:</span>
+                                        <span class="membership-value" data-summary-field="punch-card-type">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="confirmation.quantity">Quantity:</span>
+                                        <span class="membership-value" data-summary-field="punch-card-quantity">—</span>
+                                    </div>
+                                    <div class="membership-item">
+                                        <span class="membership-label" data-i18n-key="confirmation.validUntil">Valid Until:</span>
+                                        <span class="membership-value" data-summary-field="punch-card-expiry">—</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
-                        <!-- Right Column - Referral Promo & Next Steps -->
+                        <!-- Right Column - Next Steps -->
                         <div class="confirmation-right">
-                            <!-- Referral Promo Box -->
-                            <div class="referral-promo">
-                                <h3 class="promo-title">Sharing is Caring!</h3>
-                                <p class="promo-text">Refer a friend and you both get 50% off your next month!</p>
-                                <button class="referral-btn" data-action="copy-referral">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                                        <circle cx="8.5" cy="7" r="4"/>
-                                        <path d="M20 8v6"/>
-                                        <path d="M23 11h-6"/>
-                                    </svg>
-                                    Refer a Friend
-                                </button>
-                                <a href="#" class="terms-link" data-action="open-terms" data-terms-type="terms">Read all terms here</a>
-                            </div>
-                            
                             <!-- Next Steps -->
                         <div class="next-steps">
-                                <h3 class="steps-title">What happens next?</h3>
+                                <h3 class="steps-title" data-i18n-key="confirmation.nextStepsTitle">What happens next?</h3>
                                 <ul class="steps-list">
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -815,7 +1130,7 @@
                                                 <path d="M22 6L12 13 2 6"/>
                                             </svg>
                                         </div>
-                                        <span>Email confirmation sent to your inbox</span>
+                                        <span id="nextStep1" data-i18n-key="confirmation.nextStep1">Email confirmation sent to your inbox</span>
                                     </li>
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -824,7 +1139,7 @@
                                                 <path d="M22 4L12 14.01l-3-3"/>
                                             </svg>
                                         </div>
-                                        <span data-i18n-key="cart.membershipActivation">Membership activation & auto-renewal setup</span>
+                                        <span id="nextStep2" data-i18n-key="confirmation.nextStep2.membership">Membership activation & auto-renewal setup</span>
                                     </li>
                                     <li class="step-item">
                                         <div class="step-icon">
@@ -834,12 +1149,22 @@
                                                 <path d="M12 22.08V12"/>
                                             </svg>
                                         </div>
-                                        <span>Pick up your membership card at the gym</span>
+                                        <span id="nextStep3" data-i18n-key="confirmation.nextStep3.membership">Pick up your membership card at the gym</span>
                                     </li>
                             </ul>
                         </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- FAQ Section -->
+        <div class="faq-section" id="faqSection" style="display: none;">
+            <div class="faq-container">
+                <h2 class="faq-title" data-i18n-key="faq.title">Frequently Asked Questions</h2>
+                <div class="faq-list">
+                    <!-- FAQ items will be dynamically rendered here -->
                 </div>
             </div>
         </div>
@@ -891,16 +1216,21 @@
             <div class="terms-modal-header">
                 <h3 class="terms-modal-title">Data Policy</h3>
                 <div class="terms-modal-header-actions">
-                    <div class="terms-modal-language-switcher">
-                        <button class="language-btn active" data-lang="da" id="dataPolicyModalLangDa">DA</button>
-                        <button class="language-btn" data-lang="en" id="dataPolicyModalLangEn">EN</button>
-                    </div>
                     <button class="terms-modal-close" id="dataPolicyModalClose" aria-label="Close">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 6L6 18M6 6l12 12"/>
                         </svg>
                     </button>
                 </div>
+            </div>
+            <!-- Search (same as T&C modal) -->
+            <div class="terms-modal-search" id="dataPolicyModalSearch">
+                <input type="text" id="dataPolicySearchInput" placeholder="Search..." class="terms-search-input" data-placeholder-da="Søg..." data-placeholder-en="Search...">
+                <button class="terms-search-clear" id="dataPolicySearchClear" style="display: none;" aria-label="Clear search">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
             </div>
             <div class="terms-modal-body">
                 <div class="terms-modal-loading" id="dataPolicyModalLoading" style="display: none;">
@@ -909,6 +1239,77 @@
                 </div>
                 <div class="terms-modal-content-text" id="dataPolicyModalContent">
                     <!-- Content will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cookie Declaration Modal -->
+    <div class="terms-modal" id="cookieDeclarationModal" style="display: none;" role="dialog" aria-labelledby="cookieDeclarationModalTitle" aria-modal="true">
+        <div class="terms-modal-content cookie-declaration-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" id="cookieDeclarationModalTitle" data-i18n-key="footer.policies.cookie">Cookie Policy</h3>
+                <div class="terms-modal-header-actions">
+                    <button class="terms-modal-close" id="cookieDeclarationModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="terms-modal-content-text cookie-declaration-content" id="cookieDeclarationContent">
+                    <script id="CookieDeclaration" src="https://consent.cookiebot.com/31a4df3e-7adc-432b-8c8c-30c07e1d0f93/cd.js" type="text/javascript" async></script>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Campaign Rejection Modal -->
+    <div class="terms-modal" id="campaignRejectionModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" data-i18n-key="modal.campaignRejection.title">Campaign Not Available</h3>
+                <div class="terms-modal-header-actions">
+                    <button class="terms-modal-close" id="campaignRejectionModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="campaign-rejection-content">
+                    <p class="campaign-rejection-message" data-i18n-key="modal.campaignRejection.message">This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. You can sign up for a regular membership. If you believe this is a mistake, contact support.</p>
+                    <div class="campaign-rejection-actions">
+                        <button class="campaign-rejection-btn campaign-rejection-btn-primary" id="campaignRejectionOption1" data-i18n-key="modal.campaignRejection.option1">Regular Membership</button>
+                        <button class="campaign-rejection-btn campaign-rejection-btn-secondary" id="campaignRejectionOption2" data-i18n-key="modal.campaignRejection.option2">Contact Support</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cart offer expired (15-min timer ran out) -->
+    <div class="terms-modal" id="cartOfferExpiredModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" data-i18n-key="modal.cartOfferExpired.title">Offer expired</h3>
+                <div class="terms-modal-header-actions">
+                    <button type="button" class="terms-modal-close" id="cartOfferExpiredModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="campaign-rejection-content">
+                    <p class="campaign-rejection-message" data-i18n-key="modal.cartOfferExpired.message">The time to complete your purchase has run out. You can still try to pay at the price shown, or go back and choose another membership.</p>
+                    <div class="campaign-rejection-actions">
+                        <button type="button" class="campaign-rejection-btn campaign-rejection-btn-primary" id="cartOfferExpiredContinue" data-i18n-key="modal.cartOfferExpired.continue">Continue to payment</button>
+                        <button type="button" class="campaign-rejection-btn campaign-rejection-btn-secondary" id="cartOfferExpiredChooseOther" data-i18n-key="modal.cartOfferExpired.chooseOther">Choose another offer</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -937,16 +1338,23 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#" data-action="open-terms" data-terms-type="cookie" data-i18n-key="footer.policies.cookie">
+                        <a href="#" data-action="open-cookie-declaration" data-i18n-key="footer.policies.cookie">
                             Cookie Policy
                         </a>
+                    </li>
+                    <li>
+                        <button type="button" class="footer-cookie-settings-link" id="cookieSettingsButton" data-i18n-key="cookie.settings.button">
+                            Cookie Settings
+                        </button>
                     </li>
                 </ul>
             </div>
         </div>
         
         <div class="footer-bottom">
-            <p><span data-i18n-key="footer.copyright">© 2026 Boulders. All rights reserved.</span> <a href="https://boulders.dk" target="_blank" rel="noopener noreferrer">boulders.dk</a></p>
+            <div class="footer-bottom-content">
+                <p><span data-i18n-key="footer.copyright">© 2026 Boulders. All rights reserved.</span> <a href="https://boulders.dk" target="_blank" rel="noopener noreferrer">boulders.dk</a></p>
+            </div>
         </div>
     </footer>
 
@@ -965,8 +1373,8 @@
       };
       document.head.appendChild(postalCodesScript);
     </script>
-    <script type="module" src="./api-utils.js"></script>
     <script type="module" src="./app.js"></script>
+
 
 </body>
 </html>

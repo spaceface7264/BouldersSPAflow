@@ -1,148 +1,78 @@
-const numberFormatter = new Intl.NumberFormat('da-DK');
-const currencyFormatter = new Intl.NumberFormat('da-DK', {
-  style: 'currency',
-  currency: 'DKK',
-});
+// Sentry is initialized in index.html via CDN script tag
+// Use window.Sentry for error tracking
+const Sentry = window.Sentry || {};
+const captureException = (error, context) => {
+  if (Sentry.captureException) {
+    Sentry.captureException(error, context);
+  }
+};
+const setUser = (user) => {
+  if (Sentry.setUser) {
+    Sentry.setUser(user);
+  }
+};
+
+import {
+  formatCurrencyHalfKrone,
+  formatPriceHalfKrone,
+  roundToHalfKrone,
+} from './utils/format.js';
+import { formatDistance } from './utils/geo.js';
+import { getFlagEmoji } from './utils/locale.js';
+import {
+  clearLoginSessionCookie,
+  hydrateFromCookie,
+  readLoginSessionCookie,
+  writeLoginSessionCookie,
+} from './utils/tokenStorage.js';
+import {
+  formatCardNumber,
+  formatExpiryDate,
+  stripNonDigits,
+} from './utils/input.js';
+import { stripEmailPlusTag } from './utils/string.js';
+import { formatDateDMY } from './utils/date.js';
+import { showToast } from './utils/toast.js';
+import { getErrorMessage, extractErrorFields } from './utils/errors.js';
+import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
+import { highlightFieldError } from './utils/dom.js';
+import { getApiConfig } from './utils/apiConfig.js';
+import {
+  calculateGymDistances,
+  checkGeolocationPermission,
+  getUserLocation,
+  isGeolocationAvailable,
+} from './utils/geolocation.js';
+import { buildApiUrl, requestJson } from './utils/apiRequest.js';
+import { sanitizeHTML } from './sanitize.js';
 
 /**
- * Rounds amount to the nearest half krone (0.00 or 0.50)
- * Formula: floor((amount * 2) + 0.5) / 2
- * @param {number} amount - Amount to round
- * @returns {number} Rounded amount ending in .00 or .50
+ * Gets today's date in YYYY-MM-DD format using local time (not UTC).
+ * This ensures we always send the user's local "today" date to the backend.
+ * @returns {string} Today's date in YYYY-MM-DD format (e.g., "2026-01-05")
  */
-function roundToHalfKrone(amount) {
-  if (typeof amount !== 'number' || isNaN(amount)) return 0;
-  return Math.floor((amount * 2) + 0.5) / 2;
+function getTodayLocalDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
-/**
- * Formats a price with rounding to half krone, ensuring it ends in .00 or .50
- * @param {number} amount - Amount to format
- * @returns {string} Formatted price string
- */
-function formatPriceHalfKrone(amount) {
-  const rounded = roundToHalfKrone(amount);
-  return numberFormatter.format(rounded);
+const debugEnabled = window.DEBUG_LOGS === true;
+const originalConsoleLog = console.log.bind(console);
+const originalConsoleWarn = console.warn.bind(console);
+if (!debugEnabled) {
+  console.log = () => {};
+  console.warn = () => {};
 }
-
-/**
- * Formats a currency amount with rounding to half krone
- * @param {number} amount - Amount to format
- * @returns {string} Formatted currency string
- */
-function formatCurrencyHalfKrone(amount) {
-  const rounded = roundToHalfKrone(amount);
-  return currencyFormatter.format(rounded);
-}
-
-const MEMBERSHIP_PLANS = [
-  {
-    id: 'membership-student',
-    name: 'Student',
-    price: 379,
-    priceSuffix: 'kr/mo',
-    description: 'For climbers with valid student ID',
-    features: [
-      'Unlimited access to 10 gyms',
-      'Bloc Life Loyalty Program',
-      '3x 15-Day Guest Passes',
-      '10% off Shoes and Gear'
-    ],
-    cta: 'Select Student',
-  },
-  {
-    id: 'membership-adult',
-    name: 'Adult',
-    price: 445,
-    priceSuffix: 'kr/mo',
-    description: 'For climbers over 16 years',
-    features: [
-      'Unlimited access to 10 gyms',
-      'Bloc Life Loyalty Program',
-      '3x 15-Day Guest Passes',
-      '10% off Shoes and Gear'
-    ],
-    cta: 'Select Adult',
-  },
-  {
-    id: 'membership-junior',
-    name: 'Junior',
-    price: 249,
-    priceSuffix: 'kr/mo',
-    description: 'For climbers under 16 years',
-    features: [
-      'Unlimited access to 10 gyms',
-      'Bloc Life Loyalty Program',
-      '3x 15-Day Guest Passes',
-      'Discount on kids classes',
-    ],
-    cta: 'Select Junior',
-  },
-];
-
-const VALUE_CARDS = [
-  {
-    id: 'value-adult',
-    name: 'Adult',
-    price: 1200,
-    priceSuffix: 'kr',
-    description: 'For ages 16+',
-    features: [
-      '10 x Adult entries',
-      'A physical card you can share',
-      'Valid at all gyms during opening hours',
-      'Can be upgraded to membership',
-    ],
-    min: 0,
-    max: 5,
-  },
-  {
-    id: 'value-junior',
-    name: 'Junior',
-    price: 800,
-    priceSuffix: 'kr',
-    description: 'For ages up to 15 years',
-    features: [
-      '10 x Junior entries',
-      'A physical card you can share',
-      'Valid at all gyms during opening hours',
-      'Can be upgraded to membership',
-    ],
-    min: 0,
-    max: 3,
-  },
-];
-
-const ADDONS = [
-  {
-    id: 'addon-shoes',
-    name: 'Climbing Shoes',
-    price: { original: 599, discounted: 399 },
-    description: 'Essential climbing shoes for beginners',
-    features: [
-      'High-quality rubber sole',
-      'Comfortable fit',
-      'Perfect for bouldering',
-      'Available in multiple sizes',
-    ],
-    cta: 'Add to Cart',
-  },
-  {
-    id: 'addon-chalk',
-    name: 'Chalk Bag Set',
-    price: { original: 299, discounted: 199 },
-    description: 'Complete chalk bag with magnesium chalk',
-    features: [
-      'Premium magnesium chalk',
-      'Durable chalk bag',
-      'Brush included',
-      'Multiple color options',
-    ],
-    cta: 'Add to Cart',
-  },
-];
-
-const VALUE_CARD_PUNCH_MULTIPLIER = 10;
+const devLog = (...args) => {
+  if (debugEnabled) originalConsoleLog(...args);
+};
+const devWarn = (...args) => {
+  if (debugEnabled) originalConsoleWarn(...args);
+};
+const geoLogger = { log: devLog, warn: devWarn };
 
 const REQUIRED_FIELDS = [
   'firstName',
@@ -173,41 +103,9 @@ const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 // API Integration Functions
 class BusinessUnitsAPI {
   constructor(baseUrl = null) {
-    // In development, use Vite proxy (relative URL)
-    // In production on Netlify, use Netlify Function proxy to avoid CORS
-    // In production on Cloudflare, use Cloudflare Pages Function proxy to avoid CORS
-    // Detect if we're in development by checking if we're on localhost
-    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    // Cloudflare Pages detection - check for Pages domains OR boulders.dk domains (which are deployed on Cloudflare Pages)
-    // Note: workers.dev is Cloudflare Workers (not Pages), so it doesn't have Pages Functions
-    const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
-                               window.location.hostname.includes('join.boulders.dk') ||
-                               window.location.hostname === 'boulders.dk';
-    const isCloudflareWorker = window.location.hostname.includes('workers.dev');
-    const isNetlify = window.location.hostname.includes('netlify.app');
-    
-    if (baseUrl) {
-      this.baseUrl = baseUrl;
-    } else if (isDevelopment) {
-      // Use Vite proxy in development
-      this.baseUrl = '';
-    } else if (isNetlify) {
-      // Use Netlify Function proxy in production
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else if (isCloudflarePages) {
-      // Use Cloudflare Pages Function proxy in production
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (isCloudflareWorker) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      // Workers typically don't have CORS issues since they run server-side
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
   }
 
   // Get all business units from API
@@ -215,55 +113,33 @@ class BusinessUnitsAPI {
   // Note: This endpoint uses "No Auth" according to Postman docs
   async getBusinessUnits() {
     try {
-      // Build URL - if using Netlify proxy, add path as query parameter
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/reference/business-units`;
-      } else {
-        url = `${this.baseUrl}/api/reference/business-units`;
-      }
-      console.log('Fetching business units from:', url);
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/reference/business-units',
+      });
+      devLog('Fetching business units from:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(), // Step 2: Language default
         'Content-Type': 'application/json',
         // No Authorization header needed - endpoint uses "No Auth"
       };
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      console.log('API Response status:', response.status, response.statusText);
-      console.log('API Response Content-Type:', response.headers.get('Content-Type'));
-      
-      // Check if response is actually JSON before parsing
-      const contentType = response.headers.get('Content-Type') || '';
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('API returned non-JSON response:', text.substring(0, 200));
-        throw new Error(`API returned HTML instead of JSON. Status: ${response.status}. This usually means the API endpoint is not working correctly or the proxy is misconfigured.`);
-      }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('Business units API response:', data);
-      console.log('Response type:', Array.isArray(data) ? 'Array' : typeof data);
-      console.log('Number of items:', Array.isArray(data) ? data.length : 'N/A');
-      
+
+      const data = await requestJson({ url, headers });
+      devLog('Business units API response:', data);
+      devLog('Response type:', Array.isArray(data) ? 'Array' : typeof data);
+      devLog('Number of items:', Array.isArray(data) ? data.length : 'N/A');
+
       return data;
     } catch (error) {
       console.error('Error fetching business units:', error);
       console.error('Error details:', {
         message: error.message,
         stack: error.stack,
-        name: error.name
+        name: error.name,
+        status: error.status,
+        payload: error.payload,
       });
       // Don't use fallback mock data - throw error so caller can handle it
       throw error;
@@ -323,16 +199,14 @@ class BusinessUnitsAPI {
       // Build URL with business unit as query parameter
       // Note: We don't send subscriber/customer parameters for anonymous users
       // Backend should set allowedToOrder based on "kan bookes via internet" checkbox
-      let url;
       const cacheBuster = `&_t=${Date.now()}`;
       const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}${cacheBuster}` : `?_t=${Date.now()}`;
-      if (this.useProxy) {
-        // For proxy, include query params in the path
-        url = `${this.baseUrl}?path=/api/products/subscriptions${queryParam}`;
-      } else {
-        url = `${this.baseUrl}/api/products/subscriptions${queryParam}`;
-      }
-      console.log('Fetching subscriptions from:', url);
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products/subscriptions${queryParam}`,
+      });
+      devLog('Fetching subscriptions from:', url);
       
       const acceptLanguage = getAcceptLanguageHeader();
       const headers = {
@@ -340,21 +214,10 @@ class BusinessUnitsAPI {
         'Content-Type': 'application/json',
       };
       
-      console.log('[API] Fetching subscriptions with Accept-Language:', acceptLanguage);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), imageBannerText: data[0].imageBanner?.text?.substring(0, 50) } : 'empty');
+      devLog('[API] Fetching subscriptions with Accept-Language:', acceptLanguage);
+
+      const data = await requestJson({ url, headers });
+      devLog('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), externalDescription: data[0].externalDescription?.substring(0, 50) } : 'empty');
       return data;
     } catch (error) {
       console.error('Error fetching subscriptions:', error);
@@ -365,14 +228,13 @@ class BusinessUnitsAPI {
   // Step 5: Get value cards (punch cards)
   async getValueCards() {
     try {
-      let url;
       const cacheBuster = `?_t=${Date.now()}`;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/products/valuecards${cacheBuster}`;
-      } else {
-        url = `${this.baseUrl}/api/products/valuecards${cacheBuster}`;
-      }
-      console.log('Fetching value cards from:', url);
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products/valuecards${cacheBuster}`,
+      });
+      devLog('Fetching value cards from:', url);
       
       const acceptLanguage = getAcceptLanguageHeader();
       const headers = {
@@ -380,21 +242,10 @@ class BusinessUnitsAPI {
         'Content-Type': 'application/json',
       };
       
-      console.log('[API] Fetching value cards with Accept-Language:', acceptLanguage);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('[API] Value cards response sample:', data[0] ? { 
+      devLog('[API] Fetching value cards with Accept-Language:', acceptLanguage);
+
+      const data = await requestJson({ url, headers });
+      devLog('[API] Value cards response sample:', data[0] ? { 
         id: data[0].id, 
         name: data[0].name, 
         description: data[0].description?.substring(0, 50) 
@@ -411,44 +262,37 @@ class BusinessUnitsAPI {
   async getSubscriptionAdditions(productId) {
     try {
       // Try the additions endpoint first (as per guide)
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/products/subscriptions/${productId}/additions`;
-      } else {
-        url = `${this.baseUrl}/api/products/subscriptions/${productId}/additions`;
-      }
-      console.log('Fetching subscription additions from:', url);
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products/subscriptions/${productId}/additions`,
+      });
+      devLog('Fetching subscription additions from:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
+
+      let data;
+      try {
+        data = await requestJson({ url, headers });
+      } catch (error) {
         // If 404, the endpoint doesn't exist yet - return empty array for now
-        if (response.status === 404) {
-          console.warn(`Additions endpoint not found for product ${productId}. Endpoint may not be implemented yet.`);
+        if (error.status === 404) {
+          devWarn(`Additions endpoint not found for product ${productId}. Endpoint may not be implemented yet.`);
           return [];
         }
-        const errorText = await response.text();
-        console.error(`API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        throw error;
       }
-      
-      const data = await response.json();
-      console.log('Subscription additions API response:', data);
+      devLog('Subscription additions API response:', data);
       
       // Handle different response formats
       return Array.isArray(data) ? data : (data.data || data.items || []);
     } catch (error) {
       console.error('Error fetching subscription additions:', error);
       // Return empty array if endpoint doesn't exist - don't break the flow
-      console.warn('Returning empty array for add-ons - endpoint may not be available yet');
+      devWarn('Returning empty array for add-ons - endpoint may not be available yet');
       return [];
     }
   }
@@ -457,39 +301,33 @@ class BusinessUnitsAPI {
   // To offer more products, fetch catalogs with GET /api/products
   async getProducts(businessUnitId = null) {
     try {
-      let url;
       const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}` : '';
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/products${queryParam}`;
-      } else {
-        url = `${this.baseUrl}/api/products${queryParam}`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products${queryParam}`,
+      });
       
-      console.log('[Step 8] Fetching additional catalog products from:', url);
+      devLog('[Step 8] Fetching additional catalog products from:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
+
+      let data;
+      try {
+        data = await requestJson({ url, headers });
+      } catch (error) {
         // If 404, the endpoint doesn't exist yet - return empty array
-        if (response.status === 404) {
-          console.log('[Step 8] Products endpoint not found (404) - may not be implemented yet');
+        if (error.status === 404) {
+          devLog('[Step 8] Products endpoint not found (404) - may not be implemented yet');
           return [];
         }
-        const errorText = await response.text();
-        console.error(`[Step 8] API Error (${response.status}):`, errorText);
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+        throw error;
       }
-      
-      const data = await response.json();
-      console.log('[Step 8] Products API response:', data);
+
+      devLog('[Step 8] Products API response:', data);
       
       // Handle different response formats
       return Array.isArray(data) ? data : (data.data || data.items || []);
@@ -506,30 +344,10 @@ class BusinessUnitsAPI {
 // Caches responses in client state and refreshes when business unit changes
 class ReferenceDataAPI {
   constructor(baseUrl = null) {
-    // Use same proxy logic as BusinessUnitsAPI
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Development: use Vite proxy (relative URL)
-      this.baseUrl = '';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('pages.dev') ||
-               window.location.hostname.includes('join.boulders.dk') ||
-               window.location.hostname === 'boulders.dk') {
-      // Production: use Cloudflare Pages Function proxy
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev')) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
+    this.isDevelopment = config.isDevelopment;
   }
 
   // Fetch reference data (extensible for different types of reference data)
@@ -717,43 +535,23 @@ class ReferenceDataAPI {
 // Handles login, token management, customer creation, and password reset
 class AuthAPI {
   constructor(baseUrl = null) {
-    // Use same proxy logic as BusinessUnitsAPI
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Development: use Vite proxy (relative URL)
-      this.baseUrl = '';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('pages.dev') ||
-               window.location.hostname.includes('join.boulders.dk') ||
-               window.location.hostname === 'boulders.dk') {
-      // Production: use Cloudflare Pages Function proxy
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev')) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
+    this.isDevelopment = config.isDevelopment;
   }
 
   // Step 6: Login - Submit login credentials and store tokens
-  async login(email, password) {
+  async login(email, password, options = {}) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/auth/login`;
-      } else {
-        url = `${this.baseUrl}/api/auth/login`;
-      }
+      const { saveTokens = true } = options;
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/auth/login',
+      });
       
-      console.log('[Step 6] Logging in:', url);
+      devLog('[Step 6] Logging in:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
@@ -761,70 +559,52 @@ class AuthAPI {
       };
       
       // API expects username field (which is the email)
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ username: email, password }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Login error (${response.status}):`, errorText);
-        
+      let data;
+      try {
+        data = await requestJson({
+          url,
+          method: 'POST',
+          headers,
+          body: { username: email, password },
+        });
+      } catch (error) {
+        const errorPayload = error?.payload;
+        const payloadText = typeof errorPayload === 'string' ? errorPayload : JSON.stringify(errorPayload);
+        console.error(`[Step 6] Login error (${error.status || 'unknown'}):`, payloadText || error);
+
         // Handle rate limit errors with better messaging
-        if (response.status === 429) {
+        if (error.status === 429) {
           let retryAfterSeconds = 60; // Default 1 minute (60 seconds)
-          try {
-            const errorData = JSON.parse(errorText);
-            if (errorData.retryAfter) {
-              // retryAfter is already in seconds (e.g., 900 = 15 minutes)
-              retryAfterSeconds = parseInt(errorData.retryAfter, 10);
-              // Store the actual retry time for cooldown tracking
-              if (typeof window !== 'undefined') {
-                window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
-              }
-            }
-          } catch (e) {
-            // If JSON parse fails, try to extract from error text
-            const retryMatch = errorText.match(/retryAfter["\s:]*(\d+)/i);
+          if (errorPayload && typeof errorPayload === 'object' && errorPayload.retryAfter) {
+            retryAfterSeconds = parseInt(errorPayload.retryAfter, 10);
+          } else if (payloadText) {
+            const retryMatch = payloadText.match(/retryAfter["\s:]*(\d+)/i);
             if (retryMatch) {
               retryAfterSeconds = parseInt(retryMatch[1], 10);
-              if (typeof window !== 'undefined') {
-                window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
-              }
             }
+          }
+          if (typeof window !== 'undefined') {
+            window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
           }
           const retryMinutes = Math.floor(retryAfterSeconds / 60);
           const retrySeconds = retryAfterSeconds % 60;
-          const retryMessage = retryMinutes > 0 
+          const retryMessage = retryMinutes > 0
             ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
             : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
-          throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${response.status} - ${errorText})`);
+          throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${error.status} - ${payloadText})`);
         }
-        
-        // Handle 401 errors - parse JSON to extract actual error message
-        if (response.status === 401) {
-          try {
-            const errorData = JSON.parse(errorText);
-            // Check for INVALID_CREDENTIALS or other specific error codes
-            if (errorData.error?.code === 'INVALID_CREDENTIALS' || errorData.error?.message) {
-              // Preserve the original error structure so getErrorMessage can parse it
-              throw new Error(`Login failed: ${response.status} - ${errorText}`);
-            }
-          } catch (e) {
-            // If this is our thrown error, re-throw it
-            if (e.message && e.message.includes('Login failed')) {
-              throw e;
-            }
-            // If JSON parsing fails, fall through to default error
+
+        // Handle 401 errors - preserve error structure for getErrorMessage
+        if (error.status === 401 && errorPayload && typeof errorPayload === 'object') {
+          if (errorPayload.error?.code === 'INVALID_CREDENTIALS' || errorPayload.error?.message) {
+            throw new Error(`Login failed: ${error.status} - ${payloadText}`);
           }
         }
-        
-        throw new Error(`Login failed: ${response.status} - ${errorText}`);
+
+        throw new Error(`Login failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
-      console.log('[Step 6] Login response:', data);
+
+      devLog('[Step 6] Login response:', data);
       
       const tokenPayload = data?.data ?? data;
       const accessToken = tokenPayload.accessToken || tokenPayload.access_token;
@@ -838,15 +618,23 @@ class AuthAPI {
       
       if (accessToken && refreshToken) {
         if (typeof window.saveTokens === 'function') {
-          const metadata = {
-            username: tokenPayload.username || tokenPayload.userName,
-            email: tokenPayload.email || email,
-            roles: tokenPayload.roles || [],
-            tokenType: tokenPayload.tokenType || tokenPayload.token_type,
-            expiresIn: tokenPayload.expiresIn || tokenPayload.expires_in,
-          };
-          window.saveTokens(accessToken, refreshToken, expiresAt, metadata);
-          console.log('[Step 6] ✅ Tokens saved successfully');
+          if (saveTokens) {
+            const metadata = {
+              username: tokenPayload.username || tokenPayload.userName,
+              email: tokenPayload.email || email,
+              roles: tokenPayload.roles || [],
+              tokenType: tokenPayload.tokenType || tokenPayload.token_type,
+              expiresIn: tokenPayload.expiresIn || tokenPayload.expires_in,
+            };
+            window.saveTokens(accessToken, refreshToken, expiresAt, metadata);
+            console.log('[Step 6] ✅ Tokens saved successfully');
+
+            // Set user context in Sentry for error tracking
+            setUser({
+              id: tokenPayload.sub || tokenPayload.userId,
+              email: tokenPayload.email || email,
+            });
+          }
         } else {
           console.warn('[Step 6] saveTokens function not available - tokens not saved');
         }
@@ -861,6 +649,18 @@ class AuthAPI {
       return data;
     } catch (error) {
       console.error('[Step 6] Login error:', error);
+
+      // Report login errors to Sentry (excluding rate limits and user input errors)
+      if (error.status !== 429 && error.status !== 400 && error.status !== 401) {
+        captureException(error, {
+          tags: {
+            flow: 'authentication',
+            error_type: 'login_failed',
+            status: error.status,
+          },
+        });
+      }
+
       throw error;
     }
   }
@@ -868,14 +668,13 @@ class AuthAPI {
   // Step 6: Validate token - Keep tokens fresh when app reloads
   async validateToken() {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/auth/validate`;
-      } else {
-        url = `${this.baseUrl}/api/auth/validate`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/auth/validate',
+      });
       
-      console.log('[Step 6] Validating token:', url);
+      devLog('[Step 6] Validating token:', url);
       
       // Note: Authorization header will be added automatically by HttpClient
       // But since we're using fetch directly, we need to add it manually
@@ -893,20 +692,13 @@ class AuthAPI {
         'Authorization': `Bearer ${accessToken}`,
       };
       
-      const response = await fetch(url, {
+      const data = await requestJson({
+        url,
         method: 'POST',
         headers,
-        body: JSON.stringify({ accessToken }), // Some endpoints require explicit payload
+        body: { accessToken },
       });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Token validation error (${response.status}):`, errorText);
-        throw new Error(`Token validation failed: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('[Step 6] Token validation response:', data);
+      devLog('[Step 6] Token validation response:', data);
       return data;
     } catch (error) {
       console.error('[Step 6] Token validation error:', error);
@@ -917,14 +709,13 @@ class AuthAPI {
   // Step 6: Refresh token - Refresh expired tokens
   async refreshToken() {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/auth/refresh`;
-      } else {
-        url = `${this.baseUrl}/api/auth/refresh`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/auth/refresh',
+      });
       
-      console.log('[Step 6] Refreshing token:', url);
+      devLog('[Step 6] Refreshing token:', url);
       
       const refreshToken = typeof window.getRefreshToken === 'function' 
         ? window.getRefreshToken() 
@@ -939,25 +730,26 @@ class AuthAPI {
         'Content-Type': 'application/json',
       };
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ refreshToken }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Token refresh error (${response.status}):`, errorText);
-        const isRateLimit = response.status === 429;
+      let data;
+      try {
+        data = await requestJson({
+          url,
+          method: 'POST',
+          headers,
+          body: { refreshToken },
+        });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string' ? error.payload : JSON.stringify(error.payload);
+        console.error(`[Step 6] Token refresh error (${error.status || 'unknown'}):`, payloadText || error);
+        const isRateLimit = error.status === 429;
         // If refresh fails for other reasons, clear tokens and return to auth step
         if (!isRateLimit && typeof window.clearTokens === 'function') {
           window.clearTokens();
         }
-        throw new Error(`Token refresh failed: ${response.status} - ${errorText}`);
+        throw new Error(`Token refresh failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
       
-      const data = await response.json();
-      console.log('[Step 6] Token refresh response:', data);
+      devLog('[Step 6] Token refresh response:', data);
       
       const tokenPayload = data?.data ?? data;
       const newAccessToken = tokenPayload.accessToken || tokenPayload.access_token;
@@ -979,6 +771,14 @@ class AuthAPI {
           expiresIn: expiresIn,
         };
         window.saveTokens(newAccessToken, newRefreshToken, newExpiresAt, metadata);
+        
+        // Update header auth indicator after token refresh
+        refreshHeaderAuthIndicator();
+        
+        // Dispatch event to notify React components
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('auth-state-changed'));
+        }
       }
       
       return tokenPayload;
@@ -994,16 +794,15 @@ class AuthAPI {
   // appId is optional - if not provided, BRP will use default setting for reset link
   async resetPassword(email, appId = null) {
     try {
-      let url;
-      if (this.useProxy) {
-        // Use ver3 endpoint path - proxy will route to correct base URL
-        url = `${this.baseUrl}?path=/api/ver3/auth/resetpassword`;
-      } else {
-        // Direct call to ver3 API
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/auth/resetpassword`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: '/api/ver3/auth/resetpassword',
+          })
+        : 'https://boulders.brpsystems.com/apiserver/api/ver3/auth/resetpassword';
       
-      console.log('[Step 6] Requesting password reset:', url);
+      devLog('[Step 6] Requesting password reset:', url);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
@@ -1020,36 +819,25 @@ class AuthAPI {
         }
       }
       
-      console.log('[Step 6] Password reset payload:', payload);
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      // API returns 201 (CREATED) on success, even if email doesn't match (security measure)
-      if (response.status !== 201 && !response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Password reset error (${response.status}):`, errorText);
-        throw new Error(`Password reset failed: ${response.status} - ${errorText}`);
+      devLog('[Step 6] Password reset payload:', payload);
+
+      let data;
+      try {
+        data = await requestJson({
+          url,
+          method: 'POST',
+          headers,
+          body: payload,
+          expectJson: false,
+        });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string' ? error.payload : JSON.stringify(error.payload);
+        console.error(`[Step 6] Password reset error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Password reset failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      // API may return empty body on 201, or JSON response
-      let data = null;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        try {
-          data = await response.json();
-        } catch (e) {
-          // Empty response is OK for 201 status
-          console.log('[Step 6] Password reset returned 201 with no JSON body (expected)');
-        }
-      }
-      
-      console.log('[Step 6] Password reset response:', response.status, data);
-      // Return success indication
-      return { success: true, status: response.status, data };
+
+      devLog('[Step 6] Password reset response:', data);
+      return { success: true, data };
     } catch (error) {
       console.error('[Step 6] Password reset error:', error);
       throw error;
@@ -1114,6 +902,22 @@ class AuthAPI {
         const errorLower = errorMessage.toLowerCase();
         const errorCode = errorData?.errorCode || '';
         const errorCodeLower = errorCode.toLowerCase();
+
+        // Handle validation errors for email (e.g., incomplete/invalid email)
+        const validationDetails = errorData?.error?.details;
+        const emailValidationDetail = Array.isArray(validationDetails)
+          ? validationDetails.find(detail => {
+              const field = (detail?.field || '').toLowerCase();
+              return field.includes('email') || field === 'customer.email';
+            })
+          : null;
+        if (emailValidationDetail) {
+          const validationError = new Error('Please enter a valid email address.');
+          validationError.status = response.status;
+          validationError.isInvalidEmail = true;
+          validationError.validationDetail = emailValidationDetail;
+          throw validationError;
+        }
         
         // Check for EMAIL_ALREADY_EXISTS error code (from API docs)
         const hasEmailExistsErrorCode = 
@@ -1234,26 +1038,13 @@ class AuthAPI {
     }
 
     try {
-      // Set loading flag
-      state.customerDataLoading = true;
-
-      const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      let url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/customers/${customerId}`,
+      });
       
-      let url;
-      if (this.useProxy) {
-        // Use proxy with path parameter (Cloudflare/Netlify)
-        url = `${this.baseUrl}?path=/api/ver3/customers/${customerId}`;
-      } else if (isDevelopment) {
-        // In development, use Vite proxy (relative URL)
-        // Vite proxy forwards /api/* to the correct API server
-        url = `/api/ver3/customers/${customerId}`;
-      } else {
-        // Direct API call - ver3 endpoints use boulders.brpsystems.com/apiserver
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}`;
-      }
-      
-      console.log('[Step 6] Fetching customer profile:', url);
-      console.log('[Step 6] Proxy settings:', { useProxy: this.useProxy, baseUrl: this.baseUrl, isDevelopment });
+      devLog('[Step 6] Fetching customer profile:', url);
       
       const accessToken = typeof window.getAccessToken === 'function' 
         ? window.getAccessToken() 
@@ -1268,33 +1059,51 @@ class AuthAPI {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       };
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 6] Get customer error (${response.status}):`, errorText);
-        throw new Error(`Get customer failed: ${response.status} - ${errorText}`);
+
+      try {
+        const data = await requestJson({ url, headers });
+        devLog('[Step 6] Get customer response:', data);
+
+        const hasProfileDetails = Boolean(
+          data?.firstName ||
+          data?.lastName ||
+          data?.shippingAddress ||
+          data?.address ||
+          data?.mobilePhone ||
+          data?.phone ||
+          data?.phoneNumber
+        );
+
+        if (!hasProfileDetails) {
+          const fallbackUrl = this.useProxy
+            ? buildApiUrl({
+                baseUrl: this.baseUrl,
+                useProxy: this.useProxy,
+                path: `/api/ver3/customers/${customerId}`,
+              })
+            : `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}`;
+          devWarn('[Step 6] Customer profile missing details. Retrying with ver3:', fallbackUrl);
+          const fallbackData = await requestJson({ url: fallbackUrl, headers });
+          devLog('[Step 6] Get customer response (ver3):', fallbackData);
+          return fallbackData;
+        }
+
+        return data;
+      } catch (error) {
+        if (error.status === 404 && this.useProxy) {
+          // Fallback to ver3 endpoint if legacy customer profile requires it
+          const fallbackUrl = buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/customers/${customerId}`,
+          });
+          devWarn('[Step 6] Customer profile not found on /api/customers. Retrying:', fallbackUrl);
+          const data = await requestJson({ url: fallbackUrl, headers });
+          devLog('[Step 6] Get customer response (ver3):', data);
+          return data;
+        }
+        throw error;
       }
-      
-      const data = await response.json();
-      console.log('[Step 6] Get customer response:', data);
-      console.log('[Step 6] Customer data details:', {
-        id: data?.id,
-        email: data?.email,
-        firstName: data?.firstName,
-        lastName: data?.lastName
-      });
-      
-      // Cache the result
-      state.authenticatedCustomer = data;
-      state.authenticatedCustomerTimestamp = Date.now();
-      state.customerDataLoading = false;
-      
-      return data;
     } catch (error) {
       state.customerDataLoading = false;
       console.error('[Step 6] Get customer error:', error);
@@ -2717,67 +2526,11 @@ class AuthAPI {
   const LOGIN_SESSION_COOKIE = 'boulders_login_session';
   let tokenStore = null; // Memory-first storage
 
-  const encodeTokenData = (tokenData) => {
-    const payload = JSON.stringify(tokenData);
-    try {
-      if (typeof btoa === 'function') {
-        return btoa(payload);
-      }
-    } catch (error) {
-      console.warn('[Step 6] Could not base64 encode token data:', error);
-    }
-    try {
-      return encodeURIComponent(payload);
-    } catch (error) {
-      console.warn('[Step 6] Could not URI encode token data:', error);
-    }
-    return payload;
-  };
-
-  const decodeTokenData = (value) => {
-    if (!value) return null;
-    try {
-      if (typeof atob === 'function') {
-        return JSON.parse(atob(value));
-      }
-    } catch (error) {
-      // Fallback to URI decoding below
-    }
-    try {
-      return JSON.parse(decodeURIComponent(value));
-    } catch (error) {
-      console.warn('[Step 6] Could not decode login session cookie:', error);
-      return null;
-    }
-  };
-
-  const writeLoginSessionCookie = (tokenData) => {
-    if (typeof document === 'undefined') return;
-    try {
-      const encoded = encodeTokenData(tokenData);
-      const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
-      document.cookie = `${LOGIN_SESSION_COOKIE}=${encoded}; path=/; SameSite=Lax${secureFlag}`;
-    } catch (error) {
-      console.warn('[Step 6] Could not write login session cookie:', error);
-    }
-  };
-
-  const readLoginSessionCookie = () => {
-    if (typeof document === 'undefined' || !document.cookie) return null;
-    const cookies = document.cookie.split(';');
-    const match = cookies.find((cookie) => cookie.trim().startsWith(`${LOGIN_SESSION_COOKIE}=`));
-    if (!match) return null;
-    const value = match.substring(match.indexOf('=') + 1).trim();
-    return decodeTokenData(value);
-  };
-
-  const clearLoginSessionCookie = () => {
-    if (typeof document === 'undefined') return;
-    document.cookie = `${LOGIN_SESSION_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
-  };
-
-  const hydrateFromCookie = () => {
-    const cookieData = readLoginSessionCookie();
+  const getCookieData = () => readLoginSessionCookie(LOGIN_SESSION_COOKIE);
+  const persistCookie = (tokenData) => writeLoginSessionCookie(LOGIN_SESSION_COOKIE, tokenData);
+  const clearCookie = () => clearLoginSessionCookie(LOGIN_SESSION_COOKIE);
+  const loadCookieTokens = () => {
+    const cookieData = getCookieData();
     if (cookieData) {
       tokenStore = cookieData;
     }
@@ -2795,7 +2548,10 @@ class AuthAPI {
   }
 
   if (!tokenStore) {
-    hydrateFromCookie();
+    const cookieData = hydrateFromCookie(LOGIN_SESSION_COOKIE);
+    if (cookieData) {
+      tokenStore = cookieData;
+    }
   }
 
   // Step 6: saveTokens - Persist tokens in session store and cookie
@@ -2809,7 +2565,18 @@ class AuthAPI {
       console.warn('[Step 6] Could not save tokens to sessionStorage:', error);
     }
 
-    writeLoginSessionCookie(tokenData);
+    persistCookie(tokenData);
+    
+    // Update header auth indicator when tokens are saved
+    // Use setTimeout to ensure DOM is ready (in case this is called during page load)
+    setTimeout(() => {
+      refreshHeaderAuthIndicator();
+    }, 0);
+    
+    // Dispatch event to notify React components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('auth-state-changed'));
+    }
   };
 
   // Step 6: getAccessToken - Get access token from session store/cookie
@@ -2830,7 +2597,7 @@ class AuthAPI {
       console.warn('[Step 6] Could not read tokens from sessionStorage:', error);
     }
 
-    const cookieTokens = hydrateFromCookie();
+    const cookieTokens = loadCookieTokens();
     return cookieTokens?.accessToken || null;
   };
 
@@ -2852,7 +2619,7 @@ class AuthAPI {
       console.warn('[Step 6] Could not read tokens from sessionStorage:', error);
     }
     
-    const cookieTokens = hydrateFromCookie();
+    const cookieTokens = loadCookieTokens();
     return cookieTokens?.refreshToken || null;
   };
 
@@ -2873,7 +2640,7 @@ class AuthAPI {
       console.warn('[Step 6] Could not read token metadata from sessionStorage:', error);
     }
 
-    const cookieTokens = hydrateFromCookie();
+    const cookieTokens = loadCookieTokens();
     return cookieTokens?.metadata || null;
   };
 
@@ -2887,12 +2654,20 @@ class AuthAPI {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
 
-    clearLoginSessionCookie();
+    clearCookie();
+    
+    // Update header auth indicator when tokens are cleared
+    refreshHeaderAuthIndicator();
+    
+    // Dispatch event to notify React components
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('auth-state-changed'));
+    }
   };
 
   // Check if token is expired
   window.isTokenExpired = function() {
-    const activeStore = tokenStore ?? readLoginSessionCookie();
+    const activeStore = tokenStore ?? getCookieData();
     if (!activeStore?.expiresAt) {
       return false;
     }
@@ -2905,30 +2680,10 @@ class AuthAPI {
 // Handles order creation, adding items (subscriptions, value cards, articles), and order management
 class OrderAPI {
   constructor(baseUrl = null) {
-    // Use same proxy logic as BusinessUnitsAPI
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Development: use Vite proxy (relative URL)
-      this.baseUrl = '';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('pages.dev') ||
-               window.location.hostname.includes('join.boulders.dk') ||
-               window.location.hostname === 'boulders.dk') {
-      // Production: use Cloudflare Pages Function proxy
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev')) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
+    this.isDevelopment = config.isDevelopment;
   }
 
   // Step 7: Create order - POST /api/orders
@@ -2938,13 +2693,12 @@ class OrderAPI {
       if (!orderData.businessUnit && state.selectedBusinessUnit) {
         orderData.businessUnit = state.selectedBusinessUnit;
       }
-      
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders`;
-      } else {
-        url = `${this.baseUrl}/api/orders`;
-      }
+
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/orders',
+      });
       
       console.log('[Step 7] Creating order:', url);
       
@@ -2958,19 +2712,16 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(orderData),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Create order error (${response.status}):`, errorText);
-        throw new Error(`Create order failed: ${response.status} - ${errorText}`);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: orderData });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Create order error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Create order failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Create order response:', data);
 
       const createdOrderId = data?.id ?? data?.orderId ?? data?.data?.id ?? data?.data?.orderId;
@@ -2988,14 +2739,16 @@ class OrderAPI {
 
   // Step 7: Add subscription item (membership) - POST /api/ver3/orders/{orderId}/items/subscriptions
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
-  async addSubscriptionItem(orderId, productId) {
+  // @param {string} [startDateOverride] - Optional start date YYYY-MM-DD. For 15-day pass, use state.subscriptionStartDate or today.
+  async addSubscriptionItem(orderId, productId, startDateOverride) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/subscriptions`;
-      } else {
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/items/subscriptions`,
+          })
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions`;
       
       console.log('[Step 7] Adding subscription item:', url);
       
@@ -3034,18 +2787,17 @@ class OrderAPI {
       const subscriberId = state.customerId ? Number(state.customerId) : null;
       const birthDate = getSubscriberBirthDate();
       
-      // Set start date to today so membership starts immediately
+      // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
-      const todayDate = new Date();
-      const startDate = todayDate.toISOString().split('T')[0]; // e.g., "2026-01-05"
+      const startDate = (startDateOverride && /^\d{4}-\d{2}-\d{2}$/.test(startDateOverride))
+        ? startDateOverride
+        : getTodayLocalDateString();
       
-      // CRITICAL BACKEND BUG: Backend ignores startDate parameter for productId 134 ("Medlemskab")
-      // but accepts it for productId 56 ("Junior") and productId 135 ("Student").
-      // This causes backend to set initialPaymentPeriod.start to future date (next month)
-      // for productId 134, preventing partial-month pricing calculation.
-      // This is a backend issue that needs to be fixed on backend side.
-      // Workaround: Frontend calculates partial-month pricing client-side for display,
-      // but payment window will still show full monthly price because backend uses its own calculation.
+      // Pricing calculation: When startDate is on day 16 or later, price includes:
+      // - Rest of current month (prorated) + Full next month
+      // When startDate is before day 16, price includes:
+      // - Rest of current month only (prorated)
+      // Frontend calculation now matches backend logic to ensure price consistency.
       
       // Build payload according to OpenAPI spec:
       // Required: subscriptionProduct, birthDate
@@ -3060,21 +2812,23 @@ class OrderAPI {
         // ...(state.selectedBusinessUnit ? { businessUnit: state.selectedBusinessUnit } : {}),
       };
       
-      // Log warning if this is productId 134 (known backend bug)
+      // Log pricing calculation details for productId 134 for verification
       if (subscriptionProductId === 134) {
-        console.warn('[Step 7] ⚠️ BACKEND BUG: Adding subscription for productId 134 ("Medlemskab")');
-        console.warn('[Step 7] ⚠️ Backend will ignore startDate parameter and set start date to future');
-        console.warn('[Step 7] ⚠️ This prevents partial-month pricing calculation on backend');
-        console.warn('[Step 7] ⚠️ Frontend will calculate partial-month pricing client-side for display');
-        console.warn('[Step 7] ⚠️ But payment window will show full monthly price (backend bug)');
-        console.warn('[Step 7] ⚠️ This is a backend issue - backend should accept startDate for all products');
+        const dayOfMonth = new Date().getDate();
+        if (dayOfMonth >= 16) {
+          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
+          console.log('[Step 7] ℹ️ Day >= 16: Price will include rest of current month + full next month');
+        } else {
+          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
+          console.log('[Step 7] ℹ️ Day < 16: Price will include prorated rest of current month only');
+        }
       }
       
       console.log('[Step 7] Adding subscription item - productId:', productId);
       console.log('[Step 7] Extracted subscriptionProductId:', subscriptionProductId);
       console.log('[Step 7] Subscription item payload:', JSON.stringify(payload, null, 2));
       
-      // CRITICAL: Log payload details for debugging why backend ignores startDate for productId 134
+      // Log payload details for debugging and verification
       console.log('[Step 7] 🔍 Payload analysis:', {
         subscriptionProductId,
         productId,
@@ -3090,19 +2844,38 @@ class OrderAPI {
       });
       
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Add subscription item error (${response.status}):`, errorText);
-        throw new Error(`Add subscription item failed: ${response.status} - ${errorText}`);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        const errorPayload = error?.payload;
+        let errorData = errorPayload;
+        if (typeof errorPayload === 'string') {
+          try {
+            errorData = JSON.parse(errorPayload);
+          } catch (e) {
+            errorData = null;
+          }
+        }
+        const errorCode = errorData?.errorCode || errorData?.code;
+        if (errorCode === 'PRODUCT_NOT_ALLOWED') {
+          const blockedProductId = errorData?.id || subscriptionProductId;
+          console.warn(`[Step 7] ⚠️ Product ${blockedProductId} is not allowed for this customer (campaign eligibility restriction)`);
+          
+          // Create a custom error that can be identified in catch blocks
+          const restrictionError = new Error('PRODUCT_NOT_ALLOWED: This offer is not available for your account due to campaign restrictions.');
+          restrictionError.isProductNotAllowed = true;
+          restrictionError.productId = blockedProductId;
+          restrictionError.originalError = errorPayload;
+          throw restrictionError;
+        }
+
+        const payloadText = typeof errorPayload === 'string'
+          ? errorPayload
+          : JSON.stringify(errorPayload);
+        console.error(`[Step 7] Add subscription item error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Add subscription item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Add subscription item response:', data);
       
       // CRITICAL: Check if backend accepted startDate
@@ -3131,15 +2904,25 @@ class OrderAPI {
       });
       
       // CRITICAL: If backend ignored startDate, attempt to fix with multiple strategies
-      // This ensures correct pricing for ALL products, not just specific ones
+      // Only attempt when price mismatch is significant (avoid churn on rounding diffs)
       if (startDateIgnored && subscriptionItem?.id) {
+        const expectedPrice = this._calculateExpectedPartialMonthPrice(subscriptionProductId, startDate);
+        const orderPriceInCents = typeof responseOrderPrice === 'object'
+          ? responseOrderPrice.amount
+          : responseOrderPrice;
+        const priceDifference = expectedPrice && Number.isFinite(orderPriceInCents)
+          ? Math.abs(orderPriceInCents - expectedPrice.amountInCents)
+          : null;
+
+        if (priceDifference !== null && priceDifference <= 100) {
+          console.warn('[Step 7] ⚠️ Backend ignored startDate but price difference is within rounding tolerance:', priceDifference, 'cents');
+          return data;
+        }
+
         console.warn('[Step 7] ⚠️ Backend ignored startDate - start date is', daysUntilStart, 'days in future');
         console.warn('[Step 7] ⚠️ Product ID:', subscriptionProductId);
         console.warn('[Step 7] ⚠️ Attempting to fix with multiple strategies...');
-        
-        // Calculate expected price for verification
-        const expectedPrice = this._calculateExpectedPartialMonthPrice(subscriptionProductId, startDate);
-        
+
         // Try multiple strategies to fix backend pricing
         const fixedData = await this._fixBackendPricingBug(
           orderId,
@@ -3154,19 +2937,67 @@ class OrderAPI {
         );
         
         if (fixedData) {
+          // CRITICAL: Update subscription item ID after pricing fix
+          // The pricing fix deletes and re-adds the subscription item, creating a NEW ID
+          // We must update state.subscriptionItemId with the new ID, otherwise addons will fail with ID_NOT_FOUND
+          const newSubscriptionItem = fixedData?.subscriptionItems?.[0];
+          if (newSubscriptionItem?.id) {
+            const oldSubscriptionItemId = state.subscriptionItemId;
+            state.subscriptionItemId = newSubscriptionItem.id;
+            console.log('[Step 7] ✅ Updated subscription item ID after pricing fix:', {
+              oldId: oldSubscriptionItemId,
+              newId: state.subscriptionItemId
+            });
+          }
           return fixedData;
         }
         
         // If all strategies failed, log detailed error
-        console.error('[Step 7] ❌ All strategies failed to fix backend pricing bug for productId:', subscriptionProductId);
-        console.error('[Step 7] ❌ Payment window will show incorrect price');
-        console.error('[Step 7] ❌ Cart summary will calculate and show correct price');
+        console.error('[Step 7] ❌ All strategies failed to fix pricing mismatch for productId:', subscriptionProductId);
+        console.error('[Step 7] ❌ Order may have pricing discrepancy - verification will continue');
       }
       
       return data;
     } catch (error) {
       console.error('[Step 7] Add subscription item error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Delete subscription item from order. Used when user changes 15-day pass activation date.
+   * @param {string|number} orderId - Order ID
+   * @param {number} subscriptionItemId - Subscription item ID to delete
+   * @returns {Promise<boolean>} true if deleted, false if failed
+   */
+  async deleteSubscriptionItem(orderId, subscriptionItemId) {
+    try {
+      const deleteUrl = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`,
+          })
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`;
+
+      const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+      await requestJson({
+        url: deleteUrl,
+        method: 'DELETE',
+        headers: {
+          'Accept-Language': getAcceptLanguageHeader(),
+          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+        },
+        expectJson: false,
+      });
+      return true;
+    } catch (error) {
+      if (error.status === 403) {
+        console.warn('[OrderAPI] Cannot delete subscription item (403) - order may be locked');
+      } else {
+        console.warn('[OrderAPI] Failed to delete subscription item:', error);
+      }
+      return false;
     }
   }
 
@@ -3209,8 +3040,23 @@ class OrderAPI {
     const dayOfMonth = today.getDate();
     const daysRemainingInMonth = daysInCurrentMonth - dayOfMonth + 1;
     
-    // Calculate prorated price
-    const proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+    // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
+    // Otherwise: just rest of current month (prorated)
+    let proratedPriceInCents;
+    let includesNextMonth = false;
+    
+    if (dayOfMonth >= 16) {
+      // Calculate: (rest of current month) + (full next month)
+      const partialCurrentMonthPrice = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+      const fullNextMonthPrice = monthlyPriceInCents;
+      proratedPriceInCents = partialCurrentMonthPrice + fullNextMonthPrice;
+      includesNextMonth = true;
+      console.log(`[Price Calculation] Day ${dayOfMonth} >= 16: Calculating rest of month (${daysRemainingInMonth} days) + full next month`);
+    } else {
+      // Calculate: just rest of current month (prorated)
+      proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+      console.log(`[Price Calculation] Day ${dayOfMonth} < 16: Calculating prorated price for remaining ${daysRemainingInMonth} days`);
+    }
     
     return {
       amountInCents: proratedPriceInCents,
@@ -3218,7 +3064,8 @@ class OrderAPI {
       daysRemaining: daysRemainingInMonth,
       daysInMonth: daysInCurrentMonth,
       monthlyPriceInCents,
-      monthlyPriceInDKK: monthlyPriceInCents / 100
+      monthlyPriceInDKK: monthlyPriceInCents / 100,
+      includesNextMonth // Flag to indicate if next month is included
     };
   }
 
@@ -3239,40 +3086,70 @@ class OrderAPI {
   async _fixBackendPricingBug(orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today) {
     // Strategy 1: Delete and re-add with same payload (sometimes backend needs fresh start)
     console.log('[Step 7] Strategy 1: Delete and re-add with same payload');
-    const strategy1Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today
-    );
-    if (strategy1Result) return strategy1Result;
-    
-    // Strategy 2: Try with explicit date format
-    console.log('[Step 7] Strategy 2: Try with explicit date format');
-    const todayExplicit = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    if (todayExplicit !== basePayload.startDate) {
-      const payloadVariant = { ...basePayload, startDate: todayExplicit };
-      const strategy2Result = await this._tryStrategyDeleteAndReadd(
-        orderId, url, headers, subscriptionItemId, payloadVariant, productId, expectedPrice, accessToken, today
+    try {
+      const strategy1Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today
       );
-      if (strategy2Result) return strategy2Result;
+      if (strategy1Result) return strategy1Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked (403 Forbidden) - cannot modify subscription item');
+        console.warn('[Step 7] ⚠️ Skipping remaining fix strategies - order cannot be modified');
+        return null; // Order is locked, can't fix
+      }
+      // Other error - continue to next strategy
+    }
+    
+    // Strategy 2: Try with explicit date format (using helper function for consistency)
+    console.log('[Step 7] Strategy 2: Try with explicit date format');
+    try {
+      const todayExplicit = getTodayLocalDateString();
+      if (todayExplicit !== basePayload.startDate) {
+        const payloadVariant = { ...basePayload, startDate: todayExplicit };
+        const strategy2Result = await this._tryStrategyDeleteAndReadd(
+          orderId, url, headers, subscriptionItemId, payloadVariant, productId, expectedPrice, accessToken, today
+        );
+        if (strategy2Result) return strategy2Result;
+      }
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - skipping remaining strategies');
+        return null;
+      }
     }
     
     // Strategy 3: Try minimal payload (only required fields)
     console.log('[Step 7] Strategy 3: Try minimal payload');
-    const minimalPayload = {
-      subscriptionProduct: basePayload.subscriptionProduct,
-      startDate: basePayload.startDate,
-      ...(basePayload.birthDate ? { birthDate: basePayload.birthDate } : {}),
-    };
-    const strategy3Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, minimalPayload, productId, expectedPrice, accessToken, today
-    );
-    if (strategy3Result) return strategy3Result;
+    try {
+      const minimalPayload = {
+        subscriptionProduct: basePayload.subscriptionProduct,
+        startDate: basePayload.startDate,
+        ...(basePayload.birthDate ? { birthDate: basePayload.birthDate } : {}),
+      };
+      const strategy3Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, minimalPayload, productId, expectedPrice, accessToken, today
+      );
+      if (strategy3Result) return strategy3Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - skipping remaining strategies');
+        return null;
+      }
+    }
     
     // Strategy 4: Try with longer wait time (backend might need more time to process)
     console.log('[Step 7] Strategy 4: Try with longer wait time');
-    const strategy4Result = await this._tryStrategyDeleteAndReadd(
-      orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today, 2000
-    );
-    if (strategy4Result) return strategy4Result;
+    try {
+      const strategy4Result = await this._tryStrategyDeleteAndReadd(
+        orderId, url, headers, subscriptionItemId, basePayload, productId, expectedPrice, accessToken, today, 2000
+      );
+      if (strategy4Result) return strategy4Result;
+    } catch (error) {
+      if (error.isOrderLocked) {
+        console.warn('[Step 7] ⚠️ Order is locked - all strategies failed');
+        return null;
+      }
+    }
     
     return null; // All strategies failed
   }
@@ -3296,27 +3173,36 @@ class OrderAPI {
     try {
       // Delete subscription item
       const deleteUrl = this.useProxy
-        ? `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`,
+          })
         : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/subscriptions/${subscriptionItemId}`;
-      
-      const deleteResponse = await fetch(deleteUrl, {
-        method: 'DELETE',
-        headers: {
-          ...headers,
-          ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-        },
-      });
-      
-      if (!deleteResponse.ok) {
-        // 403 Forbidden means we don't have permission - this is expected for certain order states
-        // Don't log as error, just skip this strategy
-        if (deleteResponse.status === 403) {
+
+      try {
+        await requestJson({
+          url: deleteUrl,
+          method: 'DELETE',
+          headers: {
+            ...headers,
+            ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+          },
+          expectJson: false,
+        });
+      } catch (error) {
+        if (error.status === 403) {
           console.log('[Step 7] Cannot delete subscription item (403 Forbidden) - order may be in a state that prevents modification');
-          return null; // Skip this strategy - we don't have permission
+          // Throw a specific error so caller knows order is locked
+          const lockedError = new Error('Order is locked (403 Forbidden)');
+          lockedError.isOrderLocked = true;
+          lockedError.status = 403;
+          throw lockedError;
         }
-        // Other errors - log and skip
-        const errorText = await deleteResponse.text().catch(() => 'Unknown error');
-        console.warn('[Step 7] Failed to delete subscription item:', deleteResponse.status, errorText);
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.warn('[Step 7] Failed to delete subscription item:', error.status || 'unknown', payloadText || error);
         return null; // Can't delete, skip this strategy
       }
       
@@ -3324,17 +3210,12 @@ class OrderAPI {
       await new Promise(resolve => setTimeout(resolve, waitTime));
       
       // Re-add subscription
-      const retryResponse = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      if (!retryResponse.ok) {
+      let retryData;
+      try {
+        retryData = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
         return null; // Re-add failed, skip this strategy
       }
-      
-      const retryData = await retryResponse.json();
       
       // Verify pricing is correct
       const verification = this._verifySubscriptionPricing(retryData, productId, expectedPrice, today);
@@ -3377,10 +3258,12 @@ class OrderAPI {
     
     // Check if price is correct
     let priceCorrect = false;
-    if (expectedPrice && startDateCorrect) {
-      // If start date is correct, price should match expected partial-month price
-      const priceDifference = Math.abs(orderPriceInCents - expectedPrice.amountInCents);
-      priceCorrect = priceDifference <= 10; // Allow 10 cents difference for rounding
+    const priceDifference = expectedPrice
+      ? Math.abs(orderPriceInCents - expectedPrice.amountInCents)
+      : null;
+    if (expectedPrice) {
+      // Allow up to 1 DKK difference to account for backend rounding
+      priceCorrect = priceDifference <= 100;
     }
     
     const isCorrect = startDateCorrect && priceCorrect;
@@ -3390,6 +3273,7 @@ class OrderAPI {
       startDateCorrect,
       priceCorrect,
       daysUntilStart,
+      priceDifference,
       orderPriceInCents,
       orderPriceDKK: orderPriceInCents / 100,
       expectedPriceInCents: expectedPrice?.amountInCents || null,
@@ -3404,14 +3288,15 @@ class OrderAPI {
 
   // Step 7: Add value card item (punch card) - POST /api/ver3/orders/{orderId}/items/valuecards
   // API Documentation: https://boulders.brpsystems.com/brponline/external/documentation/api3
-  async addValueCardItem(orderId, productId, quantity = 1) {
+  async addValueCardItem(orderId, productId, quantity = 1, additionTo = null, amountInCentsFromCaller = null) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/items/valuecards`;
-      } else {
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/valuecards`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/items/valuecards`,
+          })
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/items/valuecards`;
       
       console.log('[Step 7] Adding value card item:', url);
       
@@ -3425,30 +3310,47 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      // API Documentation requires 'valueCardProduct' field (integer, required)
-      // Optional fields: receiverDetails, senderDetails, amount, externalMessage, additionTo
-      // Note: quantity is handled by repeating the request or backend logic, not in payload
-      const payload = {
-        valueCardProduct: productId, // Required: Value card product ID (integer)
-        // quantity is not in API spec - backend may handle it differently
-        // businessUnit is not in API spec - may be inferred from order context
-      };
-      
-      console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Add value card item error (${response.status}):`, errorText);
-        throw new Error(`Add value card item failed: ${response.status} - ${errorText}`);
+      // Resolve amount (price in cents). Backend may require 'amount' (FIELD_MANDATORY).
+      let amount = 0;
+      if (amountInCentsFromCaller != null && typeof amountInCentsFromCaller === 'number' && !Number.isNaN(amountInCentsFromCaller)) {
+        amount = Math.round(amountInCentsFromCaller);
+      } else {
+        const allValueCards = [
+          ...(state.valueCards || []),
+          ...(state.campaignValueCards || []),
+        ];
+        const valueCardProduct = allValueCards.find(p =>
+          p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)
+        ) || (state.allRawProducts || []).find(p =>
+          (p.id === productId || p.id === Number(productId) || String(p.id) === String(productId)) &&
+          (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || p.valueCardType !== undefined)
+        );
+        const priceObj = valueCardProduct?.price;
+        const amountInCents = priceObj != null
+          ? (typeof priceObj === 'object' && 'amount' in priceObj ? priceObj.amount : Number(priceObj))
+          : (valueCardProduct?.amount != null ? valueCardProduct.amount : 0);
+        amount = typeof amountInCents === 'number' && !Number.isNaN(amountInCents) ? Math.round(amountInCents) : 0;
       }
       
-      const data = await response.json();
+      // Send amount in cents (integer). Backend accepts 0 for free value cards.
+      const amountNum = typeof amount === 'number' && !Number.isNaN(amount) ? Math.round(amount) : 0;
+      const payload = {
+        valueCardProduct: productId,
+        amount: amountNum,
+        ...(additionTo != null ? { additionTo } : {}),
+      };
+      console.log('[Step 7] Value card payload:', JSON.stringify(payload, null, 2));
+      
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Add value card item error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Add value card item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+      }
       console.log('[Step 7] Add value card item response:', data);
       return data;
     } catch (error) {
@@ -3458,14 +3360,13 @@ class OrderAPI {
   }
 
   // Step 7: Add article item (add-ons/extras) - POST /api/orders/{orderId}/items/articles
-  async addArticleItem(orderId, productId) {
+  async addArticleItem(orderId, productId, additionTo = null) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders/${orderId}/items/articles`;
-      } else {
-        url = `${this.baseUrl}/api/orders/${orderId}/items/articles`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/orders/${orderId}/items/articles`,
+      });
       
       console.log('[Step 7] Adding article item:', url);
       
@@ -3479,24 +3380,26 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
+      // API expects 'articleProduct' not 'productId' per OpenAPI spec
+      // additionTo links this addon to the parent subscription item
       const payload = {
-        productId,
+        articleProduct: productId, // API field name is 'articleProduct'
         businessUnit: state.selectedBusinessUnit, // Always include active business unit
+        ...(additionTo ? { additionTo } : {}), // Link to parent subscription item if provided
       };
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
+      console.log('[Step 7] Add article item payload:', payload);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Add article item error (${response.status}):`, errorText);
-        throw new Error(`Add article item failed: ${response.status} - ${errorText}`);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Add article item error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Add article item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Add article item response:', data);
       return data;
     } catch (error) {
@@ -3508,12 +3411,11 @@ class OrderAPI {
   // Step 7: Get order - GET /api/orders/{orderId}
   async getOrder(orderId) {
     try {
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders/${orderId}`;
-      } else {
-        url = `${this.baseUrl}/api/orders/${orderId}`;
-      }
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/orders/${orderId}`,
+      });
       
       console.log('[Step 7] Getting order:', url);
       
@@ -3527,21 +3429,18 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Get order error (${response.status}):`, errorText);
-        const error = new Error(`Get order failed: ${response.status} - ${errorText}`);
-        // Store status code on error object for easier detection
-        error.status = response.status;
-        throw error;
+      let data;
+      try {
+        data = await requestJson({ url, headers });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Get order error (${error.status || 'unknown'}):`, payloadText || error);
+        const wrapped = new Error(`Get order failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        wrapped.status = error.status;
+        throw wrapped;
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Get order response:', data);
       return data;
     } catch (error) {
@@ -3557,13 +3456,12 @@ class OrderAPI {
       if (!orderData.businessUnit && state.selectedBusinessUnit) {
         orderData.businessUnit = state.selectedBusinessUnit;
       }
-      
-      let url;
-      if (this.useProxy) {
-        url = `${this.baseUrl}?path=/api/orders/${orderId}`;
-      } else {
-        url = `${this.baseUrl}/api/orders/${orderId}`;
-      }
+
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/orders/${orderId}`,
+      });
       
       console.log('[Step 7] Updating order:', url);
       
@@ -3577,19 +3475,16 @@ class OrderAPI {
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       };
       
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(orderData),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 7] Update order error (${response.status}):`, errorText);
-        throw new Error(`Update order failed: ${response.status} - ${errorText}`);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'PUT', headers, body: orderData });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 7] Update order error (${error.status || 'unknown'}):`, payloadText || error);
+        throw new Error(`Update order failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 7] Update order response:', data);
       return data;
     } catch (error) {
@@ -3604,14 +3499,13 @@ class OrderAPI {
   async applyDiscountCode(orderId, discountCode) {
     try {
       // ver3 endpoints use different base URL (boulders.brpsystems.com/apiserver)
-      let url;
-      if (this.useProxy) {
-        // Proxy will handle the ver3 endpoint routing
-        url = `${this.baseUrl}?path=/api/ver3/orders/${orderId}/coupons`;
-      } else {
-        // Direct API call - ver3 endpoints use different base URL
-        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: `/api/ver3/orders/${orderId}/coupons`,
+          })
+        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
       
       console.log('[Discount] Applying coupon:', discountCode, 'to order:', orderId);
       console.log('[Discount] Endpoint:', url);
@@ -3633,37 +3527,37 @@ class OrderAPI {
       
       console.log('[Discount] Request payload:', JSON.stringify(payload, null, 2));
       
-      // Try POST first (API returns 405 for PUT)
-      let response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      // If POST returns 405, the endpoint might not exist or need different path
-      // Try alternative endpoint structure if POST fails
-      if (response.status === 405 || response.status === 404) {
-        console.log('[Discount] POST returned', response.status, '- trying alternative endpoint...');
-        // Try with different path structure: /api/orders/{orderId}/coupon (singular)
-        const altUrl = this.useProxy 
-          ? `${this.baseUrl}?path=/api/orders/${orderId}/coupon`
-          : `${this.baseUrl}/api/orders/${orderId}/coupon`;
-        
-        console.log('[Discount] Trying alternative endpoint:', altUrl);
-        response = await fetch(altUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-        });
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        if (error.status === 405 || error.status === 404) {
+          console.log('[Discount] POST returned', error.status, '- trying alternative endpoint...');
+          const altUrl = this.useProxy
+            ? buildApiUrl({
+                baseUrl: this.baseUrl,
+                useProxy: this.useProxy,
+                path: `/api/orders/${orderId}/coupon`,
+              })
+            : `${this.baseUrl}/api/orders/${orderId}/coupon`;
+          console.log('[Discount] Trying alternative endpoint:', altUrl);
+          try {
+            data = await requestJson({ url: altUrl, method: 'POST', headers, body: payload });
+          } catch (altError) {
+            const payloadText = typeof altError.payload === 'string'
+              ? altError.payload
+              : JSON.stringify(altError.payload);
+            console.error(`[Discount] Apply coupon error (${altError.status || 'unknown'}):`, payloadText || altError);
+            throw new Error(`Apply coupon failed: ${altError.status || 'unknown'} - ${payloadText || altError.message}`);
+          }
+        } else {
+          const payloadText = typeof error.payload === 'string'
+            ? error.payload
+            : JSON.stringify(error.payload);
+          console.error(`[Discount] Apply coupon error (${error.status || 'unknown'}):`, payloadText || error);
+          throw new Error(`Apply coupon failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        }
       }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Discount] Apply coupon error (${response.status}):`, errorText);
-        throw new Error(`Apply coupon failed: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
       console.log('[Discount] Apply coupon response:', data);
       
       // Extract couponDiscount from response
@@ -3746,30 +3640,10 @@ class OrderAPI {
 // Handles payment link generation for checkout
 class PaymentAPI {
   constructor(baseUrl = null) {
-    // Use same proxy logic as BusinessUnitsAPI
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Development: use Vite proxy (relative URL)
-      this.baseUrl = '';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('pages.dev') ||
-               window.location.hostname.includes('join.boulders.dk') ||
-               window.location.hostname === 'boulders.dk') {
-      // Production: use Cloudflare Pages Function proxy
-      this.baseUrl = '/api-proxy';
-      this.useProxy = true;
-    } else if (window.location.hostname.includes('workers.dev')) {
-      // Cloudflare Workers don't have Pages Functions, use direct API
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    } else if (window.location.hostname.includes('netlify')) {
-      // Production: use Netlify Function proxy
-      this.baseUrl = '/.netlify/functions/api-proxy';
-      this.useProxy = true;
-    } else {
-      // Fallback to direct API (may have CORS issues)
-      this.baseUrl = 'https://api-join.boulders.dk';
-      this.useProxy = false;
-    }
+    const config = getApiConfig({ baseUrlOverride: baseUrl });
+    this.baseUrl = config.baseUrl;
+    this.useProxy = config.useProxy;
+    this.isDevelopment = config.isDevelopment;
     
     // Correct endpoint: /api/payment/generate-link
     // Base URL: https://api-join.boulders.dk
@@ -3789,9 +3663,7 @@ class PaymentAPI {
       // Build return URL if not provided
       if (!returnUrl && orderId) {
         const path = window.location.pathname || '/';
-        const baseUrl = isLocal
-          ? 'https://join.boulders.dk'
-          : window.location.origin.replace('http://', 'https://');
+        const baseUrl = getReturnUrlBase();
         returnUrl = `${baseUrl}${path}?payment=return&orderId=${orderId}`;
       }
       
@@ -3803,14 +3675,13 @@ class PaymentAPI {
         throw new Error('Order ID is required for payment link generation');
       }
       
-      let url;
-      if (this.useProxy) {
-        // Use standard API endpoint: /api/payment/generate-link
-        url = `${this.baseUrl}?path=${this.paymentEndpoint}`;
-      } else {
-        // Direct API call to api-join.boulders.dk
-        url = `https://api-join.boulders.dk${this.paymentEndpoint}`;
-      }
+      const url = this.useProxy
+        ? buildApiUrl({
+            baseUrl: this.baseUrl,
+            useProxy: this.useProxy,
+            path: this.paymentEndpoint,
+          })
+        : `https://api-join.boulders.dk${this.paymentEndpoint}`;
       
       console.log('[Step 9] ===== GENERATE PAYMENT LINK CARD REQUEST =====');
       console.log('[Step 9] Endpoint:', url);
@@ -3881,22 +3752,18 @@ class PaymentAPI {
       console.log('[Step 9] Request payload:', JSON.stringify(payload, null, 2));
       console.log('[Step 9] Sending Generate Payment Link Card request...');
       
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-      
-      console.log('[Step 9] Response status:', response.status, response.statusText);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Step 9] ❌ Generate Payment Link Card failed (${response.status}):`, errorText);
+      let data;
+      try {
+        data = await requestJson({ url, method: 'POST', headers, body: payload });
+      } catch (error) {
+        const payloadText = typeof error.payload === 'string'
+          ? error.payload
+          : JSON.stringify(error.payload);
+        console.error(`[Step 9] ❌ Generate Payment Link Card failed (${error.status || 'unknown'}):`, payloadText || error);
         
-        // If 403 Forbidden, log detailed information about why it might have failed
-        if (response.status === 403) {
+        if (error.status === 403) {
           console.error('[Step 9] ⚠️ 403 Forbidden - Possible reasons:');
-          console.error('[Step 9] ⚠️ 1. Order may have incorrect pricing (backend bug - startDate ignored)');
+          console.error('[Step 9] ⚠️ 1. Order may have pricing mismatch (price verification failed)');
           console.error('[Step 9] ⚠️ 2. Order may be in a state that prevents payment link generation');
           console.error('[Step 9] ⚠️ 3. Payment method may not be valid for this order');
           console.error('[Step 9] ⚠️ 4. Business unit may not match order');
@@ -3910,40 +3777,44 @@ class PaymentAPI {
             businessUnit: businessUnitId
           });
           
-          // Check if order price is incorrect (backend bug)
           const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
           if (subscriptionItem) {
             const productId = subscriptionItem?.product?.id;
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            const startDateStr = today.toISOString().split('T')[0];
+            const startDateStr = getTodayLocalDateString();
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
             const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
             
-            if (!verification.isCorrect) {
-              console.error('[Step 9] ❌ CONFIRMED: Order has incorrect pricing due to backend bug!');
+            if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
+              console.error('[Step 9] ❌ CONFIRMED: Order has pricing mismatch!');
               console.error('[Step 9] ❌ Backend shows:', verification.orderPriceDKK, 'DKK');
-              console.error('[Step 9] ❌ Should be:', verification.expectedPriceDKK || 'N/A', 'DKK');
-              console.error('[Step 9] ❌ This is why payment link generation is failing with 403');
-              console.error('[Step 9] ❌ Backend needs to fix startDate handling for productId:', productId);
+              console.error('[Step 9] ❌ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
+              console.error('[Step 9] ❌ This may cause payment link generation to fail with 403');
+              console.error('[Step 9] ❌ Product ID:', productId);
             }
           }
         }
         
-        throw new Error(`Generate Payment Link Card failed: ${response.status} - ${errorText}`);
+        throw new Error(`Generate Payment Link Card failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
-      
-      const data = await response.json();
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
       // API Response structure from backend example: { "url": "..." }
-      // Response is direct, not nested in data object
-      const paymentLink = data.url || 
-                         data.data?.url || 
-                         data.data?.paymentLink || 
-                         data.data?.link ||
-                         data.paymentLink || 
-                         data.link;
+      // We only use the payment provider URL. We do NOT redirect to Assently/signature case URLs.
+      const rawLink = data.url ||
+                     data.data?.url ||
+                     data.data?.paymentLink ||
+                     data.data?.link ||
+                     data.paymentLink ||
+                     data.link;
+      const isAssentlyUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
+      if (rawLink && isAssentlyUrl(rawLink)) {
+        console.error('[Step 9] ❌ API returned Assently/signature URL instead of payment link – refusing to use it');
+        console.error('[Step 9] URL was:', rawLink);
+        throw new Error('Payment link API returned a signature URL (Assently). Backend should return the payment provider URL only.');
+      }
+      const paymentLink = rawLink;
       
       if (!paymentLink) {
         console.error('[Step 9] ❌ No payment link in response!');
@@ -3968,30 +3839,6 @@ class PaymentAPI {
       throw error;
     }
   }
-}
-
-function stripEmailPlusTag(email) {
-  if (typeof email !== 'string') {
-    return email;
-  }
-  
-  const trimmed = email.trim();
-  const [localPart, domain] = trimmed.split('@');
-  if (!localPart || !domain) {
-    return trimmed;
-  }
-  
-  const plusIndex = localPart.indexOf('+');
-  if (plusIndex === -1) {
-    return trimmed;
-  }
-  
-  const cleanedLocal = localPart.substring(0, plusIndex);
-  const sanitized = `${cleanedLocal}@${domain}`;
-  if (sanitized !== trimmed) {
-    console.log('[Step 9] Receipt email sanitized (plus tag removed):', sanitized);
-  }
-  return sanitized;
 }
 
 function getSubscriberBirthDate() {
@@ -4054,6 +3901,7 @@ async function validateTokensOnLoad() {
       try {
         await authAPI.refreshToken();
         console.log('[Step 6] Token refreshed successfully');
+        // Header auth indicator will be updated by refreshToken() function
       } catch (error) {
         console.error('[Step 6] Token refresh failed, clearing session:', error);
         window.clearTokens();
@@ -4085,6 +3933,7 @@ async function validateTokensOnLoad() {
       try {
         await authAPI.refreshToken();
         console.log('[Step 6] Token refreshed after validation failure');
+        // Header auth indicator will be updated by refreshToken() function
       } catch (refreshError) {
         const refreshRateLimited = isRateLimitError(refreshError);
         if (refreshRateLimited) {
@@ -4204,6 +4053,9 @@ async function loadProductsFromAPI() {
       ? valueCardsResponse
       : (valueCardsResponse.data || valueCardsResponse.items || []);
 
+    // Store raw products before filtering (for boost product detection)
+    // This ensures boost products aren't missed if they're filtered out by display rules
+    state.allRawProducts = [...subscriptions, ...valueCards];
 
     // Filter out products that shouldn't be displayed according to OpenAPI documentation
     // Reference: docs/brp-api3-openapi.yaml - SubscriptionProductOut schema (line ~14970)
@@ -4394,11 +4246,43 @@ async function loadProductsFromAPI() {
       return true;
     });
     
+    // Separate value cards: those with "PublicCampaign" go to Campaign category
+    // Value cards with "PublicCampaign" should appear in Campaign, not in Punch Card category
+    const campaignValueCards = valueCards.filter(product => {
+      // Check if product has "PublicCampaign" label
+      const hasPublicCampaignLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === 'publiccampaign'
+      );
+      return hasPublicCampaignLabel;
+    });
+    
+    // Regular value cards (without "PublicCampaign") go to Punch Card category
+    const regularValueCards = valueCards.filter(product => {
+      const hasPublicCampaignLabel = product.productLabels?.some(
+        label => label.name && label.name.toLowerCase() === 'publiccampaign'
+      );
+      return !hasPublicCampaignLabel;
+    });
+
+    // Sort all product lists by price high to low (price in cents for consistent comparison)
+    const getProductPriceCents = (product) => {
+      const amount = product.priceWithInterval?.price?.amount ?? product.price?.amount ?? product.amount;
+      if (amount == null) return 0;
+      return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
+    };
+    const byPriceHighToLow = (a, b) => getProductPriceCents(b) - getProductPriceCents(a);
+    campaignSubscriptions.sort(byPriceHighToLow);
+    campaignValueCards.sort(byPriceHighToLow);
+    membershipSubscriptions.sort(byPriceHighToLow);
+    dayPassSubscriptions.sort(byPriceHighToLow);
+    regularValueCards.sort(byPriceHighToLow);
+
     // Store in state
     state.campaignSubscriptions = campaignSubscriptions;
+    state.campaignValueCards = campaignValueCards; // Value cards for Campaign category
     state.subscriptions = membershipSubscriptions;
     state.dayPassSubscriptions = dayPassSubscriptions;
-    state.valueCards = valueCards;
+    state.valueCards = regularValueCards; // Only non-campaign value cards go to Punch Card category
 
 
     // Re-render the membership plans with API data
@@ -4432,24 +4316,25 @@ function renderProductsFromAPI() {
                      product.currency || 
                      'DKK';
     
-    // Determine price unit from interval
+    // Determine price unit: 15-day pass is one-time payment (kr), others use interval (kr/mo, kr/year)
+    const is15DayPass = category === '15daypass';
     const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
-    const priceUnit = intervalUnit === 'MONTH' ? 'kr/mo' : 
-                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr';
+    const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
+                     intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
     
-    // Get description - prefer imageBanner.text for campaign products, otherwise use description
-    // For campaign products, check both imageBanner.text and description fields
+    // Get description - use externalDescription if available, otherwise fall back to description
+    // Do not show product number as fallback
     let description = '';
     if (category === 'campaign') {
-      // Campaign: prefer imageBanner.text, but fall back to description if imageBanner.text is empty or single-line
-      const bannerText = product.imageBanner?.text || '';
+      // Campaign: prefer externalDescription, but fall back to description if externalDescription is empty or single-line
+      const externalDesc = product.externalDescription || '';
       const descText = product.description || '';
-      // If bannerText exists and has newlines, use it; otherwise try description
-      description = (bannerText && bannerText.includes('\n')) ? bannerText : 
+      // If externalDesc exists and has newlines, use it; otherwise try description
+      description = (externalDesc && externalDesc.includes('\n')) ? externalDesc : 
                     (descText && descText.includes('\n')) ? descText : 
-                    bannerText || descText || product.productNumber || '';
+                    externalDesc || descText || '';
     } else {
-      description = product.imageBanner?.text || product.description || product.productNumber || '';
+      description = product.externalDescription || product.description || '';
     }
     
     // Preserve line breaks from backend - escape HTML and preserve newlines
@@ -4461,43 +4346,118 @@ function renderProductsFromAPI() {
           .replace(/\n/g, '<br>')
       : '';
     
-    planCard.innerHTML = `
+    planCard.innerHTML = sanitizeHTML(`
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
-          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-        </div>
-        <div class="plan-content-right">
           <div class="plan-price">
             <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
             <span class="price-unit">${priceUnit}</span>
           </div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
+        </div>
+        <div class="plan-card-actions">
+          <button class="select-btn" data-action="select-plan" data-plan-id="${category}-${productId}" data-i18n-key="button.select">Select</button>
         </div>
       </div>
-      <div class="check-circle"></div>
-    `;
+    `);
     
     return planCard;
   };
   
-  // Render campaign subscriptions into the campaign category
+  // Helper function to render value card (punch card) products
+  const renderValueCard = (product, category = 'punchcard') => {
+    const planCard = document.createElement('div');
+    planCard.className = 'plan-card';
+    // Use numeric ID from API
+    const productId = product.id;
+    planCard.dataset.plan = `punch-${productId}`; // For backward compatibility
+    planCard.dataset.productId = productId; // Store API product ID (numeric)
+    planCard.dataset.category = category;
+    
+    // Extract price from API structure: price.amount is in cents/øre (e.g., 77500 = 775.00 DKK)
+    const priceInCents = product.price?.amount || product.amount || 0;
+    const price = priceInCents / 100; // Convert from cents to main currency unit
+    planCard.dataset.price = price;
+    
+    // Value cards are one-time purchases, so no interval unit needed
+    const description = product.description || product.productNumber || '';
+    
+    // Preserve line breaks from backend
+    const descriptionHtml = description 
+      ? description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>')
+      : '';
+    
+    planCard.innerHTML = sanitizeHTML(`
+      <div class="plan-info">
+        <div class="plan-content-left">
+          <div class="plan-type">${product.name || 'Punch Card'}</div>
+          <div class="plan-price">
+            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
+            <span class="price-unit">kr</span>
+          </div>
+          ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
+        </div>
+        <div class="plan-card-actions">
+          <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
+          <div class="quantity-panel">
+            <span class="quantity-panel-label" data-i18n-key="quantity.label">Choose quantity</span>
+            <div class="quantity-selector">
+              <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
+              <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
+              <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
+            </div>
+            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+          </div>
+        </div>
+      </div>
+    `);
+    
+    return planCard;
+  };
+  
+  // Render campaign subscriptions and value cards into the campaign category
   const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
   const campaignPlansList = document.querySelector('[data-category="campaign"] .plans-list');
   
   if (campaignCategoryItem) {
+    // Check if we have any campaign products (subscriptions or value cards)
+    const hasCampaignSubscriptions = state.campaignSubscriptions && state.campaignSubscriptions.length > 0;
+    const hasCampaignValueCards = state.campaignValueCards && state.campaignValueCards.length > 0;
+    const hasCampaignProducts = hasCampaignSubscriptions || hasCampaignValueCards;
+    
     // Hide campaign category if no products
-    if (!state.campaignSubscriptions || state.campaignSubscriptions.length === 0) {
+    if (!hasCampaignProducts) {
       campaignCategoryItem.style.display = 'none';
+      stopCampaignCountdown();
     } else {
       // Show category and render products
       campaignCategoryItem.style.display = '';
+      startCampaignCountdown();
       if (campaignPlansList) {
         campaignPlansList.innerHTML = '';
-        state.campaignSubscriptions.forEach((product) => {
-          const planCard = renderSubscriptionCard(product, 'campaign');
-          // Event listeners will be set up by setupNewAccessStep()
-          campaignPlansList.appendChild(planCard);
-        });
+        
+        // Render campaign subscriptions first
+        if (hasCampaignSubscriptions) {
+          state.campaignSubscriptions.forEach((product) => {
+            const planCard = renderSubscriptionCard(product, 'campaign');
+            // Event listeners will be set up by setupNewAccessStep()
+            campaignPlansList.appendChild(planCard);
+          });
+        }
+        
+        // Render campaign value cards
+        if (hasCampaignValueCards) {
+          state.campaignValueCards.forEach((product) => {
+            const planCard = renderValueCard(product, 'campaign');
+            // Event listeners will be set up by setupNewAccessStep()
+            campaignPlansList.appendChild(planCard);
+          });
+        }
       }
     }
   }
@@ -4517,11 +4477,11 @@ function renderProductsFromAPI() {
       // Show "No products available" message
       const noProductsMessage = document.createElement('div');
       noProductsMessage.className = 'no-products-message';
-      noProductsMessage.innerHTML = `
+      noProductsMessage.innerHTML = sanitizeHTML(`
         <div class="no-products-content">
           <p data-i18n-key="message.noProducts.membership">No membership options available at this time.</p>
         </div>
-      `;
+      `);
       membershipPlansList.appendChild(noProductsMessage);
       // Update translation immediately
       const messageP = noProductsMessage.querySelector('p[data-i18n-key]');
@@ -4544,70 +4504,25 @@ function renderProductsFromAPI() {
       // Show "No products available" message
       const noProductsMessage = document.createElement('div');
       noProductsMessage.className = 'no-products-message';
-      noProductsMessage.innerHTML = `
+      noProductsMessage.innerHTML = sanitizeHTML(`
         <div class="no-products-content">
           <p>No 15 Day Pass options available at this time.</p>
         </div>
-      `;
+      `);
       dayPassPlansList.appendChild(noProductsMessage);
     }
   }
 
   // Render value cards (punch cards) into the punchcard category
+  // Note: Only regular value cards (without "PublicCampaign") are shown here
+  // Value cards with "PublicCampaign" are shown in the Campaign category
   const punchCardPlansList = document.querySelector('[data-category="punchcard"] .plans-list');
   if (punchCardPlansList) {
     punchCardPlansList.innerHTML = '';
     
-    if (state.valueCards.length > 0) {
+    if (state.valueCards && state.valueCards.length > 0) {
       state.valueCards.forEach((product) => {
-        const planCard = document.createElement('div');
-        planCard.className = 'plan-card';
-        // Use numeric ID from API
-        const productId = product.id;
-        planCard.dataset.plan = `punch-${productId}`; // For backward compatibility
-        planCard.dataset.productId = productId; // Store API product ID (numeric)
-        
-        // Extract price from API structure: price.amount is in cents/øre (e.g., 77500 = 775.00 DKK)
-        const priceInCents = product.price?.amount || product.amount || 0;
-        const price = priceInCents / 100; // Convert from cents to main currency unit
-        planCard.dataset.price = price;
-        
-        // Value cards are one-time purchases, so no interval unit needed
-        const description = product.description || product.productNumber || '';
-        
-        // Preserve line breaks from backend
-        const descriptionHtml = description 
-          ? description
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/\n/g, '<br>')
-          : '';
-        
-        planCard.innerHTML = `
-          <div class="plan-info">
-            <div class="plan-content-left">
-              <div class="plan-type">${product.name || 'Punch Card'}</div>
-              ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
-            </div>
-            <div class="plan-content-right">
-              <div class="plan-price">
-                <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
-                <span class="price-unit">kr</span>
-              </div>
-            </div>
-          </div>
-          <div class="check-circle"></div>
-          <div class="quantity-panel">
-            <div class="quantity-selector">
-              <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
-              <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
-              <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
-            </div>
-            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
-          </div>
-        `;
-        
+        const planCard = renderValueCard(product, 'punchcard');
         // Event listeners will be set up by setupNewAccessStep()
         punchCardPlansList.appendChild(planCard);
       });
@@ -4615,11 +4530,11 @@ function renderProductsFromAPI() {
       // Show "No products available" message
       const noProductsMessage = document.createElement('div');
       noProductsMessage.className = 'no-products-message';
-      noProductsMessage.innerHTML = `
+      noProductsMessage.innerHTML = sanitizeHTML(`
         <div class="no-products-content">
           <p data-i18n-key="message.noProducts.punchcard">No punch card options available at this time.</p>
         </div>
-      `;
+      `);
       punchCardPlansList.appendChild(noProductsMessage);
       // Update translation immediately
       const messageP = noProductsMessage.querySelector('p[data-i18n-key]');
@@ -4631,6 +4546,8 @@ function renderProductsFromAPI() {
   // Use setTimeout to ensure DOM is ready
   setTimeout(() => {
     setupNewAccessStep();
+    // Update translations for newly rendered buttons
+    updatePageTranslations();
   }, 100);
 }
 
@@ -4663,362 +4580,6 @@ async function loadSubscriptionAdditions(productId) {
 // Store user location and gym distances
 let userLocation = null;
 let gymsWithDistances = [];
-// Cache for geocoded addresses
-const geocodeCache = new Map();
-
-// Calculate distance between two coordinates using Haversine formula
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  // Validate inputs
-  if (typeof lat1 !== 'number' || typeof lon1 !== 'number' || 
-      typeof lat2 !== 'number' || typeof lon2 !== 'number' ||
-      isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
-    console.error('[Distance Calculation] Invalid coordinates:', { lat1, lon1, lat2, lon2 });
-    return null;
-  }
-  
-  // Validate coordinate ranges (lat: -90 to 90, lon: -180 to 180)
-  if (lat1 < -90 || lat1 > 90 || lat2 < -90 || lat2 > 90) {
-    console.error('[Distance Calculation] Invalid latitude (must be -90 to 90):', { lat1, lat2 });
-    return null;
-  }
-  if (lon1 < -180 || lon1 > 180 || lon2 < -180 || lon2 > 180) {
-    console.error('[Distance Calculation] Invalid longitude (must be -180 to 180):', { lon1, lon2 });
-    return null;
-  }
-  
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const distance = R * c; // Distance in kilometers
-  
-  return distance;
-}
-
-// Check if geolocation is available
-function isGeolocationAvailable() {
-  return 'geolocation' in navigator;
-}
-
-// Check geolocation permission status
-async function checkGeolocationPermission() {
-  if (!isGeolocationAvailable()) {
-    return 'not-supported';
-  }
-  
-  // Note: Permission API is not widely supported, so we'll try to get location
-  // and handle the error if permission is denied
-  return 'unknown';
-}
-
-// Get user's current location with explicit permission request
-async function getUserLocation() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation is not supported by your browser'));
-      return;
-    }
-
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 15000, // Increased timeout
-      maximumAge: 60000 // Allow 1 minute old cached position
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy // in meters
-        };
-        
-        // Log location accuracy for debugging
-        console.log('[Geolocation] User location obtained:', {
-          coordinates: { lat: location.latitude, lon: location.longitude },
-          accuracy: `${location.accuracy.toFixed(0)} meters`
-        });
-        
-        resolve(location);
-      },
-      (error) => {
-        let errorMessage = 'Unable to get your location';
-        let errorType = 'unknown';
-        
-        switch(error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied. Please allow location access in your browser settings and try again.';
-            errorType = 'permission-denied';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information is unavailable. Please check your device location settings and try again.';
-            errorType = 'unavailable';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out. Please check your connection and try again.';
-            errorType = 'timeout';
-            break;
-        }
-        
-        const errorObj = new Error(errorMessage);
-        errorObj.type = errorType;
-        errorObj.originalError = error;
-        reject(errorObj);
-      },
-      options
-    );
-  });
-}
-
-// Hardcoded coordinates for known Boulders gyms (faster than geocoding)
-// Format: "Street, PostalCode City" -> {latitude, longitude}
-// Hardcoded coordinates for known Boulders gyms (verified and updated for accuracy)
-// Format: "Street, PostalCode City" -> {latitude, longitude}
-const GYM_COORDINATES = {
-  'Skjernvej 4D, 9220 Aalborg': { latitude: 57.0488, longitude: 9.9217 },
-  'Søren Frichs Vej 54, 8230 Aarhus': { latitude: 56.15101, longitude: 10.16778 }, // Updated: Boulders Aarhus Aaby
-  'Ankersgade 12, 8000 Aarhus': { latitude: 56.14836, longitude: 10.19124 }, // Updated: Boulders Aarhus City
-  'Graham Bells Vej 18A, 8200 Aarhus': { latitude: 56.20514, longitude: 10.18169 }, // Updated: Boulders Aarhus Nord
-  'Søren Nymarks Vej 6A, 8270 Aarhus': { latitude: 56.1075, longitude: 10.2039 }, // Updated: Boulders Aarhus Syd
-  'Amager Landevej 233, 2770 København': { latitude: 55.6500, longitude: 12.5833 },
-  'Strandmarksvej 20, 2650 København': { latitude: 55.6500, longitude: 12.4833 },
-  'Bådehavnsgade 38, 2450 København': { latitude: 55.6500, longitude: 12.5500 },
-  'Wichmandsgade 11, 5000 Odense': { latitude: 55.40252, longitude: 10.37333 }, // Updated: Verified via Nominatim
-  'Vigerslev Allé 47, 2500 København': { latitude: 55.6667, longitude: 12.5167 },
-  'Vanløse Torv 1, Kronen Vanløse, 2720 København': { latitude: 55.6833, longitude: 12.4833 },
-  'Vesterbrogade 149, 1620 København V': { latitude: 55.6761, longitude: 12.5683 },
-};
-
-// Helper to create address key for lookup
-function createAddressKey(address) {
-  if (!address) return null;
-  // Normalize the address string
-  const street = (address.street || '').trim();
-  const postalCode = (address.postalCode || '').trim();
-  const city = (address.city || '').trim();
-  return `${street}, ${postalCode} ${city}`;
-}
-
-// Find coordinates for a gym address (tries multiple matching strategies)
-function findGymCoordinates(address) {
-  if (!address) return null;
-  
-  const addressKey = createAddressKey(address);
-  if (!addressKey) return null;
-  
-  // Try exact match first
-  if (GYM_COORDINATES[addressKey]) {
-    return GYM_COORDINATES[addressKey];
-  }
-  
-  // Try partial matches (street + postal code)
-  const street = address.street?.trim();
-  const postalCode = address.postalCode?.trim();
-  
-  if (street && postalCode) {
-    // Try matching by street and postal code
-    for (const [key, coords] of Object.entries(GYM_COORDINATES)) {
-      if (key.includes(street) && key.includes(postalCode)) {
-        return coords;
-      }
-    }
-  }
-  
-  return null;
-}
-
-// Geocode address to get coordinates using OpenStreetMap Nominatim (fallback)
-async function geocodeAddress(address) {
-  if (!address) return null;
-  
-  // Try hardcoded coordinates first (instant lookup, no API call needed)
-  const hardcodedCoords = findGymCoordinates(address);
-  if (hardcodedCoords) {
-    const addressKey = createAddressKey(address);
-    console.log(`[Geocoding] Using hardcoded coordinates for: ${addressKey}`);
-    return hardcodedCoords;
-  }
-  
-  // Create address key for cache lookup
-  const addressKey = createAddressKey(address);
-  if (!addressKey) return null;
-  
-  // Check cache
-  if (geocodeCache.has(addressKey)) {
-    return geocodeCache.get(addressKey);
-  }
-  
-  try {
-    // Use OpenStreetMap Nominatim geocoding service (free, no API key)
-    // Use more specific query format for better accuracy - postal code first for precision
-    const query = encodeURIComponent(`${address.postalCode} ${address.city}, ${address.street}, Denmark`);
-    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=dk&addressdetails=1&extratags=1&zoom=18`;
-    
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Boulders Membership Signup' // Required by Nominatim
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Geocoding failed: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data && data.length > 0) {
-      const result = data[0];
-      const coords = {
-        latitude: parseFloat(result.lat),
-        longitude: parseFloat(result.lon)
-      };
-      
-      // Log geocoding result for accuracy verification
-      console.log(`[Geocoding] Geocoded ${addressKey}:`, {
-        coordinates: coords,
-        displayName: result.display_name,
-        importance: result.importance,
-        type: result.type
-      });
-      
-      // Cache the result
-      geocodeCache.set(addressKey, coords);
-      
-      // Rate limiting: Nominatim allows 1 request per second
-      await new Promise(resolve => setTimeout(resolve, 1100));
-      
-      return coords;
-    }
-    
-    return null;
-  } catch (error) {
-    console.warn('[Geocoding] Failed to geocode address:', addressKey, error);
-    return null;
-  }
-}
-
-// Calculate distances for all gyms and sort by distance
-async function calculateGymDistances(gyms, userLat, userLon, userAccuracy = null) {
-  console.log('[Distance Calculation] User location:', { 
-    latitude: userLat, 
-    longitude: userLon,
-    accuracy: userAccuracy ? `${userAccuracy.toFixed(0)} meters` : 'unknown'
-  });
-  
-  // Warn if accuracy is poor (IP-based geolocation is typically > 1000m)
-  if (userAccuracy && userAccuracy > 1000) {
-    console.warn('[Distance Calculation] WARNING: Low location accuracy detected. Distance calculations may be inaccurate.', {
-      accuracy: `${userAccuracy.toFixed(0)} meters`,
-      note: 'This suggests IP-based geolocation rather than GPS. Distances may be off by hundreds of kilometers.'
-    });
-  }
-  
-  // First, try to get coordinates from API response
-  const gymsWithCoords = await Promise.all(gyms.map(async (gym) => {
-    let gymLat = null;
-    let gymLon = null;
-    
-    if (gym.address) {
-      // Try address.latitude/longitude first
-      if (gym.address.latitude !== undefined && gym.address.longitude !== undefined) {
-        gymLat = parseFloat(gym.address.latitude);
-        gymLon = parseFloat(gym.address.longitude);
-      }
-      // Try address.coordinates (GeoJSON format: [longitude, latitude])
-      else if (gym.address.coordinates && Array.isArray(gym.address.coordinates)) {
-        gymLat = parseFloat(gym.address.coordinates[1]);
-        gymLon = parseFloat(gym.address.coordinates[0]);
-      }
-    }
-    
-    // Try top-level coordinates
-    if ((gymLat === null || isNaN(gymLat)) && gym.coordinates && Array.isArray(gym.coordinates)) {
-      gymLat = parseFloat(gym.coordinates[1]);
-      gymLon = parseFloat(gym.coordinates[0]);
-    }
-    
-    // Validate parsed coordinates
-    if (isNaN(gymLat) || isNaN(gymLon)) {
-      gymLat = null;
-      gymLon = null;
-    }
-    
-    // If no coordinates found, try geocoding
-    if ((gymLat === null || gymLon === null) && gym.address) {
-      console.log(`[Distance Calculation] Geocoding ${gym.name}...`);
-      const coords = await geocodeAddress(gym.address);
-      if (coords) {
-        gymLat = coords.latitude;
-        gymLon = coords.longitude;
-        console.log(`[Distance Calculation] Geocoded ${gym.name}:`, coords);
-      } else {
-        console.warn(`[Distance Calculation] Failed to geocode ${gym.name}`);
-      }
-    }
-    
-    return { ...gym, gymLat, gymLon };
-  }));
-  
-  // Calculate distances
-  const gymsWithDistances = gymsWithCoords.map(gym => {
-    if (gym.gymLat === null || gym.gymLon === null || isNaN(gym.gymLat) || isNaN(gym.gymLon)) {
-      return { ...gym, distance: null };
-    }
-    
-    const distance = calculateDistance(
-      userLat,
-      userLon,
-      gym.gymLat,
-      gym.gymLon
-    );
-    
-    // Log detailed distance calculation for debugging
-    console.log(`[Distance Calculation] ${gym.name}:`, {
-      userLocation: { lat: userLat, lon: userLon },
-      gymLocation: { lat: gym.gymLat, lon: gym.gymLon },
-      distance: `${distance.toFixed(2)} km`,
-      address: gym.address ? `${gym.address.street}, ${gym.address.postalCode} ${gym.address.city}` : 'N/A',
-      // Verify coordinates are valid (lat should be -90 to 90, lon should be -180 to 180)
-      coordinateValidation: {
-        userLatValid: userLat >= -90 && userLat <= 90,
-        userLonValid: userLon >= -180 && userLon <= 180,
-        gymLatValid: gym.gymLat >= -90 && gym.gymLat <= 90,
-        gymLonValid: gym.gymLon >= -180 && gym.gymLon <= 180
-      }
-    });
-    
-    return { ...gym, distance };
-  });
-  
-  // Sort by distance
-  const sorted = gymsWithDistances.sort((a, b) => {
-    // Sort by distance, null distances go to the end
-    if (a.distance === null && b.distance === null) return 0;
-    if (a.distance === null) return 1;
-    if (b.distance === null) return -1;
-    return a.distance - b.distance;
-  });
-  
-  console.log('[Distance Calculation] Sorted gyms:', sorted.map(g => ({
-    name: g.name,
-    distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A'
-  })));
-  
-  return sorted;
-}
-
-// Format distance for display
-function formatDistance(distance) {
-  if (distance === null || distance === undefined) return '';
-  if (distance < 1) {
-    return `${Math.round(distance * 1000)} m`;
-  }
-  return `${distance.toFixed(1)} km`;
-}
 
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
@@ -5028,8 +4589,8 @@ async function loadGymsFromAPI() {
     // Handle different response formats - could be array or object with data property
     const gyms = Array.isArray(response) ? response : (response.data || response.items || []);
     
-    console.log('Loaded gyms from API:', gyms);
-    console.log(`Found ${gyms.length} business units`);
+    devLog('Loaded gyms from API:', gyms);
+    devLog(`Found ${gyms.length} business units`);
     
     // Store gyms for distance calculation
     gymsWithDistances = gyms;
@@ -5069,7 +4630,7 @@ async function loadGymsFromAPI() {
     
     // Log sample gym structure to debug coordinate location
     if (gyms.length > 0) {
-      console.log('[Load Gyms] Sample gym structure:', {
+      devLog('[Load Gyms] Sample gym structure:', {
         name: gyms[0].name,
         address: gyms[0].address,
         hasLatLon: !!(gyms[0].address?.latitude && gyms[0].address?.longitude),
@@ -5080,7 +4641,7 @@ async function loadGymsFromAPI() {
     // If user location is available, sort by distance
     let gymsToDisplay = gyms;
     if (userLocation) {
-      console.log('[Load Gyms] User location available, calculating distances...', userLocation);
+      devLog('[Load Gyms] User location available, calculating distances...', userLocation);
       // Show loading message
       // Hide status text
       const locationStatus = document.getElementById('locationStatus');
@@ -5089,10 +4650,11 @@ async function loadGymsFromAPI() {
       }
       
       gymsToDisplay = await calculateGymDistances(
-        gyms, 
-        userLocation.latitude, 
+        gyms,
+        userLocation.latitude,
         userLocation.longitude,
-        userLocation.accuracy // Pass accuracy for validation
+        userLocation.accuracy,
+        { logger: geoLogger }
       );
       gymsWithDistances = gymsToDisplay;
       
@@ -5108,13 +4670,13 @@ async function loadGymsFromAPI() {
       }
       
       // Log first few gyms to verify sorting
-      console.log('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
+      devLog('[Load Gyms] First 3 gyms after sorting:', gymsToDisplay.slice(0, 3).map(g => ({
         name: g.name,
         distance: g.distance !== null ? `${g.distance.toFixed(2)} km` : 'N/A',
         hasCoordinates: !!(g.address?.latitude && g.address?.longitude)
       })));
     } else {
-      console.log('[Load Gyms] No user location available, displaying gyms in original order');
+      devLog('[Load Gyms] No user location available, displaying gyms in original order');
     }
     
     // If gym list doesn't exist (e.g., on profile page), return early
@@ -5149,7 +4711,7 @@ async function loadGymsFromAPI() {
         // Mark as nearest if it's the first gym AND has a valid distance
         const isNearest = i === 0 && userLocation && gym.distance !== null && gym.distance !== undefined;
         if (isNearest) {
-          console.log('[Load Gyms] Marking as nearest:', gym.name, `${gym.distance.toFixed(2)} km`);
+          devLog('[Load Gyms] Marking as nearest:', gym.name, `${gym.distance.toFixed(2)} km`);
         }
         const gymItem = createGymItem(gym, isNearest);
         const gymId = `gym-${gym.id}`;
@@ -5213,6 +4775,11 @@ async function loadGymsFromAPI() {
     // Re-setup event listeners for new gym items
     setupGymEventListeners();
     
+    // Re-render FAQ when on step 1 so opening hours table uses API gym list (and API opening hours if present)
+    if (state.currentStep === 1) {
+      renderFAQ();
+    }
+    
   } catch (error) {
     console.error('Failed to load gyms from API:', error);
     
@@ -5239,9 +4806,9 @@ async function loadGymsFromAPI() {
 // Load countries from API and populate country code selectors
 async function loadCountriesFromAPI() {
   try {
-    // Determine base URL and proxy settings (same logic as BusinessUnitsAPI)
-    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    
+    // Determine base URL and proxy settings
+    const { baseUrl, useProxy, isDevelopment } = getApiConfig();
+
     // Helper to log only in development
     const devLog = (...args) => {
       if (isDevelopment) console.log(...args);
@@ -5252,32 +4819,6 @@ async function loadCountriesFromAPI() {
     const devError = (...args) => {
       if (isDevelopment) console.error(...args);
     };
-    const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
-                               window.location.hostname.includes('join.boulders.dk') ||
-                               window.location.hostname === 'boulders.dk';
-    const isCloudflareWorker = window.location.hostname.includes('workers.dev');
-    const isNetlify = window.location.hostname.includes('netlify.app');
-    
-    let baseUrl;
-    let useProxy = false;
-    
-    if (isDevelopment) {
-      baseUrl = '';
-      useProxy = false;
-    } else if (isNetlify) {
-      baseUrl = '/.netlify/functions/api-proxy';
-      useProxy = true;
-    } else if (isCloudflarePages) {
-      baseUrl = '/api-proxy';
-      useProxy = true;
-    } else if (isCloudflareWorker) {
-      baseUrl = 'https://api-join.boulders.dk';
-      useProxy = false;
-    } else {
-      baseUrl = 'https://api-join.boulders.dk';
-      useProxy = false;
-    }
-    
     // Build URL for countries endpoint
     // Note: /api/ver3/ endpoints use boulders.brpsystems.com/apiserver base URL
     // In development, use Vite proxy which handles this
@@ -5378,20 +4919,6 @@ async function loadCountriesFromAPI() {
     devWarn('[Countries] Error loading countries from API:', error);
     // Fallback to default +45 - selectors already have this option
   }
-}
-
-// Helper function to get flag emoji from ISO 3166-1 alpha-2 country code
-function getFlagEmoji(alpha2) {
-  if (!alpha2 || alpha2.length !== 2) return '🌍'; // Default globe emoji
-  
-  // Convert alpha2 to flag emoji using regional indicator symbols
-  // Each letter is converted to its regional indicator symbol (U+1F1E6 to U+1F1FF)
-  const codePoints = alpha2
-    .toUpperCase()
-    .split('')
-    .map(char => 127397 + char.charCodeAt(0));
-  
-  return String.fromCodePoint(...codePoints);
 }
 
 // Store country data mapping for flag lookups
@@ -5499,7 +5026,7 @@ async function findNearestGym() {
   
   // Check if location is already active - toggle it off
   if (userLocation && locationBtn.classList.contains('active')) {
-    console.log('[Geolocation] Toggling location off, restoring default order');
+    devLog('[Geolocation] Toggling location off, restoring default order');
     
     // Clear user location
     userLocation = null;
@@ -5529,15 +5056,14 @@ async function findNearestGym() {
   locationStatus.style.display = 'none';
   
   try {
-    // Check permission status first (for debugging)
-    const permissionStatus = await checkGeolocationPermission();
-    console.log('[Geolocation] Permission status before request:', permissionStatus);
-    
-    // Get user location - this will trigger browser permission prompt
-    const location = await getUserLocation();
+    // Trigger geolocation immediately from user gesture, then await permission info
+    const permissionPromise = checkGeolocationPermission();
+    const locationPromise = getUserLocation({ logger: geoLogger });
+    const [permissionStatus, location] = await Promise.all([permissionPromise, locationPromise]);
+    devLog('[Geolocation] Permission status before request:', permissionStatus);
     userLocation = location;
     
-    console.log('User location:', location);
+    devLog('User location:', location);
     
     // Hide status text
     locationStatus.style.display = 'none';
@@ -5574,13 +5100,13 @@ async function findNearestGym() {
       // Provide macOS-specific troubleshooting
       const isMacOS = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       if (isMacOS) {
-        console.log('%c[Geolocation Troubleshooting]', 'color: #F401F5; font-weight: bold;');
-        console.log('macOS CoreLocation cannot determine your position. Try:');
-        console.log('1. System Settings → Privacy & Security → Location Services (enable)');
-        console.log('2. Grant location permission to your browser');
-        console.log('3. Enable WiFi (needed for macOS location, even if not connected)');
-        console.log('4. Reset browser location permissions');
-        console.log('5. Restart your browser');
+        devLog('%c[Geolocation Troubleshooting]', 'color: #F401F5; font-weight: bold;');
+        devLog('macOS CoreLocation cannot determine your position. Try:');
+        devLog('1. System Settings → Privacy & Security → Location Services (enable)');
+        devLog('2. Grant location permission to your browser');
+        devLog('3. Enable WiFi (needed for macOS location, even if not connected)');
+        devLog('4. Reset browser location permissions');
+        devLog('5. Restart your browser');
         errorMessage = 'Location unavailable on macOS. Check: System Settings → Privacy → Location Services, enable WiFi, and grant browser permission.';
       } else {
         errorMessage = 'Location information is unavailable. Please ensure location services are enabled on your device.';
@@ -5630,7 +5156,7 @@ function createGymItem(gym, isNearest = false) {
     ? `<div class="nearest-badge">${t('gym.nearest')}</div>`
     : '';
   
-  gymItem.innerHTML = `
+  gymItem.innerHTML = sanitizeHTML(`
     ${nearestBadge}
     ${distanceBadge}
     <div class="gym-info">
@@ -5643,7 +5169,7 @@ function createGymItem(gym, isNearest = false) {
       </div>
     </div>
     <div class="check-circle"></div>
-  `;
+  `);
   
   return gymItem;
 }
@@ -5670,7 +5196,8 @@ const pendingNavigationTimeouts = {
 // Language management
 const SUPPORTED_LANGUAGES = {
   'da-DK': { code: 'da-DK', name: 'Dansk', flag: '🇩🇰' },
-  'en-GB': { code: 'en-GB', name: 'English', flag: '🇬🇧' }
+  'en-GB': { code: 'en-GB', name: 'English', flag: '🇬🇧' },
+  'de-DE': { code: 'de-DE', name: 'Deutsch', flag: '🇩🇪' }
 };
 
 const DEFAULT_LANGUAGE = 'da-DK';
@@ -5698,6 +5225,27 @@ function setStoredLanguage(languageCode) {
 
 function getAcceptLanguageHeader() {
   return state.language || DEFAULT_LANGUAGE;
+}
+
+function getReturnUrlBase() {
+  let override = null;
+  try {
+    override = window?.BOULDERS_RETURN_URL_BASE || localStorage.getItem('boulders_return_url_base');
+  } catch (e) {
+    // Ignore localStorage errors
+  }
+
+  if (override) {
+    return String(override).replace(/\/$/, '');
+  }
+
+  const isHttps = window.location.protocol === 'https:';
+  if (isHttps) {
+    return window.location.origin.replace('http://', 'https://');
+  }
+
+  // Local HTTP is not accepted by payment API, default to production
+  return 'https://join.boulders.dk';
 }
 
 const state = {
@@ -5742,11 +5290,14 @@ const state = {
   // Email tracking to prevent duplicate account creation
   createdEmails: new Set(), // Track emails that have been used to create accounts in this session
   // Step 5: Store fetched products from API
-  campaignSubscriptions: [], // Fetched campaign products (with "PublicCampaign" label)
+  campaignSubscriptions: [], // Fetched campaign subscription products (with "PublicCampaign" label)
+  campaignValueCards: [], // Fetched campaign value card products (with "PublicCampaign" label)
+  campaignEndDate: null, // ISO string or Date for countdown; if null, uses end of current month
   subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15 Day Pass")
   dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
   valueCards: [], // Fetched punch card products
   subscriptionAdditions: [], // Fetched add-ons for selected membership
+  boostProducts: [], // Products with "boostProduct" label for boost modal
   selectedProductType: null, // 'membership' or 'punch-card'
   selectedProductId: null, // The actual product ID from API
   selectedAddonIds: [], // Array of selected add-on product IDs
@@ -5754,6 +5305,12 @@ const state = {
   referenceData: {}, // Cached reference/lookup data (countries, regions, currencies, etc.)
   referenceDataLoaded: false, // Flag to track if reference data has been loaded
   subscriptionAttachedOrderId: null, // Tracks which order already has the membership attached
+  subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
+  // 15-day pass: activation date (null = today, or YYYY-MM-DD string for future start)
+  subscriptionStartDate: null,
+  // Test mode for success page
+  testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
+  testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
 };
 
 // Expose state to window for login-page.js
@@ -5765,6 +5322,72 @@ let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
 let loginCooldownUntil = 0;
+let campaignCountdownIntervalId = null;
+
+// Campaign countdown end date: set here when API doesn't send Omsætningsperiode. Use ISO string or null for "end of current month".
+const CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK = '2026-02-16'; // e.g. '2026-02-15T23:59:59.999' or '2026-02-15'
+
+function getCampaignCountdownEndDate() {
+  const fromState = state.campaignEndDate;
+  if (fromState) {
+    const d = typeof fromState === 'string' ? new Date(fromState) : fromState;
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK) {
+    const d = new Date(CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return end;
+}
+
+function updateCampaignCountdown() {
+  const el = document.getElementById('campaignCountdown');
+  const valueEl = document.getElementById('campaignCountdownValue');
+  const endDate = getCampaignCountdownEndDate();
+  const now = new Date();
+  const diff = endDate.getTime() - now.getTime();
+  const timeLeft = diff > 0;
+  const parts = timeLeft ? (() => {
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+    const p = [];
+    if (days > 0) p.push(days + (days === 1 ? 'd' : 'd'));
+    p.push(String(hours).padStart(2, '0') + 'h', String(minutes).padStart(2, '0') + 'm', String(seconds).padStart(2, '0') + 's');
+    return p.join(' ');
+  })() : '';
+  if (!timeLeft) {
+    if (el) el.style.display = 'none';
+    if (campaignCountdownIntervalId) {
+      clearInterval(campaignCountdownIntervalId);
+      campaignCountdownIntervalId = null;
+    }
+    return;
+  }
+  if (valueEl) valueEl.textContent = parts;
+  if (el) el.style.display = '';
+}
+
+function startCampaignCountdown() {
+  if (campaignCountdownIntervalId) {
+    clearInterval(campaignCountdownIntervalId);
+    campaignCountdownIntervalId = null;
+  }
+  updateCampaignCountdown();
+  campaignCountdownIntervalId = setInterval(updateCampaignCountdown, 1000);
+}
+
+function stopCampaignCountdown() {
+  if (campaignCountdownIntervalId) {
+    clearInterval(campaignCountdownIntervalId);
+    campaignCountdownIntervalId = null;
+  }
+  const el = document.getElementById('campaignCountdown');
+  if (el) el.style.display = 'none';
+}
 
 function isUserAuthenticated() {
   return typeof window.getAccessToken === 'function' && Boolean(window.getAccessToken());
@@ -5812,6 +5435,11 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
   } else {
     refreshLoginUI();
   }
+  
+  // Dispatch event to notify React components of auth state change
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth-state-changed'));
+  }
   autoEnsureOrderIfReady('auth-state-sync')
     .then(() => {
       // Order should now be created and subscription attached
@@ -5847,8 +5475,7 @@ function isMembershipSelected() {
 
 // Interstitial Add-ons Modal (shown after selecting membership on step 2)
 let addonsModal = null;
-let addonsModalImageCol = null;
-let addonsModalImageEl = null;
+let addonLightbox = null; // full-size image overlay (z-index above modal)
 function defaultAddonsImage() {
   // Simple dark gradient SVG placeholder with label
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
@@ -5869,6 +5496,25 @@ function defaultAddonsImage() {
   </g>
   <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#e5e7eb" font-size="36" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial">Boost your membership</text>
   <text x="50%" y="58%" dominant-baseline="middle" text-anchor="middle" fill="#94a3b8" font-size="18" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial">Add shoes, chalk and more</text>
+</svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+
+function getProductPlaceholderImage() {
+  // Placeholder image for individual product cards (consistent aspect ratio)
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <defs>
+    <linearGradient id="productGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#productGrad)"/>
+  <g fill="#64748b" opacity="0.3">
+    <rect x="150" y="100" width="100" height="100" rx="8"/>
+  </g>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-size="14" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial">No image</text>
 </svg>`;
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
 }
@@ -5893,10 +5539,10 @@ function ensureAddonsModal() {
   const header = document.createElement('div');
   header.className = 'addons-header';
   const title = document.createElement('h3');
-  title.textContent = 'Add to your membership';
+  title.textContent = t('addons.modal.title');
   title.className = 'addons-title';
   const closeBtn = document.createElement('button');
-  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.setAttribute('aria-label', t('addons.modal.close'));
   closeBtn.setAttribute('type', 'button');
   closeBtn.textContent = '\u00D7';
   closeBtn.className = 'addons-close';
@@ -5911,12 +5557,12 @@ function ensureAddonsModal() {
   const actions = document.createElement('div');
   actions.className = 'addons-actions';
   const hint = document.createElement('div');
-  hint.textContent = 'Add gear now at a special price and pick it up at your next visit.';
+  hint.textContent = t('addons.modal.hint');
   hint.className = 'addons-hint';
   
   // Single dynamic button
   const actionButton = document.createElement('button');
-  actionButton.textContent = 'Skip';
+  actionButton.textContent = t('addons.modal.skip');
   actionButton.className = 'addons-action-btn';
   actionButton.addEventListener('click', () => handleAddonAction());
   
@@ -5927,10 +5573,7 @@ function ensureAddonsModal() {
   actions.appendChild(rightActions);
 
   const contentCol = document.createElement('div');
-  contentCol.style.flex = '1 1 auto';
-  contentCol.style.display = 'flex';
-  contentCol.style.flexDirection = 'column';
-  contentCol.style.minWidth = '0';
+  contentCol.className = 'addons-main';
   contentCol.appendChild(header);
   contentCol.appendChild(grid);
   contentCol.appendChild(actions);
@@ -5949,8 +5592,46 @@ function ensureAddonsModal() {
   
   document.body.appendChild(overlay);
 
+  // Single lightbox for addon images (appended to body, above modal)
+  if (!addonLightbox) {
+    const lb = document.createElement('div');
+    lb.className = 'addon-lightbox';
+    lb.setAttribute('role', 'dialog');
+    lb.setAttribute('aria-modal', 'true');
+    lb.setAttribute('aria-label', t('addons.modal.close') || 'Close image');
+    lb.innerHTML = '<button type="button" class="addon-lightbox-close" aria-label="' + (t('addons.modal.close') || 'Close') + '">×</button><img class="addon-lightbox-img" alt="" />';
+    const lbImg = lb.querySelector('.addon-lightbox-img');
+    const lbClose = lb.querySelector('.addon-lightbox-close');
+    lbClose.addEventListener('click', (e) => { e.stopPropagation(); closeAddonLightbox(); });
+    lb.addEventListener('click', () => closeAddonLightbox());
+    lbImg.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && addonLightbox && addonLightbox.classList.contains('addon-lightbox--active')) closeAddonLightbox(); });
+    document.body.appendChild(lb);
+    addonLightbox = lb;
+  }
+
   addonsModal = overlay;
   return addonsModal;
+}
+
+function openAddonLightbox(imageSrc, focusReturnEl) {
+  if (!addonLightbox) ensureAddonsModal();
+  const img = addonLightbox.querySelector('.addon-lightbox-img');
+  const closeBtn = addonLightbox.querySelector('.addon-lightbox-close');
+  if (img) img.src = imageSrc || '';
+  addonLightbox._focusReturn = focusReturnEl || null;
+  addonLightbox.classList.add('addon-lightbox--active');
+  addonLightbox.style.display = 'flex';
+  if (closeBtn) closeBtn.focus();
+}
+
+function closeAddonLightbox() {
+  if (!addonLightbox) return;
+  addonLightbox.classList.remove('addon-lightbox--active');
+  addonLightbox.style.display = 'none';
+  const ret = addonLightbox._focusReturn;
+  if (ret && typeof ret.focus === 'function') ret.focus();
+  addonLightbox._focusReturn = null;
 }
 
 function populateAddonsModal() {
@@ -5958,43 +5639,61 @@ function populateAddonsModal() {
   const grid = addonsModal.querySelector('[data-modal-addons-grid]');
   if (!grid) return;
   grid.innerHTML = '';
+  const addons = Array.isArray(state.subscriptionAdditions)
+    ? state.subscriptionAdditions
+    : [];
+  if (addons.length === 0) {
+    return;
+  }
   if (!templates.addon) {
     // Fallback simple cards if template missing
-    ADDONS.forEach((addon) => {
+    addons.forEach((addon) => {
       const card = document.createElement('div');
       card.className = 'plan-card addon-card';
       card.style.cursor = 'pointer';
-      card.innerHTML = `
+      const addonPrice = getAddonPrice(addon);
+      const addToCartBtn = document.createElement('button');
+      addToCartBtn.className = 'addon-add-to-cart-btn';
+      addToCartBtn.setAttribute('data-action', 'toggle-addon');
+      addToCartBtn.setAttribute('data-addon-id', addon.id);
+      addToCartBtn.textContent = t('button.addToCart');
+      addToCartBtn.setAttribute('data-i18n-key', 'button.addToCart');
+      
+      card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${addon.name}</div>
-        <div>${formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted))} kr</div>
-        <div class="check-circle" data-action="toggle-addon" data-addon-id="${addon.id}"></div>
-      `;
+        <div>${addonPrice > 0
+          ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
+          : '—'} kr.</div>
+      `);
+      card.appendChild(addToCartBtn);
       
       // Make entire card clickable
       card.addEventListener('click', (e) => {
-        // Don't trigger if clicking the check circle itself
-        const checkCircle = card.querySelector('.check-circle');
-        if (e.target === checkCircle || checkCircle.contains(e.target)) {
+        // Don't trigger if clicking the button itself
+        if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
           return;
         }
-        // Toggle the addon
-        if (addon.id) toggleAddon(addon.id, checkCircle);
+        // Toggle the addon when clicking anywhere on the card
+        if (addon.id) toggleAddon(addon.id, addToCartBtn);
       });
       
       grid.appendChild(card);
     });
     return;
   }
-  // Use existing add-on template for consistency
-  ADDONS.forEach((addon) => {
+  // Use existing add-on template for consistency (list layout: main row + expandable details)
+  addons.forEach((addon, index) => {
     const card = templates.addon.content.firstElementChild.cloneNode(true);
-    const checkCircle = card.querySelector('[data-action="toggle-addon"]');
-    if (checkCircle) checkCircle.dataset.addonId = addon.id;
+    const addToCartBtn = card.querySelector('[data-action="toggle-addon"]');
+    if (addToCartBtn) addToCartBtn.dataset.addonId = addon.id;
+    const thumbWrapper = card.querySelector('.addon-card-thumb') || card.querySelector('[data-action="open-lightbox"]');
     const nameEl = card.querySelector('[data-element="name"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
     const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
+    const imageEl = card.querySelector('[data-element="image"]');
+    const imageBannerEl = card.querySelector('[data-element="imageBanner"]');
     if (nameEl) nameEl.textContent = addon.name;
     // Extract and display product image
     if (imageEl) {
@@ -6016,15 +5715,12 @@ function populateAddonsModal() {
           // Construct asset URL from reference ID
           const referenceId = mainAsset.reference;
           const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const isNetlify = window.location.hostname.includes('netlify.app');
           const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
                                    window.location.hostname.includes('join.boulders.dk') ||
                                    window.location.hostname === 'boulders.dk';
           
           if (isDevelopment) {
             imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
-          } else if (isNetlify) {
-            imageUrl = `/.netlify/functions/api-proxy?path=/api/assets/${referenceId}`;
           } else if (isCloudflarePages) {
             imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
           } else {
@@ -6038,50 +5734,133 @@ function populateAddonsModal() {
       
       console.log('[Addons Modal] Image URL for', addon.name, ':', imageUrl);
       
+      // Always show image element - use placeholder if no image URL
+      imageEl.removeAttribute('style'); // Remove inline style that hides it
+      imageEl.style.display = 'block';
+      imageEl.style.visibility = 'visible';
+      imageEl.style.opacity = '1';
+      imageEl.style.width = '100%';
+      // Image size controlled by CSS (.addons-grid .addon-card img max-height by breakpoint)
+      imageEl.style.objectFit = 'cover';
+      imageEl.style.borderRadius = '8px';
+      imageEl.style.marginBottom = '12px';
+      imageEl.style.backgroundColor = '#1e293b'; // Background color for placeholder
+      imageEl.classList.add('addon-image');
+      
       if (imageUrl) {
         imageEl.src = imageUrl;
         imageEl.alt = addon.name || 'Addon image';
-        imageEl.removeAttribute('style'); // Remove inline style that hides it
-        imageEl.style.display = 'block';
-        imageEl.style.visibility = 'visible';
-        imageEl.style.opacity = '1';
-        imageEl.style.width = '100%';
-        imageEl.style.height = '200px';
-        imageEl.style.objectFit = 'cover';
-        imageEl.style.borderRadius = '8px';
-        imageEl.style.marginBottom = '12px';
-        imageEl.classList.add('addon-image');
         console.log('[Addons Modal] Image set for', addon.name, '- src:', imageEl.src);
         console.log('[Addons Modal] Image computed display:', window.getComputedStyle(imageEl).display);
       } else {
-        imageEl.style.display = 'none';
-        console.log('[Addons Modal] No image URL found for', addon.name);
+        // Use placeholder image when no image is available
+        imageEl.src = getProductPlaceholderImage();
+        imageEl.alt = (addon.name || 'Addon') + ' - No image available';
+        console.log('[Addons Modal] Using placeholder image for', addon.name);
       }
+      
+      // Display image banner text if available
+      if (imageBannerEl && addon.imageBanner?.text) {
+        imageBannerEl.textContent = addon.imageBanner.text;
+        imageBannerEl.style.display = 'block';
+        console.log('[Addons Modal] Image banner text set for', addon.name, ':', addon.imageBanner.text);
+      } else if (imageBannerEl) {
+        imageBannerEl.style.display = 'none';
+      }
+      if (thumbWrapper && imageEl) {
+        thumbWrapper.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (imageEl.src) openAddonLightbox(imageEl.src, imageEl);
+        });
+      }
+      imageEl.style.width = '';
+      imageEl.style.marginBottom = '';
     } else {
       console.log('[Addons Modal] Image element not found for', addon.name);
     }
     
-    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
-    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
-    if (descriptionEl) descriptionEl.textContent = addon.description;
-    if (featuresEl) {
-      featuresEl.innerHTML = '';
-      addon.features.forEach((feature) => {
-        const li = document.createElement('li');
-        li.textContent = feature;
-        featuresEl.appendChild(li);
+    // Handle original price (only for subscription additions with discount)
+    if (originalPriceEl) {
+      const originalPrice = addon.price?.original;
+      if (typeof originalPrice === 'number' && originalPrice > 0) {
+        originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
+        originalPriceEl.style.display = '';
+      } else {
+        originalPriceEl.style.display = 'none';
+      }
+    }
+    // Use helper function for discounted/current price
+    const addonPrice = getAddonPrice(addon);
+    if (discountedPriceEl) {
+      discountedPriceEl.textContent = addonPrice > 0
+        ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
+        : '—';
+    }
+    if (descriptionEl) {
+      const description = addon.description || '';
+      if (description) {
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+      } else {
+        descriptionEl.textContent = '';
+      }
+    }
+    const descToggle = card.querySelector('.addon-card-description-toggle');
+    if (descToggle) {
+      const hasDescription = (addon.description || '').trim().length > 0;
+      descToggle.style.display = hasDescription ? '' : 'none';
+      if (hasDescription) {
+        const descId = 'addon-desc-' + (addon.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggle.setAttribute('aria-controls', descId);
+        descToggle.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
+        descToggle.title = t('addons.modal.showDescription') || 'Show full description';
+      }
+      descToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const expanded = card.classList.toggle('expanded');
+        descToggle.setAttribute('aria-expanded', String(expanded));
+        descToggle.setAttribute('aria-label', expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description'));
+        descToggle.title = expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description');
       });
     }
-    
-    // Make entire card clickable
-    card.style.cursor = 'pointer';
-    card.addEventListener('click', (e) => {
-      // Don't trigger if clicking the check circle itself
-      if (e.target === checkCircle || checkCircle.contains(e.target)) {
-        return;
+    if (featuresEl) {
+      featuresEl.innerHTML = '';
+      if (addon.features && Array.isArray(addon.features) && addon.features.length > 0) {
+        addon.features.forEach((feature) => {
+          const li = document.createElement('li');
+          li.textContent = feature;
+          featuresEl.appendChild(li);
+        });
       }
-      // Toggle the addon
-      if (addon.id) toggleAddon(addon.id, checkCircle);
+    }
+    
+    // Features are now directly in the card, no plan-meta container
+    
+    // Update button text based on initial state
+    if (addToCartBtn) {
+      const isSelected = state.addonIds.has(addon.id);
+      addToCartBtn.textContent = isSelected ? t('button.added') : t('button.addToCart');
+      addToCartBtn.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
+      if (isSelected) {
+        card.classList.add('selected');
+      }
+    }
+    
+    const mainRow = card.querySelector('.addon-card-main');
+    card.style.cursor = 'pointer';
+    (mainRow || card).addEventListener('click', (e) => {
+      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) return;
+      if (thumbWrapper && (e.target === thumbWrapper || thumbWrapper.contains(e.target))) return;
+      const descToggleEl = card.querySelector('.addon-card-description-toggle');
+      if (descToggleEl && (e.target === descToggleEl || descToggleEl.contains(e.target))) return;
+      if (addon.id) toggleAddon(addon.id, addToCartBtn);
     });
     
     grid.appendChild(card);
@@ -6093,24 +5872,52 @@ function showAddonsModal() {
   populateAddonsModal();
   updateAddonActionButton();
   
-  // Show modal with subtle animation
-  addonsModal.style.display = 'block';
-  addonsModal.style.opacity = '0';
-  addonsModal.style.transform = 'scale(0.95)';
-  document.body.style.overflow = 'hidden';
+  // Show modal - overlay dims immediately, only sheet animates
+  addonsModal.style.display = 'flex';
+  addonsModal.style.alignItems = 'center';
+  addonsModal.style.justifyContent = 'center';
+  addonsModal.style.opacity = '1'; // Overlay appears immediately (no animation)
+  addonsModal.style.transition = 'opacity 0.2s ease'; // Quick fade for overlay only
   
-  // Trigger animation after a brief moment
-  requestAnimationFrame(() => {
-    addonsModal.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    addonsModal.style.opacity = '1';
-    addonsModal.style.transform = 'scale(1)';
-  });
+  // Prevent scrolling behind modal
+  document.body.classList.add('modal-open');
+  document.body.style.overflow = 'hidden';
+  document.body.style.position = 'fixed';
+  document.body.style.width = '100%';
+  document.body.style.height = '100%';
+  
+  // Animate only the modal sheet, not the overlay
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    sheet.style.opacity = '0';
+    sheet.style.transform = 'scale(0.95)';
+    sheet.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    
+    requestAnimationFrame(() => {
+      sheet.style.opacity = '1';
+      sheet.style.transform = 'scale(1)';
+    });
+  }
 }
 
 function hideAddonsModal() {
   if (!addonsModal) return;
   addonsModal.style.display = 'none';
+  // Clear sheet inline styles so next open uses CSS only (no legacy position/transform)
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    sheet.style.position = '';
+    sheet.style.left = '';
+    sheet.style.top = '';
+    sheet.style.transform = '';
+    sheet.style.opacity = '';
+    sheet.style.transition = '';
+  }
+  document.body.classList.remove('modal-open');
   document.body.style.overflow = '';
+  document.body.style.position = '';
+  document.body.style.width = '';
+  document.body.style.height = '';
 }
 
 function proceedAfterAddons() {
@@ -6136,9 +5943,18 @@ function populateBoostModal() {
     return;
   }
   
+  // Ensure templates are initialized
+  if (!templates.addon) {
+    console.warn('[Boost Modal] Templates not initialized yet, initializing...');
+    templates.addon = document.getElementById('addon-card-template');
+    if (!templates.addon) {
+      console.error('[Boost Modal] Addon template not found in DOM!');
+    }
+  }
+  
   // Update title for boost modal
   if (title) {
-    title.textContent = 'Boost your membership';
+    title.textContent = t('addons.modal.boost.title');
   }
   
   grid.innerHTML = '';
@@ -6146,20 +5962,26 @@ function populateBoostModal() {
   // Use products with "boostProduct" label
   const boostProducts = state.boostProducts || [];
   
+  console.log(`[Boost Modal] populateBoostModal: ${boostProducts.length} boost products to render`);
+  
   if (boostProducts.length === 0) {
     // No boost products available
+    console.warn('[Boost Modal] No boost products to display');
     const emptyMsg = document.createElement('div');
     emptyMsg.className = 'addons-empty';
-    emptyMsg.textContent = 'No boost products available.';
-    emptyMsg.style.textAlign = 'center';
-    emptyMsg.style.padding = '2rem';
-    emptyMsg.style.color = 'var(--color-text-secondary, #6b7280)';
+    emptyMsg.textContent = t('addons.modal.empty');
     grid.appendChild(emptyMsg);
     return;
   }
   
+  // Check if template exists
+  if (!templates.addon) {
+    console.warn('[Boost Modal] Addon template not found, using fallback rendering');
+  }
+  
   // Render each boost product
-  boostProducts.forEach((product) => {
+  boostProducts.forEach((product, index) => {
+    console.log(`[Boost Modal] Rendering boost product ${index + 1}/${boostProducts.length}: ${product.name} (ID: ${product.id})`);
     if (!templates.addon) {
       // Fallback simple card if template missing
       const card = document.createElement('div');
@@ -6177,19 +5999,33 @@ function populateBoostModal() {
                        product.currency || 
                        'DKK';
       
-      card.innerHTML = `
+      const addToCartBtn = document.createElement('button');
+      addToCartBtn.className = 'addon-add-to-cart-btn';
+      addToCartBtn.setAttribute('data-action', 'toggle-addon');
+      addToCartBtn.setAttribute('data-addon-id', product.id);
+      
+      card.innerHTML = sanitizeHTML(`
         <div style="font-weight:600">${product.name || 'Boost Product'}</div>
-        <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr' : '—'}</div>
-        <div class="check-circle" data-action="toggle-addon" data-addon-id="${product.id}"></div>
-      `;
+        <div>${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) + ' kr.' : '—'}</div>
+      `);
+      card.appendChild(addToCartBtn);
+      
+      // Update button text based on initial state
+      const isSelected = state.addonIds.has(product.id);
+      addToCartBtn.textContent = isSelected ? t('button.added') : t('button.addToCart');
+      addToCartBtn.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
+      if (isSelected) {
+        card.classList.add('selected');
+      }
       
       // Make entire card clickable
       card.addEventListener('click', (e) => {
-        const checkCircle = card.querySelector('.check-circle');
-        if (e.target === checkCircle || checkCircle.contains(e.target)) {
+        // Don't trigger if clicking the button itself
+        if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) {
           return;
         }
-        if (product.id) toggleAddon(product.id, checkCircle);
+        // Toggle the addon when clicking anywhere on the card
+        if (product.id) toggleAddon(product.id, addToCartBtn);
       });
       
       // Ensure card is visible
@@ -6202,11 +6038,13 @@ function populateBoostModal() {
     
     // Use existing add-on template
     const card = templates.addon.content.firstElementChild.cloneNode(true);
-    const checkCircle = card.querySelector('[data-action="toggle-addon"]');
-    if (checkCircle) checkCircle.dataset.addonId = product.id;
+    const addToCartBtn = card.querySelector('[data-action="toggle-addon"]');
+    if (addToCartBtn) addToCartBtn.dataset.addonId = product.id;
     
+    const thumbWrapper = card.querySelector('.addon-card-thumb') || card.querySelector('[data-action="open-lightbox"]');
     const nameEl = card.querySelector('[data-element="name"]');
     const imageEl = card.querySelector('[data-element="image"]');
+    const imageBannerEl = card.querySelector('[data-element="imageBanner"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
     const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
     const descriptionEl = card.querySelector('[data-element="description"]');
@@ -6239,15 +6077,12 @@ function populateBoostModal() {
           // Construct asset URL from reference ID
           const referenceId = mainAsset.reference;
           const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const isNetlify = window.location.hostname.includes('netlify.app');
           const isCloudflarePages = window.location.hostname.includes('pages.dev') ||
                                    window.location.hostname.includes('join.boulders.dk') ||
                                    window.location.hostname === 'boulders.dk';
           
           if (isDevelopment) {
             imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
-          } else if (isNetlify) {
-            imageUrl = `/.netlify/functions/api-proxy?path=/api/assets/${referenceId}`;
           } else if (isCloudflarePages) {
             imageUrl = `/api-proxy?path=/api/assets/${referenceId}`;
           } else {
@@ -6259,25 +6094,55 @@ function populateBoostModal() {
       
       console.log('[Boost Modal] Image URL for', product.name, ':', imageUrl);
       
+      // Always show image element - use placeholder if no image URL
+      imageEl.removeAttribute('style'); // Remove inline style that hides it
+      imageEl.style.display = 'block';
+      imageEl.style.visibility = 'visible';
+      imageEl.style.opacity = '1';
+      imageEl.style.width = '100%';
+      // Image size controlled by CSS (.addons-grid .addon-card img max-height by breakpoint)
+      imageEl.style.objectFit = 'cover';
+      imageEl.style.borderRadius = '8px';
+      imageEl.style.marginBottom = '12px';
+      imageEl.style.backgroundColor = '#1e293b'; // Background color for placeholder
+      imageEl.classList.add('addon-image');
+      
       if (imageUrl) {
         imageEl.src = imageUrl;
         imageEl.alt = product.name || 'Product image';
-        imageEl.style.display = 'block';
-        imageEl.classList.add('addon-image');
-        console.log('[Boost Modal] Image set for', product.name);
+        console.log('[Boost Modal] Image set for', product.name, '- src:', imageEl.src);
       } else {
-        imageEl.style.display = 'none';
-        console.log('[Boost Modal] No image URL found for', product.name);
+        // Use placeholder image when no image is available
+        imageEl.src = getProductPlaceholderImage();
+        imageEl.alt = (product.name || 'Product') + ' - No image available';
+        console.log('[Boost Modal] Using placeholder image for', product.name);
       }
+      
+      // Display image banner text if available
+      if (imageBannerEl && product.imageBanner?.text) {
+        imageBannerEl.textContent = product.imageBanner.text;
+        imageBannerEl.style.display = 'block';
+        console.log('[Boost Modal] Image banner text set for', product.name, ':', product.imageBanner.text);
+      } else if (imageBannerEl) {
+        imageBannerEl.style.display = 'none';
+      }
+      if (thumbWrapper && imageEl) {
+        thumbWrapper.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (imageEl.src) openAddonLightbox(imageEl.src, imageEl);
+        });
+      }
+      // List layout: thumb size from CSS (64px / 40px mobile), no large-image inline styles
+      imageEl.style.width = '';
+      imageEl.style.marginBottom = '';
     }
     
-    // Extract price from product structure (similar to renderSubscriptionCard)
-    const priceInCents = product.priceWithInterval?.price?.amount || 
-                         product.price?.amount || 
-                         product.amount || 
-                         0;
-    const price = priceInCents > 0 ? priceInCents / 100 : 0;
-    const originalPrice = product.originalPrice ? product.originalPrice / 100 : null;
+    // Use helper function for consistent price extraction
+    const price = getAddonPrice(product);
+    // Handle original price if available (for products with discounts)
+    const originalPrice = product.originalPrice 
+      ? (typeof product.originalPrice === 'number' ? product.originalPrice / 100 : product.originalPrice)
+      : (product.price?.original ? product.price.original : null);
     
     if (originalPriceEl && originalPrice && originalPrice > price) {
       originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
@@ -6292,9 +6157,42 @@ function populateBoostModal() {
     }
     
     if (descriptionEl) {
-      // Get description similar to renderSubscriptionCard
-      const description = product.imageBanner?.text || product.description || product.productNumber || '';
-      descriptionEl.textContent = description;
+      // Get description - use externalDescription if available, otherwise fall back to description
+      // Do not show product number as fallback
+      const description = product.externalDescription || product.description || '';
+      if (description) {
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+        descriptionEl.style.display = '';
+      } else {
+        descriptionEl.textContent = '';
+        descriptionEl.style.display = 'none';
+      }
+    }
+    const descToggleBoost = card.querySelector('.addon-card-description-toggle');
+    if (descToggleBoost) {
+      const descText = (product.externalDescription || product.description || '').trim();
+      descToggleBoost.style.display = descText.length > 0 ? '' : 'none';
+      if (descText.length > 0) {
+        const descId = 'addon-desc-boost-' + (product.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggleBoost.setAttribute('aria-controls', descId);
+        descToggleBoost.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
+        descToggleBoost.title = t('addons.modal.showDescription') || 'Show full description';
+      }
+      descToggleBoost.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const expanded = card.classList.toggle('expanded');
+        descToggleBoost.setAttribute('aria-expanded', String(expanded));
+        descToggleBoost.setAttribute('aria-label', expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description'));
+        descToggleBoost.title = expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description');
+      });
     }
     
     if (featuresEl && product.features && Array.isArray(product.features)) {
@@ -6308,53 +6206,167 @@ function populateBoostModal() {
       featuresEl.innerHTML = '';
     }
     
-    // Make entire card clickable
+    // Update button text based on initial state
+    if (addToCartBtn) {
+      const isSelected = state.addonIds.has(product.id);
+      addToCartBtn.textContent = isSelected ? t('button.added') : t('button.addToCart');
+      addToCartBtn.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
+      if (isSelected) {
+        card.classList.add('selected');
+      }
+    }
+    
+    // Main row click toggles add to cart (expand button and thumbnail have their own handlers)
     card.style.cursor = 'pointer';
+    const mainRow = card.querySelector('.addon-card-main');
+    const cardClickTarget = mainRow || card;
+    cardClickTarget.addEventListener('click', (e) => {
+      if (e.target === addToCartBtn || addToCartBtn.contains(e.target)) return;
+      if (thumbWrapper && (e.target === thumbWrapper || thumbWrapper.contains(e.target))) return;
+      const descToggleEl = card.querySelector('.addon-card-description-toggle');
+      if (descToggleEl && (e.target === descToggleEl || descToggleEl.contains(e.target))) return;
+      if (product.id) toggleAddon(product.id, addToCartBtn);
+    });
     
     // Ensure card is visible (fix opacity: 0 issue)
     card.style.opacity = '1';
     card.style.visibility = 'visible';
     
-    card.addEventListener('click', (e) => {
-      if (e.target === checkCircle || checkCircle.contains(e.target)) {
-        return;
-      }
-      if (product.id) toggleAddon(product.id, checkCircle);
-    });
-    
     grid.appendChild(card);
+    console.log(`[Boost Modal] ✅ Card appended for product: ${product.name}`);
   });
+  
+  console.log(`[Boost Modal] ✅ Finished rendering ${boostProducts.length} boost products`);
 }
 
 // Show boost modal (uses same modal infrastructure as addons)
 async function showBoostModal() {
   ensureAddonsModal();
   
+  // Ensure products are loaded first
+  const hasAnyProducts = (state.allRawProducts?.length || 0) > 0 || 
+                         (state.subscriptions?.length || 0) > 0 || 
+                         (state.campaignSubscriptions?.length || 0) > 0 ||
+                         (state.dayPassSubscriptions?.length || 0) > 0 ||
+                         (state.valueCards?.length || 0) > 0;
+  
+  if (!hasAnyProducts) {
+    console.warn('[Boost Modal] No products loaded yet. Waiting for products to load...');
+    // Wait a bit and try again, or load products if business unit is selected
+    if (state.selectedBusinessUnit) {
+      await loadProductsFromAPI();
+    } else {
+      console.error('[Boost Modal] Cannot load boost products: No business unit selected');
+      showToast('Unable to load boost products. Please try again.', 'error');
+      return;
+    }
+  }
+  
   // Load boost products if not already loaded
   if (!state.boostProducts || state.boostProducts.length === 0) {
     await loadBoostProducts();
   }
   
-  populateBoostModal();
-  updateAddonActionButton();
-  
-  // Show modal with subtle animation
-  addonsModal.style.display = 'block';
-  addonsModal.style.opacity = '0';
-  addonsModal.style.transform = 'scale(0.95)';
+  // Show modal first so sheet container is in layout (CSS: flex centering, no inline position)
+  addonsModal.style.display = 'flex';
+  addonsModal.style.alignItems = 'center';
+  addonsModal.style.justifyContent = 'center';
+  addonsModal.style.opacity = '1';
+  addonsModal.style.transition = 'opacity 0.2s ease';
+
+  document.body.classList.add('modal-open');
   document.body.style.overflow = 'hidden';
-  
-  // Trigger animation after a brief moment
+  document.body.style.position = 'fixed';
+  document.body.style.width = '100%';
+  document.body.style.height = '100%';
+
+  const sheet = addonsModal.querySelector('.addons-sheet');
+  if (sheet) {
+    // Rely on CSS for positioning (no position/left/top/translate – avoids conflicts on some devices)
+    sheet.style.position = '';
+    sheet.style.left = '';
+    sheet.style.top = '';
+    sheet.style.opacity = '0';
+    sheet.style.transform = 'scale(0.95)';
+    sheet.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+  }
+
+  // Let sheet render/layout first, then populate cards, then animate
   requestAnimationFrame(() => {
-    addonsModal.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    addonsModal.style.opacity = '1';
-    addonsModal.style.transform = 'scale(1)';
+    populateBoostModal();
+    updateAddonActionButton();
+
+    if (sheet) {
+      requestAnimationFrame(() => {
+        sheet.style.opacity = '1';
+        sheet.style.transform = 'scale(1)';
+      });
+    }
   });
 }
 
 // Expose a small API to set the image dynamically if desired
 // Usage: window.setAddonsUpsellImage('https://.../image.jpg')
 // Image API removed
+
+// Check if a product has the "Boost" label
+function hasBoostLabel(product) {
+  if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+    return false;
+  }
+  return product.productLabels.some(
+    label => label.name && label.name.toLowerCase() === 'boost'
+  );
+}
+
+// Load and filter products with "boostProduct" label
+async function loadBoostProducts() {
+  const boostProducts = [];
+  const seenIds = new Set();
+  
+  // Helper function to check if product has boostProduct label
+  const hasBoostProductLabel = (product) => {
+    if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+      return false;
+    }
+    return product.productLabels.some(
+      label => label.name && label.name.toLowerCase() === 'boostproduct'
+    );
+  };
+  
+  // Scan all product sources - prioritize raw products (before filtering) to catch all boost products
+  // Then also check filtered arrays in case products are in both
+  const productSources = [
+    ...(state.allRawProducts || []), // Raw products before filtering (most important)
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || []) // Include campaign value cards
+  ];
+  
+  console.log(`[Boost Modal] Scanning ${productSources.length} products for boostProduct label`);
+  console.log(`[Boost Modal] Raw products: ${state.allRawProducts?.length || 0}, Subscriptions: ${state.subscriptions?.length || 0}, Campaigns: ${state.campaignSubscriptions?.length || 0}, DayPass: ${state.dayPassSubscriptions?.length || 0}, ValueCards: ${state.valueCards?.length || 0}, CampaignValueCards: ${state.campaignValueCards?.length || 0}`);
+  
+  // Filter products with boostProduct label and deduplicate by ID
+  productSources.forEach((product) => {
+    if (hasBoostProductLabel(product) && product.id) {
+      const productId = String(product.id);
+      if (!seenIds.has(productId)) {
+        seenIds.add(productId);
+        boostProducts.push(product);
+        console.log(`[Boost Modal] Found boost product: ${product.name} (ID: ${product.id})`);
+      }
+    }
+  });
+  
+  state.boostProducts = boostProducts;
+  console.log(`[Boost Modal] Loaded ${boostProducts.length} boost products`);
+  if (boostProducts.length === 0) {
+    console.warn('[Boost Modal] No boost products found! Check that products have "boostProduct" label.');
+  }
+  return boostProducts;
+}
 
 // Hide Boost from the step indicator permanently and toggle Boost step panel by selection
 function applyConditionalSteps() {
@@ -6409,12 +6421,18 @@ function init() {
   
   cacheDom();
   cacheTemplates();
+  initFAQ();
+  
+  // Restore privacy and terms consent from localStorage
+  restoreConsentCheckboxes();
+  
   renderCatalog();
   refreshCarousels();
   updateCartSummary();
   initAuthModeToggle();
   updateCheckoutButton();
   setupEventListeners();
+  updateFAQVisibility(); // Initialize FAQ visibility
   // Apply conditional visibility for Boost on load
   applyConditionalSteps();
   updateStepIndicator();
@@ -6435,23 +6453,9 @@ function init() {
     locationBtn.classList.add('active');
   }
   
-  // Auto-trigger geolocation on page load (if supported)
-  // This will automatically find nearest gyms when the page loads
-  if (locationBtn && isGeolocationAvailable() && !userLocation) {
-    // Small delay to let the page render first
-    setTimeout(() => {
-      console.log('[Geolocation] Auto-triggering location detection on page load');
-      findNearestGym().catch(err => {
-        // Silently fail - this is expected if user denies permission or location unavailable
-        // On macOS, this is common due to CoreLocation limitations
-        if (err.type === 'unavailable' || err.type === 'timeout') {
-          console.log('[Geolocation] Auto-location unavailable on this device (macOS CoreLocation issue). User can manually trigger if needed.');
-        } else {
-          console.log('[Geolocation] Auto-location failed (this is OK):', err.message);
-        }
-      });
-    }, 500);
-  }
+  // Cookie consent handled by Cookiebot (see index.html). Footer "Cookie Settings" triggers Cookiebot.renew().
+  
+  // Geolocation must be triggered by user gesture to avoid browser blocks.
   
   updateMainSubtitle();
   
@@ -6472,6 +6476,11 @@ function hideLoadingOverlay() {
     }
     if (mainContent) {
       mainContent.style.display = '';
+      // Update FAQ visibility after main is shown
+      setTimeout(() => {
+        updateFAQVisibility();
+        initFAQ();
+      }, 100);
     }
     
     // Hide loading overlay with fade out
@@ -6491,15 +6500,15 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Særlige tilbudsordninger og kampagner med begrænset varighed. Gør brug af disse eksklusive tilbud, mens de varer.', 'category.campaign.subtitle': 'Begrænsede tilbud', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Løbende abonnement, ubegrænset adgang', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': 'Midlertidig adgangspas', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': '10 indgange, delbart fysisk kort',
+    'category.campaign': '25% rabat i 6 måneder', 'category.campaign.desc': 'Særlig kampagne på medlemskab med begrænset varighed, udløber 15. marts 2026. Køb tilbuddet inden det udløber.', 'category.campaign.subtitle': 'Begrænset tilbud på medlemskab!', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
-    'category.15daypass.desc': 'Få 15 dages ubegrænset adgang til alle haller. Perfekt til at prøve klatring eller et kortvarigt besøg.',
-    'category.punchcard.desc': 'Du kan købe 1 type klippekort ad gangen. Hvert indgang bruger et klip på dit klippekort. Kortet er gyldigt i 5 år og giver ikke medlemsfordele. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen.',
+    'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
+    'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
     'header.selectedGym': 'Valgt hal:', 'gym.headsUp': 'Hjemmehal valgt:', 'access.headsUp': 'Adgangstype valgt:',
     'main.subtitle.step1': 'Vælg din hjemmehal', 'main.subtitle.step1.secondary': 'Dette er hvor du primært træner − du får adgang til alle haller.',
-    'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om måneden.',
+    'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen.',
     'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
-    'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger',
+    'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger', 'button.select': 'Vælg', 'button.addToCart': 'Tilføj til kurv', 'button.added': 'Tilføjet!',
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
@@ -6508,8 +6517,8 @@ const translations = {
     'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By', 'form.city.placeholder': 'Auto',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Indtast din e-mail', 'form.country': 'Land', 'form.phoneNumber': 'Mobilnummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
-    'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Gem konto',
-    'form.buyer': 'Køber', 'form.createProfile': 'OPRET PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
+    'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Opret profil',
+    'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
     'form.parentDateOfBirth': 'Fødselsdato*', 'form.parentStreetAddress': 'Gade og husnummer*', 'form.parentStreetAddress.placeholder': 'Indtast gade og husnummer',
     'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By', 'form.parentCity.placeholder': 'København',
@@ -6521,35 +6530,179 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'quantity.label': 'Vælg antal',
+    'activationDate.label': 'Hvornår vil du aktivere dit pas?',
+    'activationDate.now': 'Aktiver nu',
+    'activationDate.later': 'Aktiver på en bestemt dato',
+    'activationDate.pickLabel': 'Vælg aktiveringsdato',
+    'activationDate.hint': 'Vælg en dato i dag eller i fremtiden.',
+    'activationDate.change': 'Ændre',
+    'activationDate.changeFailed': 'Kunne ikke ændre datoen. Gennemfør din køb eller start forfra.',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
-    'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>',
-    'cart.consent.marketing': 'Jeg vil gerne modtage marketing-e-mails. Læs vores <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datapolitik</a>.',
-    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'step4.completePurchase': 'Færdiggør dit køb',
+    'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
+    'cart.consent.privacy': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Persondatapolitik</a>.*',
+    'cart.consent.marketing': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">marketing-e-mails</a>.',
+    'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
+    'cart.consent.sms': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS-beskeder</a>.',
+    'consent.sms.explainer': 'SMS<br><br>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
+    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
+    'confirmation.title': 'SUCCES!',
+    'confirmation.message': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.membership': 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.15daypass': 'Din 15-dages pas er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.orderDetails': 'Ordredetaljer',
+    'confirmation.orderNumber': 'Ordrenummer:',
+    'confirmation.date': 'Dato:',
+    'confirmation.total': 'Total:',
+    'confirmation.showReceipt': 'Vis detaljeret kvittering',
+    'confirmation.receipt.title': 'Ordrebekræftelse',
+    'confirmation.receipt.order': 'Ordre',
+    'confirmation.receipt.orderOverview': 'Ordreoversigt',
+    'confirmation.receipt.subtotal': 'Subtotal:',
+    'confirmation.receipt.discount': 'Rabat:',
+    'confirmation.receipt.total': 'TOTALT:',
+    'confirmation.receipt.vatInclusive': 'inkl. moms (25%):',
+    'confirmation.receipt.payments': 'Betalinger',
+    'confirmation.receipt.paymentMethod': 'Betalingsmetode:',
+    'confirmation.receipt.amountPaid': 'Betalt beløb:',
+    'confirmation.receipt.transactionId': 'Transaktions-id:',
+    'confirmation.receipt.sellerInfo': 'Sælgers oplysninger',
+    'confirmation.receipt.sellerName': 'Sælgerens navn:',
+    'confirmation.receipt.address': 'Adresse:',
+    'confirmation.receipt.cvr': 'CVR-nummer:',
+    'confirmation.receipt.phone': 'Telefon:',
+    'confirmation.receipt.email': 'E-mail:',
+    'confirmation.receipt.customerInfo': 'Kundens informationer',
+    'confirmation.receipt.customerName': 'Kundens navn:',
+    'confirmation.receipt.valueCardsPurchased': 'Købte værdikort',
+    'confirmation.receipt.close': 'LUK',
+    'confirmation.primaryGym': 'Hjemmehal:',
+    'confirmation.membershipType': 'Type:',
+    'confirmation.monthlyPrice': 'Månedlig pris:',
+    'confirmation.15daypassDetails': '15-dages pas detaljer',
+    'confirmation.passType': 'Pastype:',
+    'confirmation.validFrom': 'Gyldig fra:',
+    'confirmation.validUntil': 'Gyldig til:',
+    'confirmation.punchCardDetails': 'Klippekort detaljer',
+    'confirmation.name': 'Navn:',
+    'confirmation.cardType': 'Korttype:',
+    'confirmation.quantity': 'Antal:',
+    'confirmation.nextStepsTitle': 'Hvad sker der nu?',
+    'confirmation.nextStep1': 'E-mail bekræftelse sendt til din indbakke',
+    'confirmation.nextStep2.membership': 'Medlemskabsaktivering og automatisk fornyelse',
+    'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
+    'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
+    'confirmation.nextStep3.membership': 'Hent dit medlemskabskort i centeret',
+    'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge dit pas',
+    'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
+    'confirmation.pending.title': 'Betaling afventer',
+    'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
+    'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
     'footer.terms.title': 'Vilkår og Betingelser', 'footer.terms.all': 'Vilkår og Betingelser', 'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab', 'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
     'footer.policies.title': 'Politikker', 'footer.policies.privacy': 'Privatlivspolitik', 'footer.policies.cookie': 'Cookiepolitik', 'footer.rights': 'Alle rettigheder forbeholdes', 'footer.copyright': '© 2026 Boulders. Alle rettigheder forbeholdes.',
+    'cookie.banner.title': 'Vi bruger cookies', 'cookie.banner.description': 'Vi bruger cookies til at forbedre din browsingoplevelse, analysere trafik på sitet og personalisere indhold. Ved at klikke på "Accepter alle" giver du samtykke til vores brug af cookies. Du kan administrere dine præferencer eller læse mere i vores <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookiepolitik</a>.', 'cookie.banner.accept': 'Accepter alle', 'cookie.banner.reject': 'Afvis alle', 'cookie.banner.settings': 'Tilpas',
+    'cookie.settings.title': 'Cookie-indstillinger', 'cookie.settings.description': 'Administrer dine cookie-præferencer. Du kan aktivere eller deaktivere forskellige typer cookies nedenfor. Essentielle cookies kan ikke deaktiveres, da de er nødvendige for, at hjemmesiden fungerer.', 'cookie.settings.save': 'Gem præferencer', 'cookie.settings.button': 'Cookie-indstillinger',
+    'cookie.category.essential.title': 'Essentielle Cookies', 'cookie.category.essential.desc': 'Disse cookies er nødvendige for, at hjemmesiden fungerer og kan ikke deaktiveres.',
+    'cookie.category.analytics.title': 'Analyse Cookies', 'cookie.category.analytics.desc': 'Disse cookies hjælper os med at forstå, hvordan besøgende interagerer med vores hjemmeside ved at indsamle og rapportere information anonymt.',
+    'cookie.category.marketing.title': 'Marketing Cookies', 'cookie.category.marketing.desc': 'Disse cookies bruges til at levere annoncer og spore kampagneeffektivitet.',
+    'cookie.category.functional.title': 'Funktionelle Cookies', 'cookie.category.functional.desc': 'Disse cookies muliggør forbedret funktionalitet og personalisering, såsom at huske dine præferencer.',
     'addons.intro': 'Forbedre din klatreoplevelse med vores add-on produkter.',
+    'addons.modal.title': 'Tilføj til dit medlemskab',
+    'addons.modal.boost.title': 'Boost dit medlemskab',
+    'addons.modal.hint': 'Gør klatringen federe med udvalgte tilføjelser. Hentes ved dit næste besøg.',
+    'addons.modal.skip': 'Spring over',
+    'addons.modal.continue': 'Fortsæt',
+    'addons.modal.close': 'Luk',
+    'addons.modal.showDescription': 'Vis fuld beskrivelse',
+    'addons.modal.collapseDescription': 'Skjul beskrivelse',
+    'addons.modal.empty': 'Ingen boost produkter tilgængelige.',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
+    'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
+    'modal.loading': 'Indlæser...',
+    'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
+    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes at du har forladt betalingsvinduet uden at gennenmføre, et eksisterende abonnementer eller kampagnebegrænsning. Kontakt support hvis du tror dette er en fejl. Du kan stadig oprette et almindeligt medlemskab.',
+    'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
+    'modal.campaignRejection.option2': 'Kontakt support',
+    'modal.cartOfferExpired.title': 'Tilbuddet er udløbet',
+    'modal.cartOfferExpired.message': 'Tiden til at gennemføre dit køb er udløbet. Du kan stadig forsøge at betale til den viste pris, eller gå tilbage og vælge et andet medlemskab.',
+    'modal.cartOfferExpired.continue': 'Fortsæt til betaling',
+    'modal.cartOfferExpired.chooseOther': 'Vælg andet tilbud',
+    'faq.title': 'Ofte stillede spørgsmål',
+    'faq.gyms.openingHours.q': 'Hvad er åbningstiderne?',
+    'faq.gyms.openingHours.a': 'Åbningstiderne varierer mellem hallerne. Du kan finde de aktuelle åbningstider på vores hjemmeside eller ved at kontakte den specifikke hal.',
+    'faq.gyms.openingHours.intro': 'Alle Boulders har åbent fra morgen til aften 361 dage om året:',
+    'faq.gyms.openingHours.tableName': 'Hal',
+    'faq.gyms.openingHours.tableOpen': 'Åben',
+    'faq.gyms.access.q': 'Hvordan får jeg adgang til hallerne?',
+    'faq.gyms.access.a': 'Efter gennemført køb, besøger du din valgte hal og henter dit adgangkort. Kortet er din nøgle til Boulders, som du scanner for at åbne lågerne.',
+    'faq.gyms.events.q': 'Er der begivenheder og aktiviteter?',
+    'faq.gyms.events.a': 'Ja! Vi afholder regelmæssigt begivenheder, konkurrencer og sociale aktiviteter på tværs af alle vores haller. Tjek vores hjemmeside eller app for at se kommende begivenheder.',
+    'faq.gyms.gettingStarted.q': 'Hvordan kommer jeg godt i gang?',
+    'faq.gyms.gettingStarted.a': 'Der er mange måder at komme godt i gang på. Vi anbefaler at deltage på et introhold eller et Fundamentals hold. Det er ikke nødvendigt at starte på et hold, men det kan være meget rart — og en rigtig god måde at kickstarte det sociale. Mange starter alene og finder hurtigt fællesskab i vores inkluderende klatrekultur. Du kan også læse vores kom-godt-igang guide.',
+    'faq.membership.included.q': 'Hvad er inkluderet i mit medlemskab?',
+    'faq.membership.included.a': 'Dit medlemskab inkluderer gratis introhold, ubegrænset adgang til alle Boulders haller, brug af alle klatreområder og faciliteter, samt adgang til begivenheder og aktiviteter og gratis +1 til Late Night Boulders.',
+    'faq.membership.blocLife.q': 'Hvad er Bloc Life?',
+    'faq.membership.blocLife.a': 'Bloc Life er Boulders\' medlemsfordelsprogram. Når du er medlem, er du automatisk en del af det. Jo længere du er medlem, jo flere fordele får du – rabatter på klatregrej, kaffe, snacks og eksklusiv adgang til nye haller. Fordele og niveauer opdateres automatisk.',
+    'faq.membership.terms.q': 'Hvad er vilkårene og betingelserne?',
+    'faq.membership.terms.a': 'Medlemskabet er et løbende abonnement med automatisk fornyelse. Der er ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden plus 1 måned. Du kan læse de fulde vilkår og betingelser ved at klikke på linket i kurven.',
+    'faq.membership.bindingPeriod.q': 'Er der bindingsperiode?',
+    'faq.membership.bindingPeriod.a': 'Der er ikke bindingsperiode på Boulders\' medlemskaber uden for kampagner. Du kan til enhver tid melde dig ud med varsel på løbende måned plus en måned. Opretter du medlemskab på en prisnedsat kampagne, vil der være 3 måneders binding.',
+    'faq.membership.freeze.q': 'Kan jeg fryse mit medlemskab?',
+    'faq.membership.freeze.a': 'Ja, du kan fryse dit medlemskab i 1–3 måneder af gangen, op til 3 gange om året for 49 kr pr. gang. Du betaler ikke, mens du er i bero, og genaktivering er gratis. Frysning kan ikke aktiveres i bindingsperiode.',
+    'faq.membership.cancellation.q': 'Hvordan opsiger jeg mit medlemskab?',
+    'faq.membership.cancellation.a': 'Du kan opsige dit medlemskab når som helst med en kort varsel, som er resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
+    'faq.15daypass.howItWorks.q': 'Hvordan virker 15-dages kortet?',
+    'faq.15daypass.howItWorks.a': '15-dages kortet giver dig 15 dages ubegrænset adgang til alle Boulders haller fra den dag, du aktiverer det. Det er perfekt til at prøve klatring eller et kortvarigt besøg.',
+    'faq.15daypass.validity.q': 'Hvor længe er kortet gyldigt?',
+    'faq.15daypass.validity.a': '15-dages kortet er gyldigt i 15 dage fra aktiveringsdatoen. Du har ubegrænset adgang til alle haller, samt fri leje af klatresko, i denne periode.',
+    'faq.15daypass.access.q': 'Hvilken adgang får jeg med kortet?',
+    'faq.15daypass.access.a': 'Med 15-dages kortet får du ubegrænset adgang til alle Boulders haller, alle klatreområder og faciliteter i 15 dage. kortet kan ikke konverteres til et fuldt medlemskab.',
+    'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
+    'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 5 år og kan deles med andre.',
+    'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
+    'faq.punchcard.convert.a': 'Klippekort kan altid konverteres til et medlemskab ved at sende en mail til medlem@boulders.dk.',
+    'faq.punchcard.remainingClips.q': 'Hvad gør jeg med resterende klip på mit klippekort?',
+    'faq.punchcard.remainingClips.a': 'Hvis du stadig har klip på dit klippekort, men er klar til medlemskab, kan du få det ombyttet til medlemskab. For ombytning skal du sende en mail til medlem@boulders.dk. Eller giv det som gave til en, der fortjener det.',
+    'faq.punchcard.multiple.q': 'Kan jeg have flere klippekort?',
+    'faq.punchcard.multiple.a': 'Du kan have ubegrænset antal klippekort tilknyttet din profil.',
+    'faq.productChoice.difference.q': 'Hvad er forskellen mellem medlemskab, 15-dages pas og klippekort?',
+    'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 5 år og kan deles med andre.',
+    'faq.productChoice.membershipBest.q': 'Hvornår vælger jeg medlemskab?',
+    'faq.productChoice.membershipBest.a': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen. Du får ubegrænset adgang til alle haller, ingen tilmeldings- eller opsigelsesgebyrer, og du kan opsige når som helst med kort varsel.',
+    'faq.productChoice.15daypassBest.q': 'Hvornår skal jeg vælge 15-dages kortet?',
+    'faq.productChoice.15daypassBest.a': 'Vælg 15-dages kortet hvis du vil prøve klatring eller kun har brug for adgang i en kort periode. Du får 15 dages ubegrænset adgang til alle haller + lejesko, fra den dag, du aktiverer det.',
+    'faq.productChoice.punchcardBest.q': 'Hvornår vælger jeg klippekort?',
+    'faq.productChoice.punchcardBest.a': 'Vælg klippekort hvis du klatrer en gang imellem eller vil dele adgang med andre. Du får 10 (medmindre andet er angivet) indgange til alle haller, kortet er gyldigt i 5 år, og du kan genopfylde inden for 14 dage efter sidste klip og få 100 kr rabat.',
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Campaign', 'category.campaign.desc': 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last.', 'category.campaign.subtitle': 'Limited time offers', 'category.membership': 'Membership', 'category.membership.subtitle': 'Ongoing subscription, unlimited access', 'category.15daypass': '15 Day Pass', 'category.15daypass.subtitle': 'Temporary access pass', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': '10 entries, shareable physical card',
+    'category.campaign': '25% Off for 6 Months', 'category.campaign.desc': 'Promotional limited time membership campaign, expires March 15 2026. Take advantage of this exclusive deal while it lasts.', 'category.campaign.subtitle': 'Limited time membership offer!', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
-    'category.punchcard.desc': 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym.',
+    'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
+    'activationDate.label': 'When do you want to activate your pass?',
+    'activationDate.now': 'Activate now',
+    'activationDate.later': 'Activate on specific date',
+    'activationDate.pickLabel': 'Select activation date',
+    'activationDate.hint': 'Select a date today or in the future.',
+    'activationDate.change': 'Change',
+    'activationDate.changeFailed': 'Unable to change date. Please complete your purchase or start over.',
     'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
-    'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a month.',
+    'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
     'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
-    'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit',
+    'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit', 'button.select': 'Select', 'button.addToCart': 'Add to cart', 'button.added': 'Added!',
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
@@ -6571,23 +6724,289 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
-    'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>',
-    'cart.consent.marketing': 'I want to receive marketing emails. Read our <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Data policy</a>.',
-    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'step4.completePurchase': 'Complete your purchase',
+    'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
+    'cart.consent.privacy': 'I accept the <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Privacy Policy</a>*.',
+    'cart.consent.marketing': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Marketing Emails</a>.',
+    'consent.email.explainer': 'E-mail<br><br>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.',
+    'cart.consent.sms': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS Messages.</a>.',
+    'consent.sms.explainer': 'SMS<br><br>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.',
+    'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'cart.faqHelp': 'Questions? See FAQ', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
+    'confirmation.title': 'SUCCESS!',
+    'confirmation.message': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.15daypass': 'Your 15 day pass has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.orderDetails': 'Order Details',
+    'confirmation.orderNumber': 'Order Number:',
+    'confirmation.date': 'Date:',
+    'confirmation.total': 'Total:',
+    'confirmation.showReceipt': 'Show detailed receipt',
+    'confirmation.receipt.title': 'Order confirmation',
+    'confirmation.receipt.order': 'Order',
+    'confirmation.receipt.orderOverview': 'Order overview',
+    'confirmation.receipt.subtotal': 'Subtotal:',
+    'confirmation.receipt.discount': 'Discount:',
+    'confirmation.receipt.total': 'TOTAL:',
+    'confirmation.receipt.vatInclusive': 'including VAT (25%):',
+    'confirmation.receipt.payments': 'Payments',
+    'confirmation.receipt.paymentMethod': 'Payment method:',
+    'confirmation.receipt.amountPaid': 'Amount paid:',
+    'confirmation.receipt.transactionId': 'Transaction ID:',
+    'confirmation.receipt.sellerInfo': 'Seller information',
+    'confirmation.receipt.sellerName': 'Seller name:',
+    'confirmation.receipt.address': 'Address:',
+    'confirmation.receipt.cvr': 'CVR number:',
+    'confirmation.receipt.phone': 'Phone:',
+    'confirmation.receipt.email': 'Email:',
+    'confirmation.receipt.customerInfo': 'Customer information',
+    'confirmation.receipt.customerName': 'Customer name:',
+    'confirmation.receipt.valueCardsPurchased': 'Value cards purchased',
+    'confirmation.receipt.close': 'CLOSE',
+    'confirmation.primaryGym': 'Primary Gym:',
+    'confirmation.membershipType': 'Type:',
+    'confirmation.monthlyPrice': 'Monthly Price:',
+    'confirmation.15daypassDetails': '15 Day Pass Details',
+    'confirmation.passType': 'Pass Type:',
+    'confirmation.validFrom': 'Valid From:',
+    'confirmation.validUntil': 'Valid Until:',
+    'confirmation.punchCardDetails': 'Punch Card Details',
+    'confirmation.name': 'Name:',
+    'confirmation.cardType': 'Card Type:',
+    'confirmation.quantity': 'Quantity:',
+    'confirmation.nextStepsTitle': 'What happens next?',
+    'confirmation.nextStep1': 'Email confirmation sent to your inbox',
+    'confirmation.nextStep2.membership': 'Membership activation & auto-renewal setup',
+    'confirmation.nextStep2.15daypass': 'Your pass is active and ready to use',
+    'confirmation.nextStep2.punchcard': 'Your punch card is ready to use',
+    'confirmation.nextStep3.membership': 'Pick up your membership card at the gym',
+    'confirmation.nextStep3.15daypass': 'Visit the gym to start using your pass',
+    'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
+    'confirmation.pending.title': 'Payment Pending',
+    'confirmation.pending.message': 'Your payment is being processed. We\'re waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #',
+    'confirmation.pending.stillProcessing': 'Payment is still being processed. Please check back in a few minutes or contact support if you\'ve completed payment. Order #',
     'footer.terms.title': 'Terms and Conditions', 'footer.terms.all': 'Terms and Conditions', 'footer.terms.membership': 'Terms and Conditions for Membership', 'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
     'footer.policies.title': 'Policies', 'footer.policies.privacy': 'Privacy Policy', 'footer.policies.cookie': 'Cookie Policy', 'footer.rights': 'All rights reserved', 'footer.copyright': '© 2026 Boulders. All rights reserved.',
+    'cookie.banner.title': 'We use cookies', 'cookie.banner.description': 'We use cookies to enhance your browsing experience, analyze site traffic, and personalize content. By clicking "Accept All", you consent to our use of cookies. You can manage your preferences or learn more in our <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie Policy</a>.', 'cookie.banner.accept': 'Accept All', 'cookie.banner.reject': 'Reject All', 'cookie.banner.settings': 'Customize',
+    'cookie.settings.title': 'Cookie Preferences', 'cookie.settings.description': 'Manage your cookie preferences. You can enable or disable different types of cookies below. Essential cookies cannot be disabled as they are necessary for the website to function.', 'cookie.settings.save': 'Save Preferences', 'cookie.settings.button': 'Cookie Settings',
+    'cookie.category.essential.title': 'Essential Cookies', 'cookie.category.essential.desc': 'These cookies are necessary for the website to function and cannot be disabled.',
+    'cookie.category.analytics.title': 'Analytics Cookies', 'cookie.category.analytics.desc': 'These cookies help us understand how visitors interact with our website by collecting and reporting information anonymously.',
+    'cookie.category.marketing.title': 'Marketing Cookies', 'cookie.category.marketing.desc': 'These cookies are used to deliver advertisements and track campaign effectiveness.',
+    'cookie.category.functional.title': 'Functional Cookies', 'cookie.category.functional.desc': 'These cookies enable enhanced functionality and personalization, such as remembering your preferences.',
     'addons.intro': 'Enhance your climbing experience with our add-on products.',
+    'addons.modal.title': 'Add to your membership',
+    'addons.modal.boost.title': 'Boost your membership',
+    'addons.modal.hint': 'Upgrade your climbing sessions with selected additions. Pick it up at your next visit.',
+    'addons.modal.skip': 'Skip',
+    'addons.modal.continue': 'Continue',
+    'addons.modal.close': 'Close',
+    'addons.modal.showDescription': 'Show full description',
+    'addons.modal.collapseDescription': 'Collapse description',
+    'addons.modal.empty': 'No boost products available.',
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
+    'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
+    'modal.loading': 'Loading...',
+    'modal.campaignRejection.title': 'Campaign Not Available',
+    'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. If you believe this is a mistake, contact support. You can still sign up for a regular membership.',
+    'modal.campaignRejection.option1': 'Regular Membership',
+    'modal.campaignRejection.option2': 'Contact Support',
+    'modal.cartOfferExpired.title': 'Offer expired',
+    'modal.cartOfferExpired.message': 'The time to complete your purchase has run out. You can still try to pay at the price shown, or go back and choose another membership.',
+    'modal.cartOfferExpired.continue': 'Continue to payment',
+    'modal.cartOfferExpired.chooseOther': 'Choose another offer',
+    'faq.title': 'Frequently Asked Questions',
+    'faq.gyms.openingHours.q': 'What are the opening hours?',
+    'faq.gyms.openingHours.intro': 'All Boulders are open from morning to evening 361 days a year:',
+    'faq.gyms.openingHours.tableName': 'Gym',
+    'faq.gyms.openingHours.tableOpen': 'Open',
+    'faq.gyms.access.q': 'How do I access the gyms?',
+    'faq.gyms.access.a': 'After completed purchase, visit the selected gym, and pick up your access card. The card is your key to Boulders, which you scan when you arrive, to unlock the gates.',
+    'faq.gyms.events.q': 'Are there events and activities?',
+    'faq.gyms.events.a': 'Yes! We regularly host events, competitions, and social activities across all our gyms. Check our website to see upcoming events.',
+    'faq.gyms.gettingStarted.q': 'How do I get started?',
+    'faq.gyms.gettingStarted.a': 'There are many ways to get started. We recommend joining an Intro or a Fundamentals class. You don\'t have to start with a class, but it\'s a great way to meet people. Many start on their own and quickly find a community in our inclusive climbing culture. You can also read our getting-started guide.',
+    'faq.membership.included.q': 'What is included in my membership?',
+    'faq.membership.included.a': 'Your membership includes free intro class, unlimited access to all Boulders gyms, use of all climbing areas and facilities, and access to events and activities.',
+    'faq.membership.blocLife.q': 'What is Bloc Life?',
+    'faq.membership.blocLife.a': 'Bloc Life is Boulders\' membership loyalty program. When you\'re a member, you\'re automatically part of it. The longer you\'re a member, the more benefits you get – discounts on gear, coffee, snacks, and exclusive access to new gyms. Benefits and tiers update automatically.',
+    'faq.membership.terms.q': 'What are the terms and conditions?',
+    'faq.membership.terms.a': 'Membership is an ongoing subscription with automatic renewal. There are no signup or cancellation fees. Notice period is the rest of the month plus 1 month. You can read the full terms and conditions by clicking the link in the cart.',
+    'faq.membership.bindingPeriod.q': 'Is there a commitment period?',
+    'faq.membership.bindingPeriod.a': 'There is no commitment period on Boulders memberships outside of campaigns. You can cancel anytime with notice for the rest of the current month plus one month. If you sign up on a discounted campaign, there is a 3-month commitment period.',
+    'faq.membership.freeze.q': 'Can I freeze my membership?',
+    'faq.membership.freeze.a': 'Yes. You can freeze your membership for 1–3 months at a time, up to 3 times a year, for 49 kr per freeze. You are not charged while frozen, and reactivation is free. Freezing cannot be activated during a commitment period.',
+    'faq.membership.cancellation.q': 'How do I cancel my membership?',
+    'faq.membership.cancellation.a': 'You can cancel your membership at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
+    'faq.15daypass.howItWorks.q': 'How does the 15 day pass work?',
+    'faq.15daypass.howItWorks.a': 'The 15 day pass gives you 15 days of unlimited access to all Boulders gyms from the day you activate it. It\'s perfect for trying out climbing or a short-term visit.',
+    'faq.15daypass.validity.q': 'How long is the pass valid?',
+    'faq.15daypass.validity.a': 'The 15 day pass is valid for 15 days from the activation date. You have unlimited access to all gyms during this period.',
+    'faq.15daypass.access.q': 'What access do I get with the pass?',
+    'faq.15daypass.access.a': 'With the 15 day pass, you get unlimited access to all Boulders gyms, all climbing areas and facilities for 15 days. The pass cannot be converted to a full membership.',
+    'faq.punchcard.howItWorks.q': 'How does the punch card work?',
+    'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 5 years and can be shared with others.',
+    'faq.punchcard.convert.q': 'Can I convert my punch card to a membership?',
+    'faq.punchcard.convert.a': 'Yes, you can convert your punch card to a membership. Contact us at medlem@boulders.dk if you want to convert your punch card to a membership.',
+    'faq.punchcard.remainingClips.q': 'What do I do with remaining clips on my punch card?',
+    'faq.punchcard.remainingClips.a': 'If you still have punches left but are ready for a membership, you can have it converted to a membership. To convert, email medlem@boulders.dk. Or give the remaining clips as a gift to someone who deserves it.',
+    'faq.punchcard.multiple.q': 'Can I have multiple punch cards?',
+    'faq.punchcard.multiple.a': 'Yes you can have unlimited punch cards on your profile.',
+    'faq.productChoice.difference.q': 'What is the difference between membership, 15 day pass, and punch card?',
+    'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15 day pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 5 years, and can be shared with others.',
+    'faq.productChoice.membershipBest.q': 'When should I choose membership?',
+    'faq.productChoice.membershipBest.a': 'Choose membership if you plan to climb at least once a week. You get unlimited access to all gyms, no signup or cancellation fees, and you can cancel anytime with short notice.',
+    'faq.productChoice.15daypassBest.q': 'When should I choose the 15 day pass?',
+    'faq.productChoice.15daypassBest.a': 'Choose the 15 day pass if you want to try climbing or only need short-term access. You get 15 days of unlimited access to all gyms from the day you activate it. The pass is valid for 15 days from the activation date.',
+    'faq.productChoice.punchcardBest.q': 'When should I choose a punch card?',
+    'faq.productChoice.punchcardBest.a': 'Choose a punch card if you climb occasionally or want to share access with others. You get 10 entries to all gyms, unless anything else is specified, the card is valid for 5 years, and you can refill within 14 days after your last clip for 100 kr off.',
+  },
+  'de-DE': {
+    'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.campaign.endsIn': 'Endet in', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
+    'category.membership.desc': 'Mitgliedschaft ist ein laufendes Abonnement mit automatischer Verlängerung. Keine Anmelde- oder Kündigungsgebühren. Kündigungsfrist ist der Rest des Monats + 1 Monat.',
+    'category.15daypass.desc': 'Erhalten Sie 15 Tage unbegrenzten Zugang zu allen Hallen. Perfekt zum Ausprobieren des Kletterns oder für einen kurzen Besuch.',
+    'category.punchcard.desc': 'Sie können jeweils 1 Art von Stempelkarte kaufen. Jeder Eintritt verwendet einen Stempel auf Ihrer Stempelkarte. Die Karte ist 5 Jahre gültig und beinhaltet keine Mitgliedschaftsvorteile. Füllen Sie innerhalb von 14 Tagen nach Ihrem letzten Stempel nach und erhalten Sie 100 kr Rabatt in der Halle.',
+    'activationDate.label': 'Wann möchten Sie Ihren Pass aktivieren?',
+    'activationDate.now': 'Sofort aktivieren',
+    'activationDate.later': 'An einem bestimmten Datum aktivieren',
+    'activationDate.pickLabel': 'Aktivierungsdatum auswählen',
+    'activationDate.hint': 'Wählen Sie ein Datum heute oder in der Zukunft.',
+    'activationDate.change': 'Ändern',
+    'activationDate.changeFailed': 'Datum konnte nicht geändert werden. Bitte schließen Sie Ihren Kauf ab oder starten Sie neu.',
+    'header.selectedGym': 'Ausgewählte Halle:', 'gym.headsUp': 'Heimhalle ausgewählt:', 'access.headsUp': 'Zugangstyp ausgewählt:',
+    'main.subtitle.step1': 'Wählen Sie Ihre Heimhalle', 'main.subtitle.step1.secondary': 'Hier trainieren Sie hauptsächlich − Sie haben Zugang zu allen Hallen.',
+    'main.subtitle.step2': 'Wählen Sie Ihren Zugangstyp', 'main.subtitle.step2.secondary': 'Wählen Sie Mitgliedschaft, wenn Sie mindestens einmal im Monat klettern.',
+    'main.subtitle.step3': 'Möchten Sie Pommes dazu?', 'main.subtitle.step4': 'Senden',
+    'button.next': 'Weiter', 'button.back': 'Zurück', 'button.continue': 'Fortsetzen', 'button.skip': 'Überspringen', 'button.complete': 'Fertig', 'button.edit': 'Bearbeiten', 'button.select': 'Auswählen', 'button.addToCart': 'In den Warenkorb', 'button.added': 'Hinzugefügt!',
+    'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'gym.nearest': 'Nächste',
+    'form.email': 'E-Mail*', 'form.email.placeholder': 'E-Mail', 'form.password': 'Passwort*', 'form.password.placeholder': 'Passwort',
+    'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
+    'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
+    'form.dateOfBirth': 'Geburtsdatum*', 'form.streetAddress': 'Straße und Hausnummer*', 'form.streetAddress.placeholder': 'Straße und Hausnummer',
+    'form.postalCode': 'Postleitzahl*', 'form.postalCode.placeholder': 'Postleitzahl', 'form.city': 'Stadt', 'form.city.placeholder': 'Auto',
+    'form.email.create': 'E-Mail*', 'form.email.create.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.country': 'Land', 'form.phoneNumber': 'Handynummer*',
+    'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Passwort*', 'form.password.create.placeholder': 'Erstellen Sie ein Passwort',
+    'form.confirmPassword': 'Passwort bestätigen*', 'form.confirmPassword.placeholder': 'Bestätigen Sie Ihr Passwort', 'form.saveAccount': 'Profil erstellen',
+    'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
+    'form.parentFullName': 'Vorname und Nachname*', 'form.parentFullName.placeholder': 'Geben Sie Ihren vollständigen Namen ein',
+    'form.parentDateOfBirth': 'Geburtsdatum*', 'form.parentStreetAddress': 'Straße und Hausnummer*', 'form.parentStreetAddress.placeholder': 'Geben Sie Straße und Hausnummer ein',
+    'form.parentPostalCode': 'Postleitzahl*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'Stadt', 'form.parentCity.placeholder': 'Kopenhagen',
+    'form.parentEmail': 'E-Mail*', 'form.parentEmail.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.parentCountryCode': 'Land',
+    'form.parentPhoneNumber': 'Handynummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Gleiche Adresse und Kontaktinformationen',
+    'form.error.firstName': 'Bitte geben Sie Ihren Vornamen ein', 'form.error.lastName': 'Bitte geben Sie Ihren Nachnamen ein',
+    'form.error.email': 'Bitte geben Sie eine gültige E-Mail-Adresse ein',
+    'form.resetPassword': 'PASSWORT ZURÜCKSETZEN', 'form.resetPassword.desc': 'Geben Sie Ihre E-Mail-Adresse ein und wir senden Ihnen Anweisungen zum Zurücksetzen Ihres Passworts.',
+    'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
+    'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
+    'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'quantity.label': 'Menge wählen',
+    'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
+    'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
+    'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
+    'cart.consent.privacy': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datenschutzrichtlinie</a>.*',
+    'cart.consent.marketing': 'Ich möchte <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Marketing-E-Mails</a> erhalten.',
+    'consent.email.explainer': 'E-Mail<br><br>Ich gebe meine Einwilligung, dass Boulders mir E-Mails senden und mich über Veranstaltungen und Initiativen, Trainingsinspiration, Angebote und andere Dienstleistungen auf dem Laufenden halten darf.',
+    'cart.consent.sms': 'Ich möchte <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS-Nachrichten</a> erhalten.',
+    'consent.sms.explainer': 'SMS<br><br>Ich gebe meine Einwilligung, dass Boulders mir SMS-Nachrichten senden und mich über Veranstaltungen und Initiativen, Trainingsinspiration, Angebote und andere Dienstleistungen auf dem Laufenden halten darf.',
+    'cart.cardPayment': 'Kartenzahlung', 'cart.checkout': 'Zur Kasse', 'step4.completePurchase': 'Ihren Kauf abschließen',
+    'step4.loginPrompt': 'Melden Sie sich in Ihrem bestehenden Konto an oder erstellen Sie ein neues.',
+    'cart.boundUntil': 'gebunden bis', 'cart.billingPeriodConfirmed': 'Abrechnungszeitraum wird nach dem Kauf bestätigt.',
+    'message.noProducts.membership': 'Derzeit sind keine Mitgliedschaftsoptionen verfügbar.',
+    'message.noProducts.punchcard': 'Derzeit sind keine Stempelkartenoptionen verfügbar.',
+    'message.noProducts.15daypass': 'Derzeit sind keine 15-Tage-Pass-Optionen verfügbar.',
+    'footer.terms.title': 'Allgemeine Geschäftsbedingungen', 'footer.terms.all': 'Allgemeine Geschäftsbedingungen', 'footer.terms.membership': 'Allgemeine Geschäftsbedingungen für Mitgliedschaft', 'footer.terms.punchcard': 'Allgemeine Geschäftsbedingungen für Stempelkarte',
+    'footer.policies.title': 'Richtlinien', 'footer.policies.privacy': 'Datenschutzrichtlinie', 'footer.policies.cookie': 'Cookie-Richtlinie', 'footer.rights': 'Alle Rechte vorbehalten', 'footer.copyright': '© 2026 Boulders. Alle Rechte vorbehalten.',
+    'cookie.banner.title': 'Wir verwenden Cookies', 'cookie.banner.description': 'Wir verwenden Cookies, um Ihr Browsing-Erlebnis zu verbessern, den Website-Verkehr zu analysieren und Inhalte zu personalisieren. Durch Klicken auf "Alle akzeptieren" stimmen Sie unserer Verwendung von Cookies zu. Sie können Ihre Einstellungen verwalten oder mehr in unserer <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie-Richtlinie</a> erfahren.', 'cookie.banner.accept': 'Alle akzeptieren', 'cookie.banner.reject': 'Alle ablehnen', 'cookie.banner.settings': 'Anpassen',
+    'cookie.settings.title': 'Cookie-Einstellungen', 'cookie.settings.description': 'Verwalten Sie Ihre Cookie-Einstellungen. Sie können unten verschiedene Cookie-Typen aktivieren oder deaktivieren. Essenzielle Cookies können nicht deaktiviert werden, da sie für die Funktionsweise der Website erforderlich sind.', 'cookie.settings.save': 'Einstellungen speichern', 'cookie.settings.button': 'Cookie-Einstellungen',
+    'cookie.category.essential.title': 'Essenzielle Cookies', 'cookie.category.essential.desc': 'Diese Cookies sind für die Funktionsweise der Website erforderlich und können nicht deaktiviert werden.',
+    'cookie.category.analytics.title': 'Analyse-Cookies', 'cookie.category.analytics.desc': 'Diese Cookies helfen uns zu verstehen, wie Besucher mit unserer Website interagieren, indem sie Informationen anonym sammeln und melden.',
+    'cookie.category.marketing.title': 'Marketing-Cookies', 'cookie.category.marketing.desc': 'Diese Cookies werden verwendet, um Werbung zu liefern und die Kampagneneffektivität zu verfolgen.',
+    'cookie.category.functional.title': 'Funktionale Cookies', 'cookie.category.functional.desc': 'Diese Cookies ermöglichen erweiterte Funktionalität und Personalisierung, z. B. das Speichern Ihrer Einstellungen.',
+    'addons.intro': 'Verbessern Sie Ihr Klettererlebnis mit unseren Add-on-Produkten.',
+    'addons.modal.title': 'Zu Ihrer Mitgliedschaft hinzufügen',
+    'addons.modal.boost.title': 'Ihre Mitgliedschaft boosten',
+    'addons.modal.hint': 'Fügen Sie jetzt Ausrüstung zu einem Sonderpreis hinzu und holen Sie sie bei Ihrem nächsten Besuch ab.',
+    'addons.modal.skip': 'Überspringen',
+    'addons.modal.continue': 'Weiter',
+    'addons.modal.close': 'Schließen',
+    'addons.modal.showDescription': 'Vollständige Beschreibung anzeigen',
+    'addons.modal.collapseDescription': 'Beschreibung einklappen',
+    'addons.modal.empty': 'Keine Boost-Produkte verfügbar.',
+    'terms.tab.membership': 'Mitgliedschaft / 15 Tage', 'terms.tab.punchcard': 'Stempelkarte',
+    'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
+    'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
+    'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
+    'modal.loading': 'Lädt...',
+    'modal.campaignRejection.title': 'Kampagne nicht verfügbar',
+    'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
+    'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
+    'modal.campaignRejection.option2': 'Support kontaktieren',
+    'confirmation.title': 'ERFOLG!',
+    'confirmation.message': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.membership': 'Ihre Mitgliedschaft wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.15daypass': 'Ihr 15-Tage-Pass wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.punchcard': 'Ihre Stempelkarte wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.generic': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.orderDetails': 'Bestelldetails',
+    'confirmation.orderNumber': 'Bestellnummer:',
+    'confirmation.date': 'Datum:',
+    'confirmation.total': 'Gesamt:',
+    'confirmation.showReceipt': 'Detaillierte Quittung anzeigen',
+    'confirmation.receipt.title': 'Bestellbestätigung',
+    'confirmation.receipt.order': 'Bestellung',
+    'confirmation.receipt.orderOverview': 'Bestellübersicht',
+    'confirmation.receipt.subtotal': 'Zwischensumme:',
+    'confirmation.receipt.discount': 'Rabatt:',
+    'confirmation.receipt.total': 'GESAMT:',
+    'confirmation.receipt.vatInclusive': 'inkl. MwSt. (25%):',
+    'confirmation.receipt.payments': 'Zahlungen',
+    'confirmation.receipt.paymentMethod': 'Zahlungsmethode:',
+    'confirmation.receipt.amountPaid': 'Bezahlter Betrag:',
+    'confirmation.receipt.transactionId': 'Transaktions-ID:',
+    'confirmation.receipt.sellerInfo': 'Verkäuferinformationen',
+    'confirmation.receipt.sellerName': 'Verkäufername:',
+    'confirmation.receipt.address': 'Adresse:',
+    'confirmation.receipt.cvr': 'CVR-Nummer:',
+    'confirmation.receipt.phone': 'Telefon:',
+    'confirmation.receipt.email': 'E-Mail:',
+    'confirmation.receipt.customerInfo': 'Kundeninformationen',
+    'confirmation.receipt.customerName': 'Kundenname:',
+    'confirmation.receipt.valueCardsPurchased': 'Gekaufte Wertkarten',
+    'confirmation.receipt.close': 'SCHLIESSEN',
+    'confirmation.primaryGym': 'Heimhalle:',
+    'confirmation.membershipType': 'Typ:',
+    'confirmation.monthlyPrice': 'Monatlicher Preis:',
+    'confirmation.15daypassDetails': '15-Tage-Pass Details',
+    'confirmation.passType': 'Passtyp:',
+    'confirmation.validFrom': 'Gültig von:',
+    'confirmation.validUntil': 'Gültig bis:',
+    'confirmation.punchCardDetails': 'Stempelkarten-Details',
+    'confirmation.name': 'Name:',
+    'confirmation.cardType': 'Kartentyp:',
+    'confirmation.quantity': 'Menge:',
+    'confirmation.nextStepsTitle': 'Was passiert als Nächstes?',
+    'confirmation.nextStep1': 'E-Mail-Bestätigung an Ihren Posteingang gesendet',
+    'confirmation.nextStep2.membership': 'Mitgliedschaftsaktivierung und automatische Verlängerung',
+    'confirmation.nextStep2.15daypass': 'Ihr Pass ist aktiv und einsatzbereit',
+    'confirmation.nextStep2.punchcard': 'Ihre Stempelkarte ist einsatzbereit',
+    'confirmation.nextStep3.membership': 'Holen Sie Ihre Mitgliedskarte in der Halle ab',
+    'confirmation.nextStep3.15daypass': 'Besuchen Sie die Halle, um Ihren Pass zu nutzen',
+    'confirmation.nextStep3.punchcard': 'Besuchen Sie die Halle, um Ihre Stempel zu nutzen',
+    'confirmation.pending.title': 'Zahlung ausstehend',
+    'confirmation.pending.message': 'Ihre Zahlung wird bearbeitet. Wir warten auf die Bestätigung des Zahlungsanbieters. Ihre Mitgliedschaft wird nach Bestätigung der Zahlung aktiviert. Bestellung #',
+    'confirmation.pending.stillProcessing': 'Die Zahlung wird noch bearbeitet. Bitte schauen Sie in einigen Minuten erneut vorbei oder kontaktieren Sie den Support, wenn Sie die Zahlung abgeschlossen haben. Bestellung #',
   },
 };
 
@@ -6643,7 +7062,7 @@ function updatePageTranslations() {
       } else {
         // Handle HTML content for elements that may contain links (like consent text)
         if (translation.includes('<a') || translation.includes('<span')) {
-          element.innerHTML = translation;
+          element.innerHTML = sanitizeHTML(translation);
         } else {
           element.textContent = translation;
         }
@@ -6659,6 +7078,9 @@ function updatePageTranslations() {
       element.placeholder = translation;
     }
   });
+  
+  // Update addon modal translations
+  updateAddonModalTranslations();
   
   // Update step labels
   const stepLabels = document.querySelectorAll('.step-label');
@@ -6707,6 +7129,9 @@ function updatePageTranslations() {
   
   // Update heads-up displays
   updateHeadsUpTranslations();
+  
+  // Re-render FAQ with new language
+  renderFAQ();
   
   // Update terms tabs if modal is open
   const termsTabs = document.querySelectorAll('.terms-tab[data-i18n-key]');
@@ -6890,21 +7315,10 @@ function updateCartTranslations() {
     discountInput.placeholder = t('cart.discount.placeholder');
   }
   
-  // Payment method section
-  const paymentTitle = document.querySelector('.payment-title[data-i18n-key]');
-  if (paymentTitle) {
-    paymentTitle.textContent = t('cart.paymentMethod');
-  }
-  
-  const paymentRedirect = document.querySelector('.payment-methods p[data-i18n-key]');
+  // Payment redirect text (payment method selection removed)
+  const paymentRedirect = document.querySelector('p[data-i18n-key="cart.paymentRedirect"]');
   if (paymentRedirect) {
     paymentRedirect.textContent = t('cart.paymentRedirect');
-  }
-  
-  // Card payment label
-  const cardPaymentLabel = document.querySelector('#cardPayment + label span[data-i18n-key="cart.cardPayment"]');
-  if (cardPaymentLabel) {
-    cardPaymentLabel.textContent = t('cart.cardPayment');
   }
   
   // Checkout button
@@ -6914,19 +7328,35 @@ function updateCartTranslations() {
   }
   
   // Consent checkboxes
+  const privacyConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.privacy"]');
+  if (privacyConsent) {
+    // Handle HTML content with links
+    const privacyHtml = t('cart.consent.privacy');
+    privacyConsent.innerHTML = sanitizeHTML(privacyHtml);
+  }
+
   const termsConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.terms"]');
   if (termsConsent) {
     // Handle HTML content with links
     const termsHtml = t('cart.consent.terms');
-    termsConsent.innerHTML = termsHtml;
+    termsConsent.innerHTML = sanitizeHTML(termsHtml);
   }
-  
+
   const marketingConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.marketing"]');
   if (marketingConsent) {
     const marketingHtml = t('cart.consent.marketing');
-    marketingConsent.innerHTML = marketingHtml;
+    marketingConsent.innerHTML = sanitizeHTML(marketingHtml);
+  }
+
+  const smsConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.sms"]');
+  if (smsConsent) {
+    const smsHtml = t('cart.consent.sms');
+    smsConsent.innerHTML = sanitizeHTML(smsHtml);
   }
   
+  // Consent checkmark toggle is handled via event delegation in setupEventListeners()
+  // so it works on initial load even when initLanguageSwitcher() returns early (e.g. no language switcher in DOM).
+
   // Payment overview labels are handled by data-i18n-key attributes in HTML
   // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
 }
@@ -6941,6 +7371,93 @@ function updateHeadsUpTranslations() {
   
   const selectedGymLabel = document.querySelector('.selected-gym-label');
   if (selectedGymLabel) selectedGymLabel.textContent = t('header.selectedGym');
+}
+
+// Update addon modal translations
+function updateAddonModalTranslations() {
+  if (!addonsModal) return;
+  
+  // Update title - check current title to determine if it's boost or regular modal
+  const title = addonsModal.querySelector('.addons-title');
+  if (title) {
+    // Check if current title matches boost title (in any language) or check state
+    const currentTitle = title.textContent.trim();
+    // If modal is visible and showing boost products, use boost title
+    // Otherwise use regular addon title
+    // We'll update based on what's currently displayed
+    const grid = addonsModal.querySelector('[data-modal-addons-grid]');
+    const hasBoostProducts = grid && Array.from(grid.querySelectorAll('[data-plan-id]')).some(card => {
+      const planId = card.dataset.planId;
+      return state.boostProducts?.some(p => p.id === planId);
+    });
+    
+    if (hasBoostProducts) {
+      title.textContent = t('addons.modal.boost.title');
+    } else {
+      title.textContent = t('addons.modal.title');
+    }
+  }
+  
+  // Update close button aria-label
+  const closeBtn = addonsModal.querySelector('.addons-close');
+  if (closeBtn) {
+    closeBtn.setAttribute('aria-label', t('addons.modal.close'));
+  }
+  
+  // Update hint text
+  const hint = addonsModal.querySelector('.addons-hint');
+  if (hint) {
+    hint.textContent = t('addons.modal.hint');
+  }
+  
+  // Update action button
+  updateAddonActionButton();
+  
+  // Update empty message if present
+  const emptyMsg = addonsModal.querySelector('.addons-empty');
+  if (emptyMsg) {
+    emptyMsg.textContent = t('addons.modal.empty');
+  }
+}
+
+// Refresh open footer modals when language changes (footer modals follow header language)
+function refreshOpenFooterModals() {
+  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  
+  if (DOM.termsModal && DOM.termsModal.style.display === 'flex') {
+    if (state.currentModalType === 'terms' && state.currentModalTab) {
+      switchTermsTab(state.currentModalTab);
+    } else if (state.currentModalType) {
+      const content = termsContent[state.currentModalType]?.[langCode] || termsContent[state.currentModalType]?.da || '<p>Content not available.</p>';
+      const termsTitles = {
+        privacy: t('footer.policies.privacy'),
+        cookie: t('footer.policies.cookie'),
+        'email-consent': 'E-mail',
+        'sms-consent': 'SMS',
+      };
+      const title = termsTitles[state.currentModalType] || 'Terms and Conditions';
+      if (DOM.termsModalTitle) DOM.termsModalTitle.textContent = title;
+      state.termsOriginalContent = content;
+      if (DOM.termsModalContent) {
+        DOM.termsModalContent.innerHTML = sanitizeHTML(content);
+        DOM.termsModalContent.scrollTop = 0;
+      }
+      if (DOM.termsSearchInput) {
+        DOM.termsSearchInput.value = '';
+        if (DOM.termsSearchClear) DOM.termsSearchClear.style.display = 'none';
+      }
+    }
+  }
+  
+  if (DOM.dataPolicyModal && DOM.dataPolicyModal.style.display === 'flex') {
+    const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
+    state.dataPolicyOriginalContent = content;
+    if (DOM.dataPolicyModalContent) {
+      DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
+      DOM.dataPolicyModalContent.scrollTop = 0;
+    }
+    clearDataPolicySearch();
+  }
 }
 
 // Change language and reload products
@@ -6963,6 +7480,9 @@ async function changeLanguage(languageCode) {
   // Update all page translations
   updatePageTranslations();
   
+  // Refresh open footer modals so they show the new language (based on header switcher)
+  refreshOpenFooterModals();
+  
   // Reload products if we're on step 2 or later
   if (state.currentStep >= 2 && state.selectedBusinessUnit) {
     console.log('[Language] Reloading products with language:', languageCode);
@@ -6982,15 +7502,22 @@ async function changeLanguage(languageCode) {
   }
 }
 
-// Update language switcher UI to show active language
+// Update language switcher UI to show active language (trigger label + dropdown item states)
 function updateLanguageSwitcherUI() {
   const switcher = document.getElementById('languageSwitcher');
   if (!switcher) return;
   
+  const currentLang = state.language || DEFAULT_LANGUAGE;
+  const info = SUPPORTED_LANGUAGES[currentLang];
+  const triggerFlag = document.getElementById('languageSwitcherTriggerFlag');
+  const triggerName = document.getElementById('languageSwitcherTriggerName');
+  if (triggerFlag) triggerFlag.textContent = info?.flag ?? '🇩🇰';
+  if (triggerName) triggerName.textContent = currentLang === 'da-DK' ? 'DA' : currentLang === 'en-GB' ? 'EN' : 'DE';
+  
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
     const langCode = btn.dataset.lang;
-    if (langCode === state.language) {
+    if (langCode === currentLang) {
       btn.classList.add('active');
       btn.setAttribute('aria-pressed', 'true');
     } else {
@@ -7000,41 +7527,218 @@ function updateLanguageSwitcherUI() {
   });
 }
 
-// Initialize language switcher
+// Guard so dropdown listeners are only attached once (initLanguageSwitcher is called from DOMContentLoaded and from init())
+let languageSwitcherListenersBound = false;
+
+// Initialize language switcher (dropdown: trigger toggles panel, items change language)
 function initLanguageSwitcher() {
   const switcher = document.getElementById('languageSwitcher');
   if (!switcher) return;
   
-  // Set initial language
+  const trigger = document.getElementById('languageSwitcherTrigger');
+  const dropdown = document.getElementById('languageDropdown');
+  
+  // Set initial language and UI (run every time)
   const currentLang = state.language || DEFAULT_LANGUAGE;
   document.documentElement.lang = currentLang.split('-')[0];
   updateLanguageSwitcherUI();
-  
-  // Update page translations on initial load
   updatePageTranslations();
   
-  // Add click handlers to language buttons
+  // Attach dropdown open/close and item handlers only once to avoid double-toggle
+  if (languageSwitcherListenersBound) return;
+  if (!trigger || !dropdown) return;
+  languageSwitcherListenersBound = true;
+  
+  function openDropdown() {
+    switcher.classList.add('open');
+    dropdown.setAttribute('aria-hidden', 'false');
+    trigger.setAttribute('aria-expanded', 'true');
+  }
+  
+  function closeDropdown() {
+    switcher.classList.remove('open');
+    dropdown.setAttribute('aria-hidden', 'true');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+  
+  function toggleDropdown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const isOpen = switcher.classList.contains('open');
+    if (isOpen) closeDropdown();
+    else openDropdown();
+  }
+  
+  trigger.addEventListener('click', toggleDropdown);
+  
+  // Click on dropdown item: change language and close
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       const langCode = btn.dataset.lang;
       if (langCode && langCode !== state.language) {
         await changeLanguage(langCode);
       }
+      closeDropdown();
     });
   });
+  
+  // Close on click outside
+  document.addEventListener('click', (e) => {
+    if (switcher.contains(e.target)) return;
+    closeDropdown();
+  });
+}
+
+// Campaign Rejection Modal Functions
+function showCampaignRejectionModal() {
+  const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    // Focus the first button for accessibility
+    setTimeout(() => {
+      const firstButton = document.getElementById('campaignRejectionOption1');
+      if (firstButton) {
+        firstButton.focus();
+      }
+    }, 100);
+  }
+}
+
+function hideCampaignRejectionModal() {
+  const modal = document.getElementById('campaignRejectionModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function handleRejectionOption1() {
+  // Hide modal first
+  hideCampaignRejectionModal();
+  
+  // Clear cart when switching from campaign rejection to regular membership
+  // This prevents duplicate addons when user adds addon to campaign, gets rejected, then selects regular membership
+  console.log('[Campaign Rejection] Clearing cart before switching to regular membership');
+  
+  // Clear addon selections
+  state.addonIds.clear();
+  
+  // Clear membership plan selection
+  state.membershipPlanId = null;
+  state.selectedProductId = null;
+  state.selectedProductType = null;
+  
+  // Clear value card quantities
+  state.valueCardQuantities.clear();
+  
+  // Clear cart items
+  state.cartItems = [];
+  
+  // Reset order state
+  resetOrderStateForProductChange('campaign-rejection-to-regular-membership');
+  
+  // Update cart summary to reflect cleared state
+  updateCartSummary();
+  updateCartTotals();
+  
+  // Reset addon UI state
+  document.querySelectorAll('.addon-card.selected, .plan-card.addon-card.selected').forEach(card => {
+    card.classList.remove('selected');
+    const button = card.querySelector('[data-action="toggle-addon"]');
+    if (button) {
+      button.textContent = t('button.addToCart');
+      button.setAttribute('data-i18n-key', 'button.addToCart');
+    }
+  });
+  
+  // Navigate to step 2
+  state.currentStep = 2;
+  showStep(2);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  
+  // Wait for DOM to be ready, then expand membership category
+  setTimeout(() => {
+    const membershipCategory = document.querySelector('.category-item[data-category="membership"]');
+    if (membershipCategory) {
+      // Collapse all other categories
+      const categoryItems = document.querySelectorAll('.category-item');
+      categoryItems.forEach(item => {
+        if (item !== membershipCategory) {
+          item.classList.remove('expanded', 'selected');
+        }
+      });
+      
+      // Expand membership category
+      membershipCategory.classList.add('expanded', 'selected');
+      
+      // Update plan sections visibility
+      const singlePlans = document.getElementById('singleChoiceMode');
+      const quantityPlans = document.getElementById('quantityMode');
+      const singleCategory = document.querySelector('.category-item[data-category="single"]');
+      const quantityCategory = document.querySelector('.category-item[data-category="quantity"]');
+      
+      if (singlePlans) singlePlans.style.display = 'none';
+      if (quantityPlans) quantityPlans.style.display = 'none';
+      
+      // Focus and scroll to top of the category
+      setTimeout(() => {
+        membershipCategory.setAttribute('tabindex', '-1');
+        membershipCategory.focus();
+        membershipCategory.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+    
+    // Scroll to top
+    scrollToTop();
+    setTimeout(() => {
+      scrollToTop();
+    }, 200);
+  }, 200);
+}
+
+function handleRejectionOption2() {
+  // Hide modal
+  hideCampaignRejectionModal();
+  
+  // Open email to support
+  const supportEmail = 'medlem@boulders.dk';
+  const subject = encodeURIComponent('Campaign Purchase Issue');
+  const body = encodeURIComponent('Hello,\n\nI tried to purchase a campaign membership but was told it\'s not available for my account. I believe this may be a mistake.\n\nCould you please help?\n\nThank you!');
+  window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize language switcher (must be early to set language before API calls)
   initLanguageSwitcher();
   
-  // Check if we're returning from payment before initializing
+  // Set up Cookiebot "Cookie Settings" button - reopens Cookiebot consent dialog
+  setupCookiebotSettingsButton();
+  
+  // Check URL parameters for test mode and payment return
   const urlParams = new URLSearchParams(window.location.search);
+  const testSuccess = urlParams.get('testSuccess') === 'true';
+  const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
+  const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
   const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
+  
+  if (testSuccess) {
+    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType);
+    // Store test mode in state
+    state.testMode = true;
+    state.testProductType = testProductType;
+  }
+  
+  if (testPaymentFailed) {
+    console.log('[Test Mode] Test payment failed page mode enabled');
+    // Store test mode in state
+    state.testMode = true;
+  }
   let orderId = urlParams.get('orderId');
   let isPaymentReturnFlow = false;
   
@@ -7058,27 +7762,146 @@ document.addEventListener('DOMContentLoaded', () => {
     clearStoredOrderData('page-refresh');
   }
   
+  // CRITICAL: Check for payment errors BEFORE init() to prevent step 1 from showing
   if (paymentReturn === 'return' && orderId) {
-    // We're returning from payment - show confirmation instead of resetting
+    // We're returning from payment - check for errors first
     console.log('[Payment Return] Detected payment return for order:', orderId);
+    
     // Set order ID in state if available
     state.orderId = parseInt(orderId, 10);
-    // Skip normal init and go straight to confirmation
-    // We'll still call init but then immediately show confirmation
+    
+    // If there's a payment error, go directly to payment failed page
+    const hasPaymentError = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
+    if (hasPaymentError) {
+      console.log('[Payment Return] Payment error detected - preventing step 1 from showing');
+      // Set step to 5 immediately to prevent step 1 from showing
+      state.currentStep = TOTAL_STEPS;
+      state.paymentFailed = true;
+      state.paymentConfirmed = false;
+      state.paymentPending = false;
+      
+      // CRITICAL: Hide step 1 immediately before init() runs
+      // This prevents the flash of step 1
+      const step1Panel = document.getElementById('step-1');
+      if (step1Panel) {
+        step1Panel.style.display = 'none';
+        step1Panel.style.visibility = 'hidden';
+        step1Panel.style.opacity = '0';
+      }
+    }
   }
   
   init();
   
+  // If in test mode for payment failed, navigate directly to failed page
+  if (testPaymentFailed) {
+    console.log('[Test Mode] Navigating to payment failed page for testing');
+    // Set up minimal test data
+    state.orderId = 99999; // Mock order ID
+    state.currentStep = TOTAL_STEPS;
+    
+    // Call the payment failed function directly (for testing)
+    showPaymentFailedMessage(null, state.orderId, null);
+    return; // Exit early, don't continue with normal flow
+  }
+  
+  // If in test mode, navigate directly to success page
+  if (testSuccess) {
+    console.log('[Test Mode] Navigating to success page for testing');
+    state.currentStep = TOTAL_STEPS;
+    
+    // Set up test mode data immediately
+    const productType = testProductType;
+    console.log('[Test Mode] Creating mock order data for testing:', productType);
+    
+    // Create mock order data for testing
+    state.order = {
+      number: 'TEST-12345',
+      date: new Date(),
+      items: [
+        { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
+      ],
+      total: 469,
+      memberName: 'Test User',
+      membershipNumber: 'TEST-12345',
+      membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card',
+      primaryGym: 'Boulders Aarhus Nord',
+      membershipPrice: 469,
+    };
+    state.orderId = 'TEST-12345';
+    
+    // Set product type for test mode - ensure state is set correctly
+    state.testMode = true;
+    state.testProductType = productType;
+    state.paymentConfirmed = true; // Set payment confirmed for test mode
+    state.paymentFailed = false;
+    state.paymentPending = false;
+    
+    // Set product type for test mode
+    if (productType === 'punch-card') {
+      state.selectedProductType = 'punch-card';
+      // Mock value card items with price
+      state.fullOrder = {
+        valueCardItems: [{
+          quantity: 2,
+          product: { name: 'Klippekort', productLabels: [] },
+          valueCard: { number: '12345', numberOfPassages: 10 },
+          price: { amount: 46900 } // 469.00 DKK in cents
+        }]
+      };
+    } else if (productType === '15daypass') {
+      state.selectedProductType = 'membership';
+      state.membershipPlanId = '15daypass-123';
+      // Mock subscription items with 15 day pass label and price
+      state.fullOrder = {
+        subscriptionItems: [{
+          product: {
+            name: '15 Day Pass',
+            productLabels: [{ name: '15 Day Pass' }]
+          },
+          price: { amount: 46900 } // 469.00 DKK in cents
+        }]
+      };
+    } else {
+      // Default to membership
+      state.selectedProductType = 'membership';
+      state.membershipPlanId = 'membership-123';
+      // Mock subscription items with price
+      state.fullOrder = {
+        subscriptionItems: [{
+          product: {
+            name: 'Medlemskab',
+            productLabels: [{ name: 'Public' }]
+          },
+          price: { amount: 46900 } // 469.00 DKK in cents
+        }]
+      };
+    }
+    
+    console.log('[Test Mode] Mock data created:', {
+      productType: productType,
+      selectedProductType: state.selectedProductType,
+      membershipPlanId: state.membershipPlanId,
+      hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+      hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
+    });
+    
+    // Show step and render confirmation
+    showStep(TOTAL_STEPS);
+    updateStepIndicator();
+    updateNavigationButtons();
+    updateMainSubtitle();
+    
+    // Render confirmation view after a short delay to ensure DOM is ready
+    setTimeout(() => {
+      renderConfirmationView();
+    }, 100);
+    
+    return; // Skip payment return flow
+  }
+  
   // If returning from payment, fetch order data and show confirmation view
   if (paymentReturn === 'return' && orderId) {
-    // Check if payment was cancelled or failed
-    // paymentError can be 'cancelled', 'canceled', or a numeric error code (e.g., '205')
-    const hasPaymentError = paymentError !== null && paymentError !== undefined;
-    const isPaymentCancelled = paymentStatus === 'cancelled' || paymentStatus === 'canceled' || 
-                               paymentError === 'cancelled' || paymentError === 'canceled' ||
-                               paymentReturn === 'cancel' ||
-                               hasPaymentError; // Any error code indicates payment failure
-    
     // TEST MODE: Force failure for testing (add ?test=fail to URL)
     const testMode = urlParams.get('test');
     if (testMode === 'fail') {
@@ -7087,52 +7910,69 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     
-    if (isPaymentCancelled) {
-      console.log('[Payment Return] Payment was cancelled or failed - showing failure page');
-      console.log('[Payment Return] Error details:', { paymentStatus, paymentError, hasPaymentError });
-      
-      // Determine failure reason based on error code
-      let failureReason = null;
-      if (paymentError) {
-        // Map common error codes to user-friendly messages
-        const errorCode = parseInt(paymentError, 10);
-        if (!isNaN(errorCode)) {
-          switch (errorCode) {
-            case 205:
-              failureReason = 'Payment was declined by your bank or card issuer.';
-              break;
-            case 401:
-            case 403:
-              failureReason = 'Payment authorization failed. Please try again or use a different payment method.';
-              break;
-            default:
-              failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
-          }
-        } else if (paymentError.toLowerCase().includes('cancel')) {
-          failureReason = 'Payment was cancelled before completion.';
+      // CRITICAL: If payment error detected, show failed message immediately
+      // This prevents step 1 from flashing before the error is shown
+      const hasPaymentError = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
+      if (hasPaymentError) {
+        console.log('[Payment Return] Payment error detected - showing failed message immediately');
+        // Ensure step 5 is shown and all other steps are hidden
+        state.currentStep = TOTAL_STEPS;
+        state.paymentFailed = true;
+        
+      // Hide all step panels immediately (use direct DOM query since cacheDom might not have run yet)
+      const stepPanels = document.querySelectorAll('.step-panel');
+      const step5Panel = document.getElementById('step-5');
+      stepPanels.forEach((panel) => {
+        if (panel.id === 'step-5') {
+          // Show step 5
+          panel.classList.add('active');
+          panel.style.display = 'block';
+          panel.style.visibility = 'visible';
+          panel.style.opacity = '1';
+        } else {
+          // Hide all other steps immediately
+          panel.classList.remove('active');
+          panel.style.display = 'none';
+          panel.style.visibility = 'hidden';
+          panel.style.opacity = '0';
         }
+      });
+        
+        // Show payment failed message immediately
+        showPaymentFailedMessage(null, parseInt(orderId, 10), null);
+        // Still load order in background for data, but don't wait
+        loadOrderForConfirmation(parseInt(orderId, 10)).catch(err => {
+          console.warn('[Payment Return] Could not load order after showing failed message:', err);
+        });
+        return;
       }
-      
-      state.currentStep = TOTAL_STEPS;
-      showStep(state.currentStep);
-      updateStepIndicator();
-      updateNavigationButtons();
-      updateMainSubtitle();
-      showPaymentFailedMessage(null, parseInt(orderId, 10), failureReason);
-      return;
-    }
     
-    // CRITICAL: Don't show success page yet - check payment status first
-    // Fetch order data FIRST to check payment status
-    // Only show success page if payment is confirmed
+    // Always load order first; error params are handled after we verify payment state
     loadOrderForConfirmation(parseInt(orderId, 10));
   }
   
   // Step 6: Validate tokens on app load
   validateTokensOnLoad();
-
+  
   // Restore authenticated state from stored tokens (if available)
   syncAuthenticatedCustomerState();
+  
+  // Initialize header auth indicator after state sync
+  // Use setTimeout to ensure syncAuthenticatedCustomerState completes first
+  setTimeout(() => {
+    refreshHeaderAuthIndicator();
+  }, 100);
+  
+  // Listen for storage events (cross-tab synchronization)
+  // If tokens are saved/cleared in another tab, update the header
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'boulders_auth_tokens') {
+      // Tokens were changed in another tab
+      setTimeout(() => {
+        refreshHeaderAuthIndicator();
+      }, 100);
+    }
+  });
 });
 
 
@@ -7166,17 +8006,23 @@ function cacheDom() {
   DOM.valueCardContinueBtn = document.querySelector('[data-action="continue-value-cards"]');
   DOM.valueCardEntryLabel = document.querySelector('[data-entry-label]');
   DOM.cartItems = document.querySelector('[data-component="cart-items"]');
-  DOM.paymentOverview = document.querySelector('.payment-overview');
+  DOM.cartAddonItems = document.querySelector('[data-component="cart-addon-items"]');
+  DOM.paymentOverview = document.querySelector('.payment-overview:not(.payment-overview-total-wrap)');
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
+  DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
   DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
+  DOM.faqSection = document.getElementById('faqSection');
+  DOM.faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
+  DOM.privacyConsent = document.getElementById('privacyConsent');
   DOM.termsConsent = document.getElementById('termsConsent');
   DOM.discountToggle = document.querySelector('.discount-toggle');
   DOM.discountForm = document.querySelector('.discount-form');
   DOM.discountInput = document.querySelector('.discount-input');
   DOM.applyDiscountBtn = document.querySelector('.apply-discount-btn');
+  DOM.discountDisplay = document.querySelector('[data-discount-display]');
   DOM.skipAddonsBtn = document.getElementById('skipAddons');
   DOM.backFromAddonsBtn = document.getElementById('backFromAddons');
   DOM.paymentOptions = Array.from(document.querySelectorAll('input[name="paymentMethod"]'));
@@ -7230,8 +8076,13 @@ function cacheDom() {
   DOM.dataPolicyModalContent = document.getElementById('dataPolicyModalContent');
   DOM.dataPolicyModalLoading = document.getElementById('dataPolicyModalLoading');
   DOM.dataPolicyModalClose = document.getElementById('dataPolicyModalClose');
-  DOM.dataPolicyModalLangDa = document.getElementById('dataPolicyModalLangDa');
-  DOM.dataPolicyModalLangEn = document.getElementById('dataPolicyModalLangEn');
+  DOM.dataPolicyModalSearch = document.getElementById('dataPolicyModalSearch');
+  DOM.dataPolicySearchInput = document.getElementById('dataPolicySearchInput');
+  DOM.dataPolicySearchClear = document.getElementById('dataPolicySearchClear');
+  
+  // Cookie Declaration modal
+  DOM.cookieDeclarationModal = document.getElementById('cookieDeclarationModal');
+  DOM.cookieDeclarationModalClose = document.getElementById('cookieDeclarationModalClose');
   
   // Store current modal state
   state.currentModalType = null;
@@ -7275,7 +8126,50 @@ function setupEventListeners() {
   });
   DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
   DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
-  DOM.termsConsent?.addEventListener('change', updateCheckoutButton);
+  DOM.privacyConsent?.addEventListener('change', () => {
+    // Save privacy consent to localStorage with timestamp
+    if (DOM.privacyConsent.checked) {
+      try {
+        const timestamp = new Date().toISOString(); // ISO 8601 format for API
+        localStorage.setItem('boulders_privacy_consent', 'true');
+        localStorage.setItem('boulders_privacy_consent_timestamp', timestamp);
+        console.log('[Privacy Consent] Saved to localStorage with timestamp:', timestamp);
+      } catch (e) {
+        console.warn('[Privacy Consent] Could not save to localStorage:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem('boulders_privacy_consent');
+        localStorage.removeItem('boulders_privacy_consent_timestamp');
+        console.log('[Privacy Consent] Removed from localStorage');
+      } catch (e) {
+        console.warn('[Privacy Consent] Could not remove from localStorage:', e);
+      }
+    }
+    updateCheckoutButton();
+  });
+  DOM.termsConsent?.addEventListener('change', () => {
+    // Save terms consent to localStorage with timestamp
+    if (DOM.termsConsent.checked) {
+      try {
+        const timestamp = new Date().toISOString(); // ISO 8601 format for API
+        localStorage.setItem('boulders_terms_consent', 'true');
+        localStorage.setItem('boulders_terms_consent_timestamp', timestamp);
+        console.log('[Terms Consent] Saved to localStorage with timestamp:', timestamp);
+      } catch (e) {
+        console.warn('[Terms Consent] Could not save to localStorage:', e);
+      }
+    } else {
+      try {
+        localStorage.removeItem('boulders_terms_consent');
+        localStorage.removeItem('boulders_terms_consent_timestamp');
+        console.log('[Terms Consent] Removed from localStorage');
+      } catch (e) {
+        console.warn('[Terms Consent] Could not remove from localStorage:', e);
+      }
+    }
+    updateCheckoutButton();
+  });
 
   // Postal code auto-fill event listeners
   setupPostalCodeAutoFill();
@@ -7358,10 +8252,25 @@ function setupEventListeners() {
     });
   }
   
-  // Close modal on Escape key
+  // Close modal on Escape key (and language dropdown)
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
-      closeForgotPasswordModal();
+    if (e.key === 'Escape') {
+      const languageSwitcher = document.getElementById('languageSwitcher');
+      if (languageSwitcher && languageSwitcher.classList.contains('open')) {
+        languageSwitcher.classList.remove('open');
+        const dropdown = document.getElementById('languageDropdown');
+        const trigger = document.getElementById('languageSwitcherTrigger');
+        if (dropdown) dropdown.setAttribute('aria-hidden', 'true');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      if (DOM.forgotPasswordModal && DOM.forgotPasswordModal.style.display === 'flex') {
+        closeForgotPasswordModal();
+      }
+      const campaignRejectionModal = document.getElementById('campaignRejectionModal');
+      if (campaignRejectionModal && campaignRejectionModal.style.display === 'flex') {
+        hideCampaignRejectionModal();
+      }
     }
   });
   
@@ -7372,11 +8281,36 @@ function setupEventListeners() {
   
   // Terms modal handlers
   document.addEventListener('click', (e) => {
+    // Consent checkbox checkmark (event delegation – works on initial load even if updateCartTranslations ran late)
+    const consentCheckmark = e.target.closest('.consent-checkbox .checkmark');
+    if (consentCheckmark) {
+      const label = consentCheckmark.closest('.consent-checkbox');
+      const checkbox = label && label.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        e.preventDefault();
+        e.stopPropagation();
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return;
+    }
+
+    if (e.target.closest('[data-action="open-cookie-declaration"]')) {
+      e.preventDefault();
+      openCookieDeclarationModal();
+    }
+    
     if (e.target.closest('[data-action="open-terms"]')) {
       e.preventDefault();
       const termsType = e.target.closest('[data-action="open-terms"]').dataset.termsType;
       if (termsType === 'privacy') {
         openDataPolicyModal();
+      } else if (termsType === 'cookie') {
+        openCookieDeclarationModal();
+      } else if (termsType === 'email-consent') {
+        openTermsModal('email-consent');
+      } else if (termsType === 'sms-consent') {
+        openTermsModal('sms-consent');
       } else if (termsType === 'terms') {
         openTermsModal('terms');
       } else if (termsType === 'membership' || termsType === 'punchcard') {
@@ -7398,38 +8332,68 @@ function setupEventListeners() {
       switchTermsTab(tabType);
     }
     
-    // Language switching in data policy modal
-    if (e.target.closest('#dataPolicyModalLangDa') || e.target.closest('#dataPolicyModalLangEn')) {
-      const langBtn = e.target.closest('.language-btn');
-      const lang = langBtn.dataset.lang;
-      switchModalLanguage('privacy', lang);
-    }
-    
     // Search clear button
     if (e.target.closest('#termsSearchClear')) {
       clearTermsSearch();
+    }
+    if (e.target.closest('#dataPolicySearchClear')) {
+      clearDataPolicySearch();
     }
     
     if (e.target === DOM.termsModalClose || e.target.closest('#termsModalClose')) {
       closeTermsModal();
     }
     
+    if (e.target === DOM.cookieDeclarationModalClose || e.target.closest('#cookieDeclarationModalClose')) {
+      closeCookieDeclarationModal();
+    }
+    
     if (e.target === DOM.dataPolicyModalClose || e.target.closest('#dataPolicyModalClose')) {
       closeDataPolicyModal();
     }
+    
+    // Campaign rejection modal handlers
+    if (e.target.closest('#campaignRejectionOption1')) {
+      handleRejectionOption1();
+    }
+    
+    if (e.target.closest('#campaignRejectionOption2')) {
+      handleRejectionOption2();
+    }
+    
+    if (e.target.closest('#campaignRejectionModalClose')) {
+      hideCampaignRejectionModal();
+    }
+    
   });
+  
+  // Close campaign rejection modal when clicking outside
+  const campaignRejectionModal = document.getElementById('campaignRejectionModal');
+  if (campaignRejectionModal) {
+    campaignRejectionModal.addEventListener('click', (e) => {
+      if (e.target === campaignRejectionModal) {
+        hideCampaignRejectionModal();
+      }
+    });
+  }
   
   // Search input live update
   if (DOM.termsSearchInput) {
     DOM.termsSearchInput.addEventListener('input', (e) => {
       performTermsSearch(e.target.value);
     });
-    
-    // Handle Enter key to prevent form submission
     DOM.termsSearchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      }
+      if (e.key === 'Enter') e.preventDefault();
+    });
+  }
+  
+  // Data policy modal search
+  if (DOM.dataPolicySearchInput) {
+    DOM.dataPolicySearchInput.addEventListener('input', (e) => {
+      performDataPolicySearch(e.target.value);
+    });
+    DOM.dataPolicySearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
     });
   }
   
@@ -7451,6 +8415,15 @@ function setupEventListeners() {
     });
   }
   
+  // Close cookie declaration modal when clicking outside
+  if (DOM.cookieDeclarationModal) {
+    DOM.cookieDeclarationModal.addEventListener('click', (e) => {
+      if (e.target === DOM.cookieDeclarationModal) {
+        closeCookieDeclarationModal();
+      }
+    });
+  }
+  
   // Close modals on Escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -7460,8 +8433,25 @@ function setupEventListeners() {
       if (DOM.dataPolicyModal && DOM.dataPolicyModal.style.display !== 'none') {
         closeDataPolicyModal();
       }
+      if (DOM.cookieDeclarationModal && DOM.cookieDeclarationModal.style.display !== 'none') {
+        closeCookieDeclarationModal();
+      }
+      const receiptModal = document.getElementById('detailedReceiptModal');
+      if (receiptModal && receiptModal.style.display !== 'none') {
+        closeDetailedReceipt();
+      }
     }
   });
+  
+  // Close receipt modal when clicking outside
+  const receiptModal = document.getElementById('detailedReceiptModal');
+  if (receiptModal) {
+    receiptModal.addEventListener('click', (e) => {
+      if (e.target === receiptModal) {
+        closeDetailedReceipt();
+      }
+    });
+  }
 }
 
 function setLoginLoadingState(isLoading) {
@@ -7539,14 +8529,29 @@ async function handleLoginSubmit(event) {
         
         // Refresh UI again to show profile data
         refreshLoginUI();
+        
+        // Dispatch event to notify React components
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('auth-state-changed'));
+        }
       } else {
         showToast(`Logged in as ${email}.`, 'success');
+      }
+      
+      // Dispatch event to notify React components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth-state-changed'));
       }
     } catch (profileError) {
       console.warn('[login] Could not fetch customer profile:', profileError);
       // Continue even if profile fetch fails - refresh UI with whatever data we have
       showToast(`Logged in as ${email}.`, 'success');
       refreshLoginUI();
+      
+      // Dispatch event to notify React components
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth-state-changed'));
+      }
     }
     
     try {
@@ -7585,6 +8590,14 @@ async function handleLoginSubmit(event) {
       showToast(`Rate limit exceeded. Please wait ${cooldownMessage} before trying again.`, 'error');
       console.warn(`[login] Rate limited. Cooldown set for ${secondsLeft}s (${cooldownMessage})`);
     } else {
+      // Extract and highlight error fields
+      const errorFields = extractErrorFields(error);
+      errorFields.forEach(({ fieldId }) => {
+        if (fieldId) {
+          highlightFieldError(fieldId, false);
+        }
+      });
+      
       showToast(getErrorMessage(error, 'Login'), 'error');
     }
   } finally {
@@ -8098,6 +9111,140 @@ boulders.dk</p>
 
 <h3>Questions?</h3>
 <p>If you have questions or comments regarding our cookie policy, please feel free to contact us. The cookie declaration itself is regularly updated via Cookiebot.</p>`
+  },
+  'email-consent': {
+    da: `<p>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.</p>`,
+    en: `<p>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.</p>`
+  },
+  'sms-consent': {
+    da: `<p>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.</p>`,
+    en: `<p>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.</p>`
+  },
+  privacy: {
+    da: `<h2>Generelt</h2>
+<p>Denne politik for behandling af personoplysninger ("Persondatapolitik") gælder, når du interagerer med Boulders ("vi", "os", "vores"). Den beskriver, hvordan vi indsamler og behandler dine oplysninger, når du bruger vores hjemmeside boulders.goactivebooking.com ("Hjemmesiden"), benytter vores app ("Appen"), eller i forbindelse med dit kundeforhold og din træning hos os.</p>
+
+<h2>Dataansvar</h2>
+<p>Boulders ApS er ansvarlig for behandlingen af de personoplysninger, vi indsamler om dig. Du kan kontakte os på følgende adresse:</p>
+<p><strong>Boulders ApS</strong><br>
+Graham Bells Vej, 8200 Aarhus N<br>
+CVR nr.: 32777651<br>
+boulders.dk</p>
+<p>Hvis du har spørgsmål om vores behandling af dine personoplysninger, kan du skrive til os på hej@boulders.dk.</p>
+
+<h2>Hvornår indsamler vi personlige oplysninger om dig?</h2>
+<p>Vi indsamler dine personoplysninger i forskellige situationer, herunder når du:</p>
+<ul>
+<li>Tilmelder dig som medlem af Boulders.</li>
+<li>Underskriver ansvarsfraskrivelse, ved køb af dagsbillet, indløser fribillet eller lign.</li>
+<li>Køber produkter på boulders.goactivebooking.com.</li>
+<li>Besøger og bruger vores hjemmeside, som beskrevet i vores cookiepolitik.</li>
+<li>Kontakter os via e-mail ved at udfylde formular eller sender en mail til en @boulders.dk-mailkonto.</li>
+<li>Tilmeld dig vores nyhedsbrev.</li>
+<li>Bruger Boulders' app.</li>
+<li>Booker hold.</li>
+<li>Tjekker ind i vores centre med dit medlems- eller adgangs-kort.</li>
+</ul>
+<p>Vi kan også modtage oplysninger om dig fra sociale medieplatforme som Facebook og Instagram, når du interagerer med vores sider der.</p>
+
+<h2>Hvilke personlige oplysninger indsamler vi om dig?</h2>
+<p>Hos Boulders indsamler vi personoplysninger, der er nødvendige for at administrere dit medlemskab eller anden type adgang, og give dig adgang til vores faciliteter og services. De oplysninger, vi typisk indsamler, omfatter:</p>
+<ul>
+<li>Dit fulde navn, CPR-nummer (hvis oplyst), køn, e-mailadresse, postadresse, telefonnummer, og billede.</li>
+<li>Kredit- eller betalingskortoplysninger, bankkontonummer, og registreringsnummer.</li>
+<li>Dit medlemsnummer, check-in tider, og de haller, du besøger.</li>
+<li>Dine præferencer for produkter og tjenester samt markedsføringspræferencer.</li>
+<li>Data fra Boulders' app, herunder check-ins og hold.</li>
+</ul>
+
+<h2>Hvordan bruger vi dine personlige oplysninger?</h2>
+<p>Vi anvender dine personlige oplysninger til at levere de tjenester og produkter, du har købt, og til at administrere dit medlemskab. Dette inkluderer:</p>
+<ul>
+<li>Opfyldelse af aftaler, såsom medlemskab og produktkøb.</li>
+<li>Verifikation af identitet ved adgangskontrol.</li>
+<li>Fakturering og administration af betalinger.</li>
+<li>Kommunikation om tjenester og medlemskab.</li>
+<li>Tilbud og kampagner baseret på dine præferencer.</li>
+<li>Analyse af brugsmønstre for at forbedre vores tjenester.</li>
+<li>Forebyggelse af svindel og overholdelse af sikkerhed.</li>
+</ul>
+
+<h2>Grundlag for behandling af dine personlige oplysninger</h2>
+<p>Boulders behandler, lagrer og opbevarer dine personoplysninger på følgende lovlige grundlag:</p>
+<ul>
+<li>Behandling er nødvendig for at opfylde din medlemsaftale med Boulders, jf. GDPR art. 6, stk. 1, litra b.</li>
+<li>Behandling er nødvendig for at overholde en retlig forpligtelse, f.eks. bogføringsloven, jf. GDPR art. 6, stk. 1, litra c.</li>
+<li>Behandling er nødvendig for vores legitime interesse i at kommunikere med medlemmer og forbedre vores tjenester, jf. GDPR art. 6, stk. 1, litra f.</li>
+<li>Behandling af billeder eller specifikke oplysninger, såsom cpr.nr., er baseret på dit samtykke, jf. GDPR art. 6, stk. 1, litra a og relevante bestemmelser i databeskyttelsesloven.</li>
+</ul>
+
+<h2>Cookies</h2>
+<p>Når du besøger vores hjemmeside, indsamler vi automatisk oplysninger om din brug af hjemmesiden gennem session cookies og lignende teknologier. Cookies er små tekstfiler, der gemmes i din browser og hjælper os med at gøre hjemmesiden mere relevant for dine behov og interesser. Du kan vælge at afvise cookies, men dette kan begrænse din adgang til visse funktioner på vores hjemmeside. Læs mere i vores cookiepolitik her.</p>
+
+<h2>Sletning af dine personlige oplysninger</h2>
+<p>Vi opbevarer dine personlige data så længe, det er nødvendigt for formålet med behandlingen. Når dit medlemskab ophører, gemmer vi dine data i en begrænset periode for at opfylde juridiske krav og vores legitime interesser. Typisk opbevares data i op til 3 år efter sidste aktivitet, mens oplysninger omfattet af bogføringsloven kan opbevares i 5 år.</p>`,
+    en: `<h2>General</h2>
+<p>This policy for the processing of personal data ("Privacy Policy") applies when you interact with Boulders ("we", "us", "our"). It describes how we collect and process your information when you use our website boulders.goactivebooking.com ("Website"), use our app ("App"), or in connection with your customer relationship and training with us.</p>
+
+<h2>Data Controller</h2>
+<p>Boulders ApS is responsible for the processing of the personal data we collect about you. You can contact us at the following address:</p>
+<p><strong>Boulders ApS</strong><br>
+Graham Bells Vej, 8200 Aarhus N<br>
+CVR no.: 32777651<br>
+boulders.dk</p>
+<p>If you have questions about our processing of your personal data, you can write to us at hej@boulders.dk.</p>
+
+<h2>When do we collect personal information about you?</h2>
+<p>We collect your personal information in various situations, including when you:</p>
+<ul>
+<li>Sign up as a member of Boulders.</li>
+<li>Sign a liability waiver, when purchasing a day pass, redeeming a free pass, or similar.</li>
+<li>Purchase products on boulders.goactivebooking.com.</li>
+<li>Visit and use our website, as described in our cookie policy.</li>
+<li>Contact us via email by filling out a form or sending an email to a @boulders.dk email account.</li>
+<li>Subscribe to our newsletter.</li>
+<li>Use Boulders' app.</li>
+<li>Book classes.</li>
+<li>Check in at our centers with your membership or access card.</li>
+</ul>
+<p>We may also receive information about you from social media platforms such as Facebook and Instagram when you interact with our pages there.</p>
+
+<h2>What personal information do we collect about you?</h2>
+<p>At Boulders, we collect personal information that is necessary to manage your membership or other type of access, and to give you access to our facilities and services. The information we typically collect includes:</p>
+<ul>
+<li>Your full name, CPR number (if provided), gender, email address, postal address, phone number, and photo.</li>
+<li>Credit or payment card information, bank account number, and registration number.</li>
+<li>Your membership number, check-in times, and the halls you visit.</li>
+<li>Your preferences for products and services as well as marketing preferences.</li>
+<li>Data from Boulders' app, including check-ins and classes.</li>
+</ul>
+
+<h2>How do we use your personal information?</h2>
+<p>We use your personal information to deliver the services and products you have purchased, and to manage your membership. This includes:</p>
+<ul>
+<li>Fulfillment of agreements, such as membership and product purchases.</li>
+<li>Identity verification for access control.</li>
+<li>Billing and payment administration.</li>
+<li>Communication about services and membership.</li>
+<li>Offers and campaigns based on your preferences.</li>
+<li>Analysis of usage patterns to improve our services.</li>
+<li>Fraud prevention and security compliance.</li>
+</ul>
+
+<h2>Legal basis for processing your personal information</h2>
+<p>Boulders processes, stores, and retains your personal information on the following legal bases:</p>
+<ul>
+<li>Processing is necessary to fulfill your membership agreement with Boulders, cf. GDPR art. 6, para. 1, lit. b.</li>
+<li>Processing is necessary to comply with a legal obligation, e.g., the Accounting Act, cf. GDPR art. 6, para. 1, lit. c.</li>
+<li>Processing is necessary for our legitimate interest in communicating with members and improving our services, cf. GDPR art. 6, para. 1, lit. f.</li>
+<li>Processing of images or specific information, such as CPR no., is based on your consent, cf. GDPR art. 6, para. 1, lit. a and relevant provisions in the Data Protection Act.</li>
+</ul>
+
+<h2>Cookies</h2>
+<p>When you visit our website, we automatically collect information about your use of the website through session cookies and similar technologies. Cookies are small text files stored in your browser that help us make the website more relevant to your needs and interests. You can choose to reject cookies, but this may limit your access to certain features on our website. Read more in our cookie policy here.</p>
+
+<h2>Deletion of your personal information</h2>
+<p>We retain your personal data for as long as necessary for the purpose of processing. When your membership ends, we store your data for a limited period to comply with legal requirements and our legitimate interests. Typically, data is retained for up to 3 years after last activity, while information covered by the Accounting Act may be retained for 5 years.</p>`
   }
 };
 
@@ -8115,7 +9262,20 @@ function openTermsModal(termsType) {
     punchcard: t('footer.terms.punchcard'),
     privacy: t('footer.policies.privacy'),
     cookie: t('footer.policies.cookie'),
+    'email-consent': 'E-mail',
+    'sms-consent': 'SMS',
   };
+  
+  // Show search for all content types (terms, cookie, email-consent, sms-consent)
+  if (DOM.termsModalSearch) {
+    DOM.termsModalSearch.style.display = 'block';
+    if (DOM.termsSearchInput) {
+      const placeholder = currentLang === 'da' || (currentLang && currentLang.startsWith('da'))
+        ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
+        : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
+      DOM.termsSearchInput.placeholder = placeholder;
+    }
+  }
   
   // Handle 'terms' type with tabs
   if (termsType === 'terms') {
@@ -8124,42 +9284,32 @@ function openTermsModal(termsType) {
       DOM.termsModalTabs.style.display = 'flex';
     }
     
-    // Show search
-    if (DOM.termsModalSearch) {
-      DOM.termsModalSearch.style.display = 'block';
-      // Update placeholder based on language
-      if (DOM.termsSearchInput) {
-        const placeholder = currentLang === 'da' 
-          ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
-          : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
-        DOM.termsSearchInput.placeholder = placeholder;
-      }
-    }
-    
     // Set title based on language
     const title = currentLang === 'da' ? 'Vilkår og Betingelser' : 'Terms and Conditions';
     DOM.termsModalTitle.textContent = title;
     
-    // Show membership tab by default
-    state.currentModalTab = 'membership';
-    switchTermsTab('membership');
+    // Show Punch Card tab by default when punch card is in cart; otherwise Membership
+    const hasPunchCardInCart = state.selectedProductType === 'punch-card' &&
+      state.valueCardQuantities &&
+      Array.from(state.valueCardQuantities.values()).some((q) => q > 0);
+    const defaultTab = hasPunchCardInCart ? 'punchcard' : 'membership';
+    state.currentModalTab = defaultTab;
+    switchTermsTab(defaultTab);
     
     // Store original content for search
     const currentTab = state.currentModalTab || 'membership';
     const content = termsContent[currentTab]?.[currentLang] || termsContent[currentTab]?.da || '';
     state.termsOriginalContent = content;
   } else {
-    // Hide search for non-tabbed content
-    if (DOM.termsModalSearch) {
-      DOM.termsModalSearch.style.display = 'none';
-    }
-    // Hide tabs for other types
+    // Hide tabs for other types (search stays visible for all)
     if (DOM.termsModalTabs) {
       DOM.termsModalTabs.style.display = 'none';
     }
     
-    const title = termsTitles[termsType]?.[currentLang] || termsTitles[termsType]?.da || 'Terms and Conditions';
-    const content = termsContent[termsType]?.[currentLang] || termsContent[termsType]?.da || '<p>Content not available.</p>';
+    // Convert language code (da-DK -> da, en-GB -> en)
+    const langCode = currentLang.split('-')[0];
+    const title = termsTitles[termsType] || 'Terms and Conditions';
+    const content = termsContent[termsType]?.[langCode] || termsContent[termsType]?.da || '<p>Content not available.</p>';
     
     if (!termsContent[termsType]) {
       console.error('Invalid terms type:', termsType);
@@ -8170,7 +9320,7 @@ function openTermsModal(termsType) {
     DOM.termsModalTitle.textContent = title;
     
     // Set content
-    DOM.termsModalContent.innerHTML = content;
+    DOM.termsModalContent.innerHTML = sanitizeHTML(content);
     state.termsOriginalContent = content;
   }
   
@@ -8230,7 +9380,7 @@ function switchTermsTab(tabType) {
   const content = termsContent[tabType]?.[langCode] || termsContent[tabType]?.da || '<p>Content not available.</p>';
   
   if (termsContent[tabType]) {
-    DOM.termsModalContent.innerHTML = content;
+    DOM.termsModalContent.innerHTML = sanitizeHTML(content);
     state.termsOriginalContent = content;
     DOM.termsModalContent.scrollTop = 0;
   }
@@ -8248,13 +9398,13 @@ function performTermsSearch(searchQuery) {
   
   if (!query) {
     // Restore original content
-    DOM.termsModalContent.innerHTML = state.termsOriginalContent;
+    DOM.termsModalContent.innerHTML = sanitizeHTML(state.termsOriginalContent);
     return;
   }
-  
+
   // Create a temporary div to parse HTML
   const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = state.termsOriginalContent;
+  tempDiv.innerHTML = sanitizeHTML(state.termsOriginalContent);
   
   // Search and highlight function
   function highlightText(node, searchText) {
@@ -8319,7 +9469,7 @@ function performTermsSearch(searchQuery) {
     DOM.termsModalContent.appendChild(highlightedContent);
   } else {
     // No results found
-    DOM.termsModalContent.innerHTML = '<div class="search-no-results">No results found for "' + searchQuery + '"</div>';
+    DOM.termsModalContent.innerHTML = sanitizeHTML('<div class="search-no-results">No results found for "' + searchQuery + '"</div>');
   }
   
   // Scroll to first match
@@ -8339,8 +9489,93 @@ function clearTermsSearch() {
   
   // Restore original content
   if (state.termsOriginalContent) {
-    DOM.termsModalContent.innerHTML = state.termsOriginalContent;
+    DOM.termsModalContent.innerHTML = sanitizeHTML(state.termsOriginalContent);
     DOM.termsModalContent.scrollTop = 0;
+  }
+}
+
+// Data policy modal search (same algorithm as terms search)
+function performDataPolicySearch(searchQuery) {
+  if (!DOM.dataPolicyModalContent || !state.dataPolicyOriginalContent) return;
+  
+  const query = searchQuery.trim().toLowerCase();
+  
+  if (DOM.dataPolicySearchClear) {
+    DOM.dataPolicySearchClear.style.display = query ? 'flex' : 'none';
+  }
+  
+  if (!query) {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+    return;
+  }
+
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+  
+  function highlightText(node, searchText) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      const regex = new RegExp(`(${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+      const matches = text.match(regex);
+      if (matches && matches.length > 0) {
+        const parts = text.split(regex);
+        const fragment = document.createDocumentFragment();
+        parts.forEach((part, index) => {
+          if (part.toLowerCase() === searchText.toLowerCase()) {
+            const highlight = document.createElement('span');
+            highlight.className = 'search-highlight';
+            highlight.textContent = part;
+            fragment.appendChild(highlight);
+          } else if (part) {
+            fragment.appendChild(document.createTextNode(part));
+          }
+        });
+        return fragment;
+      }
+      return null;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') return null;
+      const clone = node.cloneNode(false);
+      let hasMatch = false;
+      Array.from(node.childNodes).forEach(child => {
+        const result = highlightText(child, searchText);
+        if (result) {
+          clone.appendChild(result);
+          hasMatch = true;
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          if (child.textContent.toLowerCase().includes(searchText)) {
+            clone.appendChild(child.cloneNode(true));
+            hasMatch = true;
+          }
+        } else if (child.nodeType === Node.TEXT_NODE) {
+          clone.appendChild(child.cloneNode(true));
+        }
+      });
+      return hasMatch ? clone : null;
+    }
+    return null;
+  }
+
+  const highlightedContent = highlightText(tempDiv, query);
+  if (highlightedContent) {
+    DOM.dataPolicyModalContent.innerHTML = '';
+    DOM.dataPolicyModalContent.appendChild(highlightedContent);
+  } else {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML('<div class="search-no-results">No results found for "' + searchQuery + '"</div>');
+  }
+  const firstHighlight = DOM.dataPolicyModalContent.querySelector('.search-highlight');
+  if (firstHighlight) {
+    firstHighlight.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+function clearDataPolicySearch() {
+  if (!DOM.dataPolicySearchInput || !DOM.dataPolicyModalContent) return;
+  DOM.dataPolicySearchInput.value = '';
+  if (DOM.dataPolicySearchClear) DOM.dataPolicySearchClear.style.display = 'none';
+  if (state.dataPolicyOriginalContent) {
+    DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(state.dataPolicyOriginalContent);
+    DOM.dataPolicyModalContent.scrollTop = 0;
   }
 }
 
@@ -8405,7 +9640,7 @@ function switchModalLanguage(modalType, lang) {
         DOM.termsModalTitle.textContent = title;
       }
       if (DOM.termsModalContent) {
-        DOM.termsModalContent.innerHTML = content;
+        DOM.termsModalContent.innerHTML = sanitizeHTML(content);
         state.termsOriginalContent = content;
         DOM.termsModalContent.scrollTop = 0;
       }
@@ -8418,17 +9653,8 @@ function switchModalLanguage(modalType, lang) {
         }
       }
     }
-  } else if (modalType === 'privacy') {
-    // Update data policy content
-    // Convert da-DK to da, en-GB to en for content lookup
-    const langCode = lang.split('-')[0];
-    const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
-    
-    if (DOM.dataPolicyModalContent) {
-      DOM.dataPolicyModalContent.innerHTML = content;
-      DOM.dataPolicyModalContent.scrollTop = 0;
-    }
   }
+  // Privacy/data policy modal no longer has its own language switcher; language follows header (see refreshOpenFooterModals in changeLanguage).
 }
 
 function openDataPolicyModal() {
@@ -8436,25 +9662,29 @@ function openDataPolicyModal() {
   
   state.currentModalType = 'privacy';
   
-  // Language is managed by state.language - translations handled by updatePageTranslations
   updatePageTranslations();
   
-  // Convert da-DK to da, en-GB to en for content lookup
   const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
   const content = termsContent.privacy?.[langCode] || termsContent.privacy?.da || '<p>Data policy content not available.</p>';
   
-  // Set content
-  DOM.dataPolicyModalContent.innerHTML = content;
+  DOM.dataPolicyModalContent.innerHTML = sanitizeHTML(content);
+  state.dataPolicyOriginalContent = content;
   
-  // Show modal
+  // Show and reset search (same as T&C modal)
+  if (DOM.dataPolicyModalSearch) DOM.dataPolicyModalSearch.style.display = 'block';
+  if (DOM.dataPolicySearchInput) {
+    DOM.dataPolicySearchInput.value = '';
+    const isDa = (state.language || DEFAULT_LANGUAGE).startsWith('da');
+    DOM.dataPolicySearchInput.placeholder = isDa
+      ? (DOM.dataPolicySearchInput.dataset?.placeholderDa || 'Søg...')
+      : (DOM.dataPolicySearchInput.dataset?.placeholderEn || 'Search...');
+  }
+  if (DOM.dataPolicySearchClear) DOM.dataPolicySearchClear.style.display = 'none';
+  
   DOM.dataPolicyModal.style.display = 'flex';
   DOM.dataPolicyModalContent.style.display = 'block';
-  if (DOM.dataPolicyModalLoading) {
-    DOM.dataPolicyModalLoading.style.display = 'none';
-  }
+  if (DOM.dataPolicyModalLoading) DOM.dataPolicyModalLoading.style.display = 'none';
   document.body.classList.add('modal-open');
-  
-  // Scroll to top of modal content
   DOM.dataPolicyModalContent.scrollTop = 0;
 }
 
@@ -8487,16 +9717,23 @@ function closeTermsModal() {
 function closeDataPolicyModal() {
   if (!DOM.dataPolicyModal) return;
   
-  // Clear content
-  if (DOM.dataPolicyModalContent) {
-    DOM.dataPolicyModalContent.innerHTML = '';
-  }
-  
-  // Reset state
+  if (DOM.dataPolicyModalContent) DOM.dataPolicyModalContent.innerHTML = '';
+  clearDataPolicySearch();
+  state.dataPolicyOriginalContent = null;
   state.currentModalType = null;
-  
-  // Hide modal
   DOM.dataPolicyModal.style.display = 'none';
+  document.body.classList.remove('modal-open');
+}
+
+function openCookieDeclarationModal() {
+  if (!DOM.cookieDeclarationModal) return;
+  DOM.cookieDeclarationModal.style.display = 'flex';
+  document.body.classList.add('modal-open');
+}
+
+function closeCookieDeclarationModal() {
+  if (!DOM.cookieDeclarationModal) return;
+  DOM.cookieDeclarationModal.style.display = 'none';
   document.body.classList.remove('modal-open');
 }
 
@@ -8555,7 +9792,66 @@ async function handleForgotPasswordSubmit(event) {
   }
 }
 
+function refreshHeaderAuthIndicator() {
+  const headerContent = document.getElementById('headerContent');
+  const headerAuthIndicator = document.getElementById('headerAuthIndicator');
+  const headerAuthEmail = document.getElementById('headerAuthEmail');
+  const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+  
+  if (!headerAuthIndicator) return;
+  
+  const authenticated = isUserAuthenticated();
+  
+  // Always show the header (logo should always be visible)
+  if (headerContent) {
+    headerContent.style.display = 'block';
+  }
+  
+  if (!authenticated) {
+    // Hide auth indicator when not authenticated, but keep header visible
+    headerAuthIndicator.style.display = 'none';
+    return;
+  }
+  
+  // Get email from various sources
+  const metadata = getTokenMetadata();
+  const customer = state.authenticatedCustomer;
+  const emailDisplay = state.authenticatedEmail || customer?.email || metadata?.email || metadata?.username || 'User';
+  
+  // Update email display
+  if (headerAuthEmail) {
+    headerAuthEmail.textContent = emailDisplay;
+  }
+  
+  // Show the indicator
+  headerAuthIndicator.style.display = 'flex';
+}
+
+function formatCityDisplay(city) {
+  if (!city || typeof city !== 'string') return city;
+  const trimmed = city.trim();
+  if (!trimmed) return trimmed;
+  return trimmed
+    .split(' ')
+    .filter(Boolean)
+    .map(word => word
+      .split('-')
+      .map(part => {
+        if (!part) return part;
+        const upper = part.toUpperCase();
+        if (part.length <= 2 && part === upper) {
+          return upper; // Preserve short abbreviations like "C" or "Ø"
+        }
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      })
+      .join('-'))
+    .join(' ');
+}
+
 function refreshLoginUI() {
+  // Update header auth indicator first
+  refreshHeaderAuthIndicator();
+  
   if (!DOM.loginStatus && !DOM.loginFormContainer) {
     return;
   }
@@ -8601,6 +9897,15 @@ function refreshLoginUI() {
 
   if (DOM.loginStatus) {
     DOM.loginStatus.style.display = authenticated ? 'block' : 'none';
+  }
+
+  // Ensure checkout button state is correct after auth change (e.g. after creating profile, logout)
+  // Always reset any stuck "Processing..." state - covers logout, auth expiry, and interrupted checkout
+  if (state.checkoutInProgress) {
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState(false);
+  } else {
+    updateCheckoutButton();
   }
   
   // Update name display (order: 1)
@@ -8651,9 +9956,22 @@ function refreshLoginUI() {
   // Update address display (order: 4)
   if (DOM.loginStatusAddress && DOM.loginStatusAddressRow) {
     let addressParts = [];
-    const addressSource = customer?.address || customer?.shippingAddress || formCustomer?.address;
-    const postalCodeSource = customer?.postalCode || customer?.shippingAddress?.postalCode || formCustomer?.address?.postalCode;
-    const citySource = customer?.city || customer?.shippingAddress?.city || formCustomer?.address?.city;
+    const addressSource =
+      customer?.address ||
+      customer?.shippingAddress ||
+      customer?.streetAddress ||
+      customer?.addressLine1 ||
+      formCustomer?.address;
+    const postalCodeSource =
+      customer?.postalCode ||
+      customer?.zip ||
+      customer?.shippingAddress?.postalCode ||
+      formCustomer?.address?.postalCode;
+    const citySource =
+      customer?.city ||
+      customer?.shippingAddress?.city ||
+      customer?.addressCity ||
+      formCustomer?.address?.city;
     
     if (addressSource) {
       if (typeof addressSource === 'string') {
@@ -8666,7 +9984,7 @@ function refreshLoginUI() {
       addressParts.push(postalCodeSource);
     }
     if (citySource) {
-      addressParts.push(citySource);
+      addressParts.push(formatCityDisplay(citySource));
     }
     const addressDisplay = addressParts.length > 0 ? addressParts.join(', ') : null;
     if (addressDisplay) {
@@ -8680,8 +9998,15 @@ function refreshLoginUI() {
   // Update phone number display (order: 5)
   if (DOM.loginStatusPhone && DOM.loginStatusPhoneRow) {
     let phoneDisplay = null;
-    const phoneSource = customer?.mobilePhone || customer?.phone || formCustomer?.phone;
-    const phoneCountryCodeSource = customer?.phoneCountryCode || formCustomer?.phone?.countryCode;
+    const phoneSource =
+      customer?.mobilePhone ||
+      customer?.phone ||
+      customer?.phoneNumber ||
+      formCustomer?.phone;
+    const phoneCountryCodeSource =
+      customer?.phoneCountryCode ||
+      customer?.phoneCountry ||
+      formCustomer?.phone?.countryCode;
     
     if (phoneSource) {
       if (typeof phoneSource === 'string') {
@@ -9264,10 +10589,32 @@ async function handleSaveAccount() {
     }
   });
   
+  // Validate privacy consent
+  const privacyConsent = document.getElementById('privacyConsent');
+  if (!privacyConsent || !privacyConsent.checked) {
+    showSaveAccountMessage('Please accept the privacy policy to continue.', 'error');
+    if (privacyConsent) {
+      const formGroup = privacyConsent.closest('.form-group');
+      if (formGroup) {
+        formGroup.classList.add('error');
+        formGroup.style.animation = 'shake 0.5s ease-in-out';
+        setTimeout(() => {
+          formGroup.style.animation = '';
+        }, 500);
+      }
+    }
+    const saveBtn = document.querySelector('[data-action="save-account"]');
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Account';
+    }
+    return;
+  }
+  
   // Validate password length
   const passwordInput = document.getElementById('password');
-  if (passwordInput && passwordInput.value && passwordInput.value.length < 8) {
-    showSaveAccountMessage('Password must be at least 8 characters long.', 'error');
+  if (passwordInput && passwordInput.value && passwordInput.value.length < 6) {
+    showSaveAccountMessage('Password must be at least 6 characters long.', 'error');
     highlightFieldError('password', true);
     const saveBtn = document.querySelector('[data-action="save-account"]');
     if (saveBtn) {
@@ -9280,8 +10627,8 @@ async function handleSaveAccount() {
   // Validate parent password length if parent form is visible
   const parentPasswordInput = document.getElementById('parentPassword');
   const parentForm = document.getElementById('parentGuardianForm');
-  if (parentPasswordInput && parentForm && parentForm.style.display !== 'none' && parentPasswordInput.value && parentPasswordInput.value.length < 8) {
-    showSaveAccountMessage('Parent/Guardian password must be at least 8 characters long.', 'error');
+  if (parentPasswordInput && parentForm && parentForm.style.display !== 'none' && parentPasswordInput.value && parentPasswordInput.value.length < 6) {
+    showSaveAccountMessage('Parent/Guardian password must be at least 6 characters long.', 'error');
     highlightFieldError('parentPassword', true);
     const saveBtn = document.querySelector('[data-action="save-account"]');
     if (saveBtn) {
@@ -9364,6 +10711,26 @@ async function handleSaveAccount() {
       shippingAddress.country = country; // Always DK
     }
     
+    // Get privacy/terms consent timestamp for acceptedRegistrationTerms
+    // Use timestamp from localStorage if available, otherwise use current time
+    let acceptedRegistrationTerms = null;
+    const privacyConsent = document.getElementById('privacyConsent');
+    if (privacyConsent && privacyConsent.checked) {
+      try {
+        const privacyTimestamp = localStorage.getItem('boulders_privacy_consent_timestamp');
+        if (privacyTimestamp) {
+          acceptedRegistrationTerms = privacyTimestamp;
+        } else {
+          // Fallback: use current timestamp if consent is checked but no timestamp stored
+          acceptedRegistrationTerms = new Date().toISOString();
+        }
+        console.log('[Save Account] Using acceptedRegistrationTerms timestamp:', acceptedRegistrationTerms);
+      } catch (e) {
+        console.warn('[Save Account] Could not get consent timestamp from localStorage, using current time:', e);
+        acceptedRegistrationTerms = new Date().toISOString();
+      }
+    }
+    
     const customerData = {
       email: payload.customer?.email || document.getElementById('email')?.value?.trim(),
       firstName: payload.customer?.firstName || document.getElementById('firstName')?.value?.trim(),
@@ -9379,6 +10746,9 @@ async function handleSaveAccount() {
       password: payload.customer?.password || document.getElementById('password')?.value,
       customerType: 1, // Required by API
       ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
+      ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
+      // Include registration terms acceptance timestamp (required by API)
+      ...(acceptedRegistrationTerms && { acceptedRegistrationTerms }),
     };
     
     // Also include phone and phoneCountryCode for backward compatibility (remove if not needed)
@@ -9435,35 +10805,8 @@ async function handleSaveAccount() {
         showToast('You are already logged in with this email.', 'error');
         return;
       }
-      
-      // Check if we've already created an account with this email in this session
-      if (state.createdEmails.has(email)) {
-        showSaveAccountMessage('An account with this email address has already been created in this session. Please log in instead.', 'error');
-        showToast('Account already created. Please log in.', 'error');
-        switchAuthMode('login', email);
-        return;
-      }
-      
-      // Check localStorage for previously created emails
-      try {
-        const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
-        if (storedEmails.includes(email)) {
-          showSaveAccountMessage('An account with this email address already exists. Please log in instead.', 'error');
-          showToast('Account already exists. Please log in.', 'error');
-          switchAuthMode('login', email);
-          return;
-        }
-      } catch (e) {
-        console.warn('[Save Account] Could not check localStorage:', e);
-      }
-      
-      // Note: We don't check via login because the API returns INVALID_CREDENTIALS 
-      // for both "account doesn't exist" and "wrong password" for security reasons.
-      // We rely on:
-      // 1. Session tracking (state.createdEmails)
-      // 2. localStorage tracking
-      // 3. API duplicate detection (which will catch it during account creation)
-      console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API.');
+
+      console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
     
     console.log('[Save Account] Creating customer account...');
@@ -9647,34 +10990,58 @@ async function handleSaveAccount() {
   } catch (error) {
     console.error('[Save Account] Error saving account:', error);
     
-    // Handle duplicate email error specifically
-    if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
-      const email = document.getElementById('email')?.value?.trim() || '';
-      const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
-      showSaveAccountMessage(duplicateMessage, 'error');
-      showToast('Account already exists. Please log in.', 'error');
-      
-      // Highlight the email field
-      const emailInput = document.getElementById('email');
-      if (emailInput) {
-        emailInput.closest('.form-group')?.classList.add('error');
-      }
-      
-      // Switch to login view and populate email field
-      if (email) {
-        switchAuthMode('login', email);
+    // Handle invalid email error specifically
+    if (error.isInvalidEmail) {
+      showSaveAccountMessage('Please enter a valid email address.', 'error');
+      showToast('Please enter a valid email address.', 'error');
+      highlightFieldError('email', true);
+    } else if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
+      const emailVal = document.getElementById('email')?.value?.trim()?.toLowerCase() || '';
+      const password = customerData?.password || document.getElementById('password')?.value;
+      if (emailVal && password) {
+        try {
+          await authAPI.login(emailVal, password, { saveTokens: true });
+          await syncAuthenticatedCustomerState();
+          showSaveAccountMessage('Account saved successfully! You are now logged in.', 'success');
+          showToast('Account saved successfully!', 'success');
+          refreshLoginUI();
+        } catch (loginErr) {
+          const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+          showSaveAccountMessage(duplicateMessage, 'error');
+          showToast('Account already exists. Please log in.', 'error');
+          const emailInput = document.getElementById('email');
+          if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+          switchAuthMode('login', emailVal);
+        }
       } else {
-        switchAuthMode('login');
+        const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+        showSaveAccountMessage(duplicateMessage, 'error');
+        showToast('Account already exists. Please log in.', 'error');
+        const emailInput = document.getElementById('email');
+        if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+        if (emailVal) switchAuthMode('login', emailVal);
+        else switchAuthMode('login');
       }
     } else {
-      const errorMessage = error.message || 'Failed to save account. Please try again.';
+      // Extract and highlight error fields
+      const errorFields = extractErrorFields(error);
+      errorFields.forEach(({ fieldId }) => {
+        if (fieldId) {
+          highlightFieldError(fieldId, true);
+        }
+      });
+      
+      const errorMessage = getErrorMessage(error, 'Account creation') || error.message || 'Failed to save account. Please try again.';
       showSaveAccountMessage(errorMessage, 'error');
-      showToast('Failed to save account', 'error');
+      showToast(errorMessage, 'error');
     }
   } finally {
     // Reset button state
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save Account';
+    // Ensure checkout button is not stuck in Processing (user may have switched flows)
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState(false);
   }
 }
 
@@ -9733,6 +11100,139 @@ function checkSaveAccountButtonState() {
   }
 }
 
+function showLogoutConfirmation() {
+  // Create confirmation modal
+  const confirmationOverlay = document.createElement('div');
+  confirmationOverlay.className = 'logout-confirmation-overlay';
+  confirmationOverlay.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    backdrop-filter: blur(4px);
+  `;
+  
+  const confirmationDialog = document.createElement('div');
+  confirmationDialog.className = 'logout-confirmation-dialog';
+  confirmationDialog.style.cssText = `
+    background: rgba(31, 41, 55, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  `;
+  
+  // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
+  const title = document.createElement('h3');
+  title.textContent = 'Log out?';
+  title.style.cssText = 'margin: 0 0 16px 0; color: #FFFFFF; font-size: 18px; font-weight: 600;';
+  
+  const message = document.createElement('p');
+  message.textContent = "Are you sure you want to log out? You'll need to log in again to continue.";
+  message.style.cssText = 'margin: 0 0 24px 0; color: rgba(255, 255, 255, 0.7); line-height: 1.5; font-size: 14px;';
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'logout-confirmation-btn logout-confirmation-cancel';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = `
+    padding: 10px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  `;
+  
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'logout-confirmation-btn logout-confirmation-confirm';
+  confirmBtn.textContent = 'Log out';
+  confirmBtn.style.cssText = `
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #F87171;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  `;
+  
+  buttonContainer.appendChild(cancelBtn);
+  buttonContainer.appendChild(confirmBtn);
+  
+  confirmationDialog.appendChild(title);
+  confirmationDialog.appendChild(message);
+  confirmationDialog.appendChild(buttonContainer);
+  
+  confirmationOverlay.appendChild(confirmationDialog);
+  document.body.appendChild(confirmationOverlay);
+  
+  // Add hover effects
+  
+  if (cancelBtn) {
+    cancelBtn.addEventListener('mouseenter', () => {
+      cancelBtn.style.background = 'rgba(255, 255, 255, 0.1)';
+      cancelBtn.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+    });
+    cancelBtn.addEventListener('mouseleave', () => {
+      cancelBtn.style.background = 'transparent';
+      cancelBtn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+    });
+  }
+  
+  if (confirmBtn) {
+    confirmBtn.addEventListener('mouseenter', () => {
+      confirmBtn.style.background = 'rgba(239, 68, 68, 0.3)';
+      confirmBtn.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+    });
+    confirmBtn.addEventListener('mouseleave', () => {
+      confirmBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+      confirmBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+    });
+  }
+  
+  // Add event listeners
+  cancelBtn?.addEventListener('click', () => {
+    document.body.removeChild(confirmationOverlay);
+  });
+  
+  confirmBtn?.addEventListener('click', () => {
+    document.body.removeChild(confirmationOverlay);
+    handleLogout();
+  });
+  
+  // Close on overlay click
+  confirmationOverlay.addEventListener('click', (e) => {
+    if (e.target === confirmationOverlay) {
+      document.body.removeChild(confirmationOverlay);
+    }
+  });
+  
+  // Close on Escape key
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
+      document.body.removeChild(confirmationOverlay);
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  document.addEventListener('keydown', handleEscape);
+}
+
 function handleLogout() {
   // Clear customer profile data
   state.authenticatedCustomer = null;
@@ -9743,7 +11243,12 @@ function handleLogout() {
     window.clearTokens();
   }
   
-  // Refresh UI to show logged out state (immediate feedback before refresh)
+  // Clear Sentry user context on logout
+  if (window.Sentry && window.Sentry.setUser) {
+    window.Sentry.setUser(null);
+  }
+  
+  // Refresh UI to show logged out state
   refreshLoginUI();
   
   // Refresh profile page UI (hides profile content, shows login form)
@@ -9761,38 +11266,33 @@ function handleLogout() {
   
   showToast('You have been logged out.', 'info');
   
-  // Best Practice UX: Page refresh for completely clean state
-  // Small delay to allow toast to be visible briefly
+  // Dispatch event to notify React components
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('auth-state-changed'));
+  }
+  
+  // For profile page, refresh to show login form
   setTimeout(() => {
     const currentPath = window.location.pathname;
-    
-    // For profile page, refresh to show login form
     if (currentPath.includes('profile.html')) {
       window.location.href = './profile.html';
     } else {
-      // For other pages, refresh current page
       window.location.reload();
     }
-  }, 1000); // 1 second delay to show logout toast
+  }, 1000);
 }
 
 function renderCatalog() {
-  // Step 5: Only render mock data if API data is not available yet
-  // API data will be loaded when business unit is selected and will replace this
-  // Check if we have any products (campaign, membership, 15 Day Pass, or value cards)
-  const hasAnyProducts = (state.campaignSubscriptions?.length || 0) > 0 ||
-                         (state.subscriptions?.length || 0) > 0 || 
-                         (state.dayPassSubscriptions?.length || 0) > 0 || 
-                         (state.valueCards?.length || 0) > 0;
-  if (!hasAnyProducts) {
-    renderMembershipPlans();
-    renderValueCards();
-  }
+  // API-driven catalog: renderProductsFromAPI handles memberships/value cards
+  // Add-ons are rendered from subscription additions when available
   renderAddons();
 }
 
 function renderMembershipPlans() {
   if (!templates.membership || !DOM.membershipPlans) return;
+  if (typeof MEMBERSHIP_PLANS === 'undefined' || !Array.isArray(MEMBERSHIP_PLANS) || MEMBERSHIP_PLANS.length === 0) {
+    return;
+  }
   DOM.membershipPlans.innerHTML = '';
   DOM.membershipPlans.dataset.centerInitialized = 'false';
 
@@ -10005,11 +11505,11 @@ function syncPunchCardQuantityUI(card, planId) {
   const pricePerUnit = parseInt(card.dataset.price) || 1200;
   const total = pricePerUnit * quantity;
   
-  // Find the quantity panel (now a sibling of the card)
-  const panel = card.nextElementSibling;
-  if (!panel || !panel.classList.contains('quantity-panel')) return;
+  // Quantity panel is INSIDE the plan-card (child), not a sibling
+  const panel = card.querySelector('.quantity-panel');
+  if (!panel) return;
   
-  const quantityValue = panel.querySelector('[data-element="quantityValue"]');
+  const quantityValue = panel.querySelector('.quantity-value') || panel.querySelector('[data-element="quantityValue"]');
   const quantityTotal = panel.querySelector('[data-element="quantityTotal"]');
   const decrementBtn = panel.querySelector('[data-action="decrement-quantity"]');
   const incrementBtn = panel.querySelector('[data-action="increment-quantity"]');
@@ -10021,8 +11521,9 @@ function syncPunchCardQuantityUI(card, planId) {
   if (decrementBtn) decrementBtn.disabled = quantity <= 1;
   if (incrementBtn) incrementBtn.disabled = quantity >= 5;
   
-  // Update cart when quantity changes
+  // Update cart and value card summary when quantity changes
   updateCartSummary();
+  updateValueCardSummary();
 }
 
 // Scroll to top function with multiple approaches
@@ -10185,6 +11686,9 @@ function triggerPlanButtonGlare(button) {
 
 function renderValueCards() {
   if (!templates.valueCard || !DOM.valuePlans) return;
+  if (typeof VALUE_CARDS === 'undefined' || !Array.isArray(VALUE_CARDS) || VALUE_CARDS.length === 0) {
+    return;
+  }
   DOM.valuePlans.innerHTML = '';
   DOM.valuePlans.dataset.centerInitialized = 'false';
 
@@ -10245,10 +11749,18 @@ function renderAddons() {
   if (!templates.addon || !DOM.addonPlans) return;
   DOM.addonPlans.innerHTML = '';
   DOM.addonPlans.dataset.centerInitialized = 'false';
+  const addons = Array.isArray(state.subscriptionAdditions)
+    ? state.subscriptionAdditions
+    : [];
+  if (addons.length === 0) {
+    updateAddonSkipButton();
+    return;
+  }
 
-  ADDONS.forEach((addon) => {
+  addons.forEach((addon, index) => {
     const card = templates.addon.content.firstElementChild.cloneNode(true);
     card.dataset.planId = addon.id;
+    const thumbWrapper = card.querySelector('.addon-card-thumb') || card.querySelector('[data-action="open-lightbox"]');
 
     const nameEl = card.querySelector('[data-element="name"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
@@ -10256,12 +11768,60 @@ function renderAddons() {
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
+    const imageEl = card.querySelector('[data-element="image"]');
 
     if (nameEl) nameEl.textContent = addon.name;
-    if (originalPriceEl) originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.original));
-    if (discountedPriceEl) discountedPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(addon.price.discounted));
-    if (descriptionEl) descriptionEl.textContent = addon.description;
-    if (featuresEl) {
+    // Handle original price (only for subscription additions with discount)
+    const priceOriginal = typeof addon.price?.original === 'number'
+      ? addon.price.original
+      : null;
+    // Use helper function for current price
+    const priceDiscounted = getAddonPrice(addon);
+    if (originalPriceEl) {
+      originalPriceEl.textContent = priceOriginal !== null
+        ? formatPriceHalfKrone(roundToHalfKrone(priceOriginal))
+        : '—';
+    }
+    if (discountedPriceEl) {
+      discountedPriceEl.textContent = priceDiscounted !== null
+        ? formatPriceHalfKrone(roundToHalfKrone(priceDiscounted))
+        : '—';
+    }
+    if (descriptionEl) {
+      const description = addon.description || '';
+      if (description) {
+        // Preserve line breaks from backend - escape HTML and preserve newlines
+        const descriptionHtml = description
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br>');
+        descriptionEl.innerHTML = sanitizeHTML(descriptionHtml);
+      } else {
+        descriptionEl.textContent = '';
+      }
+    }
+    const descToggleAddonsStep = card.querySelector('.addon-card-description-toggle');
+    if (descToggleAddonsStep) {
+      const hasDesc = (addon.description || '').trim().length > 0;
+      descToggleAddonsStep.style.display = hasDesc ? '' : 'none';
+      if (hasDesc) {
+        const descId = 'addon-desc-' + (addon.id || index);
+        if (descriptionEl) descriptionEl.id = descId;
+        descToggleAddonsStep.setAttribute('aria-controls', descId);
+        descToggleAddonsStep.setAttribute('aria-label', t('addons.modal.showDescription') || 'Show full description');
+        descToggleAddonsStep.title = t('addons.modal.showDescription') || 'Show full description';
+      }
+      descToggleAddonsStep.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const expanded = card.classList.toggle('expanded');
+        descToggleAddonsStep.setAttribute('aria-expanded', String(expanded));
+        descToggleAddonsStep.setAttribute('aria-label', expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description'));
+        descToggleAddonsStep.title = expanded ? (t('addons.modal.collapseDescription') || 'Collapse description') : (t('addons.modal.showDescription') || 'Show full description');
+      });
+    }
+    if (featuresEl && Array.isArray(addon.features)) {
       featuresEl.innerHTML = '';
       addon.features.forEach((feature) => {
         const li = document.createElement('li');
@@ -10273,8 +11833,21 @@ function renderAddons() {
       buttonEl.dataset.addonId = addon.id;
       buttonEl.textContent = addon.cta ?? 'Select Add-on';
     }
+    if (thumbWrapper && imageEl && imageEl.src) {
+      thumbWrapper.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAddonLightbox(imageEl.src, imageEl);
+      });
+    }
 
-    card.addEventListener('click', () => centerPlanCard(card));
+    const mainRow = card.querySelector('.addon-card-main');
+    (mainRow || card).addEventListener('click', (e) => {
+      if (buttonEl && (e.target === buttonEl || buttonEl.contains(e.target))) return;
+      if (thumbWrapper && (e.target === thumbWrapper || thumbWrapper.contains(e.target))) return;
+      const descToggleEl = card.querySelector('.addon-card-description-toggle');
+      if (descToggleEl && (e.target === descToggleEl || descToggleEl.contains(e.target))) return;
+      centerPlanCard(card);
+    });
 
     DOM.addonPlans.appendChild(card);
   });
@@ -10299,7 +11872,7 @@ function handleCategoryToggle(category) {
         setTimeout(() => {
           item.setAttribute('tabindex', '-1');
           item.focus();
-          item.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
       }
     } else {
@@ -10327,6 +11900,82 @@ function handleCategoryToggle(category) {
   }
 }
 
+function getProductPriceDKK(product) {
+  if (!product) return 0;
+  if (product.price?.amount) return product.price.amount / 100;
+  if (product.amount) return product.amount / 100;
+  if (product.priceWithInterval?.price?.amount) return product.priceWithInterval.price.amount / 100;
+  if (typeof product.price === 'number') return product.price;
+  return 0;
+}
+
+function parsePriceFromCard(card) {
+  const priceEl = card?.querySelector('.price-amount');
+  if (!priceEl) return 0;
+  const text = priceEl.textContent || '';
+  const normalized = text.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+  const value = parseFloat(normalized);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function trackSelectItemEvent({ product, productId, category, type, card }) {
+  if (!window.GTM || !window.GTM.trackSelectItem) return;
+
+  const nameFromCard = card?.querySelector('.plan-type')?.textContent?.trim();
+  const productData = {
+    id: productId,
+    name: product?.name || nameFromCard || 'Unknown Product',
+    amount: product ? getProductPriceDKK(product) : parsePriceFromCard(card),
+    type: type || 'membership',
+    quantity: 1
+  };
+
+  try {
+    window.GTM.trackSelectItem(productData, category, category);
+  } catch (error) {
+    console.warn('[GTM] Error tracking select_item:', error);
+  }
+}
+
+/**
+ * Updates the 15-day pass activation date section visibility and state.
+ * Shows when a 15-day pass plan is selected; hides otherwise.
+ */
+function updateActivationDateSection(category) {
+  const section = document.getElementById('activationDateSection');
+  const pickerWrap = document.getElementById('activationDatePickerWrap');
+  const dateInput = document.getElementById('activationDateInput');
+  const nowRadio = document.getElementById('activationDateNow');
+
+  if (!section || !pickerWrap || !dateInput) return;
+
+  const is15DayPass = category === '15daypass';
+  const categoryItem = document.querySelector('[data-category="15daypass"]');
+  const hasSelectedPlan = categoryItem?.querySelector('.plan-card.selected');
+
+  if (is15DayPass && hasSelectedPlan) {
+    section.hidden = false;
+    section.setAttribute('aria-hidden', 'false');
+    dateInput.min = getTodayLocalDateString();
+    if (nowRadio?.checked) {
+      state.subscriptionStartDate = null;
+      pickerWrap.hidden = true;
+    } else {
+      pickerWrap.hidden = false;
+      if (dateInput.value) {
+        state.subscriptionStartDate = dateInput.value;
+      } else {
+        dateInput.value = getTodayLocalDateString();
+        state.subscriptionStartDate = dateInput.value;
+      }
+    }
+  } else {
+    section.hidden = true;
+    section.setAttribute('aria-hidden', 'true');
+    state.subscriptionStartDate = null;
+  }
+}
+
 function handlePlanSelection(selectedCard) {
   // Remove selected class from all plan cards in the same category
   const category = selectedCard.closest('.category-item').dataset.category;
@@ -10339,35 +11988,66 @@ function handlePlanSelection(selectedCard) {
   // Add selected class to clicked card
   selectedCard.classList.add('selected');
   
+  // Brief delay to let user see the selection before modal opens
+  // This provides visual feedback that the plan was selected
+  
   // Step 5: Store the selected plan and product details
   const planId = selectedCard.dataset.plan;
   const productId = selectedCard.dataset.productId || planId; // Use API product ID if available
-  const isMembership = category === 'campaign' || category === 'membership' || category === '15daypass';
   
+  // Determine if this is a value card (punch card) by checking if planId starts with "punch-"
+  // Value cards can appear in Campaign category too, so we check the planId format, not just category
+  const isValueCard = typeof planId === 'string' && planId.startsWith('punch-');
+  const isMembership = !isValueCard && (category === 'campaign' || category === 'membership' || category === '15daypass');
+  
+  const previousProductId = state.selectedProductId;
+  const previousPlanId = state.membershipPlanId;
   state.membershipPlanId = planId; // Keep for backward compatibility
   state.selectedProductId = productId; // Store API product ID
   state.selectedProductType = isMembership ? 'membership' : 'punch-card';
+  if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
+    resetOrderStateForProductChange('plan-selection');
+  }
   
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
   
-  // GTM: Track select_item event
-  if (product && window.GTM && window.GTM.trackSelectItem) {
-    try {
-      const productPrice = product.price?.amount ? product.price.amount / 100 : 
-                          product.amount ? product.amount / 100 : 
-                          product.price || 0;
-      const productData = {
-        id: productId,
-        name: product.name || selectedCard.querySelector('.plan-type')?.textContent || 'Unknown Product',
-        amount: productPrice,
-        type: isMembership ? 'membership' : 'punch-card',
-        quantity: 1
-      };
-      window.GTM.trackSelectItem(productData, category, category);
-    } catch (error) {
-      console.warn('[GTM] Error tracking select_item:', error);
-    }
+  // Find the product object to check for Boost label
+  let product = null;
+  const productIdNum = typeof productId === 'string' ? parseInt(productId) : productId;
+  
+  if (isMembership) {
+    // Check all subscription types
+    const allSubscriptions = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || [])
+    ];
+    product = allSubscriptions.find(p => 
+      p.id === productId || 
+      p.id === productIdNum ||
+      String(p.id) === String(productId)
+    );
+  } else {
+    // Check value cards - include both regular and campaign value cards
+    const allValueCards = [
+      ...(state.valueCards || []),
+      ...(state.campaignValueCards || [])
+    ];
+    product = allValueCards.find(p => 
+      p.id === productId || 
+      p.id === productIdNum ||
+      String(p.id) === String(productId)
+    );
   }
+  
+  // GTM: Track select_item event
+  trackSelectItemEvent({
+    product,
+    productId,
+    category,
+    type: isMembership ? 'membership' : 'punch-card',
+    card: selectedCard
+  });
   
   // Step 5: If membership is selected, fetch add-ons immediately
   if (isMembership && productId) {
@@ -10376,6 +12056,26 @@ function handlePlanSelection(selectedCard) {
     // Clear add-ons if punch card is selected
     state.subscriptionAdditions = [];
     state.selectedAddonIds = [];
+  }
+  
+  // Handle value cards (punch cards) - initialize quantity and show quantity panel
+  // Value cards can appear in both 'punchcard' and 'campaign' categories
+  if (!isMembership && typeof planId === 'string' && planId.startsWith('punch-')) {
+    // Initialize quantity to 1 for this specific punch card type
+    if (!state.valueCardQuantities.has(planId)) {
+      state.valueCardQuantities.set(planId, 1);
+    }
+    
+    // Show quantity panel (inside plan-card-actions)
+    selectedCard.classList.add('has-quantity');
+    const panel = selectedCard.querySelector('.quantity-panel');
+    if (panel) {
+      panel.classList.add('show');
+      panel.style.display = 'flex';
+      const continueBtn = panel.querySelector('.continue-btn');
+      if (continueBtn) continueBtn.style.display = '';
+      syncPunchCardQuantityUI(selectedCard, planId);
+    }
   }
   
   // Update access heads-up display
@@ -10387,10 +12087,28 @@ function handlePlanSelection(selectedCard) {
   // Update cart to reflect selection
   updateCartSummary();
   
-  // Auto-advance to next step after a short delay
-  setTimeout(() => {
-    nextStep();
-  }, 500);
+  // Check if product has Boost label - if so, show modal instead of auto-advancing
+  if (product && hasBoostLabel(product)) {
+    // Load boost products if not already loaded
+    if (!state.boostProducts || state.boostProducts.length === 0) {
+      loadBoostProducts().then(() => {
+        // Delay to let user see the selection
+        setTimeout(() => {
+          showBoostModal();
+        }, 300);
+      });
+    } else {
+      // Delay to let user see the selection
+      setTimeout(() => {
+        showBoostModal();
+      }, 300);
+    }
+  } else {
+    // Auto-advance to next step after a short delay
+    setTimeout(() => {
+      nextStep();
+    }, 500);
+  }
 }
 
 function setupNewAccessStep() {
@@ -10450,26 +12168,29 @@ function setupNewAccessStep() {
         category.classList.add('expanded', 'selected');
         currentCategory = categoryType;
         if (footerText) {
-          footerText.innerHTML = footerTexts[categoryType];
+          footerText.innerHTML = sanitizeHTML(footerTexts[categoryType]);
         }
         
         // Focus the expanded category item for accessibility
         setTimeout(() => {
           category.setAttribute('tabindex', '-1');
           category.focus();
-          // Scroll into view smoothly
+          // Scroll to top of expanded category item smoothly
           category.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100); // Small delay to ensure expansion animation has started
       } else {
         currentCategory = null;
         if (footerText) {
-          footerText.innerHTML = 'Select a category above to view available plans.';
+          footerText.innerHTML = sanitizeHTML('Select a category above to view available plans.');
         }
       }
 
       // Clear selected plan when switching categories
       selectedPlan = null;
       state.membershipPlanId = null;
+      state.selectedProductId = null;
+      state.selectedProductType = null;
+      resetOrderStateForProductChange('category-switch');
       
       // Clear all punch card quantities when switching categories
       state.valueCardQuantities.clear();
@@ -10494,8 +12215,9 @@ function setupNewAccessStep() {
   // Plan selection
   document.querySelectorAll('.plan-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      // Don't handle clicks on quantity controls - let them handle their own events
-      if (e.target.closest('.quantity-selector')) {
+      // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
+      // This prevents clicks on +/- and Continue from toggling/deselecting the card.
+      if (e.target.closest('.quantity-panel')) {
         return;
       }
       
@@ -10512,6 +12234,14 @@ function setupNewAccessStep() {
       document.querySelectorAll('.plan-card').forEach(c => {
         c.classList.remove('selected', 'has-quantity', 'disabled');
       });
+      
+      // Hide 15-day pass activation date section when clearing selections
+      const activationSection = document.getElementById('activationDateSection');
+      if (activationSection) {
+        activationSection.hidden = true;
+        activationSection.setAttribute('aria-hidden', 'true');
+      }
+      state.subscriptionStartDate = null;
       
       // Clear all punch card quantities when making a new selection
       state.valueCardQuantities.clear();
@@ -10542,75 +12272,116 @@ function setupNewAccessStep() {
       
       // Step 5: Store the selected plan and product details
       const productId = card.dataset.productId || planId; // Use API product ID if available
+      const previousProductId = state.selectedProductId;
+      const previousPlanId = state.membershipPlanId;
       state.membershipPlanId = planId; // Keep for backward compatibility
       state.selectedProductId = productId; // Store API product ID
-      // Determine product type based on category
-      if (category === 'campaign' || category === 'membership' || category === '15daypass') {
-        state.selectedProductType = 'membership'; // All are subscription products
-      } else {
-        state.selectedProductType = 'punch-card';
-      }
       
-      // Step 5: If campaign, membership, or 15 Day Pass is selected, fetch add-ons immediately
-      if ((category === 'campaign' || category === 'membership' || category === '15daypass') && productId) {
+      // Determine if this is a value card (punch card) by checking if planId starts with "punch-"
+      // Value cards can appear in Campaign category too, so we check the planId format, not just category
+      const isValueCardProduct = typeof planId === 'string' && planId.startsWith('punch-');
+      const isMembership = !isValueCardProduct && (category === 'campaign' || category === 'membership' || category === '15daypass');
+      
+      // Determine product type based on planId format, not just category
+      if (isMembership) {
+        state.selectedProductType = 'membership'; // Subscription products
+      } else {
+        state.selectedProductType = 'punch-card'; // Value card products
+      }
+
+      if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
+        resetOrderStateForProductChange('plan-selection');
+      }
+
+      // GTM: Track select_item for API-driven plan cards
+      // Include both subscriptions and value cards for campaign category
+      const productPoolByCategory = {
+        campaign: [
+          ...(state.campaignSubscriptions || []),
+          ...(state.campaignValueCards || [])
+        ],
+        membership: state.subscriptions || [],
+        '15daypass': state.dayPassSubscriptions || [],
+        punchcard: state.valueCards || []
+      };
+      const productPool = productPoolByCategory[category] || [];
+      const selectedProduct = productPool.find((item) => String(item.id) === String(productId));
+      trackSelectItemEvent({
+        product: selectedProduct,
+        productId,
+        category,
+        type: isMembership ? 'membership' : 'punch-card',
+        card
+      });
+      
+      // Step 5: If membership is selected, fetch add-ons immediately.
+      // Value cards (even in campaign category) should not fetch or keep add-ons.
+      if (isMembership && productId) {
         loadSubscriptionAdditions(productId);
       } else {
-        // Clear add-ons if punch card is selected
+        // Switching to a value card (punch card) – clear all addon state so cart is \"restarted\"
+        // This avoids leftover addons from a previously selected membership.
         state.subscriptionAdditions = [];
         state.selectedAddonIds = [];
+        if (state.addonIds && state.addonIds.size > 0) {
+          state.addonIds.clear();
+          updateAddonSkipButton();
+          updateAddonActionButton();
+        }
       }
       
-      // Handle punch cards differently - show quantity selector
-      if (category === 'punchcard') {
+      // Handle value cards (punch cards) differently - show quantity selector and allow multi-quantity.
+      // Value cards can appear in both 'punchcard' and 'campaign' categories (planId starts with 'punch-')
+      if (isValueCardProduct) {
           // Initialize quantity to 1 for this specific punch card type
           if (!state.valueCardQuantities.has(planId)) {
             state.valueCardQuantities.set(planId, 1);
           }
+
+          // Enforce \"one type of value card\" rule:
+          // Clear quantities for all other punch card types so only the selected type remains.
+          Array.from(state.valueCardQuantities.keys()).forEach((key) => {
+            if (key !== planId && typeof key === 'string' && key.startsWith('punch-')) {
+              state.valueCardQuantities.delete(key);
+            }
+          });
           
-          // Clear quantity for the other punch card type when switching
-          const otherPunchCardId = planId === 'adult-punch' ? 'junior-punch' : 'adult-punch';
-          if (state.valueCardQuantities.has(otherPunchCardId)) {
-            state.valueCardQuantities.delete(otherPunchCardId);
-          }
-          
-          // Show quantity panel (now a sibling element)
-          card.classList.add('has-quantity');
-          const panel = card.nextElementSibling;
-          if (panel && panel.classList.contains('quantity-panel')) {
-            panel.classList.add('show');
-            panel.style.display = 'block';
-            syncPunchCardQuantityUI(card, planId);
-            
-            // Auto-scroll removed - will be revisited later
-          }
-          
-          // Grey out the other punch card type
-          const otherPunchCard = document.querySelector(`[data-plan="${otherPunchCardId}"]`);
-          if (otherPunchCard) {
-            otherPunchCard.classList.add('disabled');
-          }
-          
+          // Show quantity panel for the selected card and hide it for others
+          // Quantity panel is INSIDE each plan-card (child), not a sibling
+          const punchCardCards = document.querySelectorAll('[data-category="punchcard"] .plan-card');
+          punchCardCards.forEach((punchCard) => {
+            const punchPanel = punchCard.querySelector('.quantity-panel');
+            if (punchCard === card) {
+              punchCard.classList.add('has-quantity');
+              if (punchPanel) {
+                punchPanel.classList.add('show');
+                punchPanel.style.display = 'flex'; /* row layout: quantity left, Continue right */
+                const continueBtn = punchPanel.querySelector('.continue-btn');
+                if (continueBtn) continueBtn.style.display = '';
+              }
+            } else {
+              punchCard.classList.remove('has-quantity', 'selected', 'disabled');
+              if (punchPanel) {
+                punchPanel.classList.remove('show');
+                punchPanel.style.display = 'none';
+                const continueBtn = punchPanel.querySelector('.continue-btn');
+                if (continueBtn) continueBtn.style.display = 'none';
+              }
+            }
+          });
+
+          // Visually disable all other punch card types so it's clear only one type can be active
+          punchCardCards.forEach((punchCard) => {
+            if (punchCard !== card) {
+              punchCard.classList.add('disabled');
+            }
+          });
+
+          // Sync UI for the selected punch card (also updates cart and summary)
+          syncPunchCardQuantityUI(card, planId);
+
           // Update access heads-up
           updateAccessHeadsUp(card);
-          
-          // Update cart to reflect selection
-          updateCartSummary();
-          
-          // Clear any pending punchcard navigation timeout to prevent double-clicks
-          if (pendingNavigationTimeouts.punchcard) {
-            clearTimeout(pendingNavigationTimeouts.punchcard);
-            pendingNavigationTimeouts.punchcard = null;
-          }
-          
-          // Auto-advance to next step after a short delay
-          pendingNavigationTimeouts.punchcard = setTimeout(() => {
-            // Clear timeout reference before navigation
-            pendingNavigationTimeouts.punchcard = null;
-            // Only navigate if we're still on step 2 (prevent stale state navigation)
-            if (state.currentStep === 2) {
-              nextStep();
-            }
-          }, 500);
         } else {
           // Membership - update access heads-up
           updateAccessHeadsUp(card);
@@ -10623,23 +12394,53 @@ function setupNewAccessStep() {
           // Update cart to reflect selection
           updateCartSummary();
           
-          // Clear any pending membership navigation timeout to prevent double-clicks
-          if (pendingNavigationTimeouts.membership) {
-            clearTimeout(pendingNavigationTimeouts.membership);
-            pendingNavigationTimeouts.membership = null;
-          }
-          
-          // Reset card animation and auto-advance to next step
-          pendingNavigationTimeouts.membership = setTimeout(() => {
-            // Clear timeout reference before navigation
-            pendingNavigationTimeouts.membership = null;
+          // 15-day pass: show activation date section, don't auto-advance
+          if (category === '15daypass') {
+            state.subscriptionStartDate = null;
+            updateActivationDateSection('15daypass');
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
-            // Only navigate if we're still on step 2 (prevent stale state navigation)
-            if (state.currentStep === 2) {
-              nextStep();
+            return;
+          }
+          
+          // Check if product has Boost label - if so, show modal instead of auto-advancing
+          if (selectedProduct && hasBoostLabel(selectedProduct)) {
+            // Reset card animation
+            card.style.transform = 'scale(1)';
+            card.style.boxShadow = '';
+            // Load boost products if not already loaded
+            if (!state.boostProducts || state.boostProducts.length === 0) {
+              loadBoostProducts().then(() => {
+                // Delay to let user see the selection
+                setTimeout(() => {
+                  showBoostModal();
+                }, 300);
+              });
+            } else {
+              // Delay to let user see the selection
+              setTimeout(() => {
+                showBoostModal();
+              }, 300);
             }
-          }, 500);
+          } else {
+            // Clear any pending membership navigation timeout to prevent double-clicks
+            if (pendingNavigationTimeouts.membership) {
+              clearTimeout(pendingNavigationTimeouts.membership);
+              pendingNavigationTimeouts.membership = null;
+            }
+            
+            // Reset card animation and auto-advance to next step
+            pendingNavigationTimeouts.membership = setTimeout(() => {
+              // Clear timeout reference before navigation
+              pendingNavigationTimeouts.membership = null;
+              card.style.transform = 'scale(1)';
+              card.style.boxShadow = '';
+              // Only navigate if we're still on step 2 (prevent stale state navigation)
+              if (state.currentStep === 2) {
+                nextStep();
+              }
+            }, 500);
+          }
         }
     });
   });
@@ -10724,25 +12525,25 @@ function switchAuthMode(mode, email = null) {
       const textSpan = btn.querySelector('.auth-mode-switch-text');
       if (textSpan) textSpan.textContent = t('form.authSwitch.createAccount');
       // Update icon to account icon
-      btn.innerHTML = `
+      btn.innerHTML = sanitizeHTML(`
         <span class="auth-mode-switch-text">${t('form.authSwitch.createAccount')}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"></path>
         </svg>
-      `;
+      `);
     } else {
       btn.dataset.mode = 'login';
       const textSpan = btn.querySelector('.auth-mode-switch-text');
       if (textSpan) textSpan.textContent = t('form.authSwitch.login');
       // Update icon to login icon
-      btn.innerHTML = `
+      btn.innerHTML = sanitizeHTML(`
         <span class="auth-mode-switch-text">${t('form.authSwitch.login')}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
           <polyline points="10 17 15 12 10 7"></polyline>
           <line x1="15" y1="12" x2="3" y2="12"></line>
         </svg>
-      `;
+      `);
     }
   });
   
@@ -10810,6 +12611,16 @@ function handleGlobalClick(event) {
   }
 
   switch (action) {
+    case 'select-plan': {
+      // Normalize plan selection so both the card and its "Select" button behave the same.
+      // Delegate to the card click handler by triggering a click on the closest plan card.
+      const card = actionable.closest('.plan-card');
+      if (card) {
+        event.preventDefault();
+        card.click();
+      }
+      break;
+    }
     case 'select-membership': {
       const planId = actionable.dataset.planId;
       if (planId) selectMembershipPlan(planId);
@@ -10824,9 +12635,9 @@ function handleGlobalClick(event) {
       event.stopPropagation();
       const planId = actionable.dataset.planId;
       if (planId && planId.includes('punch')) {
-        // Find the card that contains this quantity panel
+        // Quantity panel is inside the plan-card; find the card that contains it
         const panel = actionable.closest('.quantity-panel');
-        const card = panel ? panel.previousElementSibling : null;
+        const card = panel ? panel.closest('.plan-card') : null;
         if (card && card.classList.contains('plan-card') && card.classList.contains('selected')) {
           const current = state.valueCardQuantities.get(planId) || 1;
           if (current < 5) { // Max 5 punch cards of the same type
@@ -10844,9 +12655,9 @@ function handleGlobalClick(event) {
       event.stopPropagation();
       const planId = actionable.dataset.planId;
       if (planId && planId.includes('punch')) {
-        // Find the card that contains this quantity panel
+        // Quantity panel is inside the plan-card; find the card that contains it
         const panel = actionable.closest('.quantity-panel');
-        const card = panel ? panel.previousElementSibling : null;
+        const card = panel ? panel.closest('.plan-card') : null;
         if (card && card.classList.contains('plan-card') && card.classList.contains('selected')) {
           const current = state.valueCardQuantities.get(planId) || 1;
           if (current > 1) { // Min 1 punch card
@@ -10875,7 +12686,7 @@ function handleGlobalClick(event) {
     }
     case 'submit-checkout': {
       event.preventDefault();
-      handleCheckout();
+      handleCheckoutClick();
       break;
     }
     case 'continue-value-cards': {
@@ -10883,13 +12694,60 @@ function handleGlobalClick(event) {
       handleValueCardContinue();
       break;
     }
+    case 'set-activation-now': {
+      state.subscriptionStartDate = null;
+      const pickerWrap = document.getElementById('activationDatePickerWrap');
+      if (pickerWrap) pickerWrap.hidden = true;
+      break;
+    }
+    case 'set-activation-date': {
+      const pickerWrap = document.getElementById('activationDatePickerWrap');
+      const dateInput = document.getElementById('activationDateInput');
+      if (pickerWrap) pickerWrap.hidden = false;
+      if (dateInput) {
+        dateInput.min = getTodayLocalDateString();
+        if (!dateInput.value) {
+          dateInput.value = getTodayLocalDateString();
+        }
+        state.subscriptionStartDate = dateInput.value;
+      }
+      break;
+    }
+    case 'activation-date-change': {
+      const dateInput = document.getElementById('activationDateInput');
+      if (dateInput && dateInput.value) {
+        state.subscriptionStartDate = dateInput.value;
+      }
+      break;
+    }
+    case 'activation-date-continue': {
+      event.preventDefault();
+      const dateInput = document.getElementById('activationDateInput');
+      const pickRadio = document.getElementById('activationDatePick');
+      if (pickRadio?.checked && dateInput?.value) {
+        state.subscriptionStartDate = dateInput.value;
+      } else {
+        state.subscriptionStartDate = null;
+      }
+      if (state.currentStep === 2) nextStep();
+      break;
+    }
     case 'edit-cart': {
       event.preventDefault();
       handleEditCart();
       break;
     }
-    case 'copy-referral': {
-      handleReferralCopy();
+    case 'change-activation-date': {
+      event.preventDefault();
+      handleChangeActivationDate();
+      break;
+    }
+    case 'show-detailed-receipt': {
+      showDetailedReceipt();
+      break;
+    }
+    case 'close-detailed-receipt': {
+      closeDetailedReceipt();
       break;
     }
     case 'open-login': {
@@ -10898,7 +12756,7 @@ function handleGlobalClick(event) {
     }
     case 'logout': {
       event.preventDefault();
-      handleLogout();
+      showLogoutConfirmation();
       break;
     }
     case 'save-account': {
@@ -10911,6 +12769,11 @@ function handleGlobalClick(event) {
       handleBackToGym();
       break;
     }
+    case 'go-to-step-1': {
+      event.preventDefault();
+      handleBackToGym();
+      break;
+    }
     case 'toggle-addons-step': {
       event.preventDefault();
       handleAddonContinue();
@@ -10919,6 +12782,11 @@ function handleGlobalClick(event) {
     case 'go-back-step': {
       event.preventDefault();
       prevStep();
+      break;
+    }
+    case 'scroll-to-faq': {
+      event.preventDefault();
+      scrollToFAQ();
       break;
     }
     default:
@@ -10981,25 +12849,49 @@ function selectMembershipPlan(planId) {
   }
   showToast(`${selectedPlan?.name ?? 'Membership'} selected.`, 'success');
   autoEnsureOrderIfReady('membership-select');
+
+  // GTM: Track select_item for legacy membership plan cards
+  if (selectedPlan) {
+    trackSelectItemEvent({
+      product: {
+        id: planId,
+        name: selectedPlan.name,
+        price: selectedPlan.price
+      },
+      productId: planId,
+      category: 'membership',
+      type: 'membership'
+    });
+  }
 }
 
-function toggleAddon(addonId, checkCircle) {
+function toggleAddon(addonId, button) {
+  if (!addonId) return;
+  
   if (state.addonIds.has(addonId)) {
     state.addonIds.delete(addonId);
   } else {
     state.addonIds.add(addonId);
   }
 
-  const card = checkCircle.closest('.plan-card');
+  const card = button?.closest('.addon-card') || button?.closest('.plan-card');
   if (card) {
     const isSelected = state.addonIds.has(addonId);
     card.classList.toggle('selected', isSelected);
+    
+    // Update button text if it's a button
+    if (button && button.tagName === 'BUTTON') {
+      button.textContent = isSelected ? t('button.added') : t('button.addToCart');
+      button.setAttribute('data-i18n-key', isSelected ? 'button.added' : 'button.addToCart');
+    }
+    
     centerPlanCard(card);
   }
 
   updateCartSummary();
   updateAddonSkipButton();
   updateAddonActionButton();
+  updateCheckoutButton(); // Re-evaluate checkout button state when addons change
 }
 
 function updateAddonActionButton() {
@@ -11009,10 +12901,10 @@ function updateAddonActionButton() {
   const hasSelectedAddons = state.addonIds.size > 0;
   
   if (hasSelectedAddons) {
-    actionButton.textContent = 'Continue';
+    actionButton.textContent = t('addons.modal.continue');
     actionButton.className = 'addons-action-btn addons-continue';
   } else {
-    actionButton.textContent = 'Skip';
+    actionButton.textContent = t('addons.modal.skip');
     actionButton.className = 'addons-action-btn addons-skip';
   }
 }
@@ -11055,43 +12947,60 @@ function showSkipConfirmation() {
     color: var(--color-text-secondary);
   `;
   
-  confirmationDialog.innerHTML = `
-    <h3 style="margin: 0 0 16px 0; color: var(--color-text-secondary); font-size: 18px;">Are you sure?</h3>
-    <p style="margin: 0 0 24px 0; color: var(--color-text-muted); line-height: 1.5;">
-      You're missing out on essential gear that could enhance your climbing experience. 
-      These add-ons are specially selected and offer great value!
-    </p>
-    <div style="display: flex; gap: 12px; justify-content: center;">
-      <button class="confirmation-btn confirmation-cancel" style="
-        padding: 10px 20px;
-        border: 1px solid var(--color-item-border);
-        border-radius: 8px;
-        background: transparent;
-        color: var(--color-text-secondary);
-        cursor: pointer;
-        font-weight: 600;
-      ">Go Back</button>
-      <button class="confirmation-btn confirmation-skip" style="
-        padding: 10px 20px;
-        border: none;
-        border-radius: 8px;
-        background: var(--color-brand-accent);
-        color: var(--color-button-primary);
-        cursor: pointer;
-        font-weight: 600;
-      ">Skip Anyway</button>
-    </div>
+  // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
+  const title = document.createElement('h3');
+  title.textContent = 'Are you sure?';
+  title.style.cssText = 'margin: 0 0 16px 0; color: var(--color-text-secondary); font-size: 18px;';
+  
+  const message = document.createElement('p');
+  message.textContent = "You're missing out on essential gear that could enhance your climbing experience. These add-ons are specially selected and offer great value!";
+  message.style.cssText = 'margin: 0 0 24px 0; color: var(--color-text-muted); line-height: 1.5;';
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
+  
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'confirmation-btn confirmation-cancel';
+  cancelBtn.textContent = 'Go Back';
+  cancelBtn.style.cssText = `
+    padding: 10px 20px;
+    border: 1px solid var(--color-item-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-weight: 600;
   `;
+  
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'confirmation-btn confirmation-skip';
+  skipBtn.textContent = 'Skip Anyway';
+  skipBtn.style.cssText = `
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: var(--color-brand-accent);
+    color: var(--color-button-primary);
+    cursor: pointer;
+    font-weight: 600;
+  `;
+  
+  buttonContainer.appendChild(cancelBtn);
+  buttonContainer.appendChild(skipBtn);
+  
+  confirmationDialog.appendChild(title);
+  confirmationDialog.appendChild(message);
+  confirmationDialog.appendChild(buttonContainer);
   
   confirmationOverlay.appendChild(confirmationDialog);
   document.body.appendChild(confirmationOverlay);
   
   // Add event listeners
-  confirmationOverlay.querySelector('.confirmation-cancel').addEventListener('click', () => {
+  cancelBtn.addEventListener('click', () => {
     document.body.removeChild(confirmationOverlay);
   });
   
-  confirmationOverlay.querySelector('.confirmation-skip').addEventListener('click', () => {
+  skipBtn.addEventListener('click', () => {
     document.body.removeChild(confirmationOverlay);
     proceedAfterAddons();
   });
@@ -11178,21 +13087,30 @@ function enforceValueCardAvailability() {
 }
 
 function updateValueCardSummary() {
-  if (!DOM.valueCardPunches || !DOM.valueCardContinueBtn) return;
+  // This summary is used by the legacy "quantity mode" UI and by newer flows.
+  // Treat DOM hooks as optional so modern punch-card UI can call this safely.
+  if (!state.valueCardQuantities) return;
 
   const totalQuantity = Array.from(state.valueCardQuantities.values()).reduce(
     (sum, qty) => sum + qty,
     0,
   );
-  const totalPunches = totalQuantity * VALUE_CARD_PUNCH_MULTIPLIER;
-  const entryLabel = totalPunches === 1 ? 'entry' : 'entries';
+  // IMPORTANT: We cannot reliably know how many punches each card contains from the API.
+  // Some punch cards have different numbers of punches, so instead of assuming a fixed
+  // multiplier (e.g. 10 punches per card), we show the number of cards selected.
+  const totalCards = totalQuantity;
+  const entryLabel = totalCards === 1 ? 'card' : 'cards';
 
-  DOM.valueCardPunches.textContent = totalPunches.toString();
-  DOM.valueCardContinueBtn.disabled = totalQuantity <= 0;
+  if (DOM.valueCardPunches) {
+    DOM.valueCardPunches.textContent = totalCards.toString();
+  }
+  if (DOM.valueCardContinueBtn) {
+    DOM.valueCardContinueBtn.disabled = totalQuantity <= 0;
+    DOM.valueCardContinueBtn.setAttribute('aria-label', `Continue with ${totalCards} ${entryLabel}`);
+  }
   if (DOM.valueCardEntryLabel) {
     DOM.valueCardEntryLabel.textContent = entryLabel;
   }
-  DOM.valueCardContinueBtn.setAttribute('aria-label', `Continue with ${totalPunches} ${entryLabel}`);
 }
 
 function handleValueCardContinue() {
@@ -11225,6 +13143,25 @@ function handleEditCart() {
   updateStepIndicator();
   updateNavigationButtons();
   updateMainSubtitle();
+}
+
+async function handleChangeActivationDate() {
+  // Delete subscription item so we can re-add with new date when user returns
+  const orderId = state.orderId;
+  const subscriptionItemId = state.subscriptionItemId;
+  if (orderId && subscriptionItemId) {
+    const deleted = await orderAPI.deleteSubscriptionItem(orderId, subscriptionItemId);
+    if (deleted) {
+      state.subscriptionAttachedOrderId = null;
+      state.subscriptionItemId = null;
+    } else {
+      showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
+      return;
+    }
+  } else {
+    state.subscriptionAttachedOrderId = null;
+  }
+  handleEditCart();
 }
 
 function handlePaymentChange(event) {
@@ -11278,10 +13215,14 @@ function setupPostalCodeAutoFill() {
         clearTimeout(postalCodeLookupTimers.customer);
       }
       
-      // Clear city field if postal code is empty
+      // Clear city field if postal code is empty and revert to readonly
       if (!postalCode || postalCode.length === 0) {
         if (DOM.city) {
           DOM.city.value = '';
+          DOM.city.setAttribute('readonly', 'readonly');
+          DOM.city.removeAttribute('placeholder');
+          DOM.city.style.opacity = '1';
+          DOM.city.style.cursor = 'default';
         }
         return;
       }
@@ -11310,32 +13251,44 @@ function setupPostalCodeAutoFill() {
                 console.log('[PostalCode] API unavailable - city field is now editable');
               }
             } else if (result && typeof result === 'string') {
-              // City found - auto-fill
+              // City found - auto-fill and set readonly
               if (DOM.city) {
                 DOM.city.value = result;
+                DOM.city.setAttribute('readonly', 'readonly');
+                DOM.city.removeAttribute('placeholder');
                 DOM.city.style.opacity = '1';
+                DOM.city.style.cursor = 'default';
                 console.log('[PostalCode] Auto-filled city:', result, 'for postal code:', postalCode);
               }
             } else {
-              // City not found - clear field but keep readonly
+              // City not found - make field editable so user can enter city manually
               if (DOM.city) {
                 DOM.city.value = '';
+                DOM.city.removeAttribute('readonly');
+                DOM.city.placeholder = 'Enter city name';
                 DOM.city.style.opacity = '1';
+                DOM.city.style.cursor = 'text';
+                console.log('[PostalCode] No city found for postal code:', postalCode, '- city field is now editable');
               }
-              console.log('[PostalCode] No city found for postal code:', postalCode);
             }
           } catch (error) {
             console.error('[PostalCode] Error looking up city:', error);
             if (DOM.city) {
               DOM.city.value = '';
+              DOM.city.setAttribute('readonly', 'readonly');
+              DOM.city.removeAttribute('placeholder');
               DOM.city.style.opacity = '1';
+              DOM.city.style.cursor = 'default';
             }
           }
         } else {
-          // Invalid format - clear city field
+          // Invalid format - clear city field and revert to readonly
           if (DOM.city) {
             DOM.city.value = '';
+            DOM.city.setAttribute('readonly', 'readonly');
+            DOM.city.removeAttribute('placeholder');
             DOM.city.style.opacity = '1';
+            DOM.city.style.cursor = 'default';
           }
         }
       }, 500);
@@ -11401,10 +13354,14 @@ function setupPostalCodeAutoFill() {
         clearTimeout(postalCodeLookupTimers.parent);
       }
       
-      // Clear city field if postal code is empty
+      // Clear city field if postal code is empty and revert to readonly
       if (!postalCode || postalCode.length === 0) {
         if (DOM.parentCity) {
           DOM.parentCity.value = '';
+          DOM.parentCity.setAttribute('readonly', 'readonly');
+          DOM.parentCity.removeAttribute('placeholder');
+          DOM.parentCity.style.opacity = '1';
+          DOM.parentCity.style.cursor = 'default';
         }
         return;
       }
@@ -11433,32 +13390,44 @@ function setupPostalCodeAutoFill() {
                 console.log('[PostalCode] API unavailable - parent city field is now editable');
               }
             } else if (result && typeof result === 'string') {
-              // City found - auto-fill
+              // City found - auto-fill and set readonly
               if (DOM.parentCity) {
                 DOM.parentCity.value = result;
+                DOM.parentCity.setAttribute('readonly', 'readonly');
+                DOM.parentCity.removeAttribute('placeholder');
                 DOM.parentCity.style.opacity = '1';
+                DOM.parentCity.style.cursor = 'default';
                 console.log('[PostalCode] Auto-filled parent city:', result, 'for postal code:', postalCode);
               }
             } else {
-              // City not found - clear field but keep readonly
+              // City not found - make field editable so user can enter city manually
               if (DOM.parentCity) {
                 DOM.parentCity.value = '';
+                DOM.parentCity.removeAttribute('readonly');
+                DOM.parentCity.placeholder = 'Enter city name';
                 DOM.parentCity.style.opacity = '1';
+                DOM.parentCity.style.cursor = 'text';
+                console.log('[PostalCode] No city found for parent postal code:', postalCode, '- city field is now editable');
               }
-              console.log('[PostalCode] No city found for parent postal code:', postalCode);
             }
           } catch (error) {
             console.error('[PostalCode] Error looking up parent city:', error);
             if (DOM.parentCity) {
               DOM.parentCity.value = '';
+              DOM.parentCity.setAttribute('readonly', 'readonly');
+              DOM.parentCity.removeAttribute('placeholder');
               DOM.parentCity.style.opacity = '1';
+              DOM.parentCity.style.cursor = 'default';
             }
           }
         } else {
-          // Invalid format - clear city field
+          // Invalid format - clear city field and revert to readonly
           if (DOM.parentCity) {
             DOM.parentCity.value = '';
+            DOM.parentCity.setAttribute('readonly', 'readonly');
+            DOM.parentCity.removeAttribute('placeholder');
             DOM.parentCity.style.opacity = '1';
+            DOM.parentCity.style.cursor = 'default';
           }
         }
       }, 500);
@@ -11494,14 +13463,23 @@ function setupPostalCodeAutoFill() {
               DOM.parentCity.style.cursor = 'text';
             }
           } else if (result && typeof result === 'string') {
-            // City found - auto-fill
+            // City found - auto-fill and set readonly
             if (DOM.parentCity) {
               DOM.parentCity.value = result;
+              DOM.parentCity.setAttribute('readonly', 'readonly');
+              DOM.parentCity.removeAttribute('placeholder');
               DOM.parentCity.style.opacity = '1';
+              DOM.parentCity.style.cursor = 'default';
             }
-          } else if (DOM.parentCity) {
-            DOM.parentCity.value = '';
-            DOM.parentCity.style.opacity = '1';
+          } else {
+            // City not found - make field editable so user can enter city manually
+            if (DOM.parentCity) {
+              DOM.parentCity.value = '';
+              DOM.parentCity.removeAttribute('readonly');
+              DOM.parentCity.placeholder = 'Enter city name';
+              DOM.parentCity.style.opacity = '1';
+              DOM.parentCity.style.cursor = 'text';
+            }
           }
         } catch (error) {
           console.error('[PostalCode] Error looking up parent city on blur:', error);
@@ -11674,7 +13652,7 @@ async function handleApplyDiscount() {
   
   // Order exists - apply coupon immediately
   // Use existingOrderId if state.orderId wasn't set but fullOrder has an ID
-  const orderIdToUse = state.orderId || existingOrderId;
+  let orderIdToUse = state.orderId || existingOrderId;
   
   if (!orderIdToUse) {
     console.error('[Discount] No order ID available for discount application');
@@ -11696,6 +13674,64 @@ async function handleApplyDiscount() {
   
   try {
     const orderAPI = new OrderAPI();
+
+    // Ensure the order has the selected items before applying coupon
+    if (!state.customerId) {
+      throw new Error('Please log in or create an account to apply a discount');
+    }
+
+    let orderSnapshot = state.fullOrder;
+    if (!orderSnapshot || String(orderSnapshot.id) !== String(orderIdToUse)) {
+      try {
+        orderSnapshot = await orderAPI.getOrder(orderIdToUse);
+        state.fullOrder = orderSnapshot;
+      } catch (orderFetchError) {
+        if (orderFetchError?.status === 403 || orderFetchError?.status === 404) {
+          console.warn('[Discount] Existing order is not accessible. Creating a new order.');
+          state.orderId = null;
+          state.subscriptionAttachedOrderId = null;
+          const ensuredOrderId = await ensureOrderCreated('discount-application');
+          if (!ensuredOrderId) {
+            throw new Error('Failed to create order for coupon application');
+          }
+          orderIdToUse = ensuredOrderId;
+          orderSnapshot = await orderAPI.getOrder(orderIdToUse);
+          state.fullOrder = orderSnapshot;
+        } else {
+          throw orderFetchError;
+        }
+      }
+    }
+
+    const isMembership = state.membershipPlanId &&
+      (state.selectedProductType === 'membership' ||
+       (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+
+    if (isMembership) {
+      const subscriptionItems = orderSnapshot?.subscriptionItems || [];
+      if (!subscriptionItems.length || state.subscriptionAttachedOrderId !== orderIdToUse) {
+        await ensureSubscriptionAttached('discount-application');
+        orderSnapshot = await orderAPI.getOrder(orderIdToUse);
+        state.fullOrder = orderSnapshot;
+      }
+    } else if (state.selectedProductType === 'punch-card' && state.valueCardQuantities && state.valueCardQuantities.size > 0) {
+      const existingValueCardItems = orderSnapshot?.valueCardItems || [];
+      for (const [planId, quantity] of state.valueCardQuantities.entries()) {
+        if (quantity > 0) {
+          const numericProductId = typeof planId === 'string' && planId.startsWith('punch-')
+            ? parseInt(planId.replace('punch-', ''), 10)
+            : planId;
+          const existingCount = existingValueCardItems.filter(item => item.product?.id === numericProductId).length;
+          const toAdd = Math.max(0, quantity - existingCount);
+          for (let i = 0; i < toAdd; i += 1) {
+            await orderAPI.addValueCardItem(orderIdToUse, numericProductId, 1);
+          }
+        }
+      }
+      orderSnapshot = await orderAPI.getOrder(orderIdToUse);
+      state.fullOrder = orderSnapshot;
+    }
+
     console.log('[Discount] Applying discount code:', discountCode, 'to order:', orderIdToUse);
     const response = await orderAPI.applyDiscountCode(orderIdToUse, discountCode);
     console.log('[Discount] API response received:', response);
@@ -11834,7 +13870,7 @@ async function handleApplyDiscount() {
       // Double-check the display was updated
       if (DOM.cartTotal) {
         const displayedTotal = DOM.cartTotal.textContent;
-        const expectedTotal = currencyFormatter.format(state.totals.cartTotal);
+        const expectedTotal = formatCurrencyHalfKrone(state.totals.cartTotal);
         console.log('[Discount] Cart total display check:', {
           displayed: displayedTotal,
           expected: expectedTotal,
@@ -11861,18 +13897,8 @@ async function handleApplyDiscount() {
       const payNowText = payNowElement ? payNowElement.textContent : '';
       const monthlyPaymentText = monthlyPaymentElement ? monthlyPaymentElement.textContent : '';
       
-      // Show success message with discount amount and new prices
-      let successMessage = `✓ Coupon "${discountCode}" applied successfully! Discount: ${currencyFormatter.format(discountAmount)}.`;
-      if (payNowText) {
-        successMessage += ` Pay now: ${payNowText}`;
-      }
-      if (monthlyPaymentText) {
-        successMessage += ` Monthly: ${monthlyPaymentText}`;
-      }
-      if (!payNowText && !monthlyPaymentText) {
-        successMessage += ` New total: ${currencyFormatter.format(newTotal)}`;
-      }
-      showDiscountMessage(successMessage, 'success');
+      // Show succinct success message
+      showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
       
       // Force a visual update by triggering a reflow
       if (DOM.cartTotal) {
@@ -11906,7 +13932,7 @@ async function handleApplyDiscount() {
         updatePaymentOverview(); // Update payment overview with discounted prices
         
         const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
-        showDiscountMessage(`✓ Coupon "${discountCode}" applied successfully. Total: ${currencyFormatter.format(newTotal)}`, 'success');
+        showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
         
         // Highlight the new price in cart total elements and payment overview
         const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
@@ -12040,21 +14066,6 @@ function handleParentGuardianToggle(event) {
   clearParentFormFields();
 }
 
-function formatCardNumber(event) {
-  const digits = event.target.value.replace(/\s+/g, '').replace(/[^\d]/g, '');
-  event.target.value = digits.replace(/(.{4})/g, '$1 ').trim().slice(0, 19);
-}
-
-function formatExpiryDate(event) {
-  const digits = event.target.value.replace(/[^\d]/g, '');
-  const formatted = digits.length >= 2 ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}` : digits;
-  event.target.value = formatted.slice(0, 5);
-}
-
-function stripNonDigits(event) {
-  event.target.value = event.target.value.replace(/[^\d]/g, '');
-}
-
 function copyAddressAndContactInfo() {
   const mappings = [
     ['streetAddress', 'parentStreetAddress'],
@@ -12099,7 +14110,52 @@ function clearParentFormFields() {
   });
 }
 
+// Helper function to check if cart contains a campaign
+function hasCampaignInCart() {
+  // Check if membershipPlanId starts with "campaign-"
+  if (state.membershipPlanId && String(state.membershipPlanId).startsWith('campaign-')) {
+    return true;
+  }
+  
+  // Check if any cart item's productId exists in campaign subscriptions or campaign value cards
+  const isCampaignProduct = (id) => {
+    const num = typeof id === 'string' ? parseInt(id, 10) : id;
+    const inSubs = state.campaignSubscriptions?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
+    const inCards = state.campaignValueCards?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
+    return inSubs || inCards;
+  };
+  if (state.cartItems && state.cartItems.length > 0) {
+    if (state.cartItems.some(item => item.productId && isCampaignProduct(item.productId))) return true;
+  }
+
+  if (state.selectedProductId && isCampaignProduct(state.selectedProductId)) return true;
+
+  return false;
+}
+
+// Show campaign warning banner
+function showCampaignWarning() {
+  const banner = document.getElementById('campaignWarningBanner');
+  if (banner) {
+    banner.style.display = 'flex';
+  }
+}
+
+// Hide campaign warning banner
+function hideCampaignWarning() {
+  const banner = document.getElementById('campaignWarningBanner');
+  if (banner) {
+    banner.style.display = 'none';
+  }
+}
+
 function updateCartSummary() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Summary] ⏸️ Checkout in progress - skipping cart summary update to freeze prices');
+    return;
+  }
+  
   const items = [];
   state.totals.membershipMonthly = 0;
 
@@ -12134,10 +14190,10 @@ function updateCartSummary() {
                            0;
       const price = priceInCents > 0 ? priceInCents / 100 : 0;
       
-      // Get imageBanner text if available
-      const bannerText = membership.imageBanner?.text || '';
-      const displayName = bannerText 
-        ? `${membership.name || 'Membership'} - ${bannerText}`
+      // Get externalDescription if available
+      const externalDesc = membership.externalDescription || '';
+      const displayName = externalDesc 
+        ? `${membership.name || 'Membership'} - ${externalDesc}`
         : membership.name || 'Membership';
       
       items.push({
@@ -12146,7 +14202,7 @@ function updateCartSummary() {
         amount: price,
         type: 'membership',
         productId: membership.id, // Store API product ID for order creation
-        imageBannerText: bannerText, // Store separately for rendering
+        externalDescription: externalDesc, // Store separately for rendering (renamed from imageBannerText)
         productName: membership.name || 'Membership', // Store original name
       });
       state.totals.membershipMonthly = price;
@@ -12166,7 +14222,14 @@ function updateCartSummary() {
       
       // Find the product by ID - check both the stored productId and planId format
       const productId = state.selectedProductId || planId.replace('punch-', '');
-      const valueCard = state.valueCards.find(p => 
+      
+      // Check both regular and campaign value cards
+      const allValueCards = [
+        ...(state.valueCards || []),
+        ...(state.campaignValueCards || [])
+      ];
+      
+      const valueCard = allValueCards.find(p => 
         p.id === productId || 
         p.id === parseInt(productId) ||
         planId.includes(String(p.id))
@@ -12176,37 +14239,65 @@ function updateCartSummary() {
         // Extract price from API structure (cents to DKK)
         const priceInCents = valueCard.price?.amount || valueCard.amount || 0;
         const price = priceInCents / 100;
-        
+        const punchesPerCard = getPunchesPerCard(valueCard);
+        const totalPunches = punchesPerCard != null ? quantity * punchesPerCard : null;
+        const productName = valueCard.name || 'Punch Card';
+        // Name only on left; ×N and total punches shown on the right
         items.push({
           id: valueCard.id,
-          name: `${valueCard.name || 'Punch Card'} ×${quantity}`,
+          name: productName,
           amount: roundToHalfKrone(price * quantity),
           type: 'value-card',
           quantity: quantity,
           productId: valueCard.id, // Store API product ID for order creation
+          punchesPerCard: punchesPerCard ?? undefined,
+          totalPunches: totalPunches ?? undefined,
         });
       }
     });
   }
 
-  // Handle add-ons (if any were selected - currently disabled but keeping for future)
+  // Handle add-ons (boost products and subscription additions)
+  // Store addons separately to append after subscriptions
+  const addonItems = [];
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
-    items.push({
+    const price = getAddonPrice(addon);
+    addonItems.push({
       id: addon.id,
-      name: addon.name,
-      amount: roundToHalfKrone(addon.price.discounted),
+      name: addon.name || 'Add-on',
+      amount: roundToHalfKrone(price),
       type: 'addon',
+      productId: addon.id, // Store API product ID for order creation
     });
   });
 
+  // Ensure correct order: subscriptions/value cards first, then addons
+  // Items array already has subscriptions and value cards in correct order
+  // Now append addons at the end
+  items.push(...addonItems);
+
+  // CRITICAL: Explicitly sort items to ensure subscriptions come first
+  // This ensures the array order matches the display order
+  const sortedItems = [
+    ...items.filter(item => item.type === 'membership' || item.type === 'value-card'),
+    ...items.filter(item => item.type === 'addon')
+  ];
+
   // GTM: Track add_to_cart event when items are added
   const previousCartItemCount = state.cartItems?.length || 0;
-  const newCartItemCount = items.length;
+  const newCartItemCount = sortedItems.length;
   
-  state.cartItems = items;
+  state.cartItems = sortedItems;
   
+  // Check for campaigns and show/hide warning banner
+  if (hasCampaignInCart()) {
+    showCampaignWarning();
+  } else {
+    hideCampaignWarning();
+  }
+
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
   
@@ -12229,6 +14320,9 @@ function updateCartSummary() {
   renderCartItems();
   renderCartTotal();
   
+  // Update checkout button state when cart changes (addons might have been added/removed)
+  updateCheckoutButton();
+  
   // If we're on step 4 and have order data, ensure payment overview is updated
   if (state.currentStep === 4 && state.orderId && !state.fullOrder) {
     // Order exists but fullOrder not loaded - fetch it
@@ -12248,6 +14342,12 @@ function updateCartSummary() {
 }
 
 function updateCartTotals() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Totals] ⏸️ Checkout in progress - skipping cart totals update to freeze prices');
+    return;
+  }
+  
   // Recalculate totals including discount
   const items = [];
   
@@ -12280,19 +14380,34 @@ function updateCartTotals() {
     }
   });
   
-  // Add add-ons
+  // Add add-ons (boost products and subscription additions)
+  // Store addons separately to append after subscriptions
+  const addonItems = [];
   state.addonIds.forEach((addonId) => {
     const addon = findAddon(addonId);
     if (!addon) return;
-    items.push({
+    const price = getAddonPrice(addon);
+    addonItems.push({
       id: addon.id,
-      name: addon.name,
-      amount: roundToHalfKrone(addon.price.discounted),
+      name: addon.name || 'Add-on',
+      amount: roundToHalfKrone(price),
       type: 'addon',
     });
   });
 
-  state.cartItems = items;
+  // Ensure correct order: subscriptions/value cards first, then addons
+  // Items array already has subscriptions and value cards in correct order
+  // Now append addons at the end
+  items.push(...addonItems);
+
+  // CRITICAL: Explicitly sort items to ensure subscriptions come first
+  // This ensures the array order matches the display order
+  const sortedItems = [
+    ...items.filter(item => item.type === 'membership' || item.type === 'value-card'),
+    ...items.filter(item => item.type === 'addon')
+  ];
+
+  state.cartItems = sortedItems;
   
   // Calculate subtotal (before discount) - round to half krone
   state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
@@ -12305,10 +14420,27 @@ function updateCartTotals() {
 }
 
 function renderCartItems() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Items] ⏸️ Checkout in progress - skipping cart items render to freeze prices');
+    return;
+  }
+  
   if (!templates.cartItem || !DOM.cartItems) return;
-  DOM.cartItems.innerHTML = '';
+  
+  // Check for campaigns and show/hide warning banner
+  if (hasCampaignInCart()) {
+    showCampaignWarning();
+  } else {
+    hideCampaignWarning();
+  }
 
-  if (!state.cartItems.length) {
+  if (!state.cartItems || !state.cartItems.length) {
+    DOM.cartItems.innerHTML = '';
+    if (DOM.cartAddonItems) {
+      DOM.cartAddonItems.innerHTML = '';
+      DOM.cartAddonItems.style.display = 'none';
+    }
     // Only show empty message if there's no gym selected either
     if (!state.selectedGymId && !state.selectedBusinessUnit) {
       const empty = document.createElement('div');
@@ -12318,6 +14450,9 @@ function renderCartItems() {
     }
     return;
   }
+  
+  // Clear DOM to ensure clean rendering order
+  DOM.cartItems.innerHTML = '';
 
   // Helper function to create Home Gym info element
   function createHomeGymInfo(selectedGym) {
@@ -12332,13 +14467,13 @@ function renderCartItems() {
     const infoIcon = document.createElement('span');
     infoIcon.className = 'home-gym-info-icon';
     infoIcon.setAttribute('aria-label', 'Information about home gym');
-    infoIcon.innerHTML = `
+    infoIcon.innerHTML = sanitizeHTML(`
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"></circle>
         <line x1="12" y1="16" x2="12" y2="12"></line>
         <line x1="12" y1="8" x2="12.01" y2="8"></line>
       </svg>
-    `;
+    `);
     
     // Create wrapper for info icon and tooltip
     const infoWrapper = document.createElement('span');
@@ -12347,12 +14482,12 @@ function renderCartItems() {
     // Create tooltip
     const tooltip = document.createElement('div');
     tooltip.className = 'home-gym-tooltip';
-    tooltip.innerHTML = `
+    tooltip.innerHTML = sanitizeHTML(`
       <div class="tooltip-content">
         <p><strong>${t('homeGym.tooltip.title')}</strong></p>
         <p>${t('homeGym.tooltip.desc')}</p>
       </div>
-    `;
+    `);
     
     // Add click handler to toggle tooltip
     infoIcon.addEventListener('click', (e) => {
@@ -12395,14 +14530,24 @@ function renderCartItems() {
     );
   }
 
-  state.cartItems.forEach((item, index) => {
+  // Display order: (1) access type first (subscription / punch card / 15 day) with pricing,
+  // (2) addon products, (3) total (payment overview is next sibling in DOM).
+  // Separate items into two groups: subscriptions/15day pass/value cards first, then addons.
+  // All subscriptions (including 15-day passes) have type 'membership', value cards have type 'value-card'.
+  const subscriptionItems = state.cartItems.filter(item => 
+    item.type === 'membership' || item.type === 'value-card'
+  );
+  const addonItems = state.cartItems.filter(item => item.type === 'addon');
+
+  // Helper function to render a single cart item
+  function renderCartItem(item, isFirstSubscriptionItem = false) {
     const cartItem = templates.cartItem.content.firstElementChild.cloneNode(true);
     const nameEl = cartItem.querySelector('[data-element="name"]');
     const priceEl = cartItem.querySelector('[data-element="price"]');
 
     if (nameEl) {
-      // For membership items with imageBanner text, display name and banner text separately
-      if (item.type === 'membership' && item.imageBannerText) {
+      // For membership items with externalDescription, display name and description separately
+      if (item.type === 'membership' && item.externalDescription) {
         // Clear any existing content
         nameEl.innerHTML = '';
         
@@ -12415,39 +14560,68 @@ function renderCartItems() {
         productNameSpan.textContent = item.productName || item.name;
         productNameSpan.style.fontWeight = '500';
         
-        const bannerTextSpan = document.createElement('span');
+        const descTextSpan = document.createElement('span');
         // Preserve line breaks from backend - replace newlines with <br> tags
-        const bannerTextWithBreaks = item.imageBannerText.replace(/\n/g, '<br>');
-        bannerTextSpan.innerHTML = bannerTextWithBreaks;
-        bannerTextSpan.style.fontSize = 'var(--font-size-sm)';
-        bannerTextSpan.style.color = 'var(--color-text-muted)';
-        bannerTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
+        const descTextWithBreaks = item.externalDescription.replace(/\n/g, '<br>');
+        descTextSpan.innerHTML = sanitizeHTML(descTextWithBreaks);
+        descTextSpan.style.fontSize = 'var(--font-size-sm)';
+        descTextSpan.style.color = 'var(--color-text-muted)';
+        descTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
         
         nameContainer.appendChild(productNameSpan);
-        nameContainer.appendChild(bannerTextSpan);
+        nameContainer.appendChild(descTextSpan);
         nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the name container for first item
-        if (index === 0 && selectedGym) {
+        if (isFirstSubscriptionItem && selectedGym) {
+          const gymInfo = createHomeGymInfo(selectedGym);
+          nameEl.appendChild(gymInfo);
+        }
+      } else if (item.type === 'value-card') {
+        // Punch cards: product name only in main row; Total + price go in a row below
+        nameEl.innerHTML = '';
+        const productNameSpan = document.createElement('span');
+        productNameSpan.textContent = item.name;
+        productNameSpan.style.fontWeight = '500';
+        nameEl.appendChild(productNameSpan);
+        
+        if (isFirstSubscriptionItem && selectedGym) {
           const gymInfo = createHomeGymInfo(selectedGym);
           nameEl.appendChild(gymInfo);
         }
       } else {
+        // For addon items and other types, we'll add the plus sign later in the rendering loop
         nameEl.textContent = item.name;
         
         // Add Home Gym info below the first item's name
-        if (index === 0 && selectedGym) {
+        if (isFirstSubscriptionItem && selectedGym) {
           const gymInfo = createHomeGymInfo(selectedGym);
           nameEl.appendChild(gymInfo);
         }
       }
     }
     
+    // Value-card: show ×N and total punches on the right; price moves to total row below
+    if (item.type === 'value-card' && priceEl) {
+      priceEl.style.display = 'none'; // Price shown in cart-item-total-row below
+      const rightWrapper = document.createElement('div');
+      rightWrapper.className = 'cart-item-right';
+      if (item.quantity > 1) {
+        const quantitySpan = document.createElement('span');
+        quantitySpan.className = 'cart-item-quantity';
+        quantitySpan.textContent = `×${item.quantity}`;
+        rightWrapper.appendChild(quantitySpan);
+      }
+      /* Total punches shown only in cart-item-total-row below, not duplicated on the right */
+      priceEl.parentNode.insertBefore(rightWrapper, priceEl);
+      rightWrapper.appendChild(priceEl);
+    }
+    
     // Hide price for membership items (price already shown in Monthly fee section)
     if (priceEl) {
       if (item.type === 'membership') {
         priceEl.style.display = 'none';
-      } else {
+      } else if (item.type !== 'value-card') {
         // Calculate discounted price for this item
         let displayPrice = item.amount;
         let originalPrice = item.amount;
@@ -12469,18 +14643,91 @@ function renderCartItems() {
         // Display price - show discounted price if different from original
         if (displayPrice !== originalPrice && state.discountApplied) {
           // Show original price with strikethrough and discounted price
-          priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${numberFormatter.format(originalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${numberFormatter.format(displayPrice)} kr</span>`;
+          const originalText = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
+          const discountedText = formatPriceHalfKrone(roundToHalfKrone(displayPrice));
+          priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`);
         } else {
-          priceEl.textContent = displayPrice ? numberFormatter.format(displayPrice) + ' kr' : '';
+          // Always show price, including "0 kr." for free items
+          priceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
         }
       }
     }
 
+    return cartItem;
+  }
+
+  // CRITICAL: Clear DOM first to ensure clean rendering
+  DOM.cartItems.innerHTML = '';
+
+  // Render subscription/15day pass/value card items ONLY (access type first, with pricing)
+  // Payment overview (Månedlig betaling, Betal nu) is next in DOM; then addons; then total
+  subscriptionItems.forEach((item, index) => {
+    const cartItem = renderCartItem(item, index === 0);
     DOM.cartItems.appendChild(cartItem);
+    // Value-card: add Total (X klip) + price in a row below the cart-item
+    if (item.type === 'value-card') {
+      const totalRow = document.createElement('div');
+      totalRow.className = 'cart-item-total-row';
+      const labelSpan = document.createElement('span');
+      const punches = item.totalPunches != null && item.totalPunches > 0 ? item.totalPunches : 0;
+      labelSpan.textContent = punches === 1 ? `Total (${t('cart.punch.one')})` : `Total (${punches} ${t('cart.punch.label')})`;
+      labelSpan.className = 'cart-total-label';
+      totalRow.appendChild(labelSpan);
+      const priceSpan = document.createElement('span');
+      let displayPrice = item.amount;
+      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
+        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
+        const itemDiscount = item.amount * discountRatio;
+        displayPrice = Math.max(0, item.amount - itemDiscount);
+        if (state.totals.discountAmount >= state.totals.subtotal) displayPrice = 0;
+      }
+      priceSpan.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
+      priceSpan.className = 'cart-item-total-price';
+      totalRow.appendChild(priceSpan);
+      DOM.cartItems.appendChild(totalRow);
+    }
   });
+
+  // Render addon items in separate container (below payment overview, above total)
+  if (DOM.cartAddonItems) {
+    DOM.cartAddonItems.innerHTML = '';
+    if (addonItems.length > 0) {
+      DOM.cartAddonItems.style.display = 'block';
+      addonItems.forEach((item) => {
+        const cartItem = renderCartItem(item, false);
+        // Add plus sign before addon product names (inline, to the left) with brand accent color
+        const nameEl = cartItem.querySelector('[data-element="name"]');
+        if (nameEl) {
+          const currentText = nameEl.textContent || nameEl.innerText || '';
+          if (currentText && !currentText.trim().startsWith('+')) {
+            nameEl.style.flexDirection = 'row';
+            nameEl.style.alignItems = 'center';
+            const plusSpan = document.createElement('span');
+            plusSpan.textContent = '+ ';
+            plusSpan.style.color = 'var(--color-brand-accent)';
+            plusSpan.style.marginRight = '4px';
+            nameEl.innerHTML = '';
+            nameEl.appendChild(plusSpan);
+            const textSpan = document.createElement('span');
+            textSpan.textContent = currentText.trim();
+            nameEl.appendChild(textSpan);
+          }
+        }
+        DOM.cartAddonItems.appendChild(cartItem);
+      });
+    } else {
+      DOM.cartAddonItems.style.display = 'none';
+    }
+  }
 }
 
 function renderCartAddons() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart Addons] ⏸️ Checkout in progress - skipping cart addons render to freeze prices');
+    return;
+  }
+  
   if (!templates.cartItem || !DOM.cartAddons) return;
   DOM.cartAddons.innerHTML = '';
 
@@ -12529,10 +14776,10 @@ function renderCartAddons() {
       // Display price - show discounted price if different from original
       if (roundedDisplayPrice !== roundedOriginalPrice && state.discountApplied) {
         // Show original price with strikethrough and discounted price
-        priceEl.innerHTML = `<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr</span>`;
+        priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr.</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr.</span>`);
       } else {
-        // Always show price, including "0 kr" for free items
-        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr';
+        // Always show price, including "0 kr." for free items
+        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr.';
       }
     }
 
@@ -12541,37 +14788,32 @@ function renderCartAddons() {
 }
 
 function renderCartTotal() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Cart] ⏸️ Checkout in progress - skipping cart total update to freeze prices');
+    return;
+  }
+  
   // Cart total is no longer displayed - payment overview shows calculated prices instead
   // Just update payment overview which shows the correct calculated prices
   
   // Update payment overview (shows "Betales nu" and "Månedlig betaling herefter")
   updatePaymentOverview();
   
-  // Update cart total display
-  const cartTotalEl = document.querySelector('[data-summary-field="cart-total"]');
+  // Update cart total display - use already-calculated cartTotal from state
+  const cartTotalEl = document.querySelector('[data-summary-field="cart-total"]') ||
+                      document.querySelector('.cart-total .total-amount') ||
+                      document.querySelector('.total-amount');
   const cartTotalContainer = document.querySelector('.cart-total');
   
   if (cartTotalEl) {
-    // Calculate total as: Pay now amount + addon items
-    // Get addon items total (non-membership items)
-    const addonItems = state.cartItems.filter(item => item.type !== 'membership');
-    const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
-    
-    // Get "Pay now" amount from state (calculated by updatePaymentOverview)
-    const payNowAmount = state.totals.payNowAmount || 0;
-    
-    // Total = Pay now + Addons (both already rounded to half krone)
-    let total = (state.totals.payNowAmount || 0) + addonTotal;
-    
-    // Apply discount if applicable (discount should be applied to the total)
-    if (state.discountApplied && state.totals.discountAmount > 0) {
-      total = Math.max(0, total - state.totals.discountAmount);
-    }
-    
-    // Round total to half krone and format
-    // Format: "569,00 kr" or "569,50 kr" (no dot, consistent with cart items)
-    const roundedTotal = roundToHalfKrone(total);
-    cartTotalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr';
+    // Use already-calculated cartTotal (includes membership + addons - discount)
+    // state.totals.cartTotal is calculated in updateCartSummary() as: subtotal - discount
+    const total = state.totals.cartTotal || 0;
+    cartTotalEl.textContent = formatPriceHalfKrone(roundToHalfKrone(total)) + ' kr.';
+    console.log('[Cart] Updated cart total display:', total);
+  } else {
+    console.warn('[Cart] Cart total element not found in DOM');
   }
   
   // Show/hide cart total container based on whether there are items
@@ -12584,6 +14826,9 @@ function renderCartTotal() {
   
   // Update discount display if discount is applied
   updateDiscountDisplay();
+  
+  // Update FAQ based on cart contents
+  renderFAQ();
   
   console.log('[Cart] Updated cart display (subtotal:', state.totals.subtotal, 'discount:', state.totals.discountAmount, ')');
 }
@@ -12603,6 +14848,13 @@ function renderCartTotal() {
  * @see docs/brp-api3-openapi.yaml - OrderOut, SubscriptionItemOut schemas
  */
 function updatePaymentOverview() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  // The backend will still process correctly, but UI stays frozen at checkout click
+  if (state.checkoutInProgress) {
+    console.log('[Payment Overview] ⏸️ Checkout in progress - skipping UI update to freeze cart prices');
+    return;
+  }
+  
   // Only show payment overview if there's a membership (subscription) in the cart
   const hasMembership = state.selectedProductType === 'membership' && state.selectedProductId;
   
@@ -12628,8 +14880,10 @@ function updatePaymentOverview() {
   }
   
   if (!hasMembership) {
-    // Hide payment overview if no membership
+    // Hide payment overview and total wrapper if no membership
     DOM.paymentOverview.style.display = 'none';
+    const totalWrap = document.querySelector('.payment-overview-total-wrap');
+    if (totalWrap) totalWrap.style.display = 'none';
     return;
   }
   
@@ -12670,9 +14924,17 @@ function updatePaymentOverview() {
   // Check product name from order data first, then fall back to product data
   const productFromOrder = subscriptionItem?.product;
   const productName = productFromOrder?.name || currentProduct?.name || '';
-  const is15DayPassWithShoes = productName && 
-    productName.toLowerCase().includes('15 dages klatring') &&
-    productName.toLowerCase().includes('sko');
+  const productLabels = currentProduct?.productLabels || currentProduct?.labels || [];
+  const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
+    label => label?.name && label.name.toLowerCase() === '15 day pass'
+  );
+  const is15DayPass =
+    state.selectedProductType === '15daypass' ||
+    has15DayPassLabel ||
+    (productName && (
+      productName.toLowerCase().includes('15 day pass') ||
+      productName.toLowerCase().includes('15 dages')
+    ));
   
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
@@ -12695,25 +14957,56 @@ function updatePaymentOverview() {
       ? orderPriceAmount.amount / 100 
       : orderPriceAmount / 100;
     
-    console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
-    
-    if (is15DayPassWithShoes) {
-      // For 15-day pass with shoes: always use full price (one-time payment)
+    // CRITICAL: If addons are present, ALWAYS use backend order price
+    // The backend order price includes addons (if they were successfully added)
+    // Client-side calculations don't account for addons properly
+    const hasAddons = state.addonIds && state.addonIds.size > 0;
+    if (hasAddons) {
+      console.log('[Payment Overview] ✅ Addons present - using backend order price (includes addons):', orderPriceDKK, 'DKK');
       payNowAmount = orderPriceDKK;
       
-      // Set valid until date (15 days from today)
+      // Get billing period from subscription item if available
+      if (subscriptionItem?.initialPaymentPeriod?.start) {
+        const backendStartDate = new Date(subscriptionItem.initialPaymentPeriod.start);
+        const backendEndDate = new Date(subscriptionItem.initialPaymentPeriod.end);
+        billingPeriod = {
+          start: backendStartDate,
+          end: backendEndDate
+        };
+      }
+      
+      // Update the pay now amount element
+      if (DOM.paymentPayNow) {
+        DOM.paymentPayNow.textContent = formatPriceHalfKrone(roundToHalfKrone(payNowAmount)) + ' kr.';
+      }
+      
+      // Skip the verification logic when addons are present - backend price is authoritative
+      console.log('[Payment Overview] ✅ Skipping price verification - using backend order price with addons');
+    } else {
+      // No addons - proceed with normal price verification
+      console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
+      
+      if (is15DayPass) {
+      // For 15-day pass: always use full price (one-time payment)
+      payNowAmount = orderPriceDKK;
+      
+      // Use selected activation date or today; end = start + 15 days
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const validUntil = new Date(today);
+      const startDate = state.subscriptionStartDate
+        ? new Date(state.subscriptionStartDate + 'T12:00:00')
+        : today;
+      startDate.setHours(0, 0, 0, 0);
+      const validUntil = new Date(startDate);
       validUntil.setDate(validUntil.getDate() + 15);
       
       billingPeriod = {
-        start: today,
+        start: startDate,
         end: validUntil,
         is15DayPass: true
       };
       
-      console.log('[Payment Overview] ✅ 15-day pass with shoes: Full price (one-time payment):', payNowAmount, 'DKK');
+      console.log('[Payment Overview] ✅ 15-day pass: Full price (one-time payment):', payNowAmount, 'DKK');
     } else {
       // Regular membership: Get initialPaymentPeriod (per OpenAPI: SubscriptionItemOut.initialPaymentPeriod - DayRange)
       const initialPaymentPeriod = subscriptionItem.initialPaymentPeriod;
@@ -12724,10 +15017,52 @@ function updatePaymentOverview() {
       const productId = subscriptionItem?.product?.id || state.selectedProductId;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const startDateStr = today.toISOString().split('T')[0];
+      const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
-      
-      if (initialPaymentPeriod?.start) {
+      const dayOfMonth = today.getDate();
+      const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
+        p => String(p.id) === String(productId)
+      );
+      // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
+      const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
+
+      if (isFirstMonthFreeCampaign) {
+        if (dayOfMonth < 16) {
+          payNowAmount = 0;
+          if (initialPaymentPeriod?.start) {
+            billingPeriod = {
+              start: new Date(initialPaymentPeriod.start),
+              end: new Date(initialPaymentPeriod.end)
+            };
+          } else {
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+          }
+          console.log('[Payment Overview] ✅ First month free campaign (date < 16): 0 kr from API');
+        } else {
+          payNowAmount = expectedPrice ? expectedPrice.amountInDKK : orderPriceDKK;
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          if (expectedPrice?.includesNextMonth) {
+            const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+            const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+            billingPeriod = {
+              start: today,
+              end: new Date(nextYear, nextMonth + 1, 0)
+            };
+          } else {
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+          }
+          console.log('[Payment Overview] ✅ First month free campaign (date >= 16): rest-of-month price:', payNowAmount, 'DKK');
+        }
+      } else if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
         const backendEndDate = new Date(initialPaymentPeriod.end);
         
@@ -12739,14 +15074,14 @@ function updatePaymentOverview() {
           today
         );
         
-        if (verification.isCorrect) {
+        if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
           // Backend calculated correctly - use backend's price
           payNowAmount = orderPriceDKK;
           billingPeriod = {
             start: backendStartDate,
             end: backendEndDate
           };
-          console.log('[Payment Overview] ✅ Backend pricing is correct:', payNowAmount, 'DKK');
+          console.log('[Payment Overview] ✅ Backend pricing accepted:', payNowAmount, 'DKK');
         } else {
           // Backend pricing is incorrect - calculate correct price client-side
           console.warn('[Payment Overview] ⚠️ Backend pricing is incorrect!');
@@ -12767,7 +15102,7 @@ function updatePaymentOverview() {
               end: lastDayOfMonth
             };
             console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
-            console.warn('[Payment Overview] ⚠️ NOTE: Payment window may show different price if backend bug persists');
+            console.warn('[Payment Overview] ⚠️ NOTE: Using calculated price - verify against backend order price');
           } else {
             // Can't calculate expected price - use backend price as fallback
             payNowAmount = orderPriceDKK;
@@ -12784,6 +15119,7 @@ function updatePaymentOverview() {
         console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
       }
     }
+  }
   } else {
     // No order data yet - calculate price from product data
     // This allows prices to be shown before login/account creation
@@ -12805,50 +15141,92 @@ function updatePaymentOverview() {
       );
       
       if (membership) {
-        // Check if this is 15-day pass with shoes (one-time payment)
-        const is15DayPassWithShoes = membership.name && 
-          membership.name.toLowerCase().includes('15 dages klatring') &&
-          membership.name.toLowerCase().includes('sko');
+        const membershipLabels = membership.productLabels || membership.labels || [];
+        const isMembership15DayPass =
+          state.selectedProductType === '15daypass' ||
+          (Array.isArray(membershipLabels) && membershipLabels.some(
+            label => label?.name && label.name.toLowerCase() === '15 day pass'
+          )) ||
+          (membership.name && (
+            membership.name.toLowerCase().includes('15 day pass') ||
+            membership.name.toLowerCase().includes('15 dages')
+          ));
         
-        if (is15DayPassWithShoes) {
-          // For 15-day pass with shoes: always use full price (one-time payment)
+        if (isMembership15DayPass) {
+          // For 15-day pass: always use full price (one-time payment)
           const priceInCents = membership.priceWithInterval?.price?.amount || 0;
           payNowAmount = priceInCents / 100;
           
-          // Set valid until date (15 days from today)
+          // Use selected activation date or today; end = start + 15 days
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const validUntil = new Date(today);
+          const startDate = state.subscriptionStartDate
+            ? new Date(state.subscriptionStartDate + 'T12:00:00')
+            : today;
+          startDate.setHours(0, 0, 0, 0);
+          const validUntil = new Date(startDate);
           validUntil.setDate(validUntil.getDate() + 15);
           
           billingPeriod = {
-            start: today,
+            start: startDate,
             end: validUntil,
             is15DayPass: true
           };
           
-          console.log('[Payment Overview] ✅ 15-day pass with shoes: Full price (one-time payment):', payNowAmount, 'DKK');
+          console.log('[Payment Overview] ✅ 15-day pass: Full price (one-time payment):', payNowAmount, 'DKK');
         } else {
           // Regular membership: Calculate partial month price client-side
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          const startDateStr = today.toISOString().split('T')[0];
-          
+          const startDateStr = getTodayLocalDateString();
+          const dayOfMonth = today.getDate();
+          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
+            p => String(p.id) === String(membership.id)
+          );
+          const productNameForCampaign = (membership.name || '').toLowerCase();
+          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
+            /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
+          );
+
+          if (isFirstMonthFreeCampaignNoOrder && dayOfMonth < 16) {
+            payNowAmount = 0;
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            billingPeriod = {
+              start: today,
+              end: new Date(currentYear, currentMonth + 1, 0)
+            };
+            console.log('[Payment Overview] ✅ First month free campaign (no order, date < 16): 0 kr');
+          } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
-          if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
             if (expectedPrice) {
               payNowAmount = expectedPrice.amountInDKK;
               
-              // Set billing period to today - end of month
+              // Set billing period based on whether next month is included
               const currentMonth = today.getMonth();
               const currentYear = today.getFullYear();
-              const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-              billingPeriod = {
-                start: today,
-                end: lastDayOfMonth
-              };
-              console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month):', payNowAmount, 'DKK');
+              const dayOfMonth = today.getDate();
+              
+              if (expectedPrice.includesNextMonth) {
+                // Billing period extends to end of next month
+                const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+                const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+                const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+                billingPeriod = {
+                  start: today,
+                  end: lastDayOfNextMonth
+                };
+                console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month):', payNowAmount, 'DKK');
+              } else {
+                // Billing period is just rest of current month
+                const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+                billingPeriod = {
+                  start: today,
+                  end: lastDayOfMonth
+                };
+                console.log('[Payment Overview] ✅ Pay now calculated (partial month):', payNowAmount, 'DKK');
+              }
             } else {
               // Fallback to full month price
               const priceInCents = membership.priceWithInterval?.price?.amount || 0;
@@ -12865,17 +15243,37 @@ function updatePaymentOverview() {
             const currentYear = today.getFullYear();
             const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
             const daysInMonth = lastDayOfMonth.getDate();
+            const dayOfMonth = today.getDate();
             const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
             
-            // Calculate partial month price
-            payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
-            
-            billingPeriod = {
-              start: today,
-              end: lastDayOfMonth
-            };
-            
-            console.log('[Payment Overview] ✅ Pay now calculated from product data (partial month, manual calc):', payNowAmount, 'DKK');
+            // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
+            if (dayOfMonth >= 16) {
+              // Calculate: (rest of current month) + (full next month)
+              const partialCurrentMonthPrice = (monthlyPrice / daysInMonth) * daysRemaining;
+              payNowAmount = partialCurrentMonthPrice + monthlyPrice;
+              
+              // Billing period extends to end of next month
+              const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+              const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+              const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+              
+              billingPeriod = {
+                start: today,
+                end: lastDayOfNextMonth
+              };
+              
+              console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month, manual calc):', payNowAmount, 'DKK');
+            } else {
+              // Calculate: just rest of current month (prorated)
+              payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+              
+              billingPeriod = {
+                start: today,
+                end: lastDayOfMonth
+              };
+              
+              console.log('[Payment Overview] ✅ Pay now calculated (partial month, manual calc):', payNowAmount, 'DKK');
+            }
           }
         }
       } else {
@@ -12893,10 +15291,10 @@ function updatePaymentOverview() {
   // ============================================================================
   // CALCULATE "MÅNEDLIG BETALING HEREFTER" (MONTHLY PAYMENT THEREAFTER)
   // ============================================================================
-  // Skip monthly payment calculation for 15-day pass with shoes (one-time payment)
+  // Skip monthly payment calculation for 15-day pass (one-time payment)
   let monthlyPaymentAmount = 0;
   
-  if (!is15DayPassWithShoes) {
+  if (!is15DayPass) {
     // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount
     // This is ALWAYS the regular monthly price after any promotional period
     // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
@@ -12951,34 +15349,35 @@ function updatePaymentOverview() {
       }
     }
   } else {
-    console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass with shoes - one-time payment)');
+    console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass - one-time payment)');
   }
   
   // ============================================================================
   // UPDATE DOM ELEMENTS
   // ============================================================================
   
-  // Update "Betales nu" (Pay now)
-  // Format dates in Danish format (DD.MM.YYYY) - moved up to use for period
-  const formatDate = (date) => {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
-  };
-  
   // Prepare billing period text
   let billingPeriodText = '';
-  if (is15DayPassWithShoes && billingPeriod?.is15DayPass) {
-    // For 15-day pass: show "Valid until [date 15 days in future]"
-    billingPeriodText = `${t('cart.validUntil')} ${formatDate(billingPeriod.end)}`;
+  if (is15DayPass && billingPeriod?.is15DayPass) {
+    // For 15-day pass: show date range (start - end); or "Valid until" when start is today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startDate = billingPeriod.start;
+    const startStr = startDate ? (startDate.toISOString ? startDate.toISOString().slice(0, 10) : '') : '';
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const startIsToday = !startDate || startStr === todayStr;
+    if (startIsToday) {
+      billingPeriodText = `${t('cart.validUntil')} ${formatDateDMY(billingPeriod.end)}`;
+    } else {
+      billingPeriodText = `${formatDateDMY(billingPeriod.start)} - ${formatDateDMY(billingPeriod.end)}`;
+    }
   } else if (billingPeriod) {
     // Regular membership: show billing period dates only
-    billingPeriodText = `${formatDate(billingPeriod.start)} - ${formatDate(billingPeriod.end)}`;
+    billingPeriodText = `${formatDateDMY(billingPeriod.start)} - ${formatDateDMY(billingPeriod.end)}`;
   } else if (hasOrderData && subscriptionItem?.boundUntil) {
     // No initialPaymentPeriod, but there's a boundUntil date
     const boundUntilDate = new Date(subscriptionItem.boundUntil);
-    billingPeriodText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
+    billingPeriodText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(boundUntilDate)}`;
   }
   
   // Fallback to state.billingPeriod if available
@@ -12991,6 +15390,19 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
+  // If discount is applied but order price isn't available yet, reflect discount in pay-now
+  if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
+    const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
+    if (adjustedPayNow !== payNowAmount) {
+      console.log('[Payment Overview] Applying discount to pay-now fallback:', {
+        original: payNowAmount,
+        discount: state.totals.discountAmount,
+        adjusted: adjustedPayNow
+      });
+      payNowAmount = adjustedPayNow;
+    }
+  }
+
   // Round payNowAmount to half krone and store in state for use in cart total calculation
   state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
   
@@ -13014,7 +15426,11 @@ function updatePaymentOverview() {
           label.parentNode.insertBefore(periodElement, DOM.payNow);
         }
       }
-      periodElement.textContent = `(${billingPeriodText})`;
+      if (is15DayPass) {
+        periodElement.innerHTML = `(${billingPeriodText}) <button type="button" class="change-date-link" data-action="change-activation-date">${t('activationDate.change')}</button>`;
+      } else {
+        periodElement.textContent = `(${billingPeriodText})`;
+      }
     } else if (payNowRow) {
       // Hide period element if no billing period text
       const periodElement = payNowRow.querySelector('.payment-label-period');
@@ -13049,9 +15465,9 @@ function updatePaymentOverview() {
   }
   
   // Update "Månedlig betaling herefter" (Monthly payment thereafter)
-  // Hide monthly payment for 15-day pass with shoes (one-time payment)
+  // Hide monthly payment for 15-day pass (one-time payment)
   if (DOM.monthlyPayment) {
-    if (is15DayPassWithShoes) {
+    if (is15DayPass) {
       // Hide monthly payment section for one-time payment products
       const monthlyPaymentItem = DOM.monthlyPayment.closest('.payment-overview-item');
       if (monthlyPaymentItem) {
@@ -13071,12 +15487,25 @@ function updatePaymentOverview() {
       }
     }
   }
+
+  // Show discount row in payment overview when discount is applied
+  if (DOM.paymentDiscount) {
+    const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
+    if (state.discountApplied && state.totals.discountAmount > 0) {
+      DOM.paymentDiscount.textContent = `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`;
+      if (discountRow) {
+        discountRow.style.display = 'flex';
+      }
+    } else if (discountRow) {
+      discountRow.style.display = 'none';
+    }
+  }
   
   // Display boundUntil date separately if available (for memberships with promotional periods)
   if (DOM.paymentBoundUntil) {
-    if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPassWithShoes) {
+    if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPass) {
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
-      const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDate(boundUntilDate)}`;
+      const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(boundUntilDate)}`;
       DOM.paymentBoundUntil.textContent = boundUntilText;
       DOM.paymentBoundUntil.style.display = 'block';
     } else {
@@ -13084,23 +15513,113 @@ function updatePaymentOverview() {
     }
   }
   
+  // Calculate and display total (Pay now + Addons)
+  const totalEl = document.querySelector('[data-summary-field="total"]');
+  const totalContainer = document.querySelector('.payment-overview-total');
+  
+  if (totalEl && totalContainer) {
+    // CRITICAL: Calculate addon total from state.addonIds (source of truth)
+    // Don't rely on state.cartItems which might not be updated yet (e.g., after login)
+    const hasAddons = state.addonIds && state.addonIds.size > 0;
+    let addonTotal = 0;
+    
+    if (hasAddons) {
+      // Calculate addon total directly from addonIds
+      state.addonIds.forEach((addonId) => {
+        const addon = findAddon(addonId);
+        if (addon) {
+          const price = getAddonPrice(addon);
+          addonTotal += roundToHalfKrone(price);
+        }
+      });
+    }
+    
+    // CRITICAL: Check if payNowAmount already includes addons
+    // Only trust order price if order actually has addons in it (articleItems or valueCardItems)
+    // After login, order might be created without addons yet, so we need to check
+    const orderHasAddons = hasOrderData && state.fullOrder && (
+      (state.fullOrder.articleItems && state.fullOrder.articleItems.length > 0) ||
+      (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0)
+    );
+    
+    // Check if order price includes addons: only if order actually has addons AND we have addons in state
+    const payNowIncludesAddons = hasAddons && hasOrderData && orderHasAddons && state.fullOrder?.price?.amount !== undefined;
+    
+    // Total calculation:
+    // - If payNowAmount already includes addons (from backend order that has addons), use it as-is
+    // - Otherwise, add addonTotal to payNowAmount (order doesn't have addons yet, or no order data)
+    let total = payNowIncludesAddons ? payNowAmount : payNowAmount + addonTotal;
+    
+    // Apply discount if applicable
+    if (state.discountApplied && state.totals.discountAmount > 0) {
+      total = Math.max(0, total - state.totals.discountAmount);
+    }
+    
+    // Round and format total
+    const roundedTotal = roundToHalfKrone(total);
+    totalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
+    
+    // Show/hide total container (and its wrapper) based on whether addons are present
+    const totalWrap = totalContainer.closest('.payment-overview-total-wrap');
+    if (addonTotal > 0) {
+      totalContainer.style.display = 'block';
+      if (totalWrap) totalWrap.style.display = 'block';
+      if (payNowIncludesAddons) {
+        console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now already includes addons:', payNowAmount, ')');
+      } else {
+        console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now:', payNowAmount, '+ Addons:', addonTotal, ')');
+      }
+    } else {
+      totalContainer.style.display = 'none';
+      if (totalWrap) totalWrap.style.display = 'none';
+    }
+  }
+  
+  // Calculate total for logging (same logic as display - use state.addonIds as source of truth)
+  const hasAddonsForLog = state.addonIds && state.addonIds.size > 0;
+  let addonTotalForLog = 0;
+  if (hasAddonsForLog) {
+    state.addonIds.forEach((addonId) => {
+      const addon = findAddon(addonId);
+      if (addon) {
+        const price = getAddonPrice(addon);
+        addonTotalForLog += roundToHalfKrone(price);
+      }
+    });
+  }
+  // Check if order actually has addons (same logic as display)
+  const orderHasAddonsForLog = hasOrderData && state.fullOrder && (
+    (state.fullOrder.articleItems && state.fullOrder.articleItems.length > 0) ||
+    (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0)
+  );
+  const payNowIncludesAddonsForLog = hasAddonsForLog && hasOrderData && orderHasAddonsForLog && state.fullOrder?.price?.amount !== undefined;
+  const calculatedTotal = payNowIncludesAddonsForLog ? payNowAmount : payNowAmount + addonTotalForLog;
+  
   console.log('[Payment Overview] ✅ Updated:', {
     payNow: payNowAmount,
     monthlyPayment: monthlyPaymentAmount,
-    billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A'
+    billingPeriod: DOM.paymentBillingPeriod?.textContent || 'N/A',
+    total: totalEl ? calculatedTotal : 'N/A',
+    payNowIncludesAddons: payNowIncludesAddonsForLog
   });
 }
 
 function updateDiscountDisplay() {
+  // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
+  if (state.checkoutInProgress) {
+    console.log('[Discount Display] ⏸️ Checkout in progress - skipping discount display update to freeze prices');
+    return;
+  }
+  
   // Find or create discount display element
-  let discountDisplay = document.querySelector('.discount-display');
+  let discountDisplay = DOM.discountDisplay || document.querySelector('[data-discount-display]') || document.querySelector('.discount-display');
   
   // Show discount display if discount is applied OR if discount code is stored (pending application)
   // BUT: Don't show pending message if we're currently applying a discount (button is disabled)
   const isApplyingDiscount = DOM.applyDiscountBtn && DOM.applyDiscountBtn.disabled && DOM.applyDiscountBtn.textContent.includes('Applying');
   const shouldShowPending = state.discountCode && !state.discountApplied && !isApplyingDiscount;
   
-  if ((state.discountApplied && state.totals.discountAmount > 0) || shouldShowPending) {
+  if (state.discountApplied || shouldShowPending) {
     // Ensure subtotal is calculated - but don't call updateCartTotals() to avoid recursion
     // Instead, just recalculate subtotal if needed
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
@@ -13117,7 +15636,10 @@ function updateDiscountDisplay() {
       });
       state.addonIds.forEach((addonId) => {
         const addon = findAddon(addonId);
-        if (addon) items.push({ amount: addon.price.discounted });
+        if (addon) {
+          const price = getAddonPrice(addon);
+          items.push({ amount: price });
+        }
       });
       state.totals.subtotal = roundToHalfKrone(items.reduce((total, item) => total + item.amount, 0));
     }
@@ -13126,43 +15648,52 @@ function updateDiscountDisplay() {
       // Create discount display element
       discountDisplay = document.createElement('div');
       discountDisplay.className = 'discount-display';
-      
-      // Insert before cart total
-      const cartTotalEl = document.querySelector('.cart-total');
-      if (cartTotalEl) {
-        cartTotalEl.insertAdjacentElement('beforebegin', discountDisplay);
+
+      // Prefer placing under the discount form
+      if (DOM.discountForm) {
+        DOM.discountForm.insertAdjacentElement('afterend', discountDisplay);
       } else {
-        // Fallback: try to find cart total by data attribute
-        const cartTotalByAttr = document.querySelector('[data-summary-field="cart-total"]');
-        if (cartTotalByAttr && cartTotalByAttr.parentElement) {
-          cartTotalByAttr.parentElement.insertBefore(discountDisplay, cartTotalByAttr);
+        // Fallback: insert before cart total
+        const cartTotalEl = document.querySelector('.cart-total');
+        if (cartTotalEl) {
+          cartTotalEl.insertAdjacentElement('beforebegin', discountDisplay);
+        } else {
+          // Fallback: try to find cart total by data attribute
+          const cartTotalByAttr = document.querySelector('[data-summary-field="cart-total"]');
+          if (cartTotalByAttr && cartTotalByAttr.parentElement) {
+            cartTotalByAttr.parentElement.insertBefore(discountDisplay, cartTotalByAttr);
+          }
         }
       }
+      DOM.discountDisplay = discountDisplay;
     }
     
     // Build discount display HTML - show subtotal, discount, and final total
-    if (state.discountApplied && state.totals.discountAmount > 0) {
+    if (state.discountApplied) {
       // Discount is applied - show actual discount amount
-      discountDisplay.innerHTML = `
+      const discountValue = state.totals.discountAmount > 0
+        ? `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`
+        : formatCurrencyHalfKrone(0);
+      discountDisplay.innerHTML = sanitizeHTML(`
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
-          <span class="discount-value">${currencyFormatter.format(state.totals.subtotal)}</span>
+          <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
         </div>
         <div class="discount-row discount-applied">
           <span class="discount-label">Discount (${state.discountCode}):</span>
-          <span class="discount-value">-${currencyFormatter.format(state.totals.discountAmount)}</span>
+          <span class="discount-value">${discountValue}</span>
         </div>
         <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
           <span class="discount-label" style="font-weight: bold;">Total:</span>
-          <span class="discount-value" style="font-weight: bold;">${currencyFormatter.format(state.totals.cartTotal)}</span>
+          <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
         </div>
-      `;
+      `);
     } else if (state.discountCode && !state.discountApplied) {
       // Discount code entered but not yet applied (pending) - show subtotal only
-      discountDisplay.innerHTML = `
+      discountDisplay.innerHTML = sanitizeHTML(`
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
-          <span class="discount-value">${currencyFormatter.format(state.totals.subtotal)}</span>
+          <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
         </div>
         <div class="discount-row discount-pending" style="opacity: 0.7; font-style: italic;">
           <span class="discount-label">Discount code (${state.discountCode}):</span>
@@ -13170,9 +15701,9 @@ function updateDiscountDisplay() {
         </div>
         <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
           <span class="discount-label" style="font-weight: bold;">Total:</span>
-          <span class="discount-value" style="font-weight: bold;">${currencyFormatter.format(state.totals.cartTotal)}</span>
+          <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
         </div>
-      `;
+      `);
     }
     discountDisplay.style.display = 'block';
   } else if (discountDisplay) {
@@ -13189,6 +15720,9 @@ function persistOrderSnapshot(orderId) {
       cartItems: state.cartItems || [],
       totals: state.totals,
       selectedBusinessUnit: state.selectedBusinessUnit,
+      selectedProductType: state.selectedProductType, // Store product type for restoration
+      selectedProductId: state.selectedProductId, // Store product ID for restoration
+      subscriptionStartDate: state.subscriptionStartDate, // 15-day pass activation date
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -13203,11 +15737,74 @@ function clearStoredOrderData(reason = 'manual') {
   state.paymentLink = null;
   state.paymentLinkGenerated = false;
   state.checkoutInProgress = false;
+  updateFAQVisibility(); // Show FAQ again when order data is cleared
   state.cartItems = [];
   state.totals = {
     cartTotal: 0,
     membershipMonthly: 0,
   };
+
+  try {
+    sessionStorage.removeItem('boulders_checkout_order');
+  } catch (error) {
+    console.warn('[checkout] Could not clear order session data:', error);
+  }
+}
+
+function resetOrderStateForProductChange(reason = 'product-change') {
+  const hadOrderData = Boolean(state.orderId || state.fullOrder || state.paymentLink || state.paymentLinkGenerated);
+  const hadDiscount = Boolean(state.discountApplied || state.discountCode);
+
+  // Always clear cart when switching product/plan (subscription ↔ 15-day ↔ punch card ↔ different subscription)
+  // So addons and other cart state never carry over to a new product
+  console.log(`[checkout] Resetting order state (${reason})`);
+  state.addonIds.clear();
+  state.cartItems = [];
+  state.valueCardQuantities.clear();
+
+  // Deselect addon cards in UI so they match cleared addonIds
+  document.querySelectorAll('.addon-card.selected, .plan-card.addon-card.selected').forEach((card) => {
+    card.classList.remove('selected');
+    const button = card.querySelector('[data-action="toggle-addon"]');
+    if (button) {
+      button.textContent = t('button.addToCart');
+      button.setAttribute('data-i18n-key', 'button.addToCart');
+    }
+  });
+
+  updateCartSummary();
+
+  // Clear order/discount state only when we had order or discount
+  if (!hadOrderData && !hadDiscount) {
+    return;
+  }
+
+  state.order = null;
+  state.fullOrder = null;
+  state.orderId = null;
+  state.subscriptionAttachedOrderId = null;
+  state.subscriptionStartDate = null;
+  state.paymentLink = null;
+  state.paymentLinkGenerated = false;
+  state.checkoutInProgress = false;
+  state.billingPeriod = '';
+  state.totals.discountAmount = 0;
+  state.totals.payNowAmount = 0;
+  state.discountApplied = false;
+  state.discountCode = null;
+
+  // Re-enable logout button and reset checkout button if they were disabled during checkout
+  setCheckoutLoadingState(false);
+
+  if (DOM.discountInput) {
+    DOM.discountInput.disabled = false;
+    DOM.discountInput.value = '';
+    DOM.discountInput.style.opacity = '';
+    DOM.discountInput.style.borderColor = '';
+    DOM.discountInput.style.backgroundColor = '';
+  }
+  clearDiscountMessage();
+  updateDiscountDisplay();
 
   try {
     sessionStorage.removeItem('boulders_checkout_order');
@@ -13306,8 +15903,12 @@ async function ensureSubscriptionAttached(context = 'auto') {
   subscriptionAttachPromise = (async () => {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
+    // 15-day pass: use selected activation date; others use today
+    const is15DayPass = typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-');
+    const startDate = is15DayPass ? (state.subscriptionStartDate || getTodayLocalDateString()) : undefined;
+    
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
-    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId);
+    const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId, startDate);
     state.subscriptionAttachedOrderId = orderId;
     
     // CRITICAL: Use the order from addSubscriptionItem response if available (has correct price after re-add)
@@ -13326,9 +15927,17 @@ async function ensureSubscriptionAttached(context = 'auto') {
     state.fullOrder = updatedOrder;
     state.order = updatedOrder; // Also update state.order for backward compatibility
     
+    // CRITICAL: Store subscription item ID for linking addons via additionTo
+    const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
+    if (subscriptionItem?.id) {
+      state.subscriptionItemId = subscriptionItem.id;
+      console.log('[ensureSubscriptionAttached] ✅ Stored subscription item ID:', state.subscriptionItemId);
+    } else {
+      console.warn('[ensureSubscriptionAttached] ⚠️ No subscription item ID found - addons may not be linked correctly');
+    }
+    
     // Log the order price to verify it matches what will be sent to payment window
     const orderPriceDKK = updatedOrder?.price?.amount ? updatedOrder.price.amount / 100 : 0;
-    const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
     const initialPeriodStart = subscriptionItem?.initialPaymentPeriod?.start;
     console.log('[ensureSubscriptionAttached] ✅ Order data after subscription add:', {
       orderId,
@@ -13336,6 +15945,7 @@ async function ensureSubscriptionAttached(context = 'auto') {
       initialPeriodStart,
       hasSubscriptionItems: !!subscriptionItem,
       productId: subscriptionItem?.product?.id,
+      subscriptionItemId: subscriptionItem?.id,
     });
     
     updatePaymentOverview();
@@ -13426,6 +16036,10 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
   return defaultMs;
 }
 
+function handleCheckoutClick() {
+  handleCheckout();
+}
+
 async function handleCheckout() {
   // Prevent multiple simultaneous checkout attempts
   if (state.checkoutInProgress) {
@@ -13434,8 +16048,10 @@ async function handleCheckout() {
   }
   
   // Validation (existing)
-  if (!validateForm(true)) {
-    showToast('Please review the highlighted fields.', 'error');
+  const validationResult = validateForm(true);
+  if (!validationResult.isValid) {
+    console.log('[checkout] Validation failed:', validationResult);
+    showToast(validationResult.message || 'Please review the highlighted fields.', 'error');
     // Animate checkout button with red flash
     if (DOM.checkoutBtn) {
       DOM.checkoutBtn.classList.remove('error-flash');
@@ -13471,6 +16087,9 @@ async function handleCheckout() {
   
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
+  
+  // Hide FAQ section when checkout starts
+  updateFAQVisibility();
 
   // GTM: Track begin_checkout event
   if (window.GTM && window.GTM.trackBeginCheckout && state.cartItems && state.cartItems.length > 0) {
@@ -13481,19 +16100,9 @@ async function handleCheckout() {
     }
   }
 
+  // Payment method UI removed - use card by default
   if (!state.paymentMethod) {
-    showToast('Choose a payment method to continue.', 'error');
-    // Animate checkout button with red flash
-    if (DOM.checkoutBtn) {
-      DOM.checkoutBtn.classList.remove('error-flash');
-      void DOM.checkoutBtn.offsetWidth;
-      DOM.checkoutBtn.classList.add('error-flash');
-      setTimeout(() => {
-        DOM.checkoutBtn.classList.remove('error-flash');
-      }, 600);
-    }
-    state.checkoutInProgress = false; // Reset on validation error
-    return;
+    state.paymentMethod = 'card';
   }
 
   // Set loading state
@@ -13562,6 +16171,31 @@ async function handleCheckout() {
           shippingAddress.country = country; // Always DK
         }
         
+        // Get privacy/terms consent timestamp for acceptedRegistrationTerms
+        // Use timestamp from localStorage if available, otherwise use current time
+        let acceptedRegistrationTerms = null;
+        if (payload.consent?.privacy || payload.consent?.terms) {
+          try {
+            const privacyTimestamp = localStorage.getItem('boulders_privacy_consent_timestamp');
+            const termsTimestamp = localStorage.getItem('boulders_terms_consent_timestamp');
+            // Use the earliest timestamp if both are present, otherwise use whichever is available
+            if (privacyTimestamp && termsTimestamp) {
+              acceptedRegistrationTerms = privacyTimestamp < termsTimestamp ? privacyTimestamp : termsTimestamp;
+            } else if (privacyTimestamp) {
+              acceptedRegistrationTerms = privacyTimestamp;
+            } else if (termsTimestamp) {
+              acceptedRegistrationTerms = termsTimestamp;
+            } else {
+              // Fallback: use current timestamp if consent is checked but no timestamp stored
+              acceptedRegistrationTerms = new Date().toISOString();
+            }
+            console.log('[checkout] Using acceptedRegistrationTerms timestamp:', acceptedRegistrationTerms);
+          } catch (e) {
+            console.warn('[checkout] Could not get consent timestamp from localStorage, using current time:', e);
+            acceptedRegistrationTerms = new Date().toISOString();
+          }
+        }
+        
         const customerData = {
           email: payload.customer?.email,
           firstName: payload.customer?.firstName,
@@ -13578,6 +16212,10 @@ async function handleCheckout() {
           customerType: 1, // Required by API - numeric ID (typically 1 = Individual customer type)
           // Include marketing email consent - API field: allowMassSendEmail
           ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
+          // Include SMS consent - API field: allowMassSendSms
+          ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
+          // Include registration terms acceptance timestamp (required by API)
+          ...(acceptedRegistrationTerms && { acceptedRegistrationTerms }),
         };
         
         // Also include phone and phoneCountryCode for backward compatibility
@@ -13594,6 +16232,9 @@ async function handleCheckout() {
         console.log('[checkout] Customer data before cleanup:', JSON.stringify(customerData, null, 2));
         if (customerData.allowMassSendEmail !== undefined) {
           console.log('[checkout] Marketing consent (allowMassSendEmail):', customerData.allowMassSendEmail);
+        }
+        if (customerData.allowMassSendSms !== undefined) {
+          console.log('[checkout] SMS consent (allowMassSendSms):', customerData.allowMassSendSms);
         }
         
         // Remove undefined/null values (but keep empty strings for now to debug)
@@ -13618,29 +16259,7 @@ async function handleCheckout() {
             }
             // Skip account creation and proceed
           } else {
-            // Check if email was already used to create an account
-            if (state.createdEmails.has(email)) {
-              throw new Error('An account with this email address has already been created. Please log in instead.');
-            }
-            
-            // Check localStorage
-            try {
-              const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
-              if (storedEmails.includes(email)) {
-                throw new Error('An account with this email address already exists. Please log in instead.');
-              }
-            } catch (e) {
-              console.warn('[checkout] Could not check localStorage:', e);
-            }
-            
-            // Note: We don't check via login because the API returns INVALID_CREDENTIALS 
-            // for both "account doesn't exist" and "wrong password" for security reasons.
-            // We rely on:
-            // 1. Session tracking (state.createdEmails)
-            // 2. localStorage tracking
-            // 3. API duplicate detection (which will catch it during account creation)
-            console.log('[checkout] Proceeding with account creation. Duplicate detection will be handled by API.');
-            
+            console.log('[checkout] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
             customer = await authAPI.createCustomer(customerData);
             
             // Track this email as used
@@ -13693,6 +16312,11 @@ async function handleCheckout() {
             syncAuthenticatedCustomerState(metadata.username, metadata.email);
             hasTokens = true;
             console.log('[checkout] ✅ Tokens saved from customer creation response');
+            
+            // Dispatch event to notify React components
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('auth-state-changed'));
+            }
           }
         } else if (customer?.data?.accessToken && customer?.data?.refreshToken) {
           // Check if tokens are nested in data object
@@ -13706,6 +16330,11 @@ async function handleCheckout() {
             syncAuthenticatedCustomerState(metadata.username, metadata.email);
             hasTokens = true;
             console.log('[checkout] ✅ Tokens saved from customer creation response (nested in data)');
+            
+            // Dispatch event to notify React components
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event('auth-state-changed'));
+            }
           }
         }
         
@@ -13815,35 +16444,69 @@ async function handleCheckout() {
         }
       } catch (error) {
         console.error('[checkout] Customer creation failed:', error);
-        
-        // Handle duplicate email error specifically
+        let duplicateResolvedWithLogin = false;
+
+        // Handle duplicate email error: try login with provided credentials and continue on success
         if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
-          const email = payload.customer?.email?.trim() || '';
-          const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
-          showToast(duplicateMessage, 'error');
-          
-          // Highlight the email field
-          const emailInput = document.getElementById('email');
-          if (emailInput) {
-            emailInput.closest('.form-group')?.classList.add('error');
-          }
-          
-          // Switch to login view and populate email field
-          if (email) {
-            switchAuthMode('login', email);
+          const emailVal = (payload.customer?.email?.trim() || '').toLowerCase();
+          const password = payload.customer?.password || customerData?.password;
+          if (emailVal && password) {
+            try {
+              await authAPI.login(emailVal, password, { saveTokens: true });
+              await syncAuthenticatedCustomerState();
+              customerId = state.customerId || getTokenMetadata()?.username || getTokenMetadata()?.userName;
+              if (customerId) state.customerId = String(customerId);
+              try {
+                sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
+                  id: customerId,
+                  firstName: payload.customer?.firstName,
+                  lastName: payload.customer?.lastName,
+                  email: payload.customer?.email,
+                  primaryGym: payload.customer?.primaryGym,
+                }));
+              } catch (e) {
+                console.warn('[checkout] Could not save customer to sessionStorage:', e);
+              }
+              await ensureOrderCreated('profile-create');
+              await ensureSubscriptionAttached('profile-create');
+              duplicateResolvedWithLogin = true;
+            } catch (loginErr) {
+              const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+              showToast(duplicateMessage, 'error');
+              const emailInput = document.getElementById('email');
+              if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+              if (emailVal) switchAuthMode('login', emailVal);
+              else switchAuthMode('login');
+              setCheckoutLoadingState(false);
+              state.checkoutInProgress = false;
+              return;
+            }
           } else {
-            switchAuthMode('login');
+            const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+            showToast(duplicateMessage, 'error');
+            const emailInput = document.getElementById('email');
+            if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+            if (emailVal) switchAuthMode('login', emailVal);
+            else switchAuthMode('login');
+            setCheckoutLoadingState(false);
+            state.checkoutInProgress = false;
+            return;
           }
-          
+        }
+
+        if (!duplicateResolvedWithLogin) {
+          // Extract and highlight error fields
+          const errorFields = extractErrorFields(error);
+          errorFields.forEach(({ fieldId }) => {
+            if (fieldId) {
+              highlightFieldError(fieldId, false);
+            }
+          });
+          showToast(getErrorMessage(error, 'Customer creation'), 'error');
           setCheckoutLoadingState(false);
           state.checkoutInProgress = false;
           return;
         }
-        
-        showToast(getErrorMessage(error, 'Customer creation'), 'error');
-        setCheckoutLoadingState(false);
-        state.checkoutInProgress = false;
-        return;
       }
     } else {
       // User is logged in, get customer ID from token or state
@@ -13868,6 +16531,8 @@ async function handleCheckout() {
           cartItems: state.cartItems || [],
           totals: state.totals,
           selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
+          selectedProductType: state.selectedProductType, // Store product type for restoration
+          selectedProductId: state.selectedProductId, // Store product ID for restoration
         }));
       } catch (e) {
         console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -13882,6 +16547,7 @@ async function handleCheckout() {
 
     // Step 3: Add items to order and generate payment link
     // Backend requirement: Generate Payment Link Card immediately after subscription is added to cart
+    // Note: We do not use Assently or any separate e-signature step. Checkout goes straight to payment.
     let paymentLink = null;
     
     try {
@@ -14136,7 +16802,242 @@ async function handleCheckout() {
             }
           }
           
-          // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied
+          // CRITICAL: Add add-ons/articles BEFORE generating payment link
+          // This ensures the order total includes addons when payment link is generated
+          // Payment link API reads order.price.amount, so addons must be added first
+          // CRITICAL: Link addons to subscription using additionTo field
+          if (state.addonIds && state.addonIds.size > 0) {
+            console.log('[checkout] ===== ADDING ADDONS BEFORE PAYMENT LINK =====');
+            console.log('[checkout] Adding', state.addonIds.size, 'addon(s) to order before payment link generation');
+            
+            // CRITICAL: Verify subscription item ID exists in current order before using it
+            let validSubscriptionItemId = state.subscriptionItemId;
+            if (!validSubscriptionItemId || validSubscriptionItemId === null) {
+              console.warn('[checkout] ⚠️ Subscription item ID is missing, fetching order to get current subscription item ID...');
+              try {
+                const currentOrder = await orderAPI.getOrder(state.orderId);
+                const subscriptionItem = currentOrder?.subscriptionItems?.[0];
+                if (subscriptionItem?.id) {
+                  validSubscriptionItemId = subscriptionItem.id;
+                  state.subscriptionItemId = validSubscriptionItemId;
+                  console.log('[checkout] ✅ Retrieved subscription item ID from order:', validSubscriptionItemId);
+                } else {
+                  console.error('[checkout] ❌ No subscription item found in order - cannot link addons');
+                  throw new Error('No subscription item found in order - cannot add addons with additionTo link');
+                }
+              } catch (error) {
+                console.error('[checkout] ❌ Failed to fetch order to verify subscription item ID:', error);
+                throw new Error(`Cannot verify subscription item ID: ${error.message}`);
+              }
+            } else {
+              // Verify the subscription item ID actually exists in the order
+              try {
+                const currentOrder = await orderAPI.getOrder(state.orderId);
+                const subscriptionItemExists = currentOrder?.subscriptionItems?.some(
+                  item => item.id === validSubscriptionItemId
+                );
+                if (!subscriptionItemExists) {
+                  console.warn('[checkout] ⚠️ Stored subscription item ID not found in order, fetching current ID...');
+                  const subscriptionItem = currentOrder?.subscriptionItems?.[0];
+                  if (subscriptionItem?.id) {
+                    validSubscriptionItemId = subscriptionItem.id;
+                    state.subscriptionItemId = validSubscriptionItemId;
+                    console.log('[checkout] ✅ Updated subscription item ID to:', validSubscriptionItemId);
+                  } else {
+                    console.error('[checkout] ❌ No subscription item found in order - cannot link addons');
+                    throw new Error('No subscription item found in order - cannot add addons with additionTo link');
+                  }
+                } else {
+                  console.log('[checkout] ✅ Verified subscription item ID exists in order:', validSubscriptionItemId);
+                }
+              } catch (error) {
+                console.error('[checkout] ❌ Failed to verify subscription item ID:', error);
+                // Don't throw - try to continue with stored ID, but log the warning
+                console.warn('[checkout] ⚠️ Continuing with stored subscription item ID, but it may be invalid');
+              }
+            }
+            
+            console.log('[checkout] Subscription item ID for linking:', validSubscriptionItemId);
+            
+            const addonIdsArray = Array.from(state.addonIds);
+            const addedAddonIds = [];
+            
+            for (const addonId of addonIdsArray) {
+              try {
+                // Determine if addon is a value card or article
+                // CRITICAL: Check if product ID exists in valueCards array (most reliable method)
+                // Value cards are loaded separately via /api/products/valuecards endpoint
+                const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+                const addon = findAddon(addonId);
+                
+                // Primary method: Check if product ID exists in valueCards (both regular and campaign)
+                // This is the most reliable since value cards come from a different API endpoint
+                const allValueCards = [
+                  ...(state.valueCards || []),
+                  ...(state.campaignValueCards || [])
+                ];
+                const isInValueCards = allValueCards.some(vc => {
+                  const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+                  return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+                });
+                
+                // Also check allRawProducts (includes value cards before filtering)
+                const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+                  const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+                  return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
+                         (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || 
+                          // Check if it came from valueCards endpoint by checking if it's not a subscription
+                          (!p.priceWithInterval && !p.subscriptionInterval));
+                });
+                
+                // Secondary method: Check productType field if available
+                const hasValueCardType = addon && (
+                  addon.productType === 'VALUE_CARD' ||
+                  addon.productType === 'VALUECARD' ||
+                  (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
+                );
+                
+                // Tertiary method: Check if it's from valueCards API endpoint (has value card specific fields)
+                const hasValueCardFields = addon && (
+                  addon.valueCardType !== undefined ||
+                  addon.validUntil !== undefined ||
+                  (addon.product && addon.product.valueCardType !== undefined)
+                );
+                
+                const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+                
+                console.log(`[checkout] Addon ${addonId} type detection:`, {
+                  addonId,
+                  numericId,
+                  isInValueCards,
+                  isInRawValueCards,
+                  hasValueCardType,
+                  hasValueCardFields,
+                  productType: addon?.productType || addon?.product?.productType,
+                  isValueCard,
+                  valueCardsCount: state.valueCards?.length || 0,
+                  valueCardIds: state.valueCards?.map(vc => vc.id) || [],
+                  allRawProductsCount: state.allRawProducts?.length || 0
+                });
+                
+                if (isValueCard) {
+                  // Add as value card with additionTo link. Pass amount (cents) so API FIELD_MANDATORY is satisfied.
+                  let amountCents = getAddonPriceInCents(addon);
+                  if (amountCents <= 0) {
+                    const allVc = [...(state.valueCards || []), ...(state.campaignValueCards || [])];
+                    const vcProduct = allVc.find(p => p.id === numericId || String(p.id) === String(addonId));
+                    const priceObj = vcProduct?.price;
+                    if (priceObj != null) {
+                      amountCents = typeof priceObj === 'object' && 'amount' in priceObj ? Math.round(Number(priceObj.amount)) : Math.round(Number(priceObj));
+                    }
+                    if (vcProduct?.amount != null) amountCents = Math.round(Number(vcProduct.amount));
+                  }
+                  console.log(`[checkout] Adding addon ${addonId} as value card (linked to subscription item ${validSubscriptionItemId}), amount: ${amountCents} cents`);
+                  await orderAPI.addValueCardItem(state.orderId, numericId, 1, validSubscriptionItemId, amountCents > 0 ? amountCents : null);
+                } else {
+                  // Add as article with additionTo link
+                  console.log(`[checkout] Adding addon ${addonId} as article (linked to subscription item ${validSubscriptionItemId})`);
+                  await orderAPI.addArticleItem(state.orderId, numericId, validSubscriptionItemId);
+                }
+                addedAddonIds.push(addonId);
+                console.log(`[checkout] ✅ Add-on added: ${addonId}`);
+              } catch (error) {
+                console.error(`[checkout] ❌ Failed to add add-on ${addonId}:`, error);
+                
+                // Check if error is due to invalid additionTo (ID_NOT_FOUND)
+                const errorMessage = error.message || JSON.stringify(error);
+                const isInvalidAdditionTo = errorMessage.includes('ID_NOT_FOUND') || 
+                                           errorMessage.includes('additionTo') ||
+                                           (error.payload && typeof error.payload === 'string' && error.payload.includes('ID_NOT_FOUND'));
+                
+                if (isInvalidAdditionTo) {
+                  console.error(`[checkout] ❌ CRITICAL: Invalid subscription item ID for addon ${addonId}`);
+                  console.error(`[checkout] ❌ This means the subscription item doesn't exist in the order`);
+                  console.error(`[checkout] ❌ Cannot proceed - payment window would show incorrect total`);
+                  throw new Error(`Failed to link addon ${addonId} to subscription: subscription item not found in order. Please try selecting your membership again.`);
+                }
+                
+                // Check if order is locked (403 Forbidden)
+                const isOrderLocked = error.status === 403 || errorMessage.includes('locked') || errorMessage.includes('Forbidden');
+                if (isOrderLocked) {
+                  console.error(`[checkout] ❌ CRITICAL: Order is locked (403 Forbidden) - cannot add addon ${addonId}`);
+                  console.error(`[checkout] ❌ Cannot proceed - payment window would show incorrect total`);
+                  throw new Error(`Order is locked and cannot be modified. Please start a new checkout.`);
+                }
+                
+                // For other errors, still throw to prevent incorrect payment
+                console.error(`[checkout] ❌ BLOCKING PAYMENT - Addon ${addonId} failed to add`);
+                throw new Error(`Failed to add addon ${addonId}: ${error.message || 'Unknown error'}`);
+              }
+            }
+            
+            // Refresh order and verify addons are actually in the order
+            let addonsVerified = false;
+            let attempts = 0;
+            const maxAttempts = 5;
+            
+            while (!addonsVerified && attempts < maxAttempts && addedAddonIds.length > 0) {
+              attempts++;
+              try {
+                console.log(`[checkout] Verifying addons in order (attempt ${attempts}/${maxAttempts})...`);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for backend to process
+                
+                const updatedOrder = await orderAPI.getOrder(state.orderId);
+                state.fullOrder = updatedOrder;
+                
+                // Check both article items and value card items (addons can be either type)
+                const articleItems = updatedOrder?.articleItems || [];
+                const valueCardItems = updatedOrder?.valueCardItems || [];
+                const articleProductIds = articleItems.map(item => item.product?.id).filter(Boolean);
+                const valueCardProductIds = valueCardItems.map(item => item.product?.id).filter(Boolean);
+                const allProductIds = [...articleProductIds, ...valueCardProductIds];
+                
+                // Check if all added addons are in the order (either as articles or value cards)
+                const allAddonsPresent = addedAddonIds.every(id => 
+                  allProductIds.includes(Number(id)) || allProductIds.includes(String(id))
+                );
+                
+                if (allAddonsPresent) {
+                  addonsVerified = true;
+                  const orderTotalDKK = updatedOrder?.price?.amount 
+                    ? (typeof updatedOrder.price.amount === 'object' 
+                        ? updatedOrder.price.amount.amount / 100 
+                        : updatedOrder.price.amount / 100)
+                    : 0;
+                  console.log('[checkout] ✅ All addons verified in order');
+                  console.log('[checkout] ✅ Order total with addons:', orderTotalDKK, 'DKK');
+                  console.log('[checkout] ✅ Article items in order:', articleItems.length);
+                  console.log('[checkout] ✅ Value card items in order:', valueCardItems.length);
+                  
+                  // CRITICAL: Update state.fullOrder with the order that includes addons
+                  // This ensures payment overview and payment link use the correct price
+                  state.fullOrder = updatedOrder;
+                  console.log('[checkout] ✅ Updated state.fullOrder with order containing addons');
+                } else {
+                  console.warn(`[checkout] ⚠️ Addons not yet in order (attempt ${attempts}/${maxAttempts})`);
+                  console.warn('[checkout] Expected addon IDs:', addedAddonIds);
+                  console.warn('[checkout] Article product IDs in order:', articleProductIds);
+                  console.warn('[checkout] Value card product IDs in order:', valueCardProductIds);
+                }
+              } catch (refreshError) {
+                console.warn(`[checkout] Could not verify addons (attempt ${attempts}):`, refreshError);
+              }
+            }
+            
+            if (!addonsVerified && addedAddonIds.length > 0) {
+              console.error('[checkout] ❌ CRITICAL: Could not verify addons are in order after', maxAttempts, 'attempts');
+              console.error('[checkout] ❌ Payment window will show incorrect total without addons!');
+              console.error('[checkout] ❌ Expected addons:', addedAddonIds);
+              
+              // CRITICAL: If addons failed to add, we must prevent payment link generation
+              // The payment window will show incorrect price if addons aren't in the order
+              const errorMessage = `Failed to add addons to order. Payment cannot proceed with incorrect total. Please try again or contact support.`;
+              console.error('[checkout] ❌ BLOCKING PAYMENT LINK GENERATION - Addons not in order');
+              throw new Error(errorMessage);
+            }
+          }
+          
+          // CRITICAL: Generate Payment Link Card immediately after subscription is added AND coupon is applied AND addons are added
           // The order should now have the discount applied, so payment link will show discounted price
           // Backend requirement: "Generate Payment Link Card" request must be made when subscription is added to cart
           // This is what triggers the payment flow according to backend team
@@ -14146,10 +17047,7 @@ async function handleCheckout() {
           console.log('[checkout] Payment Method:', state.paymentMethod);
           console.log('[checkout] Business Unit:', state.selectedBusinessUnit);
           
-          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const baseUrl = isLocal
-            ? 'https://join.boulders.dk'
-            : window.location.origin.replace('http://', 'https://');
+          const baseUrl = getReturnUrlBase();
           const returnUrl = `${baseUrl}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
           console.log('[checkout] Return URL:', returnUrl);
           
@@ -14164,51 +17062,115 @@ async function handleCheckout() {
           // This is our last chance to fix backend pricing bugs before payment window shows wrong price
           try {
             console.log('[checkout] ===== FINAL ORDER PRICE VERIFICATION BEFORE PAYMENT LINK =====');
-            // Wait a bit to ensure backend has fully processed everything
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Wait a bit to ensure backend has fully processed everything (including addons)
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Increased wait time for addons to be processed
             
             let orderBeforePayment = await orderAPI.getOrder(state.orderId);
             console.log('[checkout] Initial order fetch:', {
               orderId: orderBeforePayment?.id,
               orderPrice: orderBeforePayment?.price?.amount,
               orderPriceDKK: orderBeforePayment?.price?.amount ? orderBeforePayment.price.amount / 100 : null,
-              hasSubscriptionItems: !!orderBeforePayment?.subscriptionItems?.length
+              hasSubscriptionItems: !!orderBeforePayment?.subscriptionItems?.length,
+              hasArticleItems: !!orderBeforePayment?.articleItems?.length,
+              hasValueCardItems: !!orderBeforePayment?.valueCardItems?.length,
+              articleItemsCount: orderBeforePayment?.articleItems?.length || 0,
+              valueCardItemsCount: orderBeforePayment?.valueCardItems?.length || 0,
+              articleItems: orderBeforePayment?.articleItems?.map(item => ({
+                id: item.id,
+                productId: item.product?.id,
+                productName: item.product?.name,
+                price: item.price?.amount,
+                additionTo: item.addition?.parentItemId
+              })) || [],
+              valueCardItems: orderBeforePayment?.valueCardItems?.map(item => ({
+                id: item.id,
+                productId: item.product?.id,
+                productName: item.product?.name,
+                price: item.price?.amount,
+                additionTo: item.addition?.parentItemId
+              })) || []
             });
+            
+            // Verify addons are actually in the order (check both articles and value cards)
+            if (state.addonIds && state.addonIds.size > 0) {
+              const addonIdsArray = Array.from(state.addonIds);
+              const articleItems = orderBeforePayment?.articleItems || [];
+              const valueCardItems = orderBeforePayment?.valueCardItems || [];
+              const articleProductIds = articleItems.map(item => item.product?.id).filter(Boolean);
+              const valueCardProductIds = valueCardItems.map(item => item.product?.id).filter(Boolean);
+              const allProductIds = [...articleProductIds, ...valueCardProductIds];
+              
+              console.log('[checkout] Addon verification:', {
+                expectedAddonIds: addonIdsArray,
+                articleProductIdsInOrder: articleProductIds,
+                valueCardProductIdsInOrder: valueCardProductIds,
+                allProductIdsInOrder: allProductIds,
+                allAddonsInOrder: addonIdsArray.every(id => allProductIds.includes(Number(id)) || allProductIds.includes(String(id)))
+              });
+              
+              if (!addonIdsArray.every(id => allProductIds.includes(Number(id)) || allProductIds.includes(String(id)))) {
+                console.error('[checkout] ❌ CRITICAL: Not all addons are in the order!');
+                console.error('[checkout] ❌ Expected addons:', addonIdsArray);
+                console.error('[checkout] ❌ Article addons in order:', articleProductIds);
+                console.error('[checkout] ❌ Value card addons in order:', valueCardProductIds);
+                console.error('[checkout] ❌ Payment window will show incorrect total without addons!');
+              } else {
+                console.log('[checkout] ✅ All addons are present in the order');
+              }
+            }
             
             // Verify pricing is correct for subscription items
             const subscriptionItem = orderBeforePayment?.subscriptionItems?.[0];
             if (subscriptionItem) {
-              const productId = subscriptionItem?.product?.id || state.selectedProductId;
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const startDateStr = today.toISOString().split('T')[0];
-              const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+              const product = subscriptionItem?.product;
+              const productId = product?.id || state.selectedProductId;
+              const productName = product?.name || '';
+              const productLabels = product?.productLabels || product?.labels || [];
+              const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
+                label => label?.name && label.name.toLowerCase() === '15 day pass'
+              );
+              const is15DayPass =
+                state.selectedProductType === '15daypass' ||
+                has15DayPassLabel ||
+                (productName && (
+                  productName.toLowerCase().includes('15 day pass') ||
+                  productName.toLowerCase().includes('15 dages')
+                )) ||
+                (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
+
+              if (is15DayPass) {
+                console.log('[checkout] ✅ Skipping partial-month price verification for 15 day pass');
+              } else {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const startDateStr = getTodayLocalDateString();
+                const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
               
               // Use robust verification method
-              const verification = orderAPI._verifySubscriptionPricing(
-                orderBeforePayment,
-                productId,
-                expectedPrice,
-                today
-              );
+                const verification = orderAPI._verifySubscriptionPricing(
+                  orderBeforePayment,
+                  productId,
+                  expectedPrice,
+                  today
+                );
               
-              console.log('[checkout] Price verification result:', {
-                isCorrect: verification.isCorrect,
-                startDateCorrect: verification.startDateCorrect,
-                priceCorrect: verification.priceCorrect,
-                daysUntilStart: verification.daysUntilStart,
-                orderPriceDKK: verification.orderPriceDKK,
-                expectedPriceDKK: verification.expectedPriceDKK,
-                productId: productId
-              });
+                console.log('[checkout] Price verification result:', {
+                  isCorrect: verification.isCorrect,
+                  startDateCorrect: verification.startDateCorrect,
+                  priceCorrect: verification.priceCorrect,
+                  daysUntilStart: verification.daysUntilStart,
+                  orderPriceDKK: verification.orderPriceDKK,
+                  expectedPriceDKK: verification.expectedPriceDKK,
+                  productId: productId
+                });
               
               // If pricing is incorrect, try to fix it (only if we have permission)
-              if (!verification.isCorrect && subscriptionItem.id) {
-                console.warn('[checkout] ⚠️ ORDER PRICE IS INCORRECT BEFORE PAYMENT LINK GENERATION!');
-                console.warn('[checkout] ⚠️ Backend shows:', verification.orderPriceDKK, 'DKK');
-                console.warn('[checkout] ⚠️ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
-                console.warn('[checkout] ⚠️ Attempting to fix by deleting and re-adding subscription...');
-                console.warn('[checkout] ⚠️ NOTE: This may fail with 403 if order is in a state that prevents modification');
+                if (!verification.isCorrect && subscriptionItem.id && (!verification.priceDifference || verification.priceDifference > 100)) {
+                  console.warn('[checkout] ⚠️ ORDER PRICE IS INCORRECT BEFORE PAYMENT LINK GENERATION!');
+                  console.warn('[checkout] ⚠️ Backend shows:', verification.orderPriceDKK, 'DKK');
+                  console.warn('[checkout] ⚠️ Expected:', verification.expectedPriceDKK || 'N/A', 'DKK');
+                  console.warn('[checkout] ⚠️ Attempting to fix by deleting and re-adding subscription...');
+                  console.warn('[checkout] ⚠️ NOTE: This may fail with 403 if order is in a state that prevents modification');
                 
                 // Try to fix with multiple strategies
                 // Build URL for subscription endpoint
@@ -14219,56 +17181,116 @@ async function handleCheckout() {
                   subscriptionUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${state.orderId}/items/subscriptions`;
                 }
                 
-                const fixedOrder = await orderAPI._fixBackendPricingBug(
-                  state.orderId,
-                  subscriptionUrl,
-                  {
-                    'Accept-Language': getAcceptLanguageHeader(),
-                    'Content-Type': 'application/json',
-                    ...(typeof window.getAccessToken === 'function' && window.getAccessToken() 
-                      ? { 'Authorization': `Bearer ${window.getAccessToken()}` } 
-                      : {}),
-                  },
-                  subscriptionItem.id,
-                  {
-                    subscriptionProduct: productId,
-                    startDate: startDateStr,
-                    ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
-                    ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
-                  },
-                  productId,
-                  expectedPrice,
-                  typeof window.getAccessToken === 'function' ? window.getAccessToken() : null,
-                  today
-                );
-                
-                if (fixedOrder) {
-                  // Verify the fix worked
-                  const fixedVerification = orderAPI._verifySubscriptionPricing(
-                    fixedOrder,
+                  const fixedOrder = await orderAPI._fixBackendPricingBug(
+                    state.orderId,
+                    subscriptionUrl,
+                    {
+                      'Accept-Language': getAcceptLanguageHeader(),
+                      'Content-Type': 'application/json',
+                      ...(typeof window.getAccessToken === 'function' && window.getAccessToken() 
+                        ? { 'Authorization': `Bearer ${window.getAccessToken()}` } 
+                        : {}),
+                    },
+                    subscriptionItem.id,
+                    {
+                      subscriptionProduct: productId,
+                      startDate: startDateStr,
+                      ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
+                      ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
+                    },
                     productId,
                     expectedPrice,
+                    typeof window.getAccessToken === 'function' ? window.getAccessToken() : null,
                     today
                   );
-                  
-                  if (fixedVerification.isCorrect) {
-                    console.log('[checkout] ✅ Successfully fixed order price before payment link generation!');
-                    orderBeforePayment = fixedOrder;
-                  } else {
-                    console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
-                    console.error('[checkout] ❌ This is a backend bug - payment window will show incorrect price');
-                    console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
-                    console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
+                
+                  if (fixedOrder) {
+                    // Verify the fix worked
+                    const fixedVerification = orderAPI._verifySubscriptionPricing(
+                      fixedOrder,
+                      productId,
+                      expectedPrice,
+                      today
+                    );
+                    
+                    if (fixedVerification.isCorrect) {
+                      console.log('[checkout] ✅ Successfully fixed order price before payment link generation!');
+                      orderBeforePayment = fixedOrder;
+                      
+                      // CRITICAL: Update subscription item ID after pricing fix
+                      // The pricing fix deletes and re-adds the subscription item, creating a NEW ID
+                      // We must update state.subscriptionItemId with the new ID, otherwise addons will fail with ID_NOT_FOUND
+                      const newSubscriptionItem = fixedOrder?.subscriptionItems?.[0];
+                      if (newSubscriptionItem?.id) {
+                        const oldSubscriptionItemId = state.subscriptionItemId;
+                        state.subscriptionItemId = newSubscriptionItem.id;
+                        console.log('[checkout] ✅ Updated subscription item ID after pricing fix:', {
+                          oldId: oldSubscriptionItemId,
+                          newId: state.subscriptionItemId
+                        });
+                      } else {
+                        console.warn('[checkout] ⚠️ Fixed order does not have subscription item - cannot update subscriptionItemId');
+                      }
+                      
+                      // Update state.fullOrder with the fixed order
+                      state.fullOrder = fixedOrder;
+                    } else {
+                      console.error('[checkout] ❌ Fix attempt failed - price still incorrect');
+                      console.error('[checkout] ❌ Pricing mismatch detected');
+                      console.error('[checkout] ❌ UI shows calculated price:', verification.expectedPriceDKK, 'DKK');
+                      console.error('[checkout] ❌ Backend order price:', verification.orderPriceDKK, 'DKK');
+                    }
+                    } else {
+                    console.error('[checkout] ❌ All fix strategies failed - cannot modify order (likely 403 Forbidden)');
+                    console.error('[checkout] ❌ Pricing mismatch - cannot fix order (order may be locked)');
+                    console.error('[checkout] ❌ UI shows calculated price:', verification.expectedPriceDKK, 'DKK');
+                    console.error('[checkout] ❌ Backend order price:', verification.orderPriceDKK, 'DKK');
+                    console.error('[checkout] ❌ Product ID:', productId);
                   }
-                } else {
-                  console.error('[checkout] ❌ All fix strategies failed - cannot modify order (likely 403 Forbidden)');
-                  console.error('[checkout] ❌ This is a backend bug - backend ignored startDate parameter');
-                  console.error('[checkout] ❌ UI shows correct calculated price:', verification.expectedPriceDKK, 'DKK');
-                  console.error('[checkout] ❌ Payment window will show backend price:', verification.orderPriceDKK, 'DKK');
-                  console.error('[checkout] ❌ Backend needs to be fixed to respect startDate parameter for productId:', productId);
+                } else if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
+                  console.log('[checkout] ✅ Order price is acceptable - no fix needed');
                 }
-              } else if (verification.isCorrect) {
-                console.log('[checkout] ✅ Order price is correct - no fix needed');
+              }
+            }
+            
+            // CRITICAL: Refresh order one final time before payment link to ensure we have latest price with addons
+            // This is especially important if addons were just added
+            if (state.addonIds && state.addonIds.size > 0) {
+              try {
+                console.log('[checkout] 🔍 Final order refresh before payment link generation...');
+                const finalOrderCheck = await orderAPI.getOrder(state.orderId);
+                state.fullOrder = finalOrderCheck;
+                orderBeforePayment = finalOrderCheck;
+                
+                const finalOrderPriceDKK = finalOrderCheck?.price?.amount 
+                  ? (typeof finalOrderCheck.price.amount === 'object' 
+                      ? finalOrderCheck.price.amount.amount / 100 
+                      : finalOrderCheck.price.amount / 100)
+                  : 0;
+                
+                // Verify addons are in the final order
+                const finalArticleItems = finalOrderCheck?.articleItems || [];
+                const finalValueCardItems = finalOrderCheck?.valueCardItems || [];
+                const finalArticleProductIds = finalArticleItems.map(item => item.product?.id).filter(Boolean);
+                const finalValueCardProductIds = finalValueCardItems.map(item => item.product?.id).filter(Boolean);
+                const finalAllProductIds = [...finalArticleProductIds, ...finalValueCardProductIds];
+                const finalAddonIdsArray = Array.from(state.addonIds);
+                const allAddonsInFinalOrder = finalAddonIdsArray.every(id => 
+                  finalAllProductIds.includes(Number(id)) || finalAllProductIds.includes(String(id))
+                );
+                
+                if (allAddonsInFinalOrder) {
+                  console.log('[checkout] ✅ Final order verification: All addons present');
+                  console.log('[checkout] ✅ Final order price with addons:', finalOrderPriceDKK, 'DKK');
+                } else {
+                  console.error('[checkout] ❌ CRITICAL: Addons missing in final order check!');
+                  console.error('[checkout] ❌ Expected addons:', finalAddonIdsArray);
+                  console.error('[checkout] ❌ Found product IDs:', finalAllProductIds);
+                  throw new Error('Addons are not present in the final order - cannot proceed with payment');
+                }
+              } catch (finalCheckError) {
+                console.error('[checkout] ❌ Error during final order check:', finalCheckError);
+                throw finalCheckError;
               }
             }
             
@@ -14380,6 +17402,28 @@ async function handleCheckout() {
           }
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
+
+          // Report critical payment errors to Sentry
+          captureException(error, {
+            tags: {
+              flow: 'checkout',
+              error_type: 'payment_link_generation',
+            },
+            extra: {
+              orderId: state.fullOrder?.id,
+              subscriptionItems: state.fullOrder?.subscriptionItems,
+            },
+          });
+
+          // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
+          const isProductNotAllowed = error.isProductNotAllowed || 
+                                      (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
+          
+          if (isProductNotAllowed) {
+            // Show modal with options instead of toast
+            showCampaignRejectionModal();
+            return; // Stop checkout flow without throwing error
+          }
           
           // Check if this is a payment link generation error due to backend pricing bug
           const isPaymentLinkError = error.message && error.message.includes('Generate Payment Link Card failed');
@@ -14392,12 +17436,12 @@ async function handleCheckout() {
               const productId = subscriptionItem?.product?.id;
               const today = new Date();
               today.setHours(0, 0, 0, 0);
-              const startDateStr = today.toISOString().split('T')[0];
+              const startDateStr = getTodayLocalDateString();
               const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
               const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
               
-              if (!verification.isCorrect) {
-                console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO BACKEND PRICING BUG');
+              if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
+                console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO PRICING MISMATCH');
                 console.error('[checkout] ❌ Order has incorrect pricing - backend ignored startDate parameter');
                 console.error('[checkout] ❌ This is a backend issue that needs to be fixed on backend side');
                 console.error('[checkout] ❌ Product ID:', productId);
@@ -14406,9 +17450,15 @@ async function handleCheckout() {
                 
                 // Show user-friendly error message
                 showToast(
-                  'Der opstod et problem med betalingslinket på grund af en backend-fejl. Kontakt support hvis problemet fortsætter.',
+                  'Unable to process payment due to a system issue. Please try again in a few moments or contact support.',
                   'error'
                 );
+                
+                // Reset checkout state to allow retry
+                state.checkoutInProgress = false;
+                if (typeof setCheckoutLoadingState === 'function') {
+                  setCheckoutLoadingState(false);
+                }
                 
                 throw new Error(`Payment link generation failed due to backend pricing bug. Order price: ${verification.orderPriceDKK} DKK, Expected: ${verification.expectedPriceDKK || 'N/A'} DKK. Product ID: ${productId}. Backend ignored startDate parameter.`);
               }
@@ -14420,10 +17470,15 @@ async function handleCheckout() {
       }
       
       // Add value cards (punch cards) - add FIRST if no membership, or AFTER payment link if membership exists
+      // CRITICAL: Check if punch cards are already in the order (e.g., from discount flow) to avoid duplicates
       let valueCardAddFailed = false;
       let valueCardError = null;
       
       if (state.valueCardQuantities && state.valueCardQuantities.size > 0) {
+        // Check existing valueCardItems in order to avoid duplicates
+        const existingValueCardItems = state.fullOrder?.valueCardItems || [];
+        const existingProductIds = new Set(existingValueCardItems.map(item => item.product?.id));
+        
         for (const [planId, quantity] of state.valueCardQuantities.entries()) {
           if (quantity > 0) {
             try {
@@ -14432,10 +17487,23 @@ async function handleCheckout() {
                 ? parseInt(planId.replace('punch-', ''), 10)
                 : planId;
               
-              // API doesn't accept quantity in payload - call API once per quantity
-              for (let i = 0; i < quantity; i++) {
+              // Check if this product is already in the order
+              const existingCount = existingValueCardItems.filter(item => item.product?.id === numericProductId).length;
+              const neededCount = quantity;
+              
+              if (existingCount >= neededCount) {
+                console.log(`[checkout] ⚠️ Value card ${planId} (productId: ${numericProductId}) already in order (${existingCount} items, need ${neededCount}) - skipping`);
+                continue;
+              }
+              
+              // Only add the difference
+              const toAdd = neededCount - existingCount;
+              console.log(`[checkout] Adding ${toAdd} value card(s) for ${planId} (${existingCount} already in order, need ${neededCount})`);
+              
+              // API doesn't accept quantity in payload - call API once per quantity needed
+              for (let i = 0; i < toAdd; i++) {
                 await orderAPI.addValueCardItem(state.orderId, numericProductId, 1);
-                console.log(`[checkout] ✅ Value card added: ${planId} (productId: ${numericProductId}) [${i + 1}/${quantity}]`);
+                console.log(`[checkout] ✅ Value card added: ${planId} (productId: ${numericProductId}) [${existingCount + i + 1}/${neededCount}]`);
               }
             } catch (error) {
               valueCardAddFailed = true;
@@ -14463,20 +17531,6 @@ async function handleCheckout() {
         }
       }
       
-      // Add add-ons/articles - can be added after payment link is generated
-      if (state.addonIds && state.addonIds.size > 0) {
-        for (const addonId of state.addonIds) {
-          try {
-            await orderAPI.addArticleItem(state.orderId, addonId);
-            console.log(`[checkout] Add-on added: ${addonId}`);
-          } catch (error) {
-            console.error(`[checkout] Failed to add add-on ${addonId}:`, error);
-            // Don't throw - payment link is already generated, just log the error
-            console.warn(`[checkout] Continuing despite add-on error - payment link already generated`);
-          }
-        }
-      }
-      
       // CRITICAL: Generate payment link if it hasn't been generated yet
       // This handles cases where user only selected punch cards or addons (no membership)
       if (!paymentLink && state.orderId) {
@@ -14491,11 +17545,69 @@ async function handleCheckout() {
         console.log('[checkout] Has Value Cards:', state.valueCardQuantities?.size > 0);
         console.log('[checkout] Has Addons:', state.addonIds?.size > 0);
         
+        // CRITICAL: Add addons BEFORE generating payment link for non-membership orders
+        // This ensures the order total includes addons when payment link is generated
+        // Note: For non-membership orders, additionTo may not be available
+        if (state.addonIds && state.addonIds.size > 0) {
+          console.log('[checkout] Adding', state.addonIds.size, 'addon(s) to order before payment link generation (non-membership)');
+          for (const addonId of state.addonIds) {
+            try {
+              // Determine if addon is a value card or article
+              const addon = findAddon(addonId);
+              const numericId = typeof addonId === 'string' ? parseInt(addonId, 10) : addonId;
+              
+              // Check multiple sources to identify product type (consistent with membership checkout)
+              const isInValueCards = state.valueCards && state.valueCards.some(vc => {
+                const vcId = typeof vc.id === 'string' ? parseInt(vc.id, 10) : vc.id;
+                return vcId === numericId || String(vc.id) === String(addonId) || vc.id === addonId;
+              });
+              
+              // Also check allRawProducts (includes value cards before filtering)
+              const isInRawValueCards = state.allRawProducts && state.allRawProducts.some(p => {
+                const pId = typeof p.id === 'string' ? parseInt(p.id, 10) : p.id;
+                return (pId === numericId || String(p.id) === String(addonId) || p.id === addonId) &&
+                       (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || 
+                        (!p.priceWithInterval && !p.subscriptionInterval));
+              });
+              
+              const hasValueCardType = addon && (
+                addon.productType === 'VALUE_CARD' ||
+                addon.productType === 'VALUECARD' ||
+                (addon.product && (addon.product.productType === 'VALUE_CARD' || addon.product.productType === 'VALUECARD'))
+              );
+              const hasValueCardFields = addon && (
+                addon.valueCardType !== undefined ||
+                addon.validUntil !== undefined ||
+                (addon.product && addon.product.valueCardType !== undefined)
+              );
+              
+              const isValueCard = isInValueCards || isInRawValueCards || hasValueCardType || hasValueCardFields;
+              
+              if (isValueCard) {
+                await orderAPI.addValueCardItem(state.orderId, numericId, 1, null);
+              } else {
+                await orderAPI.addArticleItem(state.orderId, numericId, null);
+              }
+              console.log(`[checkout] ✅ Add-on added: ${addonId}`);
+            } catch (error) {
+              console.error(`[checkout] ❌ Failed to add add-on ${addonId}:`, error);
+              console.warn(`[checkout] ⚠️ Continuing despite add-on error - payment link may not include this addon`);
+            }
+          }
+          
+          // Refresh order to get updated total with addons
+          try {
+            console.log('[checkout] Refreshing order to get updated total with addons...');
+            const updatedOrder = await orderAPI.getOrder(state.orderId);
+            state.fullOrder = updatedOrder;
+            console.log('[checkout] ✅ Order refreshed with addons, new total:', updatedOrder?.price?.amount ? (typeof updatedOrder.price.amount === 'object' ? updatedOrder.price.amount.amount / 100 : updatedOrder.price.amount / 100) : 'N/A', 'DKK');
+          } catch (refreshError) {
+            console.warn('[checkout] Could not refresh order after adding addons:', refreshError);
+          }
+        }
+        
         try {
-          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          const baseUrl = isLocal
-            ? 'https://join.boulders.dk'
-            : window.location.origin.replace('http://', 'https://');
+          const baseUrl = getReturnUrlBase();
           const returnUrl = `${baseUrl}${window.location.pathname}?payment=return&orderId=${state.orderId}`;
           
           if (!state.orderId) {
@@ -14710,7 +17822,7 @@ async function handleCheckout() {
               }
               
               // Show success message
-              showDiscountMessage(`Coupon "${discountCodeToApply}" applied! Discount: ${currencyFormatter.format(discountAmount)}`, 'success');
+              showDiscountMessage(`Coupon "${discountCodeToApply}" applied! Discount: ${formatCurrencyHalfKrone(discountAmount)}`, 'success');
               
               console.log('[checkout] ✅ Coupon applied successfully:', discountCodeToApply, 'Amount:', discountAmount);
             } else {
@@ -14761,7 +17873,19 @@ async function handleCheckout() {
       }
     } catch (error) {
       console.error('[checkout] Failed to add items or generate payment link:', error);
-      showToast(getErrorMessage(error, 'Adding items'), 'error');
+      
+      // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
+      const isProductNotAllowed = error.isProductNotAllowed || 
+                                  (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
+      
+      if (isProductNotAllowed) {
+        // Show modal with options instead of toast
+        showCampaignRejectionModal();
+      } else {
+        // Show error message for actual errors
+        showToast(getErrorMessage(error, 'Adding items'), 'error');
+      }
+      
       setCheckoutLoadingState(false);
       return;
     }
@@ -14794,8 +17918,14 @@ async function handleCheckout() {
     console.log('[checkout] paymentLink truthy?', !!paymentLink);
     console.log('[checkout] state.paymentLink:', state.paymentLink);
     
-    if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
-      // Redirect to payment provider
+    const isAssentlyUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
+    if (paymentLink && isAssentlyUrl(paymentLink)) {
+      console.error('[checkout] ❌ Refusing to redirect to Assently – API returned signature URL instead of payment link');
+      showToast('Unable to open payment. Please try again or contact support.', 'error');
+      state.checkoutInProgress = false;
+      setCheckoutLoadingState(false);
+    } else if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
+      // Redirect to payment provider (never to Assently)
       console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
       console.log('[checkout] Payment link URL:', paymentLink);
       showToast('Redirecting to secure payment...', 'info');
@@ -14827,13 +17957,13 @@ async function handleCheckout() {
       console.error('[checkout] This means the API did not return a valid payment URL');
       console.error('[checkout] The payment provider might be embedded or the API response structure changed');
       
-      // Check if payment link is in state (maybe it was set elsewhere)
-      if (state.paymentLink && (state.paymentLink.startsWith('http://') || state.paymentLink.startsWith('https://'))) {
+      // Check if payment link is in state (maybe it was set elsewhere) – but never use Assently URL
+      const stateLink = state.paymentLink;
+      if (stateLink && (stateLink.startsWith('http://') || stateLink.startsWith('https://')) && !/assently\.com/i.test(stateLink)) {
         console.log('[checkout] Found payment link in state, using that instead');
-        paymentLink = state.paymentLink;
         showToast('Redirecting to secure payment...', 'info');
         setTimeout(() => {
-          window.location.replace(paymentLink);
+          window.location.replace(stateLink);
         }, 500);
       } else {
         // No valid payment link - this is an error
@@ -14857,6 +17987,7 @@ async function handleCheckout() {
     console.error('[checkout] Unexpected error:', error);
     showToast(getErrorMessage(error, 'Checkout'), 'error');
     state.checkoutInProgress = false; // Reset on error
+    updateFAQVisibility(); // Show FAQ again if checkout fails
     setCheckoutLoadingState(false);
   }
 }
@@ -14956,6 +18087,28 @@ function buildOrderSummary(payload, order = null, customer = null) {
   // Build primary gym label - check multiple sources
   const primaryGymValue = customer?.primaryGym || customer?.primary_gym || payload.customer?.primaryGym;
   
+  // Determine product type for the order summary
+  let productType = 'membership'; // default
+  if (state.selectedProductType === 'punch-card') {
+    productType = 'punch-card';
+  } else if (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-')) {
+    productType = '15daypass';
+  } else if (membershipPlanId) {
+    // Check if it's a 15 day pass by checking product labels
+    const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
+    const numericId = membershipPlanId.replace(/^(campaign|membership|15daypass)-/, '');
+    const productId = parseInt(numericId, 10);
+    const foundProduct = allSubscriptions.find(sub => 
+      sub.id === productId || 
+      String(sub.id) === numericId
+    );
+    if (foundProduct?.productLabels?.some(label => 
+      label.name && label.name.toLowerCase() === '15 day pass'
+    )) {
+      productType = '15daypass';
+    }
+  }
+  
   return {
     number: orderNumber,
     date: order?.createdAt ? new Date(order.createdAt) : (order?.created ? new Date(order.created) : now),
@@ -14966,6 +18119,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
     membershipType: membership?.name ?? '—',
     primaryGym: resolveGymLabel(primaryGymValue),
     membershipPrice: state.totals.membershipMonthly,
+    productType: productType, // Store product type in order summary
   };
 }
 
@@ -15039,7 +18193,7 @@ window.verifyOrderPrice = async function(orderId = null) {
     const productId = subscriptionItem?.product?.id;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const startDateStr = today.toISOString().split('T')[0];
+    const startDateStr = getTodayLocalDateString();
     const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
     const verification = orderAPI._verifySubscriptionPricing(order, productId, expectedPrice, today);
     
@@ -15168,35 +18322,13 @@ async function loadOrderForConfirmation(orderId) {
   const urlParams = new URLSearchParams(window.location.search);
   const paymentError = urlParams.get('error');
   const paymentStatus = urlParams.get('status');
+  const receiptId = urlParams.get('receiptid') || urlParams.get('receiptId');
+  const receiptUuid = urlParams.get('receiptuuid') || urlParams.get('receiptUuid');
   
-  if (paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled') {
-    console.warn('[Payment Return] ⚠️ Error detected in URL parameters - payment failed');
-    console.warn('[Payment Return] Error details:', { paymentError, paymentStatus });
-    
-    // Determine failure reason based on error code
-    let failureReason = null;
-    if (paymentError) {
-      const errorCode = parseInt(paymentError, 10);
-      if (!isNaN(errorCode)) {
-        switch (errorCode) {
-          case 205:
-            failureReason = 'Payment was declined by your bank or card issuer.';
-            break;
-          case 401:
-          case 403:
-            failureReason = 'Payment authorization failed. Please try again or use a different payment method.';
-            break;
-          default:
-            failureReason = `Payment failed with error code ${errorCode}. Please try again or contact support.`;
-        }
-      } else if (paymentError.toLowerCase().includes('cancel')) {
-        failureReason = 'Payment was cancelled before completion.';
-      }
-    }
-    
-    showPaymentFailedMessage(null, orderId, failureReason);
-    return; // Don't fetch order or show pending
-  }
+  const hasPaymentErrorParam = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
+  const hasReceiptParam = Boolean(receiptId || receiptUuid);
+  // Note: We no longer extract specific failure reasons since we show a single friendly message
+  // But we still check for payment error params to determine if payment failed
   
   // CRITICAL: Reset payment status flags at start (only if no URL error)
   state.paymentFailed = false;
@@ -15231,6 +18363,7 @@ async function loadOrderForConfirmation(orderId) {
       if (orderData) {
         storedOrder = JSON.parse(orderData);
         if (storedOrder.membershipPlanId) state.membershipPlanId = storedOrder.membershipPlanId;
+        if (storedOrder.subscriptionStartDate != null) state.subscriptionStartDate = storedOrder.subscriptionStartDate;
         if (storedOrder.cartItems) state.cartItems = storedOrder.cartItems;
         if (storedOrder.totals) state.totals = storedOrder.totals;
         if (storedOrder.selectedBusinessUnit) state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
@@ -15276,7 +18409,42 @@ async function loadOrderForConfirmation(orderId) {
           errorString: String(fetchError).substring(0, 200)
         });
         
-        // Use default calm message instead of technical details
+        if (hasReceiptParam && !hasPaymentErrorParam) {
+          console.warn('[Payment Return] ⚠️ Order fetch failed, but receipt present - showing success using stored data');
+
+          const summaryOrder = {
+            id: orderId,
+            orderId,
+            number: orderId,
+            created: new Date().toISOString(),
+            total: storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal ?? 0,
+            totalAmount: storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal ?? 0,
+          };
+
+          const payload = buildCheckoutPayload();
+          const summaryCustomer = storedCustomer || null;
+
+          state.orderId = orderId;
+          state.order = buildOrderSummary(payload, summaryOrder, summaryCustomer);
+          state.paymentConfirmed = true;
+          state.paymentFailed = false;
+          state.paymentPending = false;
+
+          state.currentStep = TOTAL_STEPS;
+          showStep(TOTAL_STEPS);
+          updateStepIndicator();
+          updateNavigationButtons();
+          updateMainSubtitle();
+          renderConfirmationView();
+          return;
+        }
+
+        if (isUnauthorized && !hasPaymentErrorParam) {
+          console.warn('[Payment Return] ⚠️ Order fetch unauthorized without error param - showing pending instead of failed');
+          showPaymentPendingMessage(null, orderId);
+          return;
+        }
+
         console.warn('[Payment Return] ⚠️ INNER CATCH: Calling showPaymentFailedMessage');
         showPaymentFailedMessage(null, orderId, null);
         console.warn('[Payment Return] ✅ showPaymentFailedMessage called from inner catch - returning early');
@@ -15307,6 +18475,12 @@ async function loadOrderForConfirmation(orderId) {
     
     // CRITICAL: Check payment status BEFORE showing any page
     // If payment is clearly not confirmed (leftToPay > 0 and not paid), show pending immediately
+    if (hasPaymentErrorParam && !initialIsPaid) {
+      console.warn('[Payment Return] ⚠️ Payment error param present and payment not confirmed - showing failure');
+      showPaymentFailedMessage(order, orderId, null);
+      return;
+    }
+
     if (initialLeftToPay !== null && initialLeftToPay > 0 && !initialIsPaid) {
       console.warn('[Payment Return] ⚠️ Payment not confirmed on initial fetch - showing pending immediately');
       showPaymentPendingMessage(order, orderId);
@@ -15599,7 +18773,10 @@ async function loadOrderForConfirmation(orderId) {
     updatePaymentOverview();
     
     // GTM: Track purchase event when payment is confirmed
-    if (window.GTM && window.GTM.trackPurchase && state.cartItems && state.cartItems.length > 0) {
+    const purchaseItems = (state.cartItems && state.cartItems.length > 0)
+      ? state.cartItems
+      : (storedOrder?.cartItems || []);
+    if (window.GTM && window.GTM.trackPurchase && purchaseItems.length > 0) {
       try {
         // Get order total - prefer from order object, fallback to cart total
         const purchaseValue = orderTotal || 
@@ -15612,7 +18789,7 @@ async function loadOrderForConfirmation(orderId) {
         
         window.GTM.trackPurchase(
           transactionId,
-          state.cartItems,
+          purchaseItems,
           purchaseValue,
           0, // tax
           0, // shipping
@@ -15621,6 +18798,8 @@ async function loadOrderForConfirmation(orderId) {
       } catch (error) {
         console.warn('[GTM] Error tracking purchase:', error);
       }
+    } else if (window.GTM && window.GTM.trackPurchase) {
+      console.warn('[GTM] purchase not tracked: missing cart items after payment return');
     }
     
     // Only render confirmation view if payment is confirmed
@@ -15658,11 +18837,10 @@ async function loadOrderForConfirmation(orderId) {
     // Also show failed for ANY error when returning from payment (safer than showing success)
     if (isUnauthorized || isNotFound || has401InMessage || has404InMessage) {
       console.warn('[Payment Return] ⚠️ DETECTED 401/404 ERROR - Calling showPaymentFailedMessage');
-        const failureReason = null; // Use default calm message instead of technical details
       
       // CRITICAL: Always call showPaymentFailedMessage for 401/404 errors
-      console.warn('[Payment Return] About to call showPaymentFailedMessage with:', { orderId, failureReason });
-      showPaymentFailedMessage(null, orderId, failureReason);
+      console.warn('[Payment Return] About to call showPaymentFailedMessage');
+      showPaymentFailedMessage(null, orderId, null);
       console.warn('[Payment Return] showPaymentFailedMessage called - returning early');
       return; // Don't show success page
     }
@@ -15670,20 +18848,23 @@ async function loadOrderForConfirmation(orderId) {
     // For any other error when returning from payment, also show failed (safer than showing success)
     // This handles cases where error doesn't match 401/404 patterns but still indicates failure
     console.warn('[Payment Return] ⚠️ Unexpected error during payment return - showing payment failed as fallback');
-    console.warn('[Payment Return] About to call showPaymentFailedMessage (fallback)');
-    showPaymentFailedMessage(null, orderId, null); // Use default calm message
+    showPaymentFailedMessage(null, orderId, null);
     console.warn('[Payment Return] showPaymentFailedMessage (fallback) called - returning early');
     return; // Don't show success page or pending message
   }
 }
 
-function showPaymentFailedMessage(order, orderId, reason = null) {
-  console.log('[Payment Failed] Called with:', { orderId, reason, currentStep: state.currentStep });
+async function showPaymentFailedMessage(order, orderId, reason = null) {
+  // reason parameter is kept for backward compatibility but no longer used
+  // All payment failures now show the same friendly message
+  console.log('[Payment Failed] Called with:', { orderId, currentStep: state.currentStep });
   
   // CRITICAL: Restore cart and state from sessionStorage BEFORE showing failure page
   // This ensures cart is populated when user clicks "Try Payment Again"
   try {
     const orderData = sessionStorage.getItem('boulders_checkout_order');
+    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    
     if (orderData) {
       const storedOrder = JSON.parse(orderData);
       console.log('[Payment Failed] Restoring cart and state from sessionStorage:', storedOrder);
@@ -15692,23 +18873,83 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
       if (storedOrder.cartItems) {
         state.cartItems = storedOrder.cartItems;
         console.log('[Payment Failed] ✅ Restored cart items:', state.cartItems.length, 'items');
+        
+        // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
+        // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
+        const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
+        if (punchCardItems.length > 0) {
+          console.log('[Payment Failed] Found punch card items, rebuilding valueCardQuantities');
+          state.valueCardQuantities.clear();
+          punchCardItems.forEach(item => {
+            // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
+            const planId = storedOrder.membershipPlanId || 
+                          (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
+            const quantity = item.quantity || 1;
+            state.valueCardQuantities.set(planId, quantity);
+            console.log('[Payment Failed] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
+          });
+        }
       }
       if (storedOrder.totals) {
         state.totals = { ...state.totals, ...storedOrder.totals };
         console.log('[Payment Failed] ✅ Restored totals:', state.totals);
       }
+      
+      // Restore selectedProductType and selectedProductId if available
+      if (storedOrder.selectedProductType) {
+        state.selectedProductType = storedOrder.selectedProductType;
+        console.log('[Payment Failed] ✅ Restored selectedProductType:', state.selectedProductType);
+      }
+      if (storedOrder.selectedProductId) {
+        state.selectedProductId = storedOrder.selectedProductId;
+        console.log('[Payment Failed] ✅ Restored selectedProductId:', state.selectedProductId);
+      }
+      
       if (storedOrder.membershipPlanId) {
         state.membershipPlanId = storedOrder.membershipPlanId;
         console.log('[Payment Failed] ✅ Restored membershipPlanId:', state.membershipPlanId);
         
-        // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
-        // This ensures updateCartSummary() can rebuild cart correctly
-        if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
-          const productId = storedOrder.membershipPlanId.replace('membership-', '');
-          state.selectedProductId = parseInt(productId, 10) || productId;
-          state.selectedProductType = 'membership';
-          console.log('[Payment Failed] ✅ Derived selectedProductId:', state.selectedProductId, 'selectedProductType:', state.selectedProductType);
+        // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
+        // Handle all formats: campaign-, membership-, 15daypass-, punch-
+        if (!state.selectedProductType || !state.selectedProductId) {
+          if (typeof storedOrder.membershipPlanId === 'string') {
+            if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+              const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+              state.selectedProductId = parseInt(productId, 10) || productId;
+              state.selectedProductType = 'membership';
+              console.log('[Payment Failed] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
+            } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+              const productId = storedOrder.membershipPlanId.replace('membership-', '');
+              state.selectedProductId = parseInt(productId, 10) || productId;
+              state.selectedProductType = 'membership';
+              console.log('[Payment Failed] ✅ Derived selectedProductId from membership:', state.selectedProductId);
+            } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+              const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+              state.selectedProductId = parseInt(productId, 10) || productId;
+              state.selectedProductType = 'membership';
+              console.log('[Payment Failed] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+            } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
+                       storedOrder.membershipPlanId === 'adult-punch' || 
+                       storedOrder.membershipPlanId === 'junior-punch') {
+              // For punch cards, extract productId from membershipPlanId
+              if (storedOrder.membershipPlanId.startsWith('punch-')) {
+                const productId = storedOrder.membershipPlanId.replace('punch-', '');
+                state.selectedProductId = parseInt(productId, 10) || productId;
+              } else {
+                // For adult-punch/junior-punch, we need to find the productId from cart items
+                const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
+                if (punchCardItem) {
+                  state.selectedProductId = punchCardItem.productId || punchCardItem.id;
+                }
+              }
+              state.selectedProductType = 'punch-card';
+              console.log('[Payment Failed] ✅ Derived selectedProductId from punch card:', state.selectedProductId);
+            }
+          }
         }
+      }
+      if (storedOrder.subscriptionStartDate != null) {
+        state.subscriptionStartDate = storedOrder.subscriptionStartDate;
       }
       if (storedOrder.selectedBusinessUnit) {
         state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
@@ -15719,8 +18960,63 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
         console.log('[Payment Failed] ✅ Restored orderId:', state.orderId);
       }
     }
+    
+    // CRITICAL: Restore customer profile data to show full profile info
+    if (customerData) {
+      try {
+        const storedCustomer = JSON.parse(customerData);
+        state.customerId = storedCustomer.id;
+        console.log('[Payment Failed] Restored customer ID from sessionStorage:', storedCustomer.id);
+        
+        // Fetch full customer profile to display all fields (if we have a customer ID)
+        // Try to fetch even if authentication status is unclear, as we might have valid tokens
+        if (storedCustomer.id) {
+          try {
+            const customerProfile = await authAPI.getCustomer(storedCustomer.id);
+            state.authenticatedCustomer = customerProfile;
+            // Also set authenticatedEmail for refreshLoginUI
+            if (customerProfile?.email) {
+              state.authenticatedEmail = customerProfile.email;
+            }
+            console.log('[Payment Failed] ✅ Loaded full customer profile:', customerProfile);
+            // Refresh UI after loading full profile
+            refreshLoginUI();
+          } catch (profileError) {
+            console.warn('[Payment Failed] Could not fetch full customer profile, using stored data:', profileError);
+            // Fallback: Use stored customer data if available
+            if (storedCustomer.firstName || storedCustomer.lastName || storedCustomer.email) {
+              state.authenticatedCustomer = {
+                id: storedCustomer.id,
+                firstName: storedCustomer.firstName,
+                lastName: storedCustomer.lastName,
+                email: storedCustomer.email,
+                // Note: Full profile might not have all fields, but we'll try to use what we have
+              };
+              // Also set authenticatedEmail for refreshLoginUI
+              if (storedCustomer.email) {
+                state.authenticatedEmail = storedCustomer.email;
+              }
+            }
+            // Refresh UI with fallback data
+            refreshLoginUI();
+          }
+        } else {
+          // No customer ID - refresh UI with what we have
+          refreshLoginUI();
+        }
+      } catch (e) {
+        console.warn('[Payment Failed] Could not parse customer data from sessionStorage:', e);
+        // Still refresh UI even if customer data parse failed
+        refreshLoginUI();
+      }
+    } else {
+      // No customer data in sessionStorage - refresh UI with current state
+      refreshLoginUI();
+    }
   } catch (e) {
     console.warn('[Payment Failed] Could not restore cart from sessionStorage:', e);
+    // Still refresh UI even if restore failed
+    refreshLoginUI();
   }
   
   // CRITICAL: Mark payment as failed FIRST to prevent success page from rendering
@@ -15739,174 +19035,382 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
   console.log('[Payment Failed] Navigating to confirmation page...');
   state.currentStep = TOTAL_STEPS;
   
-  // Show step 5 panel
+  // Show step 5 panel immediately - hide all other steps first to prevent flash
   const step5Panel = document.getElementById('step-5');
   if (step5Panel) {
-    // Mark step 5 panel as payment failed for CSS targeting
-    step5Panel.setAttribute('data-payment-failed', 'true');
-    // Hide all other panels first
+    // CRITICAL: Hide all other panels FIRST to prevent any flash of step 1
     DOM.stepPanels.forEach((panel, index) => {
       if (index + 1 === TOTAL_STEPS) {
+        // This is step 5 - show it
         panel.classList.add('active');
         panel.style.display = 'block';
         panel.style.visibility = 'visible';
         panel.style.opacity = '1';
       } else {
+        // Hide all other steps immediately
         panel.classList.remove('active');
-        if (panel.id !== 'step-3') {
-          panel.style.display = 'none';
-        }
+        panel.style.display = 'none';
+        panel.style.visibility = 'hidden';
+        panel.style.opacity = '0';
       }
     });
     
+    // Mark step 5 panel as payment failed for CSS targeting
+    step5Panel.setAttribute('data-payment-failed', 'true');
+    
+    // Add class to step-content to adjust layout when payment fails
+    const stepContent = document.querySelector('.step-content');
+    if (stepContent) {
+      stepContent.classList.remove('success-page-active'); // Remove success page class if present
+      stepContent.classList.add('payment-failed-active');
+      stepContent.style.flex = 'none';
+      stepContent.style.minHeight = 'auto';
+      stepContent.style.height = 'auto';
+    }
+    
     // IMMEDIATELY modify the HTML BEFORE it's visible to user
+    const confirmationHeader = step5Panel.querySelector('.confirmation-header');
+    if (!confirmationHeader) {
+      console.error('[Payment Failed] Confirmation header not found');
+      return;
+    }
+    
+    // Hide success elements
     const successTitle = step5Panel.querySelector('.success-title');
     const successMessage = step5Panel.querySelector('.success-message');
     const successBadge = step5Panel.querySelector('.success-badge');
     
     if (successTitle) {
-      // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
-      successTitle.removeAttribute('data-i18n-key');
-      successTitle.textContent = 'Payment Couldn\'t Be Completed';
-      successTitle.style.color = '#f59e0b'; // Use amber/orange instead of red for less alarming tone
-      console.log('[Payment Failed] ✅ Title set to calm message');
+      successTitle.style.display = 'none';
+    }
+    if (successMessage) {
+      successMessage.style.display = 'none';
+    }
+    if (successBadge) {
+      successBadge.style.display = 'none';
     }
     
-    if (successMessage) {
-      // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
-      successMessage.removeAttribute('data-i18n-key');
-      const displayOrderId = orderId || order?.number || order?.id || 'N/A';
-      
-      // Determine failure reason and provide specific guidance
-      let specificGuidance = '';
-      
-      // If a specific reason was provided (e.g., from URL error code), use it directly
-      if (reason && reason.trim() && !reason.toLowerCase().includes('payment was not completed')) {
-        specificGuidance = reason;
-      } else {
-        // Otherwise, try to infer from reason string patterns
-        const reasonLower = String(reason || '').toLowerCase();
-        
-        if (reasonLower.includes('declined') || reasonLower.includes('bank') || reasonLower.includes('card issuer')) {
-          specificGuidance = 'Payment was declined by your bank or card issuer.';
-        } else if (reasonLower.includes('cancelled') || reasonLower.includes('canceled')) {
-          specificGuidance = 'You closed the payment window before completing the transaction.';
-        } else if (reasonLower.includes('unauthorized') || reasonLower.includes('401') || reasonLower.includes('authorization failed')) {
-          specificGuidance = 'The payment session expired or was cancelled.';
-        } else if (reasonLower.includes('not found') || reasonLower.includes('404')) {
-          specificGuidance = 'The order could not be found. This may happen if the payment window was open for too long.';
-        } else {
-          specificGuidance = 'The payment process was interrupted before completion.';
-        }
-      }
-      
-      // Build clear, actionable message with status, reason, and next steps
-      successMessage.innerHTML = `
-        <div style="text-align: left; max-width: 600px; margin: 0 auto;">
-          <!-- Status Explanation -->
-          <div style="margin-bottom: 24px; padding: 16px; background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; border-radius: 4px;">
-            <strong style="color: #f59e0b; display: block; margin-bottom: 8px; font-size: 16px;">Status: Payment Not Completed</strong>
-            <p style="color: #d1d5db; margin: 0; line-height: 1.6;">${specificGuidance}</p>
+    // Get or create payment failed elements
+    let paymentFailedBadge = confirmationHeader.querySelector('.payment-failed-badge');
+    let paymentFailedTitle = confirmationHeader.querySelector('.payment-failed-title');
+    let quickStatus = confirmationHeader.querySelector('.quick-status');
+    let reassuranceBar = confirmationHeader.querySelector('.reassurance-bar');
+    let failureActions = confirmationHeader.querySelector('.failure-actions');
+    
+    const displayOrderId = orderId || order?.number || order?.id || 'N/A';
+    
+    // Use a single friendly message for all payment failures
+    const statusText = 'Payment Error';
+    const statusDetail = 'Something went wrong with your payment. Please try again.';
+    
+    // Create payment failed badge
+    if (!paymentFailedBadge) {
+      paymentFailedBadge = document.createElement('div');
+      paymentFailedBadge.className = 'payment-failed-badge';
+      confirmationHeader.insertBefore(paymentFailedBadge, confirmationHeader.firstChild);
+    }
+    paymentFailedBadge.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    `;
+    
+    // Create payment failed title
+    if (!paymentFailedTitle) {
+      paymentFailedTitle = document.createElement('h2');
+      paymentFailedTitle.className = 'payment-failed-title';
+      confirmationHeader.insertBefore(paymentFailedTitle, quickStatus || reassuranceBar || failureActions || null);
+    }
+    paymentFailedTitle.textContent = 'Payment Couldn\'t Be Completed';
+    
+    // Create quick status
+    if (!quickStatus) {
+      quickStatus = document.createElement('div');
+      quickStatus.className = 'quick-status';
+      confirmationHeader.insertBefore(quickStatus, reassuranceBar || failureActions || null);
+    }
+    quickStatus.innerHTML = `
+      <span class="status-badge">${statusText}</span>
+      <p class="status-detail">${statusDetail}</p>
+    `;
+    
+    // Create reassurance bar with separate containers
+    if (!reassuranceBar) {
+      reassuranceBar = document.createElement('div');
+      reassuranceBar.className = 'reassurance-bar';
+      confirmationHeader.insertBefore(reassuranceBar, failureActions || null);
+    }
+    reassuranceBar.innerHTML = `
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Nothing charged</span>
+      </div>
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Order saved</span>
+      </div>
+      <div class="reassurance-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        <span>Profile saved</span>
+      </div>
+    `;
+    
+    // Create failure actions
+    if (!failureActions) {
+      failureActions = document.createElement('div');
+      failureActions.className = 'failure-actions';
+      confirmationHeader.appendChild(failureActions);
+    }
+    failureActions.innerHTML = `
+      <div class="action-grid">
+        <div class="action-option primary-option">
+          <div class="option-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+            </svg>
           </div>
-          
-          <!-- Reassurance -->
-          <div style="margin-bottom: 24px; padding: 16px; background: rgba(34, 197, 94, 0.1); border-left: 4px solid #22c55e; border-radius: 4px;">
-            <p style="color: #9ca3af; margin: 0; line-height: 1.8;">
-              <strong style="color: #22c55e;">✓</strong> Nothing was charged<br>
-              <strong style="color: #22c55e;">✓</strong> Your order details are saved<br>
-              <strong style="color: #22c55e;">✓</strong> No membership has been activated yet
-            </p>
-          </div>
-          
-          <!-- Actionable Steps -->
-          <div style="color: #d1d5db; line-height: 1.8;">
-            <strong style="color: #f59e0b; display: block; margin-bottom: 16px; font-size: 16px;">What you can do:</strong>
-            
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
-              <strong style="color: #3b82f6; display: block; margin-bottom: 4px;">1. Try Again</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">Click the button below to retry payment with the same details. Your order is saved and ready.</p>
-            </div>
-            
-            <div style="margin-bottom: 16px; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
-              <strong style="color: #8b5cf6; display: block; margin-bottom: 4px;">2. Use a Different Payment Method</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">If the issue persists, try a different card or payment method. Your order will remain the same.</p>
-            </div>
-            
-            <div style="margin-bottom: 24px; padding: 12px; background: rgba(107, 114, 128, 0.1); border-radius: 4px;">
-              <strong style="color: #6b7280; display: block; margin-bottom: 4px;">3. Contact Support</strong>
-              <p style="color: #9ca3af; margin: 0; font-size: 14px;">If you continue to experience issues, our support team can help. Reference Order #${displayOrderId}</p>
-            </div>
-            
-            <!-- Action Buttons -->
-            <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px;">
-              <button id="retry-payment-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
-                Try Payment Again
-              </button>
-              <button id="contact-support-btn" style="flex: 1; min-width: 200px; padding: 14px 24px; background: transparent; color: #9ca3af; border: 2px solid #374151; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='#6b7280'; this.style.color='#d1d5db'" onmouseout="this.style.borderColor='#374151'; this.style.color='#9ca3af'">
-                Contact Support
-              </button>
-            </div>
-          </div>
+          <h4>Try Again</h4>
+          <p>Retry payment with saved order details</p>
         </div>
-      `;
-      
-      // Add event listeners for action buttons
-      setTimeout(() => {
-        const retryBtn = document.getElementById('retry-payment-btn');
-        const supportBtn = document.getElementById('contact-support-btn');
         
-        if (retryBtn) {
-          retryBtn.addEventListener('click', () => {
-            console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
-            // Navigate back to step 4 (payment step) to retry
-            state.paymentFailed = false; // Reset payment failed state
-            state.currentStep = 4;
-            showStep(4);
-            updateStepIndicator();
-            updateNavigationButtons();
-            updateMainSubtitle();
+
+        <div class="action-option" id="contact-support-option">
+          <div class="option-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <h4>Get Help</h4>
+          <p>Email support • Order #<span id="failed-order-id">${displayOrderId}</span></p>
+        </div>
+      </div>
+
+      <button id="retry-payment-btn" class="retry-btn">
+        <span>Try Payment Again</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+          <polyline points="12 5 19 12 12 19"/>
+        </svg>
+      </button>
+    `;
+    
+    // Add event listeners for action buttons
+    setTimeout(() => {
+      const retryBtn = document.getElementById('retry-payment-btn');
+      const supportOption = document.getElementById('contact-support-option');
+      const primaryOption = document.querySelector('.action-option.primary-option');
+      
+      // Shared retry payment handler function
+      const handleRetryPayment = async () => {
+          console.log('[Payment Failed] User clicked "Try Payment Again" - navigating to payment step');
+          
+          // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
+          // This ensures cart is populated when showStep(4) runs
+          try {
+            const orderData = sessionStorage.getItem('boulders_checkout_order');
+            const customerData = sessionStorage.getItem('boulders_checkout_customer');
             
-            // CRITICAL: Restore cart and state from sessionStorage if not already restored
-            try {
-              const orderData = sessionStorage.getItem('boulders_checkout_order');
-              if (orderData) {
-                const storedOrder = JSON.parse(orderData);
-                console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
+            if (orderData) {
+              const storedOrder = JSON.parse(orderData);
+              console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
+              
+              // Always restore cart items (force restore, don't check if empty)
+              if (storedOrder.cartItems) {
+                state.cartItems = storedOrder.cartItems;
+                console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
                 
-                if (storedOrder.cartItems && (!state.cartItems || state.cartItems.length === 0)) {
-                  state.cartItems = storedOrder.cartItems;
-                  console.log('[Payment Retry] ✅ Restored cart items:', state.cartItems.length, 'items');
-                }
-                if (storedOrder.totals) {
-                  state.totals = { ...state.totals, ...storedOrder.totals };
-                  console.log('[Payment Retry] ✅ Restored totals');
-                }
-                if (storedOrder.membershipPlanId && !state.membershipPlanId) {
-                  state.membershipPlanId = storedOrder.membershipPlanId;
-                  console.log('[Payment Retry] ✅ Restored membershipPlanId');
-                  
-                  // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
-                  if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
-                    const productId = storedOrder.membershipPlanId.replace('membership-', '');
-                    state.selectedProductId = parseInt(productId, 10) || productId;
-                    state.selectedProductType = 'membership';
-                    console.log('[Payment Retry] ✅ Derived selectedProductId:', state.selectedProductId);
-                  }
-                }
-                if (storedOrder.selectedBusinessUnit && !state.selectedBusinessUnit) {
-                  state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
-                  console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
-                }
-                if (storedOrder.orderId && !state.orderId) {
-                  state.orderId = storedOrder.orderId;
-                  console.log('[Payment Retry] ✅ Restored orderId');
+                // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
+                // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
+                const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
+                if (punchCardItems.length > 0) {
+                  console.log('[Payment Retry] Found punch card items, rebuilding valueCardQuantities');
+                  state.valueCardQuantities.clear();
+                  punchCardItems.forEach(item => {
+                    // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
+                    // If membershipPlanId exists, use it; otherwise construct from productId
+                    const planId = storedOrder.membershipPlanId || 
+                                  (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
+                    const quantity = item.quantity || 1;
+                    state.valueCardQuantities.set(planId, quantity);
+                    console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
+                  });
                 }
               }
-            } catch (e) {
-              console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
+              if (storedOrder.totals) {
+                state.totals = { ...state.totals, ...storedOrder.totals };
+                console.log('[Payment Retry] ✅ Restored totals');
+              }
+              
+              // Restore selectedProductType and selectedProductId if available
+              if (storedOrder.selectedProductType) {
+                state.selectedProductType = storedOrder.selectedProductType;
+                console.log('[Payment Retry] ✅ Restored selectedProductType:', state.selectedProductType);
+              }
+              if (storedOrder.selectedProductId) {
+                state.selectedProductId = storedOrder.selectedProductId;
+                console.log('[Payment Retry] ✅ Restored selectedProductId:', state.selectedProductId);
+              }
+              
+              if (storedOrder.membershipPlanId) {
+                state.membershipPlanId = storedOrder.membershipPlanId;
+                console.log('[Payment Retry] ✅ Restored membershipPlanId:', state.membershipPlanId);
+                
+                // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
+                // Handle all formats: campaign-, membership-, 15daypass-, punch-
+                if (!state.selectedProductType || !state.selectedProductId) {
+                  if (typeof storedOrder.membershipPlanId === 'string') {
+                    if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+                      const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from campaign:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+                      const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from membership:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+                      const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                      state.selectedProductType = 'membership';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from 15daypass:', state.selectedProductId);
+                    } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
+                               storedOrder.membershipPlanId === 'adult-punch' || 
+                               storedOrder.membershipPlanId === 'junior-punch') {
+                      // For punch cards, extract productId from membershipPlanId
+                      if (storedOrder.membershipPlanId.startsWith('punch-')) {
+                        const productId = storedOrder.membershipPlanId.replace('punch-', '');
+                        state.selectedProductId = parseInt(productId, 10) || productId;
+                      } else {
+                        // For adult-punch/junior-punch, we need to find the productId from cart items
+                        const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
+                        if (punchCardItem) {
+                          state.selectedProductId = punchCardItem.productId || punchCardItem.id;
+                        }
+                      }
+                      state.selectedProductType = 'punch-card';
+                      console.log('[Payment Retry] ✅ Derived selectedProductId from punch card:', state.selectedProductId);
+                    }
+                  }
+                }
+              }
+              if (storedOrder.selectedBusinessUnit) {
+                state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+                console.log('[Payment Retry] ✅ Restored selectedBusinessUnit');
+              }
+              if (storedOrder.subscriptionStartDate != null) {
+                state.subscriptionStartDate = storedOrder.subscriptionStartDate;
+              }
+              if (storedOrder.orderId) {
+                state.orderId = storedOrder.orderId;
+                console.log('[Payment Retry] ✅ Restored orderId');
+              }
             }
             
-            // CRITICAL: Update cart and payment overview to ensure items are displayed correctly
+            // CRITICAL: Verify cart was restored before proceeding
+            if (!state.cartItems || state.cartItems.length === 0) {
+              console.error('[Payment Retry] ⚠️ WARNING: Cart is still empty after restoration attempt!');
+              console.error('[Payment Retry] Stored order data:', orderData ? 'exists' : 'missing');
+            } else {
+              console.log('[Payment Retry] ✅ Cart successfully restored with', state.cartItems.length, 'items');
+            }
+            
+            // CRITICAL: Restore customer profile data to show full profile info
+            if (customerData) {
+              try {
+                const storedCustomer = JSON.parse(customerData);
+                state.customerId = storedCustomer.id;
+                console.log('[Payment Retry] Restored customer ID from sessionStorage:', storedCustomer.id);
+                
+                // Fetch full customer profile to display all fields (if we have a customer ID)
+                // Try to fetch even if authentication status is unclear, as we might have valid tokens
+                if (storedCustomer.id) {
+                  try {
+                    const customerProfile = await authAPI.getCustomer(storedCustomer.id);
+                    state.authenticatedCustomer = customerProfile;
+                    // Also set authenticatedEmail for refreshLoginUI
+                    if (customerProfile?.email) {
+                      state.authenticatedEmail = customerProfile.email;
+                    }
+                    console.log('[Payment Retry] ✅ Loaded full customer profile:', customerProfile);
+                    // Refresh UI after loading full profile
+                    refreshLoginUI();
+                  } catch (profileError) {
+                    console.warn('[Payment Retry] Could not fetch full customer profile, using stored data:', profileError);
+                    // Fallback: Use stored customer data if available
+                    if (storedCustomer.firstName || storedCustomer.lastName || storedCustomer.email) {
+                      state.authenticatedCustomer = {
+                        id: storedCustomer.id,
+                        firstName: storedCustomer.firstName,
+                        lastName: storedCustomer.lastName,
+                        email: storedCustomer.email,
+                        // Note: Full profile might not have all fields, but we'll try to use what we have
+                      };
+                      // Also set authenticatedEmail for refreshLoginUI
+                      if (storedCustomer.email) {
+                        state.authenticatedEmail = storedCustomer.email;
+                      }
+                    }
+                    // Refresh UI with fallback data
+                    refreshLoginUI();
+                  }
+                } else {
+                  // No customer ID - refresh UI with what we have
+                  refreshLoginUI();
+                }
+              } catch (e) {
+                console.warn('[Payment Retry] Could not parse customer data from sessionStorage:', e);
+                // Still refresh UI even if customer data parse failed
+                refreshLoginUI();
+              }
+            } else {
+              // No customer data in sessionStorage - refresh UI with current state
+              refreshLoginUI();
+            }
+          } catch (e) {
+            console.warn('[Payment Retry] Could not restore cart from sessionStorage:', e);
+            // Still refresh UI even if restore failed
+            refreshLoginUI();
+          }
+          
+          // Reset payment failed state and navigate to step 4
+          state.paymentFailed = false;
+          // Clean up payment-failed-active class and inline styles before navigating
+          const stepContent = document.querySelector('.step-content');
+          if (stepContent) {
+            stepContent.classList.remove('payment-failed-active');
+            stepContent.style.flex = '';
+            stepContent.style.minHeight = '';
+            stepContent.style.height = '';
+          }
+          
+          state.currentStep = 4;
+          showStep(4);
+          updateStepIndicator();
+          updateNavigationButtons();
+          updateMainSubtitle();
+          
+          // CRITICAL: Update cart immediately after restoration to ensure it's displayed
+          // Then update again after DOM is ready to ensure proper rendering
+          console.log('[Payment Retry] Cart items after restoration:', state.cartItems?.length || 0, 'items');
+          updateCartSummary();
+          
+          // CRITICAL: Update cart and payment overview after DOM is ready
+          // Use setTimeout to ensure showStep(4) has finished rendering
+          setTimeout(() => {
+            // Refresh login UI to ensure profile information is displayed
+            refreshLoginUI();
+            
+            // Update cart again to ensure it's displayed (in case showStep(4) cleared it)
+            console.log('[Payment Retry] Updating cart after showStep(4) - cart items:', state.cartItems?.length || 0, 'items');
             updateCartSummary();
             
             // If order exists, fetch full order data for payment overview
@@ -15927,39 +19431,36 @@ function showPaymentFailedMessage(order, orderId, reason = null) {
               // Update payment overview with current state data
               updatePaymentOverview();
             }
-            
-            scrollToTop();
-          });
-        }
-        
-        if (supportBtn) {
-          supportBtn.addEventListener('click', () => {
-            console.log('[Payment Failed] User clicked "Contact Support"');
-            // Open support email or support page
-            const supportEmail = 'support@boulders.dk';
-            const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
-            const body = encodeURIComponent(`Hello,\n\nI experienced a payment issue with Order #${displayOrderId}.\n\nCould you please help me complete my membership purchase?\n\nThank you!`);
-            window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
-          });
-        }
-      }, 100);
-      successMessage.style.color = '#d1d5db';
-      successMessage.style.lineHeight = '1.6';
-      successMessage.style.whiteSpace = 'normal';
-      console.log('[Payment Failed] ✅ Message updated with clear status, reason, and actionable steps');
-    }
+          }, 200); // Increased timeout to ensure showStep(4) has fully completed
+          
+          scrollToTop();
+      };
+      
+      // Attach handler to retry button
+      if (retryBtn) {
+        retryBtn.addEventListener('click', handleRetryPayment);
+      }
+      
+      // Attach handler to primary option (Try Again card)
+      if (primaryOption) {
+        primaryOption.addEventListener('click', handleRetryPayment);
+        // Add cursor pointer style for better UX
+        primaryOption.style.cursor = 'pointer';
+      }
+      
+      if (supportOption) {
+        supportOption.addEventListener('click', () => {
+          console.log('[Payment Failed] User clicked "Get Help"');
+          // Open support email
+          const supportEmail = 'medlem@boulders.dk';
+          const subject = encodeURIComponent(`Payment Issue - Order #${displayOrderId}`);
+          const body = encodeURIComponent(`Hello,\n\nHej, jeg kunne ikke gennemføre købet af ordrenr. #${displayOrderId}.\n\nKan i hjælpe med at løse det?\n\nMange tak!`);
+          window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+        });
+      }
+    }, 100);
     
-    if (successBadge) {
-      // Use a less alarming icon - info/warning circle instead of harsh X
-      successBadge.innerHTML = `
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-      `;
-      console.log('[Payment Failed] ✅ Badge updated to calm info icon');
-    }
+    console.log('[Payment Failed] ✅ New payment failed UI structure created');
     
     // CRITICAL: Hide order details, membership details, and "What happens next?" sections
     // These should only be shown when payment is successful
@@ -16049,30 +19550,28 @@ function showPaymentPendingMessage(order, orderId) {
   const successTitle = document.querySelector('.success-title');
   const successMessage = document.querySelector('.success-message');
   const successBadge = document.querySelector('.success-badge');
+  const displayOrderId = orderId || order?.number || order?.id || 'N/A';
   
   if (successTitle) {
-    // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
     successTitle.removeAttribute('data-i18n-key');
-    successTitle.textContent = 'Payment Pending';
+    successTitle.textContent = t('confirmation.pending.title');
     successTitle.style.color = '#f59e0b'; // Orange/amber color
   }
   
   if (successMessage) {
-    // CRITICAL: Remove data-i18n-key to prevent i18n from resetting the text
     successMessage.removeAttribute('data-i18n-key');
-    const displayOrderId = orderId || order?.number || order?.id || 'N/A';
-    successMessage.textContent = `Your payment is being processed. We're waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #${displayOrderId}`;
+    successMessage.textContent = t('confirmation.pending.message') + displayOrderId;
     successMessage.style.color = '#6b7280'; // Gray color
   }
   
   if (successBadge) {
     // Change checkmark to a clock/spinner icon
-    successBadge.innerHTML = `
+    successBadge.innerHTML = sanitizeHTML(`
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;">
         <circle cx="12" cy="12" r="10"></circle>
         <polyline points="12 6 12 12 16 14"></polyline>
       </svg>
-    `;
+    `);
   }
   
   // CRITICAL: Hide order details, membership details, and "What happens next?" sections
@@ -16144,10 +19643,9 @@ function showPaymentPendingMessage(order, orderId) {
       } else if (pollCount >= maxPolls) {
         console.warn('[Payment Pending] ⚠️ Payment still not confirmed after 2 minutes. Stopping auto-poll.');
         clearInterval(pollInterval);
-        // Update message to tell user to check back later
         if (successMessage) {
           const displayOrderId = orderId || updatedOrder?.number || updatedOrder?.id || 'N/A';
-          successMessage.textContent = `Payment is still being processed. Please check back in a few minutes or contact support if you've completed payment. Order #${displayOrderId}`;
+          successMessage.textContent = t('confirmation.pending.stillProcessing') + displayOrderId;
         }
       }
     } catch (error) {
@@ -16159,14 +19657,103 @@ function showPaymentPendingMessage(order, orderId) {
   }, 5000); // Check every 5 seconds
 }
 
+/**
+ * Determine product type from order data
+ * Returns: 'membership', '15daypass', or 'punch-card'
+ */
+function determineProductTypeFromOrder() {
+  // Priority 1: Check test mode product type (if in test mode)
+  if (state.testMode && state.testProductType) {
+    console.log('[Product Type] Using test mode product type:', state.testProductType);
+    return state.testProductType;
+  }
+  
+  // Priority 2: Check full order data first (from API)
+  if (state.fullOrder) {
+    // ✅ Check subscription items FIRST (subscriptions take priority)
+    if (state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
+      const subscriptionItem = state.fullOrder.subscriptionItems[0];
+      const product = subscriptionItem?.product;
+      
+      // Check product labels to determine if it's a 15 day pass
+      if (product?.productLabels && Array.isArray(product.productLabels)) {
+        const has15DayPassLabel = product.productLabels.some(
+          label => label.name && label.name.toLowerCase() === '15 day pass'
+        );
+        if (has15DayPassLabel) {
+          console.log('[Product Type] Detected 15daypass from productLabels');
+          return '15daypass';
+        }
+      }
+      
+      // Check product name for 15 day pass
+      if (product?.name) {
+        const nameLower = product.name.toLowerCase();
+        if (nameLower.includes('15 day') || nameLower.includes('15 dage')) {
+          console.log('[Product Type] Detected 15daypass from product name');
+          return '15daypass';
+        }
+      }
+      
+      // Default to membership if it's a subscription item
+      console.log('[Product Type] Detected membership from subscriptionItems');
+      return 'membership';
+    }
+    
+    // ✅ Only check value cards if NO subscription items exist
+    if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
+      console.log('[Product Type] Detected punch-card from valueCardItems');
+      return 'punch-card';
+    }
+  }
+  
+  // Priority 3: Fall back to state.selectedProductType
+  if (state.selectedProductType === 'punch-card') {
+    console.log('[Product Type] Detected punch-card from selectedProductType');
+    return 'punch-card';
+  }
+  
+  // Priority 4: Check membershipPlanId format
+  if (state.membershipPlanId) {
+    if (String(state.membershipPlanId).startsWith('15daypass-')) {
+      console.log('[Product Type] Detected 15daypass from membershipPlanId');
+      return '15daypass';
+    }
+    if (String(state.membershipPlanId).startsWith('punch-')) {
+      console.log('[Product Type] Detected punch-card from membershipPlanId');
+      return 'punch-card';
+    }
+    // Default to membership for campaign, membership, etc.
+    console.log('[Product Type] Detected membership from membershipPlanId');
+    return 'membership';
+  }
+  
+  // Priority 5: Check cart items
+  if (state.cartItems && state.cartItems.length > 0) {
+    const firstItem = state.cartItems[0];
+    if (firstItem.type === 'value-card' || firstItem.type === 'punch-card') {
+      console.log('[Product Type] Detected punch-card from cartItems');
+      return 'punch-card';
+    }
+    if (firstItem.name && (firstItem.name.toLowerCase().includes('15 day') || firstItem.name.toLowerCase().includes('15 dage'))) {
+      console.log('[Product Type] Detected 15daypass from cartItems');
+      return '15daypass';
+    }
+  }
+  
+  // Default to membership
+  console.log('[Product Type] Defaulting to membership');
+  return 'membership';
+}
+
 function renderConfirmationView() {
-  // CRITICAL: Don't render success page if payment failed or is pending
-  if (state.paymentFailed === true) {
+  // CRITICAL: Don't render success page if payment failed or is pending (unless in test mode)
+  if (!state.testMode && state.paymentFailed === true) {
     console.warn('[Confirmation] Payment failed - not rendering success page');
     return;
   }
   
-  if (state.paymentPending === true) {
+  if (!state.testMode && state.paymentPending === true) {
     console.warn('[Confirmation] Payment pending - not rendering success page');
     return;
   }
@@ -16176,13 +19763,13 @@ function renderConfirmationView() {
     return;
   }
   
-  // CRITICAL: Only render if payment is confirmed
-  if (state.paymentConfirmed !== true) {
+  // CRITICAL: Only render if payment is confirmed OR we're in test mode
+  if (!state.testMode && state.paymentConfirmed !== true) {
     console.warn('[Confirmation] Payment not confirmed - not rendering success page');
     return;
   }
   
-  console.log('[Confirmation] ✅ Rendering success page - payment confirmed');
+  console.log('[Confirmation] ✅ Rendering success page - payment confirmed' + (state.testMode ? ' (test mode)' : ''));
 
   // CRITICAL: Show confirmation sections (order details, membership details, next steps) when payment succeeds
   const step5Panel = document.getElementById('step-5');
@@ -16190,6 +19777,17 @@ function renderConfirmationView() {
     // Remove payment failed/pending attributes to allow CSS to show sections
     step5Panel.removeAttribute('data-payment-failed');
     step5Panel.removeAttribute('data-payment-pending');
+    
+    // Clean up payment-failed-active class and inline styles from step-content
+    // Add success-page-active class for reliable CSS targeting
+    const stepContent = document.querySelector('.step-content');
+    if (stepContent) {
+      stepContent.classList.remove('payment-failed-active');
+      stepContent.classList.add('success-page-active'); // Add class for reliable CSS targeting
+      stepContent.style.flex = '';
+      stepContent.style.minHeight = '';
+      stepContent.style.height = '';
+    }
     
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
     const confirmationLeft = step5Panel.querySelector('.confirmation-left');
@@ -16221,54 +19819,810 @@ function renderConfirmationView() {
     console.log('[Confirmation] ✅ Showing confirmation sections - payment confirmed');
   }
 
+  // Determine product type
+  const productType = determineProductTypeFromOrder();
+  console.log('[Confirmation] Product type determined:', productType);
+  console.log('[Confirmation] State for debugging:', {
+    selectedProductType: state.selectedProductType,
+    membershipPlanId: state.membershipPlanId,
+    hasFullOrder: !!state.fullOrder,
+    hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+    hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length),
+    productLabels: state.fullOrder?.subscriptionItems?.[0]?.product?.productLabels
+  });
+
+  // Update success message based on product type (use translation keys so language switch works)
+  const successMessage = document.querySelector('.success-message');
+  if (successMessage) {
+    const messageKey = productType === 'membership' ? 'confirmation.message.membership'
+      : productType === '15daypass' ? 'confirmation.message.15daypass'
+      : productType === 'punch-card' ? 'confirmation.message.punchcard'
+      : 'confirmation.message.generic';
+    successMessage.setAttribute('data-i18n-key', messageKey);
+    successMessage.textContent = t(messageKey);
+  }
+
+  // Update "What happens next?" steps based on product type (use translation keys)
+  const nextStep1 = document.getElementById('nextStep1');
+  const nextStep2 = document.getElementById('nextStep2');
+  const nextStep3 = document.getElementById('nextStep3');
+  
+  if (nextStep1) {
+    nextStep1.setAttribute('data-i18n-key', 'confirmation.nextStep1');
+    nextStep1.textContent = t('confirmation.nextStep1');
+  }
+  
+  if (nextStep2 && nextStep3) {
+    const step2Key = productType === 'membership' ? 'confirmation.nextStep2.membership'
+      : productType === '15daypass' ? 'confirmation.nextStep2.15daypass'
+      : productType === 'punch-card' ? 'confirmation.nextStep2.punchcard'
+      : 'confirmation.nextStep2.membership';
+    const step3Key = productType === 'membership' ? 'confirmation.nextStep3.membership'
+      : productType === '15daypass' ? 'confirmation.nextStep3.15daypass'
+      : productType === 'punch-card' ? 'confirmation.nextStep3.punchcard'
+      : 'confirmation.nextStep3.membership';
+    nextStep2.setAttribute('data-i18n-key', step2Key);
+    nextStep2.textContent = t(step2Key);
+    nextStep3.setAttribute('data-i18n-key', step3Key);
+    nextStep3.textContent = t(step3Key);
+  }
+
+  // Hide all sections first - use !important to override any CSS
+  const membershipSection = document.getElementById('confirmationMembershipSection');
+  const dayPassSection = document.getElementById('confirmation15DayPassSection');
+  const punchCardSection = document.getElementById('confirmationPunchCardSection');
+  
+  if (membershipSection) {
+    membershipSection.style.display = 'none';
+    membershipSection.style.setProperty('display', 'none', 'important');
+  }
+  if (dayPassSection) {
+    dayPassSection.style.display = 'none';
+    dayPassSection.style.setProperty('display', 'none', 'important');
+  }
+  if (punchCardSection) {
+    punchCardSection.style.display = 'none';
+    punchCardSection.style.setProperty('display', 'none', 'important');
+  }
+
+  // Show appropriate section based on product type - only ONE section should be visible
+  if (productType === 'membership' && membershipSection) {
+    console.log('[Confirmation] Showing membership section');
+    membershipSection.style.display = 'block';
+    membershipSection.style.setProperty('display', 'block', 'important');
+  } else if (productType === '15daypass' && dayPassSection) {
+    console.log('[Confirmation] Showing 15 day pass section');
+    dayPassSection.style.display = 'block';
+    dayPassSection.style.setProperty('display', 'block', 'important');
+  } else if (productType === 'punch-card' && punchCardSection) {
+    console.log('[Confirmation] Showing punch card section');
+    punchCardSection.style.display = 'block';
+    punchCardSection.style.setProperty('display', 'block', 'important');
+  } else {
+    console.warn('[Confirmation] Unknown product type or section not found:', productType);
+  }
+  
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
-  if (orderNumber) orderNumber.textContent = state.order.number;
+  // Use API data only - no fallbacks to state.order or calculated values
+  const apiOrder = state.fullOrder;
+  
+  // Order number - from API only
+  if (orderNumber) {
+    const number = apiOrder?.number || apiOrder?.id || '—';
+    orderNumber.textContent = number;
+  }
+  
+  // Order date - from API only
   if (orderDate) {
-    orderDate.textContent = new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(state.order.date);
+    if (apiOrder?.createdAt || apiOrder?.created) {
+      const date = apiOrder.createdAt ? new Date(apiOrder.createdAt) : new Date(apiOrder.created);
+      orderDate.textContent = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(date);
+    } else {
+      orderDate.textContent = '—';
+    }
   }
-  if (orderTotal) orderTotal.textContent = formatCurrencyHalfKrone(roundToHalfKrone(state.order.total));
-  if (memberName) memberName.textContent = state.order.memberName || '—';
-  if (membershipNumber) membershipNumber.textContent = state.order.membershipNumber;
-  if (membershipType) membershipType.textContent = state.order.membershipType;
-  if (primaryGym) primaryGym.textContent = state.order.primaryGym;
+  
+  // Order total - from API only
+  if (orderTotal) {
+    if (apiOrder?.price?.amount) {
+      const amount = apiOrder.price.amount;
+      const total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      orderTotal.textContent = formatCurrencyHalfKrone(total);
+    } else if (apiOrder?.total) {
+      const total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
+      orderTotal.textContent = formatCurrencyHalfKrone(total);
+    } else {
+      orderTotal.textContent = '—';
+    }
+  }
+  
+  // Member name - from API only
+  if (memberName) {
+    let name = '—';
+    if (apiOrder?.customer) {
+      const customer = apiOrder.customer;
+      name = customer.fullName || 
+            (customer.firstName && customer.lastName ? `${customer.firstName} ${customer.lastName}` : null) ||
+            customer.name ||
+            '—';
+    }
+    memberName.textContent = name;
+    // Also update in other sections
+    const dayPassMemberName = document.querySelector('#confirmation15DayPassSection [data-summary-field="member-name"]');
+    const punchCardMemberName = document.querySelector('#confirmationPunchCardSection [data-summary-field="member-name"]');
+    if (dayPassMemberName) dayPassMemberName.textContent = name;
+    if (punchCardMemberName) punchCardMemberName.textContent = name;
+  }
+  
+  // Membership-specific fields - from API only
+  if (membershipNumber) {
+    let membershipId = '—';
+    if (apiOrder?.subscriptionItems?.[0]?.subscription?.id) {
+      membershipId = apiOrder.subscriptionItems[0].subscription.id.toString();
+    } else if (apiOrder?.customer?.id) {
+      membershipId = apiOrder.customer.id.toString();
+    }
+    membershipNumber.textContent = membershipId;
+  }
+  
+  if (membershipType) {
+    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || '—';
+    membershipType.textContent = type;
+  }
+  
+  if (primaryGym) {
+    let gym = '—';
+    if (apiOrder?.customer?.primaryGym) {
+      gym = resolveGymLabel(apiOrder.customer.primaryGym);
+    } else if (apiOrder?.businessUnit?.name) {
+      gym = apiOrder.businessUnit.name;
+    }
+    primaryGym.textContent = gym;
+    // Also update in other sections
+    const dayPassGym = document.querySelector('#confirmation15DayPassSection [data-summary-field="primary-gym"]');
+    if (dayPassGym) dayPassGym.textContent = gym;
+  }
+  
   if (membershipPrice) {
-    membershipPrice.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(state.order.membershipPrice))}/month`;
+    let price = null;
+    if (apiOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].payRecurring.price.amount;
+      price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.subscriptionItems?.[0]?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].price.amount;
+      price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    }
+    
+    if (price !== null) {
+      const formatted = formatCurrencyHalfKrone(roundToHalfKrone(price));
+      membershipPrice.textContent = productType === '15daypass' ? formatted : `${formatted}/month`;
+    } else {
+      membershipPrice.textContent = '—';
+    }
+  }
+  
+  // 15 Day Pass specific fields - from API only
+  if (productType === '15daypass') {
+    const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
+    const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
+    
+    // Get start date from API subscription startDate only
+    if (passStartDate) {
+      if (apiOrder?.subscriptionItems?.[0]?.subscription?.startDate) {
+        const startDate = new Date(apiOrder.subscriptionItems[0].subscription.startDate);
+        passStartDate.textContent = new Intl.DateTimeFormat('da-DK', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }).format(startDate);
+      } else {
+        passStartDate.textContent = '—';
+      }
+    }
+    
+    // Get end date from API subscription endDate only
+    if (passEndDate) {
+      if (apiOrder?.subscriptionItems?.[0]?.subscription?.endDate) {
+        const endDate = new Date(apiOrder.subscriptionItems[0].subscription.endDate);
+        passEndDate.textContent = new Intl.DateTimeFormat('da-DK', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }).format(endDate);
+      } else {
+        passEndDate.textContent = '—';
+      }
+    }
+  }
+  
+// Helper function to create purchase item element if template not available
+function createPurchaseItemElement() {
+  const item = document.createElement('div');
+  item.className = 'purchase-item';
+  item.setAttribute('data-confirmation-item', '');
+  item.innerHTML = sanitizeHTML(`
+    <span class="item-name" data-element="name"></span>
+    <span class="item-price" data-element="price"></span>
+  `);
+  return item;
+}
+
+  // Punch Card specific fields - from API only
+  // Show aggregate info for all punch cards if multiple, or single card details
+  if (productType === 'punch-card') {
+    const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
+    const punchCardQuantity = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-quantity"]');
+    const punchCardExpiry = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-expiry"]');
+    
+    // Use API valueCardItems data - aggregate if multiple cards
+    const valueCardItems = apiOrder?.valueCardItems || [];
+    const totalQuantity = valueCardItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
+    
+    if (punchCardType) {
+      // Show product name from first card, or indicate multiple types if different
+      // Remove card number from name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
+      if (valueCardItems.length > 0) {
+        let firstCardName = valueCardItems[0]?.product?.name || 'Klippekort';
+        // Remove card number in parentheses (e.g., " (400117054549)")
+        firstCardName = firstCardName.replace(/\s*\(\d+\)\s*$/, '');
+        
+        if (valueCardItems.length === 1) {
+          punchCardType.textContent = firstCardName;
+        } else {
+          // Multiple cards - show first card name with count
+          punchCardType.textContent = `${firstCardName} (${valueCardItems.length} kort)`;
+        }
+      } else {
+        punchCardType.textContent = '—';
+      }
+    }
+    
+    if (punchCardQuantity) {
+      punchCardQuantity.textContent = totalQuantity > 0 ? totalQuantity.toString() : '—';
+    }
+    
+    if (punchCardExpiry) {
+      // Get expiry from first card (all should have same expiry)
+      // Per OpenAPI: ValueCardItemOut has validUntil field, and ValueCardOut also has validUntil
+      let expiryDate = null;
+      const firstCard = valueCardItems[0];
+      
+      // Priority 1: Check valueCardItem.validUntil (direct field on the item)
+      if (firstCard?.validUntil) {
+        expiryDate = new Date(firstCard.validUntil);
+      }
+      // Priority 2: Check valueCard.validUntil (nested in valueCard object)
+      else if (firstCard?.valueCard?.validUntil) {
+        expiryDate = new Date(firstCard.valueCard.validUntil);
+      }
+      
+      // Display expiry date from API, or show '—' if not available
+      if (expiryDate && !isNaN(expiryDate.getTime())) {
+        punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }).format(expiryDate);
+      } else {
+        punchCardExpiry.textContent = '—';
+      }
+    }
   }
 
-  if (templates.confirmationItem && DOM.confirmationItems) {
+  // Populate product details from full order (subscriptionItems/valueCardItems) or fallback to state.order.items
+  if (DOM.confirmationItems) {
     DOM.confirmationItems.innerHTML = '';
-    state.order.items.forEach((item) => {
-      const node = templates.confirmationItem.content.firstElementChild.cloneNode(true);
-      const nameEl = node.querySelector('[data-element="name"]');
-      const priceEl = node.querySelector('[data-element="price"]');
-      if (nameEl) nameEl.textContent = item.name;
-      if (priceEl) priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(item.amount));
-      DOM.confirmationItems.appendChild(node);
+    let hasItems = false;
+    
+    console.log('[Confirmation] Populating product details:', {
+      hasTemplate: !!templates.confirmationItem,
+      hasFullOrder: !!state.fullOrder,
+      hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length),
+      hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+      hasOrderItems: !!(state.order?.items?.length),
+      hasCartItems: !!(state.cartItems?.length),
+      selectedProductId: state.selectedProductId,
+      membershipPlanId: state.membershipPlanId
     });
+    
+    // Priority 1: Use fullOrder data (from API) for detailed product information
+    if (state.fullOrder) {
+      // Add subscription items (memberships, 15-day passes)
+      if (state.fullOrder.subscriptionItems && state.fullOrder.subscriptionItems.length > 0) {
+        state.fullOrder.subscriptionItems.forEach(item => {
+          const node = templates.confirmationItem 
+            ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+            : createPurchaseItemElement();
+          const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+          const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
+          
+          if (nameEl) {
+            const productName = item.product?.name || 'Medlemskab';
+            nameEl.textContent = productName;
+          }
+          
+          if (priceEl) {
+            // Per SubscriptionItemOut: price.amount is total price for all quantity
+            const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+            priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemTotal));
+          }
+          
+          DOM.confirmationItems.appendChild(node);
+          hasItems = true;
+        });
+      }
+      
+      // Add value card items (punch cards)
+      if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
+        state.fullOrder.valueCardItems.forEach(item => {
+          const node = templates.confirmationItem 
+            ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+            : createPurchaseItemElement();
+          const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+          const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
+          
+          if (nameEl) {
+            let productName = item.product?.name || 'Klippekort';
+            // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
+            productName = productName.replace(/\s*\(\d+\)\s*$/, '');
+            nameEl.textContent = productName;
+          }
+          
+          if (priceEl) {
+            // Per ValueCardItemOut: price.amount is total price for all quantity
+            const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+            priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemTotal));
+          }
+          
+          DOM.confirmationItems.appendChild(node);
+          hasItems = true;
+        });
+      }
+      
+      // Add article items (boost products/add-ons)
+      if (state.fullOrder.articleItems && state.fullOrder.articleItems.length > 0) {
+        state.fullOrder.articleItems.forEach(item => {
+          const node = templates.confirmationItem 
+            ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+            : createPurchaseItemElement();
+          const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+          const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
+          
+          if (nameEl) {
+            const productName = item.product?.name || item.name || 'Add-on';
+            nameEl.textContent = productName;
+          }
+          
+          if (priceEl) {
+            // Per ProductItemOut: price.amount is total price
+            const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+            priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemTotal));
+          }
+          
+          DOM.confirmationItems.appendChild(node);
+          hasItems = true;
+        });
+      }
+    }
+    
+    // Priority 2: Fallback to state.order.items if fullOrder not available or has no items
+    if (!hasItems && state.order?.items && state.order.items.length > 0) {
+      state.order.items.forEach((item) => {
+        const node = templates.confirmationItem 
+          ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+          : createPurchaseItemElement();
+        const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+        const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
+        if (nameEl) nameEl.textContent = item.name;
+        if (priceEl) priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(item.amount));
+        DOM.confirmationItems.appendChild(node);
+        hasItems = true;
+      });
+    }
+    
+    // Priority 3: Fallback to state.cartItems if order.items is empty
+    if (!hasItems && state.cartItems && state.cartItems.length > 0) {
+      state.cartItems.forEach((item) => {
+        const node = templates.confirmationItem 
+          ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+          : createPurchaseItemElement();
+        const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+        const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
+        if (nameEl) {
+          // Remove quantity suffix if present (e.g., " ×2")
+          const itemName = item.name?.replace(/\s×\d+$/, '') || item.name || 'Item';
+          nameEl.textContent = itemName;
+        }
+        if (priceEl) {
+          const itemPrice = item.price || item.amount || 0;
+          priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemPrice));
+        }
+        DOM.confirmationItems.appendChild(node);
+        hasItems = true;
+      });
+    }
+    
+    // Priority 4: Build from selected product if nothing else is available
+    if (!hasItems && (state.selectedProductId || state.membershipPlanId)) {
+      const node = templates.confirmationItem 
+        ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
+        : createPurchaseItemElement();
+      const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
+      const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
+      
+      if (nameEl) {
+        // Try to find product name from available product lists
+        const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || []), ...(state.campaignSubscriptions || [])];
+        const allValueCards = state.valueCards || [];
+        const allProducts = [...allSubscriptions, ...allValueCards];
+        
+        const productId = state.selectedProductId || state.membershipPlanId;
+        const numericId = String(productId).replace(/^(campaign|membership|15daypass|punch)-/, '');
+        const productIdNum = parseInt(numericId, 10);
+        
+        const foundProduct = allProducts.find(p => 
+          p.id === productId || 
+          p.id === productIdNum ||
+          String(p.id) === numericId
+        );
+        
+        const productName = foundProduct?.name || 
+                           (state.selectedProductType === 'punch-card' ? 'Klippekort' : 'Medlemskab');
+        nameEl.textContent = productName;
+      }
+      
+      if (priceEl) {
+        const itemPrice = state.totals?.membershipMonthly || state.totals?.cartTotal || state.order?.total || 0;
+        priceEl.textContent = formatCurrencyHalfKrone(roundToHalfKrone(itemPrice));
+      }
+      
+      DOM.confirmationItems.appendChild(node);
+      hasItems = true;
+    }
+    
+    // Log if no items were found
+    if (!hasItems) {
+      console.warn('[Confirmation] No product details available to display:', {
+        hasFullOrder: !!state.fullOrder,
+        hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length),
+        hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+        hasOrderItems: !!(state.order?.items?.length),
+        hasCartItems: !!(state.cartItems?.length),
+        selectedProductId: state.selectedProductId,
+        membershipPlanId: state.membershipPlanId
+      });
+    }
   }
 }
 
-function handleReferralCopy() {
-  const referralLink = 'https://boulders.dk/refer?code=TBD-CODE';
-  const clipboard = navigator.clipboard;
-
-  if (clipboard && typeof clipboard.writeText === 'function') {
-    clipboard
-      .writeText(referralLink)
-      .then(() => showToast('Referral link copied to clipboard!', 'success'))
-      .catch(() => showToast('Unable to copy link. Please try again.', 'error'));
+async function showDetailedReceipt() {
+  if (!state.fullOrder && !state.order) {
+    console.warn('[Receipt] No order data available');
+    return;
+  }
+  
+  const modal = document.getElementById('detailedReceiptModal');
+  if (!modal) return;
+  
+  const order = state.fullOrder || state.order;
+  
+  // Fetch business unit details for seller information
+  let businessUnit = null;
+  if (order.businessUnit?.id || state.selectedBusinessUnit) {
+    const businessUnitId = order.businessUnit?.id || state.selectedBusinessUnit;
+    try {
+      // Try to get from cached gymsWithDistances first (already loaded)
+      if (gymsWithDistances && Array.isArray(gymsWithDistances)) {
+        businessUnit = gymsWithDistances.find(bu => bu.id === businessUnitId || bu.id === parseInt(businessUnitId, 10));
+      }
+      
+      // If not found, try state.gyms (from loadGymsFromAPI)
+      if (!businessUnit && state.gyms && Array.isArray(state.gyms)) {
+        businessUnit = state.gyms.find(bu => bu.id === businessUnitId || bu.id === parseInt(businessUnitId, 10));
+      }
+      
+      // If still not found, fetch from API
+      if (!businessUnit) {
+        const businessUnitsAPI = new BusinessUnitsAPI();
+        const allBusinessUnits = await businessUnitsAPI.getBusinessUnits();
+        businessUnit = allBusinessUnits.find(bu => bu.id === businessUnitId || bu.id === parseInt(businessUnitId, 10));
+      }
+    } catch (error) {
+      console.warn('[Receipt] Could not fetch business unit details:', error);
+    }
+  }
+  
+  // Populate receipt header
+  const receiptOrderNumber = document.getElementById('receiptOrderNumber');
+  const receiptDate = document.getElementById('receiptDate');
+  if (receiptOrderNumber) {
+    receiptOrderNumber.textContent = order.number || order.id || '—';
+  }
+  if (receiptDate) {
+    const orderDate = order.createdAt ? new Date(order.createdAt) : (order.created ? new Date(order.created) : (order.date || new Date()));
+    receiptDate.textContent = new Intl.DateTimeFormat('da-DK', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(orderDate);
+  }
+  
+  // Calculate totals - use API data structure per OrderOut schema
+  const totalAmount = order.price?.amount || order.total || order.totalAmount || 0;
+  const totalDKK = typeof totalAmount === 'object' ? (totalAmount.amount || totalAmount) / 100 : totalAmount / 100;
+  
+  // Use vatSums from API (per OrderOut.vatSums) instead of calculating
+  let vatAmount = 0;
+  if (order.vatSums && Array.isArray(order.vatSums) && order.vatSums.length > 0) {
+    // Sum all VAT amounts from vatSums array
+    vatAmount = order.vatSums.reduce((sum, vat) => {
+      const vatValue = vat.amount ? (typeof vat.amount === 'object' ? vat.amount.amount / 100 : vat.amount / 100) : 0;
+      return sum + vatValue;
+    }, 0);
   } else {
-    showToast('Clipboard not supported in this browser. Copy the URL manually.', 'error');
+    // Fallback: calculate 25% VAT if vatSums not available
+    vatAmount = totalDKK * 0.25;
+  }
+  
+  const subtotal = totalDKK - vatAmount;
+  const discount = order.couponDiscount?.amount ? (typeof order.couponDiscount.amount === 'object' ? order.couponDiscount.amount.amount / 100 : order.couponDiscount.amount / 100) : 0;
+  
+  // Populate order overview
+  const receiptSubtotal = document.getElementById('receiptSubtotal');
+  const receiptDiscount = document.getElementById('receiptDiscount');
+  const receiptTotal = document.getElementById('receiptTotal');
+  const receiptVat = document.getElementById('receiptVat');
+  
+  if (receiptSubtotal) receiptSubtotal.textContent = formatCurrencyHalfKrone(subtotal);
+  if (receiptDiscount) receiptDiscount.textContent = discount > 0 ? `-${formatCurrencyHalfKrone(discount)}` : '0,00 kr';
+  if (receiptTotal) receiptTotal.textContent = formatCurrencyHalfKrone(totalDKK);
+  if (receiptVat) receiptVat.textContent = formatCurrencyHalfKrone(vatAmount);
+  
+  // Populate payment details
+  const receiptPaymentMethod = document.getElementById('receiptPaymentMethod');
+  const receiptAmountPaid = document.getElementById('receiptAmountPaid');
+  const receiptTransactionId = document.getElementById('receiptTransactionId');
+  
+  if (receiptPaymentMethod) {
+    // Try to get payment method from order
+    const paymentMethod = order.paymentMethod || order.payment?.method || 'Kortbetaling';
+    receiptPaymentMethod.textContent = paymentMethod;
+  }
+  if (receiptAmountPaid) receiptAmountPaid.textContent = formatCurrencyHalfKrone(totalDKK);
+  if (receiptTransactionId) {
+    // Try to get transaction ID from order - check multiple possible fields
+    const transactionId = order.externalId || 
+                         order.transactionId || 
+                         order.payment?.transactionId || 
+                         order.payment?.id ||
+                         order.paymentTransactions?.[0]?.transactionId ||
+                         order.paymentTransactions?.[0]?.id ||
+                         '—';
+    receiptTransactionId.textContent = transactionId;
+  }
+  
+  // Populate customer information - fetch full customer details if we only have a reference
+  const receiptCustomerName = document.getElementById('receiptCustomerName');
+  const receiptCustomerAddress = document.getElementById('receiptCustomerAddress');
+  const receiptCustomerPhone = document.getElementById('receiptCustomerPhone');
+  const receiptCustomerEmail = document.getElementById('receiptCustomerEmail');
+  
+  // Get customer - prefer full customer object, fallback to order.customer reference
+  let customer = order.customer || state.customer || state.authenticatedCustomer;
+  
+  // If we only have customer ID (reference), fetch full customer details
+  if (customer?.id && !customer.email && !customer.shippingAddress && !customer.billingAddress && !customer.mobilePhone) {
+    try {
+      const fullCustomer = await authAPI.getCustomer(customer.id);
+      customer = fullCustomer;
+      console.log('[Receipt] Fetched full customer details for receipt');
+    } catch (error) {
+      console.warn('[Receipt] Could not fetch full customer details:', error);
+      // Continue with reference customer
+    }
+  }
+  
+  if (receiptCustomerName) {
+    const name = customer?.fullName || 
+                (customer?.firstName && customer?.lastName ? `${customer.firstName} ${customer.lastName}` : null) || 
+                state.order?.memberName || 
+                '—';
+    receiptCustomerName.textContent = name;
+  }
+  
+  if (receiptCustomerAddress) {
+    // Use shippingAddress or billingAddress per CustomerOut schema (AddressOut)
+    const addressObj = customer?.shippingAddress || customer?.billingAddress;
+    if (addressObj) {
+      const street = addressObj.street || '';
+      const postalCode = addressObj.postalCode || '';
+      const city = addressObj.city || '';
+      const country = addressObj.country?.name || '';
+      const address = `${street} ${postalCode}${city ? ', ' + city : ''}${country ? ' ' + country : ''}`.trim();
+      receiptCustomerAddress.textContent = address || '—';
+    } else {
+      // Fallback for old structure
+      const address = customer?.address ? 
+        `${customer.address.street || ''} ${customer.address.streetNumber || ''} ${customer.address.postalCode || ''}, ${customer.address.city || ''}`.trim() :
+        (customer?.addressLine1 ? `${customer.addressLine1} ${customer.postalCode || ''}, ${customer.city || ''}`.trim() : '—');
+      receiptCustomerAddress.textContent = address || '—';
+    }
+  }
+  
+  if (receiptCustomerPhone) {
+    // Use mobilePhone per CustomerOut schema (PhoneNumberOut)
+    if (customer?.mobilePhone) {
+      const countryCode = customer.mobilePhone.countryCode ? `+${customer.mobilePhone.countryCode}` : '';
+      const number = customer.mobilePhone.number || '';
+      receiptCustomerPhone.textContent = countryCode && number ? `${countryCode} ${number}` : number || '—';
+    } else {
+      // Fallback
+      receiptCustomerPhone.textContent = customer?.phone || customer?.phoneNumber || '—';
+    }
+  }
+  
+  if (receiptCustomerEmail) {
+    receiptCustomerEmail.textContent = customer?.email || '—';
+  }
+  
+  // Populate seller information from business unit
+  const receiptSellerName = document.getElementById('receiptSellerName');
+  const receiptSellerAddress = document.getElementById('receiptSellerAddress');
+  const receiptSellerCVR = document.getElementById('receiptSellerCVR');
+  const receiptSellerPhone = document.getElementById('receiptSellerPhone');
+  const receiptSellerEmail = document.getElementById('receiptSellerEmail');
+  
+  if (businessUnit) {
+    // Per BusinessUnitOut schema: companyNameForInvoice, address, company
+    if (receiptSellerName) {
+      receiptSellerName.textContent = businessUnit.companyNameForInvoice || businessUnit.company?.name || businessUnit.name || 'Boulders ApS';
+    }
+    
+    if (receiptSellerAddress && businessUnit.address) {
+      // Per AddressOut schema: street, city, postalCode, country
+      const street = businessUnit.address.street || '';
+      const postalCode = businessUnit.address.postalCode || '';
+      const city = businessUnit.address.city || '';
+      const country = businessUnit.address.country?.name || '';
+      const address = `${street} ${postalCode}${city ? ', ' + city : ''}${country ? ' ' + country : ''}`.trim();
+      receiptSellerAddress.textContent = address || '—';
+    } else if (receiptSellerAddress) {
+      receiptSellerAddress.textContent = '—';
+    }
+    
+    // CVR, Phone, Email might not be in BusinessUnitOut schema - check if available
+    if (receiptSellerCVR) {
+      // CVR might be in company object or business unit settings - not in schema, so use fallback
+      receiptSellerCVR.textContent = businessUnit.cvr || businessUnit.company?.cvr || '32777651'; // Fallback to known value
+    }
+    
+    if (receiptSellerPhone) {
+      receiptSellerPhone.textContent = businessUnit.phone || businessUnit.contactPhone || '+45 72100019'; // Fallback
+    }
+    
+    if (receiptSellerEmail) {
+      receiptSellerEmail.textContent = businessUnit.email || businessUnit.contactEmail || 'medlem@boulders.dk'; // Fallback
+    }
+  } else {
+    // Fallback to hardcoded values if business unit not available
+    if (receiptSellerName) receiptSellerName.textContent = 'Boulders ApS';
+    if (receiptSellerAddress) receiptSellerAddress.textContent = 'Graham Bells Vej 18A, 8200 Aarhus DK';
+    if (receiptSellerCVR) receiptSellerCVR.textContent = '32777651';
+    if (receiptSellerPhone) receiptSellerPhone.textContent = '+45 72100019';
+    if (receiptSellerEmail) receiptSellerEmail.textContent = 'medlem@boulders.dk';
+  }
+  
+  // Populate purchased items
+  const receiptItems = document.getElementById('receiptItems');
+  if (receiptItems) {
+    receiptItems.innerHTML = '';
+    
+    // Add header row
+    const headerRow = document.createElement('div');
+    headerRow.className = 'receipt-item receipt-item-header';
+    headerRow.innerHTML = sanitizeHTML(`
+      <div>Navn</div>
+      <div>Antal</div>
+      <div>TOTALT</div>
+    `);
+    receiptItems.appendChild(headerRow);
+    
+    // Add items from order - per OrderOut schema
+    if (order.valueCardItems && order.valueCardItems.length > 0) {
+      // Per ValueCardItemOut schema: price is total for all quantity, quantity is amount of cards
+      order.valueCardItems.forEach(item => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'receipt-item';
+        let itemName = item.product?.name || 'Klippekort';
+        // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
+        itemName = itemName.replace(/\s*\(\d+\)\s*$/, '');
+        const itemQuantity = item.quantity || 1;
+        // Per ValueCardItemOut: price.amount is total price for all quantity (not per unit)
+        const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+        
+        itemRow.innerHTML = sanitizeHTML(`
+          <div>${itemName}</div>
+          <div>${itemQuantity}</div>
+          <div>${formatCurrencyHalfKrone(itemTotal)}</div>
+        `);
+        receiptItems.appendChild(itemRow);
+      });
+    } else if (order.subscriptionItems && order.subscriptionItems.length > 0) {
+      // Per SubscriptionItemOut schema: price is total for all quantity, quantity is amount of subscriptions
+      order.subscriptionItems.forEach(item => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'receipt-item';
+        const itemName = item.product?.name || 'Medlemskab';
+        const itemQuantity = item.quantity || 1;
+        // Per SubscriptionItemOut: price.amount is total price for all quantity
+        const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+
+        itemRow.innerHTML = sanitizeHTML(`
+          <div>${itemName}</div>
+          <div>${itemQuantity}</div>
+          <div>${formatCurrencyHalfKrone(itemTotal)}</div>
+        `);
+        receiptItems.appendChild(itemRow);
+      });
+    } else if (state.order?.items && state.order.items.length > 0) {
+      // Fallback to state.order.items
+      state.order.items.forEach(item => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'receipt-item';
+        itemRow.innerHTML = sanitizeHTML(`
+          <div>${item.name || 'Item'}</div>
+          <div>${item.quantity || 1}</div>
+          <div>${formatCurrencyHalfKrone(item.amount || 0)}</div>
+        `);
+        receiptItems.appendChild(itemRow);
+      });
+    }
+  }
+  
+  // Move modal to body to escape any parent stacking contexts
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+  
+  // Prevent background scrolling - save current scroll position
+  const scrollY = window.scrollY;
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${scrollY}px`;
+  document.body.style.width = '100%';
+  document.body.style.overflow = 'hidden';
+  
+  // Show modal
+  modal.style.display = 'flex';
+}
+
+function closeDetailedReceipt() {
+  const modal = document.getElementById('detailedReceiptModal');
+  if (modal) {
+    modal.style.display = 'none';
+    
+    // Restore background scrolling - restore scroll position
+    const scrollY = document.body.style.top;
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+    
+    // Restore scroll position
+    if (scrollY) {
+      window.scrollTo(0, parseInt(scrollY || '0') * -1);
+    }
   }
 }
+
 
 function validateForm(animate = false) {
   let isValid = true;
+  const errors = [];
   clearErrorStates();
   const skipPersonalValidation = isUserAuthenticated();
 
@@ -16277,6 +20631,7 @@ function validateForm(animate = false) {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
         isValid = false;
+        errors.push(`Missing required field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
       }
     });
@@ -16287,13 +20642,45 @@ function validateForm(animate = false) {
       const field = document.getElementById(fieldId);
       if (field && !field.value.trim()) {
         isValid = false;
+        errors.push(`Missing parent/guardian field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
       }
     });
   }
 
+  // Re-cache consent elements in case they weren't found initially
+  if (!DOM.privacyConsent) {
+    DOM.privacyConsent = document.getElementById('privacyConsent');
+  }
+  if (!DOM.termsConsent) {
+    DOM.termsConsent = document.getElementById('termsConsent');
+  }
+
+  // Privacy consent is only required for new users (not logged-in users)
+  // Logged-in users already accepted privacy policy when creating their account
+  if (!skipPersonalValidation && !DOM.privacyConsent?.checked) {
+    isValid = false;
+    errors.push('Privacy consent not accepted');
+    if (animate) {
+      showToast('Please accept the privacy policy.', 'error');
+      // Animate privacy consent checkbox
+      const privacyConsent = DOM.privacyConsent;
+      if (privacyConsent) {
+        const formGroup = privacyConsent.closest('.form-group') || privacyConsent.closest('.consents-section');
+        if (formGroup) {
+          formGroup.classList.add('error');
+          formGroup.style.animation = 'shake 0.5s ease-in-out';
+          setTimeout(() => {
+            formGroup.style.animation = '';
+          }, 500);
+        }
+      }
+    }
+  }
+
   if (!DOM.termsConsent?.checked) {
     isValid = false;
+    errors.push('Terms consent not accepted');
     if (animate) {
       showToast('Please accept the terms and conditions.', 'error');
       // Animate terms consent checkbox
@@ -16311,25 +20698,32 @@ function validateForm(animate = false) {
     }
   }
 
+  // Payment method UI removed - always use card; ensure default for API
   if (!state.paymentMethod) {
-    isValid = false;
-    if (animate) {
-      // Animate payment method section
-      const paymentMethods = document.querySelector('.payment-methods');
-      if (paymentMethods) {
-        paymentMethods.style.animation = 'shake 0.5s ease-in-out';
-        setTimeout(() => {
-          paymentMethods.style.animation = '';
-        }, 500);
-      }
-    }
+    state.paymentMethod = 'card';
   }
 
   // Card fields validation REMOVED - users are redirected to payment provider
   // Payment details are entered on the payment provider's secure page, not on our site
   // No need to validate card fields here since they won't be filled on this page
 
-  return isValid;
+  // Return detailed validation result for better debugging
+  if (!isValid) {
+    console.log('[validateForm] Validation errors:', {
+      skipPersonalValidation,
+      privacyConsentFound: !!DOM.privacyConsent,
+      privacyConsentChecked: DOM.privacyConsent?.checked,
+      termsConsentFound: !!DOM.termsConsent,
+      termsConsentChecked: DOM.termsConsent?.checked,
+      errors
+    });
+  }
+
+  return {
+    isValid,
+    errors,
+    message: errors.length > 0 ? errors[0] : 'Please review the highlighted fields.'
+  };
 }
 
 function clearErrorStates() {
@@ -16355,131 +20749,53 @@ function clearErrorStates() {
   }
 }
 
-function highlightFieldError(fieldId, animate = false) {
-  const field = document.getElementById(fieldId);
-  const formGroup = field?.closest('.form-group');
-  if (formGroup) {
-    formGroup.classList.add('error');
-    // Only animate if explicitly requested (from button clicks)
-    if (animate) {
-      formGroup.style.animation = 'none';
-      void formGroup.offsetWidth; // Trigger reflow
-      formGroup.style.animation = 'shake 0.5s ease-in-out';
-    }
-  }
-}
-
-function isValidCardNumber(value) {
-  const digits = value.replace(/\s+/g, '');
-  return /^\d{13,19}$/.test(digits);
-}
-
-function isValidExpiryDate(value) {
-  return /^(0[1-9]|1[0-2])\/\d{2}$/.test(value);
-}
-
 function updateCheckoutButton() {
   if (!DOM.checkoutBtn) return;
+  
+  // Re-cache DOM elements in case they weren't found initially (e.g., when logged in and create form is hidden)
+  if (!DOM.privacyConsent) {
+    DOM.privacyConsent = document.getElementById('privacyConsent');
+  }
+  if (!DOM.termsConsent) {
+    DOM.termsConsent = document.getElementById('termsConsent');
+  }
+  
+  const isAuthenticated = isUserAuthenticated();
+  
+  // For logged-in users, privacy consent is assumed (they already have an account)
+  // For new users, check if privacy consent checkbox is checked
+  const privacyAccepted = isAuthenticated 
+    ? true 
+    : (DOM.privacyConsent?.checked ?? false);
+  
   const termsAccepted = DOM.termsConsent?.checked ?? false;
   const hasMembership = Boolean(state.membershipPlanId);
-  const hasPayment = Boolean(state.paymentMethod);
+  const hasPunchCards = state.valueCardQuantities && 
+    Array.from(state.valueCardQuantities.values()).some(qty => qty > 0);
+  const hasAddons = state.addonIds && state.addonIds.size > 0;
 
-  DOM.checkoutBtn.disabled = !(termsAccepted && hasMembership && hasPayment);
-}
-
-// Helper function to get user-friendly error messages
-function getErrorMessage(error, context = 'operation') {
-  // Network errors
-  if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-    return 'Network error. Please check your connection and try again.';
+  // Payment method UI removed - always use card; ensure default is set for API
+  if (!state.paymentMethod) {
+    state.paymentMethod = 'card';
   }
 
-  // Try to parse validation errors from API response (400/401/403 errors with details)
-  if (error.message.includes('400') || error.message.includes('401') || error.message.includes('403')) {
-    try {
-      // Extract JSON from error message - try multiple patterns
-      let jsonMatch = error.message.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        // Also try to parse the entire error text if it's JSON
-        jsonMatch = error.message.match(/-\s*(\{[\s\S]*\})/);
-        if (jsonMatch) {
-          jsonMatch = [jsonMatch[1]];
-        }
-      }
-      
-      if (jsonMatch) {
-        const errorData = JSON.parse(jsonMatch[0]);
-        
-        // Handle 401 errors with specific error codes (like INVALID_CREDENTIALS)
-        if (errorData.code === 'INVALID_CREDENTIALS' || errorData.error?.code === 'INVALID_CREDENTIALS') {
-          return errorData.message || errorData.error?.message || 'Invalid username or password';
-        }
-        
-        // Handle validation errors with details array
-        if (errorData.error?.details && Array.isArray(errorData.error.details)) {
-          const validationErrors = errorData.error.details
-            .map(detail => detail.message || `${detail.field}: ${detail.message}`)
-            .join(', ');
-          return `Please fix the following: ${validationErrors}`;
-        }
-        
-        // Handle field errors (like customerType)
-        if (errorData.error?.details?.fieldErrors && Array.isArray(errorData.error.details.fieldErrors)) {
-          const fieldErrors = errorData.error.details.fieldErrors
-            .map(fieldError => `${fieldError.field}: ${fieldError.errorCode || 'required'}`)
-            .join(', ');
-          return `Missing required fields: ${fieldErrors}`;
-        }
-        
-        // Handle generic error messages from API
-        if (errorData.error?.message) {
-          return errorData.error.message;
-        }
-        if (errorData.message) {
-          return errorData.message;
-        }
-      }
-    } catch (e) {
-      // If parsing fails, fall through to default error message
-      console.warn('[getErrorMessage] Failed to parse error JSON:', e);
-    }
-  }
-
-  // Parse status code from error message
-  const statusMatch = error.message.match(/(\d{3})/);
-  if (statusMatch) {
-    const status = parseInt(statusMatch[1]);
-    
-    switch (status) {
-      case 400:
-        return 'Invalid information provided. Please check your details and try again.';
-      case 401:
-        // For login context, show invalid credentials message
-        if (context === 'Login') {
-          return 'Invalid username or password. Please check your credentials and try again.';
-        }
-        return 'Your session has expired. Please try again.';
-      case 403:
-        return 'You do not have permission to perform this action.';
-      case 404:
-        return `${context} not found. Please try again.`;
-      case 409:
-        return 'This order already exists. Please check your orders or contact support.';
-      case 422:
-        return 'Invalid data provided. Please review your information.';
-      case 429:
-        return 'Too many requests. Please wait a moment and try again.';
-      case 500:
-      case 502:
-      case 503:
-        return 'Server error. Please try again in a few moments.';
-      default:
-        return `An error occurred (${status}). Please try again or contact support.`;
-    }
-  }
-
-  // Default message
-  return error.message || 'An unexpected error occurred. Please try again.';
+  // Enable checkout if: privacy + terms accepted, AND (membership OR punch cards OR addons)
+  // Payment method no longer required from UI - card is used by default
+  const hasProduct = hasMembership || hasPunchCards || hasAddons;
+  DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
+  
+  console.log('[Checkout Button] State:', {
+    isAuthenticated,
+    privacyAccepted,
+    termsAccepted,
+    hasMembership,
+    hasPunchCards,
+    hasAddons,
+    hasProduct,
+    disabled: DOM.checkoutBtn.disabled,
+    privacyConsentElement: DOM.privacyConsent ? 'found' : 'not found',
+    termsConsentElement: DOM.termsConsent ? 'found' : 'not found'
+  });
 }
 
 // Helper function to manage loading state during checkout
@@ -16491,9 +20807,15 @@ function setCheckoutLoadingState(isLoading) {
   if (isLoading) {
     DOM.checkoutBtn.textContent = 'Processing...';
     DOM.checkoutBtn.classList.add('loading');
+    // Disable logout to prevent user logging out while redirecting to payment
+    const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+    if (headerLogoutBtn) headerLogoutBtn.disabled = true;
   } else {
     DOM.checkoutBtn.textContent = 'Checkout';
     DOM.checkoutBtn.classList.remove('loading');
+    // Re-enable logout when checkout flow ends
+    const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+    if (headerLogoutBtn) headerLogoutBtn.disabled = false;
     // Re-validate button state based on form
     updateCheckoutButton();
   }
@@ -16659,25 +20981,112 @@ function nextStep(fromStep) {
 
   // CRITICAL: Only show success page (step 5) if there's actually a completed order
   // Never navigate to success page unless purchase is actually successful
+  // EXCEPTION: Allow test mode via URL parameter ?testSuccess=true
   if (state.currentStep === TOTAL_STEPS) {
+    // Check URL parameters for test mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const testMode = urlParams.get('testSuccess') === 'true';
+    const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
+    
     // CRITICAL: Check if payment is actually confirmed before showing success page
     // Don't show success page if payment failed (401 error) or payment is pending
-    const isPaymentFailed = state.paymentFailed === true;
-    const isPaymentPending = state.paymentPending === true;
-    
-    if (isPaymentFailed || isPaymentPending) {
-      console.log('[Navigation] Payment failed or pending - not rendering success page');
-      // Don't render success page - the failed/pending message functions handle the UI
-      return;
+    // Test mode bypasses this check
+    if (!testMode) {
+      const isPaymentFailed = state.paymentFailed === true;
+      const isPaymentPending = state.paymentPending === true;
+      
+      if (isPaymentFailed || isPaymentPending) {
+        console.log('[Navigation] Payment failed or pending - not rendering success page');
+        // Don't render success page - the failed/pending message functions handle the UI
+        return;
+      }
     }
     
-    // Only render confirmation if we have order data AND payment is confirmed
-    // This prevents showing success page when user hasn't completed purchase
-    if (state.order && state.orderId && state.paymentConfirmed !== false) {
+    // Only render confirmation if we have order data AND (payment is confirmed OR we're in test mode)
+    // This prevents showing success page when user hasn't completed purchase (unless in test mode)
+    if ((state.order && state.orderId && (state.paymentConfirmed !== false || testMode)) || testMode) {
+      if (testMode) {
+        // Use test product type from state if available, otherwise from URL
+        const productType = state.testProductType || testProductType;
+        console.log('[Test Mode] Creating mock order data for testing:', productType);
+        
+        // Create mock order data for testing
+        state.order = {
+          number: 'TEST-12345',
+          date: new Date(),
+          items: [
+            { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
+          ],
+          total: 469,
+          memberName: 'Test User',
+          membershipNumber: 'TEST-12345',
+          membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card',
+          primaryGym: 'Boulders Aarhus Nord',
+          membershipPrice: 469,
+        };
+        state.orderId = 'TEST-12345';
+        
+        // Set product type for test mode - ensure state is set correctly
+        state.testMode = true;
+        state.testProductType = productType;
+        state.paymentConfirmed = true; // Set payment confirmed for test mode
+        state.paymentFailed = false;
+        state.paymentPending = false;
+        
+        // Set product type for test mode
+        if (productType === 'punch-card') {
+          state.selectedProductType = 'punch-card';
+          // Mock value card items with price
+          state.fullOrder = {
+            valueCardItems: [{
+              quantity: 2,
+              product: { name: 'Klippekort', productLabels: [] },
+              valueCard: { number: '12345', numberOfPassages: 10 },
+              price: { amount: 46900 } // 469.00 DKK in cents
+            }]
+          };
+        } else if (productType === '15daypass') {
+          state.selectedProductType = 'membership';
+          state.membershipPlanId = '15daypass-123';
+          // Mock subscription items with 15 day pass label and price
+          state.fullOrder = {
+            subscriptionItems: [{
+              product: {
+                name: '15 Day Pass',
+                productLabels: [{ name: '15 Day Pass' }]
+              },
+              price: { amount: 46900 } // 469.00 DKK in cents
+            }]
+          };
+        } else {
+          // Default to membership
+          state.selectedProductType = 'membership';
+          state.membershipPlanId = 'membership-123';
+          // Mock subscription items with price
+          state.fullOrder = {
+            subscriptionItems: [{
+              product: {
+                name: 'Medlemskab',
+                productLabels: [{ name: 'Public' }]
+              },
+              price: { amount: 46900 } // 469.00 DKK in cents
+            }]
+          };
+        }
+        
+        console.log('[Test Mode] Mock data created:', {
+          productType: productType,
+          selectedProductType: state.selectedProductType,
+          membershipPlanId: state.membershipPlanId,
+          hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
+          hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
+        });
+      }
       renderConfirmationView();
     } else {
       // If we somehow ended up on step 5 without an order, go back to step 1
       console.warn('[Navigation] Attempted to show success page without order data or payment not confirmed. Not rendering success page.');
+      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|15daypass|punch-card to URL');
       // Don't redirect - let the payment failed/pending handlers show the appropriate message
     }
   }
@@ -16741,26 +21150,49 @@ function prevStep() {
         // Select the previously selected card
         selectedCard.classList.add('selected');
         
-        // If it's a punch card, restore quantity panel and disabled state
-        const category = selectedCard.closest('.category-item').dataset.category;
-        if (category === 'punchcard' && state.valueCardQuantities.has(state.membershipPlanId)) {
+        // If it's a value card with quantity, restore quantity panel and disabled state.
+        // Quantity panel is INSIDE the plan-card (child), not a sibling.
+        if (state.valueCardQuantities.has(state.membershipPlanId)) {
           selectedCard.classList.add('has-quantity');
-          const panel = selectedCard.nextElementSibling;
-          if (panel && panel.classList.contains('quantity-panel')) {
+          const panel = selectedCard.querySelector('.quantity-panel');
+          if (panel) {
             panel.classList.add('show');
-            panel.style.display = 'block';
+            panel.style.display = 'flex'; /* row layout: quantity left, Continue right */
+            const continueBtn = panel.querySelector('.continue-btn');
+            if (continueBtn) continueBtn.style.display = '';
+            const qtySelector = panel.querySelector('.quantity-selector');
+            if (qtySelector) qtySelector.style.display = 'flex';
             syncPunchCardQuantityUI(selectedCard, state.membershipPlanId);
           }
-          
-          // Grey out the other punch card type
-          const otherPunchCard = document.querySelector(`[data-plan="${state.membershipPlanId === 'adult-punch' ? 'junior-punch' : 'adult-punch'}"]`);
-          if (otherPunchCard) {
-            otherPunchCard.classList.add('disabled');
+          // Grey out the other punch card type (same category)
+          const category = selectedCard.closest('.category-item').dataset.category;
+          if (category === 'punchcard') {
+            const otherPunchCard = document.querySelector(`[data-plan="${state.membershipPlanId === 'adult-punch' ? 'junior-punch' : 'adult-punch'}"]`);
+            if (otherPunchCard) otherPunchCard.classList.add('disabled');
           }
         }
         
         // Show heads-up for previously selected access type
         updateAccessHeadsUp(selectedCard);
+        
+        // 15-day pass: show activation date section if restoring selection
+        const category = selectedCard.closest('.category-item')?.dataset?.category;
+        if (category === '15daypass') {
+          updateActivationDateSection('15daypass');
+          // Restore activation date UI state
+          const nowRadio = document.getElementById('activationDateNow');
+          const pickRadio = document.getElementById('activationDatePick');
+          const dateInput = document.getElementById('activationDateInput');
+          const pickerWrap = document.getElementById('activationDatePickerWrap');
+          if (state.subscriptionStartDate && pickRadio && dateInput && pickerWrap) {
+            pickRadio.checked = true;
+            dateInput.value = state.subscriptionStartDate;
+            pickerWrap.hidden = false;
+          } else if (nowRadio && pickerWrap) {
+            nowRadio.checked = true;
+            pickerWrap.hidden = true;
+          }
+        }
       }
     }
 }
@@ -16788,6 +21220,21 @@ function showStep(stepNumber) {
   setTimeout(() => {
     scrollToTop();
   }, 100);
+  
+  // Remove flex and margin from step-content when step 5 (success page) is active
+  const stepContent = document.querySelector('.step-content');
+  if (stepContent) {
+    if (stepNumber === TOTAL_STEPS) {
+      stepContent.style.marginTop = '0';
+      stepContent.style.flex = 'none'; // Prevent container from expanding
+    } else {
+      stepContent.style.marginTop = ''; // Reset to CSS default (50px)
+      stepContent.style.flex = ''; // Reset to CSS default (flex: 1)
+    }
+  }
+  
+  // Update FAQ visibility based on current step
+  updateFAQVisibility();
   
   // Update selected gym display when showing step 2
   if (stepNumber === 2) {
@@ -16841,8 +21288,10 @@ function showStep(stepNumber) {
   if (stepNumber === 4) {
     // Use setTimeout to ensure DOM is ready
     setTimeout(() => {
-      // CRITICAL: Restore cart from sessionStorage if empty
-      if ((!state.cartItems || state.cartItems.length === 0) && state.orderId) {
+      // CRITICAL: Restore cart from sessionStorage if empty OR if we're retrying payment
+      // Check both conditions: empty cart OR payment retry scenario (orderId exists but cart might be empty)
+      const needsRestore = (!state.cartItems || state.cartItems.length === 0) && state.orderId;
+      if (needsRestore) {
         try {
           const orderData = sessionStorage.getItem('boulders_checkout_order');
           if (orderData) {
@@ -16850,23 +21299,84 @@ function showStep(stepNumber) {
             if (storedOrder.cartItems) {
               state.cartItems = storedOrder.cartItems;
               console.log('[showStep] Step 4 - Restored cart items from sessionStorage:', state.cartItems.length, 'items');
+              
+              // CRITICAL: For punch cards, rebuild valueCardQuantities from cart items
+              // This is needed because valueCardQuantities is a Map and doesn't serialize to JSON
+              const punchCardItems = storedOrder.cartItems.filter(item => item.type === 'value-card');
+              if (punchCardItems.length > 0) {
+                console.log('[showStep] Step 4 - Found punch card items, rebuilding valueCardQuantities');
+                state.valueCardQuantities.clear();
+                punchCardItems.forEach(item => {
+                  // Use membershipPlanId format (punch-{id} or adult-punch/junior-punch)
+                  const planId = storedOrder.membershipPlanId || 
+                                (item.productId ? `punch-${item.productId}` : `punch-${item.id}`);
+                  const quantity = item.quantity || 1;
+                  state.valueCardQuantities.set(planId, quantity);
+                  console.log('[showStep] Step 4 - Rebuilt valueCardQuantities:', planId, '=', quantity);
+                });
+              }
             }
             if (storedOrder.totals) {
               state.totals = { ...state.totals, ...storedOrder.totals };
             }
+            
+            // Restore selectedProductType and selectedProductId if available
+            if (storedOrder.selectedProductType) {
+              state.selectedProductType = storedOrder.selectedProductType;
+              console.log('[showStep] Step 4 - Restored selectedProductType:', state.selectedProductType);
+            }
+            if (storedOrder.selectedProductId) {
+              state.selectedProductId = storedOrder.selectedProductId;
+              console.log('[showStep] Step 4 - Restored selectedProductId:', state.selectedProductId);
+            }
+            
             if (storedOrder.membershipPlanId && !state.membershipPlanId) {
               state.membershipPlanId = storedOrder.membershipPlanId;
               
-              // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId
-              if (typeof storedOrder.membershipPlanId === 'string' && storedOrder.membershipPlanId.startsWith('membership-')) {
-                const productId = storedOrder.membershipPlanId.replace('membership-', '');
-                state.selectedProductId = parseInt(productId, 10) || productId;
-                state.selectedProductType = 'membership';
-                console.log('[showStep] Step 4 - Derived selectedProductId:', state.selectedProductId);
+              // CRITICAL: Derive selectedProductId and selectedProductType from membershipPlanId if not already set
+              // Handle all formats: campaign-, membership-, 15daypass-, punch-
+              if (!state.selectedProductType || !state.selectedProductId) {
+                if (typeof storedOrder.membershipPlanId === 'string') {
+                  if (storedOrder.membershipPlanId.startsWith('campaign-')) {
+                    const productId = storedOrder.membershipPlanId.replace('campaign-', '');
+                    state.selectedProductId = parseInt(productId, 10) || productId;
+                    state.selectedProductType = 'membership';
+                    console.log('[showStep] Step 4 - Derived selectedProductId from campaign:', state.selectedProductId);
+                  } else if (storedOrder.membershipPlanId.startsWith('membership-')) {
+                    const productId = storedOrder.membershipPlanId.replace('membership-', '');
+                    state.selectedProductId = parseInt(productId, 10) || productId;
+                    state.selectedProductType = 'membership';
+                    console.log('[showStep] Step 4 - Derived selectedProductId from membership:', state.selectedProductId);
+                  } else if (storedOrder.membershipPlanId.startsWith('15daypass-')) {
+                    const productId = storedOrder.membershipPlanId.replace('15daypass-', '');
+                    state.selectedProductId = parseInt(productId, 10) || productId;
+                    state.selectedProductType = 'membership';
+                    console.log('[showStep] Step 4 - Derived selectedProductId from 15daypass:', state.selectedProductId);
+                  } else if (storedOrder.membershipPlanId.startsWith('punch-') || 
+                             storedOrder.membershipPlanId === 'adult-punch' || 
+                             storedOrder.membershipPlanId === 'junior-punch') {
+                    // For punch cards, extract productId from membershipPlanId
+                    if (storedOrder.membershipPlanId.startsWith('punch-')) {
+                      const productId = storedOrder.membershipPlanId.replace('punch-', '');
+                      state.selectedProductId = parseInt(productId, 10) || productId;
+                    } else {
+                      // For adult-punch/junior-punch, we need to find the productId from cart items
+                      const punchCardItem = storedOrder.cartItems?.find(item => item.type === 'value-card');
+                      if (punchCardItem) {
+                        state.selectedProductId = punchCardItem.productId || punchCardItem.id;
+                      }
+                    }
+                    state.selectedProductType = 'punch-card';
+                    console.log('[showStep] Step 4 - Derived selectedProductId from punch card:', state.selectedProductId);
+                  }
+                }
               }
             }
             if (storedOrder.selectedBusinessUnit && !state.selectedBusinessUnit) {
               state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+            }
+            if (storedOrder.subscriptionStartDate != null) {
+              state.subscriptionStartDate = storedOrder.subscriptionStartDate;
             }
           }
         } catch (e) {
@@ -17010,8 +21520,8 @@ function updateStepIndicator() {
     circle.classList.toggle('inactive', !isActive && !isCompleted);
 
     if (isCompleted) {
-      circle.innerHTML =
-        '<svg class="checkmark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+      circle.innerHTML = sanitizeHTML(
+        '<svg class="checkmark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>');
     } else {
       circle.textContent = String(index + 1);
     }
@@ -17365,29 +21875,478 @@ function setByPath(target, path, value) {
 }
 
 function findMembershipPlan(id) {
-  return MEMBERSHIP_PLANS.find((plan) => plan.id === id) ?? null;
+  const planId = String(id ?? '');
+  const pools = [
+    state.subscriptions,
+    state.dayPassSubscriptions,
+    state.campaignSubscriptions,
+  ];
+  for (const list of pools) {
+    if (!Array.isArray(list)) continue;
+    const match = list.find((plan) => String(plan.id) === planId);
+    if (match) return match;
+  }
+  return null;
 }
 
 function findValueCard(id) {
-  return VALUE_CARDS.find((plan) => plan.id === id) ?? null;
+  const rawId = String(id ?? '');
+  const normalizedId = rawId.startsWith('punch-') ? rawId.replace('punch-', '') : rawId;
+  
+  // Check both regular and campaign value cards
+  const allValueCards = [
+    ...(Array.isArray(state.valueCards) ? state.valueCards : []),
+    ...(Array.isArray(state.campaignValueCards) ? state.campaignValueCards : [])
+  ];
+  
+  return allValueCards.find((plan) => String(plan.id) === normalizedId) ?? null;
+}
+
+/**
+ * Get number of punches per card for a value card product.
+ * API ValueCardProductOut does not expose this; we parse from name/description.
+ * Supports e.g. "10 Klip", "Klippekort: 10 Klip + 2 Extra", "10 clips".
+ * @param {Object} product - Value card product (name, description, etc.)
+ * @returns {number|null} Punches per card, or null if unknown
+ */
+function getPunchesPerCard(product) {
+  if (!product) return null;
+  const name = (product.name || '').trim();
+  const desc = (product.description || product.externalDescription || '').trim();
+  const text = `${name} ${desc}`;
+  if (!text) return null;
+  // Main count: "10 Klip", "10 klip", "10 clips", "10 Clips"
+  const mainMatch = text.match(/(\d+)\s*(?:klip|clips?)\b/i);
+  const main = mainMatch ? parseInt(mainMatch[1], 10) : null;
+  // Optional extra: "+ 2 Extra", "+ 2 ekstra"
+  const extraMatch = text.match(/\+\s*(\d+)\s*(?:extra|ekstra)?/i);
+  const extra = extraMatch ? parseInt(extraMatch[1], 10) : 0;
+  if (main != null && !Number.isNaN(main)) {
+    return main + (Number.isNaN(extra) ? 0 : extra);
+  }
+  // Fallback: first number in text (e.g. "Klippekort 5" → 5)
+  const anyNum = text.match(/\b(\d+)\b/);
+  return anyNum ? parseInt(anyNum[1], 10) : null;
 }
 
 function findAddon(id) {
-  return ADDONS.find((addon) => addon.id === id) ?? null;
+  // First check subscription additions (traditional addons)
+  if (Array.isArray(state.subscriptionAdditions)) {
+    const addon = state.subscriptionAdditions.find((addon) => String(addon.id) === String(id));
+    if (addon) return addon;
+  }
+  
+  // Then check boost products
+  if (Array.isArray(state.boostProducts)) {
+    const boostProduct = state.boostProducts.find((product) => String(product.id) === String(id));
+    if (boostProduct) return boostProduct;
+  }
+  
+  return null;
 }
 
-function showToast(message, type = 'info') {
-  const existingToasts = document.querySelectorAll('.toast');
-  existingToasts.forEach((toast) => toast.remove());
+// Extract price from addon (handles both subscription additions and boost products)
+function getAddonPrice(addon) {
+  if (!addon) return 0;
+  
+  // Subscription additions typically have price.discounted structure
+  if (addon.price && typeof addon.price.discounted === 'number') {
+    return addon.price.discounted;
+  }
+  
+  // Boost products use API structure similar to subscriptions
+  // Try priceWithInterval.price.amount (cents)
+  if (addon.priceWithInterval?.price?.amount) {
+    return addon.priceWithInterval.price.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try price.amount (cents)
+  if (addon.price?.amount) {
+    return addon.price.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try direct amount (cents)
+  if (addon.amount) {
+    return addon.amount / 100; // Convert cents to DKK
+  }
+  
+  // Try direct price (already in DKK)
+  if (typeof addon.price === 'number') {
+    return addon.price;
+  }
+  
+  return 0;
+}
 
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
+// Addon price in cents (for API payloads that require amount)
+function getAddonPriceInCents(addon) {
+  if (!addon) return 0;
+  if (addon.priceWithInterval?.price?.amount != null) return Math.round(Number(addon.priceWithInterval.price.amount));
+  if (addon.price?.amount != null) return Math.round(Number(addon.price.amount));
+  if (addon.amount != null) return Math.round(Number(addon.amount));
+  // Subscription additions often have price.discounted in DKK
+  if (addon.price && typeof addon.price.discounted === 'number') return Math.round(addon.price.discounted * 100);
+  const dkk = getAddonPrice(addon);
+  return Math.round(dkk * 100);
+}
 
+// Privacy and Terms Consent Persistence
+function restoreConsentCheckboxes() {
+  try {
+    // Restore privacy consent - use cached DOM element if available, otherwise query
+    const privacyConsent = DOM.privacyConsent || document.getElementById('privacyConsent');
+    if (privacyConsent) {
+      const savedPrivacyConsent = localStorage.getItem('boulders_privacy_consent');
+      if (savedPrivacyConsent === 'true') {
+        privacyConsent.checked = true;
+        // Ensure timestamp exists - if consent is restored but timestamp is missing, create one
+        // This handles edge cases where localStorage was partially cleared
+        if (!localStorage.getItem('boulders_privacy_consent_timestamp')) {
+          const timestamp = new Date().toISOString();
+          localStorage.setItem('boulders_privacy_consent_timestamp', timestamp);
+          console.log('[Privacy Consent] Restored from localStorage, created new timestamp:', timestamp);
+        } else {
+          console.log('[Privacy Consent] Restored from localStorage with existing timestamp');
+        }
+      }
+    } else {
+      console.warn('[Privacy Consent] Checkbox not found in DOM');
+    }
+    
+    // Restore terms consent - use cached DOM element if available, otherwise query
+    const termsConsent = DOM.termsConsent || document.getElementById('termsConsent');
+    if (termsConsent) {
+      const savedTermsConsent = localStorage.getItem('boulders_terms_consent');
+      if (savedTermsConsent === 'true') {
+        termsConsent.checked = true;
+        // Ensure timestamp exists - if consent is restored but timestamp is missing, create one
+        // This handles edge cases where localStorage was partially cleared
+        if (!localStorage.getItem('boulders_terms_consent_timestamp')) {
+          const timestamp = new Date().toISOString();
+          localStorage.setItem('boulders_terms_consent_timestamp', timestamp);
+          console.log('[Terms Consent] Restored from localStorage, created new timestamp:', timestamp);
+        } else {
+          console.log('[Terms Consent] Restored from localStorage with existing timestamp');
+        }
+      }
+    } else {
+      console.warn('[Terms Consent] Checkbox not found in DOM');
+    }
+  } catch (e) {
+    console.warn('[Consent] Could not restore consent checkboxes:', e);
+  }
+}
+
+// Cookiebot integration - footer "Cookie Settings" button reopens Cookiebot consent dialog
+function setupCookiebotSettingsButton() {
+  const settingsButton = document.getElementById('cookieSettingsButton');
+  if (!settingsButton) return;
+
+  settingsButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof Cookiebot !== 'undefined' && typeof Cookiebot.renew === 'function') {
+      Cookiebot.renew();
+    } else {
+      console.warn('[Cookiebot] Cookiebot.renew() not available - Cookiebot may not be loaded yet');
+    }
+  });
+}
+
+// Static opening hours fallback when API does not return openingHours (e.g. /api/reference/business-units).
+// Keys match gym names from API or partial match; values shown in "Open" column.
+const OPENING_HOURS_FALLBACK = {
+  'Boulders Aarhus City': '08 - 23',
+  'Boulders Aarhus Nord': '10 - 22',
+  'Boulders Aarhus Syd': '10 - 22',
+  'Boulders Odense': '10 - 22',
+  'Boulders KBH Sydhavn': '08 - 23',
+  'Boulders KBH Valby': '09 - 22',
+  'Boulders KBH Hvidovre': '10 - 22',
+  'Boulders KBH Amager': '10 - 22',
+  'Boulders Aarhus Aaby': '08 - 23',
+  'Boulders KBH Vanløse': '08 - 23',
+  'Boulders Aalborg': '10 - 22',
+  // Partial keys for API name variants
+  'Aarhus City': '08 - 23',
+  'Aarhus Nord': '10 - 22',
+  'Aarhus Syd': '10 - 22',
+  'Odense': '10 - 22',
+  'Sydhavn': '08 - 23',
+  'Valby': '09 - 22',
+  'Hvidovre': '10 - 22',
+  'Amager': '10 - 22',
+  'Aaby': '08 - 23',
+  'Vanløse': '08 - 23',
+  'Aalborg': '10 - 22'
+};
+
+function escapeHtml(str) {
+  if (str == null) return '';
+  const s = String(str);
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Get opening hours string for a gym: from API (openingHours / opening_hours) or static fallback.
+ * @param {{ name: string, openingHours?: string, opening_hours?: string }} gym
+ * @returns {string}
+ */
+function getGymOpeningHours(gym) {
+  const fromApi = gym.openingHours || gym.opening_hours || gym.openingHoursText;
+  if (fromApi && String(fromApi).trim()) return String(fromApi).trim();
+  const name = (gym.name || '').trim();
+  if (OPENING_HOURS_FALLBACK[name]) return OPENING_HOURS_FALLBACK[name];
+  for (const [key, hours] of Object.entries(OPENING_HOURS_FALLBACK)) {
+    if (name.includes(key) || key.includes(name)) return hours;
+  }
+  return '';
+}
+
+/**
+ * Build HTML for the FAQ "What are the opening hours?" answer: intro + table from API gyms or fallback.
+ * Uses gymsWithDistances when available; otherwise static list from OPENING_HOURS_FALLBACK.
+ * @returns {string}
+ */
+function getOpeningHoursAnswerHtml() {
+  const intro = t('faq.gyms.openingHours.intro');
+  const tableName = t('faq.gyms.openingHours.tableName');
+  const tableOpen = t('faq.gyms.openingHours.tableOpen');
+  const fullNameKeys = ['Boulders Aarhus City', 'Boulders Aarhus Nord', 'Boulders Aarhus Syd', 'Boulders Odense', 'Boulders KBH Sydhavn', 'Boulders KBH Valby', 'Boulders KBH Hvidovre', 'Boulders KBH Amager', 'Boulders Aarhus Aaby', 'Boulders KBH Vanløse', 'Boulders Aalborg'];
+  const gyms = Array.isArray(gymsWithDistances) && gymsWithDistances.length > 0
+    ? gymsWithDistances
+    : fullNameKeys.map(name => ({ name, _fallback: true }));
+  const rows = gyms.map(gym => {
+    const name = gym.name || gym;
+    const hours = (typeof gym === 'object' && !gym._fallback ? getGymOpeningHours(gym) : OPENING_HOURS_FALLBACK[name]) || '—';
+    return `<tr><td class="faq-oh-name">${escapeHtml(name)}</td><td class="faq-oh-hours">${escapeHtml(hours)}</td></tr>`;
+  }).join('');
+  return `<p class="faq-opening-hours-intro">${escapeHtml(intro)}</p><table class="faq-opening-hours-table" aria-label="${escapeHtml(tableOpen)}"><thead><tr><th scope="col">${escapeHtml(tableName)}</th><th scope="col">${escapeHtml(tableOpen)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// FAQ Data Structure
+const FAQ_DATA = {
+  gyms: [
+    { q: 'faq.gyms.openingHours.q', a: 'faq.gyms.openingHours.a' },
+    { q: 'faq.gyms.access.q', a: 'faq.gyms.access.a' },
+    { q: 'faq.gyms.events.q', a: 'faq.gyms.events.a' },
+    { q: 'faq.gyms.gettingStarted.q', a: 'faq.gyms.gettingStarted.a' }
+  ],
+  productChoice: [
+    { q: 'faq.productChoice.difference.q', a: 'faq.productChoice.difference.a' },
+    { q: 'faq.productChoice.membershipBest.q', a: 'faq.productChoice.membershipBest.a' },
+    { q: 'faq.productChoice.15daypassBest.q', a: 'faq.productChoice.15daypassBest.a' },
+    { q: 'faq.productChoice.punchcardBest.q', a: 'faq.productChoice.punchcardBest.a' }
+  ],
+  membership: [
+    { q: 'faq.membership.included.q', a: 'faq.membership.included.a' },
+    { q: 'faq.membership.blocLife.q', a: 'faq.membership.blocLife.a' },
+    { q: 'faq.membership.terms.q', a: 'faq.membership.terms.a' },
+    { q: 'faq.membership.bindingPeriod.q', a: 'faq.membership.bindingPeriod.a' },
+    { q: 'faq.membership.freeze.q', a: 'faq.membership.freeze.a' },
+    { q: 'faq.membership.cancellation.q', a: 'faq.membership.cancellation.a' }
+  ],
+  '15daypass': [
+    { q: 'faq.15daypass.howItWorks.q', a: 'faq.15daypass.howItWorks.a' },
+    { q: 'faq.15daypass.validity.q', a: 'faq.15daypass.validity.a' },
+    { q: 'faq.15daypass.access.q', a: 'faq.15daypass.access.a' }
+  ],
+  'punch-card': [
+    { q: 'faq.punchcard.howItWorks.q', a: 'faq.punchcard.howItWorks.a' },
+    { q: 'faq.punchcard.convert.q', a: 'faq.punchcard.convert.a' },
+    { q: 'faq.punchcard.remainingClips.q', a: 'faq.punchcard.remainingClips.a' },
+    { q: 'faq.punchcard.multiple.q', a: 'faq.punchcard.multiple.a' }
+  ]
+};
+
+/**
+ * Determine which FAQ categories should be shown based on current step and cart.
+ * Step 1: gyms only. Step 2–3: product choice (help choose product). Step 4: contextual to cart.
+ * @returns {string[]} Array of FAQ category keys to display
+ */
+function getActiveFAQs() {
+  const step = state.currentStep;
+
+  // Step 1: gym info only
+  if (step === 1) {
+    return ['gyms'];
+  }
+
+  // Step 2 or 3: help users choose the right product (differences between membership, 15-day pass, punch card)
+  if (step === 2 || step === 3) {
+    return ['productChoice'];
+  }
+
+  // Step 4 (cart): only FAQs for the selected product type (no gyms)
+  if (step === 4) {
+    const productType = determineProductTypeFromOrder();
+    if (productType === '15daypass') return ['15daypass'];
+    if (productType === 'membership') return ['membership'];
+    if (productType === 'punch-card') return ['punch-card'];
+    return [];
+  }
+
+  return [];
+}
+
+/**
+ * Render FAQ HTML based on active categories
+ */
+function renderFAQ() {
+  if (!DOM.faqSection) {
+    DOM.faqSection = document.getElementById('faqSection');
+    if (!DOM.faqSection) return;
+  }
+  
+  const faqList = DOM.faqSection.querySelector('.faq-list');
+  if (!faqList) return;
+  
+  // Get active FAQ categories
+  const activeCategories = getActiveFAQs();
+  
+  // Clear existing FAQ items
+  faqList.innerHTML = '';
+  
+  // Render FAQs for each active category
+  activeCategories.forEach(categoryKey => {
+    const categoryFAQs = FAQ_DATA[categoryKey];
+    if (!categoryFAQs) return;
+    
+    categoryFAQs.forEach(faq => {
+      const faqItem = document.createElement('div');
+      faqItem.className = 'faq-item';
+      faqItem.setAttribute('aria-expanded', 'false');
+      const isOpeningHours = categoryKey === 'gyms' && faq.a === 'faq.gyms.openingHours.a';
+      const answerContent = isOpeningHours ? getOpeningHoursAnswerHtml() : t(faq.a);
+      const answerTag = isOpeningHours ? 'div' : 'p';
+      const answerClass = isOpeningHours ? 'faq-answer-text faq-opening-hours' : 'faq-answer-text';
+      if (isOpeningHours) faqItem.classList.add('faq-item--with-table');
+      faqItem.innerHTML = `
+        <button class="faq-question" type="button" aria-expanded="false">
+          <span class="faq-question-text">${t(faq.q)}</span>
+          <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+        <div class="faq-answer">
+          <${answerTag} class="${answerClass}">${answerContent}</${answerTag}>
+        </div>
+      `;
+      
+      faqList.appendChild(faqItem);
+    });
+  });
+  
+  // Reinitialize accordion functionality for new FAQ items
+  initFAQ();
+}
+
+// Update FAQ section visibility
+function updateFAQVisibility() {
+  if (!DOM.faqSection) {
+    // Retry to find FAQ section if not cached yet
+    DOM.faqSection = document.getElementById('faqSection');
+    if (!DOM.faqSection) return;
+  }
+  
+  // Hide FAQ if checkout is in progress or on step 5 (success page)
+  const shouldHide = state.checkoutInProgress || state.currentStep === TOTAL_STEPS;
+  
+  if (shouldHide) {
+    DOM.faqSection.style.display = 'none';
+    DOM.faqSection.setAttribute('data-checkout', 'true');
+    DOM.faqSection.setAttribute('data-step-5', state.currentStep === TOTAL_STEPS ? 'true' : 'false');
+  } else {
+    // Show FAQ on steps 1-4 when checkout is not in progress
+    DOM.faqSection.style.display = 'block';
+    DOM.faqSection.removeAttribute('data-checkout');
+    DOM.faqSection.removeAttribute('data-step-5');
+    // Render FAQ when showing
+    renderFAQ();
+  }
+}
+
+/**
+ * Scroll to FAQ section smoothly
+ */
+function scrollToFAQ() {
+  const faqSection = document.getElementById('faqSection');
+  if (!faqSection) return;
+  
+  // Force FAQ to be visible if hidden
+  if (state.checkoutInProgress) {
+    // Temporarily show FAQ even during checkout
+    faqSection.style.display = 'block';
+    faqSection.removeAttribute('data-checkout');
+  } else {
+    updateFAQVisibility();
+  }
+  
+  // Scroll to FAQ with smooth behavior
+  faqSection.scrollIntoView({ 
+    behavior: 'smooth', 
+    block: 'start' 
+  });
+  
+  // Optional: Highlight FAQ section briefly
+  faqSection.style.transition = 'background-color 0.3s ease';
+  faqSection.style.backgroundColor = 'rgba(244, 1, 245, 0.1)';
   setTimeout(() => {
-    toast.remove();
-  }, 4000);
+    faqSection.style.backgroundColor = '';
+  }, 2000);
+}
+
+// Initialize FAQ accordion functionality
+function initFAQ() {
+  if (!DOM.faqQuestions || DOM.faqQuestions.length === 0) {
+    // Retry after DOM is fully loaded
+    setTimeout(() => {
+      DOM.faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
+      if (DOM.faqQuestions.length > 0) {
+        setupFAQAccordion();
+      }
+    }, 100);
+    return;
+  }
+  
+  setupFAQAccordion();
+}
+
+function setupFAQAccordion() {
+  // Get fresh references to FAQ questions
+  const faqQuestions = Array.from(document.querySelectorAll('.faq-question'));
+  if (faqQuestions.length === 0) return;
+  
+  faqQuestions.forEach((questionBtn) => {
+    // Check if already has listener (avoid duplicates)
+    if (questionBtn.dataset.faqInitialized === 'true') return;
+    questionBtn.dataset.faqInitialized = 'true';
+    
+    questionBtn.addEventListener('click', () => {
+      const faqItem = questionBtn.closest('.faq-item');
+      const isExpanded = questionBtn.getAttribute('aria-expanded') === 'true';
+      
+      // Close all other FAQ items
+      faqQuestions.forEach((otherBtn) => {
+        if (otherBtn !== questionBtn) {
+          const otherItem = otherBtn.closest('.faq-item');
+          otherBtn.setAttribute('aria-expanded', 'false');
+          if (otherItem) {
+            otherItem.setAttribute('aria-expanded', 'false');
+          }
+        }
+      });
+      
+      // Toggle current item
+      questionBtn.setAttribute('aria-expanded', !isExpanded);
+      if (faqItem) {
+        faqItem.setAttribute('aria-expanded', !isExpanded);
+      }
+    });
+  });
+  
+  // Update DOM reference
+  DOM.faqQuestions = faqQuestions;
 }
 
 // Expose functions to window for login-page.js (after function definitions)

@@ -1,0 +1,76 @@
+Project Progress Summary
+Date: 2026-01-15
+Project: Boulders Membership Checkout Flow
+
+Overall status: PRODUCTION READY
+
+Completed (client-side, Steps 1-9):
+- Production API URL locked and CORS handled via Cloudflare Pages Function proxy
+- Accept-Language da-DK header applied across API calls
+- Business unit picker and reference data loader
+- Membership and value card product loading
+- Authentication, token handling, and customer creation
+- Order creation and item management (subscriptions, value cards, articles)
+- Payment link generation and payment return handling
+- Session storage restore and payment polling
+- Logging and error handling throughout checkout
+
+Backend integration status:
+- Webhook processing is stable
+- Payments register (leftToPay reaches 0)
+- Orders update to "Betalet"
+- Subscriptions link to customers
+- Memberships are being created in BRP
+
+Open backend issues:
+- Duplicate profiles can be created with the same email and password (backend bug; frontend blocks creation when password matches)
+
+Production/deployment:
+- Deployed to join.boulders.dk
+- Cloudflare Pages auto-deployments working
+- No build or linter issues reported
+- GitHub Pages works for static UI only; API calls are not expected there (no proxy/backend)
+
+Documentation updates:
+- Status report refreshed to reflect webhook fix and membership creation
+- Solved backend issue docs archived under docs/backend-issues/archive
+
+Tracking report:
+- GTM ecommerce events implemented: select_item, add_to_cart, begin_checkout, purchase
+- GTM utils loaded via index.html; events pushed with GA4 ecommerce schema
+- Debug guide available in docs/TRACKING_DEBUG_GUIDE.md
+- GTM Preview verification complete on hygiene preview (all 4 events fired once per purchase)
+- GA4 DebugView verification pending
+- Server-side tagging live via gtm.join.boulders.dk (GA4 collects routed through sGTM)
+- Own CDN (Cloudflare) checklist: docs/TRACKING_OWN_CDN_CLOUDFLARE_CHECKLIST.md
+
+Remaining planned work (non-blocking):
+- Punch card setup flow
+- Analytics integration (Steps 13-17)
+- Guardian/child flows
+- End-to-end walkthrough testing (Step 11)
+
+Test user findings (translated):
+- Junior membership purchase: should show a clear error when purchase is blocked (status: pending)
+- Password length: BRP allows 6 digits; UI currently requires 8 (status: fixed)
+- Payment status messaging: shows "payment failed" even when membership is created (status: fixed)
+- Campaign visibility: clarify whether punch cards and membership campaigns both appear under Campaigns (status: fixed)
+- Campaign copy: make auto-renew subscription more explicit for membership campaigns (status: pending)
+- No active campaign: clarify how the campaign option behaves when none are public (status: pending)
+- "Create account" label: make clearer since most users are new (status: fixed)
+- Amount rounding: BRP uses half-kr; comma decimals still show (status: fixed)
+- 15-day pass pricing: currently adds rest-of-month; should be full amount only (status: fixed)
+- 15-day pass proration: unclear amount due from day 15; needs decision/clarification (status: fixed)
+- Campaign rejection flow: define UX when user is blocked due to recent membership (status: pending) !!
+- Discount code UI: hard to see when applied and not reducing payable amount (status: fixed)
+- Pay now membership price: when date is between 16th and last day of month, pay now price is rest of current month + next month (fetch price from API when possible, fallback to calculation)
+- Ved køb af klippekort, tildeles nyt kundenr når profilen allerede er medlem
+- ved køb af junior medlemskab, tildeles nyt kundenr hvis profilen allerede er medlem + extend form til navn og DOB på barnet
+- Junior medlemskab skal oprettes af forældre/værge 
+- Gør Hjemmehal i Cart edit knap til at vælge ny hal via modal 
+
+
+Next steps:
+- Monitor production for payment registration and membership creation
+- Run full regression test after backend fix
+- Document backend webhook resolution details

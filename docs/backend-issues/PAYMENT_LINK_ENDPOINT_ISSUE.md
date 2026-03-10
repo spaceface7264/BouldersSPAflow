@@ -87,7 +87,7 @@
 - Check if there's a different endpoint structure
 
 ### Option 3: Test with Direct API Call
-- Try calling the endpoint directly (bypassing Netlify proxy) to see the exact error
+- Try calling the endpoint directly (bypassing Cloudflare Pages proxy) to see the exact error
 - This will help identify if it's a proxy issue or endpoint issue
 
 ### Option 4: Check Backend Logs

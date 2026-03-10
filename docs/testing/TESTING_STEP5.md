@@ -69,7 +69,7 @@ Loaded 0 subscription additions for product 56
 
 1. **Prices showing as very large numbers** → Price not being divided by 100 (check if `price.amount` exists)
 2. **No products showing** → Check if API response format matches expectations
-3. **CORS errors** → Should use Netlify Function proxy in production
+3. **CORS errors** → Should use Cloudflare Pages Function proxy in production
 4. **Products not loading** → Check if `state.selectedBusinessUnit` is set correctly
 
 ## What to Report

@@ -22,6 +22,8 @@ window.dataLayer.filter(e => e.event === 'purchase')
 
 **Expected:** You should see events with `event: 'purchase'` and `ecommerce` data.
 
+**Note:** The page reloads on payment return, so the DataLayer resets. To confirm `purchase`, use Network → Preserve log and look for `collect` requests with `en=purchase`, or use GTM Preview mode.
+
 ### 2. Check Browser Console for GTM Logs
 
 Look for `[GTM]` prefixed messages:
@@ -31,6 +33,8 @@ Look for `[GTM]` prefixed messages:
 - `[GTM] Pushed event: select_item`
 
 **If you don't see these:** Events aren't firing from the code.
+
+**Tip:** Enable "Preserve log" in Console to keep logs across payment redirects.
 
 ### 3. Verify GTM Container is Loaded
 
@@ -60,6 +64,12 @@ window.dataLayer[0] // Should show {gtm.start: timestamp, event: 'gtm.js'}
 - `GA4 - Configuration` tag firing
 - `GA4 - Purchase` tag firing when purchase completes
 - DataLayer events visible
+
+### 4a. When Events Should Fire
+- `select_item`: when a plan card is selected
+- `add_to_cart`: when items are added to cart
+- `begin_checkout`: when checkout starts
+- `purchase`: after payment is confirmed on the success page
 
 ### 5. Verify GA4 Configuration in GTM
 

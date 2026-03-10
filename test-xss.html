@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XSS Protection Test - Boulders</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-box {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        h2 { color: #e91e63; border-bottom: 2px solid #e91e63; padding-bottom: 10px; }
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        button {
+            background: #e91e63;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #c2185b;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #4caf50;
+            border-radius: 4px;
+        }
+        .result.vulnerable {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+        .result.safe {
+            border-left-color: #4caf50;
+            background: #e8f5e9;
+        }
+        code {
+            background: #eee;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.pass {
+            background: #4caf50;
+            color: white;
+        }
+        .status.fail {
+            background: #f44336;
+            color: white;
+        }
+        #output {
+            border: 2px dashed #ddd;
+            padding: 15px;
+            min-height: 50px;
+            margin-top: 15px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔒 XSS Protection Test Suite</h1>
+    <p>Test DOMPurify sanitization for the Boulders membership app.</p>
+
+    <div class="test-box">
+        <h2>Test 1: Interactive XSS Test</h2>
+        <p>Enter malicious HTML below to test sanitization:</p>
+        <textarea id="xssInput" placeholder="Try: <script>alert('XSS')</script>
+or: <img src=x onerror=alert('XSS')>
+or: <iframe src=javascript:alert('XSS')></iframe>">
+<script>alert('XSS Attack!')</script>
+<img src=x onerror="alert('XSS')">
+Click me!</textarea>
+        <button onclick="testXSS()">Test Sanitization</button>
+        <div id="testResult"></div>
+        <div id="output"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 2: Automated XSS Payload Tests</h2>
+        <button onclick="runAllTests()">Run All XSS Tests</button>
+        <div id="autoTestResults"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>Test 3: Product Description XSS</h2>
+        <p>Simulates malicious product data from API:</p>
+        <button onclick="testProductXSS()">Test Product Sanitization</button>
+        <div id="productResult"></div>
+    </div>
+
+    <script type="module">
+        import { sanitizeHTML } from './sanitize.js';
+
+        // Make available globally for tests
+        window.sanitizeHTML = sanitizeHTML;
+        window.testsRun = false;
+    </script>
+
+    <script>
+        function testXSS() {
+            const input = document.getElementById('xssInput').value;
+            const output = document.getElementById('output');
+            const result = document.getElementById('testResult');
+
+            if (typeof window.sanitizeHTML !== 'function') {
+                result.innerHTML = '<div class="result vulnerable">❌ ERROR: sanitizeHTML not loaded!</div>';
+                return;
+            }
+
+            const sanitized = window.sanitizeHTML(input);
+            output.innerHTML = sanitized;
+
+            const hasScript = input.includes('<script') || input.includes('onerror') || input.includes('javascript:');
+            const stillHasScript = sanitized.includes('<script') || sanitized.includes('onerror') || sanitized.includes('javascript:');
+
+            if (hasScript && !stillHasScript) {
+                result.innerHTML = `
+                    <div class="result safe">
+                        ✅ <strong>SAFE</strong>: Malicious code was sanitized!
+                        <div style="margin-top: 10px;">
+                            <strong>Input:</strong> <code>${input.replace(/</g, '&lt;').substring(0, 100)}...</code><br>
+                            <strong>Output:</strong> <code>${sanitized.replace(/</g, '&lt;')}</code>
+                        </div>
+                    </div>
+                `;
+            } else if (!hasScript) {
+                result.innerHTML = '<div class="result">ℹ️ No malicious code detected in input. Try entering XSS payloads.</div>';
+            } else {
+                result.innerHTML = `
+                    <div class="result vulnerable">
+                        ❌ <strong>VULNERABLE</strong>: Malicious code was NOT removed!
+                        <div style="margin-top: 10px;">
+                            <strong>Input:</strong> <code>${input.replace(/</g, '&lt;')}</code><br>
+                            <strong>Output:</strong> <code>${sanitized.replace(/</g, '&lt;')}</code>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function runAllTests() {
+            const testCases = [
+                '<script>alert("XSS")</script>',
+                '<img src=x onerror="alert(\'XSS\')">',
+                '<iframe src="javascript:alert(\'XSS\')"></iframe>',
+                '<svg onload="alert(\'XSS\')">',
+                '<body onload="alert(\'XSS\')">',
+                '<input onfocus="alert(\'XSS\')" autofocus>',
+                '<select onfocus="alert(\'XSS\')" autofocus>',
+                '<textarea onfocus="alert(\'XSS\')" autofocus>',
+                '<a href="javascript:alert(\'XSS\')">Click</a>',
+                '<div onclick="alert(\'XSS\')">Click</div>'
+            ];
+
+            const results = document.getElementById('autoTestResults');
+            let html = '<div style="margin-top: 15px;"><h3>Test Results:</h3>';
+            let passed = 0;
+            let failed = 0;
+
+            testCases.forEach((payload, i) => {
+                const sanitized = window.sanitizeHTML(payload);
+                const safe = !sanitized.includes('script') &&
+                            !sanitized.includes('onerror') &&
+                            !sanitized.includes('onload') &&
+                            !sanitized.includes('onfocus') &&
+                            !sanitized.includes('onclick') &&
+                            !sanitized.includes('javascript:');
+
+                if (safe) {
+                    passed++;
+                    html += `<div style="margin: 5px 0;">✅ Test ${i + 1}: <span class="status pass">PASS</span></div>`;
+                } else {
+                    failed++;
+                    html += `<div style="margin: 5px 0;">❌ Test ${i + 1}: <span class="status fail">FAIL</span> - <code>${sanitized.replace(/</g, '&lt;').substring(0, 50)}</code></div>`;
+                }
+            });
+
+            html += `
+                <div style="margin-top: 20px; padding: 15px; background: ${failed === 0 ? '#e8f5e9' : '#ffebee'}; border-radius: 8px;">
+                    <strong>Summary:</strong> ${passed}/${testCases.length} tests passed
+                    ${failed === 0 ? '<br>🎉 All XSS protection working!' : '<br>⚠️ Some vulnerabilities detected!'}
+                </div>
+            </div>`;
+
+            results.innerHTML = html;
+            window.testsRun = true;
+        }
+
+        function testProductXSS() {
+            const maliciousProduct = {
+                name: 'Premium Membership<script>alert("HACKED")</script>',
+                description: 'Great deal! <img src=x onerror="console.log(\'VULNERABLE\')"> Join now!',
+                price: '299 DKK'
+            };
+
+            const sanitizedName = window.sanitizeHTML(maliciousProduct.name);
+            const sanitizedDesc = window.sanitizeHTML(maliciousProduct.description);
+
+            const nameClean = !sanitizedName.includes('<script');
+            const descClean = !sanitizedDesc.includes('onerror');
+
+            const result = document.getElementById('productResult');
+            result.innerHTML = `
+                <div class="result ${nameClean && descClean ? 'safe' : 'vulnerable'}" style="margin-top: 15px;">
+                    <strong>Original Name:</strong><br>
+                    <code>${maliciousProduct.name.replace(/</g, '&lt;')}</code><br><br>
+
+                    <strong>Sanitized Name:</strong> ${nameClean ? '✅' : '❌'}<br>
+                    <code>${sanitizedName.replace(/</g, '&lt;')}</code><br><br>
+
+                    <strong>Original Description:</strong><br>
+                    <code>${maliciousProduct.description.replace(/</g, '&lt;')}</code><br><br>
+
+                    <strong>Sanitized Description:</strong> ${descClean ? '✅' : '❌'}<br>
+                    <code>${sanitizedDesc.replace(/</g, '&lt;')}</code><br><br>
+
+                    ${nameClean && descClean ?
+                        '<div style="color: #4caf50; font-weight: bold; margin-top: 10px;">🎉 Product data safely sanitized!</div>' :
+                        '<div style="color: #f44336; font-weight: bold; margin-top: 10px;">⚠️ XSS vulnerability detected!</div>'
+                    }
+                </div>
+            `;
+        }
+
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (typeof window.sanitizeHTML === 'function' && !window.testsRun) {
+                    console.log('✅ DOMPurify loaded successfully');
+                    runAllTests();
+                } else if (!window.sanitizeHTML) {
+                    document.getElementById('autoTestResults').innerHTML =
+                        '<div class="result vulnerable">❌ ERROR: sanitizeHTML function not available. Check console.</div>';
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
