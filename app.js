@@ -10278,7 +10278,24 @@ async function applyActivationDateToExistingOrder() {
   if (subscriptionItemId) {
     const deleted = await orderAPI.deleteSubscriptionItem(orderId, subscriptionItemId);
     if (!deleted) {
-      showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
+      // If backend refuses the mutation (often due to auth/order lock), fall back to recreating order on next checkout.
+      console.warn('[Activation Date] Backend refused subscription item delete; clearing order state so checkout can recreate with new start date.', {
+        orderId,
+        subscriptionItemId,
+      });
+      state.order = null;
+      state.fullOrder = null;
+      state.orderId = null;
+      state.subscriptionAttachedOrderId = null;
+      state.subscriptionItemId = null;
+      state.paymentLink = null;
+      state.paymentLinkGenerated = false;
+      state.checkoutInProgress = false;
+      state.billingPeriod = '';
+      state.discountApplied = false;
+      state.totals.discountAmount = 0;
+      updateCartSummary();
+      updatePaymentOverview();
       return false;
     }
     state.subscriptionAttachedOrderId = null;
