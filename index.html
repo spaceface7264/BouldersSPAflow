@@ -334,26 +334,7 @@
                                     <div class="plans-list">
                                         <!-- Products will be loaded from API -->
                                     </div>
-                                    <!-- Activation date choice (shown when a 15-day pass plan is selected) -->
-                                    <div class="activation-date-section" id="activationDateSection" hidden aria-hidden="true">
-                                        <p class="activation-date-label" id="activationDateLabel" data-i18n-key="activationDate.label">When do you want to activate your pass?</p>
-                                        <div class="activation-date-options" role="radiogroup" aria-labelledby="activationDateLabel">
-                                            <label class="activation-date-option">
-                                                <input type="radio" name="activationDate" value="now" id="activationDateNow" checked data-action="set-activation-now">
-                                                <span data-i18n-key="activationDate.now">Activate now</span>
-                                            </label>
-                                            <label class="activation-date-option">
-                                                <input type="radio" name="activationDate" value="date" id="activationDatePick" data-action="set-activation-date">
-                                                <span data-i18n-key="activationDate.later">Activate on specific date</span>
-                                            </label>
-                                        </div>
-                                        <div class="activation-date-picker-wrap" id="activationDatePickerWrap" hidden>
-                                            <label for="activationDateInput" class="sr-only" data-i18n-key="activationDate.pickLabel">Select activation date</label>
-                                            <input type="date" id="activationDateInput" min="" data-action="activation-date-change" aria-describedby="activationDateHint">
-                                            <span class="activation-date-hint" id="activationDateHint" data-i18n-key="activationDate.hint">Select a date today or in the future.</span>
-                                        </div>
-                                        <button type="button" class="select-btn activation-date-continue" data-action="activation-date-continue" data-i18n-key="button.continue">Continue</button>
-                                    </div>
+                                    <!-- Activation date choice now shown as full-page modal overlay -->
                                 </div>
                             </div>
 
@@ -1169,6 +1150,34 @@
             </div>
         </div>
     </main>
+
+    <!-- Activation Date Modal (full-page overlay) -->
+    <div class="activation-date-section" id="activationDateSection" hidden aria-hidden="true">
+        <div class="activation-date-modal-card" role="dialog" aria-modal="true" aria-labelledby="activationDateLabel">
+            <p class="activation-date-label" id="activationDateLabel" data-i18n-key="activationDate.label">When do you want to activate your pass?</p>
+            <div class="activation-date-options" role="radiogroup" aria-labelledby="activationDateLabel">
+                <label class="activation-date-option">
+                    <input type="radio" name="activationDate" value="now" id="activationDateNow" checked data-action="set-activation-now">
+                    <span class="activation-date-option-title" data-i18n-key="activationDate.now">Activate now</span>
+                    <span class="activation-date-option-desc" data-i18n-key="activationDate.now.desc">Start today</span>
+                </label>
+                <label class="activation-date-option">
+                    <input type="radio" name="activationDate" value="date" id="activationDatePick" data-action="set-activation-date">
+                    <span class="activation-date-option-title" data-i18n-key="activationDate.later">Activate on specific date</span>
+                    <span class="activation-date-option-desc" data-i18n-key="activationDate.later.desc">Choose a future start date</span>
+                </label>
+            </div>
+            <div class="activation-date-picker-wrap" id="activationDatePickerWrap" hidden>
+                <label for="activationDateInput" class="sr-only" data-i18n-key="activationDate.pickLabel">Select activation date</label>
+                <input type="date" id="activationDateInput" min="" data-action="activation-date-change" aria-describedby="activationDateHint">
+                <span class="activation-date-hint" id="activationDateHint" data-i18n-key="activationDate.hint">Select a date today or in the future.</span>
+            </div>
+            <div class="activation-date-actions">
+                <button type="button" class="btn-outline activation-date-cancel" data-action="close-activation-modal" data-i18n-key="button.cancel">Cancel</button>
+                <button type="button" class="select-btn activation-date-continue" data-action="activation-date-continue" data-i18n-key="button.continue">Continue</button>
+            </div>
+        </div>
+    </div>
     
     <!-- Terms Modal -->
     <!-- Terms and Conditions Modal -->

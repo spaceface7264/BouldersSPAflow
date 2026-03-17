@@ -5158,7 +5158,9 @@ const translations = {
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere dit pas?',
     'activationDate.now': 'Aktiver nu',
+    'activationDate.now.desc': 'Starter i dag',
     'activationDate.later': 'Aktiver på en bestemt dato',
+    'activationDate.later.desc': 'Vælg en fremtidig startdato',
     'activationDate.pickLabel': 'Vælg aktiveringsdato',
     'activationDate.hint': 'Vælg en dato i dag eller i fremtiden.',
     'activationDate.change': 'Ændre',
@@ -5317,7 +5319,9 @@ const translations = {
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
     'activationDate.label': 'When do you want to activate your pass?',
     'activationDate.now': 'Activate now',
+    'activationDate.now.desc': 'Start today',
     'activationDate.later': 'Activate on specific date',
+    'activationDate.later.desc': 'Choose a future start date',
     'activationDate.pickLabel': 'Select activation date',
     'activationDate.hint': 'Select a date today or in the future.',
     'activationDate.change': 'Change',
@@ -5503,7 +5507,9 @@ const translations = {
     'category.punchcard.desc': 'Sie können jeweils 1 Art von Stempelkarte kaufen. Jeder Eintritt verwendet einen Stempel auf Ihrer Stempelkarte. Die Karte ist 5 Jahre gültig und beinhaltet keine Mitgliedschaftsvorteile. Füllen Sie innerhalb von 14 Tagen nach Ihrem letzten Stempel nach und erhalten Sie 100 kr Rabatt in der Halle.',
     'activationDate.label': 'Wann möchten Sie Ihren Pass aktivieren?',
     'activationDate.now': 'Sofort aktivieren',
+    'activationDate.now.desc': 'Startet heute',
     'activationDate.later': 'An einem bestimmten Datum aktivieren',
+    'activationDate.later.desc': 'Wählen Sie ein zukünftiges Startdatum',
     'activationDate.pickLabel': 'Aktivierungsdatum auswählen',
     'activationDate.hint': 'Wählen Sie ein Datum heute oder in der Zukunft.',
     'activationDate.change': 'Ändern',
@@ -6894,6 +6900,49 @@ function setupEventListeners() {
       const campaignRejectionModal = document.getElementById('campaignRejectionModal');
       if (campaignRejectionModal && campaignRejectionModal.style.display === 'flex') {
         hideCampaignRejectionModal();
+      }
+      if (isActivationDateModalOpen()) {
+        closeActivationDateModal();
+      }
+    }
+  });
+
+  // Close activation modal on backdrop click + trap focus
+  const activationDateSection = document.getElementById('activationDateSection');
+  if (activationDateSection) {
+    activationDateSection.addEventListener('click', (e) => {
+      if (e.target === activationDateSection) {
+        closeActivationDateModal();
+      }
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    if (!isActivationDateModalOpen()) return;
+
+    const modal = document.querySelector('#activationDateSection .activation-date-modal-card');
+    if (!modal) return;
+
+    const focusables = Array.from(
+      modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+    ).filter((el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true');
+
+    if (focusables.length === 0) return;
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+
+    if (e.shiftKey) {
+      if (active === first || !modal.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (active === last) {
+        e.preventDefault();
+        first.focus();
       }
     }
   });
@@ -10069,6 +10118,79 @@ function trackSelectItemEvent({ product, productId, category, type, card }) {
  * Updates the 15-day pass activation date section visibility and state.
  * Shows when a 15-day pass plan is selected; hides otherwise.
  */
+function isActivationDateModalOpen() {
+  const section = document.getElementById('activationDateSection');
+  return !!section && !section.hidden && section.classList.contains('activation-date-modal-open');
+}
+
+function closeActivationDateModal({ restoreFocus } = { restoreFocus: true }) {
+  const section = document.getElementById('activationDateSection');
+  const pickerWrap = document.getElementById('activationDatePickerWrap');
+  if (section) {
+    section.hidden = true;
+    section.setAttribute('aria-hidden', 'true');
+    section.classList.remove('activation-date-modal-open');
+  }
+  if (pickerWrap) pickerWrap.hidden = true;
+  document.body.classList.remove('modal-open');
+
+  if (restoreFocus && state.activationDateModalPreviousFocus && typeof state.activationDateModalPreviousFocus.focus === 'function') {
+    setTimeout(() => {
+      try {
+        state.activationDateModalPreviousFocus.focus();
+      } catch (e) {}
+    }, 0);
+  }
+  state.activationDateModalPreviousFocus = null;
+}
+
+function openActivationDateModal() {
+  const section = document.getElementById('activationDateSection');
+  if (!section) return;
+
+  state.activationDateModalPreviousFocus = document.activeElement;
+  section.hidden = false;
+  section.setAttribute('aria-hidden', 'false');
+  section.classList.add('activation-date-modal-open');
+  document.body.classList.add('modal-open');
+
+  // Focus first option for accessibility
+  const firstRadio = section.querySelector('input[name="activationDate"]');
+  if (firstRadio) {
+    setTimeout(() => firstRadio.focus(), 50);
+  }
+}
+
+async function applyActivationDateToExistingOrder() {
+  const orderId = state.orderId || state.fullOrder?.id;
+  const productId = state.selectedProductId || state.fullOrder?.subscriptionItems?.[0]?.product?.id;
+  if (!orderId || !productId) return false;
+
+  // If an existing subscription item exists, delete it before re-adding with new start date
+  const subscriptionItemId = state.subscriptionItemId || state.fullOrder?.subscriptionItems?.[0]?.id;
+  if (subscriptionItemId) {
+    const deleted = await orderAPI.deleteSubscriptionItem(orderId, subscriptionItemId);
+    if (!deleted) {
+      showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
+      return false;
+    }
+    state.subscriptionAttachedOrderId = null;
+    state.subscriptionItemId = null;
+  }
+
+  const updatedOrder = await orderAPI.addSubscriptionItem(orderId, productId, state.subscriptionStartDate);
+  state.fullOrder = updatedOrder;
+
+  const newSubscriptionItem = updatedOrder?.subscriptionItems?.[0];
+  if (newSubscriptionItem?.id) {
+    state.subscriptionItemId = newSubscriptionItem.id;
+  }
+
+  updateCartSummary();
+  updatePaymentOverview();
+  return true;
+}
+
 function updateActivationDateSection(category) {
   const section = document.getElementById('activationDateSection');
   const pickerWrap = document.getElementById('activationDatePickerWrap');
@@ -10082,8 +10204,10 @@ function updateActivationDateSection(category) {
   const hasSelectedPlan = categoryItem?.querySelector('.plan-card.selected');
 
   if (is15DayPass && hasSelectedPlan) {
-    section.hidden = false;
-    section.setAttribute('aria-hidden', 'false');
+    if (!isActivationDateModalOpen()) {
+      openActivationDateModal();
+    }
+
     dateInput.min = getTodayLocalDateString();
     if (nowRadio?.checked) {
       state.subscriptionStartDate = null;
@@ -10098,9 +10222,9 @@ function updateActivationDateSection(category) {
       }
     }
   } else {
-    section.hidden = true;
-    section.setAttribute('aria-hidden', 'true');
+    closeActivationDateModal({ restoreFocus: false });
     state.subscriptionStartDate = null;
+    if (pickerWrap) pickerWrap.hidden = true;
   }
 }
 
@@ -10847,7 +10971,27 @@ function handleGlobalClick(event) {
       } else {
         state.subscriptionStartDate = null;
       }
-      if (state.currentStep === 2) nextStep();
+      closeActivationDateModal();
+      if (state.currentStep === 2) {
+        nextStep();
+      } else {
+        // Immediately reflect the newly selected date in UI
+        updatePaymentOverview();
+        // If user changes date from summary step, update order + UI in-place
+        (async () => {
+          try {
+            await applyActivationDateToExistingOrder();
+          } catch (e) {
+            console.error('[Activation Date] Failed to apply activation date change:', e);
+            showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
+          }
+        })();
+      }
+      break;
+    }
+    case 'close-activation-modal': {
+      event.preventDefault();
+      closeActivationDateModal();
       break;
     }
     case 'edit-cart': {
@@ -11264,22 +11408,26 @@ function handleEditCart() {
 }
 
 async function handleChangeActivationDate() {
-  // Delete subscription item so we can re-add with new date when user returns
-  const orderId = state.orderId;
-  const subscriptionItemId = state.subscriptionItemId;
-  if (orderId && subscriptionItemId) {
-    const deleted = await orderAPI.deleteSubscriptionItem(orderId, subscriptionItemId);
-    if (deleted) {
-      state.subscriptionAttachedOrderId = null;
-      state.subscriptionItemId = null;
-    } else {
-      showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
-      return;
+  // Open the same activation modal in-place (no step navigation)
+  const nowRadio = document.getElementById('activationDateNow');
+  const pickRadio = document.getElementById('activationDatePick');
+  const pickerWrap = document.getElementById('activationDatePickerWrap');
+  const dateInput = document.getElementById('activationDateInput');
+
+  // Ensure the UI reflects current state before opening
+  if (state.subscriptionStartDate) {
+    if (pickRadio) pickRadio.checked = true;
+    if (pickerWrap) pickerWrap.hidden = false;
+    if (dateInput) {
+      dateInput.min = getTodayLocalDateString();
+      dateInput.value = state.subscriptionStartDate;
     }
   } else {
-    state.subscriptionAttachedOrderId = null;
+    if (nowRadio) nowRadio.checked = true;
+    if (pickerWrap) pickerWrap.hidden = true;
   }
-  handleEditCart();
+
+  openActivationDateModal();
 }
 
 function handlePaymentChange(event) {
