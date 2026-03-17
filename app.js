@@ -11123,8 +11123,8 @@ function handleGlobalClick(event) {
       event.preventDefault();
       closeCheckoutConfirmModal();
       state.checkoutConfirmPendingAfterEdit = true;
-      // Open the same activation modal so user can change selection/date
-      openActivationDateModal();
+      // Reuse the same change handler so the date input is shown when needed
+      handleChangeActivationDate();
       break;
     }
     case 'checkout-confirm-continue': {
