@@ -11101,6 +11101,13 @@ function handleGlobalClick(event) {
       } else {
         // Immediately reflect the newly selected date in UI
         updatePaymentOverview();
+        // If the user is editing from checkout confirmation flow, re-open confirmation
+        if (state.checkoutConfirmPendingAfterEdit) {
+          state.checkoutConfirmPendingAfterEdit = false;
+          setTimeout(() => openCheckoutConfirmModal(), 0);
+          break;
+        }
+
         // If user changes date from summary step, update order + UI in-place
         (async () => {
           try {
@@ -11110,12 +11117,6 @@ function handleGlobalClick(event) {
             showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
           }
         })();
-
-        // If the user is editing from checkout confirmation flow, re-open confirmation
-        if (state.checkoutConfirmPendingAfterEdit) {
-          state.checkoutConfirmPendingAfterEdit = false;
-          setTimeout(() => openCheckoutConfirmModal(), 0);
-        }
       }
       break;
     }
