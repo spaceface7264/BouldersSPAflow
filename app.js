@@ -11108,15 +11108,19 @@ function handleGlobalClick(event) {
           break;
         }
 
-        // If user changes date from summary step, update order + UI in-place
-        (async () => {
-          try {
-            await applyActivationDateToExistingOrder();
-          } catch (e) {
-            console.error('[Activation Date] Failed to apply activation date change:', e);
-            showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
-          }
-        })();
+        // If there's no order yet (common before checkout), only update local state/UI.
+        // We'll apply the selected start date when checkout creates the order.
+        if (state.orderId || state.fullOrder?.id) {
+          // If user changes date from summary step after an order exists, update order + UI in-place
+          (async () => {
+            try {
+              await applyActivationDateToExistingOrder();
+            } catch (e) {
+              console.error('[Activation Date] Failed to apply activation date change:', e);
+              showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
+            }
+          })();
+        }
       }
       break;
     }
