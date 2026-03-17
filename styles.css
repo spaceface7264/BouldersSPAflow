@@ -2873,6 +2873,89 @@ body {
     box-shadow: none;
 }
 
+/* Checkout confirmation modal (pre-checkout verification) */
+.checkout-confirm-modal.checkout-confirm-open {
+    position: fixed;
+    inset: 0;
+    z-index: 2200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.checkout-confirm-modal-card {
+    background: #020617;
+    border-radius: 16px;
+    border: 1px solid var(--color-item-border);
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.8);
+    padding: 22px 22px 18px;
+    max-width: 520px;
+    width: 100%;
+    animation: slideUp 0.25s ease-out;
+}
+
+.checkout-confirm-title {
+    margin: 0 0 6px;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xl);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+}
+
+.checkout-confirm-subtitle {
+    margin: 0 0 16px;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+.checkout-confirm-summary {
+    border: 1px solid var(--color-item-border);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 14px;
+}
+
+.checkout-confirm-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.checkout-confirm-row + .checkout-confirm-row {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.checkout-confirm-label {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.checkout-confirm-value {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-md);
+    font-weight: 700;
+    text-align: right;
+}
+
+.checkout-confirm-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.checkout-confirm-actions .checkout-confirm-edit,
+.checkout-confirm-actions .checkout-confirm-continue {
+    flex: 1;
+    min-height: 44px;
+    border-radius: 999px;
+}
+
 .activation-date-section .activation-date-continue {
     margin-top: 4px;
     width: 100%;

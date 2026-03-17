@@ -1178,6 +1178,30 @@
             </div>
         </div>
     </div>
+
+    <!-- Checkout Confirmation Modal (verify activation choice before checkout) -->
+    <div class="checkout-confirm-modal" id="checkoutConfirmModal" hidden aria-hidden="true">
+        <div class="checkout-confirm-modal-card" role="dialog" aria-modal="true" aria-labelledby="checkoutConfirmTitle">
+            <h3 class="checkout-confirm-title" id="checkoutConfirmTitle" data-i18n-key="activationConfirm.title">Confirm your selection</h3>
+            <p class="checkout-confirm-subtitle" data-i18n-key="activationConfirm.subtitle">Please confirm when your pass should start.</p>
+
+            <div class="checkout-confirm-summary">
+                <div class="checkout-confirm-row">
+                    <span class="checkout-confirm-label" data-i18n-key="activationConfirm.startLabel">Starts</span>
+                    <span class="checkout-confirm-value" id="checkoutConfirmStartValue">—</span>
+                </div>
+                <div class="checkout-confirm-row">
+                    <span class="checkout-confirm-label" data-i18n-key="activationConfirm.endLabel">Valid until</span>
+                    <span class="checkout-confirm-value" id="checkoutConfirmEndValue">—</span>
+                </div>
+            </div>
+
+            <div class="checkout-confirm-actions">
+                <button type="button" class="btn-outline checkout-confirm-edit" data-action="checkout-confirm-edit" data-i18n-key="button.edit">Edit</button>
+                <button type="button" class="select-btn checkout-confirm-continue" data-action="checkout-confirm-continue" data-i18n-key="activationConfirm.continue">Continue to checkout</button>
+            </div>
+        </div>
+    </div>
     
     <!-- Terms Modal -->
     <!-- Terms and Conditions Modal -->

@@ -3947,6 +3947,9 @@ const state = {
   subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
   // 15-day pass: activation date (null = today, or YYYY-MM-DD string for future start)
   subscriptionStartDate: null,
+  checkoutConfirmAccepted: false,
+  checkoutConfirmPreviousFocus: null,
+  checkoutConfirmPendingAfterEdit: false,
   // Test mode for success page
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
@@ -5156,15 +5159,21 @@ const translations = {
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
-    'activationDate.label': 'Hvornår vil du aktivere dit pas?',
+    'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
-    'activationDate.now.desc': 'Starter i dag',
+    'activationDate.now.desc': 'Starter med det samme',
     'activationDate.later': 'Aktiver på en bestemt dato',
     'activationDate.later.desc': 'Vælg en fremtidig startdato',
     'activationDate.pickLabel': 'Vælg aktiveringsdato',
     'activationDate.hint': 'Vælg en dato i dag eller i fremtiden.',
     'activationDate.change': 'Ændre',
     'activationDate.changeFailed': 'Kunne ikke ændre datoen. Gennemfør din køb eller start forfra.',
+    'activationConfirm.title': 'Bekræft dit valg',
+    'activationConfirm.subtitle': 'Tjek venligst, hvornår dit pas skal starte, før du går til betaling.',
+    'activationConfirm.startLabel': 'Starter',
+    'activationConfirm.endLabel': 'Gyldig til',
+    'activationConfirm.today': 'I dag',
+    'activationConfirm.continue': 'Fortsæt til betaling',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
@@ -5317,7 +5326,7 @@ const translations = {
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
-    'activationDate.label': 'When do you want to activate your pass?',
+    'activationDate.label': 'When do you want your trial period to start?',
     'activationDate.now': 'Activate now',
     'activationDate.now.desc': 'Start today',
     'activationDate.later': 'Activate on specific date',
@@ -5326,6 +5335,12 @@ const translations = {
     'activationDate.hint': 'Select a date today or in the future.',
     'activationDate.change': 'Change',
     'activationDate.changeFailed': 'Unable to change date. Please complete your purchase or start over.',
+    'activationConfirm.title': 'Confirm your selection',
+    'activationConfirm.subtitle': 'Please confirm when your pass should start before continuing to checkout.',
+    'activationConfirm.startLabel': 'Starts',
+    'activationConfirm.endLabel': 'Valid until',
+    'activationConfirm.today': 'Today',
+    'activationConfirm.continue': 'Continue to checkout',
     'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
@@ -5514,6 +5529,12 @@ const translations = {
     'activationDate.hint': 'Wählen Sie ein Datum heute oder in der Zukunft.',
     'activationDate.change': 'Ändern',
     'activationDate.changeFailed': 'Datum konnte nicht geändert werden. Bitte schließen Sie Ihren Kauf ab oder starten Sie neu.',
+    'activationConfirm.title': 'Auswahl bestätigen',
+    'activationConfirm.subtitle': 'Bitte bestätigen Sie, wann Ihr Pass starten soll, bevor Sie zur Zahlung fortfahren.',
+    'activationConfirm.startLabel': 'Start',
+    'activationConfirm.endLabel': 'Gültig bis',
+    'activationConfirm.today': 'Heute',
+    'activationConfirm.continue': 'Weiter zur Kasse',
     'header.selectedGym': 'Ausgewählte Halle:', 'gym.headsUp': 'Heimhalle ausgewählt:', 'access.headsUp': 'Zugangstyp ausgewählt:',
     'main.subtitle.step1': 'Wählen Sie Ihre Heimhalle', 'main.subtitle.step1.secondary': 'Hier trainieren Sie hauptsächlich − Sie haben Zugang zu allen Hallen.',
     'main.subtitle.step2': 'Wählen Sie Ihren Zugangstyp', 'main.subtitle.step2.secondary': 'Wählen Sie Mitgliedschaft, wenn Sie mindestens einmal im Monat klettern.',
@@ -6904,6 +6925,9 @@ function setupEventListeners() {
       if (isActivationDateModalOpen()) {
         closeActivationDateModal();
       }
+      if (isCheckoutConfirmModalOpen()) {
+        closeCheckoutConfirmModal();
+      }
     }
   });
 
@@ -6917,11 +6941,25 @@ function setupEventListeners() {
     });
   }
 
+  // Close checkout confirm modal on backdrop click
+  const checkoutConfirmModal = document.getElementById('checkoutConfirmModal');
+  if (checkoutConfirmModal) {
+    checkoutConfirmModal.addEventListener('click', (e) => {
+      if (e.target === checkoutConfirmModal) {
+        closeCheckoutConfirmModal();
+      }
+    });
+  }
+
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Tab') return;
-    if (!isActivationDateModalOpen()) return;
+    const activationOpen = isActivationDateModalOpen();
+    const confirmOpen = isCheckoutConfirmModalOpen();
+    if (!activationOpen && !confirmOpen) return;
 
-    const modal = document.querySelector('#activationDateSection .activation-date-modal-card');
+    const modal = activationOpen
+      ? document.querySelector('#activationDateSection .activation-date-modal-card')
+      : document.querySelector('#checkoutConfirmModal .checkout-confirm-modal-card');
     if (!modal) return;
 
     const focusables = Array.from(
@@ -10123,6 +10161,75 @@ function isActivationDateModalOpen() {
   return !!section && !section.hidden && section.classList.contains('activation-date-modal-open');
 }
 
+function isCheckoutConfirmModalOpen() {
+  const modal = document.getElementById('checkoutConfirmModal');
+  return !!modal && !modal.hidden && modal.classList.contains('checkout-confirm-open');
+}
+
+function closeCheckoutConfirmModal({ restoreFocus } = { restoreFocus: true }) {
+  const modal = document.getElementById('checkoutConfirmModal');
+  if (modal) {
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+    modal.classList.remove('checkout-confirm-open');
+  }
+  document.body.classList.remove('modal-open');
+
+  if (restoreFocus && state.checkoutConfirmPreviousFocus && typeof state.checkoutConfirmPreviousFocus.focus === 'function') {
+    setTimeout(() => {
+      try {
+        state.checkoutConfirmPreviousFocus.focus();
+      } catch (e) {}
+    }, 0);
+  }
+  state.checkoutConfirmPreviousFocus = null;
+}
+
+function openCheckoutConfirmModal() {
+  const modal = document.getElementById('checkoutConfirmModal');
+  if (!modal) return;
+
+  // Only relevant for 15-day pass
+  const is15DayPassSelected =
+    document.querySelector('[data-category="15daypass"] .plan-card.selected') ||
+    (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
+  if (!is15DayPassSelected) return;
+
+  state.checkoutConfirmAccepted = false;
+  state.checkoutConfirmPreviousFocus = document.activeElement;
+
+  // Compute displayed start/end dates (15-day pass)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startDate = state.subscriptionStartDate
+    ? new Date(state.subscriptionStartDate + 'T12:00:00')
+    : today;
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 15);
+
+  const startValueEl = document.getElementById('checkoutConfirmStartValue');
+  const endValueEl = document.getElementById('checkoutConfirmEndValue');
+  if (startValueEl) {
+    const startIsToday = !state.subscriptionStartDate || startDate.getTime() === today.getTime();
+    startValueEl.textContent = startIsToday ? (t('activationConfirm.today') || 'Today') : formatDateDMY(startDate);
+  }
+  if (endValueEl) {
+    endValueEl.textContent = formatDateDMY(endDate);
+  }
+
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+  modal.classList.add('checkout-confirm-open');
+  document.body.classList.add('modal-open');
+
+  // Focus primary action
+  const primary = modal.querySelector('[data-action="checkout-confirm-continue"]');
+  if (primary) {
+    setTimeout(() => primary.focus(), 50);
+  }
+}
+
 function closeActivationDateModal({ restoreFocus } = { restoreFocus: true }) {
   const section = document.getElementById('activationDateSection');
   const pickerWrap = document.getElementById('activationDatePickerWrap');
@@ -10928,6 +11035,14 @@ function handleGlobalClick(event) {
     }
     case 'submit-checkout': {
       event.preventDefault();
+      // For 15-day pass: confirm activation choice before proceeding to checkout
+      const is15DayPassSelected =
+        document.querySelector('[data-category="15daypass"] .plan-card.selected') ||
+        (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
+      if (is15DayPassSelected && !state.checkoutConfirmAccepted) {
+        openCheckoutConfirmModal();
+        break;
+      }
       handleCheckoutClick();
       break;
     }
@@ -10947,9 +11062,10 @@ function handleGlobalClick(event) {
       const dateInput = document.getElementById('activationDateInput');
       if (pickerWrap) pickerWrap.hidden = false;
       if (dateInput) {
-        dateInput.min = getTodayLocalDateString();
-        if (!dateInput.value) {
-          dateInput.value = getTodayLocalDateString();
+        const todayStr = getTodayLocalDateString();
+        dateInput.min = todayStr;
+        if (!dateInput.value || dateInput.value < todayStr) {
+          dateInput.value = todayStr;
         }
         state.subscriptionStartDate = dateInput.value;
       }
@@ -10958,6 +11074,10 @@ function handleGlobalClick(event) {
     case 'activation-date-change': {
       const dateInput = document.getElementById('activationDateInput');
       if (dateInput && dateInput.value) {
+        const todayStr = getTodayLocalDateString();
+        if (dateInput.value < todayStr) {
+          dateInput.value = todayStr;
+        }
         state.subscriptionStartDate = dateInput.value;
       }
       break;
@@ -10967,6 +11087,10 @@ function handleGlobalClick(event) {
       const dateInput = document.getElementById('activationDateInput');
       const pickRadio = document.getElementById('activationDatePick');
       if (pickRadio?.checked && dateInput?.value) {
+        const todayStr = getTodayLocalDateString();
+        if (dateInput.value < todayStr) {
+          dateInput.value = todayStr;
+        }
         state.subscriptionStartDate = dateInput.value;
       } else {
         state.subscriptionStartDate = null;
@@ -10986,7 +11110,28 @@ function handleGlobalClick(event) {
             showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
           }
         })();
+
+        // If the user is editing from checkout confirmation flow, re-open confirmation
+        if (state.checkoutConfirmPendingAfterEdit) {
+          state.checkoutConfirmPendingAfterEdit = false;
+          setTimeout(() => openCheckoutConfirmModal(), 0);
+        }
       }
+      break;
+    }
+    case 'checkout-confirm-edit': {
+      event.preventDefault();
+      closeCheckoutConfirmModal();
+      state.checkoutConfirmPendingAfterEdit = true;
+      // Open the same activation modal so user can change selection/date
+      openActivationDateModal();
+      break;
+    }
+    case 'checkout-confirm-continue': {
+      event.preventDefault();
+      state.checkoutConfirmAccepted = true;
+      closeCheckoutConfirmModal();
+      handleCheckoutClick();
       break;
     }
     case 'close-activation-modal': {
@@ -11419,8 +11564,10 @@ async function handleChangeActivationDate() {
     if (pickRadio) pickRadio.checked = true;
     if (pickerWrap) pickerWrap.hidden = false;
     if (dateInput) {
-      dateInput.min = getTodayLocalDateString();
-      dateInput.value = state.subscriptionStartDate;
+      const todayStr = getTodayLocalDateString();
+      dateInput.min = todayStr;
+      dateInput.value = state.subscriptionStartDate < todayStr ? todayStr : state.subscriptionStartDate;
+      state.subscriptionStartDate = dateInput.value;
     }
   } else {
     if (nowRadio) nowRadio.checked = true;
