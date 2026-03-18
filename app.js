@@ -133,6 +133,31 @@ class BusinessUnitsAPI {
 
       return data;
     } catch (error) {
+      // Temporary resilience: api-join reference endpoint has been observed returning 500 HTML.
+      // Fall back to BRP API3 businessunits list via the same proxy.
+      // This keeps Step 1 "locations" functional during outages of /api/reference/business-units.
+      try {
+        console.warn('[BusinessUnits] Primary endpoint failed; falling back to /api/ver3/businessunits', {
+          status: error?.status,
+        });
+        const fallbackUrl = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: '/api/ver3/businessunits',
+        });
+        const headers = {
+          'Accept-Language': getAcceptLanguageHeader(),
+          'Content-Type': 'application/json',
+        };
+        const fallbackData = await requestJson({ url: fallbackUrl, headers });
+        if (Array.isArray(fallbackData) && fallbackData.length > 0) {
+          console.warn('[BusinessUnits] Fallback businessunits loaded:', fallbackData.length);
+          return fallbackData;
+        }
+      } catch (fallbackError) {
+        console.warn('[BusinessUnits] Fallback endpoint also failed:', fallbackError);
+      }
+
       console.error('Error fetching business units:', error);
       console.error('Error details:', {
         message: error.message,
