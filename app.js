@@ -5716,6 +5716,7 @@ function t(key, fallback = '') {
 // Update all translations on the page
 function updatePageTranslations() {
   const lang = state.language || DEFAULT_LANGUAGE;
+  const langCode = String(lang).split('-')[0];
   
   // Update elements with data-i18n-key attribute
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
@@ -5727,7 +5728,7 @@ function updatePageTranslations() {
     if (translation && translation.includes('{date}')) {
       const dateIso = element.getAttribute('data-i18n-date-iso');
       if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
-        const locale = lang === 'de' ? 'de-DE' : lang === 'en' ? 'en-US' : 'da-DK';
+        const locale = langCode === 'de' ? 'de-DE' : langCode === 'en' ? 'en-US' : 'da-DK';
         const date = new Date(`${dateIso}T12:00:00`);
         if (!isNaN(date.getTime())) {
           const dateText = new Intl.DateTimeFormat(locale, {
@@ -18569,8 +18570,9 @@ function renderConfirmationView() {
       parsedEnd = computedEnd;
     }
 
-    const locale = state.language === 'de' ? 'de-DE'
-      : state.language === 'en' ? 'en-US'
+    const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+    const locale = langCode === 'de' ? 'de-DE'
+      : langCode === 'en' ? 'en-US'
       : 'da-DK';
     const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
       year: 'numeric',
