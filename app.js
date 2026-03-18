@@ -5176,7 +5176,7 @@ const translations = {
     'activationDate.change': 'Ændre',
     'activationDate.changeFailed': 'Kunne ikke ændre datoen. Gennemfør din køb eller start forfra.',
     'activationConfirm.title': 'Bekræft dit valg',
-    'activationConfirm.subtitle': 'Tjek venligst, hvornår dit pas skal starte, før du går til betaling.',
+    'activationConfirm.subtitle': 'Bekræft hvornår din prøveperiode skal starte, før du går til betaling.',
     'activationConfirm.startLabel': 'Starter',
     'activationConfirm.endLabel': 'Gyldig til',
     'activationConfirm.today': 'I dag',
