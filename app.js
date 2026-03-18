@@ -3238,12 +3238,22 @@ function renderProductsFromAPI() {
   }
   
   // Re-setup event listeners for the new cards
-  // Use setTimeout to ensure DOM is ready
-  setTimeout(() => {
+  // Rebind interactions immediately so users can click right away (e.g. after language switch).
+  // Also schedule a next-frame rebind to handle any late DOM/layout changes.
+  try {
     setupNewAccessStep();
-    // Update translations for newly rendered buttons
     updatePageTranslations();
-  }, 100);
+  } catch (e) {
+    console.warn('[Step 2] setupNewAccessStep failed (immediate):', e);
+  }
+  requestAnimationFrame(() => {
+    try {
+      setupNewAccessStep();
+      updatePageTranslations();
+    } catch (e) {
+      console.warn('[Step 2] setupNewAccessStep failed (raf):', e);
+    }
+  });
 }
 
 // Step 5: Load add-ons when a membership is selected
