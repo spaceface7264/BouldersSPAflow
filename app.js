@@ -5680,6 +5680,11 @@ function updatePageTranslations() {
   
   // Update elements with data-i18n-key attribute
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
+    // Allow specific elements to opt out of automatic translation updates
+    // (used for dynamic, runtime-generated strings such as post-purchase messaging with dates)
+    if (element.getAttribute('data-i18n-dynamic') === 'true') {
+      return;
+    }
     const key = element.getAttribute('data-i18n-key');
     const translation = t(key);
     if (translation && translation !== key) {
@@ -18459,31 +18464,70 @@ function renderConfirmationView() {
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
     const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
     
-    // Get start date from API subscription startDate only
-    if (passStartDate) {
-      if (apiOrder?.subscriptionItems?.[0]?.subscription?.startDate) {
-        const startDate = new Date(apiOrder.subscriptionItems[0].subscription.startDate);
-        passStartDate.textContent = new Intl.DateTimeFormat('da-DK', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }).format(startDate);
-      } else {
-        passStartDate.textContent = '—';
-      }
+    const subscriptionItem = apiOrder?.subscriptionItems?.[0];
+    const rawStart =
+      subscriptionItem?.subscription?.startDate ||
+      subscriptionItem?.initialPaymentPeriod?.start ||
+      (state.subscriptionStartDate ? `${state.subscriptionStartDate}T12:00:00` : null);
+    const rawEnd =
+      subscriptionItem?.subscription?.endDate ||
+      subscriptionItem?.initialPaymentPeriod?.end ||
+      null;
+
+    const parsedStart = rawStart ? new Date(rawStart) : null;
+    let parsedEnd = rawEnd ? new Date(rawEnd) : null;
+    if (parsedStart && !parsedEnd) {
+      // Fallback for 15-day pass: end = start + 15 days
+      const computedEnd = new Date(parsedStart);
+      computedEnd.setDate(computedEnd.getDate() + 15);
+      parsedEnd = computedEnd;
     }
-    
-    // Get end date from API subscription endDate only
+
+    const locale = state.language === 'de' ? 'de-DE'
+      : state.language === 'en' ? 'en-US'
+      : 'da-DK';
+    const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(date);
+
+    if (passStartDate) {
+      passStartDate.textContent = (parsedStart && !isNaN(parsedStart.getTime()))
+        ? formatLongDate(parsedStart)
+        : '—';
+    }
+
     if (passEndDate) {
-      if (apiOrder?.subscriptionItems?.[0]?.subscription?.endDate) {
-        const endDate = new Date(apiOrder.subscriptionItems[0].subscription.endDate);
-        passEndDate.textContent = new Intl.DateTimeFormat('da-DK', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }).format(endDate);
+      passEndDate.textContent = (parsedEnd && !isNaN(parsedEnd.getTime()))
+        ? formatLongDate(parsedEnd)
+        : '—';
+    }
+
+    // Update "what happens next" step 2 to reflect future activation
+    if (nextStep2 && parsedStart && !isNaN(parsedStart.getTime())) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startDay = new Date(parsedStart);
+      startDay.setHours(0, 0, 0, 0);
+
+      if (startDay.getTime() > today.getTime()) {
+        const dateText = formatLongDate(startDay);
+        // Prevent language-switch re-render from overwriting this dynamic message
+        nextStep2.setAttribute('data-i18n-dynamic', 'true');
+        nextStep2.removeAttribute('data-i18n-key');
+        if (state.language === 'de') {
+          nextStep2.textContent = `Ihr Pass wird am ${dateText} aktiv`;
+        } else if (state.language === 'en') {
+          nextStep2.textContent = `Your pass becomes active on ${dateText}`;
+        } else {
+          nextStep2.textContent = `Dit pas bliver aktivt den ${dateText}`;
+        }
       } else {
-        passEndDate.textContent = '—';
+        // Pass is active now (or today) - restore normal i18n-managed message
+        nextStep2.removeAttribute('data-i18n-dynamic');
+        nextStep2.setAttribute('data-i18n-key', 'confirmation.nextStep2.15daypass');
+        nextStep2.textContent = t('confirmation.nextStep2.15daypass');
       }
     }
   }
