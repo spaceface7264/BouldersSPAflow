@@ -1343,6 +1343,42 @@ class OrderAPI {
     this.isDevelopment = config.isDevelopment;
   }
 
+  // Apply coupon via api-join order endpoint (used by payment link generation)
+  // Some backends do not propagate API3 coupon changes into /api/orders immediately.
+  async applyDiscountCodeApiOrders(orderId, discountCode) {
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/orders/${orderId}/coupon`,
+    });
+
+    const accessToken = typeof window.getAccessToken === 'function'
+      ? window.getAccessToken()
+      : null;
+
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+    };
+
+    const payload = { couponName: discountCode };
+    console.log('[Discount] Applying coupon via /api/orders coupon endpoint:', { orderId, discountCode, url });
+
+    try {
+      return await requestJson({ url, method: 'POST', headers, body: payload });
+    } catch (error) {
+      const payloadText = typeof error.payload === 'string'
+        ? error.payload
+        : JSON.stringify(error.payload);
+      console.error(`[Discount] /api/orders coupon apply error (${error.status || 'unknown'}):`, payloadText || error);
+      const wrapped = new Error(`Apply coupon (api/orders) failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+      wrapped.status = error.status;
+      wrapped.payload = error.payload;
+      throw wrapped;
+    }
+  }
+
   // Step 7: Create order - POST /api/orders
   async createOrder(orderData) {
     try {
@@ -15156,6 +15192,40 @@ async function handleCheckout() {
                 state.totals.discountAmount = roundToHalfKrone(discountAmount);
                 updateCartSummary(); // Use API-based cart update function
                 console.log('[checkout] ✅ Coupon applied before payment link:', discountCodeToApply, 'Amount:', discountAmount);
+
+                // CRITICAL: Ensure coupon impacts the /api/orders representation used by payment link generation
+                // If /api/orders doesn't reflect the coupon, payment window will still show full price.
+                try {
+                  const orderAfterCoupon = await orderAPI.getOrder(state.orderId);
+                  const orderAfterAmountRaw = orderAfterCoupon?.price?.amount;
+                  const orderAfterAmountCents = typeof orderAfterAmountRaw === 'object'
+                    ? (orderAfterAmountRaw?.amount ?? null)
+                    : orderAfterAmountRaw;
+                  const orderAfterAmountDKK = (typeof orderAfterAmountCents === 'number')
+                    ? (orderAfterAmountCents / 100)
+                    : null;
+                  const hasCouponOnApiOrders = !!(orderAfterCoupon?.couponDiscount || orderAfterCoupon?.price?.couponDiscount);
+                  const expectedTotalDKK = Math.max(0, (state.totals.subtotal || state.totals.cartTotal || 0) - discountAmount);
+
+                  console.log('[checkout] Post-coupon /api/orders verification:', {
+                    hasCouponOnApiOrders,
+                    orderPriceAmount: orderAfterAmountRaw,
+                    orderPriceDKK: orderAfterAmountDKK,
+                    expectedTotalDKK,
+                  });
+
+                  const priceMatches = typeof orderAfterAmountDKK === 'number' && Math.abs(orderAfterAmountDKK - expectedTotalDKK) < 1;
+                  if (!hasCouponOnApiOrders && !priceMatches) {
+                    console.warn('[checkout] ⚠️ Coupon not reflected in /api/orders - applying via /api/orders coupon endpoint...');
+                    await orderAPI.applyDiscountCodeApiOrders(state.orderId, discountCodeToApply);
+                    const orderAfterAlt = await orderAPI.getOrder(state.orderId);
+                    state.fullOrder = orderAfterAlt;
+                    updatePaymentOverview();
+                    console.log('[checkout] ✅ /api/orders coupon apply done. Updated order price:', orderAfterAlt?.price?.amount);
+                  }
+                } catch (apiOrdersCouponError) {
+                  console.warn('[checkout] ⚠️ Could not verify/apply coupon via /api/orders endpoint:', apiOrdersCouponError);
+                }
                 
                 // CRITICAL: Fetch updated order multiple times to ensure backend has processed the coupon
                 // Payment link generation reads order total from the order, so we need to ensure it's updated
