@@ -2993,6 +2993,37 @@ async function loadProductsFromAPI() {
 
 // Step 5: Render products from API data into the UI
 function renderProductsFromAPI() {
+  try {
+    console.log('[Step 2] renderProductsFromAPI', {
+      pathname: window.location.pathname,
+      landing: state.landing,
+    });
+  } catch {}
+
+  // Keep landing state in sync with current pathname.
+  // Without this, navigating between /freetrial ↔ / (same SPA) can leave the app "stuck" in landing mode.
+  try {
+    const cfg = getLandingConfigFromPathname(window.location.pathname);
+    if (cfg) {
+      state.landing = { ...state.landing, ...cfg };
+    } else {
+      state.landing = { routeKey: null, mode: null, productLabel: null, productId: null, allowMultiple: false };
+    }
+  } catch (e) {
+    console.warn('[Landing] Failed to sync landing state from pathname:', e);
+    state.landing = { routeKey: null, mode: null, productLabel: null, productId: null, allowMultiple: false };
+  }
+
+  // If we previously rendered a landing single-product view, restore the normal category UI
+  // when landing mode is not active.
+  try {
+    const landingWrap = document.getElementById('landingSingleProductWrap');
+    const categoryList = document.querySelector('#step-2 .category-list');
+    if (!(state.landing && state.landing.mode === 'single-product' && (state.landing.productLabel != null || state.landing.productId != null))) {
+      if (landingWrap) landingWrap.remove();
+      if (categoryList) categoryList.style.display = '';
+    }
+  } catch {}
   // Helper function to render a subscription product card
   const renderSubscriptionCard = (product, category) => {
     const planCard = document.createElement('div');
@@ -3018,6 +3049,13 @@ function renderProductsFromAPI() {
     const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
     const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
                      intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
+
+    const isLanding = !!(state.landing && state.landing.mode === 'single-product' && state.landing.routeKey);
+    const isFree = Number(priceInCents) === 0;
+    const priceAmountText = (isLanding && isFree)
+      ? t('price.free', 'Gratis')
+      : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—');
+    const priceUnitText = (isLanding && isFree) ? '' : priceUnit;
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3048,8 +3086,8 @@ function renderProductsFromAPI() {
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
           <div class="plan-price">
-            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
-            <span class="price-unit">${priceUnit}</span>
+            <span class="price-amount">${priceAmountText}</span>
+            ${priceUnitText ? `<span class="price-unit">${priceUnitText}</span>` : ''}
           </div>
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
@@ -3116,6 +3154,268 @@ function renderProductsFromAPI() {
     
     return planCard;
   };
+
+  const landing = state.landing;
+  const landingWantsSingleProduct = !!(
+    landing
+    && landing.mode === 'single-product'
+    && (landing.productLabel != null || landing.productId != null)
+  );
+  if (landingWantsSingleProduct) {
+    const desiredId = landing.productId;
+    const desiredLabel = landing.productLabel ? String(landing.productLabel).trim().toLowerCase() : null;
+    const allowMultiple = !!landing.allowMultiple;
+    const matchesId = (p) => p && desiredId != null && (String(p.id) === String(desiredId));
+    const hasLabel = (p) => {
+      if (!desiredLabel) return false;
+      const labels = p?.productLabels;
+      if (!Array.isArray(labels)) return false;
+      return labels.some(l => String(l?.name || '').trim().toLowerCase() === desiredLabel);
+    };
+
+    // Landing pages should be able to show products that are intentionally hidden from the public catalog.
+    // So we resolve against *raw* products first (unfiltered), then fall back to the public lists.
+    const rawList = (state.allRawProducts || []);
+    const rawMatches = desiredLabel
+      ? rawList.filter(hasLabel)
+      : rawList.filter(matchesId);
+
+    const landingProducts = allowMultiple ? rawMatches : (rawMatches[0] ? [rawMatches[0]] : []);
+    if (desiredLabel && rawMatches.length > 1 && !allowMultiple) {
+      console.warn('[Landing] Multiple products matched landing label; using first.', {
+        desiredLabel,
+        matchedIds: rawMatches.map(p => p?.id).filter(Boolean),
+      });
+    }
+
+    const inCampaignSub = (state.campaignSubscriptions || []).find(matchesId);
+    const inCampaignVc = (state.campaignValueCards || []).find(matchesId);
+    const inMembership = (state.subscriptions || []).find(matchesId);
+    const inDayPass = (state.dayPassSubscriptions || []).find(matchesId);
+    const inPunch = (state.valueCards || []).find(matchesId);
+
+    const resolved =
+      (landingProducts.length ? { products: landingProducts, source: 'raw' } : null) ||
+      (inCampaignSub ? { product: inCampaignSub, kind: 'subscription', category: 'campaign' } : null) ||
+      (inCampaignVc ? { product: inCampaignVc, kind: 'valuecard', category: 'campaign' } : null) ||
+      (inMembership ? { product: inMembership, kind: 'subscription', category: 'membership' } : null) ||
+      (inDayPass ? { product: inDayPass, kind: 'subscription', category: '15daypass' } : null) ||
+      (inPunch ? { product: inPunch, kind: 'valuecard', category: 'punchcard' } : null);
+
+    if (resolved) {
+      // Landing: hide category UI entirely, but render within the same DOM structure/CSS
+      // your catalog expects: `.category-item.expanded.selected .category-content .plans-list`.
+      // We omit the header entirely to avoid showing "Membership", etc.
+      const categoryList = document.querySelector('#step-2 .category-list');
+      if (categoryList) categoryList.style.display = 'none';
+
+      const container =
+        document.querySelector('#step-2 .container')
+        || document.querySelector('#step-2 .step-panel-content')
+        || document.querySelector('#step-2');
+
+      let wrap = document.getElementById('landingSingleProductWrap');
+      if (!wrap && container) {
+        wrap = document.createElement('div');
+        wrap.id = 'landingSingleProductWrap';
+        wrap.className = 'landing-single-product-wrap';
+        wrap.style.display = 'block';
+        wrap.style.marginTop = '16px';
+        const insertBeforeEl = container.querySelector('.category-list');
+        if (insertBeforeEl && insertBeforeEl.parentNode === container) {
+          container.insertBefore(wrap, insertBeforeEl);
+        } else {
+          container.appendChild(wrap);
+        }
+      }
+
+      if (wrap) {
+        wrap.innerHTML = '';
+        const fakeCategory = document.createElement('div');
+        fakeCategory.className = 'category-item expanded selected';
+        fakeCategory.setAttribute('data-landing', 'single-product');
+        // No header — only content.
+        const content = document.createElement('div');
+        content.className = 'category-content';
+        // Ensure visible regardless of header animation timing.
+        content.style.maxHeight = 'none';
+        content.style.opacity = '1';
+        content.style.transform = 'none';
+        content.style.overflow = 'visible';
+
+        const list = document.createElement('div');
+        list.className = 'plans-list';
+        // Use existing plans-list styling, but ensure it's visible immediately.
+        list.style.opacity = '1';
+        list.style.transform = 'none';
+        list.style.maxHeight = 'none';
+        list.style.overflow = 'visible';
+
+        const getLabelNamesLower = (p) => (Array.isArray(p?.productLabels) ? p.productLabels : [])
+          .map(l => String(l?.name || '').trim().toLowerCase())
+          .filter(Boolean);
+        const inferKind = (p) => {
+          // Avoid misclassifying subscription products as value cards.
+          // Value cards have explicit VALUE_CARD/VALUECARD productType or valueCardType.
+          const isValueCard = (p?.productType === 'VALUE_CARD' || p?.productType === 'VALUECARD' || p?.valueCardType !== undefined);
+          return isValueCard ? 'valuecard' : 'subscription';
+        };
+        const inferCategory = (p, kind) => {
+          const labelsLower = getLabelNamesLower(p);
+          const hasPublicCampaign = labelsLower.includes('publiccampaign');
+          const has15DayPass = labelsLower.includes('15 day pass');
+          if (hasPublicCampaign) return 'campaign';
+          if (kind === 'valuecard') return 'punchcard';
+          if (has15DayPass) return '15daypass';
+          return 'membership';
+        };
+
+        const bindLandingCardClick = (cardEl) => {
+          if (!cardEl || cardEl.__landingClickBound) return;
+          cardEl.__landingClickBound = true;
+          cardEl.setAttribute('data-landing-card', 'true');
+          cardEl.addEventListener('click', (e) => {
+            // Avoid double-trigger when clicking the inner button (handled by global click).
+            const withinAction = e.target?.closest?.('[data-action]');
+            if (withinAction) return;
+            handlePlanSelection(cardEl);
+          });
+        };
+
+        if ('products' in resolved) {
+          resolved.products.forEach((p) => {
+            const kind = inferKind(p);
+            const category = inferCategory(p, kind);
+            const card = kind === 'valuecard'
+              ? renderValueCard(p, category)
+              : renderSubscriptionCard(p, category);
+            bindLandingCardClick(card);
+            list.appendChild(card);
+          });
+        } else {
+          const card = resolved.kind === 'valuecard'
+            ? renderValueCard(resolved.product, resolved.category)
+            : renderSubscriptionCard(resolved.product, resolved.category);
+          bindLandingCardClick(card);
+          list.appendChild(card);
+        }
+
+        content.appendChild(list);
+        fakeCategory.appendChild(content);
+        wrap.appendChild(fakeCategory);
+      }
+
+      stopCampaignCountdown();
+
+      try {
+        setupNewAccessStep();
+        updatePageTranslations();
+      } catch (e) {
+        console.warn('[Step 2] setupNewAccessStep failed (landing single-product):', e);
+      }
+      requestAnimationFrame(() => {
+        try {
+          setupNewAccessStep();
+          updatePageTranslations();
+        } catch (e) {
+          console.warn('[Step 2] setupNewAccessStep failed (landing single-product raf):', e);
+        }
+      });
+
+      if (wrap) return;
+    }
+    console.warn('[Landing] Single-product mode enabled but product not found in API lists.', {
+      desiredId,
+      desiredLabel,
+      campaignSubscriptions: (state.campaignSubscriptions || []).map(p => p?.id).slice(0, 50),
+      campaignValueCards: (state.campaignValueCards || []).map(p => p?.id).slice(0, 50),
+      subscriptions: (state.subscriptions || []).map(p => p?.id).slice(0, 50),
+      dayPassSubscriptions: (state.dayPassSubscriptions || []).map(p => p?.id).slice(0, 50),
+      valueCards: (state.valueCards || []).map(p => p?.id).slice(0, 50),
+    });
+
+    // Fallback (landing): do NOT show other products. Show an "offer unavailable" message instead.
+    try {
+      showToast('Offer unavailable right now. Please try again later.', 'error');
+    } catch {
+      // ignore
+    }
+
+    // Hide category list entirely and show a standalone message.
+    const categoryList = document.querySelector('#step-2 .category-list');
+    if (categoryList) categoryList.style.display = 'none';
+
+    const container =
+      document.querySelector('#step-2 .container')
+      || document.querySelector('#step-2 .step-panel-content')
+      || document.querySelector('#step-2');
+    let wrap = document.getElementById('landingSingleProductWrap');
+    if (!wrap && container) {
+      wrap = document.createElement('div');
+      wrap.id = 'landingSingleProductWrap';
+      wrap.className = 'landing-single-product-wrap';
+      wrap.style.display = 'block';
+      wrap.style.marginTop = '16px';
+      const insertBeforeEl = container.querySelector('.category-list');
+      if (insertBeforeEl && insertBeforeEl.parentNode === container) {
+        container.insertBefore(wrap, insertBeforeEl);
+      } else {
+        container.appendChild(wrap);
+      }
+    }
+    if (wrap) {
+      wrap.innerHTML = '';
+      const msg = document.createElement('div');
+      // Make this unmistakably visible regardless of existing CSS.
+      msg.style.padding = '18px 16px';
+      msg.style.borderRadius = '14px';
+      msg.style.background = 'rgba(255,255,255,0.06)';
+      msg.style.border = '1px solid rgba(255,255,255,0.14)';
+      msg.style.color = '#fff';
+      msg.style.textAlign = 'center';
+      msg.style.fontSize = '16px';
+      msg.style.lineHeight = '1.4';
+      msg.textContent = 'Offer unavailable right now. Please try again later.';
+      const fakeCategory = document.createElement('div');
+      fakeCategory.className = 'category-item expanded selected';
+      fakeCategory.setAttribute('data-landing', 'unavailable');
+      const content = document.createElement('div');
+      content.className = 'category-content';
+      content.style.maxHeight = 'none';
+      content.style.opacity = '1';
+      content.style.transform = 'none';
+      content.style.overflow = 'visible';
+      const list = document.createElement('div');
+      list.className = 'plans-list';
+      list.style.opacity = '1';
+      list.style.transform = 'none';
+      list.style.maxHeight = 'none';
+      list.style.overflow = 'visible';
+      list.appendChild(msg);
+      content.appendChild(list);
+      fakeCategory.appendChild(content);
+      wrap.appendChild(fakeCategory);
+    }
+
+    // Ensure campaign countdown is not running when categories are hidden.
+    try { stopCampaignCountdown(); } catch {}
+
+    try {
+      setupNewAccessStep();
+      updatePageTranslations();
+    } catch (e) {
+      console.warn('[Landing] setupNewAccessStep failed (unavailable fallback):', e);
+    }
+    requestAnimationFrame(() => {
+      try {
+        setupNewAccessStep();
+        updatePageTranslations();
+      } catch (e) {
+        console.warn('[Landing] setupNewAccessStep failed (unavailable fallback raf):', e);
+      }
+    });
+    return;
+  }
   
   // Render campaign subscriptions and value cards into the campaign category
   const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
@@ -3947,6 +4247,15 @@ function getReturnUrlBase() {
 const state = {
   currentStep: 1,
   language: getStoredLanguage(), // Current selected language
+  // Landing routes: optionally constrain UI to a single product based on pathname (e.g. /freetrial)
+  landing: {
+    routeKey: null, // e.g. 'freetrial'
+    mode: null, // 'single-product' | null
+    // Prefer label-based resolution; productId remains supported for legacy mappings.
+    productLabel: null, // string label to match (case-insensitive)
+    productId: null, // numeric API product id (legacy)
+    allowMultiple: false, // if true, render all products matching productLabel
+  },
   selectedGymId: null,
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
@@ -4009,6 +4318,29 @@ const state = {
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
 };
+
+function getLandingConfigFromPathname(pathnameRaw) {
+  const pathname = String(pathnameRaw || '/')
+    .trim()
+    .toLowerCase()
+    .replace(/\/+$/, '') || '/';
+
+  // Add more routes here as needed.
+  //
+  // Label-driven landing routes:
+  // - Add the label below to exactly one product in BRP.
+  // - That product will be the only one rendered on the route.
+  //
+  // (Labels are matched case-insensitively against product.productLabels[].name)
+  const LABEL_FREE_TRIAL = 'LandingFreeTrial';
+  const LABEL_FIRST_MONTH_FREE = 'LandingFirstMonthFree';
+  const routes = {
+    '/freetrial': { routeKey: 'freetrial', mode: 'single-product', productLabel: LABEL_FREE_TRIAL, allowMultiple: false },
+    '/firstmonthfree': { routeKey: 'firstmonthfree', mode: 'single-product', productLabel: LABEL_FIRST_MONTH_FREE, allowMultiple: true },
+  };
+
+  return routes[pathname] || null;
+}
 
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
@@ -5190,6 +5522,10 @@ const translations = {
     'header.selectedGym': 'Valgt hal:', 'gym.headsUp': 'Hjemmehal valgt:', 'access.headsUp': 'Adgangstype valgt:',
     'main.subtitle.step1': 'Vælg din hjemmehal', 'main.subtitle.step1.secondary': 'Dette er hvor du primært træner − du får adgang til alle haller.',
     'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen.',
+    'main.subtitle.step2.landing.freetrial': 'Din gratis prøveperiode',
+    'main.subtitle.step2.landing.freetrial.secondary': 'Vælg produktet herunder for at starte.',
+    'main.subtitle.step2.landing.firstmonthfree': 'Første måned gratis',
+    'main.subtitle.step2.landing.firstmonthfree.secondary': 'Vælg et produkt herunder for at fortsætte.',
     'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
     'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger', 'button.select': 'Vælg', 'button.addToCart': 'Tilføj til kurv', 'button.added': 'Tilføjet!',
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
@@ -5213,8 +5549,9 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.validRange': 'Gyldig:', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
+    'price.free': 'Gratis',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
     'activationDate.now.desc': 'Starter med det samme',
@@ -5401,6 +5738,10 @@ const translations = {
     'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
+    'main.subtitle.step2.landing.freetrial': 'Your free trial',
+    'main.subtitle.step2.landing.freetrial.secondary': 'Select the product below to get started.',
+    'main.subtitle.step2.landing.firstmonthfree': 'First month free',
+    'main.subtitle.step2.landing.firstmonthfree.secondary': 'Select a product below to continue.',
     'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
     'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit', 'button.select': 'Select', 'button.addToCart': 'Add to cart', 'button.added': 'Added!',
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
@@ -5424,8 +5765,9 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.validRange': 'Valid:', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
+    'price.free': 'Free',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
@@ -5596,6 +5938,10 @@ const translations = {
     'header.selectedGym': 'Ausgewählte Halle:', 'gym.headsUp': 'Heimhalle ausgewählt:', 'access.headsUp': 'Zugangstyp ausgewählt:',
     'main.subtitle.step1': 'Wählen Sie Ihre Heimhalle', 'main.subtitle.step1.secondary': 'Hier trainieren Sie hauptsächlich − Sie haben Zugang zu allen Hallen.',
     'main.subtitle.step2': 'Wählen Sie Ihren Zugangstyp', 'main.subtitle.step2.secondary': 'Wählen Sie Mitgliedschaft, wenn Sie mindestens einmal im Monat klettern.',
+    'main.subtitle.step2.landing.freetrial': 'Ihre kostenlose Probezeit',
+    'main.subtitle.step2.landing.freetrial.secondary': 'Wählen Sie das Produkt unten aus, um zu starten.',
+    'main.subtitle.step2.landing.firstmonthfree': 'Erster Monat kostenlos',
+    'main.subtitle.step2.landing.firstmonthfree.secondary': 'Wählen Sie unten ein Produkt aus, um fortzufahren.',
     'main.subtitle.step3': 'Möchten Sie Pommes dazu?', 'main.subtitle.step4': 'Senden',
     'button.next': 'Weiter', 'button.back': 'Zurück', 'button.continue': 'Fortsetzen', 'button.skip': 'Überspringen', 'button.complete': 'Fertig', 'button.edit': 'Bearbeiten', 'button.select': 'Auswählen', 'button.addToCart': 'In den Warenkorb', 'button.added': 'Hinzugefügt!',
     'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'gym.nearest': 'Nächste',
@@ -5619,8 +5965,9 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.validRange': 'Gültig:', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
+    'price.free': 'Kostenlos',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
@@ -6498,6 +6845,17 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Set up Cookiebot "Cookie Settings" button - reopens Cookiebot consent dialog
   setupCookiebotSettingsButton();
+
+  // Landing route config (path-based, independent of query params)
+  try {
+    const landingConfig = getLandingConfigFromPathname(window.location.pathname);
+    if (landingConfig) {
+      state.landing = { ...state.landing, ...landingConfig };
+      console.log('[Landing] Enabled landing config:', state.landing);
+    }
+  } catch (e) {
+    console.warn('[Landing] Failed to resolve landing config:', e);
+  }
   
   // Check URL parameters for test mode and payment return
   const urlParams = new URLSearchParams(window.location.search);
@@ -10532,8 +10890,11 @@ function updateActivationDateSection(category) {
 
 function handlePlanSelection(selectedCard) {
   // Remove selected class from all plan cards in the same category
-  const category = selectedCard.closest('.category-item').dataset.category;
-  const allCardsInCategory = selectedCard.closest('.category-item').querySelectorAll('.plan-card');
+  const categoryItem = selectedCard.closest('.category-item');
+  const category = categoryItem?.dataset?.category || selectedCard.dataset.category || 'membership';
+  const allCardsInCategory = categoryItem
+    ? categoryItem.querySelectorAll('.plan-card')
+    : selectedCard.parentElement?.querySelectorAll?.('.plan-card') || [];
   
   allCardsInCategory.forEach(card => {
     card.classList.remove('selected');
@@ -10592,6 +10953,14 @@ function handlePlanSelection(selectedCard) {
       p.id === productIdNum ||
       String(p.id) === String(productId)
     );
+  }
+
+  // Landing pages may show products excluded from public lists.
+  if (!product) {
+    const raw = (state.allRawProducts || []).find(p =>
+      p && (p.id === productId || p.id === productIdNum || String(p.id) === String(productId))
+    );
+    if (raw) product = raw;
   }
   
   // GTM: Track select_item event
@@ -10777,6 +11146,10 @@ function setupNewAccessStep() {
     }
     const card = clonedCard;
     card.addEventListener('click', (e) => {
+      // Landing pages use their own selection handler (handlePlanSelection) and do not live inside real categories.
+      if (card.closest('#landingSingleProductWrap')) {
+        return;
+      }
       // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
       // This prevents clicks on +/- and Continue from toggling/deselecting the card.
       if (e.target.closest('.quantity-panel')) {
@@ -11169,6 +11542,13 @@ function handleGlobalClick(event) {
       // Avoid triggering a second synthetic click here, which can toggle selection twice.
       event.preventDefault();
       event.stopPropagation();
+
+      const card = actionable.closest('.plan-card');
+      // Landing pages render cards outside the normal category accordion wiring.
+      // Trigger selection directly for those cards.
+      if (card && card.closest('#landingSingleProductWrap')) {
+        handlePlanSelection(card);
+      }
       break;
     }
     case 'select-membership': {
@@ -12801,39 +13181,58 @@ function updateCartSummary() {
       p.id === productIdNum ||
       String(p.id) === String(state.selectedProductId)
     );
-    
-    if (membership) {
+
+    // Landing products may be hidden from the public subscription lists.
+    // When selectedProductType is 'membership' we trust the selection path and resolve by id from raw products
+    // without additional shape heuristics (raw payloads can vary by product type/config).
+    const rawMembership = !membership
+      ? (state.allRawProducts || []).find(p =>
+          p && (p.id === state.selectedProductId || p.id === productIdNum || String(p.id) === String(state.selectedProductId))
+        )
+      : null;
+
+    const resolvedMembership = membership || rawMembership;
+
+    if (resolvedMembership) {
       // Extract price from API structure (cents to DKK)
       // The API uses priceWithInterval, not price directly
       // priceWithInterval contains: { interval: { numberOf: 1, unit: "MONTH" }, price: { amount: 46900, currency: "DKK" } }
-      const priceInCents = membership.priceWithInterval?.price?.amount || 
-                           membership.price?.amount || 
-                           membership.amount || 
-                           membership.monthlyPrice ||
+      const priceInCents = resolvedMembership.priceWithInterval?.price?.amount || 
+                           resolvedMembership.price?.amount || 
+                           resolvedMembership.amount || 
+                           resolvedMembership.monthlyPrice ||
                            0;
       const price = priceInCents > 0 ? priceInCents / 100 : 0;
       
       // Get externalDescription if available
-      const externalDesc = membership.externalDescription || '';
+      const externalDesc = resolvedMembership.externalDescription || '';
       const displayName = externalDesc 
-        ? `${membership.name || 'Membership'} - ${externalDesc}`
-        : membership.name || 'Membership';
+        ? `${resolvedMembership.name || 'Membership'} - ${externalDesc}`
+        : resolvedMembership.name || 'Membership';
       
       items.push({
-        id: membership.id,
+        id: resolvedMembership.id,
         name: displayName,
         amount: price,
         type: 'membership',
-        productId: membership.id, // Store API product ID for order creation
+        productId: resolvedMembership.id, // Store API product ID for order creation
         externalDescription: externalDesc, // Store separately for rendering (renamed from imageBannerText)
-        productName: membership.name || 'Membership', // Store original name
+        productName: resolvedMembership.name || 'Membership', // Store original name
+        is15DayPass: (() => {
+          const labels = Array.isArray(resolvedMembership?.productLabels) ? resolvedMembership.productLabels : [];
+          const has15 = labels.some(l => String(l?.name || '').toLowerCase() === '15 day pass');
+          const n = String(resolvedMembership?.name || '').toLowerCase();
+          const isFreeTrialLanding = state.landing?.routeKey === 'freetrial';
+          return isFreeTrialLanding || has15 || n.includes('15 day') || n.includes('15 dage') || n.includes('15 days');
+        })(),
       });
       state.totals.membershipMonthly = price;
     } else {
       console.warn('Cart: Membership not found', {
         selectedProductId: state.selectedProductId,
         selectedProductType: state.selectedProductType,
-        availableSubscriptions: allSubscriptions.map(s => ({ id: s.id, name: s.name }))
+        availableSubscriptions: allSubscriptions.map(s => ({ id: s.id, name: s.name })),
+        rawProductIds: (state.allRawProducts || []).slice(0, 30).map(p => p?.id).filter(Boolean),
       });
     }
   }
@@ -12857,22 +13256,33 @@ function updateCartSummary() {
         p.id === parseInt(productId) ||
         planId.includes(String(p.id))
       );
+
+      // Landing products may be hidden from the public value card lists.
+      const rawValueCard = !valueCard
+        ? (state.allRawProducts || []).find(p =>
+            p
+            && (p.id === productId || p.id === parseInt(productId) || String(p.id) === String(productId))
+            && (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || p.valueCardType !== undefined)
+          )
+        : null;
       
-      if (valueCard) {
+      const resolvedValueCard = valueCard || rawValueCard;
+
+      if (resolvedValueCard) {
         // Extract price from API structure (cents to DKK)
-        const priceInCents = valueCard.price?.amount || valueCard.amount || 0;
+        const priceInCents = resolvedValueCard.price?.amount || resolvedValueCard.amount || 0;
         const price = priceInCents / 100;
-        const punchesPerCard = getPunchesPerCard(valueCard);
+        const punchesPerCard = getPunchesPerCard(resolvedValueCard);
         const totalPunches = punchesPerCard != null ? quantity * punchesPerCard : null;
-        const productName = valueCard.name || 'Punch Card';
+        const productName = resolvedValueCard.name || 'Punch Card';
         // Name only on left; ×N and total punches shown on the right
         items.push({
-          id: valueCard.id,
+          id: resolvedValueCard.id,
           name: productName,
           amount: roundToHalfKrone(price * quantity),
           type: 'value-card',
           quantity: quantity,
-          productId: valueCard.id, // Store API product ID for order creation
+          productId: resolvedValueCard.id, // Store API product ID for order creation
           punchesPerCard: punchesPerCard ?? undefined,
           totalPunches: totalPunches ?? undefined,
         });
@@ -13193,6 +13603,26 @@ function renderCartItems() {
         
         nameContainer.appendChild(productNameSpan);
         nameContainer.appendChild(descTextSpan);
+
+        // For 15-day pass, show date range (start → end) under description.
+        if (item.is15DayPass) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const startDate = state.subscriptionStartDate
+            ? new Date(state.subscriptionStartDate + 'T12:00:00')
+            : today;
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 15);
+
+          const range = document.createElement('span');
+          range.style.fontSize = 'var(--font-size-sm)';
+          range.style.color = 'var(--color-text-muted)';
+          range.style.whiteSpace = 'pre-line';
+          range.textContent = `${t('cart.validRange')} ${formatDateDMY(startDate)} – ${formatDateDMY(endDate)}`;
+          nameContainer.appendChild(range);
+        }
+
         nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the name container for first item
@@ -13214,7 +13644,36 @@ function renderCartItems() {
         }
       } else {
         // For addon items and other types, we'll add the plus sign later in the rendering loop
-        nameEl.textContent = item.name;
+        nameEl.innerHTML = '';
+        const nameContainer = document.createElement('div');
+        nameContainer.style.display = 'flex';
+        nameContainer.style.flexDirection = 'column';
+        nameContainer.style.gap = '4px';
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = item.name;
+        titleSpan.style.fontWeight = '500';
+        nameContainer.appendChild(titleSpan);
+
+        // For 15-day pass (even without externalDescription), show date range.
+        if (item.type === 'membership' && item.is15DayPass) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const startDate = state.subscriptionStartDate
+            ? new Date(state.subscriptionStartDate + 'T12:00:00')
+            : today;
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 15);
+
+          const range = document.createElement('span');
+          range.style.fontSize = 'var(--font-size-sm)';
+          range.style.color = 'var(--color-text-muted)';
+          range.style.whiteSpace = 'pre-line';
+          range.textContent = `${t('cart.validRange')} ${formatDateDMY(startDate)} – ${formatDateDMY(endDate)}`;
+          nameContainer.appendChild(range);
+        }
+
+        nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the first item's name
         if (isFirstSubscriptionItem && selectedGym) {
@@ -13542,7 +14001,9 @@ function updatePaymentOverview() {
     p.id === state.selectedProductId || 
     p.id === productIdNum ||
     String(p.id) === String(state.selectedProductId)
-  );
+  ) || (state.allRawProducts || []).find(p =>
+    p && (p.id === state.selectedProductId || p.id === productIdNum || String(p.id) === String(state.selectedProductId))
+  ) || null;
   
   // Check product name from order data first, then fall back to product data
   const productFromOrder = subscriptionItem?.product;
@@ -13551,13 +14012,17 @@ function updatePaymentOverview() {
   const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
     label => label?.name && label.name.toLowerCase() === '15 day pass'
   );
+  const nameLooksLike15DayPass = !!(productName && (
+    productName.toLowerCase().includes('15 day') ||
+    productName.toLowerCase().includes('15 dage') ||
+    productName.toLowerCase().includes('15 days')
+  ));
+  const isFreeTrialLanding = state.landing?.routeKey === 'freetrial';
   const is15DayPass =
     state.selectedProductType === '15daypass' ||
     has15DayPassLabel ||
-    (productName && (
-      productName.toLowerCase().includes('15 day pass') ||
-      productName.toLowerCase().includes('15 dages')
-    ));
+    nameLooksLike15DayPass ||
+    isFreeTrialLanding;
   
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
@@ -14049,9 +14514,17 @@ function updatePaymentOverview() {
           label.parentNode.insertBefore(periodElement, DOM.payNow);
         }
       }
-      if (is15DayPass) {
+      const isFreeTrialLanding = state.landing?.routeKey === 'freetrial';
+      if (isFreeTrialLanding) {
+        // For /freetrial, the cart already shows a clear date range under the product.
+        // Hide the small "(Billing period confirmed...)" helper next to "Pay now".
+        periodElement.textContent = '';
+        periodElement.style.display = 'none';
+      } else if (is15DayPass) {
+        periodElement.style.display = '';
         periodElement.innerHTML = `(${billingPeriodText}) <button type="button" class="change-date-link" data-action="change-activation-date">${t('activationDate.change')}</button>`;
       } else {
+        periodElement.style.display = '';
         periodElement.textContent = `(${billingPeriodText})`;
       }
     } else if (payNowRow) {
@@ -20405,15 +20878,41 @@ function updateMainSubtitle() {
     5: 'Welcome to Boulders!', // Step 5 is success page
   };
 
-  DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? t('main.subtitle.step2');
+  const isLandingStep2 = state.currentStep === 2
+    && state.landing
+    && state.landing.mode === 'single-product'
+    && state.landing.routeKey;
+
+  if (isLandingStep2) {
+    const routeKey = String(state.landing.routeKey);
+    const key = `main.subtitle.step2.landing.${routeKey}`;
+    DOM.mainSubtitle.setAttribute('data-i18n-key', key);
+    DOM.mainSubtitle.textContent = t(key, t('main.subtitle.step2'));
+  } else {
+    // Restore the default key for the current step so updatePageTranslations doesn't overwrite with stale landing keys.
+    if (state.currentStep === 1) DOM.mainSubtitle.setAttribute('data-i18n-key', 'main.subtitle.step1');
+    else if (state.currentStep === 2) DOM.mainSubtitle.setAttribute('data-i18n-key', 'main.subtitle.step2');
+    else if (state.currentStep === 3) DOM.mainSubtitle.setAttribute('data-i18n-key', 'main.subtitle.step3');
+    else if (state.currentStep === 4) DOM.mainSubtitle.setAttribute('data-i18n-key', 'main.subtitle.step4');
+    DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? t('main.subtitle.step2');
+  }
   
   // Update secondary subtitle for current step
   const secondarySubtitle = document.querySelector('.secondary-subtitle');
   if (secondarySubtitle) {
     if (state.currentStep === 1) {
+      secondarySubtitle.setAttribute('data-i18n-key', 'main.subtitle.step1.secondary');
       secondarySubtitle.textContent = t('main.subtitle.step1.secondary');
     } else if (state.currentStep === 2) {
-      secondarySubtitle.textContent = t('main.subtitle.step2.secondary');
+      if (isLandingStep2) {
+        const routeKey = String(state.landing.routeKey);
+        const key = `main.subtitle.step2.landing.${routeKey}.secondary`;
+        secondarySubtitle.setAttribute('data-i18n-key', key);
+        secondarySubtitle.textContent = t(key, t('main.subtitle.step2.secondary'));
+      } else {
+        secondarySubtitle.setAttribute('data-i18n-key', 'main.subtitle.step2.secondary');
+        secondarySubtitle.textContent = t('main.subtitle.step2.secondary');
+      }
     }
   }
   
