@@ -1343,6 +1343,42 @@ class OrderAPI {
     this.isDevelopment = config.isDevelopment;
   }
 
+  // Apply coupon via api-join order endpoint (used by payment link generation)
+  // Some backends do not propagate API3 coupon changes into /api/orders immediately.
+  async applyDiscountCodeApiOrders(orderId, discountCode) {
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/orders/${orderId}/coupon`,
+    });
+
+    const accessToken = typeof window.getAccessToken === 'function'
+      ? window.getAccessToken()
+      : null;
+
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+    };
+
+    const payload = { couponName: discountCode };
+    console.log('[Discount] Applying coupon via /api/orders coupon endpoint:', { orderId, discountCode, url });
+
+    try {
+      return await requestJson({ url, method: 'POST', headers, body: payload });
+    } catch (error) {
+      const payloadText = typeof error.payload === 'string'
+        ? error.payload
+        : JSON.stringify(error.payload);
+      console.error(`[Discount] /api/orders coupon apply error (${error.status || 'unknown'}):`, payloadText || error);
+      const wrapped = new Error(`Apply coupon (api/orders) failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+      wrapped.status = error.status;
+      wrapped.payload = error.payload;
+      throw wrapped;
+    }
+  }
+
   // Step 7: Create order - POST /api/orders
   async createOrder(orderData) {
     try {
@@ -2156,13 +2192,20 @@ class OrderAPI {
   async applyDiscountCode(orderId, discountCode) {
     try {
       // ver3 endpoints use different base URL (boulders.brpsystems.com/apiserver)
-      const url = this.useProxy
-        ? buildApiUrl({
-            baseUrl: this.baseUrl,
-            useProxy: this.useProxy,
-            path: `/api/ver3/orders/${orderId}/coupons`,
-          })
-        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
+      // In development we rely on a relative URL so local dev proxy can handle it.
+      // In production we should normally use the Cloudflare Pages proxy (`/api-proxy`).
+      let url;
+      if (this.useProxy) {
+        url = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/ver3/orders/${orderId}/coupons`,
+        });
+      } else if (this.isDevelopment) {
+        url = `/api/ver3/orders/${orderId}/coupons`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
+      }
       
       console.log('[Discount] Applying coupon:', discountCode, 'to order:', orderId);
       console.log('[Discount] Endpoint:', url);
@@ -5169,7 +5212,7 @@ const translations = {
     'activationDate.change': 'Ændre',
     'activationDate.changeFailed': 'Kunne ikke ændre datoen. Gennemfør din køb eller start forfra.',
     'activationConfirm.title': 'Bekræft dit valg',
-    'activationConfirm.subtitle': 'Tjek venligst, hvornår dit pas skal starte, før du går til betaling.',
+    'activationConfirm.subtitle': 'Bekræft hvornår din prøveperiode skal starte, før du går til betaling.',
     'activationConfirm.startLabel': 'Starter',
     'activationConfirm.endLabel': 'Gyldig til',
     'activationConfirm.today': 'I dag',
@@ -5235,6 +5278,7 @@ const translations = {
     'confirmation.nextStep1': 'E-mail bekræftelse sendt til din indbakke',
     'confirmation.nextStep2.membership': 'Medlemskabsaktivering og automatisk fornyelse',
     'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
+    'confirmation.nextStep2.15daypass.future': 'Dit pas bliver aktivt den {date}',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskabskort i centeret',
     'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge dit pas',
@@ -5430,6 +5474,7 @@ const translations = {
     'confirmation.nextStep1': 'Email confirmation sent to your inbox',
     'confirmation.nextStep2.membership': 'Membership activation & auto-renewal setup',
     'confirmation.nextStep2.15daypass': 'Your pass is active and ready to use',
+    'confirmation.nextStep2.15daypass.future': 'Your pass becomes active on {date}',
     'confirmation.nextStep2.punchcard': 'Your punch card is ready to use',
     'confirmation.nextStep3.membership': 'Pick up your membership card at the gym',
     'confirmation.nextStep3.15daypass': 'Visit the gym to start using your pass',
@@ -5651,6 +5696,7 @@ const translations = {
     'confirmation.nextStep1': 'E-Mail-Bestätigung an Ihren Posteingang gesendet',
     'confirmation.nextStep2.membership': 'Mitgliedschaftsaktivierung und automatische Verlängerung',
     'confirmation.nextStep2.15daypass': 'Ihr Pass ist aktiv und einsatzbereit',
+    'confirmation.nextStep2.15daypass.future': 'Ihr Pass wird am {date} aktiv',
     'confirmation.nextStep2.punchcard': 'Ihre Stempelkarte ist einsatzbereit',
     'confirmation.nextStep3.membership': 'Holen Sie Ihre Mitgliedskarte in der Halle ab',
     'confirmation.nextStep3.15daypass': 'Besuchen Sie die Halle, um Ihren Pass zu nutzen',
@@ -5674,7 +5720,25 @@ function updatePageTranslations() {
   // Update elements with data-i18n-key attribute
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
     const key = element.getAttribute('data-i18n-key');
-    const translation = t(key);
+    let translation = t(key);
+
+    // Simple placeholder substitution for dynamic translations.
+    // Currently supports `{date}` when element provides `data-i18n-date-iso="YYYY-MM-DD"`.
+    if (translation && translation.includes('{date}')) {
+      const dateIso = element.getAttribute('data-i18n-date-iso');
+      if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+        const locale = lang === 'de' ? 'de-DE' : lang === 'en' ? 'en-US' : 'da-DK';
+        const date = new Date(`${dateIso}T12:00:00`);
+        if (!isNaN(date.getTime())) {
+          const dateText = new Intl.DateTimeFormat(locale, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }).format(date);
+          translation = translation.replaceAll('{date}', dateText);
+        }
+      }
+    }
     if (translation && translation !== key) {
       // Handle input placeholders
       if (element.tagName === 'INPUT') {
@@ -10278,7 +10342,24 @@ async function applyActivationDateToExistingOrder() {
   if (subscriptionItemId) {
     const deleted = await orderAPI.deleteSubscriptionItem(orderId, subscriptionItemId);
     if (!deleted) {
-      showToast(t('activationDate.changeFailed') || 'Unable to change date. Please complete your purchase or start over.', 'error');
+      // If backend refuses the mutation (often due to auth/order lock), fall back to recreating order on next checkout.
+      console.warn('[Activation Date] Backend refused subscription item delete; clearing order state so checkout can recreate with new start date.', {
+        orderId,
+        subscriptionItemId,
+      });
+      state.order = null;
+      state.fullOrder = null;
+      state.orderId = null;
+      state.subscriptionAttachedOrderId = null;
+      state.subscriptionItemId = null;
+      state.paymentLink = null;
+      state.paymentLinkGenerated = false;
+      state.checkoutInProgress = false;
+      state.billingPeriod = '';
+      state.discountApplied = false;
+      state.totals.discountAmount = 0;
+      updateCartSummary();
+      updatePaymentOverview();
       return false;
     }
     state.subscriptionAttachedOrderId = null;
@@ -14092,13 +14173,19 @@ function updateDiscountDisplay() {
       const discountValue = state.totals.discountAmount > 0
         ? `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`
         : formatCurrencyHalfKrone(0);
+      const discountPercent = (state.totals.subtotal > 0 && state.totals.discountAmount > 0)
+        ? (state.totals.discountAmount / state.totals.subtotal) * 100
+        : null;
+      const discountPercentText = (typeof discountPercent === 'number' && Number.isFinite(discountPercent))
+        ? `, ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(discountPercent)}%`
+        : '';
       discountDisplay.innerHTML = sanitizeHTML(`
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
           <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
         </div>
         <div class="discount-row discount-applied">
-          <span class="discount-label">Discount (${state.discountCode}):</span>
+          <span class="discount-label">Discount (${state.discountCode}${discountPercentText}):</span>
           <span class="discount-value">${discountValue}</span>
         </div>
         <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
@@ -15105,6 +15192,40 @@ async function handleCheckout() {
                 state.totals.discountAmount = roundToHalfKrone(discountAmount);
                 updateCartSummary(); // Use API-based cart update function
                 console.log('[checkout] ✅ Coupon applied before payment link:', discountCodeToApply, 'Amount:', discountAmount);
+
+                // CRITICAL: Ensure coupon impacts the /api/orders representation used by payment link generation
+                // If /api/orders doesn't reflect the coupon, payment window will still show full price.
+                try {
+                  const orderAfterCoupon = await orderAPI.getOrder(state.orderId);
+                  const orderAfterAmountRaw = orderAfterCoupon?.price?.amount;
+                  const orderAfterAmountCents = typeof orderAfterAmountRaw === 'object'
+                    ? (orderAfterAmountRaw?.amount ?? null)
+                    : orderAfterAmountRaw;
+                  const orderAfterAmountDKK = (typeof orderAfterAmountCents === 'number')
+                    ? (orderAfterAmountCents / 100)
+                    : null;
+                  const hasCouponOnApiOrders = !!(orderAfterCoupon?.couponDiscount || orderAfterCoupon?.price?.couponDiscount);
+                  const expectedTotalDKK = Math.max(0, (state.totals.subtotal || state.totals.cartTotal || 0) - discountAmount);
+
+                  console.log('[checkout] Post-coupon /api/orders verification:', {
+                    hasCouponOnApiOrders,
+                    orderPriceAmount: orderAfterAmountRaw,
+                    orderPriceDKK: orderAfterAmountDKK,
+                    expectedTotalDKK,
+                  });
+
+                  const priceMatches = typeof orderAfterAmountDKK === 'number' && Math.abs(orderAfterAmountDKK - expectedTotalDKK) < 1;
+                  if (!hasCouponOnApiOrders && !priceMatches) {
+                    console.warn('[checkout] ⚠️ Coupon not reflected in /api/orders - applying via /api/orders coupon endpoint...');
+                    await orderAPI.applyDiscountCodeApiOrders(state.orderId, discountCodeToApply);
+                    const orderAfterAlt = await orderAPI.getOrder(state.orderId);
+                    state.fullOrder = orderAfterAlt;
+                    updatePaymentOverview();
+                    console.log('[checkout] ✅ /api/orders coupon apply done. Updated order price:', orderAfterAlt?.price?.amount);
+                  }
+                } catch (apiOrdersCouponError) {
+                  console.warn('[checkout] ⚠️ Could not verify/apply coupon via /api/orders endpoint:', apiOrdersCouponError);
+                }
                 
                 // CRITICAL: Fetch updated order multiple times to ensure backend has processed the coupon
                 // Payment link generation reads order total from the order, so we need to ensure it's updated
@@ -18347,11 +18468,11 @@ function renderConfirmationView() {
   
   // Order total - from API only
   if (orderTotal) {
-    if (apiOrder?.price?.amount) {
+    if (apiOrder?.price?.amount !== undefined && apiOrder?.price?.amount !== null) {
       const amount = apiOrder.price.amount;
       const total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
       orderTotal.textContent = formatCurrencyHalfKrone(total);
-    } else if (apiOrder?.total) {
+    } else if (apiOrder?.total !== undefined && apiOrder?.total !== null) {
       const total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
       orderTotal.textContent = formatCurrencyHalfKrone(total);
     } else {
@@ -18429,31 +18550,65 @@ function renderConfirmationView() {
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
     const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
     
-    // Get start date from API subscription startDate only
-    if (passStartDate) {
-      if (apiOrder?.subscriptionItems?.[0]?.subscription?.startDate) {
-        const startDate = new Date(apiOrder.subscriptionItems[0].subscription.startDate);
-        passStartDate.textContent = new Intl.DateTimeFormat('da-DK', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }).format(startDate);
-      } else {
-        passStartDate.textContent = '—';
-      }
+    const subscriptionItem = apiOrder?.subscriptionItems?.[0];
+    const rawStart =
+      subscriptionItem?.subscription?.startDate ||
+      subscriptionItem?.initialPaymentPeriod?.start ||
+      (state.subscriptionStartDate ? `${state.subscriptionStartDate}T12:00:00` : null);
+    const rawEnd =
+      subscriptionItem?.subscription?.endDate ||
+      subscriptionItem?.initialPaymentPeriod?.end ||
+      null;
+
+    const parsedStart = rawStart ? new Date(rawStart) : null;
+    let parsedEnd = rawEnd ? new Date(rawEnd) : null;
+    if (parsedStart && !parsedEnd) {
+      // Fallback for 15-day pass: end = start + 15 days
+      const computedEnd = new Date(parsedStart);
+      computedEnd.setDate(computedEnd.getDate() + 15);
+      parsedEnd = computedEnd;
     }
-    
-    // Get end date from API subscription endDate only
+
+    const locale = state.language === 'de' ? 'de-DE'
+      : state.language === 'en' ? 'en-US'
+      : 'da-DK';
+    const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(date);
+
+    if (passStartDate) {
+      passStartDate.textContent = (parsedStart && !isNaN(parsedStart.getTime()))
+        ? formatLongDate(parsedStart)
+        : '—';
+    }
+
     if (passEndDate) {
-      if (apiOrder?.subscriptionItems?.[0]?.subscription?.endDate) {
-        const endDate = new Date(apiOrder.subscriptionItems[0].subscription.endDate);
-        passEndDate.textContent = new Intl.DateTimeFormat('da-DK', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }).format(endDate);
+      passEndDate.textContent = (parsedEnd && !isNaN(parsedEnd.getTime()))
+        ? formatLongDate(parsedEnd)
+        : '—';
+    }
+
+    // Update "what happens next" step 2 to reflect future activation
+    if (nextStep2 && parsedStart && !isNaN(parsedStart.getTime())) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startDay = new Date(parsedStart);
+      startDay.setHours(0, 0, 0, 0);
+
+      if (startDay.getTime() > today.getTime()) {
+        const dateIso = `${startDay.getFullYear()}-${String(startDay.getMonth() + 1).padStart(2, '0')}-${String(startDay.getDate()).padStart(2, '0')}`;
+        const key = 'confirmation.nextStep2.15daypass.future';
+        nextStep2.setAttribute('data-i18n-key', key);
+        nextStep2.setAttribute('data-i18n-date-iso', dateIso);
+        // Render immediately (also allows updatePageTranslations() to re-render on language switch)
+        nextStep2.textContent = t(key).replaceAll('{date}', formatLongDate(startDay));
       } else {
-        passEndDate.textContent = '—';
+        // Pass is active now (or today) - restore normal i18n-managed message
+        nextStep2.removeAttribute('data-i18n-date-iso');
+        nextStep2.setAttribute('data-i18n-key', 'confirmation.nextStep2.15daypass');
+        nextStep2.textContent = t('confirmation.nextStep2.15daypass');
       }
     }
   }
