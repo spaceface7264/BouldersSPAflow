@@ -245,6 +245,31 @@ class BusinessUnitsAPI {
       devLog('[API] Subscriptions response sample:', data[0] ? { id: data[0].id, name: data[0].name, description: data[0].description?.substring(0, 50), externalDescription: data[0].externalDescription?.substring(0, 50) } : 'empty');
       return data;
     } catch (error) {
+      // Resilience: api-join products endpoints have been observed returning 500 HTML.
+      // Fall back to BRP API3 subscriptions endpoint via the same proxy.
+      try {
+        console.warn('[Subscriptions] Primary endpoint failed; falling back to /api/ver3/products/subscriptions', {
+          status: error?.status,
+        });
+        const cacheBuster = `&_t=${Date.now()}`;
+        const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}${cacheBuster}` : `?_t=${Date.now()}`;
+        const fallbackUrl = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/ver3/products/subscriptions${queryParam}`,
+        });
+        const headers = {
+          'Accept-Language': getAcceptLanguageHeader(),
+          'Content-Type': 'application/json',
+        };
+        const fallbackData = await requestJson({ url: fallbackUrl, headers });
+        if (Array.isArray(fallbackData) && fallbackData.length > 0) {
+          console.warn('[Subscriptions] Fallback subscriptions loaded:', fallbackData.length);
+          return fallbackData;
+        }
+      } catch (fallbackError) {
+        console.warn('[Subscriptions] Fallback endpoint also failed:', fallbackError);
+      }
       console.error('Error fetching subscriptions:', error);
       throw error;
     }
@@ -277,6 +302,30 @@ class BusinessUnitsAPI {
       } : 'empty');
       return data;
     } catch (error) {
+      // Resilience: api-join products endpoints have been observed returning 500 HTML.
+      // Fall back to BRP API3 value cards endpoint via the same proxy.
+      try {
+        console.warn('[ValueCards] Primary endpoint failed; falling back to /api/ver3/products/valuecards', {
+          status: error?.status,
+        });
+        const cacheBuster = `?_t=${Date.now()}`;
+        const fallbackUrl = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/ver3/products/valuecards${cacheBuster}`,
+        });
+        const headers = {
+          'Accept-Language': getAcceptLanguageHeader(),
+          'Content-Type': 'application/json',
+        };
+        const fallbackData = await requestJson({ url: fallbackUrl, headers });
+        if (Array.isArray(fallbackData) && fallbackData.length > 0) {
+          console.warn('[ValueCards] Fallback value cards loaded:', fallbackData.length);
+          return fallbackData;
+        }
+      } catch (fallbackError) {
+        console.warn('[ValueCards] Fallback endpoint also failed:', fallbackError);
+      }
       console.error('Error fetching value cards:', error);
       throw error;
     }
