@@ -14108,9 +14108,10 @@ function updatePaymentOverview() {
       const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
       const dayOfMonth = today.getDate();
-      const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
+      const isFirstMonthFreeLanding = state.landing?.routeKey === 'firstmonthfree';
+      const isCampaignProduct = isFirstMonthFreeLanding || (state.campaignSubscriptions && state.campaignSubscriptions.some(
         p => String(p.id) === String(productId)
-      );
+      ));
       // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
       const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
 
@@ -14422,10 +14423,16 @@ function updatePaymentOverview() {
           p.id === productIdNum ||
           String(p.id) === String(state.selectedProductId)
         );
+        const rawMembership = !membership
+          ? (state.allRawProducts || []).find(p =>
+              p && (p.id === state.selectedProductId || p.id === productIdNum || String(p.id) === String(state.selectedProductId))
+            )
+          : null;
+        const resolvedMembership = membership || rawMembership;
         
-        if (membership?.priceWithInterval?.price?.amount !== undefined) {
+        if (resolvedMembership?.priceWithInterval?.price?.amount !== undefined) {
           // Use price from API product data
-          monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
+          monthlyPaymentAmount = resolvedMembership.priceWithInterval.price.amount / 100;
           console.log('[Payment Overview] Monthly payment from API product data (priceWithInterval):', monthlyPaymentAmount, 'DKK');
         } else {
           monthlyPaymentAmount = state.totals.membershipMonthly || 0;
