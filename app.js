@@ -2156,13 +2156,20 @@ class OrderAPI {
   async applyDiscountCode(orderId, discountCode) {
     try {
       // ver3 endpoints use different base URL (boulders.brpsystems.com/apiserver)
-      const url = this.useProxy
-        ? buildApiUrl({
-            baseUrl: this.baseUrl,
-            useProxy: this.useProxy,
-            path: `/api/ver3/orders/${orderId}/coupons`,
-          })
-        : `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
+      // In development we rely on a relative URL so local dev proxy can handle it.
+      // In production we should normally use the Cloudflare Pages proxy (`/api-proxy`).
+      let url;
+      if (this.useProxy) {
+        url = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/ver3/orders/${orderId}/coupons`,
+        });
+      } else if (this.isDevelopment) {
+        url = `/api/ver3/orders/${orderId}/coupons`;
+      } else {
+        url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons`;
+      }
       
       console.log('[Discount] Applying coupon:', discountCode, 'to order:', orderId);
       console.log('[Discount] Endpoint:', url);
@@ -14109,13 +14116,19 @@ function updateDiscountDisplay() {
       const discountValue = state.totals.discountAmount > 0
         ? `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`
         : formatCurrencyHalfKrone(0);
+      const discountPercent = (state.totals.subtotal > 0 && state.totals.discountAmount > 0)
+        ? (state.totals.discountAmount / state.totals.subtotal) * 100
+        : null;
+      const discountPercentText = (typeof discountPercent === 'number' && Number.isFinite(discountPercent))
+        ? `, ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(discountPercent)}%`
+        : '';
       discountDisplay.innerHTML = sanitizeHTML(`
         <div class="discount-row">
           <span class="discount-label">Subtotal:</span>
           <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
         </div>
         <div class="discount-row discount-applied">
-          <span class="discount-label">Discount (${state.discountCode}):</span>
+          <span class="discount-label">Discount (${state.discountCode}${discountPercentText}):</span>
           <span class="discount-value">${discountValue}</span>
         </div>
         <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">

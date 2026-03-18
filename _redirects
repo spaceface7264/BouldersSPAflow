@@ -1,0 +1,2 @@
+# Redirect /hero to /hero/ so hero landing page loads
+/hero    /hero/    302
