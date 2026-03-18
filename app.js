@@ -5242,6 +5242,7 @@ const translations = {
     'confirmation.nextStep1': 'E-mail bekræftelse sendt til din indbakke',
     'confirmation.nextStep2.membership': 'Medlemskabsaktivering og automatisk fornyelse',
     'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
+    'confirmation.nextStep2.15daypass.future': 'Dit pas bliver aktivt den {date}',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskabskort i centeret',
     'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge dit pas',
@@ -5437,6 +5438,7 @@ const translations = {
     'confirmation.nextStep1': 'Email confirmation sent to your inbox',
     'confirmation.nextStep2.membership': 'Membership activation & auto-renewal setup',
     'confirmation.nextStep2.15daypass': 'Your pass is active and ready to use',
+    'confirmation.nextStep2.15daypass.future': 'Your pass becomes active on {date}',
     'confirmation.nextStep2.punchcard': 'Your punch card is ready to use',
     'confirmation.nextStep3.membership': 'Pick up your membership card at the gym',
     'confirmation.nextStep3.15daypass': 'Visit the gym to start using your pass',
@@ -5658,6 +5660,7 @@ const translations = {
     'confirmation.nextStep1': 'E-Mail-Bestätigung an Ihren Posteingang gesendet',
     'confirmation.nextStep2.membership': 'Mitgliedschaftsaktivierung und automatische Verlängerung',
     'confirmation.nextStep2.15daypass': 'Ihr Pass ist aktiv und einsatzbereit',
+    'confirmation.nextStep2.15daypass.future': 'Ihr Pass wird am {date} aktiv',
     'confirmation.nextStep2.punchcard': 'Ihre Stempelkarte ist einsatzbereit',
     'confirmation.nextStep3.membership': 'Holen Sie Ihre Mitgliedskarte in der Halle ab',
     'confirmation.nextStep3.15daypass': 'Besuchen Sie die Halle, um Ihren Pass zu nutzen',
@@ -5680,13 +5683,26 @@ function updatePageTranslations() {
   
   // Update elements with data-i18n-key attribute
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
-    // Allow specific elements to opt out of automatic translation updates
-    // (used for dynamic, runtime-generated strings such as post-purchase messaging with dates)
-    if (element.getAttribute('data-i18n-dynamic') === 'true') {
-      return;
-    }
     const key = element.getAttribute('data-i18n-key');
-    const translation = t(key);
+    let translation = t(key);
+
+    // Simple placeholder substitution for dynamic translations.
+    // Currently supports `{date}` when element provides `data-i18n-date-iso="YYYY-MM-DD"`.
+    if (translation && translation.includes('{date}')) {
+      const dateIso = element.getAttribute('data-i18n-date-iso');
+      if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+        const locale = lang === 'de' ? 'de-DE' : lang === 'en' ? 'en-US' : 'da-DK';
+        const date = new Date(`${dateIso}T12:00:00`);
+        if (!isNaN(date.getTime())) {
+          const dateText = new Intl.DateTimeFormat(locale, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }).format(date);
+          translation = translation.replaceAll('{date}', dateText);
+        }
+      }
+    }
     if (translation && translation !== key) {
       // Handle input placeholders
       if (element.tagName === 'INPUT') {
@@ -18382,11 +18398,11 @@ function renderConfirmationView() {
   
   // Order total - from API only
   if (orderTotal) {
-    if (apiOrder?.price?.amount) {
+    if (apiOrder?.price?.amount !== undefined && apiOrder?.price?.amount !== null) {
       const amount = apiOrder.price.amount;
       const total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
       orderTotal.textContent = formatCurrencyHalfKrone(total);
-    } else if (apiOrder?.total) {
+    } else if (apiOrder?.total !== undefined && apiOrder?.total !== null) {
       const total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
       orderTotal.textContent = formatCurrencyHalfKrone(total);
     } else {
@@ -18512,20 +18528,15 @@ function renderConfirmationView() {
       startDay.setHours(0, 0, 0, 0);
 
       if (startDay.getTime() > today.getTime()) {
-        const dateText = formatLongDate(startDay);
-        // Prevent language-switch re-render from overwriting this dynamic message
-        nextStep2.setAttribute('data-i18n-dynamic', 'true');
-        nextStep2.removeAttribute('data-i18n-key');
-        if (state.language === 'de') {
-          nextStep2.textContent = `Ihr Pass wird am ${dateText} aktiv`;
-        } else if (state.language === 'en') {
-          nextStep2.textContent = `Your pass becomes active on ${dateText}`;
-        } else {
-          nextStep2.textContent = `Dit pas bliver aktivt den ${dateText}`;
-        }
+        const dateIso = `${startDay.getFullYear()}-${String(startDay.getMonth() + 1).padStart(2, '0')}-${String(startDay.getDate()).padStart(2, '0')}`;
+        const key = 'confirmation.nextStep2.15daypass.future';
+        nextStep2.setAttribute('data-i18n-key', key);
+        nextStep2.setAttribute('data-i18n-date-iso', dateIso);
+        // Render immediately (also allows updatePageTranslations() to re-render on language switch)
+        nextStep2.textContent = t(key).replaceAll('{date}', formatLongDate(startDay));
       } else {
         // Pass is active now (or today) - restore normal i18n-managed message
-        nextStep2.removeAttribute('data-i18n-dynamic');
+        nextStep2.removeAttribute('data-i18n-date-iso');
         nextStep2.setAttribute('data-i18n-key', 'confirmation.nextStep2.15daypass');
         nextStep2.textContent = t('confirmation.nextStep2.15daypass');
       }
