@@ -10664,7 +10664,12 @@ function setupNewAccessStep() {
   });
 
   // Plan selection
+  // Guard against duplicate listeners: setupNewAccessStep can run multiple times
+  // (immediate + requestAnimationFrame), so bind each card only once.
   document.querySelectorAll('.plan-card').forEach(card => {
+    if (card.dataset.planSelectionBound === 'true') return;
+    card.dataset.planSelectionBound = 'true';
+
     card.addEventListener('click', (e) => {
       // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
       // This prevents clicks on +/- and Continue from toggling/deselecting the card.
