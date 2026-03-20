@@ -3921,6 +3921,11 @@ function getAcceptLanguageHeader() {
   return state.language || DEFAULT_LANGUAGE;
 }
 
+function getDateLocale() {
+  const langCode = String(state.language || DEFAULT_LANGUAGE).split('-')[0];
+  return langCode === 'de' ? 'de-DE' : langCode === 'en' ? 'en-GB' : 'da-DK';
+}
+
 function getReturnUrlBase() {
   let override = null;
   try {
@@ -5358,7 +5363,7 @@ const translations = {
     'faq.15daypass.access.q': 'Hvilken adgang får jeg med kortet?',
     'faq.15daypass.access.a': 'Med 15-dages kortet får du ubegrænset adgang til alle Boulders haller, alle klatreområder og faciliteter i 15 dage. kortet kan ikke konverteres til et fuldt medlemskab.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
-    'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 5 år og kan deles med andre.',
+    'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 12 måneder og kan deles med andre.',
     'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
     'faq.punchcard.convert.a': 'Klippekort kan altid konverteres til et medlemskab ved at sende en mail til medlem@boulders.dk.',
     'faq.punchcard.remainingClips.q': 'Hvad gør jeg med resterende klip på mit klippekort?',
@@ -5366,13 +5371,13 @@ const translations = {
     'faq.punchcard.multiple.q': 'Kan jeg have flere klippekort?',
     'faq.punchcard.multiple.a': 'Du kan have ubegrænset antal klippekort tilknyttet din profil.',
     'faq.productChoice.difference.q': 'Hvad er forskellen mellem medlemskab, 15-dages pas og klippekort?',
-    'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 5 år og kan deles med andre.',
+    'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 12 måneder og kan deles med andre.',
     'faq.productChoice.membershipBest.q': 'Hvornår vælger jeg medlemskab?',
     'faq.productChoice.membershipBest.a': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen. Du får ubegrænset adgang til alle haller, ingen tilmeldings- eller opsigelsesgebyrer, og du kan opsige når som helst med kort varsel.',
     'faq.productChoice.15daypassBest.q': 'Hvornår skal jeg vælge 15-dages kortet?',
     'faq.productChoice.15daypassBest.a': 'Vælg 15-dages kortet hvis du vil prøve klatring eller kun har brug for adgang i en kort periode. Du får 15 dages ubegrænset adgang til alle haller + lejesko, fra den dag, du aktiverer det.',
     'faq.productChoice.punchcardBest.q': 'Hvornår vælger jeg klippekort?',
-    'faq.productChoice.punchcardBest.a': 'Vælg klippekort hvis du klatrer en gang imellem eller vil dele adgang med andre. Du får 10 (medmindre andet er angivet) indgange til alle haller, kortet er gyldigt i 5 år, og du kan genopfylde inden for 14 dage efter sidste klip og få 100 kr rabat.',
+    'faq.productChoice.punchcardBest.a': 'Vælg klippekort hvis du klatrer en gang imellem eller vil dele adgang med andre. Du får 10 (medmindre andet er angivet) indgange til alle haller, kortet er gyldigt i 12 måneder, og du kan genopfylde inden for 14 dage efter sidste klip og få 100 kr rabat.',
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
@@ -5525,6 +5530,7 @@ const translations = {
     'modal.cartOfferExpired.chooseOther': 'Choose another offer',
     'faq.title': 'Frequently Asked Questions',
     'faq.gyms.openingHours.q': 'What are the opening hours?',
+    'faq.gyms.openingHours.a': 'Opening hours vary between gyms. You can find current opening hours on our website or by contacting the specific gym.',
     'faq.gyms.openingHours.intro': 'All Boulders are open from morning to evening 361 days a year:',
     'faq.gyms.openingHours.tableName': 'Gym',
     'faq.gyms.openingHours.tableOpen': 'Open',
@@ -5553,7 +5559,7 @@ const translations = {
     'faq.15daypass.access.q': 'What access do I get with the pass?',
     'faq.15daypass.access.a': 'With the 15 day pass, you get unlimited access to all Boulders gyms, all climbing areas and facilities for 15 days. The pass cannot be converted to a full membership.',
     'faq.punchcard.howItWorks.q': 'How does the punch card work?',
-    'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 5 years and can be shared with others.',
+    'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 12 months and can be shared with others.',
     'faq.punchcard.convert.q': 'Can I convert my punch card to a membership?',
     'faq.punchcard.convert.a': 'Yes, you can convert your punch card to a membership. Contact us at medlem@boulders.dk if you want to convert your punch card to a membership.',
     'faq.punchcard.remainingClips.q': 'What do I do with remaining clips on my punch card?',
@@ -5561,13 +5567,13 @@ const translations = {
     'faq.punchcard.multiple.q': 'Can I have multiple punch cards?',
     'faq.punchcard.multiple.a': 'Yes you can have unlimited punch cards on your profile.',
     'faq.productChoice.difference.q': 'What is the difference between membership, 15 day pass, and punch card?',
-    'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15 day pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 5 years, and can be shared with others.',
+    'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15 day pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 12 months, and can be shared with others.',
     'faq.productChoice.membershipBest.q': 'When should I choose membership?',
     'faq.productChoice.membershipBest.a': 'Choose membership if you plan to climb at least once a week. You get unlimited access to all gyms, no signup or cancellation fees, and you can cancel anytime with short notice.',
     'faq.productChoice.15daypassBest.q': 'When should I choose the 15 day pass?',
     'faq.productChoice.15daypassBest.a': 'Choose the 15 day pass if you want to try climbing or only need short-term access. You get 15 days of unlimited access to all gyms from the day you activate it. The pass is valid for 15 days from the activation date.',
     'faq.productChoice.punchcardBest.q': 'When should I choose a punch card?',
-    'faq.productChoice.punchcardBest.a': 'Choose a punch card if you climb occasionally or want to share access with others. You get 10 entries to all gyms, unless anything else is specified, the card is valid for 5 years, and you can refill within 14 days after your last clip for 100 kr off.',
+    'faq.productChoice.punchcardBest.a': 'Choose a punch card if you climb occasionally or want to share access with others. You get 10 entries to all gyms, unless anything else is specified, the card is valid for 12 months, and you can refill within 14 days after your last clip for 100 kr off.',
   },
   'de-DE': {
     'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
@@ -5714,13 +5720,63 @@ const translations = {
     'confirmation.pending.title': 'Zahlung ausstehend',
     'confirmation.pending.message': 'Ihre Zahlung wird bearbeitet. Wir warten auf die Bestätigung des Zahlungsanbieters. Ihre Mitgliedschaft wird nach Bestätigung der Zahlung aktiviert. Bestellung #',
     'confirmation.pending.stillProcessing': 'Die Zahlung wird noch bearbeitet. Bitte schauen Sie in einigen Minuten erneut vorbei oder kontaktieren Sie den Support, wenn Sie die Zahlung abgeschlossen haben. Bestellung #',
+    'faq.title': 'Häufig gestellte Fragen',
+    'faq.gyms.openingHours.q': 'Was sind die Öffnungszeiten?',
+    'faq.gyms.openingHours.a': 'Die Öffnungszeiten variieren zwischen den Hallen. Sie finden die aktuellen Öffnungszeiten auf unserer Website oder indem Sie die jeweilige Halle kontaktieren.',
+    'faq.gyms.openingHours.intro': 'Alle Boulders haben 361 Tage im Jahr von morgens bis abends geöffnet:',
+    'faq.gyms.openingHours.tableName': 'Halle',
+    'faq.gyms.openingHours.tableOpen': 'Geöffnet',
+    'faq.gyms.access.q': 'Wie erhalte ich Zugang zu den Hallen?',
+    'faq.gyms.access.a': 'Nach Abschluss des Kaufs besuchen Sie die ausgewählte Halle und holen Ihre Zugangskarte ab. Die Karte ist Ihr Schlüssel zu Boulders, den Sie scannen, um die Tore zu öffnen.',
+    'faq.gyms.events.q': 'Gibt es Veranstaltungen und Aktivitäten?',
+    'faq.gyms.events.a': 'Ja! Wir veranstalten regelmäßig Events, Wettbewerbe und soziale Aktivitäten in allen unseren Hallen. Schauen Sie auf unserer Website nach bevorstehenden Veranstaltungen.',
+    'faq.gyms.gettingStarted.q': 'Wie fange ich an?',
+    'faq.gyms.gettingStarted.a': 'Es gibt viele Möglichkeiten, anzufangen. Wir empfehlen, an einem Intro- oder Fundamentals-Kurs teilzunehmen. Sie müssen nicht mit einem Kurs beginnen, aber es ist eine großartige Möglichkeit, Leute kennenzulernen. Viele fangen alleine an und finden schnell eine Gemeinschaft in unserer inklusiven Kletterkultur. Sie können auch unseren Einstiegsleitfaden lesen.',
+    'faq.membership.included.q': 'Was ist in meiner Mitgliedschaft enthalten?',
+    'faq.membership.included.a': 'Ihre Mitgliedschaft beinhaltet einen kostenlosen Einführungskurs, unbegrenzten Zugang zu allen Boulders-Hallen, Nutzung aller Kletterbereiche und Einrichtungen sowie Zugang zu Veranstaltungen und Aktivitäten.',
+    'faq.membership.blocLife.q': 'Was ist Bloc Life?',
+    'faq.membership.blocLife.a': 'Bloc Life ist das Mitgliedertreueprogramm von Boulders. Wenn Sie Mitglied sind, sind Sie automatisch dabei. Je länger Sie Mitglied sind, desto mehr Vorteile erhalten Sie – Rabatte auf Ausrüstung, Kaffee, Snacks und exklusiven Zugang zu neuen Hallen. Vorteile und Stufen werden automatisch aktualisiert.',
+    'faq.membership.terms.q': 'Was sind die Geschäftsbedingungen?',
+    'faq.membership.terms.a': 'Die Mitgliedschaft ist ein laufendes Abonnement mit automatischer Verlängerung. Es gibt keine Anmelde- oder Kündigungsgebühren. Die Kündigungsfrist beträgt den Rest des Monats plus 1 Monat. Sie können die vollständigen Geschäftsbedingungen lesen, indem Sie auf den Link im Warenkorb klicken.',
+    'faq.membership.bindingPeriod.q': 'Gibt es eine Mindestvertragslaufzeit?',
+    'faq.membership.bindingPeriod.a': 'Bei Boulders-Mitgliedschaften außerhalb von Kampagnen gibt es keine Mindestvertragslaufzeit. Sie können jederzeit mit einer Frist für den Rest des aktuellen Monats plus einen Monat kündigen. Wenn Sie sich für eine vergünstigte Kampagne anmelden, gibt es eine 3-monatige Mindestvertragslaufzeit.',
+    'faq.membership.freeze.q': 'Kann ich meine Mitgliedschaft einfrieren?',
+    'faq.membership.freeze.a': 'Ja. Sie können Ihre Mitgliedschaft für 1–3 Monate am Stück einfrieren, bis zu 3 Mal pro Jahr, für 49 kr pro Einfrierung. Während des Einfrierens fallen keine Gebühren an, und die Reaktivierung ist kostenlos. Das Einfrieren kann während einer Mindestvertragslaufzeit nicht aktiviert werden.',
+    'faq.membership.cancellation.q': 'Wie kündige ich meine Mitgliedschaft?',
+    'faq.membership.cancellation.a': 'Sie können Ihre Mitgliedschaft jederzeit kündigen. Die Kündigungsfrist beträgt den Rest des aktuellen Monats plus 1 Monat. Kontaktieren Sie medlem@boulders.dk oder melden Sie sich in Ihrem Konto an, um zu kündigen.',
+    'faq.15daypass.howItWorks.q': 'Wie funktioniert der 15-Tage-Pass?',
+    'faq.15daypass.howItWorks.a': 'Der 15-Tage-Pass gibt Ihnen ab dem Tag der Aktivierung 15 Tage lang unbegrenzten Zugang zu allen Boulders-Hallen. Er ist perfekt, um das Klettern auszuprobieren oder für einen kurzfristigen Besuch.',
+    'faq.15daypass.validity.q': 'Wie lange ist der Pass gültig?',
+    'faq.15daypass.validity.a': 'Der 15-Tage-Pass ist ab dem Aktivierungsdatum 15 Tage lang gültig. Sie haben während dieser Zeit unbegrenzten Zugang zu allen Hallen.',
+    'faq.15daypass.access.q': 'Welchen Zugang erhalte ich mit dem Pass?',
+    'faq.15daypass.access.a': 'Mit dem 15-Tage-Pass erhalten Sie 15 Tage lang unbegrenzten Zugang zu allen Boulders-Hallen, allen Kletterbereichen und Einrichtungen. Der Pass kann nicht in eine Vollmitgliedschaft umgewandelt werden.',
+    'faq.punchcard.howItWorks.q': 'Wie funktioniert die Stempelkarte?',
+    'faq.punchcard.howItWorks.a': 'Die Stempelkarte gibt Ihnen einen (1) Eintritt pro Stempel in allen Boulders-Hallen. Bei jedem Hallenbesuch wird ein (1) Stempel verwendet. Die Karte ist 12 Monate gültig und kann mit anderen geteilt werden.',
+    'faq.punchcard.convert.q': 'Kann ich meine Stempelkarte in eine Mitgliedschaft umwandeln?',
+    'faq.punchcard.convert.a': 'Ja, Sie können Ihre Stempelkarte in eine Mitgliedschaft umwandeln. Kontaktieren Sie uns unter medlem@boulders.dk, wenn Sie Ihre Stempelkarte in eine Mitgliedschaft umwandeln möchten.',
+    'faq.punchcard.remainingClips.q': 'Was mache ich mit den verbleibenden Stempeln auf meiner Stempelkarte?',
+    'faq.punchcard.remainingClips.a': 'Wenn Sie noch Stempel übrig haben, aber bereit für eine Mitgliedschaft sind, können Sie diese in eine Mitgliedschaft umwandeln lassen. Für die Umwandlung senden Sie eine E-Mail an medlem@boulders.dk. Oder verschenken Sie die verbleibenden Stempel an jemanden, der es verdient.',
+    'faq.punchcard.multiple.q': 'Kann ich mehrere Stempelkarten haben?',
+    'faq.punchcard.multiple.a': 'Ja, Sie können unbegrenzt viele Stempelkarten in Ihrem Profil haben.',
+    'faq.productChoice.difference.q': 'Was ist der Unterschied zwischen Mitgliedschaft, 15-Tage-Pass und Stempelkarte?',
+    'faq.productChoice.difference.a': 'Die Mitgliedschaft ist ein laufendes Abonnement mit unbegrenztem Zugang. Der 15-Tage-Pass gibt Ihnen 15 Tage unbegrenzten Zugang – ideal, um das Klettern auszuprobieren. Die Stempelkarte gibt Ihnen in der Regel 10 Eintritte, sofern nicht anders angegeben, ist 12 Monate gültig und kann mit anderen geteilt werden.',
+    'faq.productChoice.membershipBest.q': 'Wann sollte ich die Mitgliedschaft wählen?',
+    'faq.productChoice.membershipBest.a': 'Wählen Sie die Mitgliedschaft, wenn Sie mindestens einmal pro Woche klettern möchten. Sie erhalten unbegrenzten Zugang zu allen Hallen, keine Anmelde- oder Kündigungsgebühren, und Sie können jederzeit mit kurzer Frist kündigen.',
+    'faq.productChoice.15daypassBest.q': 'Wann sollte ich den 15-Tage-Pass wählen?',
+    'faq.productChoice.15daypassBest.a': 'Wählen Sie den 15-Tage-Pass, wenn Sie das Klettern ausprobieren möchten oder nur kurzfristigen Zugang benötigen. Sie erhalten ab dem Tag der Aktivierung 15 Tage lang unbegrenzten Zugang zu allen Hallen. Der Pass ist ab dem Aktivierungsdatum 15 Tage lang gültig.',
+    'faq.productChoice.punchcardBest.q': 'Wann sollte ich eine Stempelkarte wählen?',
+    'faq.productChoice.punchcardBest.a': 'Wählen Sie eine Stempelkarte, wenn Sie gelegentlich klettern oder den Zugang mit anderen teilen möchten. Sie erhalten 10 Eintritte für alle Hallen, sofern nicht anders angegeben, die Karte ist 12 Monate gültig, und Sie können innerhalb von 14 Tagen nach Ihrem letzten Stempel für 100 kr Rabatt nachfüllen.',
   },
 };
 
 // Get translation for current language
 function t(key, fallback = '') {
   const lang = state.language || DEFAULT_LANGUAGE;
-  return translations[lang]?.[key] || translations[DEFAULT_LANGUAGE]?.[key] || fallback || key;
+  return translations[lang]?.[key] 
+    || (lang !== 'en-GB' && translations['en-GB']?.[key]) 
+    || translations[DEFAULT_LANGUAGE]?.[key] 
+    || fallback 
+    || key;
 }
 
 // Update all translations on the page
@@ -5738,7 +5794,7 @@ function updatePageTranslations() {
     if (translation && translation.includes('{date}')) {
       const dateIso = element.getAttribute('data-i18n-date-iso');
       if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
-        const locale = langCode === 'de' ? 'de-DE' : langCode === 'en' ? 'en-US' : 'da-DK';
+        const locale = getDateLocale();
         const date = new Date(`${dateIso}T12:00:00`);
         if (!isNaN(date.getTime())) {
           const dateText = new Intl.DateTimeFormat(locale, {
@@ -18467,7 +18523,7 @@ function renderConfirmationView() {
   if (orderDate) {
     if (apiOrder?.createdAt || apiOrder?.created) {
       const date = apiOrder.createdAt ? new Date(apiOrder.createdAt) : new Date(apiOrder.created);
-      orderDate.textContent = new Intl.DateTimeFormat('en-US', {
+      orderDate.textContent = new Intl.DateTimeFormat(getDateLocale(), {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -18580,10 +18636,7 @@ function renderConfirmationView() {
       parsedEnd = computedEnd;
     }
 
-    const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
-    const locale = langCode === 'de' ? 'de-DE'
-      : langCode === 'en' ? 'en-US'
-      : 'da-DK';
+    const locale = getDateLocale();
     const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
       year: 'numeric',
       month: 'long',
@@ -18688,7 +18741,7 @@ function createPurchaseItemElement() {
       
       // Display expiry date from API, or show '—' if not available
       if (expiryDate && !isNaN(expiryDate.getTime())) {
-        punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
+        punchCardExpiry.textContent = new Intl.DateTimeFormat(getDateLocale(), {
           year: 'numeric',
           month: 'long',
           day: 'numeric',
@@ -18930,7 +18983,7 @@ async function showDetailedReceipt() {
   }
   if (receiptDate) {
     const orderDate = order.createdAt ? new Date(order.createdAt) : (order.created ? new Date(order.created) : (order.date || new Date()));
-    receiptDate.textContent = new Intl.DateTimeFormat('da-DK', {
+    receiptDate.textContent = new Intl.DateTimeFormat(getDateLocale(), {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
