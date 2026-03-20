@@ -3106,7 +3106,7 @@ function renderProductsFromAPI() {
               <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
               <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
             </div>
-            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}" data-i18n-key="button.continue">Continue</button>
           </div>
         </div>
       </div>
@@ -4243,7 +4243,8 @@ function ensureAddonsModal() {
   // Single dynamic button
   const actionButton = document.createElement('button');
   actionButton.textContent = t('addons.modal.skip');
-  actionButton.className = 'addons-action-btn';
+  actionButton.className = 'addons-action-btn addons-skip';
+  actionButton.setAttribute('data-i18n-key', 'addons.modal.skip');
   actionButton.addEventListener('click', () => handleAddonAction());
   
   const rightActions = document.createElement('div');
@@ -11406,10 +11407,14 @@ function updateAddonActionButton() {
   
   if (hasSelectedAddons) {
     actionButton.textContent = t('addons.modal.continue');
-    actionButton.className = 'addons-action-btn addons-continue';
+    actionButton.setAttribute('data-i18n-key', 'addons.modal.continue');
+    actionButton.classList.remove('addons-skip');
+    actionButton.classList.add('addons-continue');
   } else {
     actionButton.textContent = t('addons.modal.skip');
-    actionButton.className = 'addons-action-btn addons-skip';
+    actionButton.setAttribute('data-i18n-key', 'addons.modal.skip');
+    actionButton.classList.remove('addons-continue');
+    actionButton.classList.add('addons-skip');
   }
 }
 
