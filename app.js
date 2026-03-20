@@ -10903,7 +10903,8 @@ function setupNewAccessStep() {
           
           // Show quantity panel for the selected card and hide it for others
           // Quantity panel is INSIDE each plan-card (child), not a sibling
-          const punchCardCards = document.querySelectorAll('[data-category="punchcard"] .plan-card');
+          // Find all punch cards across all categories (campaign, punchcard)
+          const punchCardCards = document.querySelectorAll('.plan-card[data-plan^="punch-"]');
           punchCardCards.forEach((punchCard) => {
             const punchPanel = punchCard.querySelector('.quantity-panel');
             if (punchCard === card) {
