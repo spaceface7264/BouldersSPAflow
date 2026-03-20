@@ -3921,6 +3921,13 @@ function getAcceptLanguageHeader() {
   return state.language || DEFAULT_LANGUAGE;
 }
 
+function getDateLocale(language = state.language || DEFAULT_LANGUAGE) {
+  const langCode = String(language).split('-')[0];
+  return langCode === 'de' ? 'de-DE'
+    : langCode === 'en' ? 'en-GB'
+    : 'da-DK';
+}
+
 function getReturnUrlBase() {
   let override = null;
   try {
@@ -5726,7 +5733,6 @@ function t(key, fallback = '') {
 // Update all translations on the page
 function updatePageTranslations() {
   const lang = state.language || DEFAULT_LANGUAGE;
-  const langCode = String(lang).split('-')[0];
   
   // Update elements with data-i18n-key attribute
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
@@ -5738,7 +5744,7 @@ function updatePageTranslations() {
     if (translation && translation.includes('{date}')) {
       const dateIso = element.getAttribute('data-i18n-date-iso');
       if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
-        const locale = langCode === 'de' ? 'de-DE' : langCode === 'en' ? 'en-US' : 'da-DK';
+        const locale = getDateLocale(lang);
         const date = new Date(`${dateIso}T12:00:00`);
         if (!isNaN(date.getTime())) {
           const dateText = new Intl.DateTimeFormat(locale, {
@@ -18467,7 +18473,7 @@ function renderConfirmationView() {
   if (orderDate) {
     if (apiOrder?.createdAt || apiOrder?.created) {
       const date = apiOrder.createdAt ? new Date(apiOrder.createdAt) : new Date(apiOrder.created);
-      orderDate.textContent = new Intl.DateTimeFormat('en-US', {
+      orderDate.textContent = new Intl.DateTimeFormat(getDateLocale(), {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -18580,10 +18586,7 @@ function renderConfirmationView() {
       parsedEnd = computedEnd;
     }
 
-    const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
-    const locale = langCode === 'de' ? 'de-DE'
-      : langCode === 'en' ? 'en-US'
-      : 'da-DK';
+    const locale = getDateLocale();
     const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
       year: 'numeric',
       month: 'long',
