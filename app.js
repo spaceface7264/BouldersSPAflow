@@ -3895,6 +3895,7 @@ const SUPPORTED_LANGUAGES = {
 };
 
 const DEFAULT_LANGUAGE = 'da-DK';
+const SECONDARY_FALLBACK_LANGUAGE = 'en-GB';
 
 function getStoredLanguage() {
   try {
@@ -5532,6 +5533,7 @@ const translations = {
     'modal.cartOfferExpired.chooseOther': 'Choose another offer',
     'faq.title': 'Frequently Asked Questions',
     'faq.gyms.openingHours.q': 'What are the opening hours?',
+    'faq.gyms.openingHours.a': 'Opening hours vary between gyms. You can find current opening hours on our website or by contacting the specific gym.',
     'faq.gyms.openingHours.intro': 'All Boulders are open from morning to evening 361 days a year:',
     'faq.gyms.openingHours.tableName': 'Gym',
     'faq.gyms.openingHours.tableOpen': 'Open',
@@ -5727,7 +5729,22 @@ const translations = {
 // Get translation for current language
 function t(key, fallback = '') {
   const lang = state.language || DEFAULT_LANGUAGE;
-  return translations[lang]?.[key] || translations[DEFAULT_LANGUAGE]?.[key] || fallback || key;
+  const currentTranslation = translations[lang]?.[key];
+  if (currentTranslation !== undefined && currentTranslation !== null) {
+    return currentTranslation;
+  }
+
+  // Prefer English as an intermediate fallback for non-default locales
+  // so partially translated languages don't fall straight back to Danish.
+  if (lang !== DEFAULT_LANGUAGE && lang !== SECONDARY_FALLBACK_LANGUAGE) {
+    const secondaryTranslation = translations[SECONDARY_FALLBACK_LANGUAGE]?.[key];
+    if (secondaryTranslation !== undefined && secondaryTranslation !== null) {
+      return secondaryTranslation;
+    }
+  }
+
+  const defaultTranslation = translations[DEFAULT_LANGUAGE]?.[key];
+  return defaultTranslation || fallback || key;
 }
 
 // Update all translations on the page
