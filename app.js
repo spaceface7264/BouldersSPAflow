@@ -18691,7 +18691,7 @@ function createPurchaseItemElement() {
       
       // Display expiry date from API, or show '—' if not available
       if (expiryDate && !isNaN(expiryDate.getTime())) {
-        punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
+        punchCardExpiry.textContent = new Intl.DateTimeFormat(getDateLocale(), {
           year: 'numeric',
           month: 'long',
           day: 'numeric',
@@ -18933,7 +18933,7 @@ async function showDetailedReceipt() {
   }
   if (receiptDate) {
     const orderDate = order.createdAt ? new Date(order.createdAt) : (order.created ? new Date(order.created) : (order.date || new Date()));
-    receiptDate.textContent = new Intl.DateTimeFormat('da-DK', {
+    receiptDate.textContent = new Intl.DateTimeFormat(getDateLocale(), {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
