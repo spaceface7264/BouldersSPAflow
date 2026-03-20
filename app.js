@@ -6213,6 +6213,20 @@ async function changeLanguage(languageCode) {
   // Reload products if we're on step 2 or later
   if (state.currentStep >= 2 && state.selectedBusinessUnit) {
     console.log('[Language] Reloading products with language:', languageCode);
+    
+    // Save current UI state before re-rendering
+    const savedState = {
+      selectedProductId: state.selectedProductId,
+      selectedProductType: state.selectedProductType,
+      membershipPlanId: state.membershipPlanId,
+      valueCardQuantities: new Map(state.valueCardQuantities),
+      // Find which cards are currently selected and showing quantity panels
+      selectedCards: Array.from(document.querySelectorAll('.plan-card.selected')).map(card => ({
+        planId: card.dataset.plan,
+        hasQuantityPanel: card.querySelector('.quantity-panel.show') !== null
+      }))
+    };
+    
     // Clear cached products to force fresh fetch
     state.subscriptions = [];
     state.campaignSubscriptions = [];
@@ -6220,6 +6234,44 @@ async function changeLanguage(languageCode) {
     state.valueCards = [];
     await loadProductsFromAPI();
     renderProductsFromAPI();
+    
+    // Restore UI state after re-rendering
+    if (savedState.selectedProductId) {
+      state.selectedProductId = savedState.selectedProductId;
+      state.selectedProductType = savedState.selectedProductType;
+      state.membershipPlanId = savedState.membershipPlanId;
+    }
+    
+    // Restore quantity selections and UI state
+    if (savedState.valueCardQuantities.size > 0) {
+      state.valueCardQuantities = savedState.valueCardQuantities;
+      
+      // Restore selected cards and quantity panels
+      savedState.selectedCards.forEach(({ planId, hasQuantityPanel }) => {
+        const card = document.querySelector(`.plan-card[data-plan="${planId}"]`);
+        if (card) {
+          card.classList.add('selected', 'has-quantity');
+          
+          if (hasQuantityPanel) {
+            const quantityPanel = card.querySelector('.quantity-panel');
+            if (quantityPanel) {
+              quantityPanel.classList.add('show');
+              quantityPanel.style.display = 'flex';
+              
+              // Update the quantity display
+              const quantity = state.valueCardQuantities.get(planId) || 1;
+              syncPunchCardQuantityUI(card, planId);
+              
+              // Show the continue button
+              const continueBtn = card.querySelector('.continue-btn');
+              if (continueBtn) {
+                continueBtn.style.display = 'block';
+              }
+            }
+          }
+        }
+      });
+    }
   }
   
   // Reload gyms if we're on step 1
@@ -10644,7 +10696,8 @@ function setupNewAccessStep() {
       state.selectedProductType = null;
       resetOrderStateForProductChange('category-switch');
       
-      // Clear all punch card quantities when switching categories
+      // Clear all punch card quantities when switching categories (but not when just re-initializing)
+      // Only clear if user is actually switching categories, not during language change re-render
       state.valueCardQuantities.clear();
       
       document.querySelectorAll('.plan-card').forEach(card => {
