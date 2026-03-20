@@ -3069,9 +3069,6 @@ function renderProductsFromAPI() {
     planCard.dataset.plan = `punch-${productId}`; // For backward compatibility
     planCard.dataset.productId = productId; // Store API product ID (numeric)
     planCard.dataset.category = category;
-    // #region agent log
-    require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:3069',message:'renderValueCard creating card',data:{productId,dataPlan:planCard.dataset.plan,category,productName:product.name},timestamp:Date.now(),hypothesisId:'B'})+'\n');
-    // #endregion
     
     // Extract price from API structure: price.amount is in cents/øre (e.g., 77500 = 775.00 DKK)
     const priceInCents = product.price?.amount || product.amount || 0;
@@ -10619,9 +10616,6 @@ function handlePlanSelection(selectedCard) {
 }
 
 function setupNewAccessStep() {
-  // #region agent log
-  require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:10621',message:'setupNewAccessStep called',data:{totalCards:document.querySelectorAll('.plan-card').length,punchCards:document.querySelectorAll('.plan-card[data-plan^="punch-"]').length,timestamp:Date.now()},timestamp:Date.now(),hypothesisId:'A'})+'\n');
-  // #endregion
   const categoryItems = document.querySelectorAll('.category-item');
   const footerText = document.getElementById('footerText');
   
@@ -10724,14 +10718,8 @@ function setupNewAccessStep() {
   });
 
   // Plan selection
-  // #region agent log
-  require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:10721',message:'setupNewAccessStep attaching listeners',data:{cardCount:document.querySelectorAll('.plan-card').length,punchCardCount:document.querySelectorAll('.plan-card[data-plan^="punch-"]').length},timestamp:Date.now(),hypothesisId:'A'})+'\n');
-  // #endregion
   document.querySelectorAll('.plan-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      // #region agent log
-      require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:10722',message:'Click handler fired',data:{dataPlan:card.dataset.plan,category:card.closest('.category-item')?.dataset?.category,hasQuantityPanel:!!card.querySelector('.quantity-panel')},timestamp:Date.now(),hypothesisId:'A,B,C,D,E'})+'\n');
-      // #endregion
       // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
       // This prevents clicks on +/- and Continue from toggling/deselecting the card.
       if (e.target.closest('.quantity-panel')) {
@@ -10743,9 +10731,6 @@ function setupNewAccessStep() {
       const planId = card.dataset.plan;
       const categoryItem = card.closest('.category-item');
       const category = categoryItem.dataset.category;
-      // #region agent log
-      require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:10731',message:'Extracted planId and category',data:{planId,category,planIdType:typeof planId,planIdStartsWith:typeof planId==='string'?planId.substring(0,10):null},timestamp:Date.now(),hypothesisId:'B,C,E'})+'\n');
-      // #endregion
       
       // Check if this card is already selected
       const isAlreadySelected = card.classList.contains('selected');
@@ -10801,9 +10786,6 @@ function setupNewAccessStep() {
       // Value cards can appear in Campaign category too, so we check the planId format, not just category
       const isValueCardProduct = typeof planId === 'string' && planId.startsWith('punch-');
       const isMembership = !isValueCardProduct && (category === 'campaign' || category === 'membership' || category === '15daypass');
-      // #region agent log
-      require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:10787',message:'Product type determined',data:{isValueCardProduct,isMembership,planId,category},timestamp:Date.now(),hypothesisId:'B,C,E'})+'\n');
-      // #endregion
       
       // Determine product type based on planId format, not just category
       if (isMembership) {
@@ -10856,9 +10838,6 @@ function setupNewAccessStep() {
       // Handle value cards (punch cards) differently - show quantity selector and allow multi-quantity.
       // Value cards can appear in both 'punchcard' and 'campaign' categories (planId starts with 'punch-')
       if (isValueCardProduct) {
-          // #region agent log
-          require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:10852',message:'Entered isValueCardProduct block',data:{planId},timestamp:Date.now(),hypothesisId:'B,C'})+'\n');
-          // #endregion
           // Initialize quantity to 1 for this specific punch card type
           if (!state.valueCardQuantities.has(planId)) {
             state.valueCardQuantities.set(planId, 1);
@@ -10876,15 +10855,9 @@ function setupNewAccessStep() {
           // Quantity panel is INSIDE each plan-card (child), not a sibling
           // Find all punch cards across all categories (campaign, punchcard)
           const punchCardCards = document.querySelectorAll('.plan-card[data-plan^="punch-"]');
-          // #region agent log
-          require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:10869',message:'Found punch cards',data:{punchCardCount:punchCardCards.length,clickedCardHasPanel:!!card.querySelector('.quantity-panel')},timestamp:Date.now(),hypothesisId:'D'})+'\n');
-          // #endregion
           punchCardCards.forEach((punchCard) => {
             const punchPanel = punchCard.querySelector('.quantity-panel');
             if (punchCard === card) {
-              // #region agent log
-              require('fs').appendFileSync('/opt/cursor/logs/debug.log',JSON.stringify({location:'app.js:10878',message:'Showing panel for clicked card',data:{hasPunchPanel:!!punchPanel,punchCardDataPlan:punchCard.dataset.plan,isClickedCard:true},timestamp:Date.now(),hypothesisId:'D'})+'\n');
-              // #endregion
               punchCard.classList.add('has-quantity');
               if (punchPanel) {
                 punchPanel.classList.add('show');
