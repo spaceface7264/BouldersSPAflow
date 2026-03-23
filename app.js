@@ -1307,6 +1307,8 @@ class AuthAPI {
     
     try {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem('boulders_checkout_customer');
+      sessionStorage.removeItem('boulders_checkout_order');
     } catch (error) {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
@@ -9576,6 +9578,30 @@ function handleLogout() {
   
   // Switch to create account mode when logging out
   switchAuthMode('create');
+
+  // If user logs out from success/payment-return context, force app back to front flow.
+  // Also strip payment return params so init logic cannot keep user on step 5.
+  try {
+    const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+  } catch (error) {
+    console.warn('[logout] Could not clean URL params:', error);
+  }
+
+  state.currentStep = 1;
+  const stepContent = document.querySelector('.step-content');
+  if (stepContent) {
+    stepContent.classList.remove('success-page-active');
+    stepContent.classList.remove('payment-failed-active');
+    stepContent.style.flex = '';
+    stepContent.style.minHeight = '';
+    stepContent.style.height = '';
+  }
+  showStep(state.currentStep);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  scrollToTop();
   
   showToast('You have been logged out.', 'info');
   
