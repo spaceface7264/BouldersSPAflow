@@ -11158,13 +11158,10 @@ function handleGlobalClick(event) {
 
   switch (action) {
     case 'select-plan': {
-      // Normalize plan selection so both the card and its "Select" button behave the same.
-      // Delegate to the card click handler by triggering a click on the closest plan card.
-      const card = actionable.closest('.plan-card');
-      if (card) {
-        event.preventDefault();
-        card.click();
-      }
+      // The button lives inside .plan-card, and the card click handler already processes selection.
+      // Avoid triggering a second synthetic click here, which can toggle selection twice.
+      event.preventDefault();
+      event.stopPropagation();
       break;
     }
     case 'select-membership': {
