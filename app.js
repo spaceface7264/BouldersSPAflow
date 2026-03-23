@@ -1307,6 +1307,8 @@ class AuthAPI {
     
     try {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem('boulders_checkout_customer');
+      sessionStorage.removeItem('boulders_checkout_order');
     } catch (error) {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
@@ -9548,6 +9550,30 @@ function handleLogout() {
   state.authenticatedCustomer = null;
   state.authenticatedEmail = null;
   state.customerId = null;
+  state.fullOrder = null;
+  state.billingPeriod = '';
+  state.subscriptionStartDate = null;
+  state.discountCode = null;
+  state.discountApplied = false;
+  state.paymentFailed = false;
+  state.paymentPending = false;
+  state.paymentConfirmed = false;
+
+  // IMPORTANT: Reset checkout/order context so a new user never reuses
+  // a previous user's order/customer snapshot after logout.
+  clearStoredOrderData('logout');
+  state.selectedProductType = null;
+  state.selectedProductId = null;
+  state.membershipPlanId = null;
+  state.addonIds.clear();
+  state.valueCardQuantities.clear();
+  state.createdEmails.clear();
+  try {
+    sessionStorage.removeItem('boulders_checkout_customer');
+    sessionStorage.removeItem('boulders_checkout_order');
+  } catch (error) {
+    console.warn('[checkout] Could not clear checkout session snapshots on logout:', error);
+  }
   
   if (typeof window.clearTokens === 'function') {
     window.clearTokens();
@@ -9563,6 +9589,30 @@ function handleLogout() {
   
   // Switch to create account mode when logging out
   switchAuthMode('create');
+
+  // If user logs out from success/payment-return context, force app back to front flow.
+  // Also strip payment return params so init logic cannot keep user on step 5.
+  try {
+    const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+  } catch (error) {
+    console.warn('[logout] Could not clean URL params:', error);
+  }
+
+  state.currentStep = 1;
+  const stepContent = document.querySelector('.step-content');
+  if (stepContent) {
+    stepContent.classList.remove('success-page-active');
+    stepContent.classList.remove('payment-failed-active');
+    stepContent.style.flex = '';
+    stepContent.style.minHeight = '';
+    stepContent.style.height = '';
+  }
+  showStep(state.currentStep);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  scrollToTop();
   
   showToast('You have been logged out.', 'info');
   
@@ -19815,6 +19865,11 @@ function showStep(stepNumber) {
     } else {
       stepContent.style.marginTop = ''; // Reset to CSS default (50px)
       stepContent.style.flex = ''; // Reset to CSS default (flex: 1)
+      // Ensure success/failure layout classes never leak into regular steps
+      stepContent.classList.remove('success-page-active');
+      stepContent.classList.remove('payment-failed-active');
+      stepContent.style.minHeight = '';
+      stepContent.style.height = '';
     }
   }
   
