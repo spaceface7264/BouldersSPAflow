@@ -10768,7 +10768,14 @@ function setupNewAccessStep() {
   });
 
   // Plan selection
-  document.querySelectorAll('.plan-card').forEach(card => {
+  // Re-clone cards before binding to avoid duplicate listeners when setup runs multiple times
+  // (e.g. immediate + requestAnimationFrame after render/language updates).
+  Array.from(document.querySelectorAll('.plan-card')).forEach((originalCard) => {
+    const clonedCard = originalCard.cloneNode(true);
+    if (originalCard.parentNode) {
+      originalCard.parentNode.replaceChild(clonedCard, originalCard);
+    }
+    const card = clonedCard;
     card.addEventListener('click', (e) => {
       // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
       // This prevents clicks on +/- and Continue from toggling/deselecting the card.
