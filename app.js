@@ -9537,6 +9537,30 @@ function handleLogout() {
   state.authenticatedCustomer = null;
   state.authenticatedEmail = null;
   state.customerId = null;
+  state.fullOrder = null;
+  state.billingPeriod = '';
+  state.subscriptionStartDate = null;
+  state.discountCode = null;
+  state.discountApplied = false;
+  state.paymentFailed = false;
+  state.paymentPending = false;
+  state.paymentConfirmed = false;
+
+  // IMPORTANT: Reset checkout/order context so a new user never reuses
+  // a previous user's order/customer snapshot after logout.
+  clearStoredOrderData('logout');
+  state.selectedProductType = null;
+  state.selectedProductId = null;
+  state.membershipPlanId = null;
+  state.addonIds.clear();
+  state.valueCardQuantities.clear();
+  state.createdEmails.clear();
+  try {
+    sessionStorage.removeItem('boulders_checkout_customer');
+    sessionStorage.removeItem('boulders_checkout_order');
+  } catch (error) {
+    console.warn('[checkout] Could not clear checkout session snapshots on logout:', error);
+  }
   
   if (typeof window.clearTokens === 'function') {
     window.clearTokens();
