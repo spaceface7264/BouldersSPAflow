@@ -19853,6 +19853,11 @@ function showStep(stepNumber) {
     } else {
       stepContent.style.marginTop = ''; // Reset to CSS default (50px)
       stepContent.style.flex = ''; // Reset to CSS default (flex: 1)
+      // Ensure success/failure layout classes never leak into regular steps
+      stepContent.classList.remove('success-page-active');
+      stepContent.classList.remove('payment-failed-active');
+      stepContent.style.minHeight = '';
+      stepContent.style.height = '';
     }
   }
   
