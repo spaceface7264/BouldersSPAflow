@@ -3108,7 +3108,7 @@ function renderProductsFromAPI() {
               <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
               <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
             </div>
-            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}">Continue</button>
+            <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}" data-i18n-key="button.continue">Continue</button>
           </div>
         </div>
       </div>
@@ -4245,7 +4245,8 @@ function ensureAddonsModal() {
   // Single dynamic button
   const actionButton = document.createElement('button');
   actionButton.textContent = t('addons.modal.skip');
-  actionButton.className = 'addons-action-btn';
+  actionButton.className = 'addons-action-btn addons-skip';
+  actionButton.setAttribute('data-i18n-key', 'addons.modal.skip');
   actionButton.addEventListener('click', () => handleAddonAction());
   
   const rightActions = document.createElement('div');
@@ -6214,6 +6215,20 @@ async function changeLanguage(languageCode) {
   // Reload products if we're on step 2 or later
   if (state.currentStep >= 2 && state.selectedBusinessUnit) {
     console.log('[Language] Reloading products with language:', languageCode);
+    
+    // Save current UI state before re-rendering
+    const savedState = {
+      selectedProductId: state.selectedProductId,
+      selectedProductType: state.selectedProductType,
+      membershipPlanId: state.membershipPlanId,
+      valueCardQuantities: new Map(state.valueCardQuantities),
+      // Find which cards are currently selected and showing quantity panels
+      selectedCards: Array.from(document.querySelectorAll('.plan-card.selected')).map(card => ({
+        planId: card.dataset.plan,
+        hasQuantityPanel: card.querySelector('.quantity-panel.show') !== null
+      }))
+    };
+    
     // Clear cached products to force fresh fetch
     state.subscriptions = [];
     state.campaignSubscriptions = [];
@@ -6221,6 +6236,44 @@ async function changeLanguage(languageCode) {
     state.valueCards = [];
     await loadProductsFromAPI();
     renderProductsFromAPI();
+    
+    // Restore UI state after re-rendering
+    if (savedState.selectedProductId) {
+      state.selectedProductId = savedState.selectedProductId;
+      state.selectedProductType = savedState.selectedProductType;
+      state.membershipPlanId = savedState.membershipPlanId;
+    }
+    
+    // Restore quantity selections and UI state
+    if (savedState.valueCardQuantities.size > 0) {
+      state.valueCardQuantities = savedState.valueCardQuantities;
+      
+      // Restore selected cards and quantity panels
+      savedState.selectedCards.forEach(({ planId, hasQuantityPanel }) => {
+        const card = document.querySelector(`.plan-card[data-plan="${planId}"]`);
+        if (card) {
+          card.classList.add('selected', 'has-quantity');
+          
+          if (hasQuantityPanel) {
+            const quantityPanel = card.querySelector('.quantity-panel');
+            if (quantityPanel) {
+              quantityPanel.classList.add('show');
+              quantityPanel.style.display = 'flex';
+              
+              // Update the quantity display
+              const quantity = state.valueCardQuantities.get(planId) || 1;
+              syncPunchCardQuantityUI(card, planId);
+              
+              // Show the continue button
+              const continueBtn = card.querySelector('.continue-btn');
+              if (continueBtn) {
+                continueBtn.style.display = 'block';
+              }
+            }
+          }
+        }
+      });
+    }
   }
   
   // Reload gyms if we're on step 1
@@ -10693,7 +10746,8 @@ function setupNewAccessStep() {
       state.selectedProductType = null;
       resetOrderStateForProductChange('category-switch');
       
-      // Clear all punch card quantities when switching categories
+      // Clear all punch card quantities when switching categories (but not when just re-initializing)
+      // Only clear if user is actually switching categories, not during language change re-render
       state.valueCardQuantities.clear();
       
       document.querySelectorAll('.plan-card').forEach(card => {
@@ -10714,7 +10768,14 @@ function setupNewAccessStep() {
   });
 
   // Plan selection
-  document.querySelectorAll('.plan-card').forEach(card => {
+  // Re-clone cards before binding to avoid duplicate listeners when setup runs multiple times
+  // (e.g. immediate + requestAnimationFrame after render/language updates).
+  Array.from(document.querySelectorAll('.plan-card')).forEach((originalCard) => {
+    const clonedCard = originalCard.cloneNode(true);
+    if (originalCard.parentNode) {
+      originalCard.parentNode.replaceChild(clonedCard, originalCard);
+    }
+    const card = clonedCard;
     card.addEventListener('click', (e) => {
       // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
       // This prevents clicks on +/- and Continue from toggling/deselecting the card.
@@ -10849,7 +10910,8 @@ function setupNewAccessStep() {
           
           // Show quantity panel for the selected card and hide it for others
           // Quantity panel is INSIDE each plan-card (child), not a sibling
-          const punchCardCards = document.querySelectorAll('[data-category="punchcard"] .plan-card');
+          // Find all punch cards across all categories (campaign, punchcard)
+          const punchCardCards = document.querySelectorAll('.plan-card[data-plan^="punch-"]');
           punchCardCards.forEach((punchCard) => {
             const punchPanel = punchCard.querySelector('.quantity-panel');
             if (punchCard === card) {
@@ -11103,13 +11165,10 @@ function handleGlobalClick(event) {
 
   switch (action) {
     case 'select-plan': {
-      // Normalize plan selection so both the card and its "Select" button behave the same.
-      // Delegate to the card click handler by triggering a click on the closest plan card.
-      const card = actionable.closest('.plan-card');
-      if (card) {
-        event.preventDefault();
-        card.click();
-      }
+      // The button lives inside .plan-card, and the card click handler already processes selection.
+      // Avoid triggering a second synthetic click here, which can toggle selection twice.
+      event.preventDefault();
+      event.stopPropagation();
       break;
     }
     case 'select-membership': {
@@ -11456,10 +11515,14 @@ function updateAddonActionButton() {
   
   if (hasSelectedAddons) {
     actionButton.textContent = t('addons.modal.continue');
-    actionButton.className = 'addons-action-btn addons-continue';
+    actionButton.setAttribute('data-i18n-key', 'addons.modal.continue');
+    actionButton.classList.remove('addons-skip');
+    actionButton.classList.add('addons-continue');
   } else {
     actionButton.textContent = t('addons.modal.skip');
-    actionButton.className = 'addons-action-btn addons-skip';
+    actionButton.setAttribute('data-i18n-key', 'addons.modal.skip');
+    actionButton.classList.remove('addons-continue');
+    actionButton.classList.add('addons-skip');
   }
 }
 
