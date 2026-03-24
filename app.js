@@ -59,6 +59,138 @@ function getTodayLocalDateString() {
   return `${year}-${month}-${day}`;
 }
 
+function getFirstMonthFreeStartDateString(referenceDate = new Date()) {
+  const base = new Date(referenceDate);
+  base.setHours(0, 0, 0, 0);
+  const day = base.getDate();
+  const targetYear = base.getMonth() === 11 ? base.getFullYear() + 1 : base.getFullYear();
+  const targetMonth = (base.getMonth() + 1) % 12;
+  const lastDayOfTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const clampedDay = Math.min(day, lastDayOfTargetMonth);
+  const start = new Date(targetYear, targetMonth, clampedDay);
+  const year = start.getFullYear();
+  const month = String(start.getMonth() + 1).padStart(2, '0');
+  const dayStr = String(start.getDate()).padStart(2, '0');
+  return `${year}-${month}-${dayStr}`;
+}
+
+function currencyAmountToDKK(value) {
+  if (value == null) return 0;
+  const raw = typeof value === 'object' && value !== null ? value.amount : value;
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric)) return 0;
+  return numeric / 100;
+}
+
+function getNormalizedRoutePath() {
+  try {
+    return (window.location.pathname || '').replace(/\/+$/, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function isFirstMonthFreeRouteActive() {
+  const routePath = getNormalizedRoutePath();
+  return state.landing?.routeKey === 'firstmonthfree' || routePath === '/firstmonthfree';
+}
+
+function hasProductLabel(product, labelName) {
+  if (!product || !labelName) return false;
+  const target = String(labelName).trim().toLowerCase();
+  if (!target) return false;
+  const labels = product.productLabels || product.labels || [];
+  return Array.isArray(labels) && labels.some((label) => String(label?.name || '').trim().toLowerCase() === target);
+}
+
+function isFirstMonthFreeProduct(product) {
+  if (!product) return false;
+  if (hasProductLabel(product, 'PublicFirstMonthFree') || hasProductLabel(product, 'LandingFirstMonthFree')) {
+    return true;
+  }
+  const name = String(product?.name || '').toLowerCase();
+  return /0\s*kr|første\s*måned|first\s*month\s*free/.test(name);
+}
+
+function toDateYMD(dateInput) {
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getFirstMonthFreeExpectedPeriodEndYMD(referenceDate = new Date()) {
+  const base = new Date(referenceDate);
+  base.setHours(0, 0, 0, 0);
+  // New pricing model:
+  // - Free period: today -> same day next month
+  // - Pay-now period: same day next month -> end of that same month
+  return toDateYMD(new Date(base.getFullYear(), base.getMonth() + 2, 0));
+}
+
+function validateFirstMonthFreeOrderContract(order, referenceDate = new Date()) {
+  const orderPrice = currencyAmountToDKK(order?.price?.amount);
+  const leftToPay = currencyAmountToDKK(
+    order?.leftToPay?.amount
+    ?? order?.leftToPay
+    ?? order?.price?.leftToPay?.amount
+    ?? order?.price?.leftToPay
+  );
+  const payableNow = leftToPay > 0 ? leftToPay : orderPrice;
+  const subscriptionItem = order?.subscriptionItems?.[0];
+  const actualEndYMD = subscriptionItem?.initialPaymentPeriod?.end
+    ? toDateYMD(subscriptionItem.initialPaymentPeriod.end)
+    : '';
+  const expectedEndYMD = getFirstMonthFreeExpectedPeriodEndYMD(referenceDate);
+  const periodMatches = Boolean(actualEndYMD) && actualEndYMD === expectedEndYMD;
+  const payableIsValid = Number.isFinite(payableNow) && payableNow >= 0;
+  return {
+    ok: periodMatches && payableIsValid,
+    payableNow,
+    orderPrice,
+    leftToPay,
+    actualEndYMD,
+    expectedEndYMD,
+    payableIsValid,
+    periodMatches,
+  };
+}
+
+function computeFirstMonthFreeDisplay(referenceDate = new Date(), monthlyPrice = 0) {
+  const base = new Date(referenceDate);
+  base.setHours(0, 0, 0, 0);
+
+  const freeStart = new Date(base);
+  // Use clamped "same day next month" to avoid Date overflow
+  // (e.g. Jan 31 -> Mar 03 when using setMonth directly).
+  const freeEndYMD = getFirstMonthFreeStartDateString(base);
+  const freeEnd = new Date(`${freeEndYMD}T12:00:00`);
+  freeEnd.setHours(0, 0, 0, 0);
+
+  const payStart = new Date(freeEnd);
+  payStart.setHours(0, 0, 0, 0);
+
+  // Pay-now period always ends at the end of payStart month
+  // (no before/after 15th branching).
+  const payEnd = new Date(payStart.getFullYear(), payStart.getMonth() + 1, 0);
+  payEnd.setHours(0, 0, 0, 0);
+
+  const daysInPayPeriod = Math.max(1, Math.floor((payEnd - payStart) / (1000 * 60 * 60 * 24)) + 1);
+  const daysInPayStartMonth = new Date(payStart.getFullYear(), payStart.getMonth() + 1, 0).getDate();
+  const dailyRate = daysInPayStartMonth > 0 ? (Number(monthlyPrice) || 0) / daysInPayStartMonth : 0;
+  const payNowAmount = dailyRate * daysInPayPeriod;
+
+  return {
+    freeStart,
+    freeEnd,
+    payStart,
+    payEnd,
+    payNowAmount,
+  };
+}
+
 const debugEnabled = window.DEBUG_LOGS === true;
 const originalConsoleLog = console.log.bind(console);
 const originalConsoleWarn = console.warn.bind(console);
@@ -1488,11 +1620,9 @@ class OrderAPI {
         ? startDateOverride
         : getTodayLocalDateString();
       
-      // Pricing calculation: When startDate is on day 16 or later, price includes:
-      // - Rest of current month (prorated) + Full next month
-      // When startDate is before day 16, price includes:
-      // - Rest of current month only (prorated)
-      // Frontend calculation now matches backend logic to ensure price consistency.
+      // Pricing for standard memberships may depend on date windows.
+      // First-month-free products use a dedicated unified model
+      // (today -> same day next month free; then pay-now until month end).
       
       // Build payload according to OpenAPI spec:
       // Required: subscriptionProduct, birthDate
@@ -1509,14 +1639,7 @@ class OrderAPI {
       
       // Log pricing calculation details for productId 134 for verification
       if (subscriptionProductId === 134) {
-        const dayOfMonth = new Date().getDate();
-        if (dayOfMonth >= 16) {
-          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
-          console.log('[Step 7] ℹ️ Day >= 16: Price will include rest of current month + full next month');
-        } else {
-          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
-          console.log('[Step 7] ℹ️ Day < 16: Price will include prorated rest of current month only');
-        }
+        console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
       }
       
       console.log('[Step 7] Adding subscription item - productId:', productId);
@@ -1727,7 +1850,32 @@ class OrderAPI {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Calculate days remaining in current month
+    const productLooksFirstMonthFree = hasProductLabel(membership, 'PublicFirstMonthFree')
+      || hasProductLabel(membership, 'LandingFirstMonthFree')
+      || /0\s*kr|første\s*måned|first\s*month\s*free/.test(String(membership?.name || '').toLowerCase());
+
+    if (productLooksFirstMonthFree) {
+      const monthlyDKK = monthlyPriceInCents / 100;
+      const display = computeFirstMonthFreeDisplay(today, monthlyDKK);
+      const amountInCents = Math.round((display?.payNowAmount || 0) * 100);
+      const payStart = display?.payStart || null;
+      const payEnd = display?.payEnd || null;
+      const daysInPayPeriod = payStart && payEnd
+        ? Math.max(1, Math.floor((payEnd - payStart) / (1000 * 60 * 60 * 24)) + 1)
+        : null;
+      return {
+        amountInCents,
+        amountInDKK: amountInCents / 100,
+        daysRemaining: daysInPayPeriod,
+        daysInMonth: payStart ? new Date(payStart.getFullYear(), payStart.getMonth() + 1, 0).getDate() : null,
+        monthlyPriceInCents,
+        monthlyPriceInDKK: monthlyPriceInCents / 100,
+        includesNextMonth: false,
+        mode: 'firstMonthFreeUnified',
+      };
+    }
+
+    // Calculate days remaining in current month (standard memberships)
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
     const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
@@ -2993,6 +3141,37 @@ async function loadProductsFromAPI() {
 
 // Step 5: Render products from API data into the UI
 function renderProductsFromAPI() {
+  try {
+    console.log('[Step 2] renderProductsFromAPI', {
+      pathname: window.location.pathname,
+      landing: state.landing,
+    });
+  } catch {}
+
+  // Keep landing state in sync with current pathname.
+  // Without this, navigating between /freetrial ↔ / (same SPA) can leave the app "stuck" in landing mode.
+  try {
+    const cfg = getLandingConfigFromPathname(window.location.pathname);
+    if (cfg) {
+      state.landing = { ...state.landing, ...cfg };
+    } else {
+      state.landing = { routeKey: null, mode: null, productLabel: null, productId: null, allowMultiple: false };
+    }
+  } catch (e) {
+    console.warn('[Landing] Failed to sync landing state from pathname:', e);
+    state.landing = { routeKey: null, mode: null, productLabel: null, productId: null, allowMultiple: false };
+  }
+
+  // If we previously rendered a landing single-product view, restore the normal category UI
+  // when landing mode is not active.
+  try {
+    const landingWrap = document.getElementById('landingSingleProductWrap');
+    const categoryList = document.querySelector('#step-2 .category-list');
+    if (!(state.landing && state.landing.mode === 'single-product' && (state.landing.productLabel != null || state.landing.productId != null))) {
+      if (landingWrap) landingWrap.remove();
+      if (categoryList) categoryList.style.display = '';
+    }
+  } catch {}
   // Helper function to render a subscription product card
   const renderSubscriptionCard = (product, category) => {
     const planCard = document.createElement('div');
@@ -3018,6 +3197,13 @@ function renderProductsFromAPI() {
     const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
     const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
                      intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
+
+    const isLanding = !!(state.landing && state.landing.mode === 'single-product' && state.landing.routeKey);
+    const isFree = Number(priceInCents) === 0;
+    const priceAmountText = (isLanding && isFree)
+      ? t('price.free', 'Gratis')
+      : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—');
+    const priceUnitText = (isLanding && isFree) ? '' : priceUnit;
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3048,8 +3234,8 @@ function renderProductsFromAPI() {
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
           <div class="plan-price">
-            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
-            <span class="price-unit">${priceUnit}</span>
+            <span class="price-amount">${priceAmountText}</span>
+            ${priceUnitText ? `<span class="price-unit">${priceUnitText}</span>` : ''}
           </div>
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
@@ -3116,6 +3302,268 @@ function renderProductsFromAPI() {
     
     return planCard;
   };
+
+  const landing = state.landing;
+  const landingWantsSingleProduct = !!(
+    landing
+    && landing.mode === 'single-product'
+    && (landing.productLabel != null || landing.productId != null)
+  );
+  if (landingWantsSingleProduct) {
+    const desiredId = landing.productId;
+    const desiredLabel = landing.productLabel ? String(landing.productLabel).trim().toLowerCase() : null;
+    const allowMultiple = !!landing.allowMultiple;
+    const matchesId = (p) => p && desiredId != null && (String(p.id) === String(desiredId));
+    const hasLabel = (p) => {
+      if (!desiredLabel) return false;
+      const labels = p?.productLabels;
+      if (!Array.isArray(labels)) return false;
+      return labels.some(l => String(l?.name || '').trim().toLowerCase() === desiredLabel);
+    };
+
+    // Landing pages should be able to show products that are intentionally hidden from the public catalog.
+    // So we resolve against *raw* products first (unfiltered), then fall back to the public lists.
+    const rawList = (state.allRawProducts || []);
+    const rawMatches = desiredLabel
+      ? rawList.filter(hasLabel)
+      : rawList.filter(matchesId);
+
+    const landingProducts = allowMultiple ? rawMatches : (rawMatches[0] ? [rawMatches[0]] : []);
+    if (desiredLabel && rawMatches.length > 1 && !allowMultiple) {
+      console.warn('[Landing] Multiple products matched landing label; using first.', {
+        desiredLabel,
+        matchedIds: rawMatches.map(p => p?.id).filter(Boolean),
+      });
+    }
+
+    const inCampaignSub = (state.campaignSubscriptions || []).find(matchesId);
+    const inCampaignVc = (state.campaignValueCards || []).find(matchesId);
+    const inMembership = (state.subscriptions || []).find(matchesId);
+    const inDayPass = (state.dayPassSubscriptions || []).find(matchesId);
+    const inPunch = (state.valueCards || []).find(matchesId);
+
+    const resolved =
+      (landingProducts.length ? { products: landingProducts, source: 'raw' } : null) ||
+      (inCampaignSub ? { product: inCampaignSub, kind: 'subscription', category: 'campaign' } : null) ||
+      (inCampaignVc ? { product: inCampaignVc, kind: 'valuecard', category: 'campaign' } : null) ||
+      (inMembership ? { product: inMembership, kind: 'subscription', category: 'membership' } : null) ||
+      (inDayPass ? { product: inDayPass, kind: 'subscription', category: '15daypass' } : null) ||
+      (inPunch ? { product: inPunch, kind: 'valuecard', category: 'punchcard' } : null);
+
+    if (resolved) {
+      // Landing: hide category UI entirely, but render within the same DOM structure/CSS
+      // your catalog expects: `.category-item.expanded.selected .category-content .plans-list`.
+      // We omit the header entirely to avoid showing "Membership", etc.
+      const categoryList = document.querySelector('#step-2 .category-list');
+      if (categoryList) categoryList.style.display = 'none';
+
+      const container =
+        document.querySelector('#step-2 .container')
+        || document.querySelector('#step-2 .step-panel-content')
+        || document.querySelector('#step-2');
+
+      let wrap = document.getElementById('landingSingleProductWrap');
+      if (!wrap && container) {
+        wrap = document.createElement('div');
+        wrap.id = 'landingSingleProductWrap';
+        wrap.className = 'landing-single-product-wrap';
+        wrap.style.display = 'block';
+        wrap.style.marginTop = '16px';
+        const insertBeforeEl = container.querySelector('.category-list');
+        if (insertBeforeEl && insertBeforeEl.parentNode === container) {
+          container.insertBefore(wrap, insertBeforeEl);
+        } else {
+          container.appendChild(wrap);
+        }
+      }
+
+      if (wrap) {
+        wrap.innerHTML = '';
+        const fakeCategory = document.createElement('div');
+        fakeCategory.className = 'category-item expanded selected';
+        fakeCategory.setAttribute('data-landing', 'single-product');
+        // No header — only content.
+        const content = document.createElement('div');
+        content.className = 'category-content';
+        // Ensure visible regardless of header animation timing.
+        content.style.maxHeight = 'none';
+        content.style.opacity = '1';
+        content.style.transform = 'none';
+        content.style.overflow = 'visible';
+
+        const list = document.createElement('div');
+        list.className = 'plans-list';
+        // Use existing plans-list styling, but ensure it's visible immediately.
+        list.style.opacity = '1';
+        list.style.transform = 'none';
+        list.style.maxHeight = 'none';
+        list.style.overflow = 'visible';
+
+        const getLabelNamesLower = (p) => (Array.isArray(p?.productLabels) ? p.productLabels : [])
+          .map(l => String(l?.name || '').trim().toLowerCase())
+          .filter(Boolean);
+        const inferKind = (p) => {
+          // Avoid misclassifying subscription products as value cards.
+          // Value cards have explicit VALUE_CARD/VALUECARD productType or valueCardType.
+          const isValueCard = (p?.productType === 'VALUE_CARD' || p?.productType === 'VALUECARD' || p?.valueCardType !== undefined);
+          return isValueCard ? 'valuecard' : 'subscription';
+        };
+        const inferCategory = (p, kind) => {
+          const labelsLower = getLabelNamesLower(p);
+          const hasPublicCampaign = labelsLower.includes('publiccampaign');
+          const has15DayPass = labelsLower.includes('15 day pass');
+          if (hasPublicCampaign) return 'campaign';
+          if (kind === 'valuecard') return 'punchcard';
+          if (has15DayPass) return '15daypass';
+          return 'membership';
+        };
+
+        const bindLandingCardClick = (cardEl) => {
+          if (!cardEl || cardEl.__landingClickBound) return;
+          cardEl.__landingClickBound = true;
+          cardEl.setAttribute('data-landing-card', 'true');
+          cardEl.addEventListener('click', (e) => {
+            // Avoid double-trigger when clicking the inner button (handled by global click).
+            const withinAction = e.target?.closest?.('[data-action]');
+            if (withinAction) return;
+            handlePlanSelection(cardEl);
+          });
+        };
+
+        if ('products' in resolved) {
+          resolved.products.forEach((p) => {
+            const kind = inferKind(p);
+            const category = inferCategory(p, kind);
+            const card = kind === 'valuecard'
+              ? renderValueCard(p, category)
+              : renderSubscriptionCard(p, category);
+            bindLandingCardClick(card);
+            list.appendChild(card);
+          });
+        } else {
+          const card = resolved.kind === 'valuecard'
+            ? renderValueCard(resolved.product, resolved.category)
+            : renderSubscriptionCard(resolved.product, resolved.category);
+          bindLandingCardClick(card);
+          list.appendChild(card);
+        }
+
+        content.appendChild(list);
+        fakeCategory.appendChild(content);
+        wrap.appendChild(fakeCategory);
+      }
+
+      stopCampaignCountdown();
+
+      try {
+        setupNewAccessStep();
+        updatePageTranslations();
+      } catch (e) {
+        console.warn('[Step 2] setupNewAccessStep failed (landing single-product):', e);
+      }
+      requestAnimationFrame(() => {
+        try {
+          setupNewAccessStep();
+          updatePageTranslations();
+        } catch (e) {
+          console.warn('[Step 2] setupNewAccessStep failed (landing single-product raf):', e);
+        }
+      });
+
+      if (wrap) return;
+    }
+    console.warn('[Landing] Single-product mode enabled but product not found in API lists.', {
+      desiredId,
+      desiredLabel,
+      campaignSubscriptions: (state.campaignSubscriptions || []).map(p => p?.id).slice(0, 50),
+      campaignValueCards: (state.campaignValueCards || []).map(p => p?.id).slice(0, 50),
+      subscriptions: (state.subscriptions || []).map(p => p?.id).slice(0, 50),
+      dayPassSubscriptions: (state.dayPassSubscriptions || []).map(p => p?.id).slice(0, 50),
+      valueCards: (state.valueCards || []).map(p => p?.id).slice(0, 50),
+    });
+
+    // Fallback (landing): do NOT show other products. Show an "offer unavailable" message instead.
+    try {
+      showToast('Offer unavailable right now. Please try again later.', 'error');
+    } catch {
+      // ignore
+    }
+
+    // Hide category list entirely and show a standalone message.
+    const categoryList = document.querySelector('#step-2 .category-list');
+    if (categoryList) categoryList.style.display = 'none';
+
+    const container =
+      document.querySelector('#step-2 .container')
+      || document.querySelector('#step-2 .step-panel-content')
+      || document.querySelector('#step-2');
+    let wrap = document.getElementById('landingSingleProductWrap');
+    if (!wrap && container) {
+      wrap = document.createElement('div');
+      wrap.id = 'landingSingleProductWrap';
+      wrap.className = 'landing-single-product-wrap';
+      wrap.style.display = 'block';
+      wrap.style.marginTop = '16px';
+      const insertBeforeEl = container.querySelector('.category-list');
+      if (insertBeforeEl && insertBeforeEl.parentNode === container) {
+        container.insertBefore(wrap, insertBeforeEl);
+      } else {
+        container.appendChild(wrap);
+      }
+    }
+    if (wrap) {
+      wrap.innerHTML = '';
+      const msg = document.createElement('div');
+      // Make this unmistakably visible regardless of existing CSS.
+      msg.style.padding = '18px 16px';
+      msg.style.borderRadius = '14px';
+      msg.style.background = 'rgba(255,255,255,0.06)';
+      msg.style.border = '1px solid rgba(255,255,255,0.14)';
+      msg.style.color = '#fff';
+      msg.style.textAlign = 'center';
+      msg.style.fontSize = '16px';
+      msg.style.lineHeight = '1.4';
+      msg.textContent = 'Offer unavailable right now. Please try again later.';
+      const fakeCategory = document.createElement('div');
+      fakeCategory.className = 'category-item expanded selected';
+      fakeCategory.setAttribute('data-landing', 'unavailable');
+      const content = document.createElement('div');
+      content.className = 'category-content';
+      content.style.maxHeight = 'none';
+      content.style.opacity = '1';
+      content.style.transform = 'none';
+      content.style.overflow = 'visible';
+      const list = document.createElement('div');
+      list.className = 'plans-list';
+      list.style.opacity = '1';
+      list.style.transform = 'none';
+      list.style.maxHeight = 'none';
+      list.style.overflow = 'visible';
+      list.appendChild(msg);
+      content.appendChild(list);
+      fakeCategory.appendChild(content);
+      wrap.appendChild(fakeCategory);
+    }
+
+    // Ensure campaign countdown is not running when categories are hidden.
+    try { stopCampaignCountdown(); } catch {}
+
+    try {
+      setupNewAccessStep();
+      updatePageTranslations();
+    } catch (e) {
+      console.warn('[Landing] setupNewAccessStep failed (unavailable fallback):', e);
+    }
+    requestAnimationFrame(() => {
+      try {
+        setupNewAccessStep();
+        updatePageTranslations();
+      } catch (e) {
+        console.warn('[Landing] setupNewAccessStep failed (unavailable fallback raf):', e);
+      }
+    });
+    return;
+  }
   
   // Render campaign subscriptions and value cards into the campaign category
   const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
@@ -3947,6 +4395,15 @@ function getReturnUrlBase() {
 const state = {
   currentStep: 1,
   language: getStoredLanguage(), // Current selected language
+  // Landing routes: optionally constrain UI to a single product based on pathname (e.g. /freetrial)
+  landing: {
+    routeKey: null, // e.g. 'freetrial'
+    mode: null, // 'single-product' | null
+    // Prefer label-based resolution; productId remains supported for legacy mappings.
+    productLabel: null, // string label to match (case-insensitive)
+    productId: null, // numeric API product id (legacy)
+    allowMultiple: false, // if true, render all products matching productLabel
+  },
   selectedGymId: null,
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
@@ -4010,8 +4467,32 @@ const state = {
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
 };
 
+function getLandingConfigFromPathname(pathnameRaw) {
+  const pathname = String(pathnameRaw || '/')
+    .trim()
+    .toLowerCase()
+    .replace(/\/+$/, '') || '/';
+
+  // Add more routes here as needed.
+  //
+  // Label-driven landing routes:
+  // - Add the label below to exactly one product in BRP.
+  // - That product will be the only one rendered on the route.
+  //
+  // (Labels are matched case-insensitively against product.productLabels[].name)
+  const LABEL_FREE_TRIAL = 'LandingFreeTrial';
+  const LABEL_FIRST_MONTH_FREE = 'LandingFirstMonthFree';
+  const routes = {
+    '/freetrial': { routeKey: 'freetrial', mode: 'single-product', productLabel: LABEL_FREE_TRIAL, allowMultiple: false },
+    '/firstmonthfree': { routeKey: 'firstmonthfree', mode: 'single-product', productLabel: LABEL_FIRST_MONTH_FREE, allowMultiple: true },
+  };
+
+  return routes[pathname] || null;
+}
+
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
+let paymentOverviewSyncPromise = null;
 let tokenValidationCooldownUntil = 0;
 let loginCooldownUntil = 0;
 let campaignCountdownIntervalId = null;
@@ -5190,6 +5671,10 @@ const translations = {
     'header.selectedGym': 'Valgt hal:', 'gym.headsUp': 'Hjemmehal valgt:', 'access.headsUp': 'Adgangstype valgt:',
     'main.subtitle.step1': 'Vælg din hjemmehal', 'main.subtitle.step1.secondary': 'Dette er hvor du primært træner − du får adgang til alle haller.',
     'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen.',
+    'main.subtitle.step2.landing.freetrial': 'Din gratis prøveperiode',
+    'main.subtitle.step2.landing.freetrial.secondary': 'Vælg produktet herunder for at starte.',
+    'main.subtitle.step2.landing.firstmonthfree': 'Første måned gratis',
+    'main.subtitle.step2.landing.firstmonthfree.secondary': 'Vælg et produkt herunder for at fortsætte.',
     'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
     'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger', 'button.select': 'Vælg', 'button.addToCart': 'Tilføj til kurv', 'button.added': 'Tilføjet!',
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
@@ -5213,8 +5698,9 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.payNowPending': 'Beregnes efter login', 'cart.monthlyFee': 'Månedlig betaling', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.validRange': 'Gyldig:', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
+    'price.free': 'Gratis',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
     'activationDate.now.desc': 'Starter med det samme',
@@ -5401,6 +5887,10 @@ const translations = {
     'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
+    'main.subtitle.step2.landing.freetrial': 'Your free trial',
+    'main.subtitle.step2.landing.freetrial.secondary': 'Select the product below to get started.',
+    'main.subtitle.step2.landing.firstmonthfree': 'First month free',
+    'main.subtitle.step2.landing.firstmonthfree.secondary': 'Select a product below to continue.',
     'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
     'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit', 'button.select': 'Select', 'button.addToCart': 'Add to cart', 'button.added': 'Added!',
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
@@ -5424,8 +5914,9 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.payNowPending': 'Calculated after login', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.validRange': 'Valid:', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
+    'price.free': 'Free',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
@@ -5596,6 +6087,10 @@ const translations = {
     'header.selectedGym': 'Ausgewählte Halle:', 'gym.headsUp': 'Heimhalle ausgewählt:', 'access.headsUp': 'Zugangstyp ausgewählt:',
     'main.subtitle.step1': 'Wählen Sie Ihre Heimhalle', 'main.subtitle.step1.secondary': 'Hier trainieren Sie hauptsächlich − Sie haben Zugang zu allen Hallen.',
     'main.subtitle.step2': 'Wählen Sie Ihren Zugangstyp', 'main.subtitle.step2.secondary': 'Wählen Sie Mitgliedschaft, wenn Sie mindestens einmal im Monat klettern.',
+    'main.subtitle.step2.landing.freetrial': 'Ihre kostenlose Probezeit',
+    'main.subtitle.step2.landing.freetrial.secondary': 'Wählen Sie das Produkt unten aus, um zu starten.',
+    'main.subtitle.step2.landing.firstmonthfree': 'Erster Monat kostenlos',
+    'main.subtitle.step2.landing.firstmonthfree.secondary': 'Wählen Sie unten ein Produkt aus, um fortzufahren.',
     'main.subtitle.step3': 'Möchten Sie Pommes dazu?', 'main.subtitle.step4': 'Senden',
     'button.next': 'Weiter', 'button.back': 'Zurück', 'button.continue': 'Fortsetzen', 'button.skip': 'Überspringen', 'button.complete': 'Fertig', 'button.edit': 'Bearbeiten', 'button.select': 'Auswählen', 'button.addToCart': 'In den Warenkorb', 'button.added': 'Hinzugefügt!',
     'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'gym.nearest': 'Nächste',
@@ -5619,8 +6114,9 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.payNowPending': 'Wird nach Anmeldung berechnet', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.validRange': 'Gültig:', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
+    'price.free': 'Kostenlos',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
@@ -6498,6 +6994,17 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Set up Cookiebot "Cookie Settings" button - reopens Cookiebot consent dialog
   setupCookiebotSettingsButton();
+
+  // Landing route config (path-based, independent of query params)
+  try {
+    const landingConfig = getLandingConfigFromPathname(window.location.pathname);
+    if (landingConfig) {
+      state.landing = { ...state.landing, ...landingConfig };
+      console.log('[Landing] Enabled landing config:', state.landing);
+    }
+  } catch (e) {
+    console.warn('[Landing] Failed to resolve landing config:', e);
+  }
   
   // Check URL parameters for test mode and payment return
   const urlParams = new URLSearchParams(window.location.search);
@@ -10532,8 +11039,11 @@ function updateActivationDateSection(category) {
 
 function handlePlanSelection(selectedCard) {
   // Remove selected class from all plan cards in the same category
-  const category = selectedCard.closest('.category-item').dataset.category;
-  const allCardsInCategory = selectedCard.closest('.category-item').querySelectorAll('.plan-card');
+  const categoryItem = selectedCard.closest('.category-item');
+  const category = categoryItem?.dataset?.category || selectedCard.dataset.category || 'membership';
+  const allCardsInCategory = categoryItem
+    ? categoryItem.querySelectorAll('.plan-card')
+    : selectedCard.parentElement?.querySelectorAll?.('.plan-card') || [];
   
   allCardsInCategory.forEach(card => {
     card.classList.remove('selected');
@@ -10592,6 +11102,14 @@ function handlePlanSelection(selectedCard) {
       p.id === productIdNum ||
       String(p.id) === String(productId)
     );
+  }
+
+  // Landing pages may show products excluded from public lists.
+  if (!product) {
+    const raw = (state.allRawProducts || []).find(p =>
+      p && (p.id === productId || p.id === productIdNum || String(p.id) === String(productId))
+    );
+    if (raw) product = raw;
   }
   
   // GTM: Track select_item event
@@ -10777,6 +11295,10 @@ function setupNewAccessStep() {
     }
     const card = clonedCard;
     card.addEventListener('click', (e) => {
+      // Landing pages use their own selection handler (handlePlanSelection) and do not live inside real categories.
+      if (card.closest('#landingSingleProductWrap')) {
+        return;
+      }
       // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
       // This prevents clicks on +/- and Continue from toggling/deselecting the card.
       if (e.target.closest('.quantity-panel')) {
@@ -11169,6 +11691,13 @@ function handleGlobalClick(event) {
       // Avoid triggering a second synthetic click here, which can toggle selection twice.
       event.preventDefault();
       event.stopPropagation();
+
+      const card = actionable.closest('.plan-card');
+      // Landing pages render cards outside the normal category accordion wiring.
+      // Trigger selection directly for those cards.
+      if (card && card.closest('#landingSingleProductWrap')) {
+        handlePlanSelection(card);
+      }
       break;
     }
     case 'select-membership': {
@@ -12801,39 +13330,58 @@ function updateCartSummary() {
       p.id === productIdNum ||
       String(p.id) === String(state.selectedProductId)
     );
-    
-    if (membership) {
+
+    // Landing products may be hidden from the public subscription lists.
+    // When selectedProductType is 'membership' we trust the selection path and resolve by id from raw products
+    // without additional shape heuristics (raw payloads can vary by product type/config).
+    const rawMembership = !membership
+      ? (state.allRawProducts || []).find(p =>
+          p && (p.id === state.selectedProductId || p.id === productIdNum || String(p.id) === String(state.selectedProductId))
+        )
+      : null;
+
+    const resolvedMembership = membership || rawMembership;
+
+    if (resolvedMembership) {
       // Extract price from API structure (cents to DKK)
       // The API uses priceWithInterval, not price directly
       // priceWithInterval contains: { interval: { numberOf: 1, unit: "MONTH" }, price: { amount: 46900, currency: "DKK" } }
-      const priceInCents = membership.priceWithInterval?.price?.amount || 
-                           membership.price?.amount || 
-                           membership.amount || 
-                           membership.monthlyPrice ||
+      const priceInCents = resolvedMembership.priceWithInterval?.price?.amount || 
+                           resolvedMembership.price?.amount || 
+                           resolvedMembership.amount || 
+                           resolvedMembership.monthlyPrice ||
                            0;
       const price = priceInCents > 0 ? priceInCents / 100 : 0;
       
       // Get externalDescription if available
-      const externalDesc = membership.externalDescription || '';
+      const externalDesc = resolvedMembership.externalDescription || '';
       const displayName = externalDesc 
-        ? `${membership.name || 'Membership'} - ${externalDesc}`
-        : membership.name || 'Membership';
+        ? `${resolvedMembership.name || 'Membership'} - ${externalDesc}`
+        : resolvedMembership.name || 'Membership';
       
       items.push({
-        id: membership.id,
+        id: resolvedMembership.id,
         name: displayName,
         amount: price,
         type: 'membership',
-        productId: membership.id, // Store API product ID for order creation
+        productId: resolvedMembership.id, // Store API product ID for order creation
         externalDescription: externalDesc, // Store separately for rendering (renamed from imageBannerText)
-        productName: membership.name || 'Membership', // Store original name
+        productName: resolvedMembership.name || 'Membership', // Store original name
+        is15DayPass: (() => {
+          const labels = Array.isArray(resolvedMembership?.productLabels) ? resolvedMembership.productLabels : [];
+          const has15 = labels.some(l => String(l?.name || '').toLowerCase() === '15 day pass');
+          const n = String(resolvedMembership?.name || '').toLowerCase();
+          const isFreeTrialLanding = state.landing?.routeKey === 'freetrial';
+          return isFreeTrialLanding || has15 || n.includes('15 day') || n.includes('15 dage') || n.includes('15 days');
+        })(),
       });
       state.totals.membershipMonthly = price;
     } else {
       console.warn('Cart: Membership not found', {
         selectedProductId: state.selectedProductId,
         selectedProductType: state.selectedProductType,
-        availableSubscriptions: allSubscriptions.map(s => ({ id: s.id, name: s.name }))
+        availableSubscriptions: allSubscriptions.map(s => ({ id: s.id, name: s.name })),
+        rawProductIds: (state.allRawProducts || []).slice(0, 30).map(p => p?.id).filter(Boolean),
       });
     }
   }
@@ -12857,22 +13405,33 @@ function updateCartSummary() {
         p.id === parseInt(productId) ||
         planId.includes(String(p.id))
       );
+
+      // Landing products may be hidden from the public value card lists.
+      const rawValueCard = !valueCard
+        ? (state.allRawProducts || []).find(p =>
+            p
+            && (p.id === productId || p.id === parseInt(productId) || String(p.id) === String(productId))
+            && (p.productType === 'VALUE_CARD' || p.productType === 'VALUECARD' || p.valueCardType !== undefined)
+          )
+        : null;
       
-      if (valueCard) {
+      const resolvedValueCard = valueCard || rawValueCard;
+
+      if (resolvedValueCard) {
         // Extract price from API structure (cents to DKK)
-        const priceInCents = valueCard.price?.amount || valueCard.amount || 0;
+        const priceInCents = resolvedValueCard.price?.amount || resolvedValueCard.amount || 0;
         const price = priceInCents / 100;
-        const punchesPerCard = getPunchesPerCard(valueCard);
+        const punchesPerCard = getPunchesPerCard(resolvedValueCard);
         const totalPunches = punchesPerCard != null ? quantity * punchesPerCard : null;
-        const productName = valueCard.name || 'Punch Card';
+        const productName = resolvedValueCard.name || 'Punch Card';
         // Name only on left; ×N and total punches shown on the right
         items.push({
-          id: valueCard.id,
+          id: resolvedValueCard.id,
           name: productName,
           amount: roundToHalfKrone(price * quantity),
           type: 'value-card',
           quantity: quantity,
-          productId: valueCard.id, // Store API product ID for order creation
+          productId: resolvedValueCard.id, // Store API product ID for order creation
           punchesPerCard: punchesPerCard ?? undefined,
           totalPunches: totalPunches ?? undefined,
         });
@@ -13193,6 +13752,26 @@ function renderCartItems() {
         
         nameContainer.appendChild(productNameSpan);
         nameContainer.appendChild(descTextSpan);
+
+        // For 15-day pass, show date range (start → end) under description.
+        if (item.is15DayPass) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const startDate = state.subscriptionStartDate
+            ? new Date(state.subscriptionStartDate + 'T12:00:00')
+            : today;
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 15);
+
+          const range = document.createElement('span');
+          range.style.fontSize = 'var(--font-size-sm)';
+          range.style.color = 'var(--color-text-muted)';
+          range.style.whiteSpace = 'pre-line';
+          range.textContent = `${t('cart.validRange')} ${formatDateDMY(startDate)} – ${formatDateDMY(endDate)}`;
+          nameContainer.appendChild(range);
+        }
+
         nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the name container for first item
@@ -13214,7 +13793,36 @@ function renderCartItems() {
         }
       } else {
         // For addon items and other types, we'll add the plus sign later in the rendering loop
-        nameEl.textContent = item.name;
+        nameEl.innerHTML = '';
+        const nameContainer = document.createElement('div');
+        nameContainer.style.display = 'flex';
+        nameContainer.style.flexDirection = 'column';
+        nameContainer.style.gap = '4px';
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = item.name;
+        titleSpan.style.fontWeight = '500';
+        nameContainer.appendChild(titleSpan);
+
+        // For 15-day pass (even without externalDescription), show date range.
+        if (item.type === 'membership' && item.is15DayPass) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const startDate = state.subscriptionStartDate
+            ? new Date(state.subscriptionStartDate + 'T12:00:00')
+            : today;
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 15);
+
+          const range = document.createElement('span');
+          range.style.fontSize = 'var(--font-size-sm)';
+          range.style.color = 'var(--color-text-muted)';
+          range.style.whiteSpace = 'pre-line';
+          range.textContent = `${t('cart.validRange')} ${formatDateDMY(startDate)} – ${formatDateDMY(endDate)}`;
+          nameContainer.appendChild(range);
+        }
+
+        nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the first item's name
         if (isFirstSubscriptionItem && selectedGym) {
@@ -13527,6 +14135,28 @@ function updatePaymentOverview() {
   // If not available, we'll use product data instead
   const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
   const hasOrderData = !!subscriptionItem;
+
+  // Pull authoritative pricing/billing data from API order whenever possible.
+  // Without this, UI can temporarily show client-side fallback values.
+  if (!hasOrderData && state.customerId && state.selectedBusinessUnit && !state.checkoutInProgress) {
+    if (!paymentOverviewSyncPromise) {
+      paymentOverviewSyncPromise = (async () => {
+        try {
+          await ensureOrderCreated('payment-overview-sync');
+          await ensureSubscriptionAttached('payment-overview-sync');
+          if (state.orderId) {
+            state.fullOrder = await orderAPI.getOrder(state.orderId);
+          }
+        } catch (error) {
+          console.warn('[Payment Overview] Could not sync order data from API:', error);
+        } finally {
+          paymentOverviewSyncPromise = null;
+          // Re-render once sync completes (success or failure)
+          setTimeout(() => updatePaymentOverview(), 0);
+        }
+      })();
+    }
+  }
   
   // Check if this is a 15-day pass with shoes (one-time payment product)
   // Check both order data and product data
@@ -13542,7 +14172,9 @@ function updatePaymentOverview() {
     p.id === state.selectedProductId || 
     p.id === productIdNum ||
     String(p.id) === String(state.selectedProductId)
-  );
+  ) || (state.allRawProducts || []).find(p =>
+    p && (p.id === state.selectedProductId || p.id === productIdNum || String(p.id) === String(state.selectedProductId))
+  ) || null;
   
   // Check product name from order data first, then fall back to product data
   const productFromOrder = subscriptionItem?.product;
@@ -13551,13 +14183,99 @@ function updatePaymentOverview() {
   const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
     label => label?.name && label.name.toLowerCase() === '15 day pass'
   );
+  const nameLooksLike15DayPass = !!(productName && (
+    productName.toLowerCase().includes('15 day') ||
+    productName.toLowerCase().includes('15 dage') ||
+    productName.toLowerCase().includes('15 days')
+  ));
+  const routePath = getNormalizedRoutePath();
+  const isFreeTrialLanding = state.landing?.routeKey === 'freetrial' || routePath === '/freetrial';
+  const isFirstMonthFreeLandingRoute = isFirstMonthFreeRouteActive();
   const is15DayPass =
     state.selectedProductType === '15daypass' ||
     has15DayPassLabel ||
-    (productName && (
-      productName.toLowerCase().includes('15 day pass') ||
-      productName.toLowerCase().includes('15 dages')
-    ));
+    nameLooksLike15DayPass ||
+    isFreeTrialLanding;
+
+  // /firstmonthfree: pre-login/while-sync UX.
+  // Show stable campaign rows immediately, but keep pay-now amount pending until backend order exists.
+  if (isFirstMonthFreeLandingRoute && !hasOrderData && (paymentOverviewSyncPromise || !state.orderId)) {
+    const paymentOverviewRoot = DOM.paymentOverview || document.querySelector('.payment-overview:not(.payment-overview-total-wrap)');
+    const payNowRow = DOM.payNow?.closest('.payment-overview-paynow-row');
+    const payNowLabel = payNowRow?.querySelector('.payment-label');
+    const periodElement = payNowRow?.querySelector('.payment-label-period');
+    const monthlyPaymentItem = DOM.monthlyPayment?.closest('.payment-overview-item');
+    const payNowItem = DOM.payNow?.closest('.payment-overview-item');
+    const monthlyPriceDKK = currencyAmountToDKK(
+      currentProduct?.priceWithInterval?.price?.amount
+      ?? currentProduct?.price?.amount
+      ?? currentProduct?.amount
+      ?? 0
+    );
+    const preview = computeFirstMonthFreeDisplay(new Date(), monthlyPriceDKK);
+
+    if (DOM.paymentOverview) {
+      DOM.paymentOverview.style.display = '';
+    }
+    if (monthlyPaymentItem) {
+      monthlyPaymentItem.style.display = '';
+    }
+    if (DOM.monthlyPayment) {
+      if (monthlyPriceDKK > 0) {
+        DOM.monthlyPayment.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(monthlyPriceDKK))}/md`;
+      } else {
+        DOM.monthlyPayment.textContent = t('modal.loading', 'Loading...');
+      }
+    }
+    if (payNowLabel && preview) {
+      const coverText = `${formatDateDMY(preview.payStart)} - ${formatDateDMY(preview.payEnd)}`;
+      payNowLabel.removeAttribute('data-i18n-key');
+      payNowLabel.innerHTML = sanitizeHTML(
+        `${t('cart.payNow', 'Betal nu')} <span class="payment-label-period-inline">(${coverText})</span>`
+      );
+    }
+    if (periodElement) {
+      periodElement.textContent = '';
+      periodElement.style.display = 'none';
+    }
+    if (DOM.payNow) {
+      DOM.payNow.textContent = t('cart.payNowPending', 'Beregnes efter login');
+    }
+
+    let firstMonthRow = paymentOverviewRoot?.querySelector('.payment-overview-first-month');
+    if (!firstMonthRow && paymentOverviewRoot && payNowItem) {
+      firstMonthRow = document.createElement('div');
+      firstMonthRow.className = 'payment-overview-item payment-overview-first-month';
+      firstMonthRow.innerHTML = sanitizeHTML(`
+        <span class="payment-label"></span>
+        <span class="payment-amount"></span>
+      `);
+      paymentOverviewRoot.insertBefore(firstMonthRow, payNowItem);
+    }
+    if (firstMonthRow && preview) {
+      const firstMonthLabel = firstMonthRow.querySelector('.payment-label');
+      const firstMonthAmount = firstMonthRow.querySelector('.payment-amount');
+      if (firstMonthLabel) {
+        const freePeriodText = `${formatDateDMY(preview.freeStart)} - ${formatDateDMY(preview.freeEnd)}`;
+        firstMonthLabel.innerHTML = sanitizeHTML(
+          `${t('cart.firstMonth', 'Første måned')} <span class="payment-label-period-inline">(${freePeriodText})</span>`
+        );
+      }
+      if (firstMonthAmount) {
+        firstMonthAmount.textContent = '0 kr';
+      }
+      firstMonthRow.style.display = '';
+    }
+
+    const boundUntilRow = paymentOverviewRoot?.querySelector('.payment-overview-item.payment-overview-bound-until-row');
+    if (boundUntilRow) {
+      boundUntilRow.style.display = 'none';
+    }
+    if (DOM.paymentBoundUntil) {
+      DOM.paymentBoundUntil.style.display = 'none';
+    }
+    return;
+  }
   
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
@@ -13570,23 +14288,51 @@ function updatePaymentOverview() {
   // If order data is not available, calculate from product data
   let payNowAmount = 0;
   let billingPeriod = null;
+  let firstMonthFreeDisplay = null;
+
+  const computeFirstMonthFreeProrated = (monthlyPrice, referenceDate = new Date()) => {
+    const monthly = Number(monthlyPrice) || 0;
+    if (monthly <= 0) {
+      return null;
+    }
+    const base = new Date(referenceDate);
+    base.setHours(0, 0, 0, 0);
+
+    // Free period: today -> day before same day next month.
+    const chargeStart = new Date(base);
+    chargeStart.setMonth(chargeStart.getMonth() + 1); // ex: 24/03 -> 24/04
+    chargeStart.setHours(0, 0, 0, 0);
+    const chargeEnd = new Date(chargeStart.getFullYear(), chargeStart.getMonth() + 1, 0); // end of charge month
+    const daysInChargeMonth = chargeEnd.getDate();
+    const chargeDays = Math.max(0, chargeEnd.getDate() - chargeStart.getDate() + 1);
+    const amount = (monthly / daysInChargeMonth) * chargeDays;
+
+    return {
+      amount,
+      start: chargeStart,
+      end: chargeEnd,
+    };
+  };
   
   if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
-    // CRITICAL: Use API price from order - this is the authoritative source
-    // This ensures "Pay now" matches exactly what backend sends to payment window
-    // Extract price amount (CurrencyOut can be object with .amount or direct number)
-    const orderPriceAmount = state.fullOrder.price.amount;
-    const orderPriceDKK = typeof orderPriceAmount === 'object' 
-      ? orderPriceAmount.amount / 100 
-      : orderPriceAmount / 100;
+    // Always derive payable amount from backend order fields.
+    // Payment UI can be based on leftToPay, while price.amount is order total.
+    const orderPriceDKK = currencyAmountToDKK(state.fullOrder?.price?.amount);
+    const orderLeftToPayDKK = currencyAmountToDKK(
+      state.fullOrder?.leftToPay?.amount
+      ?? state.fullOrder?.leftToPay
+      ?? state.fullOrder?.price?.leftToPay?.amount
+      ?? state.fullOrder?.price?.leftToPay
+    );
+    const backendPayNowDKK = orderLeftToPayDKK > 0 ? orderLeftToPayDKK : orderPriceDKK;
     
     // CRITICAL: If addons are present, ALWAYS use backend order price
     // The backend order price includes addons (if they were successfully added)
     // Client-side calculations don't account for addons properly
     const hasAddons = state.addonIds && state.addonIds.size > 0;
     if (hasAddons) {
-      console.log('[Payment Overview] ✅ Addons present - using backend order price (includes addons):', orderPriceDKK, 'DKK');
-      payNowAmount = orderPriceDKK;
+      console.log('[Payment Overview] ✅ Addons present - using backend payable amount:', backendPayNowDKK, 'DKK');
+      payNowAmount = backendPayNowDKK;
       
       // Get billing period from subscription item if available
       if (subscriptionItem?.initialPaymentPeriod?.start) {
@@ -13607,11 +14353,15 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ✅ Skipping price verification - using backend order price with addons');
     } else {
       // No addons - proceed with normal price verification
-      console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
+      console.log('[Payment Overview] ✅ Using API amount from order:', {
+        backendPayNowDKK,
+        orderPriceDKK,
+        orderLeftToPayDKK,
+      });
       
       if (is15DayPass) {
       // For 15-day pass: always use full price (one-time payment)
-      payNowAmount = orderPriceDKK;
+      payNowAmount = backendPayNowDKK;
       
       // Use selected activation date or today; end = start + 15 days
       const today = new Date();
@@ -13643,48 +14393,61 @@ function updatePaymentOverview() {
       const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
       const dayOfMonth = today.getDate();
-      const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
+      const isFirstMonthFreeLanding = isFirstMonthFreeLandingRoute;
+      const isCampaignProduct = isFirstMonthFreeLanding || (state.campaignSubscriptions && state.campaignSubscriptions.some(
         p => String(p.id) === String(productId)
-      );
-      // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
+      ));
+      // First month free landing/campaign: trust backend order totals when order exists.
       const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
+      if (isFirstMonthFreeLanding) {
+        // First-month-free display model:
+        // pay-now is always the prorated amount for same-day-next-month -> month end.
+        const recurringAmountRaw = subscriptionItem?.payRecurring?.price?.amount
+          ?? subscriptionItem?.product?.priceWithInterval?.price?.amount
+          ?? 0;
+        const recurringMonthlyPrice = currencyAmountToDKK(recurringAmountRaw);
+        firstMonthFreeDisplay = computeFirstMonthFreeDisplay(new Date(), recurringMonthlyPrice);
+        if (firstMonthFreeDisplay) {
+          payNowAmount = firstMonthFreeDisplay.payNowAmount;
+          billingPeriod = {
+            start: firstMonthFreeDisplay.payStart,
+            end: firstMonthFreeDisplay.payEnd,
+          };
+        } else if (initialPaymentPeriod?.start) {
+          payNowAmount = backendPayNowDKK;
+          billingPeriod = {
+            start: new Date(initialPaymentPeriod.start),
+            end: new Date(initialPaymentPeriod.end),
+          };
+        } else {
+          payNowAmount = backendPayNowDKK;
+        }
+        console.log('[Payment Overview] ✅ First month free landing: using unified pay-now period pricing:', payNowAmount, 'DKK');
+      } else
 
       if (isFirstMonthFreeCampaign) {
-        if (dayOfMonth < 16) {
-          payNowAmount = 0;
-          if (initialPaymentPeriod?.start) {
-            billingPeriod = {
-              start: new Date(initialPaymentPeriod.start),
-              end: new Date(initialPaymentPeriod.end)
-            };
-          } else {
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
-            };
-          }
-          console.log('[Payment Overview] ✅ First month free campaign (date < 16): 0 kr from API');
+        // No 15th-cutoff behavior: use a single first-month-free model.
+        const recurringAmountRaw = subscriptionItem?.payRecurring?.price?.amount
+          ?? subscriptionItem?.product?.priceWithInterval?.price?.amount
+          ?? 0;
+        const recurringMonthlyPrice = currencyAmountToDKK(recurringAmountRaw);
+        firstMonthFreeDisplay = computeFirstMonthFreeDisplay(new Date(), recurringMonthlyPrice);
+        if (firstMonthFreeDisplay) {
+          payNowAmount = firstMonthFreeDisplay.payNowAmount;
+          billingPeriod = {
+            start: firstMonthFreeDisplay.payStart,
+            end: firstMonthFreeDisplay.payEnd,
+          };
+        } else if (initialPaymentPeriod?.start) {
+          payNowAmount = backendPayNowDKK;
+          billingPeriod = {
+            start: new Date(initialPaymentPeriod.start),
+            end: new Date(initialPaymentPeriod.end),
+          };
         } else {
-          payNowAmount = expectedPrice ? expectedPrice.amountInDKK : orderPriceDKK;
-          const currentMonth = today.getMonth();
-          const currentYear = today.getFullYear();
-          if (expectedPrice?.includesNextMonth) {
-            const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-            const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-            billingPeriod = {
-              start: today,
-              end: new Date(nextYear, nextMonth + 1, 0)
-            };
-          } else {
-            billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
-            };
-          }
-          console.log('[Payment Overview] ✅ First month free campaign (date >= 16): rest-of-month price:', payNowAmount, 'DKK');
+          payNowAmount = backendPayNowDKK;
         }
+        console.log('[Payment Overview] ✅ First month free campaign: unified pay-now period pricing:', payNowAmount, 'DKK');
       } else if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
         const backendEndDate = new Date(initialPaymentPeriod.end);
@@ -13699,7 +14462,7 @@ function updatePaymentOverview() {
         
         if (verification.isCorrect || (verification.priceDifference !== null && verification.priceDifference <= 100)) {
           // Backend calculated correctly - use backend's price
-          payNowAmount = orderPriceDKK;
+          payNowAmount = backendPayNowDKK;
           billingPeriod = {
             start: backendStartDate,
             end: backendEndDate
@@ -13728,7 +14491,7 @@ function updatePaymentOverview() {
             console.warn('[Payment Overview] ⚠️ NOTE: Using calculated price - verify against backend order price');
           } else {
             // Can't calculate expected price - use backend price as fallback
-            payNowAmount = orderPriceDKK;
+            payNowAmount = backendPayNowDKK;
             billingPeriod = {
               start: backendStartDate,
               end: backendEndDate
@@ -13738,7 +14501,7 @@ function updatePaymentOverview() {
         }
       } else {
         // No initialPaymentPeriod - use order price as-is
-        payNowAmount = orderPriceDKK;
+        payNowAmount = backendPayNowDKK;
         console.log('[Payment Overview] ✅ Pay now from fullOrder.price.amount:', payNowAmount, 'DKK (no initialPaymentPeriod)');
       }
     }
@@ -13803,23 +14566,34 @@ function updatePaymentOverview() {
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
           const dayOfMonth = today.getDate();
-          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
+          const isFirstMonthFreeLandingNoOrder = isFirstMonthFreeLandingRoute;
+          const isCampaignProductNoOrder = isFirstMonthFreeLandingNoOrder || (state.campaignSubscriptions && state.campaignSubscriptions.some(
             p => String(p.id) === String(membership.id)
-          );
+          ));
           const productNameForCampaign = (membership.name || '').toLowerCase();
-          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
+          const isFirstMonthFreeCampaignNoOrder = isFirstMonthFreeLandingNoOrder || (isCampaignProductNoOrder && (
             /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
-          );
+          ));
 
-          if (isFirstMonthFreeCampaignNoOrder && dayOfMonth < 16) {
-            payNowAmount = 0;
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
-            };
-            console.log('[Payment Overview] ✅ First month free campaign (no order, date < 16): 0 kr');
+          if (isFirstMonthFreeLandingRoute) {
+            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+            const recurringMonthlyPrice = priceInCents / 100;
+            firstMonthFreeDisplay = computeFirstMonthFreeDisplay(today, recurringMonthlyPrice);
+            payNowAmount = firstMonthFreeDisplay.payNowAmount;
+            billingPeriod = { start: firstMonthFreeDisplay.payStart, end: firstMonthFreeDisplay.payEnd };
+            console.log('[Payment Overview] ✅ First month free landing (no order): forced route prorated pay-now:', payNowAmount, 'DKK');
+          } else if (isFirstMonthFreeCampaignNoOrder) {
+            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+            const monthlyPrice = priceInCents / 100;
+            firstMonthFreeDisplay = computeFirstMonthFreeDisplay(today, monthlyPrice);
+            if (firstMonthFreeDisplay) {
+              payNowAmount = firstMonthFreeDisplay.payNowAmount;
+              billingPeriod = {
+                start: firstMonthFreeDisplay.payStart,
+                end: firstMonthFreeDisplay.payEnd,
+              };
+            }
+            console.log('[Payment Overview] ✅ First month free campaign (no order): unified pay-now period model');
           } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
@@ -13957,10 +14731,16 @@ function updatePaymentOverview() {
           p.id === productIdNum ||
           String(p.id) === String(state.selectedProductId)
         );
+        const rawMembership = !membership
+          ? (state.allRawProducts || []).find(p =>
+              p && (p.id === state.selectedProductId || p.id === productIdNum || String(p.id) === String(state.selectedProductId))
+            )
+          : null;
+        const resolvedMembership = membership || rawMembership;
         
-        if (membership?.priceWithInterval?.price?.amount !== undefined) {
+        if (resolvedMembership?.priceWithInterval?.price?.amount !== undefined) {
           // Use price from API product data
-          monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
+          monthlyPaymentAmount = resolvedMembership.priceWithInterval.price.amount / 100;
           console.log('[Payment Overview] Monthly payment from API product data (priceWithInterval):', monthlyPaymentAmount, 'DKK');
         } else {
           monthlyPaymentAmount = state.totals.membershipMonthly || 0;
@@ -14008,9 +14788,10 @@ function updatePaymentOverview() {
     billingPeriodText = state.billingPeriod;
   }
   
-  // If still no billing period, show default message
+  // If billing period is unavailable, keep it empty instead of showing a generic
+  // placeholder sentence. This avoids misleading users while API data is syncing.
   if (!billingPeriodText) {
-    billingPeriodText = t('cart.billingPeriodConfirmed');
+    billingPeriodText = '';
   }
   
   // If discount is applied but order price isn't available yet, reflect discount in pay-now
@@ -14026,8 +14807,21 @@ function updatePaymentOverview() {
     }
   }
 
+  // For /firstmonthfree, only use a local prorated estimate as a temporary fallback
+  // when we do not yet have authoritative order price from API.
+  if (isFirstMonthFreeLandingRoute && !hasOrderData) {
+    firstMonthFreeDisplay = computeFirstMonthFreeDisplay(new Date(), monthlyPaymentAmount);
+    if (firstMonthFreeDisplay) {
+      payNowAmount = firstMonthFreeDisplay.payNowAmount;
+      billingPeriod = { start: firstMonthFreeDisplay.payStart, end: firstMonthFreeDisplay.payEnd };
+      console.log('[Payment Overview] ℹ️ First month free fallback estimate applied (awaiting API order):', payNowAmount, 'DKK');
+    }
+  }
+
   // Round payNowAmount to half krone and store in state for use in cart total calculation
   state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
+  const paymentOverviewRoot = DOM.paymentOverview || document.querySelector('.payment-overview:not(.payment-overview-total-wrap)');
+  const payNowItem = DOM.payNow ? DOM.payNow.closest('.payment-overview-item') : null;
   
   if (DOM.payNow) {
     const amountText = formatCurrencyHalfKrone(state.totals.payNowAmount);
@@ -14035,6 +14829,53 @@ function updatePaymentOverview() {
     
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
+    const payNowLabel = payNowRow ? payNowRow.querySelector('.payment-label') : null;
+
+    // /firstmonthfree: show "Første måned - 0 kr" as a proper row and include period in pay-now label.
+    if (paymentOverviewRoot && payNowItem) {
+      let firstMonthRow = paymentOverviewRoot.querySelector('.payment-overview-first-month');
+      if (!firstMonthRow) {
+        firstMonthRow = document.createElement('div');
+        firstMonthRow.className = 'payment-overview-item payment-overview-first-month';
+        firstMonthRow.innerHTML = sanitizeHTML(`
+          <span class="payment-label"></span>
+          <span class="payment-amount"></span>
+        `);
+        paymentOverviewRoot.insertBefore(firstMonthRow, payNowItem);
+      }
+
+      if (isFirstMonthFreeLandingRoute && firstMonthFreeDisplay) {
+        const firstMonthLabel = firstMonthRow.querySelector('.payment-label');
+        const firstMonthAmount = firstMonthRow.querySelector('.payment-amount');
+        if (firstMonthLabel) {
+          const freePeriodText = `${formatDateDMY(firstMonthFreeDisplay.freeStart)} - ${formatDateDMY(firstMonthFreeDisplay.freeEnd)}`;
+          firstMonthLabel.innerHTML = sanitizeHTML(
+            `${t('cart.firstMonth', 'Første måned')} <span class="payment-label-period-inline">(${freePeriodText})</span>`
+          );
+        }
+        if (firstMonthAmount) {
+          firstMonthAmount.textContent = '0 kr';
+        }
+        firstMonthRow.style.display = '';
+
+        if (payNowLabel) {
+          const coverText = `${formatDateDMY(firstMonthFreeDisplay.payStart)} - ${formatDateDMY(firstMonthFreeDisplay.payEnd)}`;
+          payNowLabel.removeAttribute('data-i18n-key');
+          payNowLabel.innerHTML = sanitizeHTML(
+            `${t('cart.payNow', 'Betal nu')} <span class="payment-label-period-inline">(${coverText})</span>`
+          );
+        }
+      } else {
+        if (firstMonthRow) {
+          firstMonthRow.style.display = 'none';
+        }
+        if (payNowLabel) {
+          payNowLabel.setAttribute('data-i18n-key', 'cart.payNow');
+          payNowLabel.textContent = t('cart.payNow', 'Betal nu');
+        }
+      }
+    }
+
     if (payNowRow && billingPeriodText) {
       let periodElement = payNowRow.querySelector('.payment-label-period');
       if (!periodElement) {
@@ -14049,9 +14890,21 @@ function updatePaymentOverview() {
           label.parentNode.insertBefore(periodElement, DOM.payNow);
         }
       }
-      if (is15DayPass) {
+      const isFreeTrialLanding = state.landing?.routeKey === 'freetrial';
+      if (isFreeTrialLanding) {
+        // For /freetrial, the cart already shows a clear date range under the product.
+        // Hide the small "(Billing period confirmed...)" helper next to "Pay now".
+        periodElement.textContent = '';
+        periodElement.style.display = 'none';
+      } else if (isFirstMonthFreeLandingRoute) {
+        // /firstmonthfree puts the coverage period directly in the pay-now label.
+        periodElement.textContent = '';
+        periodElement.style.display = 'none';
+      } else if (is15DayPass) {
+        periodElement.style.display = '';
         periodElement.innerHTML = `(${billingPeriodText}) <button type="button" class="change-date-link" data-action="change-activation-date">${t('activationDate.change')}</button>`;
       } else {
+        periodElement.style.display = '';
         periodElement.textContent = `(${billingPeriodText})`;
       }
     } else if (payNowRow) {
@@ -14061,24 +14914,28 @@ function updatePaymentOverview() {
         periodElement.textContent = '';
       }
     }
-    
-    // Verify this matches payment window price (only if order data is available)
+
+    // Verify this matches backend payable amount (only if order data is available)
     if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
-      const orderPriceForPayment = state.fullOrder.price.amount;
-      const orderPriceDKK = typeof orderPriceForPayment === 'object' 
-        ? orderPriceForPayment.amount / 100 
-        : orderPriceForPayment / 100;
-      const pricesMatch = Math.abs(payNowAmount - orderPriceDKK) < 0.01; // Allow small rounding differences
+      const orderPriceDKK = currencyAmountToDKK(state.fullOrder?.price?.amount);
+      const orderLeftToPayDKK = currencyAmountToDKK(
+        state.fullOrder?.leftToPay?.amount
+        ?? state.fullOrder?.leftToPay
+        ?? state.fullOrder?.price?.leftToPay?.amount
+        ?? state.fullOrder?.price?.leftToPay
+      );
+      const backendPayNowDKK = orderLeftToPayDKK > 0 ? orderLeftToPayDKK : orderPriceDKK;
+      const pricesMatch = Math.abs(payNowAmount - backendPayNowDKK) < 0.01; // Allow small rounding differences
       
       console.log('[Payment Overview] 🔍 "Betales nu" price:', payNowAmount, 'DKK');
-      console.log('[Payment Overview] 🔍 Order price (sent to payment window):', orderPriceDKK, 'DKK');
+      console.log('[Payment Overview] 🔍 Backend payable amount (payment window source):', backendPayNowDKK, 'DKK');
       console.log('[Payment Overview] 🔍 Prices match:', pricesMatch ? '✅ YES' : '❌ NO - MISMATCH!');
       
       if (!pricesMatch) {
         const productId = subscriptionItem?.product?.id || state.selectedProductId;
         console.warn('[Payment Overview] ⚠️ PRICE MISMATCH DETECTED!');
         console.warn('[Payment Overview] ⚠️ UI shows:', payNowAmount, 'DKK');
-        console.warn('[Payment Overview] ⚠️ Payment window will show:', orderPriceDKK, 'DKK');
+        console.warn('[Payment Overview] ⚠️ Payment window will show:', backendPayNowDKK, 'DKK');
         console.warn('[Payment Overview] ⚠️ Product ID:', productId);
       }
     } else {
@@ -14124,15 +14981,34 @@ function updatePaymentOverview() {
     }
   }
   
-  // Display boundUntil date separately if available (for memberships with promotional periods)
-  if (DOM.paymentBoundUntil) {
+  // Display boundUntil as a proper left/right row when available.
+  // This keeps it visually aligned with "Månedlig betaling", "Første måned", and "Betal nu".
+  if (paymentOverviewRoot && payNowItem) {
+    let boundUntilRow = paymentOverviewRoot.querySelector('.payment-overview-item.payment-overview-bound-until-row');
+    if (!boundUntilRow) {
+      boundUntilRow = document.createElement('div');
+      boundUntilRow.className = 'payment-overview-item payment-overview-bound-until-row';
+      boundUntilRow.innerHTML = sanitizeHTML(`
+        <span class="payment-label"></span>
+        <span class="payment-amount"></span>
+      `);
+      payNowItem.insertAdjacentElement('afterend', boundUntilRow);
+    }
+
     if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPass) {
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
-      const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(boundUntilDate)}`;
-      DOM.paymentBoundUntil.textContent = boundUntilText;
-      DOM.paymentBoundUntil.style.display = 'block';
+      const labelEl = boundUntilRow.querySelector('.payment-label');
+      const amountEl = boundUntilRow.querySelector('.payment-amount');
+      if (labelEl) {
+        const boundLabel = t('cart.boundUntil');
+        labelEl.textContent = boundLabel ? (boundLabel.charAt(0).toUpperCase() + boundLabel.slice(1)) : 'Bundet indtil';
+      }
+      if (amountEl) {
+        amountEl.textContent = formatDateDMY(boundUntilDate);
+      }
+      boundUntilRow.style.display = '';
     } else {
-      DOM.paymentBoundUntil.style.display = 'none';
+      boundUntilRow.style.display = 'none';
     }
   }
   
@@ -14532,9 +15408,59 @@ async function ensureSubscriptionAttached(context = 'auto') {
   subscriptionAttachPromise = (async () => {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
-    // 15-day pass: use selected activation date; others use today
+    // 15-day pass: use selected activation date.
+    // /firstmonthfree: membership should start today; first-month-free billing
+    // behavior is handled by backend contract/order periods, not by delaying startDate.
+    // Others: leave undefined so backend uses its default start behavior.
     const is15DayPass = typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-');
-    const startDate = is15DayPass ? (state.subscriptionStartDate || getTodayLocalDateString()) : undefined;
+    const isFirstMonthFreeLandingRoute = isFirstMonthFreeRouteActive();
+    const membershipProductIdRaw = typeof state.membershipPlanId === 'string' && state.membershipPlanId.includes('-')
+      ? state.membershipPlanId.split('-').pop()
+      : state.membershipPlanId;
+    const membershipProductIdNum = Number(membershipProductIdRaw);
+    const allProducts = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || []),
+      ...(state.allRawProducts || []),
+    ];
+    const selectedMembershipProduct = allProducts.find((p) =>
+      p && (
+        String(p.id) === String(membershipProductIdRaw) ||
+        (Number.isFinite(membershipProductIdNum) && p.id === membershipProductIdNum)
+      )
+    ) || null;
+    const isFirstMonthFreeSelectedProduct = isFirstMonthFreeProduct(selectedMembershipProduct);
+    const shouldForceTodayStartDate = isFirstMonthFreeLandingRoute || isFirstMonthFreeSelectedProduct;
+
+  // First-month-free flows must not carry stale subscription rows from reused orders.
+  // Ensure the order has at most one fresh subscription before we add current product.
+  if (shouldForceTodayStartDate) {
+    try {
+      const currentOrder = await orderAPI.getOrder(orderId);
+      const existingSubs = Array.isArray(currentOrder?.subscriptionItems) ? currentOrder.subscriptionItems : [];
+      if (existingSubs.length > 0) {
+        console.log('[checkout] First-month-free: clearing existing subscription items before attach', {
+          orderId,
+          existingSubscriptionCount: existingSubs.length,
+        });
+      }
+      for (const subItem of existingSubs) {
+        if (subItem?.id) {
+          await orderAPI.deleteSubscriptionItem(orderId, subItem.id);
+        }
+      }
+      if (existingSubs.length > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    } catch (cleanupError) {
+      console.warn('[checkout] Could not clean existing subscription items before first-month-free attach:', cleanupError);
+    }
+  }
+
+    const startDate = is15DayPass
+      ? (state.subscriptionStartDate || getTodayLocalDateString())
+      : (shouldForceTodayStartDate ? getTodayLocalDateString() : undefined);
     
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
     const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId, startDate);
@@ -15145,6 +16071,25 @@ async function handleCheckout() {
 
     // Step 2: Ensure order exists (create if needed)
     try {
+      // First-month-free should use a fresh order in checkout to avoid stale
+      // pricing from previously attached subscription items.
+      if (isFirstMonthFreeRouteActive() && state.orderId) {
+        console.log('[checkout] First-month-free: resetting existing order before checkout-flow', {
+          oldOrderId: state.orderId,
+        });
+        state.orderId = null;
+        state.fullOrder = null;
+        state.subscriptionAttachedOrderId = null;
+        state.subscriptionItemId = null;
+        state.paymentLink = null;
+        state.paymentLinkGenerated = false;
+        try {
+          sessionStorage.removeItem('boulders_checkout_order');
+        } catch (e) {
+          console.warn('[checkout] Could not clear stored order before first-month-free checkout reset:', e);
+        }
+      }
+
       console.log('[checkout] Ensuring order exists before adding items...');
       const ensuredOrderId = await ensureOrderCreated('checkout-flow');
       if (!ensuredOrderId) {
@@ -15800,9 +16745,10 @@ async function handleCheckout() {
                   productName.toLowerCase().includes('15 dages')
                 )) ||
                 (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
-
               if (is15DayPass) {
-                console.log('[checkout] ✅ Skipping partial-month price verification for 15 day pass');
+                console.log('[checkout] ✅ Skipping partial-month price verification for special route/product', {
+                  is15DayPass,
+                });
               } else {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
@@ -15956,6 +16902,22 @@ async function handleCheckout() {
                 throw finalCheckError;
               }
             }
+
+            // /firstmonthfree contract check:
+            // keep this as a warning signal only so checkout can continue while
+            // backend alignment is being rolled out.
+            if (isFirstMonthFreeRouteActive()) {
+              const contract = validateFirstMonthFreeOrderContract(orderBeforePayment, new Date());
+              console.log('[checkout] First month free contract validation:', contract);
+              if (!contract.ok) {
+                const details = [
+                  `payableNow=${contract.payableNow.toFixed(2)} DKK`,
+                  `periodEnd=${contract.actualEndYMD || 'missing'}`,
+                  `expectedEnd=${contract.expectedEndYMD || 'missing'}`,
+                ].join(', ');
+                console.warn(`[checkout] ⚠️ First-month-free campaign contract mismatch (${details}). Continuing checkout with current backend order.`);
+              }
+            }
             
             // Store full order object for payment overview
             state.fullOrder = orderBeforePayment;
@@ -16092,6 +17054,7 @@ async function handleCheckout() {
           const isPaymentLinkError = error.message && error.message.includes('Generate Payment Link Card failed');
           const is403Error = error.message && error.message.includes('403');
           
+          let recoveredFromPaymentLinkError = false;
           if (isPaymentLinkError && is403Error) {
             // Check if order has incorrect pricing
             const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
@@ -16110,25 +17073,93 @@ async function handleCheckout() {
                 console.error('[checkout] ❌ Product ID:', productId);
                 console.error('[checkout] ❌ Backend price:', verification.orderPriceDKK, 'DKK');
                 console.error('[checkout] ❌ Expected price:', verification.expectedPriceDKK || 'N/A', 'DKK');
-                
-                // Show user-friendly error message
-                showToast(
-                  'Unable to process payment due to a system issue. Please try again in a few moments or contact support.',
-                  'error'
-                );
-                
-                // Reset checkout state to allow retry
-                state.checkoutInProgress = false;
-                if (typeof setCheckoutLoadingState === 'function') {
-                  setCheckoutLoadingState(false);
-                }
-                
-                throw new Error(`Payment link generation failed due to backend pricing bug. Order price: ${verification.orderPriceDKK} DKK, Expected: ${verification.expectedPriceDKK || 'N/A'} DKK. Product ID: ${productId}. Backend ignored startDate parameter.`);
               }
             }
+
+            // Recovery path: attempt one backend pricing fix + payment-link retry before failing checkout.
+            try {
+              if (state.orderId) {
+                const latestOrder = await orderAPI.getOrder(state.orderId);
+                state.fullOrder = latestOrder;
+                const latestSub = latestOrder?.subscriptionItems?.[0];
+                const latestProductId = latestSub?.product?.id || state.selectedProductId;
+                const latestToday = new Date();
+                latestToday.setHours(0, 0, 0, 0);
+                const latestStartDate = getTodayLocalDateString();
+                const latestExpectedPrice = orderAPI._calculateExpectedPartialMonthPrice(latestProductId, latestStartDate);
+
+                if (latestSub?.id) {
+                  let subscriptionUrl;
+                  if (orderAPI.useProxy) {
+                    subscriptionUrl = `${orderAPI.baseUrl}?path=/api/ver3/orders/${state.orderId}/items/subscriptions`;
+                  } else {
+                    subscriptionUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${state.orderId}/items/subscriptions`;
+                  }
+
+                  const fixedOrder = await orderAPI._fixBackendPricingBug(
+                    state.orderId,
+                    subscriptionUrl,
+                    {
+                      'Accept-Language': getAcceptLanguageHeader(),
+                      'Content-Type': 'application/json',
+                      ...(typeof window.getAccessToken === 'function' && window.getAccessToken()
+                        ? { 'Authorization': `Bearer ${window.getAccessToken()}` }
+                        : {}),
+                    },
+                    latestSub.id,
+                    {
+                      subscriptionProduct: latestProductId,
+                      startDate: latestStartDate,
+                      ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
+                      ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
+                    },
+                    latestProductId,
+                    latestExpectedPrice,
+                    typeof window.getAccessToken === 'function' ? window.getAccessToken() : null,
+                    latestToday
+                  );
+
+                  if (fixedOrder) {
+                    state.fullOrder = fixedOrder;
+                    const fixedSub = fixedOrder?.subscriptionItems?.[0];
+                    if (fixedSub?.id) {
+                      state.subscriptionItemId = fixedSub.id;
+                    }
+                  }
+                }
+
+                const retryPaymentData = await paymentAPI.generatePaymentLink({
+                  orderId: state.orderId,
+                  paymentMethod: state.paymentMethod,
+                  businessUnit: state.selectedBusinessUnit,
+                  returnUrl,
+                  receiptEmail: customerEmail,
+                });
+
+                const retryPaymentLink = retryPaymentData?.data?.paymentLink ||
+                  retryPaymentData?.data?.link ||
+                  retryPaymentData?.data?.url ||
+                  retryPaymentData?.paymentLink ||
+                  retryPaymentData?.link ||
+                  retryPaymentData?.url;
+
+                if (retryPaymentLink) {
+                  paymentLink = retryPaymentLink;
+                  state.paymentLink = retryPaymentLink;
+                  state.paymentLinkGenerated = true;
+                  console.log('[checkout] ✅ Payment link recovery succeeded after pricing retry');
+                  recoveredFromPaymentLinkError = true;
+                }
+              }
+            } catch (recoveryError) {
+              console.error('[checkout] Recovery attempt after 403 payment-link failure did not succeed:', recoveryError);
+            }
           }
-          
+          if (recoveredFromPaymentLinkError) {
+            // Recovery succeeded; continue normal checkout flow.
+          } else {
           throw new Error('Failed to add membership to order or generate payment link');
+          }
         }
       }
       
@@ -20405,15 +21436,41 @@ function updateMainSubtitle() {
     5: 'Welcome to Boulders!', // Step 5 is success page
   };
 
-  DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? t('main.subtitle.step2');
+  const isLandingStep2 = state.currentStep === 2
+    && state.landing
+    && state.landing.mode === 'single-product'
+    && state.landing.routeKey;
+
+  if (isLandingStep2) {
+    const routeKey = String(state.landing.routeKey);
+    const key = `main.subtitle.step2.landing.${routeKey}`;
+    DOM.mainSubtitle.setAttribute('data-i18n-key', key);
+    DOM.mainSubtitle.textContent = t(key, t('main.subtitle.step2'));
+  } else {
+    // Restore the default key for the current step so updatePageTranslations doesn't overwrite with stale landing keys.
+    if (state.currentStep === 1) DOM.mainSubtitle.setAttribute('data-i18n-key', 'main.subtitle.step1');
+    else if (state.currentStep === 2) DOM.mainSubtitle.setAttribute('data-i18n-key', 'main.subtitle.step2');
+    else if (state.currentStep === 3) DOM.mainSubtitle.setAttribute('data-i18n-key', 'main.subtitle.step3');
+    else if (state.currentStep === 4) DOM.mainSubtitle.setAttribute('data-i18n-key', 'main.subtitle.step4');
+    DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? t('main.subtitle.step2');
+  }
   
   // Update secondary subtitle for current step
   const secondarySubtitle = document.querySelector('.secondary-subtitle');
   if (secondarySubtitle) {
     if (state.currentStep === 1) {
+      secondarySubtitle.setAttribute('data-i18n-key', 'main.subtitle.step1.secondary');
       secondarySubtitle.textContent = t('main.subtitle.step1.secondary');
     } else if (state.currentStep === 2) {
-      secondarySubtitle.textContent = t('main.subtitle.step2.secondary');
+      if (isLandingStep2) {
+        const routeKey = String(state.landing.routeKey);
+        const key = `main.subtitle.step2.landing.${routeKey}.secondary`;
+        secondarySubtitle.setAttribute('data-i18n-key', key);
+        secondarySubtitle.textContent = t(key, t('main.subtitle.step2.secondary'));
+      } else {
+        secondarySubtitle.setAttribute('data-i18n-key', 'main.subtitle.step2.secondary');
+        secondarySubtitle.textContent = t('main.subtitle.step2.secondary');
+      }
     }
   }
   

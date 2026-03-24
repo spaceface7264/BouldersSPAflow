@@ -1,2 +1,8 @@
 # Redirect /hero to /hero/ so hero landing page loads
 /hero    /hero/    302
+
+# SPA landing routes (serve app for deep links)
+/freetrial      /index.html   200
+/freetrial/     /index.html   200
+/firstmonthfree  /index.html  200
+/firstmonthfree/ /index.html  200
