@@ -14066,6 +14066,30 @@ function updatePaymentOverview() {
   // If order data is not available, calculate from product data
   let payNowAmount = 0;
   let billingPeriod = null;
+
+  const computeFirstMonthFreeProrated = (monthlyPrice, referenceDate = new Date()) => {
+    const monthly = Number(monthlyPrice) || 0;
+    if (monthly <= 0) {
+      return null;
+    }
+    const base = new Date(referenceDate);
+    base.setHours(0, 0, 0, 0);
+
+    // Free period: today -> day before same day next month.
+    const chargeStart = new Date(base);
+    chargeStart.setMonth(chargeStart.getMonth() + 1); // ex: 24/03 -> 24/04
+    chargeStart.setHours(0, 0, 0, 0);
+    const chargeEnd = new Date(chargeStart.getFullYear(), chargeStart.getMonth() + 1, 0); // end of charge month
+    const daysInChargeMonth = chargeEnd.getDate();
+    const chargeDays = Math.max(0, chargeEnd.getDate() - chargeStart.getDate() + 1);
+    const amount = (monthly / daysInChargeMonth) * chargeDays;
+
+    return {
+      amount,
+      start: chargeStart,
+      end: chargeEnd,
+    };
+  };
   
   if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
     // CRITICAL: Use API price from order - this is the authoritative source
@@ -14165,6 +14189,13 @@ function updatePaymentOverview() {
           payNowAmount = (recurringMonthlyPrice / daysInChargeMonth) * chargeDays;
           billingPeriod = { start: chargeStart, end: chargeEnd };
           console.log('[Payment Overview] ✅ First month free landing: prorated post-free pay-now from API period:', payNowAmount, 'DKK');
+        } else if (recurringMonthlyPrice > 0) {
+          const estimate = computeFirstMonthFreeProrated(recurringMonthlyPrice, new Date());
+          if (estimate) {
+            payNowAmount = estimate.amount;
+            billingPeriod = { start: estimate.start, end: estimate.end };
+            console.log('[Payment Overview] ✅ First month free landing: fallback prorated pay-now estimate:', payNowAmount, 'DKK');
+          }
         } else {
           payNowAmount = orderPriceDKK;
           if (initialPaymentPeriod?.start) {
@@ -14343,16 +14374,14 @@ function updatePaymentOverview() {
           if (isFirstMonthFreeLandingRoute) {
             const priceInCents = membership.priceWithInterval?.price?.amount || 0;
             const recurringMonthlyPrice = priceInCents / 100;
-            const freePeriodEnd = new Date(today);
-            freePeriodEnd.setMonth(freePeriodEnd.getMonth() + 1);
-            const chargeStart = new Date(freePeriodEnd);
-            chargeStart.setDate(chargeStart.getDate() + 1);
-            chargeStart.setHours(0, 0, 0, 0);
-            const chargeEnd = new Date(chargeStart.getFullYear(), chargeStart.getMonth() + 1, 0);
-            const daysInChargeMonth = chargeEnd.getDate();
-            const chargeDays = Math.max(0, chargeEnd.getDate() - chargeStart.getDate() + 1);
-            payNowAmount = (recurringMonthlyPrice / daysInChargeMonth) * chargeDays;
-            billingPeriod = { start: chargeStart, end: chargeEnd };
+            const estimate = computeFirstMonthFreeProrated(recurringMonthlyPrice, today);
+            if (estimate) {
+              payNowAmount = estimate.amount;
+              billingPeriod = { start: estimate.start, end: estimate.end };
+            } else {
+              payNowAmount = 0;
+              billingPeriod = null;
+            }
             console.log('[Payment Overview] ✅ First month free landing (no order): forced route prorated pay-now:', payNowAmount, 'DKK');
           } else if (isFirstMonthFreeCampaignNoOrder) {
             // Estimate "pay now" to mirror whitelabel behavior:
