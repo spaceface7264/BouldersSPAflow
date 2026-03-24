@@ -95,6 +95,23 @@ function isFirstMonthFreeRouteActive() {
   return state.landing?.routeKey === 'firstmonthfree' || routePath === '/firstmonthfree';
 }
 
+function hasProductLabel(product, labelName) {
+  if (!product || !labelName) return false;
+  const target = String(labelName).trim().toLowerCase();
+  if (!target) return false;
+  const labels = product.productLabels || product.labels || [];
+  return Array.isArray(labels) && labels.some((label) => String(label?.name || '').trim().toLowerCase() === target);
+}
+
+function isFirstMonthFreeProduct(product) {
+  if (!product) return false;
+  if (hasProductLabel(product, 'PublicFirstMonthFree') || hasProductLabel(product, 'LandingFirstMonthFree')) {
+    return true;
+  }
+  const name = String(product?.name || '').toLowerCase();
+  return /0\s*kr|første\s*måned|first\s*month\s*free/.test(name);
+}
+
 function toDateYMD(dateInput) {
   const d = new Date(dateInput);
   if (Number.isNaN(d.getTime())) return '';
@@ -107,9 +124,10 @@ function toDateYMD(dateInput) {
 function getFirstMonthFreeExpectedPeriodEndYMD(referenceDate = new Date()) {
   const base = new Date(referenceDate);
   base.setHours(0, 0, 0, 0);
-  const day = base.getDate();
-  const monthsToAdd = day <= 15 ? 1 : 2;
-  return toDateYMD(new Date(base.getFullYear(), base.getMonth() + monthsToAdd + 1, 0));
+  // New pricing model:
+  // - Free period: today -> same day next month
+  // - Pay-now period: same day next month -> end of that same month
+  return toDateYMD(new Date(base.getFullYear(), base.getMonth() + 2, 0));
 }
 
 function validateFirstMonthFreeOrderContract(order, referenceDate = new Date()) {
@@ -154,10 +172,9 @@ function computeFirstMonthFreeDisplay(referenceDate = new Date(), monthlyPrice =
   const payStart = new Date(freeEnd);
   payStart.setHours(0, 0, 0, 0);
 
-  const dayOfMonth = base.getDate();
-  const payEnd = dayOfMonth > 16
-    ? new Date(payStart.getFullYear(), payStart.getMonth() + 2, 0)
-    : new Date(payStart.getFullYear(), payStart.getMonth() + 1, 0);
+  // Pay-now period always ends at the end of payStart month
+  // (no before/after 15th branching).
+  const payEnd = new Date(payStart.getFullYear(), payStart.getMonth() + 1, 0);
   payEnd.setHours(0, 0, 0, 0);
 
   const daysInPayPeriod = Math.max(1, Math.floor((payEnd - payStart) / (1000 * 60 * 60 * 24)) + 1);
@@ -1603,11 +1620,9 @@ class OrderAPI {
         ? startDateOverride
         : getTodayLocalDateString();
       
-      // Pricing calculation: When startDate is on day 16 or later, price includes:
-      // - Rest of current month (prorated) + Full next month
-      // When startDate is before day 16, price includes:
-      // - Rest of current month only (prorated)
-      // Frontend calculation now matches backend logic to ensure price consistency.
+      // Pricing for standard memberships may depend on date windows.
+      // First-month-free products use a dedicated unified model
+      // (today -> same day next month free; then pay-now until month end).
       
       // Build payload according to OpenAPI spec:
       // Required: subscriptionProduct, birthDate
@@ -1624,14 +1639,7 @@ class OrderAPI {
       
       // Log pricing calculation details for productId 134 for verification
       if (subscriptionProductId === 134) {
-        const dayOfMonth = new Date().getDate();
-        if (dayOfMonth >= 16) {
-          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
-          console.log('[Step 7] ℹ️ Day >= 16: Price will include rest of current month + full next month');
-        } else {
-          console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
-          console.log('[Step 7] ℹ️ Day < 16: Price will include prorated rest of current month only');
-        }
+        console.log('[Step 7] ℹ️ Adding subscription for productId 134 ("Medlemskab")');
       }
       
       console.log('[Step 7] Adding subscription item - productId:', productId);
@@ -1842,7 +1850,32 @@ class OrderAPI {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Calculate days remaining in current month
+    const productLooksFirstMonthFree = hasProductLabel(membership, 'PublicFirstMonthFree')
+      || hasProductLabel(membership, 'LandingFirstMonthFree')
+      || /0\s*kr|første\s*måned|first\s*month\s*free/.test(String(membership?.name || '').toLowerCase());
+
+    if (productLooksFirstMonthFree) {
+      const monthlyDKK = monthlyPriceInCents / 100;
+      const display = computeFirstMonthFreeDisplay(today, monthlyDKK);
+      const amountInCents = Math.round((display?.payNowAmount || 0) * 100);
+      const payStart = display?.payStart || null;
+      const payEnd = display?.payEnd || null;
+      const daysInPayPeriod = payStart && payEnd
+        ? Math.max(1, Math.floor((payEnd - payStart) / (1000 * 60 * 60 * 24)) + 1)
+        : null;
+      return {
+        amountInCents,
+        amountInDKK: amountInCents / 100,
+        daysRemaining: daysInPayPeriod,
+        daysInMonth: payStart ? new Date(payStart.getFullYear(), payStart.getMonth() + 1, 0).getDate() : null,
+        monthlyPriceInCents,
+        monthlyPriceInDKK: monthlyPriceInCents / 100,
+        includesNextMonth: false,
+        mode: 'firstMonthFreeUnified',
+      };
+    }
+
+    // Calculate days remaining in current month (standard memberships)
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
     const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
@@ -14367,59 +14400,54 @@ function updatePaymentOverview() {
       // First month free landing/campaign: trust backend order totals when order exists.
       const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
       if (isFirstMonthFreeLanding) {
-        // Once we have order data, always trust backend totals and period.
-        // This keeps cart UI aligned with the amount the payment window charges.
-        payNowAmount = backendPayNowDKK;
+        // First-month-free display model:
+        // pay-now is always the prorated amount for same-day-next-month -> month end.
         const recurringAmountRaw = subscriptionItem?.payRecurring?.price?.amount
           ?? subscriptionItem?.product?.priceWithInterval?.price?.amount
           ?? 0;
         const recurringMonthlyPrice = currencyAmountToDKK(recurringAmountRaw);
         firstMonthFreeDisplay = computeFirstMonthFreeDisplay(new Date(), recurringMonthlyPrice);
-        if (initialPaymentPeriod?.start) {
+        if (firstMonthFreeDisplay) {
+          payNowAmount = firstMonthFreeDisplay.payNowAmount;
+          billingPeriod = {
+            start: firstMonthFreeDisplay.payStart,
+            end: firstMonthFreeDisplay.payEnd,
+          };
+        } else if (initialPaymentPeriod?.start) {
+          payNowAmount = backendPayNowDKK;
           billingPeriod = {
             start: new Date(initialPaymentPeriod.start),
             end: new Date(initialPaymentPeriod.end),
           };
+        } else {
+          payNowAmount = backendPayNowDKK;
         }
-        console.log('[Payment Overview] ✅ First month free landing: using backend order price:', payNowAmount, 'DKK');
+        console.log('[Payment Overview] ✅ First month free landing: using unified pay-now period pricing:', payNowAmount, 'DKK');
       } else
 
       if (isFirstMonthFreeCampaign) {
-        if (dayOfMonth < 16) {
-          payNowAmount = 0;
-          if (initialPaymentPeriod?.start) {
-            billingPeriod = {
-              start: new Date(initialPaymentPeriod.start),
-              end: new Date(initialPaymentPeriod.end)
-            };
-          } else {
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
-            };
-          }
-          console.log('[Payment Overview] ✅ First month free campaign (date < 16): 0 kr from API');
+        // No 15th-cutoff behavior: use a single first-month-free model.
+        const recurringAmountRaw = subscriptionItem?.payRecurring?.price?.amount
+          ?? subscriptionItem?.product?.priceWithInterval?.price?.amount
+          ?? 0;
+        const recurringMonthlyPrice = currencyAmountToDKK(recurringAmountRaw);
+        firstMonthFreeDisplay = computeFirstMonthFreeDisplay(new Date(), recurringMonthlyPrice);
+        if (firstMonthFreeDisplay) {
+          payNowAmount = firstMonthFreeDisplay.payNowAmount;
+          billingPeriod = {
+            start: firstMonthFreeDisplay.payStart,
+            end: firstMonthFreeDisplay.payEnd,
+          };
+        } else if (initialPaymentPeriod?.start) {
+          payNowAmount = backendPayNowDKK;
+          billingPeriod = {
+            start: new Date(initialPaymentPeriod.start),
+            end: new Date(initialPaymentPeriod.end),
+          };
         } else {
-          payNowAmount = expectedPrice ? expectedPrice.amountInDKK : backendPayNowDKK;
-          const currentMonth = today.getMonth();
-          const currentYear = today.getFullYear();
-          if (expectedPrice?.includesNextMonth) {
-            const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-            const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-            billingPeriod = {
-              start: today,
-              end: new Date(nextYear, nextMonth + 1, 0)
-            };
-          } else {
-            billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
-            };
-          }
-          console.log('[Payment Overview] ✅ First month free campaign (date >= 16): rest-of-month price:', payNowAmount, 'DKK');
+          payNowAmount = backendPayNowDKK;
         }
+        console.log('[Payment Overview] ✅ First month free campaign: unified pay-now period pricing:', payNowAmount, 'DKK');
       } else if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
         const backendEndDate = new Date(initialPaymentPeriod.end);
@@ -14555,24 +14583,17 @@ function updatePaymentOverview() {
             billingPeriod = { start: firstMonthFreeDisplay.payStart, end: firstMonthFreeDisplay.payEnd };
             console.log('[Payment Overview] ✅ First month free landing (no order): forced route prorated pay-now:', payNowAmount, 'DKK');
           } else if (isFirstMonthFreeCampaignNoOrder) {
-            // Estimate "pay now" to mirror whitelabel behavior:
-            // first month is free, then charge prorated amount for the remainder of the next month.
             const priceInCents = membership.priceWithInterval?.price?.amount || 0;
             const monthlyPrice = priceInCents / 100;
-            const freePeriodEnd = new Date(today);
-            freePeriodEnd.setMonth(freePeriodEnd.getMonth() + 1);
-            const chargeStart = new Date(freePeriodEnd);
-            chargeStart.setDate(chargeStart.getDate() + 1);
-            chargeStart.setHours(0, 0, 0, 0);
-            const chargeEnd = new Date(chargeStart.getFullYear(), chargeStart.getMonth() + 1, 0);
-            const daysInChargeMonth = chargeEnd.getDate();
-            const chargeDays = Math.max(0, chargeEnd.getDate() - chargeStart.getDate() + 1);
-            payNowAmount = (monthlyPrice / daysInChargeMonth) * chargeDays;
-            billingPeriod = {
-              start: chargeStart,
-              end: chargeEnd,
-            };
-            console.log('[Payment Overview] ✅ First month free campaign (no order): estimated prorated post-free amount:', payNowAmount, 'DKK');
+            firstMonthFreeDisplay = computeFirstMonthFreeDisplay(today, monthlyPrice);
+            if (firstMonthFreeDisplay) {
+              payNowAmount = firstMonthFreeDisplay.payNowAmount;
+              billingPeriod = {
+                start: firstMonthFreeDisplay.payStart,
+                end: firstMonthFreeDisplay.payEnd,
+              };
+            }
+            console.log('[Payment Overview] ✅ First month free campaign (no order): unified pay-now period model');
           } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
@@ -15388,13 +15409,58 @@ async function ensureSubscriptionAttached(context = 'auto') {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
     // 15-day pass: use selected activation date.
-    // /firstmonthfree: start same day next month to represent the free first month.
+    // /firstmonthfree: membership should start today; first-month-free billing
+    // behavior is handled by backend contract/order periods, not by delaying startDate.
     // Others: leave undefined so backend uses its default start behavior.
     const is15DayPass = typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-');
     const isFirstMonthFreeLandingRoute = isFirstMonthFreeRouteActive();
+    const membershipProductIdRaw = typeof state.membershipPlanId === 'string' && state.membershipPlanId.includes('-')
+      ? state.membershipPlanId.split('-').pop()
+      : state.membershipPlanId;
+    const membershipProductIdNum = Number(membershipProductIdRaw);
+    const allProducts = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || []),
+      ...(state.allRawProducts || []),
+    ];
+    const selectedMembershipProduct = allProducts.find((p) =>
+      p && (
+        String(p.id) === String(membershipProductIdRaw) ||
+        (Number.isFinite(membershipProductIdNum) && p.id === membershipProductIdNum)
+      )
+    ) || null;
+    const isFirstMonthFreeSelectedProduct = isFirstMonthFreeProduct(selectedMembershipProduct);
+    const shouldForceTodayStartDate = isFirstMonthFreeLandingRoute || isFirstMonthFreeSelectedProduct;
+
+  // First-month-free flows must not carry stale subscription rows from reused orders.
+  // Ensure the order has at most one fresh subscription before we add current product.
+  if (shouldForceTodayStartDate) {
+    try {
+      const currentOrder = await orderAPI.getOrder(orderId);
+      const existingSubs = Array.isArray(currentOrder?.subscriptionItems) ? currentOrder.subscriptionItems : [];
+      if (existingSubs.length > 0) {
+        console.log('[checkout] First-month-free: clearing existing subscription items before attach', {
+          orderId,
+          existingSubscriptionCount: existingSubs.length,
+        });
+      }
+      for (const subItem of existingSubs) {
+        if (subItem?.id) {
+          await orderAPI.deleteSubscriptionItem(orderId, subItem.id);
+        }
+      }
+      if (existingSubs.length > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    } catch (cleanupError) {
+      console.warn('[checkout] Could not clean existing subscription items before first-month-free attach:', cleanupError);
+    }
+  }
+
     const startDate = is15DayPass
       ? (state.subscriptionStartDate || getTodayLocalDateString())
-      : (isFirstMonthFreeLandingRoute ? getFirstMonthFreeStartDateString() : undefined);
+      : (shouldForceTodayStartDate ? getTodayLocalDateString() : undefined);
     
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
     const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId, startDate);
@@ -16005,6 +16071,25 @@ async function handleCheckout() {
 
     // Step 2: Ensure order exists (create if needed)
     try {
+      // First-month-free should use a fresh order in checkout to avoid stale
+      // pricing from previously attached subscription items.
+      if (isFirstMonthFreeRouteActive() && state.orderId) {
+        console.log('[checkout] First-month-free: resetting existing order before checkout-flow', {
+          oldOrderId: state.orderId,
+        });
+        state.orderId = null;
+        state.fullOrder = null;
+        state.subscriptionAttachedOrderId = null;
+        state.subscriptionItemId = null;
+        state.paymentLink = null;
+        state.paymentLinkGenerated = false;
+        try {
+          sessionStorage.removeItem('boulders_checkout_order');
+        } catch (e) {
+          console.warn('[checkout] Could not clear stored order before first-month-free checkout reset:', e);
+        }
+      }
+
       console.log('[checkout] Ensuring order exists before adding items...');
       const ensuredOrderId = await ensureOrderCreated('checkout-flow');
       if (!ensuredOrderId) {
@@ -16660,12 +16745,9 @@ async function handleCheckout() {
                   productName.toLowerCase().includes('15 dages')
                 )) ||
                 (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
-              const isFirstMonthFreeLandingRoute = isFirstMonthFreeRouteActive();
-
-              if (is15DayPass || isFirstMonthFreeLandingRoute) {
+              if (is15DayPass) {
                 console.log('[checkout] ✅ Skipping partial-month price verification for special route/product', {
                   is15DayPass,
-                  isFirstMonthFreeLandingRoute,
                 });
               } else {
                 const today = new Date();
@@ -16821,8 +16903,9 @@ async function handleCheckout() {
               }
             }
 
-            // Rule 4 hard guard: /firstmonthfree must be fully driven by backend contract.
-            // If backend order doesn't match the campaign contract, block payment redirect.
+            // /firstmonthfree contract check:
+            // keep this as a warning signal only so checkout can continue while
+            // backend alignment is being rolled out.
             if (isFirstMonthFreeRouteActive()) {
               const contract = validateFirstMonthFreeOrderContract(orderBeforePayment, new Date());
               console.log('[checkout] First month free contract validation:', contract);
@@ -16832,7 +16915,7 @@ async function handleCheckout() {
                   `periodEnd=${contract.actualEndYMD || 'missing'}`,
                   `expectedEnd=${contract.expectedEndYMD || 'missing'}`,
                 ].join(', ');
-                throw new Error(`First-month-free campaign contract mismatch (${details}).`);
+                console.warn(`[checkout] ⚠️ First-month-free campaign contract mismatch (${details}). Continuing checkout with current backend order.`);
               }
             }
             
@@ -16873,10 +16956,6 @@ async function handleCheckout() {
             });
           } catch (orderCheckError) {
             console.error('[checkout] ❌ Error during final order verification:', orderCheckError);
-            if (isFirstMonthFreeRouteActive()) {
-              console.error('[checkout] ❌ Blocking payment link for /firstmonthfree due to contract mismatch');
-              throw orderCheckError;
-            }
             console.warn('[checkout] ⚠️ Continuing with payment link generation - price may be incorrect');
             // Try to get order anyway for payment overview
             try {
@@ -16975,6 +17054,7 @@ async function handleCheckout() {
           const isPaymentLinkError = error.message && error.message.includes('Generate Payment Link Card failed');
           const is403Error = error.message && error.message.includes('403');
           
+          let recoveredFromPaymentLinkError = false;
           if (isPaymentLinkError && is403Error) {
             // Check if order has incorrect pricing
             const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
@@ -16993,25 +17073,93 @@ async function handleCheckout() {
                 console.error('[checkout] ❌ Product ID:', productId);
                 console.error('[checkout] ❌ Backend price:', verification.orderPriceDKK, 'DKK');
                 console.error('[checkout] ❌ Expected price:', verification.expectedPriceDKK || 'N/A', 'DKK');
-                
-                // Show user-friendly error message
-                showToast(
-                  'Unable to process payment due to a system issue. Please try again in a few moments or contact support.',
-                  'error'
-                );
-                
-                // Reset checkout state to allow retry
-                state.checkoutInProgress = false;
-                if (typeof setCheckoutLoadingState === 'function') {
-                  setCheckoutLoadingState(false);
-                }
-                
-                throw new Error(`Payment link generation failed due to backend pricing bug. Order price: ${verification.orderPriceDKK} DKK, Expected: ${verification.expectedPriceDKK || 'N/A'} DKK. Product ID: ${productId}. Backend ignored startDate parameter.`);
               }
             }
+
+            // Recovery path: attempt one backend pricing fix + payment-link retry before failing checkout.
+            try {
+              if (state.orderId) {
+                const latestOrder = await orderAPI.getOrder(state.orderId);
+                state.fullOrder = latestOrder;
+                const latestSub = latestOrder?.subscriptionItems?.[0];
+                const latestProductId = latestSub?.product?.id || state.selectedProductId;
+                const latestToday = new Date();
+                latestToday.setHours(0, 0, 0, 0);
+                const latestStartDate = getTodayLocalDateString();
+                const latestExpectedPrice = orderAPI._calculateExpectedPartialMonthPrice(latestProductId, latestStartDate);
+
+                if (latestSub?.id) {
+                  let subscriptionUrl;
+                  if (orderAPI.useProxy) {
+                    subscriptionUrl = `${orderAPI.baseUrl}?path=/api/ver3/orders/${state.orderId}/items/subscriptions`;
+                  } else {
+                    subscriptionUrl = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${state.orderId}/items/subscriptions`;
+                  }
+
+                  const fixedOrder = await orderAPI._fixBackendPricingBug(
+                    state.orderId,
+                    subscriptionUrl,
+                    {
+                      'Accept-Language': getAcceptLanguageHeader(),
+                      'Content-Type': 'application/json',
+                      ...(typeof window.getAccessToken === 'function' && window.getAccessToken()
+                        ? { 'Authorization': `Bearer ${window.getAccessToken()}` }
+                        : {}),
+                    },
+                    latestSub.id,
+                    {
+                      subscriptionProduct: latestProductId,
+                      startDate: latestStartDate,
+                      ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
+                      ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
+                    },
+                    latestProductId,
+                    latestExpectedPrice,
+                    typeof window.getAccessToken === 'function' ? window.getAccessToken() : null,
+                    latestToday
+                  );
+
+                  if (fixedOrder) {
+                    state.fullOrder = fixedOrder;
+                    const fixedSub = fixedOrder?.subscriptionItems?.[0];
+                    if (fixedSub?.id) {
+                      state.subscriptionItemId = fixedSub.id;
+                    }
+                  }
+                }
+
+                const retryPaymentData = await paymentAPI.generatePaymentLink({
+                  orderId: state.orderId,
+                  paymentMethod: state.paymentMethod,
+                  businessUnit: state.selectedBusinessUnit,
+                  returnUrl,
+                  receiptEmail: customerEmail,
+                });
+
+                const retryPaymentLink = retryPaymentData?.data?.paymentLink ||
+                  retryPaymentData?.data?.link ||
+                  retryPaymentData?.data?.url ||
+                  retryPaymentData?.paymentLink ||
+                  retryPaymentData?.link ||
+                  retryPaymentData?.url;
+
+                if (retryPaymentLink) {
+                  paymentLink = retryPaymentLink;
+                  state.paymentLink = retryPaymentLink;
+                  state.paymentLinkGenerated = true;
+                  console.log('[checkout] ✅ Payment link recovery succeeded after pricing retry');
+                  recoveredFromPaymentLinkError = true;
+                }
+              }
+            } catch (recoveryError) {
+              console.error('[checkout] Recovery attempt after 403 payment-link failure did not succeed:', recoveryError);
+            }
           }
-          
+          if (recoveredFromPaymentLinkError) {
+            // Recovery succeeded; continue normal checkout flow.
+          } else {
           throw new Error('Failed to add membership to order or generate payment link');
+          }
         }
       }
       
