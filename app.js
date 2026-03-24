@@ -5663,7 +5663,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.validRange': 'Gyldig:', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.payNowPending': 'Beregnes efter login', 'cart.monthlyFee': 'Månedlig betaling', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.validRange': 'Gyldig:', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'price.free': 'Gratis',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
@@ -5879,7 +5879,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.validRange': 'Valid:', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.payNowPending': 'Calculated after login', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.validRange': 'Valid:', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
     'price.free': 'Free',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
@@ -6079,7 +6079,7 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.validRange': 'Gültig:', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.payNowPending': 'Wird nach Anmeldung berechnet', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.validRange': 'Gültig:', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'price.free': 'Kostenlos',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
@@ -14161,6 +14161,86 @@ function updatePaymentOverview() {
     has15DayPassLabel ||
     nameLooksLike15DayPass ||
     isFreeTrialLanding;
+
+  // /firstmonthfree: pre-login/while-sync UX.
+  // Show stable campaign rows immediately, but keep pay-now amount pending until backend order exists.
+  if (isFirstMonthFreeLandingRoute && !hasOrderData && (paymentOverviewSyncPromise || !state.orderId)) {
+    const paymentOverviewRoot = DOM.paymentOverview || document.querySelector('.payment-overview:not(.payment-overview-total-wrap)');
+    const payNowRow = DOM.payNow?.closest('.payment-overview-paynow-row');
+    const payNowLabel = payNowRow?.querySelector('.payment-label');
+    const periodElement = payNowRow?.querySelector('.payment-label-period');
+    const monthlyPaymentItem = DOM.monthlyPayment?.closest('.payment-overview-item');
+    const payNowItem = DOM.payNow?.closest('.payment-overview-item');
+    const monthlyPriceDKK = currencyAmountToDKK(
+      currentProduct?.priceWithInterval?.price?.amount
+      ?? currentProduct?.price?.amount
+      ?? currentProduct?.amount
+      ?? 0
+    );
+    const preview = computeFirstMonthFreeDisplay(new Date(), monthlyPriceDKK);
+
+    if (DOM.paymentOverview) {
+      DOM.paymentOverview.style.display = '';
+    }
+    if (monthlyPaymentItem) {
+      monthlyPaymentItem.style.display = '';
+    }
+    if (DOM.monthlyPayment) {
+      if (monthlyPriceDKK > 0) {
+        DOM.monthlyPayment.textContent = `${formatCurrencyHalfKrone(roundToHalfKrone(monthlyPriceDKK))}/md`;
+      } else {
+        DOM.monthlyPayment.textContent = t('modal.loading', 'Loading...');
+      }
+    }
+    if (payNowLabel && preview) {
+      const coverText = `${formatDateDMY(preview.payStart)} - ${formatDateDMY(preview.payEnd)}`;
+      payNowLabel.removeAttribute('data-i18n-key');
+      payNowLabel.innerHTML = sanitizeHTML(
+        `${t('cart.payNow', 'Betal nu')} <span class="payment-label-period-inline">(${coverText})</span>`
+      );
+    }
+    if (periodElement) {
+      periodElement.textContent = '';
+      periodElement.style.display = 'none';
+    }
+    if (DOM.payNow) {
+      DOM.payNow.textContent = t('cart.payNowPending', 'Beregnes efter login');
+    }
+
+    let firstMonthRow = paymentOverviewRoot?.querySelector('.payment-overview-first-month');
+    if (!firstMonthRow && paymentOverviewRoot && payNowItem) {
+      firstMonthRow = document.createElement('div');
+      firstMonthRow.className = 'payment-overview-item payment-overview-first-month';
+      firstMonthRow.innerHTML = sanitizeHTML(`
+        <span class="payment-label"></span>
+        <span class="payment-amount"></span>
+      `);
+      paymentOverviewRoot.insertBefore(firstMonthRow, payNowItem);
+    }
+    if (firstMonthRow && preview) {
+      const firstMonthLabel = firstMonthRow.querySelector('.payment-label');
+      const firstMonthAmount = firstMonthRow.querySelector('.payment-amount');
+      if (firstMonthLabel) {
+        const freePeriodText = `${formatDateDMY(preview.freeStart)} - ${formatDateDMY(preview.freeEnd)}`;
+        firstMonthLabel.innerHTML = sanitizeHTML(
+          `${t('cart.firstMonth', 'Første måned')} <span class="payment-label-period-inline">(${freePeriodText})</span>`
+        );
+      }
+      if (firstMonthAmount) {
+        firstMonthAmount.textContent = '0 kr';
+      }
+      firstMonthRow.style.display = '';
+    }
+
+    const boundUntilRow = paymentOverviewRoot?.querySelector('.payment-overview-item.payment-overview-bound-until-row');
+    if (boundUntilRow) {
+      boundUntilRow.style.display = 'none';
+    }
+    if (DOM.paymentBoundUntil) {
+      DOM.paymentBoundUntil.style.display = 'none';
+    }
+    return;
+  }
   
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
@@ -14717,6 +14797,8 @@ function updatePaymentOverview() {
 
   // Round payNowAmount to half krone and store in state for use in cart total calculation
   state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
+  const paymentOverviewRoot = DOM.paymentOverview || document.querySelector('.payment-overview:not(.payment-overview-total-wrap)');
+  const payNowItem = DOM.payNow ? DOM.payNow.closest('.payment-overview-item') : null;
   
   if (DOM.payNow) {
     const amountText = formatCurrencyHalfKrone(state.totals.payNowAmount);
@@ -14724,6 +14806,53 @@ function updatePaymentOverview() {
     
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
+    const payNowLabel = payNowRow ? payNowRow.querySelector('.payment-label') : null;
+
+    // /firstmonthfree: show "Første måned - 0 kr" as a proper row and include period in pay-now label.
+    if (paymentOverviewRoot && payNowItem) {
+      let firstMonthRow = paymentOverviewRoot.querySelector('.payment-overview-first-month');
+      if (!firstMonthRow) {
+        firstMonthRow = document.createElement('div');
+        firstMonthRow.className = 'payment-overview-item payment-overview-first-month';
+        firstMonthRow.innerHTML = sanitizeHTML(`
+          <span class="payment-label"></span>
+          <span class="payment-amount"></span>
+        `);
+        paymentOverviewRoot.insertBefore(firstMonthRow, payNowItem);
+      }
+
+      if (isFirstMonthFreeLandingRoute && firstMonthFreeDisplay) {
+        const firstMonthLabel = firstMonthRow.querySelector('.payment-label');
+        const firstMonthAmount = firstMonthRow.querySelector('.payment-amount');
+        if (firstMonthLabel) {
+          const freePeriodText = `${formatDateDMY(firstMonthFreeDisplay.freeStart)} - ${formatDateDMY(firstMonthFreeDisplay.freeEnd)}`;
+          firstMonthLabel.innerHTML = sanitizeHTML(
+            `${t('cart.firstMonth', 'Første måned')} <span class="payment-label-period-inline">(${freePeriodText})</span>`
+          );
+        }
+        if (firstMonthAmount) {
+          firstMonthAmount.textContent = '0 kr';
+        }
+        firstMonthRow.style.display = '';
+
+        if (payNowLabel) {
+          const coverText = `${formatDateDMY(firstMonthFreeDisplay.payStart)} - ${formatDateDMY(firstMonthFreeDisplay.payEnd)}`;
+          payNowLabel.removeAttribute('data-i18n-key');
+          payNowLabel.innerHTML = sanitizeHTML(
+            `${t('cart.payNow', 'Betal nu')} <span class="payment-label-period-inline">(${coverText})</span>`
+          );
+        }
+      } else {
+        if (firstMonthRow) {
+          firstMonthRow.style.display = 'none';
+        }
+        if (payNowLabel) {
+          payNowLabel.setAttribute('data-i18n-key', 'cart.payNow');
+          payNowLabel.textContent = t('cart.payNow', 'Betal nu');
+        }
+      }
+    }
+
     if (payNowRow && billingPeriodText) {
       let periodElement = payNowRow.querySelector('.payment-label-period');
       if (!periodElement) {
@@ -14744,6 +14873,10 @@ function updatePaymentOverview() {
         // Hide the small "(Billing period confirmed...)" helper next to "Pay now".
         periodElement.textContent = '';
         periodElement.style.display = 'none';
+      } else if (isFirstMonthFreeLandingRoute) {
+        // /firstmonthfree puts the coverage period directly in the pay-now label.
+        periodElement.textContent = '';
+        periodElement.style.display = 'none';
       } else if (is15DayPass) {
         periodElement.style.display = '';
         periodElement.innerHTML = `(${billingPeriodText}) <button type="button" class="change-date-link" data-action="change-activation-date">${t('activationDate.change')}</button>`;
@@ -14759,40 +14892,6 @@ function updatePaymentOverview() {
       }
     }
 
-    // Recommended UX for /firstmonthfree: clearly show free window + what "Pay now" covers.
-    if (payNowRow) {
-      let freePeriodElement = payNowRow.parentElement?.querySelector('.payment-free-period-note');
-      if (!freePeriodElement && payNowRow.parentElement) {
-        freePeriodElement = document.createElement('div');
-        freePeriodElement.className = 'payment-free-period-note';
-        payNowRow.parentElement.appendChild(freePeriodElement);
-      }
-
-      if (freePeriodElement) {
-        if (isFirstMonthFreeLandingRoute && firstMonthFreeDisplay) {
-          const freeLabel = t('cart.freePeriod', 'Gratis periode');
-          const payCoverLabel = t('cart.payNowCovers', 'Betal nu dækker');
-          const freeText = `${formatDateDMY(firstMonthFreeDisplay.freeStart)} - ${formatDateDMY(firstMonthFreeDisplay.freeEnd)}`;
-          const coverText = `${formatDateDMY(firstMonthFreeDisplay.payStart)} - ${formatDateDMY(firstMonthFreeDisplay.payEnd)}`;
-          freePeriodElement.innerHTML = sanitizeHTML(`
-            <div class="payment-free-period-row">
-              <span class="payment-free-period-label">${freeLabel}</span>
-              <span class="payment-free-period-value">${freeText}</span>
-              <span class="payment-free-period-pill">0 kr</span>
-            </div>
-            <div class="payment-free-period-row">
-              <span class="payment-free-period-label">${payCoverLabel}</span>
-              <span class="payment-free-period-value">${coverText}</span>
-            </div>
-          `);
-          freePeriodElement.style.display = 'block';
-        } else {
-          freePeriodElement.textContent = '';
-          freePeriodElement.style.display = 'none';
-        }
-      }
-    }
-    
     // Verify this matches backend payable amount (only if order data is available)
     if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
       const orderPriceDKK = currencyAmountToDKK(state.fullOrder?.price?.amount);
@@ -14859,15 +14958,34 @@ function updatePaymentOverview() {
     }
   }
   
-  // Display boundUntil date separately if available (for memberships with promotional periods)
-  if (DOM.paymentBoundUntil) {
+  // Display boundUntil as a proper left/right row when available.
+  // This keeps it visually aligned with "Månedlig betaling", "Første måned", and "Betal nu".
+  if (paymentOverviewRoot && payNowItem) {
+    let boundUntilRow = paymentOverviewRoot.querySelector('.payment-overview-item.payment-overview-bound-until-row');
+    if (!boundUntilRow) {
+      boundUntilRow = document.createElement('div');
+      boundUntilRow.className = 'payment-overview-item payment-overview-bound-until-row';
+      boundUntilRow.innerHTML = sanitizeHTML(`
+        <span class="payment-label"></span>
+        <span class="payment-amount"></span>
+      `);
+      payNowItem.insertAdjacentElement('afterend', boundUntilRow);
+    }
+
     if (hasOrderData && subscriptionItem?.boundUntil && !is15DayPass) {
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
-      const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(boundUntilDate)}`;
-      DOM.paymentBoundUntil.textContent = boundUntilText;
-      DOM.paymentBoundUntil.style.display = 'block';
+      const labelEl = boundUntilRow.querySelector('.payment-label');
+      const amountEl = boundUntilRow.querySelector('.payment-amount');
+      if (labelEl) {
+        const boundLabel = t('cart.boundUntil');
+        labelEl.textContent = boundLabel ? (boundLabel.charAt(0).toUpperCase() + boundLabel.slice(1)) : 'Bundet indtil';
+      }
+      if (amountEl) {
+        amountEl.textContent = formatDateDMY(boundUntilDate);
+      }
+      boundUntilRow.style.display = '';
     } else {
-      DOM.paymentBoundUntil.style.display = 'none';
+      boundUntilRow.style.display = 'none';
     }
   }
   
