@@ -145,8 +145,10 @@ function computeFirstMonthFreeDisplay(referenceDate = new Date(), monthlyPrice =
   base.setHours(0, 0, 0, 0);
 
   const freeStart = new Date(base);
-  const freeEnd = new Date(base);
-  freeEnd.setMonth(freeEnd.getMonth() + 1);
+  // Use clamped "same day next month" to avoid Date overflow
+  // (e.g. Jan 31 -> Mar 03 when using setMonth directly).
+  const freeEndYMD = getFirstMonthFreeStartDateString(base);
+  const freeEnd = new Date(`${freeEndYMD}T12:00:00`);
   freeEnd.setHours(0, 0, 0, 0);
 
   const payStart = new Date(freeEnd);
