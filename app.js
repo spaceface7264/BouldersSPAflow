@@ -4344,6 +4344,7 @@ function getLandingConfigFromPathname(pathnameRaw) {
 
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
+let paymentOverviewSyncPromise = null;
 let tokenValidationCooldownUntil = 0;
 let loginCooldownUntil = 0;
 let campaignCountdownIntervalId = null;
@@ -13986,6 +13987,28 @@ function updatePaymentOverview() {
   // If not available, we'll use product data instead
   const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
   const hasOrderData = !!subscriptionItem;
+
+  // Pull authoritative pricing/billing data from API order whenever possible.
+  // Without this, UI can temporarily show client-side fallback values.
+  if (!hasOrderData && state.customerId && state.selectedBusinessUnit && !state.checkoutInProgress) {
+    if (!paymentOverviewSyncPromise) {
+      paymentOverviewSyncPromise = (async () => {
+        try {
+          await ensureOrderCreated('payment-overview-sync');
+          await ensureSubscriptionAttached('payment-overview-sync');
+          if (state.orderId) {
+            state.fullOrder = await orderAPI.getOrder(state.orderId);
+          }
+        } catch (error) {
+          console.warn('[Payment Overview] Could not sync order data from API:', error);
+        } finally {
+          paymentOverviewSyncPromise = null;
+          // Re-render once sync completes (success or failure)
+          setTimeout(() => updatePaymentOverview(), 0);
+        }
+      })();
+    }
+  }
   
   // Check if this is a 15-day pass with shoes (one-time payment product)
   // Check both order data and product data
@@ -14112,8 +14135,18 @@ function updatePaymentOverview() {
       const isCampaignProduct = isFirstMonthFreeLanding || (state.campaignSubscriptions && state.campaignSubscriptions.some(
         p => String(p.id) === String(productId)
       ));
-      // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
+      // First month free landing/campaign: trust backend order totals when order exists.
       const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
+      if (isFirstMonthFreeLanding) {
+        payNowAmount = orderPriceDKK;
+        if (initialPaymentPeriod?.start) {
+          billingPeriod = {
+            start: new Date(initialPaymentPeriod.start),
+            end: new Date(initialPaymentPeriod.end),
+          };
+        }
+        console.log('[Payment Overview] ✅ First month free landing: using backend order price:', payNowAmount, 'DKK');
+      } else
 
       if (isFirstMonthFreeCampaign) {
         if (dayOfMonth < 16) {
@@ -14269,23 +14302,34 @@ function updatePaymentOverview() {
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
           const dayOfMonth = today.getDate();
-          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
+          const isFirstMonthFreeLandingNoOrder = state.landing?.routeKey === 'firstmonthfree';
+          const isCampaignProductNoOrder = isFirstMonthFreeLandingNoOrder || (state.campaignSubscriptions && state.campaignSubscriptions.some(
             p => String(p.id) === String(membership.id)
-          );
+          ));
           const productNameForCampaign = (membership.name || '').toLowerCase();
           const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
             /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
           );
 
-          if (isFirstMonthFreeCampaignNoOrder && dayOfMonth < 16) {
-            payNowAmount = 0;
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
+          if (isFirstMonthFreeCampaignNoOrder) {
+            // Estimate "pay now" to mirror whitelabel behavior:
+            // first month is free, then charge prorated amount for the remainder of the next month.
+            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+            const monthlyPrice = priceInCents / 100;
+            const freePeriodEnd = new Date(today);
+            freePeriodEnd.setMonth(freePeriodEnd.getMonth() + 1);
+            const chargeStart = new Date(freePeriodEnd);
+            chargeStart.setDate(chargeStart.getDate() + 1);
+            chargeStart.setHours(0, 0, 0, 0);
+            const chargeEnd = new Date(chargeStart.getFullYear(), chargeStart.getMonth() + 1, 0);
+            const daysInChargeMonth = chargeEnd.getDate();
+            const chargeDays = Math.max(0, chargeEnd.getDate() - chargeStart.getDate() + 1);
+            payNowAmount = (monthlyPrice / daysInChargeMonth) * chargeDays;
             billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
+              start: chargeStart,
+              end: chargeEnd,
             };
-            console.log('[Payment Overview] ✅ First month free campaign (no order, date < 16): 0 kr');
+            console.log('[Payment Overview] ✅ First month free campaign (no order): estimated prorated post-free amount:', payNowAmount, 'DKK');
           } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
@@ -14480,9 +14524,10 @@ function updatePaymentOverview() {
     billingPeriodText = state.billingPeriod;
   }
   
-  // If still no billing period, show default message
+  // If billing period is unavailable, keep it empty instead of showing a generic
+  // placeholder sentence. This avoids misleading users while API data is syncing.
   if (!billingPeriodText) {
-    billingPeriodText = t('cart.billingPeriodConfirmed');
+    billingPeriodText = '';
   }
   
   // If discount is applied but order price isn't available yet, reflect discount in pay-now
