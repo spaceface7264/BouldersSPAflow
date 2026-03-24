@@ -14615,6 +14615,17 @@ function updatePaymentOverview() {
     }
   }
 
+  // Final guardrail: for /firstmonthfree route, force pay-now to prorated post-free amount.
+  // This runs after all branches above to prevent accidental fallback to full monthly price.
+  if (isFirstMonthFreeLandingRoute) {
+    const estimate = computeFirstMonthFreeProrated(monthlyPaymentAmount, new Date());
+    if (estimate) {
+      payNowAmount = estimate.amount;
+      billingPeriod = { start: estimate.start, end: estimate.end };
+      console.log('[Payment Overview] ✅ First month free guardrail applied:', payNowAmount, 'DKK');
+    }
+  }
+
   // Round payNowAmount to half krone and store in state for use in cart total calculation
   state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
   
