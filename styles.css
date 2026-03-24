@@ -6605,6 +6605,46 @@ body {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.payment-free-period-note {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    display: grid;
+    gap: 4px;
+}
+
+.payment-free-period-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    line-height: 1.3;
+}
+
+.payment-free-period-label {
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.payment-free-period-value {
+    color: var(--color-text-white);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.payment-free-period-pill {
+    font-size: 11px;
+    font-weight: 700;
+    color: #10B981;
+    border: 1px solid rgba(16, 185, 129, 0.45);
+    border-radius: 999px;
+    padding: 1px 7px;
+    margin-left: 2px;
+}
+
 /* Discount Code */
 .discount-section {
     margin-top: 20px;
