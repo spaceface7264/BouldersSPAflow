@@ -14040,7 +14040,15 @@ function updatePaymentOverview() {
     productName.toLowerCase().includes('15 dage') ||
     productName.toLowerCase().includes('15 days')
   ));
-  const isFreeTrialLanding = state.landing?.routeKey === 'freetrial';
+  const routePath = (() => {
+    try {
+      return (window.location.pathname || '').replace(/\/+$/, '').toLowerCase();
+    } catch {
+      return '';
+    }
+  })();
+  const isFreeTrialLanding = state.landing?.routeKey === 'freetrial' || routePath === '/freetrial';
+  const isFirstMonthFreeLandingRoute = state.landing?.routeKey === 'firstmonthfree' || routePath === '/firstmonthfree';
   const is15DayPass =
     state.selectedProductType === '15daypass' ||
     has15DayPassLabel ||
@@ -14131,21 +14139,42 @@ function updatePaymentOverview() {
       const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
       const dayOfMonth = today.getDate();
-      const isFirstMonthFreeLanding = state.landing?.routeKey === 'firstmonthfree';
+      const isFirstMonthFreeLanding = isFirstMonthFreeLandingRoute;
       const isCampaignProduct = isFirstMonthFreeLanding || (state.campaignSubscriptions && state.campaignSubscriptions.some(
         p => String(p.id) === String(productId)
       ));
       // First month free landing/campaign: trust backend order totals when order exists.
       const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
       if (isFirstMonthFreeLanding) {
-        payNowAmount = orderPriceDKK;
-        if (initialPaymentPeriod?.start) {
-          billingPeriod = {
-            start: new Date(initialPaymentPeriod.start),
-            end: new Date(initialPaymentPeriod.end),
-          };
+        // Route-specific behavior for /firstmonthfree:
+        // derive "pay now" from API recurring monthly price and free-period end date.
+        const recurringAmountRaw = subscriptionItem?.payRecurring?.price?.amount;
+        const recurringMonthlyPrice = recurringAmountRaw !== undefined
+          ? (typeof recurringAmountRaw === 'object' ? recurringAmountRaw.amount / 100 : recurringAmountRaw / 100)
+          : 0;
+        const initialEndRaw = subscriptionItem?.initialPaymentPeriod?.end;
+        const initialEnd = initialEndRaw ? new Date(initialEndRaw) : null;
+
+        if (recurringMonthlyPrice > 0 && initialEnd && !Number.isNaN(initialEnd.getTime())) {
+          const chargeStart = new Date(initialEnd);
+          chargeStart.setDate(chargeStart.getDate() + 1);
+          chargeStart.setHours(0, 0, 0, 0);
+          const chargeEnd = new Date(chargeStart.getFullYear(), chargeStart.getMonth() + 1, 0);
+          const daysInChargeMonth = chargeEnd.getDate();
+          const chargeDays = Math.max(0, chargeEnd.getDate() - chargeStart.getDate() + 1);
+          payNowAmount = (recurringMonthlyPrice / daysInChargeMonth) * chargeDays;
+          billingPeriod = { start: chargeStart, end: chargeEnd };
+          console.log('[Payment Overview] ✅ First month free landing: prorated post-free pay-now from API period:', payNowAmount, 'DKK');
+        } else {
+          payNowAmount = orderPriceDKK;
+          if (initialPaymentPeriod?.start) {
+            billingPeriod = {
+              start: new Date(initialPaymentPeriod.start),
+              end: new Date(initialPaymentPeriod.end),
+            };
+          }
+          console.log('[Payment Overview] ⚠️ First month free landing: fallback to backend order price:', payNowAmount, 'DKK');
         }
-        console.log('[Payment Overview] ✅ First month free landing: using backend order price:', payNowAmount, 'DKK');
       } else
 
       if (isFirstMonthFreeCampaign) {
@@ -14302,16 +14331,30 @@ function updatePaymentOverview() {
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
           const dayOfMonth = today.getDate();
-          const isFirstMonthFreeLandingNoOrder = state.landing?.routeKey === 'firstmonthfree';
+          const isFirstMonthFreeLandingNoOrder = isFirstMonthFreeLandingRoute;
           const isCampaignProductNoOrder = isFirstMonthFreeLandingNoOrder || (state.campaignSubscriptions && state.campaignSubscriptions.some(
             p => String(p.id) === String(membership.id)
           ));
           const productNameForCampaign = (membership.name || '').toLowerCase();
-          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
+          const isFirstMonthFreeCampaignNoOrder = isFirstMonthFreeLandingNoOrder || (isCampaignProductNoOrder && (
             /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
-          );
+          ));
 
-          if (isFirstMonthFreeCampaignNoOrder) {
+          if (isFirstMonthFreeLandingRoute) {
+            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+            const recurringMonthlyPrice = priceInCents / 100;
+            const freePeriodEnd = new Date(today);
+            freePeriodEnd.setMonth(freePeriodEnd.getMonth() + 1);
+            const chargeStart = new Date(freePeriodEnd);
+            chargeStart.setDate(chargeStart.getDate() + 1);
+            chargeStart.setHours(0, 0, 0, 0);
+            const chargeEnd = new Date(chargeStart.getFullYear(), chargeStart.getMonth() + 1, 0);
+            const daysInChargeMonth = chargeEnd.getDate();
+            const chargeDays = Math.max(0, chargeEnd.getDate() - chargeStart.getDate() + 1);
+            payNowAmount = (recurringMonthlyPrice / daysInChargeMonth) * chargeDays;
+            billingPeriod = { start: chargeStart, end: chargeEnd };
+            console.log('[Payment Overview] ✅ First month free landing (no order): forced route prorated pay-now:', payNowAmount, 'DKK');
+          } else if (isFirstMonthFreeCampaignNoOrder) {
             // Estimate "pay now" to mirror whitelabel behavior:
             // first month is free, then charge prorated amount for the remainder of the next month.
             const priceInCents = membership.priceWithInterval?.price?.amount || 0;
