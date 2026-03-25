@@ -1481,12 +1481,27 @@ class OrderAPI {
       
       const subscriberId = state.customerId ? Number(state.customerId) : null;
       const birthDate = getSubscriberBirthDate();
+      const allSubscriptions = [
+        ...(state.campaignSubscriptions || []),
+        ...(state.subscriptions || []),
+        ...(state.dayPassSubscriptions || []),
+      ];
+      const matchedProduct = allSubscriptions.find((p) =>
+        p.id === subscriptionProductId ||
+        String(p.id) === String(subscriptionProductId)
+      );
+      const isCampaignProduct = Array.isArray(state.campaignSubscriptions) &&
+        state.campaignSubscriptions.some((p) => String(p.id) === String(subscriptionProductId));
+      const isFirstMonthFreeCampaignProduct = isCampaignProduct &&
+        /0\s*kr|første\s*måned|first\s*month\s*free/.test(String(matchedProduct?.name || '').toLowerCase());
       
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
-      const startDate = (startDateOverride && /^\d{4}-\d{2}-\d{2}$/.test(startDateOverride))
+      const hasExplicitStartDate = !!(startDateOverride && /^\d{4}-\d{2}-\d{2}$/.test(startDateOverride));
+      const startDate = hasExplicitStartDate
         ? startDateOverride
         : getTodayLocalDateString();
+      const includeStartDate = hasExplicitStartDate || !isFirstMonthFreeCampaignProduct;
       
       // Pricing calculation: When startDate is on day 16 or later, price includes:
       // - Rest of current month (prorated) + Full next month
@@ -1500,7 +1515,7 @@ class OrderAPI {
       // Note: businessUnit is not in spec - may be inferred from order context
       const payload = {
         subscriptionProduct: subscriptionProductId,
-        startDate: startDate, // Set membership to start today (ISO format: YYYY-MM-DD)
+        ...(includeStartDate ? { startDate } : {}),
         ...(subscriberId ? { subscriber: subscriberId } : {}),
         ...(birthDate ? { birthDate } : {}),
         // businessUnit is not in OpenAPI spec - backend may infer from order
@@ -1528,6 +1543,8 @@ class OrderAPI {
         subscriptionProductId,
         productId,
         startDate,
+        includeStartDate,
+        isFirstMonthFreeCampaignProduct,
         hasSubscriber: !!subscriberId,
         subscriberId,
         hasBirthDate: !!birthDate,
@@ -1572,6 +1589,10 @@ class OrderAPI {
         throw new Error(`Add subscription item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
       console.log('[Step 7] Add subscription item response:', data);
+      if (isFirstMonthFreeCampaignProduct) {
+        console.log('[Step 7] ✅ First-month-free campaign product: skipping custom pricing fix flow and trusting backend response');
+        return data;
+      }
       
       // CRITICAL: Check if backend accepted startDate
       const subscriptionItem = data?.subscriptionItems?.[0];
@@ -5213,7 +5234,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
@@ -5424,7 +5445,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
@@ -5619,7 +5640,7 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
-    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
@@ -13497,6 +13518,12 @@ function updatePaymentOverview() {
   if (!DOM.paymentBoundUntil) {
     DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
   }
+  if (!DOM.firstMonthAmount) {
+    DOM.firstMonthAmount = document.querySelector('[data-summary-field="first-month"]');
+  }
+  if (!DOM.firstMonthRow) {
+    DOM.firstMonthRow = document.querySelector('.payment-overview-first-month');
+  }
   
   if (!DOM.paymentOverview || !DOM.payNow || !DOM.monthlyPayment) {
     return;
@@ -13558,6 +13585,31 @@ function updatePaymentOverview() {
       productName.toLowerCase().includes('15 day pass') ||
       productName.toLowerCase().includes('15 dages')
     ));
+
+  const addMonthsClamped = (date, monthsToAdd) => {
+    const d = new Date(date);
+    const originalDay = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + monthsToAdd);
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(originalDay, lastDay));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const endOfMonth = (date) => {
+    const d = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const getProratedAmount = (monthlyAmount, periodStart, periodEnd) => {
+    if (!Number.isFinite(monthlyAmount) || monthlyAmount <= 0) return 0;
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysInMonth = new Date(periodEnd.getFullYear(), periodEnd.getMonth() + 1, 0).getDate();
+    const billedDays = Math.max(1, Math.floor((periodEnd.getTime() - periodStart.getTime()) / msPerDay) + 1);
+    return (monthlyAmount / daysInMonth) * billedDays;
+  };
   
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
@@ -13570,6 +13622,7 @@ function updatePaymentOverview() {
   // If order data is not available, calculate from product data
   let payNowAmount = 0;
   let billingPeriod = null;
+  let isCampaignPayNowPending = false;
   
   if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
     // CRITICAL: Use API price from order - this is the authoritative source
@@ -13646,45 +13699,28 @@ function updatePaymentOverview() {
       const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
         p => String(p.id) === String(productId)
       );
-      // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
-      const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
+      const productNameLower = String(subscriptionItem?.product?.name || '').toLowerCase();
+      const isFirstMonthFreeCampaignByName = /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameLower);
+      const isFirstMonthFreeCampaign = isCampaignProduct && (orderPriceDKK === 0 || isFirstMonthFreeCampaignByName);
 
       if (isFirstMonthFreeCampaign) {
-        if (dayOfMonth < 16) {
-          payNowAmount = 0;
-          if (initialPaymentPeriod?.start) {
-            billingPeriod = {
-              start: new Date(initialPaymentPeriod.start),
-              end: new Date(initialPaymentPeriod.end)
-            };
-          } else {
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
-            };
-          }
-          console.log('[Payment Overview] ✅ First month free campaign (date < 16): 0 kr from API');
+        // For first-month-free campaigns, trust backend order total/period as authoritative.
+        // Backend campaign rules can differ from the generic partial-month verification helper.
+        payNowAmount = orderPriceDKK;
+        if (initialPaymentPeriod?.start) {
+          billingPeriod = {
+            start: new Date(initialPaymentPeriod.start),
+            end: new Date(initialPaymentPeriod.end)
+          };
         } else {
-          payNowAmount = expectedPrice ? expectedPrice.amountInDKK : orderPriceDKK;
           const currentMonth = today.getMonth();
           const currentYear = today.getFullYear();
-          if (expectedPrice?.includesNextMonth) {
-            const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-            const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-            billingPeriod = {
-              start: today,
-              end: new Date(nextYear, nextMonth + 1, 0)
-            };
-          } else {
-            billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
-            };
-          }
-          console.log('[Payment Overview] ✅ First month free campaign (date >= 16): rest-of-month price:', payNowAmount, 'DKK');
+          billingPeriod = {
+            start: today,
+            end: new Date(currentYear, currentMonth + 1, 0)
+          };
         }
+        console.log('[Payment Overview] ✅ First-month-free campaign: using backend order total/period:', payNowAmount, 'DKK');
       } else if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
         const backendEndDate = new Date(initialPaymentPeriod.end);
@@ -13811,15 +13847,13 @@ function updatePaymentOverview() {
             /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
           );
 
-          if (isFirstMonthFreeCampaignNoOrder && dayOfMonth < 16) {
+          if (isFirstMonthFreeCampaignNoOrder) {
+            // Before login/order creation, campaign pay-now cannot be trusted from fallback math.
+            // Show pending state until backend order amount is available.
             payNowAmount = 0;
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            billingPeriod = {
-              start: today,
-              end: new Date(currentYear, currentMonth + 1, 0)
-            };
-            console.log('[Payment Overview] ✅ First month free campaign (no order, date < 16): 0 kr');
+            billingPeriod = null;
+            isCampaignPayNowPending = true;
+            console.log('[Payment Overview] ⏳ First month free campaign (no order): pay-now pending backend order');
           } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
@@ -13974,6 +14008,39 @@ function updatePaymentOverview() {
   } else {
     console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass - one-time payment)');
   }
+
+  const cartMembershipName = String(state.cartItems?.find((item) => item.type === 'membership')?.name || '').toLowerCase();
+  const firstMonthFreeByName = /0\s*kr|første\s*måned|first\s*month\s*free/.test(productName.toLowerCase()) ||
+    /0\s*kr|første\s*måned|first\s*month\s*free/.test(cartMembershipName);
+  const isCampaignProductDisplay =
+    Array.isArray(state.campaignSubscriptions) &&
+    state.campaignSubscriptions.some((p) => String(p.id) === String(currentProduct?.id || productFromOrder?.id || state.selectedProductId));
+  const useSplitCampaignDisplay = !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
+
+  if (useSplitCampaignDisplay) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const firstMonthEnd = addMonthsClamped(today, 1);
+    const chargeStart = new Date(firstMonthEnd);
+    chargeStart.setHours(0, 0, 0, 0);
+    const chargeEnd = endOfMonth(chargeStart);
+    const campaignPayNow = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
+
+    payNowAmount = campaignPayNow;
+    billingPeriod = { start: chargeStart, end: chargeEnd };
+    isCampaignPayNowPending = false;
+
+    if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = '';
+    if (DOM.firstMonthAmount) {
+      DOM.firstMonthAmount.textContent = formatCurrencyHalfKrone(0);
+    }
+    const firstMonthPeriodEl = DOM.firstMonthRow?.querySelector('.payment-label-period-first-month');
+    if (firstMonthPeriodEl) {
+      firstMonthPeriodEl.textContent = `(${formatDateDMY(today)} - ${formatDateDMY(firstMonthEnd)})`;
+    }
+  } else if (DOM.firstMonthRow) {
+    DOM.firstMonthRow.style.display = 'none';
+  }
   
   // ============================================================================
   // UPDATE DOM ELEMENTS
@@ -14031,11 +14098,11 @@ function updatePaymentOverview() {
   
   if (DOM.payNow) {
     const amountText = formatCurrencyHalfKrone(state.totals.payNowAmount);
-    DOM.payNow.textContent = amountText;
+    DOM.payNow.textContent = isCampaignPayNowPending ? '—' : amountText;
     
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
-    if (payNowRow && billingPeriodText) {
+    if (!isCampaignPayNowPending && payNowRow && billingPeriodText) {
       let periodElement = payNowRow.querySelector('.payment-label-period');
       if (!periodElement) {
         // Create period element if it doesn't exist
@@ -15800,9 +15867,14 @@ async function handleCheckout() {
                   productName.toLowerCase().includes('15 dages')
                 )) ||
                 (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
+              const isFirstMonthFreeCampaignCheckout =
+                hasCampaignInCart() &&
+                /0\s*kr|første\s*måned|first\s*month\s*free/.test(String(productName || '').toLowerCase());
 
               if (is15DayPass) {
                 console.log('[checkout] ✅ Skipping partial-month price verification for 15 day pass');
+              } else if (isFirstMonthFreeCampaignCheckout) {
+                console.log('[checkout] ✅ First-month-free campaign: skipping custom price verification/fix and trusting backend order');
               } else {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
