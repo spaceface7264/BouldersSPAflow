@@ -6514,6 +6514,16 @@ body {
     gap: 8px;
 }
 
+/* Keep "First month" amount aligned with other right-column amounts */
+.payment-overview-first-month {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.payment-overview-first-month .payment-overview-paynow-row {
+    width: 100%;
+}
+
 .payment-overview-paynow-row {
     display: flex;
     justify-content: space-between;
