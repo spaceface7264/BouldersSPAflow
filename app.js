@@ -4036,6 +4036,7 @@ let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
 let loginCooldownUntil = 0;
 let campaignCountdownIntervalId = null;
+let campaignGuardCustomerRefreshPromise = null;
 
 // Campaign countdown end date: set here when API doesn't send Omsætningsperiode. Use ISO string or null for "end of current month".
 const CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK = '2026-02-16'; // e.g. '2026-02-15T23:59:59.999' or '2026-02-15'
@@ -10551,7 +10552,7 @@ function updateActivationDateSection(category) {
   }
 }
 
-function handlePlanSelection(selectedCard) {
+async function handlePlanSelection(selectedCard) {
   // Remove selected class from all plan cards in the same category
   const category = selectedCard.closest('.category-item').dataset.category;
   const allCardsInCategory = selectedCard.closest('.category-item').querySelectorAll('.plan-card');
@@ -10574,6 +10575,19 @@ function handlePlanSelection(selectedCard) {
   // Value cards can appear in Campaign category too, so we check the planId format, not just category
   const isValueCard = typeof planId === 'string' && planId.startsWith('punch-');
   const isMembership = !isValueCard && (category === 'campaign' || category === 'membership' || category === '15daypass');
+  if (category === 'campaign' && isMembership) {
+    await refreshAuthenticatedCustomerForCampaignGuard();
+  }
+  if (category === 'campaign' && isMembership && customerHasMembershipCampaignBlockRequirement()) {
+    showCampaignRejectionModal();
+    selectedCard.classList.remove('selected');
+    state.membershipPlanId = null;
+    state.selectedProductId = null;
+    state.selectedProductType = null;
+    updateCartSummary();
+    updateCheckoutButton();
+    return;
+  }
   
   const previousProductId = state.selectedProductId;
   const previousPlanId = state.membershipPlanId;
@@ -10797,7 +10811,7 @@ function setupNewAccessStep() {
       originalCard.parentNode.replaceChild(clonedCard, originalCard);
     }
     const card = clonedCard;
-    card.addEventListener('click', (e) => {
+    card.addEventListener('click', async (e) => {
       // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
       // This prevents clicks on +/- and Continue from toggling/deselecting the card.
       if (e.target.closest('.quantity-panel')) {
@@ -10864,6 +10878,20 @@ function setupNewAccessStep() {
       // Value cards can appear in Campaign category too, so we check the planId format, not just category
       const isValueCardProduct = typeof planId === 'string' && planId.startsWith('punch-');
       const isMembership = !isValueCardProduct && (category === 'campaign' || category === 'membership' || category === '15daypass');
+      if (category === 'campaign' && isMembership) {
+        await refreshAuthenticatedCustomerForCampaignGuard();
+      }
+      if (category === 'campaign' && isMembership && customerHasMembershipCampaignBlockRequirement()) {
+        showCampaignRejectionModal();
+        card.classList.remove('selected');
+        selectedPlan = null;
+        state.membershipPlanId = null;
+        state.selectedProductId = null;
+        state.selectedProductType = null;
+        updateCartSummary();
+        updateCheckoutButton();
+        return;
+      }
       
       // Determine product type based on planId format, not just category
       if (isMembership) {
@@ -12775,6 +12803,60 @@ function hasCampaignInCart() {
   if (state.selectedProductId && isCampaignProduct(state.selectedProductId)) return true;
 
   return false;
+}
+
+function customerHasMembershipCampaignBlockRequirement() {
+  if (!isUserAuthenticated()) return false;
+
+  const subscriptions = state.authenticatedCustomer?.subscriptions;
+  if (!Array.isArray(subscriptions) || subscriptions.length === 0) return false;
+
+  return subscriptions.some((sub) => {
+    const statusCodes = Array.isArray(sub?.statuses)
+      ? sub.statuses.map((s) => String(s?.code || '').toUpperCase())
+      : [];
+    if (statusCodes.includes('TERMINATED')) return false;
+
+    const productLabels =
+      sub?.subscriptionProduct?.productLabels ||
+      sub?.product?.productLabels ||
+      sub?.productLabels ||
+      [];
+
+    return Array.isArray(productLabels) && productLabels.some((label) => {
+      const name = String(label?.name || '').toLowerCase();
+      return name.includes('medlem') || name.includes('member');
+    });
+  });
+}
+
+async function refreshAuthenticatedCustomerForCampaignGuard() {
+  if (!isUserAuthenticated()) return;
+
+  if (campaignGuardCustomerRefreshPromise) {
+    await campaignGuardCustomerRefreshPromise;
+    return;
+  }
+
+  campaignGuardCustomerRefreshPromise = (async () => {
+    const metadata = getTokenMetadata();
+    const resolvedCustomerId = state.customerId || metadata?.username || metadata?.userName;
+    if (!resolvedCustomerId) return;
+
+    try {
+      const customerData = await authAPI.getCustomer(String(resolvedCustomerId));
+      state.customerId = String(resolvedCustomerId);
+      state.authenticatedCustomer = customerData;
+    } catch (error) {
+      console.warn('[Campaign Guard] Could not refresh customer profile before eligibility check:', error);
+    }
+  })();
+
+  try {
+    await campaignGuardCustomerRefreshPromise;
+  } finally {
+    campaignGuardCustomerRefreshPromise = null;
+  }
 }
 
 // Show campaign warning banner
@@ -14778,6 +14860,16 @@ async function handleCheckout() {
         DOM.checkoutBtn.classList.remove('error-flash');
       }, 600);
     }
+    return;
+  }
+
+  // Guardrail: block campaign membership checkout for users who meet
+  // "Bloker oprettelse for brugere der har ABO med produktmærke Medlem".
+  if (hasCampaignInCart()) {
+    await refreshAuthenticatedCustomerForCampaignGuard();
+  }
+  if (hasCampaignInCart() && customerHasMembershipCampaignBlockRequirement()) {
+    showCampaignRejectionModal();
     return;
   }
   
