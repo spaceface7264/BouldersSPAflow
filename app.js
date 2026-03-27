@@ -4149,17 +4149,11 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('auth-state-changed'));
   }
-  autoEnsureOrderIfReady('auth-state-sync')
-    .then(() => {
-      // Order should now be created and subscription attached
-      // Update payment overview if we're on step 4
-      if (state.currentStep === 4) {
-        updatePaymentOverview();
-      }
-    })
-    .catch(error => {
-      console.warn('[Auth] Could not ensure order after auth sync:', error);
-    });
+  // Do not auto-create orders/items on auth sync.
+  // Order creation must only happen after explicit checkout action.
+  if (state.currentStep === 4) {
+    updatePaymentOverview();
+  }
 }
 
 const DOM = {};
@@ -7417,16 +7411,9 @@ async function handleLoginSubmit(event) {
       }
     }
     
-    try {
-      await ensureOrderCreated('login');
-      await ensureSubscriptionAttached('login');
-      // Payment overview should be updated by ensureSubscriptionAttached
-      // But let's make sure it's updated if we're on step 4
-      if (state.currentStep === 4) {
-        updatePaymentOverview();
-      }
-    } catch (orderError) {
-      console.warn('[login] Auto order creation after login failed:', orderError);
+    // Do not auto-create order on login; wait for explicit checkout.
+    if (state.currentStep === 4) {
+      updatePaymentOverview();
     }
     DOM.loginForm?.reset();
     // Clear cooldown on successful login
@@ -9357,15 +9344,9 @@ async function handleSaveAccount() {
         showSaveAccountMessage('Account saved successfully! You are now logged in. You can proceed to checkout.', 'success');
         showToast('Account saved and logged in successfully!', 'success');
         
-        // Auto-create order and attach subscription if on step 4
+        // Do not auto-create order after profile creation; wait for explicit checkout.
         if (state.currentStep === 4) {
-          try {
-            await ensureOrderCreated('profile-create');
-            await ensureSubscriptionAttached('profile-create');
-            updatePaymentOverview();
-          } catch (orderError) {
-            console.warn('[Save Account] Auto order creation after login failed:', orderError);
-          }
+          updatePaymentOverview();
         }
       } else {
         showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
@@ -11510,7 +11491,7 @@ function selectMembershipPlan(planId) {
     setTimeout(() => nextStep(), 300);
   }
   showToast(`${selectedPlan?.name ?? 'Membership'} selected.`, 'success');
-  autoEnsureOrderIfReady('membership-select');
+  // Do not pre-create order on plan selection; wait for explicit checkout.
 
   // GTM: Track select_item for legacy membership plan cards
   if (selectedPlan) {
@@ -19798,20 +19779,7 @@ function nextStep(fromStep) {
     if (isUserAuthenticated()) {
       switchAuthMode('login');
       
-      // If user is authenticated and has selected membership, ensure order is created
-      // This allows payment overview to show correct prices
-      if (state.membershipPlanId && state.selectedBusinessUnit && state.customerId) {
-        console.log('[Payment Overview] Step 4 shown - ensuring order is created for payment overview');
-        autoEnsureOrderIfReady('step-4-display')
-          .then(() => {
-            // Order should now be created and subscription attached
-            // ensureSubscriptionAttached already fetches order and calls updatePaymentOverview()
-            console.log('[Payment Overview] ✅ Order ensured on step 4');
-          })
-          .catch(error => {
-            console.warn('[Payment Overview] Could not ensure order on step 4:', error);
-          });
-      }
+      // Do not pre-create order on step display; wait for explicit checkout.
     }
     
     // If order exists, fetch full order data for payment overview
