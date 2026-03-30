@@ -702,16 +702,16 @@
       --color-text-secondary: #D1D5DB;
       
       /* Font Sizes */
-      --font-size-xs: 10px;        /* Step labels, small captions */
-      --font-size-sm: 12px;        /* Small descriptions, footnotes, step indicators */
-      --font-size-base: 14px;      /* Buttons, form inputs, body text */
-      --font-size-md: 16px;        /* Card titles, plan types, navigation */
-      --font-size-lg: 18px;        /* Section descriptions, step content */
-      --font-size-xl: 20px;        /* Modal titles, main headings */
-      --font-size-2xl: 24px;       /* Prices, large headings, addon titles */
-      --font-size-3xl: 32px;       /* Main page titles, hero text */
-      --font-size-4xl: 36px;       /* Large prices, display text */
-      --font-size-5xl: 48px;       /* Hero headings, large display text */
+      --font-size-xs: 12px;        /* Captions, helper labels */
+      --font-size-sm: 14px;        /* Secondary text, fine print */
+      --font-size-base: 16px;      /* Body text, form inputs, buttons */
+      --font-size-md: 18px;        /* Card titles, prominent UI labels */
+      --font-size-lg: 20px;        /* Section subtitles */
+      --font-size-xl: 24px;        /* Modal titles, section headings */
+      --font-size-2xl: 28px;       /* Price highlights, larger headings */
+      --font-size-3xl: 36px;       /* Main page titles */
+      --font-size-4xl: 42px;       /* Display headings */
+      --font-size-5xl: 52px;       /* Hero display text */
   }
 
 
@@ -2282,6 +2282,16 @@ body {
 @media (max-width: 767px) {
     :root {
         --plan-section-gap: 24px;
+        --font-size-xs: 11px;
+        --font-size-sm: 13px;
+        --font-size-base: 16px;
+        --font-size-md: 17px;
+        --font-size-lg: 19px;
+        --font-size-xl: 22px;
+        --font-size-2xl: 26px;
+        --font-size-3xl: 32px;
+        --font-size-4xl: 38px;
+        --font-size-5xl: 46px;
     }
 
     .value-card-summary {
@@ -3349,8 +3359,8 @@ body {
     }
 
     .plan-card .select-btn {
-        padding: 7px 12px;
-        font-size: var(--font-size-sm);
+        padding: 7px 14px;
+        font-size: calc(var(--font-size-sm) * 0.5);
     }
 }
 
@@ -3386,8 +3396,8 @@ body {
     }
 
     .plan-card .select-btn {
-        padding: 7px 12px;
-        font-size: var(--font-size-sm);
+        padding: 7px 14px;
+        font-size: calc(var(--font-size-sm) * 0.5);
     }
 
     .plan-info {
@@ -9304,6 +9314,11 @@ main {
     }
 
     .plan-description {
+        font-size: var(--font-size-sm);
+    }
+
+    .plan-card .select-btn {
+        padding: 7px 14px;
         font-size: var(--font-size-sm);
     }
 
