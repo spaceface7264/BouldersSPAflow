@@ -5413,6 +5413,10 @@ const translations = {
     'addons.modal.showDescription': 'Vis fuld beskrivelse',
     'addons.modal.collapseDescription': 'Skjul beskrivelse',
     'addons.modal.empty': 'Ingen boost produkter tilgængelige.',
+    'addons.skipConfirm.title': 'Spring boost over?',
+    'addons.skipConfirm.message': 'Du har ikke valgt ekstraudstyr. Vil du fortsætte uden?',
+    'addons.skipConfirm.goBack': 'Tilbage',
+    'addons.skipConfirm.skipAnyway': 'Fortsæt uden',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
@@ -5609,6 +5613,10 @@ const translations = {
     'addons.modal.showDescription': 'Show full description',
     'addons.modal.collapseDescription': 'Collapse description',
     'addons.modal.empty': 'No boost products available.',
+    'addons.skipConfirm.title': 'Skip boost?',
+    'addons.skipConfirm.message': 'You have not selected any extras. Continue without them?',
+    'addons.skipConfirm.goBack': 'Back',
+    'addons.skipConfirm.skipAnyway': 'Continue without',
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
@@ -5749,6 +5757,10 @@ const translations = {
     'addons.modal.showDescription': 'Vollständige Beschreibung anzeigen',
     'addons.modal.collapseDescription': 'Beschreibung einklappen',
     'addons.modal.empty': 'Keine Boost-Produkte verfügbar.',
+    'addons.skipConfirm.title': 'Boost überspringen?',
+    'addons.skipConfirm.message': 'Sie haben kein Zusatzprodukt ausgewählt. Ohne fortfahren?',
+    'addons.skipConfirm.goBack': 'Zurück',
+    'addons.skipConfirm.skipAnyway': 'Ohne fortfahren',
     'terms.tab.membership': 'Mitgliedschaft / 15 Tage', 'terms.tab.punchcard': 'Stempelkarte',
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
@@ -11641,7 +11653,12 @@ function showSkipConfirmation() {
   confirmationOverlay.style.cssText = `
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background:
+      radial-gradient(120% 90% at 15% 100%, rgba(240, 0, 240, 0.2), transparent 58%),
+      radial-gradient(90% 80% at 85% -5%, rgba(59, 130, 246, 0.16), transparent 60%),
+      rgba(8, 10, 18, 0.5);
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -11651,22 +11668,29 @@ function showSkipConfirmation() {
   const confirmationDialog = document.createElement('div');
   confirmationDialog.className = 'confirmation-dialog';
   confirmationDialog.style.cssText = `
-    background: var(--color-surface-dark);
-    border: 2px solid var(--color-item-border);
+    background:
+      linear-gradient(155deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 40%, rgba(255, 255, 255, 0.02) 100%),
+      rgba(17, 20, 32, 0.66);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 16px;
     padding: 24px;
     max-width: 400px;
     text-align: center;
     color: var(--color-text-secondary);
+    box-shadow:
+      0 30px 70px rgba(0, 0, 0, 0.45),
+      0 0 0 1px rgba(255, 255, 255, 0.18) inset;
   `;
   
   // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
   const title = document.createElement('h3');
-  title.textContent = 'Are you sure?';
+  title.textContent = t('addons.skipConfirm.title');
   title.style.cssText = 'margin: 0 0 16px 0; color: var(--color-text-secondary); font-size: 18px;';
   
   const message = document.createElement('p');
-  message.textContent = "You're missing out on essential gear that could enhance your climbing experience. These add-ons are specially selected and offer great value!";
+  message.textContent = t('addons.skipConfirm.message');
   message.style.cssText = 'margin: 0 0 24px 0; color: var(--color-text-muted); line-height: 1.5;';
   
   const buttonContainer = document.createElement('div');
@@ -11674,12 +11698,12 @@ function showSkipConfirmation() {
   
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'confirmation-btn confirmation-cancel';
-  cancelBtn.textContent = 'Go Back';
+  cancelBtn.textContent = t('addons.skipConfirm.goBack');
   cancelBtn.style.cssText = `
     padding: 10px 20px;
-    border: 1px solid var(--color-item-border);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 8px;
-    background: transparent;
+    background: rgba(255, 255, 255, 0.05);
     color: var(--color-text-secondary);
     cursor: pointer;
     font-weight: 600;
@@ -11687,7 +11711,7 @@ function showSkipConfirmation() {
   
   const skipBtn = document.createElement('button');
   skipBtn.className = 'confirmation-btn confirmation-skip';
-  skipBtn.textContent = 'Skip Anyway';
+  skipBtn.textContent = t('addons.skipConfirm.skipAnyway');
   skipBtn.style.cssText = `
     padding: 10px 20px;
     border: none;
