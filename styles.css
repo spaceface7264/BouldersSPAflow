@@ -478,22 +478,75 @@
       gap: 12px;
     }
 
+    /* Mobile card layout:
+       row 1: image + title
+       row 2: description spans full width (starts under image)
+       row 3: price/actions */
+    .addon-card .addon-card-main {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr);
+      grid-template-rows: auto auto auto;
+      column-gap: 10px;
+      row-gap: 8px;
+      align-items: start;
+      padding: 14px;
+    }
+    .addon-card .addon-card-content {
+      display: contents;
+      min-width: 0;
+    }
+    .addon-card .addon-card-content .plan-type {
+      grid-column: 2;
+      grid-row: 1;
+      margin: 0;
+    }
+    .addon-card-description-wrap {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      margin-top: 2px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--color-item-border);
+    }
+    .addon-card .addon-card-actions {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      width: 100%;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding-left: 0; /* allow price/actions to use space under thumbnail */
+    }
+    .addon-card .addon-card-price {
+      align-items: flex-start;
+      text-align: left;
+    }
+    .addon-card .addon-card-actions-row {
+      margin-left: auto;
+    }
+    .addon-card .addon-card-content .plan-description {
+      -webkit-line-clamp: 1;
+      line-clamp: 1;
+    }
+
     /* List layout mobile: smaller thumb, 44px expand touch target */
     .addon-card .addon-card-thumb {
+      grid-column: 1;
+      grid-row: 1;
       width: 40px;
       height: 40px;
     }
     .addon-card-description-toggle {
-      min-width: 40px;
-      min-height: 40px;
-      width: 40px;
-      height: 40px;
+      min-width: 36px;
+      min-height: 36px;
+      width: 36px;
+      height: 36px;
     }
     .addon-card .addon-card-actions .addon-add-to-cart-btn {
-      height: 40px;
-      min-height: 40px;
-      padding: 0 10px;
-      font-size: 0.875rem;
+      height: 36px;
+      min-height: 36px;
+      padding: 0 9px;
+      font-size: 0.8125rem;
     }
 
     .addons-actions {
@@ -523,6 +576,9 @@
     .addons-grid {
       padding: 10px 12px;
       gap: 10px;
+    }
+    .addon-card .addon-card-actions {
+      padding-left: 0;
     }
   }
 

@@ -5012,10 +5012,8 @@ async function showBoostModal() {
     }
   }
   
-  // Load boost products if not already loaded
-  if (!state.boostProducts || state.boostProducts.length === 0) {
-    await loadBoostProducts();
-  }
+  // Always reload boost products for the currently selected plan to avoid stale cross-plan cache.
+  await loadBoostProducts(resolveSelectedAccessProduct());
   
   // Show modal first so sheet container is in layout (CSS: flex centering, no inline position)
   addonsModal.style.display = 'flex';
@@ -5059,30 +5057,45 @@ async function showBoostModal() {
 // Usage: window.setAddonsUpsellImage('https://.../image.jpg')
 // Image API removed
 
-// Check if a product has the "Boost" label
-function hasBoostLabel(product) {
-  if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+function hasProductLabel(product, expectedLabelName) {
+  if (!product || !Array.isArray(product.productLabels)) {
     return false;
   }
-  return product.productLabels.some(
-    label => label.name && label.name.toLowerCase() === 'boost'
-  );
+  const targetLabel = String(expectedLabelName || '').toLowerCase();
+  if (!targetLabel) return false;
+  return product.productLabels.some((label) => {
+    const labelName = String(label?.name || '').toLowerCase();
+    return labelName === targetLabel;
+  });
 }
 
-// Load and filter products with "boostProduct" label
-async function loadBoostProducts() {
+function resolveSelectedAccessProduct() {
+  if (!state.selectedProductId) return null;
+  const selectedId = String(state.selectedProductId);
+  const productPools = [
+    ...(state.allRawProducts || []),
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || [])
+  ];
+  return productPools.find((product) => String(product?.id) === selectedId) || null;
+}
+
+// Check if a product should trigger boost modal ("boost" or "boostCampaign")
+function hasBoostLabel(product) {
+  return hasProductLabel(product, 'boost') || hasProductLabel(product, 'boostcampaign');
+}
+
+// Load and filter products with boost labels for the selected plan
+async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
   const seenIds = new Set();
   
-  // Helper function to check if product has boostProduct label
-  const hasBoostProductLabel = (product) => {
-    if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
-      return false;
-    }
-    return product.productLabels.some(
-      label => label.name && label.name.toLowerCase() === 'boostproduct'
-    );
-  };
+  const resolvedSelectedPlanProduct = selectedPlanProduct || resolveSelectedAccessProduct();
+  const selectedPlanHasBoost = hasProductLabel(resolvedSelectedPlanProduct, 'boost');
+  const selectedPlanHasBoostCampaign = hasProductLabel(resolvedSelectedPlanProduct, 'boostcampaign');
   
   // Scan all product sources - prioritize raw products (before filtering) to catch all boost products
   // Then also check filtered arrays in case products are in both
@@ -5095,12 +5108,17 @@ async function loadBoostProducts() {
     ...(state.campaignValueCards || []) // Include campaign value cards
   ];
   
-  console.log(`[Boost Modal] Scanning ${productSources.length} products for boostProduct label`);
+  console.log(`[Boost Modal] Scanning ${productSources.length} products for boost labels`);
   console.log(`[Boost Modal] Raw products: ${state.allRawProducts?.length || 0}, Subscriptions: ${state.subscriptions?.length || 0}, Campaigns: ${state.campaignSubscriptions?.length || 0}, DayPass: ${state.dayPassSubscriptions?.length || 0}, ValueCards: ${state.valueCards?.length || 0}, CampaignValueCards: ${state.campaignValueCards?.length || 0}`);
   
-  // Filter products with boostProduct label and deduplicate by ID
+  // Filter products with:
+  // - boostProduct label when selected plan has boost label, or
+  // - boostCampaignProduct label when selected plan has boostCampaign label.
+  // If plan has both labels, include both product sets.
   productSources.forEach((product) => {
-    if (hasBoostProductLabel(product) && product.id) {
+    const includeByDefaultBoost = selectedPlanHasBoost && hasProductLabel(product, 'boostproduct');
+    const includeByBoostCampaign = selectedPlanHasBoostCampaign && hasProductLabel(product, 'boostcampaignproduct');
+    if ((includeByDefaultBoost || includeByBoostCampaign) && product.id) {
       const productId = String(product.id);
       if (!seenIds.has(productId)) {
         seenIds.add(productId);
@@ -5124,7 +5142,7 @@ async function loadBoostProducts() {
   state.boostProducts = enrichedBoostProducts;
   console.log(`[Boost Modal] Loaded ${enrichedBoostProducts.length} boost products`);
   if (enrichedBoostProducts.length === 0) {
-    console.warn('[Boost Modal] No boost products found! Check that products have "boostProduct" label.');
+    console.warn('[Boost Modal] No boost products found! Check selected plan labels ("boost"/"boostCampaign") and product labels ("boostProduct"/"boostCampaignProduct").');
   }
   return enrichedBoostProducts;
 }
@@ -10723,20 +10741,12 @@ async function handlePlanSelection(selectedCard) {
   
   // Check if product has Boost label - if so, show modal instead of auto-advancing
   if (product && hasBoostLabel(product)) {
-    // Load boost products if not already loaded
-    if (!state.boostProducts || state.boostProducts.length === 0) {
-      loadBoostProducts().then(() => {
-        // Delay to let user see the selection
-        setTimeout(() => {
-          showBoostModal();
-        }, 300);
-      });
-    } else {
+    loadBoostProducts(product).then(() => {
       // Delay to let user see the selection
       setTimeout(() => {
         showBoostModal();
       }, 300);
-    }
+    });
   } else {
     // Auto-advance to next step after a short delay
     setTimeout(() => {
@@ -11065,20 +11075,12 @@ function setupNewAccessStep() {
             // Reset card animation
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
-            // Load boost products if not already loaded
-            if (!state.boostProducts || state.boostProducts.length === 0) {
-              loadBoostProducts().then(() => {
-                // Delay to let user see the selection
-                setTimeout(() => {
-                  showBoostModal();
-                }, 300);
-              });
-            } else {
+            loadBoostProducts(selectedProduct).then(() => {
               // Delay to let user see the selection
               setTimeout(() => {
                 showBoostModal();
               }, 300);
-            }
+            });
           } else {
             // Clear any pending membership navigation timeout to prevent double-clicks
             if (pendingNavigationTimeouts.membership) {
