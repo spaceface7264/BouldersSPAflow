@@ -1586,6 +1586,7 @@ body {
 
 .main-subtitle {
     font-size: var(--font-size-lg);
+    font-weight: 500;
     padding-bottom: 0;
     margin-bottom: 8px;
     margin-top: 0;
