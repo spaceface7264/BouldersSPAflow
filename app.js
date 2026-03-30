@@ -297,6 +297,50 @@ class BusinessUnitsAPI {
     }
   }
 
+  async getSubscriptionById(productId, businessUnitId = null) {
+    try {
+      const cacheBuster = `_t=${Date.now()}`;
+      const query = businessUnitId != null
+        ? `?businessUnit=${businessUnitId}&${cacheBuster}`
+        : `?${cacheBuster}`;
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products/subscriptions/${productId}${query}`,
+      });
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+      };
+      return await requestJson({ url, headers });
+    } catch (error) {
+      console.warn('[Boost Modal] Could not load subscription details:', { productId, error });
+      return null;
+    }
+  }
+
+  async getValueCardById(productId, businessUnitId = null) {
+    try {
+      const cacheBuster = `_t=${Date.now()}`;
+      const query = businessUnitId != null
+        ? `?businessUnit=${businessUnitId}&${cacheBuster}`
+        : `?${cacheBuster}`;
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/products/valuecards/${productId}${query}`,
+      });
+      const headers = {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+      };
+      return await requestJson({ url, headers });
+    } catch (error) {
+      console.warn('[Boost Modal] Could not load value card details:', { productId, error });
+      return null;
+    }
+  }
+
   // Step 8: Get additional catalog items - GET /api/products
   // To offer more products, fetch catalogs with GET /api/products
   async getProducts(businessUnitId = null) {
@@ -4389,11 +4433,13 @@ function populateAddonsModal() {
     const nameEl = card.querySelector('[data-element="name"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
     const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
+    const priceBannerEl = card.querySelector('[data-element="priceBanner"]');
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
     const imageEl = card.querySelector('[data-element="image"]');
     const imageBannerEl = card.querySelector('[data-element="imageBanner"]');
-    if (nameEl) nameEl.textContent = addon.name;
+    const addonData = addon.addition || addon;
+    if (nameEl) nameEl.textContent = addonData.name || addon.name || '';
     // Extract and display product image
     if (imageEl) {
       // Check if addon has assets (from API product) or imageUrl (from hardcoded)
@@ -4458,14 +4504,16 @@ function populateAddonsModal() {
         console.log('[Addons Modal] Using placeholder image for', addon.name);
       }
       
-      // Display image banner text if available
-      if (imageBannerEl && addon.imageBanner?.text) {
-        imageBannerEl.textContent = addon.imageBanner.text;
-        imageBannerEl.style.display = 'block';
-        console.log('[Addons Modal] Image banner text set for', addon.name, ':', addon.imageBanner.text);
-      } else if (imageBannerEl) {
-        imageBannerEl.style.display = 'none';
+      // Display media banner text above price (workaround for original/list price payload gaps).
+      const addonBannerText = getAddonMediaBannerText(addon);
+      if (priceBannerEl && addonBannerText) {
+        priceBannerEl.textContent = addonBannerText;
+        priceBannerEl.style.display = '';
+        console.log('[Addons Modal] Price banner text set for', addon.name, ':', addonBannerText);
+      } else if (priceBannerEl) {
+        priceBannerEl.style.display = 'none';
       }
+      if (imageBannerEl) imageBannerEl.style.display = 'none';
       if (thumbWrapper && imageEl) {
         thumbWrapper.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -4478,25 +4526,20 @@ function populateAddonsModal() {
       console.log('[Addons Modal] Image element not found for', addon.name);
     }
     
-    // Handle original price (only for subscription additions with discount)
-    if (originalPriceEl) {
-      const originalPrice = addon.price?.original;
-      if (typeof originalPrice === 'number' && originalPrice > 0) {
-        originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
-        originalPriceEl.style.display = '';
-      } else {
-        originalPriceEl.style.display = 'none';
-      }
-    }
     // Use helper function for discounted/current price
     const addonPrice = getAddonPrice(addon);
+
+    // Hide legacy strikethrough original price in addon modal cards.
+    if (originalPriceEl) {
+      originalPriceEl.style.display = 'none';
+    }
     if (discountedPriceEl) {
       discountedPriceEl.textContent = addonPrice > 0
         ? formatPriceHalfKrone(roundToHalfKrone(addonPrice))
         : '—';
     }
     if (descriptionEl) {
-      const description = addon.description || '';
+      const description = addonData.description || addon.description || '';
       if (description) {
         // Preserve line breaks from backend - escape HTML and preserve newlines
         const descriptionHtml = description
@@ -4511,7 +4554,7 @@ function populateAddonsModal() {
     }
     const descToggle = card.querySelector('.addon-card-description-toggle');
     if (descToggle) {
-      const hasDescription = (addon.description || '').trim().length > 0;
+      const hasDescription = (addonData.description || addon.description || '').trim().length > 0;
       descToggle.style.display = hasDescription ? '' : 'none';
       if (hasDescription) {
         const descId = 'addon-desc-' + (addon.id || index);
@@ -4746,6 +4789,7 @@ function populateBoostModal() {
     const imageBannerEl = card.querySelector('[data-element="imageBanner"]');
     const originalPriceEl = card.querySelector('[data-element="originalPrice"]');
     const discountedPriceEl = card.querySelector('[data-element="discountedPrice"]');
+    const priceBannerEl = card.querySelector('[data-element="priceBanner"]');
     const descriptionEl = card.querySelector('[data-element="description"]');
     const featuresEl = card.querySelector('[data-element="features"]');
     
@@ -4817,14 +4861,16 @@ function populateBoostModal() {
         console.log('[Boost Modal] Using placeholder image for', product.name);
       }
       
-      // Display image banner text if available
-      if (imageBannerEl && product.imageBanner?.text) {
-        imageBannerEl.textContent = product.imageBanner.text;
-        imageBannerEl.style.display = 'block';
-        console.log('[Boost Modal] Image banner text set for', product.name, ':', product.imageBanner.text);
-      } else if (imageBannerEl) {
-        imageBannerEl.style.display = 'none';
+      // Display media banner text above price (used as original-price fallback too).
+      const productBannerText = getAddonMediaBannerText(product);
+      if (priceBannerEl && productBannerText) {
+        priceBannerEl.textContent = productBannerText;
+        priceBannerEl.style.display = '';
+        console.log('[Boost Modal] Price banner text set for', product.name, ':', productBannerText);
+      } else if (priceBannerEl) {
+        priceBannerEl.style.display = 'none';
       }
+      if (imageBannerEl) imageBannerEl.style.display = 'none';
       if (thumbWrapper && imageEl) {
         thumbWrapper.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -4838,15 +4884,20 @@ function populateBoostModal() {
     
     // Use helper function for consistent price extraction
     const price = getAddonPrice(product);
-    // Handle original price if available (for products with discounts)
-    const originalPrice = product.originalPrice 
-      ? (typeof product.originalPrice === 'number' ? product.originalPrice / 100 : product.originalPrice)
-      : (product.price?.original ? product.price.original : null);
+    // Boost products come from regular catalog products (label: boostProduct).
+    // Try explicit standard/list fields, then derive from discount percent.
+    const originalPrice = getBoostProductOriginalPrice(product);
+    console.log('[Boost Modal] Price diagnostics:', {
+      productId: product.id,
+      productName: product.name,
+      discountedPriceDKK: price,
+      originalPriceDKK: originalPrice,
+      priceWithIntervalAmount: product.priceWithInterval?.price?.amount,
+      priceAmount: product.price?.amount,
+      discountPercent: product.discountPercent ?? product.discountPercentage ?? product.rabatProcent ?? product.discount?.percent,
+    });
     
-    if (originalPriceEl && originalPrice && originalPrice > price) {
-      originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
-      originalPriceEl.style.display = '';
-    } else if (originalPriceEl) {
+    if (originalPriceEl) {
       originalPriceEl.style.display = 'none';
     }
     
@@ -5059,12 +5110,23 @@ async function loadBoostProducts() {
     }
   });
   
-  state.boostProducts = boostProducts;
-  console.log(`[Boost Modal] Loaded ${boostProducts.length} boost products`);
-  if (boostProducts.length === 0) {
+  let enrichedBoostProducts = boostProducts;
+  if (boostProducts.length > 0) {
+    enrichedBoostProducts = await Promise.all(boostProducts.map(async (product) => {
+      const looksLikeSubscription = !!product.priceWithInterval;
+      const details = looksLikeSubscription
+        ? await businessUnitsAPI.getSubscriptionById(product.id, state.selectedBusinessUnit)
+        : await businessUnitsAPI.getValueCardById(product.id, state.selectedBusinessUnit);
+      return details ? { ...product, ...details } : product;
+    }));
+  }
+
+  state.boostProducts = enrichedBoostProducts;
+  console.log(`[Boost Modal] Loaded ${enrichedBoostProducts.length} boost products`);
+  if (enrichedBoostProducts.length === 0) {
     console.warn('[Boost Modal] No boost products found! Check that products have "boostProduct" label.');
   }
-  return boostProducts;
+  return enrichedBoostProducts;
 }
 
 // Hide Boost from the step indicator permanently and toggle Boost step panel by selection
@@ -10166,17 +10228,19 @@ function renderAddons() {
     const buttonEl = card.querySelector('[data-action="toggle-addon"]');
     const imageEl = card.querySelector('[data-element="image"]');
 
-    if (nameEl) nameEl.textContent = addon.name;
-    // Handle original price (only for subscription additions with discount)
-    const priceOriginal = typeof addon.price?.original === 'number'
-      ? addon.price.original
-      : null;
+    const addonData = addon.addition || addon;
+    if (nameEl) nameEl.textContent = addonData.name || addon.name || '';
+    // Prefer explicit original/list price if provided; otherwise derive from discount percent.
+    const priceOriginal = getAddonOriginalPrice(addon);
     // Use helper function for current price
     const priceDiscounted = getAddonPrice(addon);
     if (originalPriceEl) {
-      originalPriceEl.textContent = priceOriginal !== null
-        ? formatPriceHalfKrone(roundToHalfKrone(priceOriginal))
-        : '—';
+      if (typeof priceOriginal === 'number' && priceOriginal > priceDiscounted) {
+        originalPriceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(priceOriginal));
+        originalPriceEl.style.display = '';
+      } else {
+        originalPriceEl.style.display = 'none';
+      }
     }
     if (discountedPriceEl) {
       discountedPriceEl.textContent = priceDiscounted !== null
@@ -10184,7 +10248,7 @@ function renderAddons() {
         : '—';
     }
     if (descriptionEl) {
-      const description = addon.description || '';
+      const description = addonData.description || addon.description || '';
       if (description) {
         // Preserve line breaks from backend - escape HTML and preserve newlines
         const descriptionHtml = description
@@ -10199,7 +10263,7 @@ function renderAddons() {
     }
     const descToggleAddonsStep = card.querySelector('.addon-card-description-toggle');
     if (descToggleAddonsStep) {
-      const hasDesc = (addon.description || '').trim().length > 0;
+      const hasDesc = (addonData.description || addon.description || '').trim().length > 0;
       descToggleAddonsStep.style.display = hasDesc ? '' : 'none';
       if (hasDesc) {
         const descId = 'addon-desc-' + (addon.id || index);
@@ -20783,29 +20847,45 @@ function findAddon(id) {
 // Extract price from addon (handles both subscription additions and boost products)
 function getAddonPrice(addon) {
   if (!addon) return 0;
+  const source = addon.addition || addon;
   
   // Subscription additions typically have price.discounted structure
   if (addon.price && typeof addon.price.discounted === 'number') {
     return addon.price.discounted;
   }
+  if (source.price && typeof source.price.discounted === 'number') {
+    return source.price.discounted;
+  }
   
   // Boost products use API structure similar to subscriptions
   // Try priceWithInterval.price.amount (cents)
+  if (source.priceWithInterval?.price?.amount) {
+    return source.priceWithInterval.price.amount / 100; // Convert cents to DKK
+  }
   if (addon.priceWithInterval?.price?.amount) {
     return addon.priceWithInterval.price.amount / 100; // Convert cents to DKK
   }
   
   // Try price.amount (cents)
+  if (source.price?.amount) {
+    return source.price.amount / 100; // Convert cents to DKK
+  }
   if (addon.price?.amount) {
     return addon.price.amount / 100; // Convert cents to DKK
   }
   
   // Try direct amount (cents)
+  if (source.amount) {
+    return source.amount / 100; // Convert cents to DKK
+  }
   if (addon.amount) {
     return addon.amount / 100; // Convert cents to DKK
   }
   
   // Try direct price (already in DKK)
+  if (typeof source.price === 'number') {
+    return source.price;
+  }
   if (typeof addon.price === 'number') {
     return addon.price;
   }
@@ -20813,14 +20893,263 @@ function getAddonPrice(addon) {
   return 0;
 }
 
+function getAddonDiscountPercent(addon) {
+  if (!addon) return null;
+  const source = addon.addition || addon;
+  const discount = addon.discount || source.discount;
+  const candidates = [
+    addon.discountPercent,
+    addon.discountPercentage,
+    addon.rabatPercent,
+    addon.rabatProcent,
+    source.discountPercent,
+    source.discountPercentage,
+    source.rabatPercent,
+    source.rabatProcent,
+    discount?.percent,
+    discount?.percentage,
+    discount?.rate,
+    discount?.value,
+  ];
+
+  for (const candidate of candidates) {
+    const percent = Number(candidate);
+    if (Number.isFinite(percent) && percent > 0 && percent < 100) {
+      return percent;
+    }
+  }
+  return null;
+}
+
+function getAddonMediaBannerText(addon) {
+  if (!addon) return '';
+  const source = addon.addition || addon;
+  const directCandidates = [
+    addon.imageBanner?.text,
+    source.imageBanner?.text,
+  ];
+  for (const candidate of directCandidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+  }
+  return extractMediaBannerText(source.media) || extractMediaBannerText(addon.media) || '';
+}
+
+function extractMediaBannerText(media) {
+  if (!media) return '';
+  const mediaItems = Array.isArray(media) ? media : [media];
+  for (const item of mediaItems) {
+    if (typeof item === 'string' && item.trim()) return item.trim();
+    if (!item || typeof item !== 'object') continue;
+
+    const directTextCandidates = [
+      item.text,
+      item.bannerText,
+      item.priceText,
+      item.label,
+      item.title,
+      item.value,
+      item.imageBanner?.text,
+      item.content?.text,
+      item.data?.text,
+    ];
+    for (const candidate of directTextCandidates) {
+      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+    }
+  }
+  return '';
+}
+
+function getAddonOriginalPrice(addon) {
+  if (!addon) return null;
+  const source = addon.addition || addon;
+  const discounted = getAddonPrice(addon);
+
+  // Workaround: Use media/image-banner text as explicit original price when provided.
+  const bannerText = getAddonMediaBannerText(source);
+  if (typeof bannerText === 'string' && bannerText.trim()) {
+    const match = bannerText.match(/(\d{1,6}(?:[.,]\d{1,2})?)/);
+    if (match) {
+      const parsed = Number(match[1].replace(',', '.'));
+      if (Number.isFinite(parsed) && parsed > discounted) {
+        return parsed;
+      }
+    }
+  }
+
+  const centsCandidates = [
+    addon.originalAmount,
+    source.originalAmount,
+    addon.price?.originalAmount,
+    source.price?.originalAmount,
+    addon.price?.original?.amount,
+    source.price?.original?.amount,
+    addon.priceWithInterval?.price?.originalAmount,
+    source.priceWithInterval?.price?.originalAmount,
+    addon.priceWithInterval?.originalPrice?.amount,
+    source.priceWithInterval?.originalPrice?.amount,
+    addon.priceWithInterval?.price?.amountBeforeDiscount,
+    source.priceWithInterval?.price?.amountBeforeDiscount,
+  ];
+  for (const cents of centsCandidates) {
+    const value = Number(cents);
+    if (Number.isFinite(value) && value > 0) {
+      return value / 100;
+    }
+  }
+
+  const dkkCandidates = [
+    addon.originalPrice,
+    source.originalPrice,
+    addon.standardPrice,
+    source.standardPrice,
+    addon.listPrice,
+    source.listPrice,
+    addon.price?.original,
+    source.price?.original,
+    addon.priceBeforeDiscount,
+    source.priceBeforeDiscount,
+  ];
+  for (const dkk of dkkCandidates) {
+    const value = Number(dkk);
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+
+  const discountPercent = getAddonDiscountPercent(addon);
+  if (discountPercent && discounted > 0) {
+    const derived = discounted / (1 - (discountPercent / 100));
+    if (Number.isFinite(derived) && derived > discounted) {
+      return derived;
+    }
+  }
+
+  return null;
+}
+
+function getBoostProductOriginalPrice(product) {
+  if (!product) return null;
+
+  const discounted = getAddonPrice(product);
+  if (!(discounted > 0)) return null;
+  
+  // Workaround: Use media banner text as explicit original price when provided.
+  // Example inputs: "199 kr", "199,00", "199.00 kr."
+  const bannerText = getAddonMediaBannerText(product);
+  if (typeof bannerText === 'string' && bannerText.trim()) {
+    const match = bannerText.match(/(\d{1,6}(?:[.,]\d{1,2})?)/);
+    if (match) {
+      const parsed = Number(match[1].replace(',', '.'));
+      if (Number.isFinite(parsed) && parsed > discounted) {
+        return parsed;
+      }
+    }
+  }
+
+  // Many boost products are regular catalog products where priceWithInterval.price.amount
+  // is the discounted/current value and price.amount can still hold standard/list price.
+  const centsCandidates = [
+    product.price?.amount,
+    product.originalAmount,
+    product.originalPrice?.amount,
+    product.price?.originalAmount,
+    product.price?.original?.amount,
+    product.priceWithInterval?.price?.originalAmount,
+    product.priceWithInterval?.originalPrice?.amount,
+    product.priceWithInterval?.price?.amountBeforeDiscount,
+    product.priceBeforeDiscount?.amount,
+  ];
+  for (const cents of centsCandidates) {
+    const value = Number(cents);
+    if (Number.isFinite(value) && value > 0) {
+      const dkk = value / 100;
+      if (dkk > discounted) return dkk;
+    }
+  }
+
+  const dkkCandidates = [
+    product.originalPrice,
+    product.standardPrice,
+    product.listPrice,
+    product.price?.original,
+    product.priceBeforeDiscount,
+  ];
+  for (const dkk of dkkCandidates) {
+    const value = Number(dkk);
+    if (Number.isFinite(value) && value > discounted) {
+      return value;
+    }
+  }
+
+  const percent = getBoostProductDiscountPercent(product);
+  if (Number.isFinite(percent) && percent > 0 && percent < 100 && discounted > 0) {
+    // BRP price rows use discount% on the base/original price:
+    // discounted = original * (1 - discount%)
+    // => original = discounted / (1 - discount%)
+    const derived = discounted / (1 - (percent / 100));
+    if (Number.isFinite(derived) && derived > discounted) return derived;
+  }
+
+  return null;
+}
+
+function getBoostProductDiscountPercent(product) {
+  if (!product) return null;
+
+  const numericCandidates = [
+    product.discountPercent,
+    product.discountPercentage,
+    product.rabatPercent,
+    product.rabatProcent,
+    product.discount?.percent,
+    product.discount?.percentage,
+    product.discount?.rate,
+    product.discount?.value,
+  ];
+  for (const candidate of numericCandidates) {
+    const percent = Number(candidate);
+    if (Number.isFinite(percent) && percent > 0 && percent < 100) {
+      return percent;
+    }
+  }
+
+  // Fallback: look for "15%" style hints in product text/labels.
+  const textCandidates = [
+    product.externalProductInfo,
+    product.description,
+    product.name,
+    ...(Array.isArray(product.productLabels)
+      ? product.productLabels.map((label) => label?.name).filter(Boolean)
+      : []),
+  ]
+    .filter(Boolean)
+    .map((v) => String(v));
+
+  for (const text of textCandidates) {
+    const match = text.match(/(\d{1,2}(?:[.,]\d+)?)\s*%/);
+    if (!match) continue;
+    const percent = Number(String(match[1]).replace(',', '.'));
+    if (Number.isFinite(percent) && percent > 0 && percent < 100) {
+      return percent;
+    }
+  }
+
+  return null;
+}
+
 // Addon price in cents (for API payloads that require amount)
 function getAddonPriceInCents(addon) {
   if (!addon) return 0;
+  const source = addon.addition || addon;
+  if (source.priceWithInterval?.price?.amount != null) return Math.round(Number(source.priceWithInterval.price.amount));
+  if (source.price?.amount != null) return Math.round(Number(source.price.amount));
+  if (source.amount != null) return Math.round(Number(source.amount));
   if (addon.priceWithInterval?.price?.amount != null) return Math.round(Number(addon.priceWithInterval.price.amount));
   if (addon.price?.amount != null) return Math.round(Number(addon.price.amount));
   if (addon.amount != null) return Math.round(Number(addon.amount));
   // Subscription additions often have price.discounted in DKK
   if (addon.price && typeof addon.price.discounted === 'number') return Math.round(addon.price.discounted * 100);
+  if (source.price && typeof source.price.discounted === 'number') return Math.round(source.price.discounted * 100);
   const dkk = getAddonPrice(addon);
   return Math.round(dkk * 100);
 }

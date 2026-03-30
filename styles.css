@@ -286,6 +286,12 @@
     align-items: flex-end;
     gap: 2px;
   }
+  .addon-card .addon-card-price .addon-price-banner {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-brand-accent);
+    line-height: 1.2;
+  }
   .addon-card .addon-card-price .addon-original-price {
     font-size: 0.8125rem;
     color: var(--color-text-muted);
