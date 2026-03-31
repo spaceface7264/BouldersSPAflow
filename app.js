@@ -5424,7 +5424,7 @@ const translations = {
     'confirmation.nextStep2.15daypass.future': 'Din 15-Dages Prøveperiode bliver aktivt den {date}',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskabskort i centeret',
-    'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge dit pas',
+    'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge ditn 15-Dages Prøveperiode',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
