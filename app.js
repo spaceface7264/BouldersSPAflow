@@ -1770,7 +1770,7 @@ class OrderAPI {
    * @returns {Object|null} Expected price info { amountInCents, amountInDKK, daysRemaining, daysInMonth } or null
    */
   _calculateExpectedPartialMonthPrice(productId, startDate) {
-    // Check all subscription types: campaign, membership, and 15 Day Pass
+    // Check all subscription types: campaign, membership, and 15-Day Trial Pass
     const allSubscriptions = [
       ...(state.campaignSubscriptions || []),
       ...(state.subscriptions || []),
@@ -2968,11 +2968,11 @@ async function loadProductsFromAPI() {
     });
     
 
-    // Separate subscriptions into Campaign, Membership, and 15 Day Pass categories based on labels
-    // Priority: PublicCampaign > 15 Day Pass > Public
+    // Separate subscriptions into Campaign, Membership, and 15-Day Trial Pass categories based on labels
+    // Priority: PublicCampaign > 15-Day Trial Pass > Public
     // Products with "PublicCampaign" label → Campaign category
-    // Products with "15 Day Pass" label → 15 Day Pass category
-    // Products with "Public" label (but not "PublicCampaign" or "15 Day Pass") → Membership category
+    // Products with "15-Day Trial Pass" label → 15-Day Trial Pass category
+    // Products with "Public" label (but not "PublicCampaign" or "15-Day Trial Pass") → Membership category
     const campaignSubscriptions = subscriptions.filter(product => {
       // Check if product has "PublicCampaign" label
       const hasPublicCampaignLabel = product.productLabels?.some(
@@ -2982,9 +2982,9 @@ async function loadProductsFromAPI() {
     });
     
     const dayPassSubscriptions = subscriptions.filter(product => {
-      // Check if product has "15 Day Pass" label (but not "PublicCampaign")
+      // Check if product has "15-Day Trial Pass" label (but not "PublicCampaign")
       const has15DayPassLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === '15 day pass'
+        label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
       );
       const hasPublicCampaignLabel = product.productLabels?.some(
         label => label.name && label.name.toLowerCase() === 'publiccampaign'
@@ -2993,14 +2993,14 @@ async function loadProductsFromAPI() {
     });
     
     const membershipSubscriptions = subscriptions.filter(product => {
-      // Check if product has "PublicCampaign" or "15 Day Pass" label
+      // Check if product has "PublicCampaign" or "15-Day Trial Pass" label
       const hasPublicCampaignLabel = product.productLabels?.some(
         label => label.name && label.name.toLowerCase() === 'publiccampaign'
       );
       const has15DayPassLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === '15 day pass'
+        label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
       );
-      // If it has "PublicCampaign" or "15 Day Pass" label, exclude from membership
+      // If it has "PublicCampaign" or "15-Day Trial Pass" label, exclude from membership
       if (hasPublicCampaignLabel || has15DayPassLabel) {
         return false;
       }
@@ -3254,7 +3254,7 @@ function renderProductsFromAPI() {
     }
   }
 
-  // Render 15 Day Pass subscriptions into the 15daypass category
+  // Render 15-Day Trial Pass subscriptions into the 15daypass category
   const dayPassPlansList = document.querySelector('[data-category="15daypass"] .plans-list');
   if (dayPassPlansList) {
     dayPassPlansList.innerHTML = '';
@@ -3271,7 +3271,7 @@ function renderProductsFromAPI() {
       noProductsMessage.className = 'no-products-message';
       noProductsMessage.innerHTML = sanitizeHTML(`
         <div class="no-products-content">
-          <p>No 15 Day Pass options available at this time.</p>
+          <p>No 15-Day Trial Pass options available at this time.</p>
         </div>
       `);
       dayPassPlansList.appendChild(noProductsMessage);
@@ -4055,8 +4055,8 @@ const state = {
   campaignSubscriptions: [], // Fetched campaign subscription products (with "PublicCampaign" label)
   campaignValueCards: [], // Fetched campaign value card products (with "PublicCampaign" label)
   campaignEndDate: null, // ISO string or Date for countdown; if null, uses end of current month
-  subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15 Day Pass")
-  dayPassSubscriptions: [], // Fetched 15 Day Pass products (with "15 Day Pass" label)
+  subscriptions: [], // Fetched membership products (with "Public" label, excluding "PublicCampaign" and "15-Day Trial Pass")
+  dayPassSubscriptions: [], // Fetched 15-Day Trial Pass products (with "15-Day Trial Pass" label)
   valueCards: [], // Fetched punch card products
   subscriptionAdditions: [], // Fetched add-ons for selected membership
   boostProducts: [], // Products with "boostProduct" label for boost modal
@@ -5313,7 +5313,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': '25% rabat i 6 måneder', 'category.campaign.desc': 'Særlig kampagne på medlemskab med begrænset varighed, udløber 15. marts 2026. Køb tilbuddet inden det udløber.', 'category.campaign.subtitle': 'Begrænset tilbud på medlemskab!', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Første måned 0 kr', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Begrænset tilbud på medlemskab!', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15-Dages Prøveperiode', 'category.15daypass.subtitle': 'Prøv Boulders med 15 dages ubegrænset klatring inkl. sko. Start når det passer dig.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
     'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
@@ -5360,7 +5360,7 @@ const translations = {
     'activationConfirm.endLabel': 'Gyldig til',
     'activationConfirm.today': 'I dag',
     'activationConfirm.continue': 'Fortsæt til betaling',
-    'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabsaktivering og automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
+    'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
     'cart.consent.privacy': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Persondatapolitik</a>.*',
@@ -5421,10 +5421,10 @@ const translations = {
     'confirmation.nextStep1': 'E-mail bekræftelse sendt til din indbakke',
     'confirmation.nextStep2.membership': 'Medlemskabsaktivering og automatisk fornyelse',
     'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
-    'confirmation.nextStep2.15daypass.future': 'Dit pas bliver aktivt den {date}',
+    'confirmation.nextStep2.15daypass.future': 'Din 15-Dages Prøveperiode bliver aktivt den {date}',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
-    'confirmation.nextStep3.membership': 'Hent dit medlemskabskort i centeret',
-    'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge dit pas',
+    'confirmation.nextStep3.membership': 'Hent dit medlemskort i Boulders',
+    'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge ditn 15-Dages Prøveperiode',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
@@ -5495,7 +5495,7 @@ const translations = {
     'faq.15daypass.access.q': 'Hvilken adgang får jeg med kortet?',
     'faq.15daypass.access.a': 'Med 15-dages kortet får du ubegrænset adgang til alle Boulders haller, alle klatreområder og faciliteter i 15 dage. kortet kan ikke konverteres til et fuldt medlemskab.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
-    'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 5 år og kan deles med andre.',
+    'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 12 måneder og kan deles med andre.',
     'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
     'faq.punchcard.convert.a': 'Klippekort kan altid konverteres til et medlemskab ved at sende en mail til medlem@boulders.dk.',
     'faq.punchcard.remainingClips.q': 'Hvad gør jeg med resterende klip på mit klippekort?',
@@ -5503,17 +5503,17 @@ const translations = {
     'faq.punchcard.multiple.q': 'Kan jeg have flere klippekort?',
     'faq.punchcard.multiple.a': 'Du kan have ubegrænset antal klippekort tilknyttet din profil.',
     'faq.productChoice.difference.q': 'Hvad er forskellen mellem medlemskab, 15-dages pas og klippekort?',
-    'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 5 år og kan deles med andre.',
+    'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 12 måneder og kan deles med andre.',
     'faq.productChoice.membershipBest.q': 'Hvornår vælger jeg medlemskab?',
     'faq.productChoice.membershipBest.a': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen. Du får ubegrænset adgang til alle haller, ingen tilmeldings- eller opsigelsesgebyrer, og du kan opsige når som helst med kort varsel.',
     'faq.productChoice.15daypassBest.q': 'Hvornår skal jeg vælge 15-dages kortet?',
     'faq.productChoice.15daypassBest.a': 'Vælg 15-dages kortet hvis du vil prøve klatring eller kun har brug for adgang i en kort periode. Du får 15 dages ubegrænset adgang til alle haller + lejesko, fra den dag, du aktiverer det.',
     'faq.productChoice.punchcardBest.q': 'Hvornår vælger jeg klippekort?',
-    'faq.productChoice.punchcardBest.a': 'Vælg klippekort hvis du klatrer en gang imellem eller vil dele adgang med andre. Du får 10 (medmindre andet er angivet) indgange til alle haller, kortet er gyldigt i 5 år, og du kan genopfylde inden for 14 dage efter sidste klip og få 100 kr rabat.',
+    'faq.productChoice.punchcardBest.a': 'Vælg klippekort hvis du klatrer en gang imellem eller vil dele adgang med andre. Du får 10 (medmindre andet er angivet) indgange til alle haller, kortet er gyldigt i 12 måneder, og du kan genopfylde inden for 14 dage efter sidste klip og få 100 kr rabat.',
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': '25% Off for 6 Months', 'category.campaign.desc': 'Promotional limited time membership campaign, expires March 15 2026. Take advantage of this exclusive deal while it lasts.', 'category.campaign.subtitle': 'Limited time membership offer!', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15 Days Pass', 'category.15daypass.subtitle': '15 days unlimited climbing incl. shoes. Perfect to try us out or for a short visit.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
+    'category.campaign': 'First Month 0 DKK', 'category.campaign.desc': 'Limited membership campaign, expires April 8, 2026. Get the offer before it expires. Can only be used by people who have not been members at Boulders within the last 6 months.', 'category.campaign.subtitle': 'Limited time membership offer!', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15-Day Trial Pass', 'category.15daypass.subtitle': 'Try Boulders with 15 days of unlimited climbing incl. shoes. Start whenever it suits you.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
@@ -5573,11 +5573,11 @@ const translations = {
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
-    'message.noProducts.15daypass': 'No 15 day pass options available at this time.',
+    'message.noProducts.15daypass': 'No 15-Day Trial Pass options available at this time.',
     'confirmation.title': 'SUCCESS!',
     'confirmation.message': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.15daypass': 'Your 15 day pass has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.15daypass': 'Your 15-Day Trial Pass has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.orderDetails': 'Order Details',
@@ -5609,7 +5609,7 @@ const translations = {
     'confirmation.primaryGym': 'Primary Gym:',
     'confirmation.membershipType': 'Type:',
     'confirmation.monthlyPrice': 'Monthly Price:',
-    'confirmation.15daypassDetails': '15 Day Pass Details',
+    'confirmation.15daypassDetails': '15-Day Trial Pass Details',
     'confirmation.passType': 'Pass Type:',
     'confirmation.validFrom': 'Valid From:',
     'confirmation.validUntil': 'Valid Until:',
@@ -5651,7 +5651,7 @@ const translations = {
     'addons.skipConfirm.message': 'You have not selected any extras. Continue without them?',
     'addons.skipConfirm.goBack': 'Back',
     'addons.skipConfirm.skipAnyway': 'Continue without',
-    'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
+    'terms.tab.membership': 'Membership/Trial', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
@@ -5687,28 +5687,28 @@ const translations = {
     'faq.membership.freeze.a': 'Yes. You can freeze your membership for 1–3 months at a time, up to 3 times a year, for 49 kr per freeze. You are not charged while frozen, and reactivation is free. Freezing cannot be activated during a commitment period.',
     'faq.membership.cancellation.q': 'How do I cancel my membership?',
     'faq.membership.cancellation.a': 'You can cancel your membership at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
-    'faq.15daypass.howItWorks.q': 'How does the 15 day pass work?',
-    'faq.15daypass.howItWorks.a': 'The 15 day pass gives you 15 days of unlimited access to all Boulders gyms from the day you activate it. It\'s perfect for trying out climbing or a short-term visit.',
+    'faq.15daypass.howItWorks.q': 'How does the 15-Day  Trial Pass work?',
+    'faq.15daypass.howItWorks.a': 'The 15-Day Trial Pass gives you 15 days of unlimited access to all Boulders gyms from the day you activate it. It\'s perfect for trying out climbing or a short-term visit.',
     'faq.15daypass.validity.q': 'How long is the pass valid?',
-    'faq.15daypass.validity.a': 'The 15 day pass is valid for 15 days from the activation date. You have unlimited access to all gyms during this period.',
+    'faq.15daypass.validity.a': 'The 15-Day Trial Pass is valid for 15 days from the activation date. You have unlimited access to all gyms during this period.',
     'faq.15daypass.access.q': 'What access do I get with the pass?',
-    'faq.15daypass.access.a': 'With the 15 day pass, you get unlimited access to all Boulders gyms, all climbing areas and facilities for 15 days. The pass cannot be converted to a full membership.',
+    'faq.15daypass.access.a': 'With the 15-Day Trial Pass, you get unlimited access to all Boulders gyms, all climbing areas and facilities for 15 days. The pass cannot be converted to a full membership.',
     'faq.punchcard.howItWorks.q': 'How does the punch card work?',
-    'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 5 years and can be shared with others.',
+    'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 12 months and can be shared with others.',
     'faq.punchcard.convert.q': 'Can I convert my punch card to a membership?',
     'faq.punchcard.convert.a': 'Yes, you can convert your punch card to a membership. Contact us at medlem@boulders.dk if you want to convert your punch card to a membership.',
     'faq.punchcard.remainingClips.q': 'What do I do with remaining clips on my punch card?',
     'faq.punchcard.remainingClips.a': 'If you still have punches left but are ready for a membership, you can have it converted to a membership. To convert, email medlem@boulders.dk. Or give the remaining clips as a gift to someone who deserves it.',
     'faq.punchcard.multiple.q': 'Can I have multiple punch cards?',
     'faq.punchcard.multiple.a': 'Yes you can have unlimited punch cards on your profile.',
-    'faq.productChoice.difference.q': 'What is the difference between membership, 15 day pass, and punch card?',
-    'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15 day pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 5 years, and can be shared with others.',
+    'faq.productChoice.difference.q': 'What is the difference between membership, 15-Day Trial Pass, and punch card?',
+    'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15-Day Trial Pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 12 months, and can be shared with others.',
     'faq.productChoice.membershipBest.q': 'When should I choose membership?',
     'faq.productChoice.membershipBest.a': 'Choose membership if you plan to climb at least once a week. You get unlimited access to all gyms, no signup or cancellation fees, and you can cancel anytime with short notice.',
-    'faq.productChoice.15daypassBest.q': 'When should I choose the 15 day pass?',
-    'faq.productChoice.15daypassBest.a': 'Choose the 15 day pass if you want to try climbing or only need short-term access. You get 15 days of unlimited access to all gyms from the day you activate it. The pass is valid for 15 days from the activation date.',
+    'faq.productChoice.15daypassBest.q': 'When should I choose the 15-Day Trial Pass?',
+    'faq.productChoice.15daypassBest.a': 'Choose the 15-Day Trial Pass if you want to try climbing or only need short-term access. You get 15 days of unlimited access to all gyms from the day you activate it. The pass is valid for 15 days from the activation date.',
     'faq.productChoice.punchcardBest.q': 'When should I choose a punch card?',
-    'faq.productChoice.punchcardBest.a': 'Choose a punch card if you climb occasionally or want to share access with others. You get 10 entries to all gyms, unless anything else is specified, the card is valid for 5 years, and you can refill within 14 days after your last clip for 100 kr off.',
+    'faq.productChoice.punchcardBest.a': 'Choose a punch card if you climb occasionally or want to share access with others. You get 10 entries to all gyms, unless anything else is specified, the card is valid for 12 months, and you can refill within 14 days after your last clip for 100 kr off.',
   },
   'de-DE': {
     'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
@@ -6742,12 +6742,12 @@ document.addEventListener('DOMContentLoaded', () => {
       number: 'TEST-12345',
       date: new Date(),
       items: [
-        { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
+        { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
       ],
       total: 469,
       memberName: 'Test User',
       membershipNumber: 'TEST-12345',
-      membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card',
+      membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
       primaryGym: 'Boulders Aarhus Nord',
       membershipPrice: 469,
     };
@@ -6775,12 +6775,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (productType === '15daypass') {
       state.selectedProductType = 'membership';
       state.membershipPlanId = '15daypass-123';
-      // Mock subscription items with 15 day pass label and price
+      // Mock subscription items with 15-Day Trial Pass label and price
       state.fullOrder = {
         subscriptionItems: [{
           product: {
-            name: '15 Day Pass',
-            productLabels: [{ name: '15 Day Pass' }]
+            name: '15-Day Trial Pass',
+            productLabels: [{ name: '15-Day Trial Pass' }]
           },
           price: { amount: 46900 } // 469.00 DKK in cents
         }]
@@ -7761,7 +7761,7 @@ const termsContent = {
 <p>15 dages klatring må kun benyttes af personer, der ikke tidligere har været medlem eller tidligere har benyttet et 15 dages kort. Opdages snyd med dette vil indehaveren blive pålagt at betale forholdsmæssig entré for sin brug af 15 dages klatring.</p>
 <p>15 dages klatring er personligt og må ikke deles med andre.</p>
 <p>Der henvises yderligere til §10 – helbredstilstand og personskade, §10A – Værdigenstande, §12- Persondataforordningen (GDPR) i dette regelsæt, der også er gældende for 15 dages klatring.</p>`,
-    en: `<h2>Rules for Members and 15 Days of Climbing at Boulders</h2>
+    en: `<h2>Rules for Members and Trial Pass holders at Boulders</h2>
 <p><strong>The following rules apply to all memberships</strong></p>
 
 <h3>Acceptance</h3>
@@ -7788,7 +7788,7 @@ const termsContent = {
 <li>§11. Force Majeure</li>
 <li>§12. Data Protection (GDPR)</li>
 <li>§13. Governing Law and Jurisdiction</li>
-<li>§14. 15 Day-Climbing Pass</li>
+<li>§14. 15 Day Trial Pass</li>
 </ul>
 
 <h3>§1 General Provisions</h3>
@@ -7902,10 +7902,10 @@ const termsContent = {
 <p>All purchases covered by these membership terms are subject to Danish law, excluding the CISG (United Nations Convention on Contracts for the International Sale of Goods), unless otherwise specified by mandatory rules.</p>
 <p>Any disputes that cannot be resolved amicably shall be settled by the Danish courts unless otherwise required by mandatory rules.</p>
 
-<h3>§14 15-Day Climbing Pass</h3>
-<p>The 15-day climbing pass may only be used by individuals who have not previously been members or used a 15-day pass. If misuse of this pass is discovered, the holder will be required to pay a proportional entrance fee for the usage of the 15-day climbing pass.</p>
-<p>The 15-day climbing pass is personal and may not be shared with others.</p>
-<p>Additionally, references are made to §10 – Health Condition and Personal Injury, §10A – Valuables, and §12 – General Data Protection Regulation (GDPR), which also apply to the 15-day climbing pass.</p>`
+<h3>§14 15-Day Trial Pass</h3>
+<p>The 15-Day Trial Pass may only be used by individuals who have not previously been members or used a 15-day pass. If misuse of this pass is discovered, the holder will be required to pay a proportional entrance fee for the usage of the 15-Day Trial Pass.</p>
+<p>The 15-Day Trial Pass is personal and may not be shared with others.</p>
+<p>Additionally, references are made to §10 – Health Condition and Personal Injury, §10A – Valuables, and §12 – General Data Protection Regulation (GDPR), which also apply to the 15-Day Trial Pass.</p>`
   },
   punchcard: {
     da: `<h2>Vilkår og betingelser for klippekort</h2>
@@ -7940,7 +7940,7 @@ Boulders er dataansvarlig i forbindelse med vores behandling af de oplysninger d
 <p>Det er muligt at ombytte sit ubrugte eller delvist brugte klippekort til et medlemskab. Boulders tager derved højde for antal brugte klip og købsprisen og udregner derved restancen, som bliver fratrukket det ønskede medlemskab. Bemærk at der skal underskrives et regelsæt til medlemskab. Det er ikke muligt at få refunderet restancen ved endt medlemskab. Ønskes ombytning skal du skrive en mail til medlem@boulders.dk. Boulders ombytter ikke i receptionen.</p>
 
 <h3>§6 Handelsbetingelser</h3>
-<p>Dit klippekort er gyldigt i 5 år fra købsdatoen og betales forud. Du har ikke ret til at få refunderet resterende klip eller på anden måde modtage godtgørelse for ubrugte klip.<br>
+<p>Dit klippekort er gyldigt i 12 måneder fra købsdatoen og betales forud. Du har ikke ret til at få refunderet resterende klip eller på anden måde modtage godtgørelse for ubrugte klip.<br>
 Ved køb af et klippekort i Boulders har du 14 dages fortrydelsesret fra den dag, klippekort blev oprettet. For at gøre brug af fortrydelsesretten, skal du rette henvendelse til medlem@boulders.dk. Fortrydelsesretten kan ikke benyttes ved gentagne oprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af gældende entrépriser for det antal gange klippekort er benyttet og priserne vil reflektere tidspunktet for check-in i relation til peakpriser og off-peakpriser.</p>
 
 <p>Klippekortet er ikke personligt og må gerne benyttes af andre. Enhver person, der benytter et klip fra en klippekortholders kort, skal dog underskrive Boulders' gældende ansvarsfraskrivelse.</p>`,
@@ -7977,7 +7977,7 @@ Boulders is the data controller responsible for processing the information you p
 To request a conversion, you must send an email to medlem@boulders.dk. Boulders does not process conversions at the reception.</p>
 
 <h3>§6 Terms of Sale</h3>
-<p>Your punch card is valid for 5 years from the date of purchase and must be paid upfront. You are not entitled to a refund for remaining punches or any other compensation for unused punches.<br>
+<p>Your punch card is valid for 12 months from the date of purchase and must be paid upfront. You are not entitled to a refund for remaining punches or any other compensation for unused punches.<br>
 When purchasing a punch card at Boulders, you have a 14-day right of withdrawal from the date the punch card was created. To exercise your right of withdrawal, you must contact medlem@boulders.dk. The right of withdrawal cannot be exercised for repeated purchases. If you exercise your right of withdrawal, Boulders is entitled to demand proportional payment based on applicable entrance fees for the number of times the punch card has been used. Prices will reflect the check-in time in relation to peak and off-peak pricing.</p>
 
 <p>The punch card is not personal and may be used by others. However, any person using a punch from a cardholder's punch card must sign Boulders' applicable liability waiver.</p>`
@@ -10006,7 +10006,7 @@ function updateAccessHeadsUp(selectedCard) {
     } else if (category === 'membership') {
       displayName = `${planType} Membership`;
     } else if (category === '15daypass') {
-      displayName = `${planType} 15 Day Pass`;
+      displayName = `${planType} 15-Day Trial Pass`;
     }
     
     accessName.textContent = displayName;
@@ -10813,8 +10813,8 @@ function setupNewAccessStep() {
   const footerTexts = {
     campaign: 'Special promotional offers and limited-time campaigns. Take advantage of these exclusive deals while they last. By purchasing a campaign offer, you accept <a href="#">terms and Conditions</a>.',
     membership: 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month. By signing up you accept <a href="#">terms and Conditions</a>.',
-    '15daypass': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit. By purchasing a 15 Day Pass, you accept <a href="#">terms and Conditions</a>.',
-    punchcard: 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 5 years and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym. By purchasing a value card, you accept <a href="#">terms and Conditions</a>.'
+    '15daypass': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit. By purchasing a 15-Day Trial Pass, you accept <a href="#">terms and Conditions</a>.',
+    punchcard: 'You can buy 1 type of value card at a time. Each entry uses one clip on your value card. Card is valid for 12 months and does not include membership benefits. Refill within 14 days after your last clip and get 100 kr off at the gym. By purchasing a value card, you accept <a href="#">terms and Conditions</a>.'
   };
 
   let currentCategory = null;
@@ -12998,7 +12998,7 @@ function updateCartSummary() {
       ? parseInt(state.selectedProductId) 
       : state.selectedProductId;
     
-    // Check all subscription types: campaign, membership, and 15 Day Pass
+    // Check all subscription types: campaign, membership, and 15-Day Trial Pass
     const allSubscriptions = [
       ...(state.campaignSubscriptions || []),
       ...(state.subscriptions || []),
@@ -13932,13 +13932,13 @@ function updatePaymentOverview() {
   const productName = productFromOrder?.name || currentProduct?.name || '';
   const productLabels = currentProduct?.productLabels || currentProduct?.labels || [];
   const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
-    label => label?.name && label.name.toLowerCase() === '15 day pass'
+    label => label?.name && label.name.toLowerCase() === '15-Day Trial Pass'
   );
   const is15DayPass =
     state.selectedProductType === '15daypass' ||
     has15DayPassLabel ||
     (productName && (
-      productName.toLowerCase().includes('15 day pass') ||
+      productName.toLowerCase().includes('15-Day Trial Pass') ||
       productName.toLowerCase().includes('15 dages')
     ));
 
@@ -14143,7 +14143,7 @@ function updatePaymentOverview() {
         ? parseInt(state.selectedProductId) 
         : state.selectedProductId;
       
-      // Check all subscription types: campaign, membership, and 15 Day Pass
+      // Check all subscription types: campaign, membership, and 15-Day Trial Pass
       const allSubscriptions = [
         ...(state.campaignSubscriptions || []),
         ...(state.subscriptions || []),
@@ -14160,10 +14160,10 @@ function updatePaymentOverview() {
         const isMembership15DayPass =
           state.selectedProductType === '15daypass' ||
           (Array.isArray(membershipLabels) && membershipLabels.some(
-            label => label?.name && label.name.toLowerCase() === '15 day pass'
+            label => label?.name && label.name.toLowerCase() === '15-Day Trial Pass'
           )) ||
           (membership.name && (
-            membership.name.toLowerCase().includes('15 day pass') ||
+            membership.name.toLowerCase().includes('15-Day Trial Pass') ||
             membership.name.toLowerCase().includes('15 dages')
           ));
         
@@ -14331,7 +14331,7 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ⚠️ Monthly payment from API (product.priceWithInterval - fallback):', monthlyPaymentAmount, 'DKK');
     } else {
       // No order data yet - use product data from API response
-      // Check all subscription types: campaign, membership, and 15 Day Pass
+      // Check all subscription types: campaign, membership, and 15-Day Trial Pass
       const allSubscriptionsForMonthly = [
         ...(state.campaignSubscriptions || []),
         ...(state.subscriptions || []),
@@ -16223,13 +16223,13 @@ async function handleCheckout() {
               const productName = product?.name || '';
               const productLabels = product?.productLabels || product?.labels || [];
               const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
-                label => label?.name && label.name.toLowerCase() === '15 day pass'
+                label => label?.name && label.name.toLowerCase() === '15-Day Trial Pass'
               );
               const is15DayPass =
                 state.selectedProductType === '15daypass' ||
                 has15DayPassLabel ||
                 (productName && (
-                  productName.toLowerCase().includes('15 day pass') ||
+                  productName.toLowerCase().includes('15-Day Trial Pass') ||
                   productName.toLowerCase().includes('15 dages')
                 )) ||
                 (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
@@ -16238,7 +16238,7 @@ async function handleCheckout() {
                 /0\s*kr|første\s*måned|first\s*month\s*free/.test(String(productName || '').toLowerCase());
 
               if (is15DayPass) {
-                console.log('[checkout] ✅ Skipping partial-month price verification for 15 day pass');
+                console.log('[checkout] ✅ Skipping partial-month price verification for 15-Day Trial Pass');
               } else if (isFirstMonthFreeCampaignCheckout) {
                 console.log('[checkout] ✅ First-month-free campaign: skipping custom price verification/fix and trusting backend order');
               } else {
@@ -17131,7 +17131,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
   // Try to find membership from API subscriptions first, then fall back to static plans
   let membership = null;
   const membershipPlanId = state.membershipPlanId ?? '';
-  // Check both membership subscriptions and 15 Day Pass subscriptions
+  // Check both membership subscriptions and 15-Day Trial Pass subscriptions
   const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
   if (membershipPlanId && allSubscriptions.length > 0) {
     // Extract numeric ID from 'campaign-XXX', 'membership-134', or '15daypass-XXX' format
@@ -17195,7 +17195,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
   } else if (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-')) {
     productType = '15daypass';
   } else if (membershipPlanId) {
-    // Check if it's a 15 day pass by checking product labels
+    // Check if it's a 15-Day Trial Pass by checking product labels
     const allSubscriptions = [...(state.subscriptions || []), ...(state.dayPassSubscriptions || [])];
     const numericId = membershipPlanId.replace(/^(campaign|membership|15daypass)-/, '');
     const productId = parseInt(numericId, 10);
@@ -17204,7 +17204,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
       String(sub.id) === numericId
     );
     if (foundProduct?.productLabels?.some(label => 
-      label.name && label.name.toLowerCase() === '15 day pass'
+      label.name && label.name.toLowerCase() === '15-Day Trial Pass'
     )) {
       productType = '15daypass';
     }
@@ -18776,10 +18776,10 @@ function determineProductTypeFromOrder() {
       const subscriptionItem = state.fullOrder.subscriptionItems[0];
       const product = subscriptionItem?.product;
       
-      // Check product labels to determine if it's a 15 day pass
+      // Check product labels to determine if it's a 15-Day Trial Pass
       if (product?.productLabels && Array.isArray(product.productLabels)) {
         const has15DayPassLabel = product.productLabels.some(
-          label => label.name && label.name.toLowerCase() === '15 day pass'
+          label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
         );
         if (has15DayPassLabel) {
           console.log('[Product Type] Detected 15daypass from productLabels');
@@ -18787,7 +18787,7 @@ function determineProductTypeFromOrder() {
         }
       }
       
-      // Check product name for 15 day pass
+      // Check product name for 15-Day Trial Pass
       if (product?.name) {
         const nameLower = product.name.toLowerCase();
         if (nameLower.includes('15 day') || nameLower.includes('15 dage')) {
@@ -18992,7 +18992,7 @@ function renderConfirmationView() {
     membershipSection.style.display = 'block';
     membershipSection.style.setProperty('display', 'block', 'important');
   } else if (productType === '15daypass' && dayPassSection) {
-    console.log('[Confirmation] Showing 15 day pass section');
+    console.log('[Confirmation] Showing 15-Day Trial Pass section');
     dayPassSection.style.display = 'block';
     dayPassSection.style.setProperty('display', 'block', 'important');
   } else if (productType === 'punch-card' && punchCardSection) {
@@ -19107,7 +19107,7 @@ function renderConfirmationView() {
     }
   }
   
-  // 15 Day Pass specific fields - from API only
+  // 15-Day Trial Pass specific fields - from API only
   if (productType === '15daypass') {
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
     const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
@@ -20138,12 +20138,12 @@ function nextStep(fromStep) {
           number: 'TEST-12345',
           date: new Date(),
           items: [
-            { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card', amount: 469 }
+            { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
           ],
           total: 469,
           memberName: 'Test User',
           membershipNumber: 'TEST-12345',
-          membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15 Day Pass' : 'Punch Card',
+          membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
           primaryGym: 'Boulders Aarhus Nord',
           membershipPrice: 469,
         };
@@ -20171,12 +20171,12 @@ function nextStep(fromStep) {
         } else if (productType === '15daypass') {
           state.selectedProductType = 'membership';
           state.membershipPlanId = '15daypass-123';
-          // Mock subscription items with 15 day pass label and price
+          // Mock subscription items with 15-Day Trial Pass label and price
           state.fullOrder = {
             subscriptionItems: [{
               product: {
-                name: '15 Day Pass',
-                productLabels: [{ name: '15 Day Pass' }]
+                name: '15-Day Trial Pass',
+                productLabels: [{ name: '15-Day Trial Pass' }]
               },
               price: { amount: 46900 } // 469.00 DKK in cents
             }]
