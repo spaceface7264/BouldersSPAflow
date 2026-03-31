@@ -3260,6 +3260,11 @@ body {
     white-space: nowrap;
 }
 
+.plan-price--campaign {
+    flex-wrap: wrap;
+    row-gap: 4px;
+}
+
 .price-amount {
     font-size: var(--font-size-2xl);
     font-weight: 700;
@@ -3272,6 +3277,15 @@ body {
     color: #f0f;
     font-weight: 500;
     line-height: 1.2;
+}
+
+.price-original {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+    text-decoration-color: rgba(255, 255, 255, 0.55);
+    margin-left: 6px;
 }
 
 .plan-description {
@@ -9405,6 +9419,11 @@ main {
     .plan-card .select-btn {
         padding: 7px 14px;
         font-size: var(--font-size-sm);
+    }
+
+    /* Reserve space for the absolute-positioned select button */
+    .plan-card:not(.addon-card) .plan-info {
+        padding-right: 88px;
     }
 
     /* Mobile Plan Cards Carousel */

@@ -3086,6 +3086,14 @@ function renderProductsFromAPI() {
     const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
     const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
                      intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
+
+    // Campaign cards can show "0 first month" with the original monthly price struck through
+    const productNameLower = String(product.name || '').toLowerCase();
+    const productTextLower = String(`${product.externalDescription || ''} ${product.description || ''}`).toLowerCase();
+    const isFirstMonthFreeCampaign = category === 'campaign' &&
+      (/0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameLower) ||
+       /0\s*kr|første\s*måned|first\s*month\s*free/.test(productTextLower));
+    const originalPriceDisplay = price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '';
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3115,9 +3123,12 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
-          <div class="plan-price">
-            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
+          <div class="plan-price ${isFirstMonthFreeCampaign ? 'plan-price--campaign' : ''}">
+            <span class="price-amount">${isFirstMonthFreeCampaign ? '0' : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—')}</span>
             <span class="price-unit">${priceUnit}</span>
+            ${isFirstMonthFreeCampaign && originalPriceDisplay
+              ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
+              : ''}
           </div>
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
