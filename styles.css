@@ -3260,6 +3260,11 @@ body {
     white-space: nowrap;
 }
 
+.plan-price--campaign {
+    flex-wrap: wrap;
+    row-gap: 4px;
+}
+
 .price-amount {
     font-size: var(--font-size-2xl);
     font-weight: 700;
@@ -3272,6 +3277,15 @@ body {
     color: #f0f;
     font-weight: 500;
     line-height: 1.2;
+}
+
+.price-original {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+    text-decoration-color: rgba(255, 255, 255, 0.55);
+    margin-left: 6px;
 }
 
 .plan-description {
@@ -5147,13 +5161,17 @@ body {
     border: 1px solid #374151;
     border-radius: 6px;
     width: 100%;
-    padding: 12px 0 6px 0;
+    padding: 0;
     max-width: 900px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
     animation: slideUp 0.3s ease-out;
+}
+
+.terms-modal.terms-modal--short-consent .terms-modal-content {
+    max-width: 640px;
 }
 
 .terms-modal-header {
@@ -5166,7 +5184,7 @@ body {
 
 .terms-modal-header-actions {
     display: flex;
-    padding-top: 8px;
+    padding-top: 0;
     align-items: center;
     gap: 16px;
 }
@@ -5323,7 +5341,7 @@ body {
     color: #FFFFFF; /* Pure white for maximum contrast on dark background */
     font-size: var(--font-size-lg);
     font-weight: 700;
-    margin: 0;
+    margin: 4px 0 0 12px;
 }
 
 .terms-modal-close {
@@ -5331,7 +5349,9 @@ body {
     border: none;
     color: var(--color-text-muted);
     cursor: pointer;
-    padding: 8px;
+    padding: 4px;
+    margin-top: -2px;
+    margin-right: -4px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -6451,7 +6471,7 @@ body {
 
 .cart-total-label {
     font-size: var(--font-size-base);
-    text-transform: uppercase;
+    text-transform: none;
     letter-spacing: 0.04em;
     font-weight: 600;
     color: var(--color-text-white);
@@ -9405,6 +9425,11 @@ main {
     .plan-card .select-btn {
         padding: 7px 14px;
         font-size: var(--font-size-sm);
+    }
+
+    /* Reserve space for the absolute-positioned select button */
+    .plan-card:not(.addon-card) .plan-info {
+        padding-right: 88px;
     }
 
     /* Mobile Plan Cards Carousel */

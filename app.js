@@ -2973,33 +2973,40 @@ async function loadProductsFromAPI() {
     // Products with "PublicCampaign" label → Campaign category
     // Products with "15-Day Trial Pass" label → 15-Day Trial Pass category
     // Products with "Public" label (but not "PublicCampaign" or "15-Day Trial Pass") → Membership category
+    const hasLabelName = (product, expected) =>
+      Array.isArray(product?.productLabels) &&
+      product.productLabels.some((label) =>
+        String(label?.name || '').trim().toLowerCase() === expected
+      );
+
+    const has15DayPassLikeLabel = (product) =>
+      Array.isArray(product?.productLabels) &&
+      product.productLabels.some((label) => {
+        const normalized = String(label?.name || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '');
+        return normalized === '15daypass' ||
+          normalized === '15daytrialpass' ||
+          normalized === '15daypassfree';
+      });
+
     const campaignSubscriptions = subscriptions.filter(product => {
       // Check if product has "PublicCampaign" label
-      const hasPublicCampaignLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
-      return hasPublicCampaignLabel;
+      return hasLabelName(product, 'publiccampaign');
     });
     
     const dayPassSubscriptions = subscriptions.filter(product => {
       // Check if product has "15-Day Trial Pass" label (but not "PublicCampaign")
-      const has15DayPassLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
-      );
-      const hasPublicCampaignLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
+      const has15DayPassLabel = has15DayPassLikeLabel(product);
+      const hasPublicCampaignLabel = hasLabelName(product, 'publiccampaign');
       return has15DayPassLabel && !hasPublicCampaignLabel;
     });
     
     const membershipSubscriptions = subscriptions.filter(product => {
       // Check if product has "PublicCampaign" or "15-Day Trial Pass" label
-      const hasPublicCampaignLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
-      const has15DayPassLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
-      );
+      const hasPublicCampaignLabel = hasLabelName(product, 'publiccampaign');
+      const has15DayPassLabel = has15DayPassLikeLabel(product);
       // If it has "PublicCampaign" or "15-Day Trial Pass" label, exclude from membership
       if (hasPublicCampaignLabel || has15DayPassLabel) {
         return false;
@@ -3086,6 +3093,42 @@ function renderProductsFromAPI() {
     const intervalUnit = product.priceWithInterval?.interval?.unit || 'MONTH';
     const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
                      intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
+
+    // Campaign cards can show first-month intro price with original monthly price struck through.
+    // Prefer explicit API fields if present; otherwise parse from campaign text.
+    const resolveCampaignIntroPriceDisplay = (campaignProduct) => {
+      const directCandidates = [
+        campaignProduct?.firstCampaignPrice,
+        campaignProduct?.firstMonthPrice,
+        campaignProduct?.introPrice,
+        campaignProduct?.campaignPrice,
+        campaignProduct?.priceFirstMonth,
+        campaignProduct?.price?.firstMonth?.amount,
+        campaignProduct?.priceWithInterval?.firstMonth?.amount,
+      ];
+
+      for (const candidate of directCandidates) {
+        if (candidate === null || candidate === undefined || candidate === '') continue;
+        const numeric = Number(candidate) > 1000 ? Number(candidate) / 100 : Number(candidate);
+        if (Number.isFinite(numeric) && numeric >= 0) {
+          return formatPriceHalfKrone(roundToHalfKrone(numeric));
+        }
+      }
+
+      const combinedText = `${campaignProduct?.name || ''} ${campaignProduct?.externalDescription || ''} ${campaignProduct?.description || ''}`;
+      const normalizedText = combinedText.replace(/\u00a0/g, ' ');
+      const introMatch = normalizedText.match(/(?:første\s*måned|first\s*month)[^0-9]{0,20}(\d+(?:[.,]\d{1,2})?)\s*(?:kr|dkk)?/i) ||
+        normalizedText.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:kr|dkk)[^a-zA-Z]{0,20}(?:første\s*måned|first\s*month)/i);
+      if (!introMatch || !introMatch[1]) return null;
+
+      const parsed = Number(introMatch[1].replace(',', '.'));
+      if (!Number.isFinite(parsed) || parsed < 0) return null;
+      return formatPriceHalfKrone(roundToHalfKrone(parsed));
+    };
+
+    const campaignIntroPriceDisplay = category === 'campaign' ? resolveCampaignIntroPriceDisplay(product) : null;
+    const isFirstMonthCampaignPricing = category === 'campaign' && campaignIntroPriceDisplay !== null;
+    const originalPriceDisplay = price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '';
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3115,9 +3158,12 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
-          <div class="plan-price">
-            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
+          <div class="plan-price ${isFirstMonthCampaignPricing ? 'plan-price--campaign' : ''}">
+            <span class="price-amount">${isFirstMonthCampaignPricing ? campaignIntroPriceDisplay : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—')}</span>
             <span class="price-unit">${priceUnit}</span>
+            ${isFirstMonthCampaignPricing && originalPriceDisplay
+              ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
+              : ''}
           </div>
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
@@ -5120,6 +5166,21 @@ function hasBoostLabel(product) {
   return hasProductLabel(product, 'boost') || hasProductLabel(product, 'boostcampaign');
 }
 
+function has15DayPassLabel(product) {
+  if (!product || !Array.isArray(product.productLabels)) {
+    return false;
+  }
+  return product.productLabels.some((label) => {
+    const normalized = String(label?.name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+    return normalized === '15daypass' ||
+      normalized === '15daytrialpass' ||
+      normalized === '15daypassfree';
+  });
+}
+
 // Load and filter products with boost labels for the selected plan
 async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
@@ -5343,7 +5404,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
@@ -8241,11 +8302,15 @@ function openTermsModal(termsType) {
     'email-consent': 'E-mail',
     'sms-consent': 'SMS',
   };
+
+  const isShortConsentModal = termsType === 'sms-consent' || termsType === 'email-consent';
+  DOM.termsModal.classList.toggle('terms-modal--short-consent', isShortConsentModal);
   
-  // Show search for all content types (terms, cookie, email-consent, sms-consent)
+  // Hide search for short one-paragraph consent modals like SMS and Email consent.
+  const showModalSearch = termsType !== 'sms-consent' && termsType !== 'email-consent';
   if (DOM.termsModalSearch) {
-    DOM.termsModalSearch.style.display = 'block';
-    if (DOM.termsSearchInput) {
+    DOM.termsModalSearch.style.display = showModalSearch ? 'block' : 'none';
+    if (showModalSearch && DOM.termsSearchInput) {
       const placeholder = currentLang === 'da' || (currentLang && currentLang.startsWith('da'))
         ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
         : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
@@ -8687,6 +8752,7 @@ function closeTermsModal() {
   
   // Hide modal
   DOM.termsModal.style.display = 'none';
+  DOM.termsModal.classList.remove('terms-modal--short-consent');
   document.body.classList.remove('modal-open');
 }
 
@@ -13930,15 +13996,17 @@ function updatePaymentOverview() {
   // Check product name from order data first, then fall back to product data
   const productFromOrder = subscriptionItem?.product;
   const productName = productFromOrder?.name || currentProduct?.name || '';
-  const productLabels = currentProduct?.productLabels || currentProduct?.labels || [];
-  const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
-    label => label?.name && label.name.toLowerCase() === '15-Day Trial Pass'
-  );
+  const currentProductForLabelCheck = currentProduct
+    ? { ...currentProduct, productLabels: (currentProduct?.productLabels || currentProduct?.labels || []) }
+    : null;
+  const has15DayPassDetectedLabel = has15DayPassLabel(currentProductForLabelCheck) || has15DayPassLabel(productFromOrder);
   const is15DayPass =
     state.selectedProductType === '15daypass' ||
-    has15DayPassLabel ||
+    (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-')) ||
+    has15DayPassDetectedLabel ||
     (productName && (
-      productName.toLowerCase().includes('15-Day Trial Pass') ||
+      productName.toLowerCase().includes('15-day trial pass') ||
+      productName.toLowerCase().includes('15 day pass') ||
       productName.toLowerCase().includes('15 dages')
     ));
 
@@ -14019,8 +14087,13 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
       
       if (is15DayPass) {
-      // For 15-day pass: always use full price (one-time payment)
-      payNowAmount = orderPriceDKK;
+      // For 15-day pass: always use product list price (one-time payment), not prorated order math
+      const dayPassPriceInCents =
+        currentProduct?.priceWithInterval?.price?.amount ??
+        productFromOrder?.priceWithInterval?.price?.amount ??
+        currentProduct?.price?.amount ??
+        0;
+      payNowAmount = dayPassPriceInCents > 0 ? (dayPassPriceInCents / 100) : orderPriceDKK;
       
       // Use selected activation date or today; end = start + 15 days
       const today = new Date();
@@ -14157,13 +14230,17 @@ function updatePaymentOverview() {
       
       if (membership) {
         const membershipLabels = membership.productLabels || membership.labels || [];
+        const membershipForLabelCheck = {
+          ...membership,
+          productLabels: membershipLabels
+        };
         const isMembership15DayPass =
           state.selectedProductType === '15daypass' ||
-          (Array.isArray(membershipLabels) && membershipLabels.some(
-            label => label?.name && label.name.toLowerCase() === '15-Day Trial Pass'
-          )) ||
+          (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-')) ||
+          has15DayPassLabel(membershipForLabelCheck) ||
           (membership.name && (
-            membership.name.toLowerCase().includes('15-Day Trial Pass') ||
+            membership.name.toLowerCase().includes('15-day trial pass') ||
+            membership.name.toLowerCase().includes('15 day pass') ||
             membership.name.toLowerCase().includes('15 dages')
           ));
         
@@ -18777,20 +18854,15 @@ function determineProductTypeFromOrder() {
       const product = subscriptionItem?.product;
       
       // Check product labels to determine if it's a 15-Day Trial Pass
-      if (product?.productLabels && Array.isArray(product.productLabels)) {
-        const has15DayPassLabel = product.productLabels.some(
-          label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
-        );
-        if (has15DayPassLabel) {
-          console.log('[Product Type] Detected 15daypass from productLabels');
-          return '15daypass';
-        }
+      if (has15DayPassLabel(product)) {
+        console.log('[Product Type] Detected 15daypass from productLabels');
+        return '15daypass';
       }
       
       // Check product name for 15-Day Trial Pass
       if (product?.name) {
         const nameLower = product.name.toLowerCase();
-        if (nameLower.includes('15 day') || nameLower.includes('15 dage')) {
+        if (nameLower.includes('15 day') || nameLower.includes('15-day') || nameLower.includes('15 dage')) {
           console.log('[Product Type] Detected 15daypass from product name');
           return '15daypass';
         }
