@@ -6465,7 +6465,7 @@ body {
 
 .cart-total-label {
     font-size: var(--font-size-base);
-    text-transform: uppercase;
+    text-transform: none;
     letter-spacing: 0.04em;
     font-weight: 600;
     color: var(--color-text-white);

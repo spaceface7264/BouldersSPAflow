@@ -2973,33 +2973,40 @@ async function loadProductsFromAPI() {
     // Products with "PublicCampaign" label → Campaign category
     // Products with "15-Day Trial Pass" label → 15-Day Trial Pass category
     // Products with "Public" label (but not "PublicCampaign" or "15-Day Trial Pass") → Membership category
+    const hasLabelName = (product, expected) =>
+      Array.isArray(product?.productLabels) &&
+      product.productLabels.some((label) =>
+        String(label?.name || '').trim().toLowerCase() === expected
+      );
+
+    const has15DayPassLikeLabel = (product) =>
+      Array.isArray(product?.productLabels) &&
+      product.productLabels.some((label) => {
+        const normalized = String(label?.name || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '');
+        return normalized === '15daypass' ||
+          normalized === '15daytrialpass' ||
+          normalized === '15daypassfree';
+      });
+
     const campaignSubscriptions = subscriptions.filter(product => {
       // Check if product has "PublicCampaign" label
-      const hasPublicCampaignLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
-      return hasPublicCampaignLabel;
+      return hasLabelName(product, 'publiccampaign');
     });
     
     const dayPassSubscriptions = subscriptions.filter(product => {
       // Check if product has "15-Day Trial Pass" label (but not "PublicCampaign")
-      const has15DayPassLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
-      );
-      const hasPublicCampaignLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
+      const has15DayPassLabel = has15DayPassLikeLabel(product);
+      const hasPublicCampaignLabel = hasLabelName(product, 'publiccampaign');
       return has15DayPassLabel && !hasPublicCampaignLabel;
     });
     
     const membershipSubscriptions = subscriptions.filter(product => {
       // Check if product has "PublicCampaign" or "15-Day Trial Pass" label
-      const hasPublicCampaignLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
-      const has15DayPassLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
-      );
+      const hasPublicCampaignLabel = hasLabelName(product, 'publiccampaign');
+      const has15DayPassLabel = has15DayPassLikeLabel(product);
       // If it has "PublicCampaign" or "15-Day Trial Pass" label, exclude from membership
       if (hasPublicCampaignLabel || has15DayPassLabel) {
         return false;
@@ -5382,7 +5389,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig betaling', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
