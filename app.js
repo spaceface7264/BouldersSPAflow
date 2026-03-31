@@ -3087,12 +3087,40 @@ function renderProductsFromAPI() {
     const priceUnit = is15DayPass ? 'kr' : (intervalUnit === 'MONTH' ? 'kr/mo' : 
                      intervalUnit === 'YEAR' ? 'kr/year' : 'kr');
 
-    // Campaign cards can show "0 first month" with the original monthly price struck through
-    const productNameLower = String(product.name || '').toLowerCase();
-    const productTextLower = String(`${product.externalDescription || ''} ${product.description || ''}`).toLowerCase();
-    const isFirstMonthFreeCampaign = category === 'campaign' &&
-      (/0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameLower) ||
-       /0\s*kr|første\s*måned|first\s*month\s*free/.test(productTextLower));
+    // Campaign cards can show first-month intro price with original monthly price struck through.
+    // Prefer explicit API fields if present; otherwise parse from campaign text.
+    const resolveCampaignIntroPriceDisplay = (campaignProduct) => {
+      const directCandidates = [
+        campaignProduct?.firstCampaignPrice,
+        campaignProduct?.firstMonthPrice,
+        campaignProduct?.introPrice,
+        campaignProduct?.campaignPrice,
+        campaignProduct?.priceFirstMonth,
+        campaignProduct?.price?.firstMonth?.amount,
+        campaignProduct?.priceWithInterval?.firstMonth?.amount,
+      ];
+
+      for (const candidate of directCandidates) {
+        if (candidate === null || candidate === undefined || candidate === '') continue;
+        const numeric = Number(candidate) > 1000 ? Number(candidate) / 100 : Number(candidate);
+        if (Number.isFinite(numeric) && numeric >= 0) {
+          return formatPriceHalfKrone(roundToHalfKrone(numeric));
+        }
+      }
+
+      const combinedText = `${campaignProduct?.name || ''} ${campaignProduct?.externalDescription || ''} ${campaignProduct?.description || ''}`;
+      const normalizedText = combinedText.replace(/\u00a0/g, ' ');
+      const introMatch = normalizedText.match(/(?:første\s*måned|first\s*month)[^0-9]{0,20}(\d+(?:[.,]\d{1,2})?)\s*(?:kr|dkk)?/i) ||
+        normalizedText.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:kr|dkk)[^a-zA-Z]{0,20}(?:første\s*måned|first\s*month)/i);
+      if (!introMatch || !introMatch[1]) return null;
+
+      const parsed = Number(introMatch[1].replace(',', '.'));
+      if (!Number.isFinite(parsed) || parsed < 0) return null;
+      return formatPriceHalfKrone(roundToHalfKrone(parsed));
+    };
+
+    const campaignIntroPriceDisplay = category === 'campaign' ? resolveCampaignIntroPriceDisplay(product) : null;
+    const isFirstMonthCampaignPricing = category === 'campaign' && campaignIntroPriceDisplay !== null;
     const originalPriceDisplay = price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '';
     
     // Get description - use externalDescription if available, otherwise fall back to description
@@ -3123,10 +3151,10 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
-          <div class="plan-price ${isFirstMonthFreeCampaign ? 'plan-price--campaign' : ''}">
-            <span class="price-amount">${isFirstMonthFreeCampaign ? '0' : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—')}</span>
+          <div class="plan-price ${isFirstMonthCampaignPricing ? 'plan-price--campaign' : ''}">
+            <span class="price-amount">${isFirstMonthCampaignPricing ? campaignIntroPriceDisplay : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—')}</span>
             <span class="price-unit">${priceUnit}</span>
-            ${isFirstMonthFreeCampaign && originalPriceDisplay
+            ${isFirstMonthCampaignPricing && originalPriceDisplay
               ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
               : ''}
           </div>
