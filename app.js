@@ -5012,10 +5012,8 @@ async function showBoostModal() {
     }
   }
   
-  // Load boost products if not already loaded
-  if (!state.boostProducts || state.boostProducts.length === 0) {
-    await loadBoostProducts();
-  }
+  // Always reload boost products for the currently selected plan to avoid stale cross-plan cache.
+  await loadBoostProducts(resolveSelectedAccessProduct());
   
   // Show modal first so sheet container is in layout (CSS: flex centering, no inline position)
   addonsModal.style.display = 'flex';
@@ -5059,30 +5057,45 @@ async function showBoostModal() {
 // Usage: window.setAddonsUpsellImage('https://.../image.jpg')
 // Image API removed
 
-// Check if a product has the "Boost" label
-function hasBoostLabel(product) {
-  if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
+function hasProductLabel(product, expectedLabelName) {
+  if (!product || !Array.isArray(product.productLabels)) {
     return false;
   }
-  return product.productLabels.some(
-    label => label.name && label.name.toLowerCase() === 'boost'
-  );
+  const targetLabel = String(expectedLabelName || '').toLowerCase();
+  if (!targetLabel) return false;
+  return product.productLabels.some((label) => {
+    const labelName = String(label?.name || '').toLowerCase();
+    return labelName === targetLabel;
+  });
 }
 
-// Load and filter products with "boostProduct" label
-async function loadBoostProducts() {
+function resolveSelectedAccessProduct() {
+  if (!state.selectedProductId) return null;
+  const selectedId = String(state.selectedProductId);
+  const productPools = [
+    ...(state.allRawProducts || []),
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || [])
+  ];
+  return productPools.find((product) => String(product?.id) === selectedId) || null;
+}
+
+// Check if a product should trigger boost modal ("boost" or "boostCampaign")
+function hasBoostLabel(product) {
+  return hasProductLabel(product, 'boost') || hasProductLabel(product, 'boostcampaign');
+}
+
+// Load and filter products with boost labels for the selected plan
+async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
   const seenIds = new Set();
   
-  // Helper function to check if product has boostProduct label
-  const hasBoostProductLabel = (product) => {
-    if (!product || !product.productLabels || !Array.isArray(product.productLabels)) {
-      return false;
-    }
-    return product.productLabels.some(
-      label => label.name && label.name.toLowerCase() === 'boostproduct'
-    );
-  };
+  const resolvedSelectedPlanProduct = selectedPlanProduct || resolveSelectedAccessProduct();
+  const selectedPlanHasBoost = hasProductLabel(resolvedSelectedPlanProduct, 'boost');
+  const selectedPlanHasBoostCampaign = hasProductLabel(resolvedSelectedPlanProduct, 'boostcampaign');
   
   // Scan all product sources - prioritize raw products (before filtering) to catch all boost products
   // Then also check filtered arrays in case products are in both
@@ -5095,12 +5108,17 @@ async function loadBoostProducts() {
     ...(state.campaignValueCards || []) // Include campaign value cards
   ];
   
-  console.log(`[Boost Modal] Scanning ${productSources.length} products for boostProduct label`);
+  console.log(`[Boost Modal] Scanning ${productSources.length} products for boost labels`);
   console.log(`[Boost Modal] Raw products: ${state.allRawProducts?.length || 0}, Subscriptions: ${state.subscriptions?.length || 0}, Campaigns: ${state.campaignSubscriptions?.length || 0}, DayPass: ${state.dayPassSubscriptions?.length || 0}, ValueCards: ${state.valueCards?.length || 0}, CampaignValueCards: ${state.campaignValueCards?.length || 0}`);
   
-  // Filter products with boostProduct label and deduplicate by ID
+  // Filter products with:
+  // - boostProduct label when selected plan has boost label, or
+  // - boostCampaignProduct label when selected plan has boostCampaign label.
+  // If plan has both labels, include both product sets.
   productSources.forEach((product) => {
-    if (hasBoostProductLabel(product) && product.id) {
+    const includeByDefaultBoost = selectedPlanHasBoost && hasProductLabel(product, 'boostproduct');
+    const includeByBoostCampaign = selectedPlanHasBoostCampaign && hasProductLabel(product, 'boostcampaignproduct');
+    if ((includeByDefaultBoost || includeByBoostCampaign) && product.id) {
       const productId = String(product.id);
       if (!seenIds.has(productId)) {
         seenIds.add(productId);
@@ -5124,7 +5142,7 @@ async function loadBoostProducts() {
   state.boostProducts = enrichedBoostProducts;
   console.log(`[Boost Modal] Loaded ${enrichedBoostProducts.length} boost products`);
   if (enrichedBoostProducts.length === 0) {
-    console.warn('[Boost Modal] No boost products found! Check that products have "boostProduct" label.');
+    console.warn('[Boost Modal] No boost products found! Check selected plan labels ("boost"/"boostCampaign") and product labels ("boostProduct"/"boostCampaignProduct").');
   }
   return enrichedBoostProducts;
 }
@@ -5395,6 +5413,10 @@ const translations = {
     'addons.modal.showDescription': 'Vis fuld beskrivelse',
     'addons.modal.collapseDescription': 'Skjul beskrivelse',
     'addons.modal.empty': 'Ingen boost produkter tilgængelige.',
+    'addons.skipConfirm.title': 'Spring boost over?',
+    'addons.skipConfirm.message': 'Du har ikke valgt ekstraudstyr. Vil du fortsætte uden?',
+    'addons.skipConfirm.goBack': 'Tilbage',
+    'addons.skipConfirm.skipAnyway': 'Fortsæt uden',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
@@ -5591,6 +5613,10 @@ const translations = {
     'addons.modal.showDescription': 'Show full description',
     'addons.modal.collapseDescription': 'Collapse description',
     'addons.modal.empty': 'No boost products available.',
+    'addons.skipConfirm.title': 'Skip boost?',
+    'addons.skipConfirm.message': 'You have not selected any extras. Continue without them?',
+    'addons.skipConfirm.goBack': 'Back',
+    'addons.skipConfirm.skipAnyway': 'Continue without',
     'terms.tab.membership': 'Membership / 15 Day', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
@@ -5731,6 +5757,10 @@ const translations = {
     'addons.modal.showDescription': 'Vollständige Beschreibung anzeigen',
     'addons.modal.collapseDescription': 'Beschreibung einklappen',
     'addons.modal.empty': 'Keine Boost-Produkte verfügbar.',
+    'addons.skipConfirm.title': 'Boost überspringen?',
+    'addons.skipConfirm.message': 'Sie haben kein Zusatzprodukt ausgewählt. Ohne fortfahren?',
+    'addons.skipConfirm.goBack': 'Zurück',
+    'addons.skipConfirm.skipAnyway': 'Ohne fortfahren',
     'terms.tab.membership': 'Mitgliedschaft / 15 Tage', 'terms.tab.punchcard': 'Stempelkarte',
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
@@ -10723,20 +10753,12 @@ async function handlePlanSelection(selectedCard) {
   
   // Check if product has Boost label - if so, show modal instead of auto-advancing
   if (product && hasBoostLabel(product)) {
-    // Load boost products if not already loaded
-    if (!state.boostProducts || state.boostProducts.length === 0) {
-      loadBoostProducts().then(() => {
-        // Delay to let user see the selection
-        setTimeout(() => {
-          showBoostModal();
-        }, 300);
-      });
-    } else {
+    loadBoostProducts(product).then(() => {
       // Delay to let user see the selection
       setTimeout(() => {
         showBoostModal();
       }, 300);
-    }
+    });
   } else {
     // Auto-advance to next step after a short delay
     setTimeout(() => {
@@ -11065,20 +11087,12 @@ function setupNewAccessStep() {
             // Reset card animation
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
-            // Load boost products if not already loaded
-            if (!state.boostProducts || state.boostProducts.length === 0) {
-              loadBoostProducts().then(() => {
-                // Delay to let user see the selection
-                setTimeout(() => {
-                  showBoostModal();
-                }, 300);
-              });
-            } else {
+            loadBoostProducts(selectedProduct).then(() => {
               // Delay to let user see the selection
               setTimeout(() => {
                 showBoostModal();
               }, 300);
-            }
+            });
           } else {
             // Clear any pending membership navigation timeout to prevent double-clicks
             if (pendingNavigationTimeouts.membership) {
@@ -11639,7 +11653,12 @@ function showSkipConfirmation() {
   confirmationOverlay.style.cssText = `
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background:
+      radial-gradient(120% 90% at 15% 100%, rgba(240, 0, 240, 0.2), transparent 58%),
+      radial-gradient(90% 80% at 85% -5%, rgba(59, 130, 246, 0.16), transparent 60%),
+      rgba(8, 10, 18, 0.5);
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -11649,22 +11668,29 @@ function showSkipConfirmation() {
   const confirmationDialog = document.createElement('div');
   confirmationDialog.className = 'confirmation-dialog';
   confirmationDialog.style.cssText = `
-    background: var(--color-surface-dark);
-    border: 2px solid var(--color-item-border);
+    background:
+      linear-gradient(155deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 40%, rgba(255, 255, 255, 0.02) 100%),
+      rgba(17, 20, 32, 0.66);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 16px;
     padding: 24px;
     max-width: 400px;
     text-align: center;
     color: var(--color-text-secondary);
+    box-shadow:
+      0 30px 70px rgba(0, 0, 0, 0.45),
+      0 0 0 1px rgba(255, 255, 255, 0.18) inset;
   `;
   
   // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
   const title = document.createElement('h3');
-  title.textContent = 'Are you sure?';
+  title.textContent = t('addons.skipConfirm.title');
   title.style.cssText = 'margin: 0 0 16px 0; color: var(--color-text-secondary); font-size: 18px;';
   
   const message = document.createElement('p');
-  message.textContent = "You're missing out on essential gear that could enhance your climbing experience. These add-ons are specially selected and offer great value!";
+  message.textContent = t('addons.skipConfirm.message');
   message.style.cssText = 'margin: 0 0 24px 0; color: var(--color-text-muted); line-height: 1.5;';
   
   const buttonContainer = document.createElement('div');
@@ -11672,12 +11698,12 @@ function showSkipConfirmation() {
   
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'confirmation-btn confirmation-cancel';
-  cancelBtn.textContent = 'Go Back';
+  cancelBtn.textContent = t('addons.skipConfirm.goBack');
   cancelBtn.style.cssText = `
     padding: 10px 20px;
-    border: 1px solid var(--color-item-border);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 8px;
-    background: transparent;
+    background: rgba(255, 255, 255, 0.05);
     color: var(--color-text-secondary);
     cursor: pointer;
     font-weight: 600;
@@ -11685,7 +11711,7 @@ function showSkipConfirmation() {
   
   const skipBtn = document.createElement('button');
   skipBtn.className = 'confirmation-btn confirmation-skip';
-  skipBtn.textContent = 'Skip Anyway';
+  skipBtn.textContent = t('addons.skipConfirm.skipAnyway');
   skipBtn.style.cssText = `
     padding: 10px 20px;
     border: none;
