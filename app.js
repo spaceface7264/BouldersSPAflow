@@ -5313,7 +5313,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': '25% rabat i 6 måneder', 'category.campaign.desc': 'Særlig kampagne på medlemskab med begrænset varighed, udløber 15. marts 2026. Køb tilbuddet inden det udløber.', 'category.campaign.subtitle': 'Begrænset tilbud på medlemskab!', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15 Dages Klatring', 'category.15daypass.subtitle': '15 dages ubegrænset klatring inkl. sko. Perfekt til at prøve af eller et kort ophold.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Første måned 0 kr', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber.', 'category.campaign.subtitle': 'Begrænset tilbud på medlemskab!', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15-Dages Prøveperiode', 'category.15daypass.subtitle': 'Prøv Boulders med 15 dages ubegrænset klatring inkl. sko. Start når det passer dig.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
     'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
@@ -5421,7 +5421,7 @@ const translations = {
     'confirmation.nextStep1': 'E-mail bekræftelse sendt til din indbakke',
     'confirmation.nextStep2.membership': 'Medlemskabsaktivering og automatisk fornyelse',
     'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
-    'confirmation.nextStep2.15daypass.future': 'Dit pas bliver aktivt den {date}',
+    'confirmation.nextStep2.15daypass.future': 'Din 15-Dages Prøveperiode bliver aktivt den {date}',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskabskort i centeret',
     'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge dit pas',
