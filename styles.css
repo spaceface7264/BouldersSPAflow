@@ -5161,13 +5161,17 @@ body {
     border: 1px solid #374151;
     border-radius: 6px;
     width: 100%;
-    padding: 12px 0 6px 0;
+    padding: 0;
     max-width: 900px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
     animation: slideUp 0.3s ease-out;
+}
+
+.terms-modal.terms-modal--short-consent .terms-modal-content {
+    max-width: 640px;
 }
 
 .terms-modal-header {
@@ -5180,7 +5184,7 @@ body {
 
 .terms-modal-header-actions {
     display: flex;
-    padding-top: 8px;
+    padding-top: 0;
     align-items: center;
     gap: 16px;
 }
@@ -5337,7 +5341,7 @@ body {
     color: #FFFFFF; /* Pure white for maximum contrast on dark background */
     font-size: var(--font-size-lg);
     font-weight: 700;
-    margin: 0;
+    margin: 4px 0 0 12px;
 }
 
 .terms-modal-close {
@@ -5345,7 +5349,9 @@ body {
     border: none;
     color: var(--color-text-muted);
     cursor: pointer;
-    padding: 8px;
+    padding: 4px;
+    margin-top: -2px;
+    margin-right: -4px;
     display: flex;
     align-items: center;
     justify-content: center;

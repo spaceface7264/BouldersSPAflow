@@ -8302,11 +8302,15 @@ function openTermsModal(termsType) {
     'email-consent': 'E-mail',
     'sms-consent': 'SMS',
   };
+
+  const isShortConsentModal = termsType === 'sms-consent' || termsType === 'email-consent';
+  DOM.termsModal.classList.toggle('terms-modal--short-consent', isShortConsentModal);
   
-  // Show search for all content types (terms, cookie, email-consent, sms-consent)
+  // Hide search for short one-paragraph consent modals like SMS and Email consent.
+  const showModalSearch = termsType !== 'sms-consent' && termsType !== 'email-consent';
   if (DOM.termsModalSearch) {
-    DOM.termsModalSearch.style.display = 'block';
-    if (DOM.termsSearchInput) {
+    DOM.termsModalSearch.style.display = showModalSearch ? 'block' : 'none';
+    if (showModalSearch && DOM.termsSearchInput) {
       const placeholder = currentLang === 'da' || (currentLang && currentLang.startsWith('da'))
         ? DOM.termsSearchInput.dataset.placeholderDa || 'Søg i vilkår...'
         : DOM.termsSearchInput.dataset.placeholderEn || 'Search terms...';
@@ -8748,6 +8752,7 @@ function closeTermsModal() {
   
   // Hide modal
   DOM.termsModal.style.display = 'none';
+  DOM.termsModal.classList.remove('terms-modal--short-consent');
   document.body.classList.remove('modal-open');
 }
 
