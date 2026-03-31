@@ -5166,6 +5166,21 @@ function hasBoostLabel(product) {
   return hasProductLabel(product, 'boost') || hasProductLabel(product, 'boostcampaign');
 }
 
+function has15DayPassLabel(product) {
+  if (!product || !Array.isArray(product.productLabels)) {
+    return false;
+  }
+  return product.productLabels.some((label) => {
+    const normalized = String(label?.name || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+    return normalized === '15daypass' ||
+      normalized === '15daytrialpass' ||
+      normalized === '15daypassfree';
+  });
+}
+
 // Load and filter products with boost labels for the selected plan
 async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
@@ -5389,7 +5404,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
@@ -13976,15 +13991,17 @@ function updatePaymentOverview() {
   // Check product name from order data first, then fall back to product data
   const productFromOrder = subscriptionItem?.product;
   const productName = productFromOrder?.name || currentProduct?.name || '';
-  const productLabels = currentProduct?.productLabels || currentProduct?.labels || [];
-  const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
-    label => label?.name && label.name.toLowerCase() === '15-Day Trial Pass'
-  );
+  const currentProductForLabelCheck = currentProduct
+    ? { ...currentProduct, productLabels: (currentProduct?.productLabels || currentProduct?.labels || []) }
+    : null;
+  const has15DayPassDetectedLabel = has15DayPassLabel(currentProductForLabelCheck) || has15DayPassLabel(productFromOrder);
   const is15DayPass =
     state.selectedProductType === '15daypass' ||
-    has15DayPassLabel ||
+    (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-')) ||
+    has15DayPassDetectedLabel ||
     (productName && (
-      productName.toLowerCase().includes('15-Day Trial Pass') ||
+      productName.toLowerCase().includes('15-day trial pass') ||
+      productName.toLowerCase().includes('15 day pass') ||
       productName.toLowerCase().includes('15 dages')
     ));
 
@@ -14065,8 +14082,13 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
       
       if (is15DayPass) {
-      // For 15-day pass: always use full price (one-time payment)
-      payNowAmount = orderPriceDKK;
+      // For 15-day pass: always use product list price (one-time payment), not prorated order math
+      const dayPassPriceInCents =
+        currentProduct?.priceWithInterval?.price?.amount ??
+        productFromOrder?.priceWithInterval?.price?.amount ??
+        currentProduct?.price?.amount ??
+        0;
+      payNowAmount = dayPassPriceInCents > 0 ? (dayPassPriceInCents / 100) : orderPriceDKK;
       
       // Use selected activation date or today; end = start + 15 days
       const today = new Date();
@@ -14203,13 +14225,17 @@ function updatePaymentOverview() {
       
       if (membership) {
         const membershipLabels = membership.productLabels || membership.labels || [];
+        const membershipForLabelCheck = {
+          ...membership,
+          productLabels: membershipLabels
+        };
         const isMembership15DayPass =
           state.selectedProductType === '15daypass' ||
-          (Array.isArray(membershipLabels) && membershipLabels.some(
-            label => label?.name && label.name.toLowerCase() === '15-Day Trial Pass'
-          )) ||
+          (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-')) ||
+          has15DayPassLabel(membershipForLabelCheck) ||
           (membership.name && (
-            membership.name.toLowerCase().includes('15-Day Trial Pass') ||
+            membership.name.toLowerCase().includes('15-day trial pass') ||
+            membership.name.toLowerCase().includes('15 day pass') ||
             membership.name.toLowerCase().includes('15 dages')
           ));
         
@@ -18823,20 +18849,15 @@ function determineProductTypeFromOrder() {
       const product = subscriptionItem?.product;
       
       // Check product labels to determine if it's a 15-Day Trial Pass
-      if (product?.productLabels && Array.isArray(product.productLabels)) {
-        const has15DayPassLabel = product.productLabels.some(
-          label => label.name && label.name.toLowerCase() === '15-Day Trial Pass'
-        );
-        if (has15DayPassLabel) {
-          console.log('[Product Type] Detected 15daypass from productLabels');
-          return '15daypass';
-        }
+      if (has15DayPassLabel(product)) {
+        console.log('[Product Type] Detected 15daypass from productLabels');
+        return '15daypass';
       }
       
       // Check product name for 15-Day Trial Pass
       if (product?.name) {
         const nameLower = product.name.toLowerCase();
-        if (nameLower.includes('15 day') || nameLower.includes('15 dage')) {
+        if (nameLower.includes('15 day') || nameLower.includes('15-day') || nameLower.includes('15 dage')) {
           console.log('[Product Type] Detected 15daypass from product name');
           return '15daypass';
         }
