@@ -3049,6 +3049,9 @@ async function loadProductsFromAPI() {
 
     // Re-render the membership plans with API data
     renderProductsFromAPI();
+
+    // Prewarm boost modal resources in the background so first open feels instant.
+    prewarmBoostModalResources();
   } catch (error) {
     console.error('Failed to load products from API:', error);
     // Show error message to user
@@ -4989,8 +4992,10 @@ function populateBoostModal() {
   console.log(`[Boost Modal] ✅ Finished rendering ${boostProducts.length} boost products`);
 }
 
+const BOOST_MODAL_OPEN_DELAY_MS = 50;
+
 // Show boost modal (uses same modal infrastructure as addons)
-async function showBoostModal() {
+async function showBoostModal(options = {}) {
   ensureAddonsModal();
   
   // Ensure products are loaded first
@@ -5012,8 +5017,10 @@ async function showBoostModal() {
     }
   }
   
-  // Always reload boost products for the currently selected plan to avoid stale cross-plan cache.
-  await loadBoostProducts(resolveSelectedAccessProduct());
+  // If products were already loaded for the current selection, skip duplicate reload.
+  if (!options.productsPreloaded) {
+    await loadBoostProducts(resolveSelectedAccessProduct());
+  }
   
   // Show modal first so sheet container is in layout (CSS: flex centering, no inline position)
   addonsModal.style.display = 'flex';
@@ -5050,6 +5057,31 @@ async function showBoostModal() {
         sheet.style.transform = 'scale(1)';
       });
     }
+  });
+}
+
+function prewarmBoostModalResources() {
+  // Precreate modal DOM upfront to avoid first-open construction cost.
+  ensureAddonsModal();
+
+  if (!state.selectedBusinessUnit) return;
+  if (Array.isArray(state.boostProducts) && state.boostProducts.length > 0) return;
+
+  const productSources = [
+    ...(state.allRawProducts || []),
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || [])
+  ];
+
+  // Warm the likely boost dataset using any plan that can trigger boost modal.
+  const preloadPlan = productSources.find((product) => hasBoostLabel(product));
+  if (!preloadPlan) return;
+
+  loadBoostProducts(preloadPlan).catch((error) => {
+    console.warn('[Boost Modal] Prewarm skipped:', error);
   });
 }
 
@@ -5200,6 +5232,8 @@ function init() {
   
   cacheDom();
   cacheTemplates();
+  // Precreate addon/boost modal shell once so opening is snappier.
+  ensureAddonsModal();
   initFAQ();
   
   // Restore privacy and terms consent from localStorage
@@ -10756,8 +10790,8 @@ async function handlePlanSelection(selectedCard) {
     loadBoostProducts(product).then(() => {
       // Delay to let user see the selection
       setTimeout(() => {
-        showBoostModal();
-      }, 300);
+        showBoostModal({ productsPreloaded: true });
+      }, BOOST_MODAL_OPEN_DELAY_MS);
     });
   } else {
     // Auto-advance to next step after a short delay
@@ -11090,8 +11124,8 @@ function setupNewAccessStep() {
             loadBoostProducts(selectedProduct).then(() => {
               // Delay to let user see the selection
               setTimeout(() => {
-                showBoostModal();
-              }, 300);
+                showBoostModal({ productsPreloaded: true });
+              }, BOOST_MODAL_OPEN_DELAY_MS);
             });
           } else {
             // Clear any pending membership navigation timeout to prevent double-clicks
