@@ -1,0 +1,1865 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - Boulders</title>
+    <link rel="shortcut icon" type="image/png" href="./favicon.png">
+    <link rel="icon" type="image/png" href="./favicon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="./favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: #1a1a1a;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .login-page-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            position: relative;
+            background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+        }
+        
+        .login-page-wrapper::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            opacity: 0.4;
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        /* Show/hide based on authentication state */
+        body:not(.authenticated) .page-content-wrapper {
+            display: none !important;
+        }
+        
+        body.authenticated .login-page-wrapper {
+            display: none !important;
+        }
+        
+        body.authenticated .page-content-wrapper {
+            display: block;
+            flex: 1;
+        }
+        
+        
+        .login-page-close-btn {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            background-color: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 28px;
+            font-weight: 300;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            line-height: 1;
+        }
+        
+        .login-page-close-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: #FFFFFF;
+        }
+        
+        .profile-edit-section {
+            margin-top: 40px;
+            padding-top: 32px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        /* Inherit styles from signup flow login modal */
+        .form-container {
+            background-color: #1a1a1a;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            max-width: 480px;
+            margin: 0 auto;
+        }
+        
+        .form-container-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        
+        .info-section-title {
+            font-size: var(--font-size-md);
+            text-align: left;
+            font-weight: bold;
+            margin: 0;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .form-container-logo {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        .form-logo-image {
+            height: 20px;
+            width: auto;
+            object-fit: contain;
+            display: block;
+        }
+        
+        .form-logo-fallback {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 1px;
+            color: white;
+            background: linear-gradient(135deg, #F401F5 0%, #8B5CF6 100%);
+            border-radius: 6px;
+            padding: 4px 10px;
+            height: 20px;
+            min-width: 70px;
+        }
+        
+        .form-container .form-group {
+            margin-bottom: 24px;
+        }
+        
+        .form-container .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-base);
+        }
+        
+        .form-container .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background-color: #2a2a2a;
+            border: 2px solid #374151;
+            border-radius: 8px;
+            color: white;
+            font-size: var(--font-size-base);
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-container .form-group input:focus {
+            outline: none;
+            border-color: #F401F5;
+        }
+        
+        .form-container .form-group input::placeholder {
+            color: #6B7280;
+        }
+        
+        .form-container .forgot-password-link {
+            display: inline-block;
+            margin-top: 8px;
+            color: #F401F5;
+            font-size: var(--font-size-sm);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        
+        .form-container .forgot-password-link:hover {
+            color: #D401D5;
+            text-decoration: underline;
+        }
+        
+        .form-container .login-btn {
+            width: 100%;
+            padding: 16px 24px;
+            background-color: #F401F5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: var(--font-size-md);
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            text-transform: uppercase;
+        }
+        
+        .form-container .login-btn:hover {
+            background-color: #D401D5;
+        }
+        
+        .new-user-section {
+            margin-top: 24px;
+            text-align: center;
+        }
+        
+        .new-user-text {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .new-user-link {
+            color: #F401F5;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s ease;
+        }
+        
+        .new-user-link:hover {
+            color: #8B5CF6;
+            text-decoration: underline;
+        }
+        
+        /* Login status section styles */
+        .login-status {
+            background: linear-gradient(135deg, rgba(244, 1, 245, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+        
+        .login-status-header {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .login-status-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #9CA3AF;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .login-status-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #FFFFFF;
+            margin-bottom: 4px;
+            letter-spacing: -0.3px;
+        }
+        
+        .login-status-email {
+            font-size: 14px;
+            color: #D1D5DB;
+            margin-bottom: 16px;
+        }
+        
+        .profile-detail-item {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .profile-detail-item:last-child {
+            border-bottom: none;
+        }
+        
+        .profile-detail-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: #9CA3AF;
+        }
+        
+        .profile-detail-value {
+            font-size: 13px;
+            font-weight: 500;
+            color: #FFFFFF;
+        }
+        
+        .login-status .login-btn {
+            position: static;
+            width: 100%;
+            margin-top: 20px;
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            background-color: rgba(244, 1, 245, 0.1);
+            border: 1px solid rgba(244, 1, 245, 0.3);
+            color: #F401F5;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+        
+        .login-status .login-btn:hover {
+            background-color: rgba(244, 1, 245, 0.2);
+            border-color: #F401F5;
+            transform: translateY(-1px);
+        }
+        
+        /* Profile edit form styles */
+        .profile-edit-section .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        .profile-edit-section .form-group input {
+            width: 100%;
+            padding: 14px 16px;
+            background-color: rgba(17, 24, 39, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: #FFFFFF;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+        
+        .profile-edit-section .form-group input:focus {
+            outline: none;
+            border-color: #F401F5;
+            background-color: rgba(17, 24, 39, 0.8);
+            box-shadow: 0 0 0 3px rgba(244, 1, 245, 0.1);
+        }
+        
+        .profile-edit-section .form-group input::placeholder {
+            color: #6B7280;
+        }
+        
+        .profile-edit-section .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #D1D5DB;
+            letter-spacing: 0.1px;
+        }
+        
+        .profile-edit-section .login-btn {
+            margin-top: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            .login-page-wrapper {
+                padding: 20px 16px;
+            }
+            
+            
+            .login-page-close-btn {
+                right: 16px;
+                top: 16px;
+            }
+            
+            .form-container-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 16px;
+            }
+            
+            .form-container-logo {
+                align-self: flex-end;
+            }
+            
+            .form-logo-image {
+                height: 18px;
+            }
+            
+            .form-logo-fallback {
+                height: 18px;
+                font-size: 11px;
+                padding: 3px 8px;
+                min-width: 65px;
+            }
+            
+            .profile-edit-section .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Forgot password modal styles */
+        .forgot-password-modal {
+            backdrop-filter: blur(8px);
+        }
+        
+        .forgot-password-modal-content {
+            background-color: rgba(31, 41, 55, 0.98);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        }
+        
+        .forgot-password-description {
+            color: #D1D5DB;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .forgot-password-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        
+        .forgot-password-cancel-btn {
+            flex: 1;
+            padding: 14px 20px;
+            background-color: rgba(255, 255, 255, 0.08);
+            color: #D1D5DB;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .forgot-password-cancel-btn:hover {
+            background-color: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.25);
+            color: #FFFFFF;
+        }
+        
+        .forgot-password-success {
+            text-align: center;
+            padding: 24px 0;
+        }
+        
+        .forgot-password-success-message {
+            color: #10B981;
+            font-size: 14px;
+            margin-bottom: 24px;
+            line-height: 1.6;
+            font-weight: 500;
+        }
+        
+        @media (max-width: 480px) {
+            .login-page-wrapper {
+                padding: 16px 12px;
+            }
+            
+            .login-page-close-btn {
+                right: 12px;
+                top: 12px;
+                width: 28px;
+                height: 28px;
+                font-size: 24px;
+            }
+            
+            .form-container-header {
+                gap: 12px;
+            }
+            
+            .form-logo-image {
+                height: 16px;
+            }
+            
+            .form-logo-fallback {
+                height: 16px;
+                font-size: 10px;
+                padding: 3px 6px;
+                min-width: 60px;
+            }
+            
+            
+            
+            .login-page-close-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 24px;
+            }
+            
+            .forgot-password-modal-content {
+                padding: 24px;
+            }
+            
+            .forgot-password-actions {
+                flex-direction: column;
+            }
+            
+            .forgot-password-cancel-btn,
+            .forgot-password-actions .login-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Contract Signing Banner (shown when contract is not signed) -->
+    <div class="contract-signing-banner" id="contractSigningBanner" style="display: none;">
+        <div class="contract-banner-content">
+            <div class="contract-banner-message">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                <span>Your membership contract needs to be signed. Please sign it to complete your membership setup.</span>
+            </div>
+            <a href="#" class="contract-banner-cta" id="contractBannerCTA" target="_blank" rel="noopener noreferrer">
+                Sign Contract
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Navigation -->
+    <header class="main-navigation" id="mainNavigation" style="display: none;">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <a href="./index.html" class="nav-logo-link">
+                    <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="nav-logo-image" style="height:22px;width:auto;max-width:180px;display:block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                    <span class="nav-logo-fallback">BOULDERS</span>
+                </a>
+            </div>
+            <nav class="nav-links">
+                <a href="#" class="nav-link" data-route="dashboard">Dashboard</a>
+                <a href="#" class="nav-link" data-route="classes">Classes & Bookings</a>
+                <a href="#" class="nav-link" data-route="activity">Activity</a>
+                <a href="#" class="nav-link active" data-route="profile">Profile</a>
+            </nav>
+            <div class="nav-user" id="navUser">
+                <span class="user-name" id="navUserName">User</span>
+                <div class="user-avatar" id="navUserAvatar" data-initials="U"></div>
+                <svg class="dropdown-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+                <div class="user-dropdown" id="userDropdown" style="display: none;">
+                    <a href="#" class="dropdown-item" data-action="nav-profile">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        Profile
+                    </a>
+                    <a href="#" class="dropdown-item" data-action="nav-settings">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+                        </svg>
+                        Settings
+                    </a>
+                    <a href="#" class="dropdown-item" data-action="nav-logout">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Page Content Container (shown when authenticated) -->
+    <div class="page-content-wrapper" id="pageContentWrapper" style="display: none;">
+        <!-- Dashboard Page -->
+        <div class="page-section" id="pageDashboard" style="display: none;">
+            <div class="dashboard-page-container">
+                <!-- Welcome Header -->
+                <div class="dashboard-welcome">
+                    <h1 class="dashboard-welcome-title">
+                        Welcome back, <span id="dashboardUserName">User</span>! 👋
+                    </h1>
+                </div>
+
+                <!-- Dashboard Grid -->
+                <div class="dashboard-grid">
+                    <!-- My Activity Card -->
+                    <div class="dashboard-card dashboard-card-large">
+                        <div class="dashboard-card-header">
+                            <div>
+                                <h2 class="dashboard-card-title">My activity</h2>
+                                <p class="dashboard-card-subtitle">Last 30 days</p>
+                            </div>
+                        </div>
+                        <div class="dashboard-chart-container">
+                            <div class="dashboard-chart" id="activityChart">
+                                <div class="dashboard-loading">
+                                    <div class="dashboard-skeleton-chart">
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 60%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 80%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 45%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 90%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 70%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 55%;"></div>
+                                        <div class="dashboard-skeleton-chart-bar" style="height: 85%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- My Info Card -->
+                    <div class="dashboard-card">
+                        <h2 class="dashboard-card-title">My info</h2>
+                        <div class="dashboard-info-list">
+                            <div class="dashboard-info-item">
+                                <span class="dashboard-info-label">Name:</span>
+                                <span class="dashboard-info-value" id="dashboardName">-</span>
+                            </div>
+                            <div class="dashboard-info-item">
+                                <span class="dashboard-info-label">Email:</span>
+                                <span class="dashboard-info-value" id="dashboardEmail">-</span>
+                            </div>
+                            <div class="dashboard-info-item">
+                                <span class="dashboard-info-label">Phone:</span>
+                                <span class="dashboard-info-value" id="dashboardPhone">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- My Membership Card -->
+                    <div class="dashboard-card">
+                        <h2 class="dashboard-card-title">My membership</h2>
+                        <div class="dashboard-info-list">
+                            <div class="dashboard-info-item">
+                                <span class="dashboard-info-label">Type:</span>
+                                <span class="dashboard-info-value" id="dashboardMembershipType">-</span>
+                            </div>
+                            <div class="dashboard-info-item">
+                                <span class="dashboard-info-label">Location:</span>
+                                <span class="dashboard-info-value" id="dashboardMembershipLocation">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- My Upcoming Classes Card -->
+                    <div class="dashboard-card dashboard-card-large">
+                        <h2 class="dashboard-card-title">My upcoming classes</h2>
+                        <div class="dashboard-classes-list" id="dashboardUpcomingClasses">
+                            <div class="dashboard-loading">
+                                <div class="dashboard-skeleton-list">
+                                    <div class="skeleton-list-item">
+                                        <div class="skeleton skeleton-avatar"></div>
+                                        <div style="flex: 1;">
+                                            <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                            <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="skeleton-list-item">
+                                        <div class="skeleton skeleton-avatar"></div>
+                                        <div style="flex: 1;">
+                                            <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                            <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bloc Life Loyalty Program Card -->
+                    <div class="dashboard-card">
+                        <h2 class="dashboard-card-title">Bloc Life Loyalty Program</h2>
+                        <div class="dashboard-loyalty-content">
+                            <div class="dashboard-loyalty-tier">
+                                <span class="dashboard-loyalty-tier-name" id="dashboardLoyaltyTier">-</span>
+                                <span class="dashboard-loyalty-tier-level" id="dashboardLoyaltyLevel">-</span>
+                            </div>
+                            <div class="dashboard-loyalty-benefits" id="dashboardLoyaltyBenefits">
+                                <div class="dashboard-loading">
+                                    <div class="dashboard-skeleton-list">
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 60%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Purchase History Card -->
+                    <div class="dashboard-card dashboard-card-full-width">
+                        <div id="dashboardPurchases">
+                            <div class="dashboard-loading">
+                                <div class="dashboard-skeleton-list">
+                                    <div class="skeleton-list-item">
+                                        <div style="flex: 1;">
+                                            <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+                                            <div class="skeleton skeleton-text" style="width: 40%;"></div>
+                                        </div>
+                                        <div class="skeleton skeleton-badge"></div>
+                                    </div>
+                                    <div class="skeleton-list-item">
+                                        <div style="flex: 1;">
+                                            <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+                                            <div class="skeleton skeleton-text" style="width: 40%;"></div>
+                                        </div>
+                                        <div class="skeleton skeleton-badge"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Classes & Bookings Page -->
+        <div class="page-section" id="pageClasses" style="display: none;">
+            <div class="classes-page-container">
+                <!-- Main Tabs -->
+                <div class="bookings-tabs">
+                    <button class="booking-tab active" data-tab="myBookings">
+                        <span>My Bookings</span>
+                    </button>
+                    <button class="booking-tab" data-tab="browse">
+                        <span>Browse Classes</span>
+                    </button>
+                </div>
+
+                <!-- My Bookings Section -->
+                <div class="bookings-section active" id="myBookingsSection">
+                    <!-- Sub-tabs -->
+                    <div class="bookings-sub-tabs">
+                        <button class="booking-sub-tab active" data-sub-tab="upcoming">
+                            <span>Upcoming</span>
+                        </button>
+                        <button class="booking-sub-tab" data-sub-tab="past">
+                            <span>Past</span>
+                        </button>
+                        <button class="booking-sub-tab" data-sub-tab="waiting">
+                            <span>Waiting List</span>
+                        </button>
+                    </div>
+
+                    <!-- Upcoming Bookings -->
+                    <div class="bookings-sub-section active" id="upcomingBookings">
+                        <div class="bookings-list" id="upcomingBookingsList">
+                            <div class="bookings-loading">
+                                <div class="bookings-skeleton-list">
+                                    <div class="bookings-skeleton-card">
+                                        <div class="skeleton skeleton-title"></div>
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 60%; margin-top: 12px;"></div>
+                                    </div>
+                                    <div class="bookings-skeleton-card">
+                                        <div class="skeleton skeleton-title"></div>
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 60%; margin-top: 12px;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Past Bookings -->
+                    <div class="bookings-sub-section" id="pastBookings" style="display: none;">
+                        <div class="bookings-list" id="pastBookingsList">
+                            <div class="bookings-loading">
+                                <div class="bookings-skeleton-list">
+                                    <div class="bookings-skeleton-card">
+                                        <div class="skeleton skeleton-title"></div>
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Waiting List -->
+                    <div class="bookings-sub-section" id="waitingListBookings" style="display: none;">
+                        <div class="bookings-list" id="waitingListBookingsList">
+                            <div class="bookings-loading">
+                                <div class="bookings-skeleton-list">
+                                    <div class="bookings-skeleton-card">
+                                        <div class="skeleton skeleton-title"></div>
+                                        <div class="skeleton skeleton-text"></div>
+                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Browse Classes Section -->
+                <div class="bookings-section" id="browseClasses" style="display: none;">
+                    <!-- Filters -->
+                    <div class="browse-filters">
+                        <div class="filter-group filter-group-search">
+                            <label for="browseSearchFilter" class="filter-label">Search</label>
+                            <input type="text" id="browseSearchFilter" class="filter-input" placeholder="Search classes by name..." />
+                        </div>
+                        <div class="filter-group">
+                            <label for="browseGymFilter" class="filter-label">Gym</label>
+                            <select id="browseGymFilter" class="filter-select">
+                                <option value="">All Gyms</option>
+                            </select>
+                        </div>
+                        <div class="filter-group filter-group-date-range">
+                            <label for="browseDateRangePreset" class="filter-label">Date Range</label>
+                            <select id="browseDateRangePreset" class="filter-select">
+                                <option value="today">Today</option>
+                                <option value="tomorrow">Tomorrow</option>
+                                <option value="thisWeek" selected>This Week</option>
+                                <option value="nextWeek">Next Week</option>
+                                <option value="thisMonth">This Month</option>
+                                <option value="nextMonth">Next Month</option>
+                                <option value="custom">Custom Range</option>
+                            </select>
+                            <div id="customDateRangeContainer" class="custom-date-range-container" style="display: none; margin-top: 8px; gap: 8px; flex-direction: column;">
+                                <div class="date-input-container">
+                                    <label for="browseDateStart" class="filter-label-small">Start Date</label>
+                                    <input type="date" id="browseDateStart" class="filter-input date-input" />
+                                </div>
+                                <div class="date-input-container">
+                                    <label for="browseDateEnd" class="filter-label-small">End Date</label>
+                                    <input type="date" id="browseDateEnd" class="filter-input date-input" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="filter-group">
+                            <label for="browseTypeFilter" class="filter-label">Type</label>
+                            <select id="browseTypeFilter" class="filter-select">
+                                <option value="">All Types</option>
+                                <option value="groupActivity">Classes</option>
+                                <option value="event">Events</option>
+                            </select>
+                        </div>
+                        <button class="filter-apply-btn" id="applyFiltersBtn">Apply Filters</button>
+                    </div>
+
+                    <!-- Browse Results -->
+                    <div class="browse-results" id="browseResults">
+                        <div class="bookings-loading">Select filters to browse classes...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Page -->
+        <div class="page-section" id="pageActivity" style="display: none;">
+            <div class="activity-page-container">
+                <!-- Summary Stats -->
+                <div class="activity-stats-grid">
+                    <div class="activity-stat-card">
+                        <div class="activity-stat-label">Member since</div>
+                        <div class="activity-stat-value" id="activityMemberSince">-</div>
+                    </div>
+                    <div class="activity-stat-card">
+                        <div class="activity-stat-label">Total check-ins</div>
+                        <div class="activity-stat-value" id="activityTotalCheckins">-</div>
+                    </div>
+                    <div class="activity-stat-card">
+                        <div class="activity-stat-label">Most visited gym</div>
+                        <div class="activity-stat-value" id="activityMostVisitedGym">-</div>
+                    </div>
+                    <div class="activity-stat-card">
+                        <div class="activity-stat-label">Top check-in time</div>
+                        <div class="activity-stat-value" id="activityTopCheckinTime">-</div>
+                    </div>
+                    <div class="activity-stat-card">
+                        <div class="activity-stat-label">Bloc Life Loyalty</div>
+                        <div class="activity-stat-value" id="activityLoyaltyTier">-</div>
+                    </div>
+                </div>
+
+                <!-- Check-in History -->
+                <div class="activity-history-section">
+                    <h2 class="activity-section-title">Check-in History</h2>
+                    <div class="activity-history-list" id="activityHistoryList">
+                        <div class="activity-loading">
+                            <div class="activity-skeleton-list">
+                                <div class="activity-skeleton-item">
+                                    <div class="skeleton activity-skeleton-icon"></div>
+                                    <div class="activity-skeleton-content">
+                                        <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                    </div>
+                                </div>
+                                <div class="activity-skeleton-item">
+                                    <div class="skeleton activity-skeleton-icon"></div>
+                                    <div class="activity-skeleton-content">
+                                        <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                    </div>
+                                </div>
+                                <div class="activity-skeleton-item">
+                                    <div class="skeleton activity-skeleton-icon"></div>
+                                    <div class="activity-skeleton-content">
+                                        <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 50%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Page -->
+        <div class="page-section" id="pageProfile" style="display: none;">
+            <div class="profile-page-container">
+                <!-- Profile Cards Grid -->
+                <div class="profile-cards-grid">
+                    <!-- My Profile Card -->
+                    <div class="profile-card">
+                        <h2 class="profile-card-title">My profile</h2>
+                        <div class="profile-card-content">
+                            <div class="profile-info-section">
+                                <h3 class="profile-info-label">User information</h3>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">First name:</span>
+                                    <span class="profile-detail-value" id="profileFirstName">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Last name:</span>
+                                    <span class="profile-detail-value" id="profileLastName">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Customer No:</span>
+                                    <span class="profile-detail-value" id="profileCustomerNumber">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Primary gym:</span>
+                                    <span class="profile-detail-value" id="profilePrimaryGym">-</span>
+                                </div>
+                            </div>
+                            <div class="profile-info-section">
+                                <h3 class="profile-info-label">Personal info</h3>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Birthdate:</span>
+                                    <span class="profile-detail-value" id="profileBirthdate">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Gender:</span>
+                                    <span class="profile-detail-value" id="profileGender">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Valid student ID:</span>
+                                    <span class="profile-detail-value" id="profileStudentId">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- My Membership Card -->
+                    <div class="profile-card">
+                        <h2 class="profile-card-title">My membership</h2>
+                        <div class="profile-card-content">
+                            <!-- Membership details (shown when user has subscription) -->
+                            <div id="membershipDetails">
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Membership type (subscription):</span>
+                                    <span class="profile-detail-value" id="profileMembershipType">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Active since:</span>
+                                    <span class="profile-detail-value" id="profileActiveSince">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Price:</span>
+                                    <span class="profile-detail-value" id="profileMembershipPrice">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Primary gym:</span>
+                                    <span class="profile-detail-value" id="profileMembershipGym">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Member ID:</span>
+                                    <span class="profile-detail-value" id="profileMemberId">-</span>
+                                </div>
+                                <div class="profile-detail-row" id="profileBoundUntilRow" style="display: none;">
+                                    <span class="profile-detail-label">Bound until:</span>
+                                    <span class="profile-detail-value" id="profileBoundUntil">-</span>
+                                </div>
+                                <div class="profile-detail-row" id="profileCardConsentRow" style="display: none;">
+                                    <span class="profile-detail-label">Card consent:</span>
+                                    <span class="profile-detail-value" id="profileCardConsentStatus">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Contract status:</span>
+                                    <span class="profile-detail-value" id="profileContractStatus">-</span>
+                                </div>
+                                <!-- Bloc Life Loyalty tier: Hidden as requested -->
+                                <div class="profile-detail-row" style="display: none;">
+                                    <span class="profile-detail-label">Bloc Life Loyalty tier:</span>
+                                    <span class="profile-detail-value" id="profileLoyaltyTier"></span>
+                                </div>
+                                <button class="profile-action-btn" id="manageMembershipBtn">Manage membership</button>
+                            </div>
+                            <!-- Warning/CTA for missing card consent (hidden by default) -->
+                            <div id="cardConsentWarning" style="display: none;">
+                                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 16px; margin-top: 20px;">
+                                    <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #EF4444; flex-shrink: 0; margin-top: 2px;">
+                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                        </svg>
+                                        <div style="flex: 1;">
+                                            <p style="color: #FFFFFF; margin: 0 0 8px 0; font-weight: 500; font-size: 15px;">
+                                                Card consent required
+                                            </p>
+                                            <p style="color: rgba(255, 255, 255, 0.8); margin: 0; font-size: 14px; line-height: 1.5;">
+                                                Your membership requires a valid card consent (Kort Sammentykke) for recurring payments. Please register your payment card to continue your membership.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button class="profile-action-btn" id="registerCardConsentBtn" style="width: 100%; margin-top: 12px;">
+                                        Register payment card
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- CTA for users without subscription (hidden by default) -->
+                            <div id="membershipCTA" style="display: none;">
+                                <p style="color: var(--color-text-secondary); margin-bottom: 24px; line-height: 1.6;">
+                                    You don't have an active membership yet. Sign up now to get access to all Boulders gyms and exclusive benefits!
+                                </p>
+                                <a href="./index.html" class="profile-action-btn" style="text-decoration: none; display: inline-block; text-align: center;">
+                                    Sign up for membership
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- My Products Card -->
+                    <div class="profile-card" id="profileProductsCard" style="display: none;">
+                        <h2 class="profile-card-title">My products</h2>
+                        <div class="profile-card-content">
+                            <div id="profileProductsList">
+                                <!-- Products will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contact Info Card -->
+                    <div class="profile-card">
+                        <h2 class="profile-card-title">Contact info</h2>
+                        <div class="profile-card-content">
+                            <div class="profile-info-section">
+                                <h3 class="profile-info-label">Phone & E-mail</h3>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Phone number:</span>
+                                    <span class="profile-detail-value" id="profilePhone">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Email:</span>
+                                    <span class="profile-detail-value" id="profileEmail">-</span>
+                                </div>
+                            </div>
+                            <div class="profile-info-section">
+                                <h3 class="profile-info-label">Address</h3>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Street:</span>
+                                    <span class="profile-detail-value" id="profileStreet">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">City:</span>
+                                    <span class="profile-detail-value" id="profileCity">-</span>
+                                </div>
+                                <div class="profile-detail-row">
+                                    <span class="profile-detail-label">Country:</span>
+                                    <span class="profile-detail-value" id="profileCountry">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Consents Card (hidden - only shown in Settings) -->
+                    <div class="profile-card" style="display: none;">
+                        <h2 class="profile-card-title">Consents</h2>
+                        <div class="profile-card-content">
+                            <div class="profile-consent-row">
+                                <span class="profile-consent-label">Read Boulder's terms & conditions</span>
+                                <label class="profile-toggle">
+                                    <input type="checkbox" id="consentTerms" disabled>
+                                    <span class="profile-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="profile-consent-row">
+                                <span class="profile-consent-label">Allow email marketing from Boulders containing news, inspiration and more</span>
+                                <label class="profile-toggle">
+                                    <input type="checkbox" id="consentEmailMarketing" disabled>
+                                    <span class="profile-toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="profile-consent-row">
+                                <span class="profile-consent-label">Allow push notifications from Boulders containing news, inspiration and more</span>
+                                <label class="profile-toggle">
+                                    <input type="checkbox" id="consentPushNotifications" disabled>
+                                    <span class="profile-toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Card (hidden - only shown in Settings) -->
+                    <div class="profile-card" style="display: none;">
+                        <h2 class="profile-card-title">Payment</h2>
+                        <div class="profile-card-content">
+                            <div class="profile-detail-row">
+                                <span class="profile-detail-label">Payment method:</span>
+                                <span class="profile-detail-value" id="profilePaymentMethod">-</span>
+                            </div>
+                            <div class="profile-detail-row">
+                                <span class="profile-detail-label">Next:</span>
+                                <span class="profile-detail-value" id="profileNextBilling">-</span>
+                            </div>
+                            <button class="profile-action-btn-secondary" id="allInvoicesBtn">All invoices</button>
+                            <button class="profile-action-btn-secondary" id="updatePaymentBtn">Update payment method</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div class="page-section" id="pageSettings" style="display: none;">
+            <div class="settings-page-container">
+                <!-- Account Settings Section -->
+                <div class="settings-section" id="accountSettingsSection">
+                    <h2 class="settings-section-title">Account Settings</h2>
+                    
+                    <!-- Email -->
+                    <div class="settings-item settings-item-inline">
+                        <div class="settings-item-header">
+                            <label class="settings-item-label">Email Address</label>
+                            <div class="settings-item-trailing">
+                                <span class="settings-item-value" id="settingsEmail">-</span>
+                                <button class="settings-edit-btn settings-edit-icon-btn" id="editEmailBtn" data-field="email" aria-label="Edit email address">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                    <span class="visually-hidden">Edit</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-edit" id="emailEditForm" style="display: none;">
+                                <input type="email" class="settings-input" id="emailInput" placeholder="Enter email address" />
+                                <div class="settings-form-actions">
+                                    <button class="settings-save-btn" id="saveEmailBtn">Save</button>
+                                    <button class="settings-cancel-btn" id="cancelEmailBtn">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Phone -->
+                    <div class="settings-item settings-item-inline">
+                        <div class="settings-item-header">
+                            <label class="settings-item-label">Phone Number</label>
+                            <div class="settings-item-trailing">
+                                <span class="settings-item-value" id="settingsPhone">-</span>
+                                <button class="settings-edit-btn settings-edit-icon-btn" id="editPhoneBtn" data-field="phone" aria-label="Edit phone number">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                    <span class="visually-hidden">Edit</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-edit" id="phoneEditForm" style="display: none;">
+                                <input type="tel" class="settings-input" id="phoneInput" placeholder="Enter phone number" />
+                                <div class="settings-form-actions">
+                                    <button class="settings-save-btn" id="savePhoneBtn">Save</button>
+                                    <button class="settings-cancel-btn" id="cancelPhoneBtn">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Password -->
+                    <div class="settings-item settings-item-inline">
+                        <div class="settings-item-header">
+                            <label class="settings-item-label">Password</label>
+                            <div class="settings-item-trailing">
+                                <span class="settings-item-value">••••••••</span>
+                                <button class="settings-edit-btn settings-edit-icon-btn" id="changePasswordBtn" aria-label="Change password">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                    <span class="visually-hidden">Change Password</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Saved Payment Methods Section -->
+                <div class="settings-section">
+                    <div class="settings-section-header-with-action">
+                        <h2 class="settings-section-title">Saved payment methods</h2>
+                        <button class="settings-action-btn settings-action-btn-header" id="settingsRegisterCardConsentBtn" style="display: none;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            <span>Register payment card</span>
+                        </button>
+                    </div>
+                    <div id="settingsPaymentMethods">
+                        <div class="settings-loading">
+                            <div class="settings-skeleton-list">
+                                <div class="settings-skeleton-item">
+                                    <div class="settings-skeleton-item-content">
+                                        <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 40%;"></div>
+                                    </div>
+                                    <div class="skeleton settings-skeleton-item-action"></div>
+                                </div>
+                                <div class="settings-skeleton-item">
+                                    <div class="settings-skeleton-item-content">
+                                        <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 40%;"></div>
+                                    </div>
+                                    <div class="skeleton settings-skeleton-item-action"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Invoices Section -->
+                <div class="settings-section" id="accountActionsSection">
+                    <h2 class="settings-section-title">Invoices</h2>
+                    <div id="settingsInvoices">
+                        <div class="settings-loading">
+                            <div class="settings-skeleton-list">
+                                <div class="settings-skeleton-item">
+                                    <div class="settings-skeleton-item-content">
+                                        <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 30%;"></div>
+                                    </div>
+                                    <div class="skeleton skeleton-badge"></div>
+                                </div>
+                                <div class="settings-skeleton-item">
+                                    <div class="settings-skeleton-item-content">
+                                        <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 8px;"></div>
+                                        <div class="skeleton skeleton-text" style="width: 30%;"></div>
+                                    </div>
+                                    <div class="skeleton skeleton-badge"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notifications & Privacy Section -->
+                <div class="settings-section" id="notificationsPrivacySection">
+                    <h2 class="settings-section-title">Notifications & Privacy</h2>
+                    
+                    <!-- Email Marketing -->
+                    <div class="settings-item">
+                        <div class="settings-item-header">
+                            <label class="settings-item-label">Email Marketing</label>
+                            <label class="settings-toggle">
+                                <input type="checkbox" id="settingsEmailMarketing" />
+                                <span class="settings-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p class="settings-item-description">Receive promotional emails and updates</p>
+                    </div>
+
+                    <!-- SMS Marketing -->
+                    <div class="settings-item">
+                        <div class="settings-item-header">
+                            <label class="settings-item-label">SMS Marketing</label>
+                            <label class="settings-toggle">
+                                <input type="checkbox" id="settingsSmsMarketing" />
+                                <span class="settings-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p class="settings-item-description">Receive promotional SMS messages</p>
+                    </div>
+
+                    <!-- Mail Marketing -->
+                    <div class="settings-item">
+                        <div class="settings-item-header">
+                            <label class="settings-item-label">Mail Marketing</label>
+                            <label class="settings-toggle">
+                                <input type="checkbox" id="settingsMailMarketing" />
+                                <span class="settings-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <p class="settings-item-description">Receive promotional mail</p>
+                    </div>
+                </div>
+
+                <!-- Account Actions Section -->
+                <div class="settings-section">
+                    <h2 class="settings-section-title">Account Actions</h2>
+                    
+                    <!-- Subscription actions (shown only when user has active subscription) -->
+                    <div id="subscriptionActions">
+                        <div class="settings-item">
+                            <button class="settings-action-btn" id="freezeSubscriptionSettingsBtn">
+                                Freeze Membership
+                            </button>
+                        </div>
+                        
+                        <div class="settings-item">
+                            <button class="settings-action-btn settings-action-btn-danger" id="cancelSubscriptionSettingsBtn">
+                                Cancel Subscription
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-item">
+                        <button class="settings-action-btn settings-action-btn-danger" id="logoutBtn">
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Freeze Membership Modal - Step 1: Duration Selection -->
+            <div class="settings-modal" id="freezeSubscriptionModal" style="display: none;">
+                <div class="settings-modal-content">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title">Taking a break?<br><span style="font-weight: 400; font-size: 0.9em;">We'll be waiting for you!</span></h3>
+                        <button class="settings-modal-close" id="closeFreezeSubscriptionModal">&times;</button>
+                    </div>
+                    <div class="settings-modal-body">
+                        <div class="settings-form-group">
+                            <p class="settings-info-text">
+                                You can freeze your membership for 1-3 months at a time, up to 3 times a year for 49,- per time. 
+                                You don't pay the monthly membership fee while you're on hold and reactivation is free.
+                            </p>
+                            <p class="settings-warning-text" style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">
+                                Freezing cannot be activated during the binding period proceeding cancellation of a membership.
+                            </p>
+                        </div>
+                        <div class="settings-form-group">
+                            <label class="settings-form-label">Choose the freeze period:</label>
+                            <div class="freeze-date-range-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                                <div class="date-input-group" style="display: flex; flex-direction: column; gap: 6px;">
+                                    <label class="settings-form-label" style="font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.8);">Start Date</label>
+                                    <input type="date" class="settings-input" id="freezeStartDate" style="width: 100%;" />
+                                </div>
+                                <div class="date-input-group" style="display: flex; flex-direction: column; gap: 6px;">
+                                    <label class="settings-form-label" style="font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.8);">End Date</label>
+                                    <input type="date" class="settings-input" id="freezeEndDate" style="width: 100%;" />
+                                </div>
+                            </div>
+                            <div class="freeze-date-preview" id="freezeDatePreview" style="margin-top: 12px; padding: 12px; background-color: rgba(244, 1, 245, 0.1); border: 1px solid rgba(244, 1, 245, 0.2); border-radius: 8px; color: rgba(255, 255, 255, 0.9); font-size: 14px;"></div>
+                        </div>
+                        <div class="settings-form-error" id="freezeSubscriptionError" style="display: none;"></div>
+                    </div>
+                    <div class="settings-modal-footer">
+                        <button class="settings-action-btn" id="stayMembershipBtn" style="background-color: #F401F5; color: #FFFFFF; border: none;">I'll stay!</button>
+                        <button class="settings-save-btn" id="proceedFreezeBtn">Proceed</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Freeze Membership Modal - Step 2: Payment & Terms -->
+            <div class="settings-modal" id="freezeSubscriptionModalStep2" style="display: none;">
+                <div class="settings-modal-content">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title">Taking a break?<br><span style="font-weight: 400; font-size: 0.9em;">We'll be waiting for you!</span></h3>
+                        <button class="settings-modal-close" id="closeFreezeSubscriptionModalStep2">&times;</button>
+                    </div>
+                    <div class="settings-modal-body">
+                        <div class="settings-form-group">
+                            <p class="settings-info-text">
+                                By freezing your membership you accept that we charge a one-time payment of 49 DKK to your registered payment method.
+                            </p>
+                        </div>
+                        <div class="settings-form-group">
+                            <label class="settings-toggle" style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
+                                <input type="checkbox" id="freezeAcceptTerms" />
+                                <span class="settings-toggle-slider"></span>
+                                <span class="settings-form-label" style="margin: 0; cursor: pointer;">
+                                    I accept Boulders' <a href="#" style="color: #F401F5; text-decoration: underline;">terms & conditions</a>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="settings-form-error" id="freezeSubscriptionErrorStep2" style="display: none;"></div>
+                    </div>
+                    <div class="settings-modal-footer">
+                        <button class="settings-action-btn" id="stayMembershipBtnStep2" style="background-color: #F401F5; color: #FFFFFF; border: none;">I'll stay!</button>
+                        <button class="settings-save-btn" id="proceedFreezeBtnStep2">Proceed</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Freeze Membership Modal - Step 3: Success & Feedback -->
+            <div class="settings-modal" id="freezeSubscriptionModalStep3" style="display: none;">
+                <div class="settings-modal-content">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title">It's done!</h3>
+                        <button class="settings-modal-close" id="closeFreezeSubscriptionModalStep3">&times;</button>
+                    </div>
+                    <div class="settings-modal-body">
+                        <div class="settings-form-group">
+                            <h4 style="color: #FFFFFF; font-size: 18px; font-weight: 600; margin-bottom: 12px;">Do you have a minute?</h4>
+                            <p class="settings-info-text" style="margin-bottom: 16px;">
+                                Your membership has been set on hold.
+                            </p>
+                            <p class="settings-info-text" style="margin-bottom: 20px;">
+                                We would love your feedback! 💕 Please let us know why you have decided to freeze your membership.
+                            </p>
+                        </div>
+                        <div class="settings-form-group">
+                            <label class="settings-form-label">Choose a main cause from the list...</label>
+                            <div class="freeze-feedback-options" id="freezeFeedbackOptions" style="margin-top: 12px;">
+                                <button class="freeze-feedback-option" data-reason="injury">I have an injury</button>
+                                <button class="freeze-feedback-option" data-reason="busy">I am too busy to climb at the moment</button>
+                                <button class="freeze-feedback-option" data-reason="vacation">I am going on vacation / studying abroad</button>
+                                <button class="freeze-feedback-option" data-reason="no-partner">I didn't have anyone to go climb with</button>
+                            </div>
+                        </div>
+                        <div class="settings-form-error" id="freezeSubscriptionErrorStep3" style="display: none;"></div>
+                    </div>
+                    <div class="settings-modal-footer">
+                        <button class="settings-save-btn" id="sendFreezeFeedbackBtn" style="width: 100%; background-color: #F401F5;">Send feedback</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cancel Subscription Modal - Step 1: Warning -->
+            <div class="settings-modal" id="cancelSubscriptionModal" style="display: none;">
+                <div class="settings-modal-content">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title">Hey, <span id="cancelSubscriptionUserName">User</span></h3>
+                        <button class="settings-modal-close" id="closeCancelSubscriptionModal">&times;</button>
+                    </div>
+                    <div class="settings-modal-body">
+                        <div class="settings-form-group">
+                            <h4 style="color: #FFFFFF; font-size: 20px; font-weight: 700; margin-bottom: 16px;">This is the danger zone!</h4>
+                            <p class="settings-warning-text" style="margin-bottom: 16px;">
+                                By cancelling your membership you will no longer have access to any Boulders gyms and you will permanently lose your Bloc Life seniority.
+                            </p>
+                            <p class="settings-info-text" style="margin-bottom: 20px;">
+                                Have you considered freezing your membership?
+                            </p>
+                            <p class="settings-info-text">
+                                Freezing your membership allows you to temporarily pause your payments. When you're ready, you can easily reactivate your membership and resume your Bloc Life seniority! 👋
+                            </p>
+                        </div>
+                        <div class="settings-form-error" id="cancelSubscriptionError" style="display: none;"></div>
+                    </div>
+                    <div class="settings-modal-footer" style="flex-direction: column; gap: 12px;">
+                        <div style="display: flex; gap: 12px; width: 100%;">
+                            <button class="settings-action-btn" id="freezeInsteadBtn" style="flex: 1;">Freeze my membership</button>
+                            <button class="settings-action-btn" id="proceedCancelBtn" style="flex: 1;">Sorry... I have to go 😟</button>
+                        </div>
+                        <button class="settings-action-btn" id="nevermindCancelBtn" style="width: 100%; background-color: #F401F5; color: #FFFFFF; border: none;">Nevermind!</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- All Invoices Modal -->
+            <div class="settings-modal" id="allInvoicesModal" style="display: none;">
+                <div class="settings-modal-content" style="max-width: 800px;">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title">All Invoices</h3>
+                        <button class="settings-modal-close" id="closeAllInvoicesModal">&times;</button>
+                    </div>
+                    <div class="settings-modal-body" style="max-height: 70vh; overflow-y: auto;">
+                        <div id="allInvoicesContainer">
+                            <div style="text-align: center; padding: 40px; color: rgba(255, 255, 255, 0.7);">Loading invoices...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cancel Subscription Modal - Step 2: Password Confirmation -->
+            <div class="settings-modal" id="cancelSubscriptionModalStep2" style="display: none;">
+                <div class="settings-modal-content">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title">You're leaving?<br><span style="font-weight: 400; font-size: 0.9em;">We're sad to see you go!</span></h3>
+                        <button class="settings-modal-close" id="closeCancelSubscriptionModalStep2">&times;</button>
+                    </div>
+                    <div class="settings-modal-body">
+                        <div class="settings-form-group">
+                            <p class="settings-info-text">
+                                Canceling your membership will terminate your membership at Boulders in <strong>one month from the next billing date</strong>. This cancellation <strong>can not be reversed</strong>.
+                            </p>
+                            <p class="settings-info-text" style="margin-top: 16px;">
+                                Are you sure you want to proceed with the cancellation?
+                            </p>
+                        </div>
+                        <div class="settings-form-group">
+                            <label class="settings-form-label" for="cancelPasswordInput">Confirm your password</label>
+                            <input type="password" class="settings-input" id="cancelPasswordInput" placeholder="Enter your password" />
+                        </div>
+                        <div class="settings-form-error" id="cancelSubscriptionErrorStep2" style="display: none;"></div>
+                    </div>
+                    <div class="settings-modal-footer">
+                        <button class="settings-action-btn" id="stayMembershipCancelBtn" style="background-color: #F401F5; color: #FFFFFF; border: none;">I'll stay!</button>
+                        <button class="settings-save-btn" id="confirmCancelSubscriptionBtn">Proceed</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cancel Subscription Modal - Step 3: Success & Feedback -->
+            <div class="settings-modal" id="cancelSubscriptionModalStep3" style="display: none;">
+                <div class="settings-modal-content">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title">It's done!</h3>
+                        <button class="settings-modal-close" id="closeCancelSubscriptionModalStep3">&times;</button>
+                    </div>
+                    <div class="settings-modal-body">
+                        <div class="settings-form-group">
+                            <h4 style="color: #FFFFFF; font-size: 18px; font-weight: 600; margin-bottom: 12px;">Do you have a minute?</h4>
+                            <p class="settings-info-text" style="margin-bottom: 16px;">
+                                Your cancellation has been registered.
+                            </p>
+                            <p class="settings-info-text" style="margin-bottom: 20px;">
+                                We would love your feedback! 💕 Please let us know why you have decided to leave Boulders.
+                            </p>
+                        </div>
+                        <div class="settings-form-group">
+                            <label class="settings-form-label">Choose a main cause from the list...</label>
+                            <div class="freeze-feedback-options" id="cancelFeedbackOptions" style="margin-top: 12px;">
+                                <button class="freeze-feedback-option" data-reason="not-using">I didn't use my membership anymore</button>
+                                <button class="freeze-feedback-option" data-reason="expensive">The membership was too expensive for me</button>
+                                <button class="freeze-feedback-option" data-reason="facilities">I wasn't satisfied with the facilities</button>
+                                <button class="freeze-feedback-option" data-reason="no-partner">I didn't have anyone to go climb with</button>
+                            </div>
+                        </div>
+                        <div class="settings-form-error" id="cancelSubscriptionErrorStep3" style="display: none;"></div>
+                    </div>
+                    <div class="settings-modal-footer">
+                        <button class="settings-save-btn" id="sendCancelFeedbackBtn" style="width: 100%; background-color: #F401F5;">Send feedback</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact Field Edit Modal -->
+            <div class="settings-modal" id="contactFieldModal" style="display: none;">
+                <div class="settings-modal-content" style="max-width: 460px;">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title" id="contactFieldModalTitle">Edit</h3>
+                        <button class="settings-modal-close" id="closeContactFieldModal">&times;</button>
+                    </div>
+                    <div class="settings-modal-body">
+                        <div class="settings-form-group">
+                            <input type="text" class="settings-input" id="contactFieldInput" placeholder="" />
+                        </div>
+                        <div class="settings-form-error" id="contactFieldModalError" style="display: none;"></div>
+                    </div>
+                    <div class="settings-modal-footer">
+                        <button class="settings-cancel-btn" id="cancelContactFieldModal">Cancel</button>
+                        <button class="settings-save-btn" id="saveContactFieldModal">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Password Change Modal -->
+            <div class="settings-modal" id="passwordModal" style="display: none;">
+                <div class="settings-modal-content">
+                    <div class="settings-modal-header">
+                        <h3 class="settings-modal-title">Change Password</h3>
+                        <button class="settings-modal-close" id="closePasswordModal">&times;</button>
+                    </div>
+                    <div class="settings-modal-body">
+                        <div class="settings-form-group">
+                            <label class="settings-form-label" for="oldPasswordInput">Current Password</label>
+                            <input type="password" class="settings-input" id="oldPasswordInput" placeholder="Enter current password" />
+                        </div>
+                        <div class="settings-form-group">
+                            <label class="settings-form-label" for="newPasswordInput">New Password</label>
+                            <input type="password" class="settings-input" id="newPasswordInput" placeholder="Enter new password" />
+                        </div>
+                        <div class="settings-form-group">
+                            <label class="settings-form-label" for="confirmPasswordInput">Confirm New Password</label>
+                            <input type="password" class="settings-input" id="confirmPasswordInput" placeholder="Confirm new password" />
+                        </div>
+                        <div class="settings-form-error" id="passwordFormError" style="display: none;"></div>
+                    </div>
+                    <div class="settings-modal-footer">
+                        <button class="settings-cancel-btn" id="cancelPasswordBtn">Cancel</button>
+                        <button class="settings-save-btn" id="savePasswordBtn">Change Password</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Page Content (shown when not authenticated) -->
+    <div class="login-page-wrapper" id="loginPageWrapper">
+        <a href="./index.html" class="login-page-close-btn" title="Close">
+            &times;
+        </a>
+        
+        <!-- Login Status Section -->
+        <div class="login-status" data-login-status style="display: none;">
+            <div class="login-status-content">
+                <div class="login-status-profile">
+                    <div class="login-status-header">
+                        <p class="login-status-label">Logged in as</p>
+                        <p class="login-status-name" data-auth-name-page>-</p>
+                        <p class="login-status-email" data-auth-email-page>-</p>
+                        <div class="login-status-dob profile-detail-item" data-auth-dob-page style="display: none;">
+                            <span class="profile-detail-label">Date of birth:</span>
+                            <span class="profile-detail-value">-</span>
+                        </div>
+                        <div class="login-status-address profile-detail-item" data-auth-address-page style="display: none;">
+                            <span class="profile-detail-label">Address:</span>
+                            <span class="profile-detail-value">-</span>
+                        </div>
+                        <div class="login-status-phone profile-detail-item" data-auth-phone-page style="display: none;">
+                            <span class="profile-detail-label">Phone:</span>
+                            <span class="profile-detail-value">-</span>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="login-btn" data-action="logout">Log out</button>
+            </div>
+        </div>
+
+        <!-- Login Form Section -->
+        <div class="form-container" data-login-form-container-page>
+            <div class="form-container-header">
+                <h3 class="info-section-title">LOG IN</h3>
+                <div class="form-container-logo">
+                    <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="form-logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                    <div class="form-logo-fallback">BOULDERS</div>
+                </div>
+            </div>
+            <form class="login-form" id="loginPageForm">
+                <div class="form-group">
+                    <label for="loginEmailPage">E-mail*</label>
+                    <input type="email" id="loginEmailPage" name="loginEmail" placeholder="E-mail">
+                </div>
+                <div class="form-group">
+                    <label for="loginPasswordPage">Password*</label>
+                    <input type="password" id="loginPasswordPage" name="loginPassword" placeholder="Enter your password">
+                    <a href="#" class="forgot-password-link" data-action="forgot-password">Forgot password?</a>
+                </div>
+                <button type="submit" class="login-btn">LOG IN</button>
+            </form>
+            <div class="new-user-section">
+                <p class="new-user-text">New user? <a href="./index.html" class="new-user-link">Sign up here</a></p>
+            </div>
+        </div>
+
+        <!-- Profile Edit Section (shown when logged in) -->
+        <div class="profile-edit-section" id="profileEditSection" style="display: none;">
+                    <h3 class="info-section-title">EDIT PROFILE</h3>
+                    <form class="profile-edit-form" id="profileEditForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="editFirstName">First name*</label>
+                                <input type="text" id="editFirstName" name="firstName" placeholder="First Name">
+                            </div>
+                            <div class="form-group">
+                                <label for="editLastName">Last name*</label>
+                                <input type="text" id="editLastName" name="lastName" placeholder="Last name">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="editDateOfBirth">Date of birth*</label>
+                            <input type="date" id="editDateOfBirth" name="dateOfBirth" class="date-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="editStreetAddress">Street and house number*</label>
+                            <input type="text" id="editStreetAddress" name="streetAddress" placeholder="Street and house nr">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="editPostalCode">Postal code*</label>
+                                <input type="text" id="editPostalCode" name="postalCode" placeholder="Zipcode">
+                            </div>
+                            <div class="form-group">
+                                <label for="editCity">City</label>
+                                <input type="text" id="editCity" name="city" placeholder="City">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="editPhone">Phone</label>
+                            <input type="tel" id="editPhone" name="phone" placeholder="Phone number">
+                        </div>
+                        <button type="submit" class="login-btn">SAVE CHANGES</button>
+                    </form>
+                </div>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div class="forgot-password-modal" id="forgotPasswordModal" style="display: none;">
+        <div class="forgot-password-modal-content">
+            <h3 class="info-section-title">RESET PASSWORD</h3>
+            <p class="forgot-password-description">Enter your email address and we'll send you instructions to reset your password.</p>
+            
+            <form class="forgot-password-form" id="forgotPasswordForm">
+                <div class="form-group">
+                    <label for="forgotPasswordEmail">E-mail*</label>
+                    <input type="email" id="forgotPasswordEmail" name="forgotPasswordEmail" placeholder="Enter your email" required>
+                </div>
+                
+                <div class="forgot-password-actions">
+                    <button type="button" class="forgot-password-cancel-btn" data-action="close-forgot-password">Cancel</button>
+                    <button type="submit" class="login-btn">SEND RESET LINK</button>
+                </div>
+            </form>
+            
+            <div class="forgot-password-success" id="forgotPasswordSuccess" style="display: none;">
+                <p class="forgot-password-success-message">Password reset instructions have been sent to your email.</p>
+                <button type="button" class="login-btn" data-action="close-forgot-password">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terms and Conditions Modal -->
+    <div class="terms-modal" id="termsModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" id="termsModalTitle">Terms and Conditions</h3>
+                <div class="terms-modal-header-actions">
+                    <button class="terms-modal-close" id="termsModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-tabs" id="termsModalTabs" style="display: none;">
+                <button class="terms-tab active" data-tab="membership">Membership / 15 Day</button>
+                <button class="terms-tab" data-tab="punchcard">Punch Card</button>
+            </div>
+            <div class="terms-modal-search" id="termsModalSearch" style="display: none;">
+                <input type="text" id="termsSearchInput" placeholder="Search terms..." class="terms-search-input" data-placeholder-da="Søg i vilkår..." data-placeholder-en="Search terms...">
+                <button class="terms-search-clear" id="termsSearchClear" style="display: none;" aria-label="Clear search">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="terms-modal-body">
+                <div class="terms-modal-loading" id="termsModalLoading" style="display: none;">
+                    <div class="terms-modal-spinner"></div>
+                    <p>Loading...</p>
+                </div>
+                <div class="terms-modal-content-text" id="termsModalContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Policy Modal -->
+    <div class="terms-modal" id="dataPolicyModal" style="display: none;">
+        <div class="terms-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title">Data Policy</h3>
+                <div class="terms-modal-header-actions">
+                    <button class="terms-modal-close" id="dataPolicyModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-search" id="dataPolicyModalSearch">
+                <input type="text" id="dataPolicySearchInput" placeholder="Search..." class="terms-search-input" data-placeholder-da="Søg..." data-placeholder-en="Search...">
+                <button class="terms-search-clear" id="dataPolicySearchClear" style="display: none;" aria-label="Clear search">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="terms-modal-body">
+                <div class="terms-modal-loading" id="dataPolicyModalLoading" style="display: none;">
+                    <div class="terms-modal-spinner"></div>
+                    <p>Loading...</p>
+                </div>
+                <div class="terms-modal-content-text" id="dataPolicyModalContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cookie Declaration Modal -->
+    <div class="terms-modal" id="cookieDeclarationModal" style="display: none;" role="dialog" aria-labelledby="cookieDeclarationModalTitle" aria-modal="true">
+        <div class="terms-modal-content cookie-declaration-modal-content">
+            <div class="terms-modal-header">
+                <h3 class="terms-modal-title" id="cookieDeclarationModalTitle">Cookie Policy</h3>
+                <div class="terms-modal-header-actions">
+                    <button class="terms-modal-close" id="cookieDeclarationModalClose" aria-label="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="terms-modal-body">
+                <div class="terms-modal-content-text cookie-declaration-content" id="cookieDeclarationContent">
+                    <script id="CookieDeclaration" src="https://consent.cookiebot.com/31a4df3e-7adc-432b-8c8c-30c07e1d0f93/cd.js" type="text/javascript" async></script>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="./profile-main.js"></script>
+
+    <!-- Footer -->
+    <footer class="global-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>Terms and Conditions</h4>
+                <ul>
+                    <li>
+                        <a href="#" data-action="open-terms" data-terms-type="terms">Terms and Conditions</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Policies</h4>
+                <ul>
+                    <li>
+                        <a href="#" data-action="open-terms" data-terms-type="privacy">Privacy Policy</a>
+                    </li>
+                    <li>
+                        <a href="#" data-action="open-cookie-declaration">Cookie Policy</a>
+                    </li>
+                    <li>
+                        <button type="button" class="footer-cookie-settings-link" id="cookieSettingsButton">Cookie Settings</button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="footer-bottom-content">
+                <p>© 2026 Boulders. All rights reserved. <a href="https://boulders.dk" target="_blank" rel="noopener noreferrer">boulders.dk</a></p>
+                <p style="font-size: 12px; opacity: 0.72; margin-top: 8px;">Built by Rami</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

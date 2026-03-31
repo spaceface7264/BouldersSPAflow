@@ -786,6 +786,50 @@ body {
     white-space: nowrap;
 }
 
+.header-login-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #FFFFFF;
+    background-color: rgba(34, 197, 94, 0.2);
+    border: 1px solid rgba(34, 197, 94, 0.45);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.header-login-btn:hover {
+    background-color: rgba(34, 197, 94, 0.3);
+    border-color: rgba(34, 197, 94, 0.65);
+}
+
+.header-login-btn:active {
+    transform: translateY(1px);
+}
+
+.header-profile-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #FFFFFF;
+    background-color: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.header-profile-btn:hover {
+    background-color: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.55);
+}
+
+.header-profile-btn:active {
+    transform: translateY(1px);
+}
+
 .header-logout-btn:hover {
     background-color: rgba(239, 68, 68, 0.3);
     border-color: rgba(239, 68, 68, 0.6);
@@ -998,6 +1042,16 @@ body {
         padding: 4px 10px;
         font-size: 10px;
     }
+
+    .header-login-btn {
+        padding: 4px 10px;
+        font-size: 10px;
+    }
+
+    .header-profile-btn {
+        padding: 4px 10px;
+        font-size: 10px;
+    }
     
     .main {
         padding: 0px 12px 0 12px; /* Match mobile padding pattern */
@@ -1113,7 +1167,17 @@ body {
         padding: 4px 8px;
         font-size: 10px;
     }
-    
+
+    .header-login-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    .header-profile-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
     .main {
         padding: 0px 8px 0 8px; /* Match mobile padding pattern */
         padding-top: calc(44px + 0px); /* Minimal space for fixed header on mobile */

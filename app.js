@@ -7137,7 +7137,7 @@ function setupEventListeners() {
     if (e.target === DOM.dataPolicyModalClose || e.target.closest('#dataPolicyModalClose')) {
       closeDataPolicyModal();
     }
-    
+
     // Campaign rejection modal handlers
     if (e.target.closest('#campaignRejectionOption1')) {
       handleRejectionOption1();
@@ -7209,7 +7209,7 @@ function setupEventListeners() {
       }
     });
   }
-  
+
   // Close modals on Escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -8583,6 +8583,7 @@ function refreshHeaderAuthIndicator() {
   const headerAuthIndicator = document.getElementById('headerAuthIndicator');
   const headerAuthEmail = document.getElementById('headerAuthEmail');
   const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+  const headerLoginBtn = document.getElementById('headerLoginBtn');
   
   if (!headerAuthIndicator) return;
   
@@ -8596,6 +8597,9 @@ function refreshHeaderAuthIndicator() {
   if (!authenticated) {
     // Hide auth indicator when not authenticated, but keep header visible
     headerAuthIndicator.style.display = 'none';
+    if (headerLoginBtn) {
+      headerLoginBtn.style.display = 'inline-flex';
+    }
     return;
   }
   
@@ -8611,6 +8615,9 @@ function refreshHeaderAuthIndicator() {
   
   // Show the indicator
   headerAuthIndicator.style.display = 'flex';
+  if (headerLoginBtn) {
+    headerLoginBtn.style.display = 'none';
+  }
 }
 
 function formatCityDisplay(city) {
@@ -11260,12 +11267,20 @@ function handleGlobalClick(event) {
       break;
     }
     case 'open-login': {
-      showToast('Login flow handled by backend integration.', 'info');
+      event.preventDefault();
+      state.currentStep = 4;
+      showStep(4);
+      switchAuthMode('login');
       break;
     }
     case 'logout': {
       event.preventDefault();
       showLogoutConfirmation();
+      break;
+    }
+    case 'open-profile': {
+      event.preventDefault();
+      window.location.href = '/profile';
       break;
     }
     case 'save-account': {
@@ -20937,4 +20952,17 @@ function setupFAQAccordion() {
   
   // Update DOM reference
   DOM.faqQuestions = faqQuestions;
+}
+
+// Bridge selected app internals for profile.html legacy page support.
+// This keeps /profile usable without the older monolithic app.js.
+if (typeof window !== 'undefined') {
+  window.state = state;
+  window.authAPI = authAPI;
+  window.isUserAuthenticated = isUserAuthenticated;
+  window.syncAuthenticatedCustomerState = syncAuthenticatedCustomerState;
+  window.refreshLoginUI = refreshLoginUI;
+  window.showToast = showToast;
+  window.getErrorMessage = getErrorMessage;
+  window.handleLogout = handleLogout;
 }

@@ -1,0 +1,1214 @@
+:root {
+  --profile-bg: #141518;
+  --profile-card: rgba(21, 23, 29, 0.9);
+  --profile-border: rgba(255, 255, 255, 0.08);
+  --profile-text: #ffffff;
+  --profile-muted: rgba(255, 255, 255, 0.72);
+  --profile-accent: #f401f5;
+  --type-h1: clamp(2rem, 1.3rem + 1.6vw, 2.5rem);
+  --type-h2: clamp(1.12rem, 1.02rem + 0.35vw, 1.34rem);
+  --type-h3: clamp(1.08rem, 0.96rem + 0.35vw, 1.2rem);
+  --type-body: clamp(0.92rem, 0.88rem + 0.2vw, 1rem);
+  --type-label: clamp(0.9rem, 0.85rem + 0.18vw, 0.98rem);
+  --type-meta: clamp(0.82rem, 0.8rem + 0.16vw, 0.9rem);
+}
+
+.main-navigation {
+  position: sticky;
+  top: 0;
+  z-index: 2000;
+  background: rgba(13, 14, 18, 0.92);
+  border-bottom: 1px solid var(--profile-border);
+  backdrop-filter: blur(8px);
+  overflow: visible;
+}
+
+.nav-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  position: relative;
+  overflow: visible;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.nav-logo {
+  flex-shrink: 0;
+}
+
+.nav-logo-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.nav-logo-image {
+  display: block;
+  height: 22px !important;
+  width: auto !important;
+  max-width: 180px;
+  object-fit: contain;
+}
+
+.nav-logo-fallback {
+  display: none;
+  color: var(--profile-text);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.nav-link {
+  color: var(--profile-muted);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: var(--type-meta);
+  padding: 8px 0;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-link.active {
+  color: var(--profile-text);
+  border-bottom-color: var(--profile-accent);
+}
+
+.page-content-wrapper {
+  max-width: 1200px;
+  margin: 24px auto 0;
+  padding: 0 20px 40px;
+}
+
+.dashboard-page-container,
+.classes-page-container,
+.activity-page-container,
+.profile-page-container,
+.settings-page-container {
+  color: var(--profile-text);
+}
+
+.dashboard-grid,
+.profile-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dashboard-card,
+.profile-card,
+.activity-history-section,
+.settings-section,
+.bookings-section,
+.bookings-filters {
+  background: var(--profile-card);
+  border: 1px solid var(--profile-border);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.dashboard-card-large,
+.dashboard-card-full-width {
+  grid-column: span 2;
+}
+
+.dashboard-card-title,
+.profile-card-title,
+.activity-section-title,
+.settings-section-title {
+  margin: 0 0 12px;
+  font-size: var(--type-h2);
+  line-height: 1.2;
+}
+
+.profile-page-header,
+.classes-page-header,
+.activity-page-header,
+.settings-page-header {
+  margin-bottom: 18px;
+}
+
+.profile-page-title,
+.classes-page-title,
+.activity-page-title,
+.settings-page-title {
+  margin: 0;
+  font-size: var(--type-h1);
+  line-height: 1.1;
+}
+
+.profile-detail-row,
+.dashboard-info-item,
+.activity-history-item,
+.settings-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--profile-border);
+}
+
+.profile-detail-row:last-child,
+.dashboard-info-item:last-child {
+  border-bottom: 0;
+}
+
+.profile-detail-label,
+.dashboard-info-label,
+.activity-stat-label {
+  color: var(--profile-muted);
+  font-size: var(--type-label);
+  line-height: 1.35;
+}
+
+.profile-detail-value,
+.dashboard-info-value,
+.activity-stat-value {
+  color: var(--profile-text);
+  font-weight: 600;
+  text-align: right;
+  font-size: var(--type-body);
+  line-height: 1.35;
+}
+
+.bookings-tabs,
+.bookings-sub-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.booking-tab,
+.booking-sub-tab,
+.filter-apply-btn,
+.profile-action-btn,
+.profile-action-btn-secondary {
+  border: 1px solid var(--profile-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--profile-text);
+  border-radius: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.booking-tab.active,
+.booking-sub-tab.active,
+.profile-action-btn,
+.filter-apply-btn {
+  background: linear-gradient(180deg, #ff00d6, #c800ff);
+  border-color: transparent;
+}
+
+.activity-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.activity-stat-card {
+  background: var(--profile-card);
+  border: 1px solid var(--profile-border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.nav-user {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--profile-text);
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 180px;
+  background: #1c1f27;
+  border: 1px solid var(--profile-border);
+  border-radius: 10px;
+  padding: 6px;
+  z-index: 3000;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
+}
+
+.dropdown-item {
+  display: block;
+  color: var(--profile-text);
+  text-decoration: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: var(--type-body);
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* --- Profile Overhaul v2 --- */
+body.authenticated {
+  background-color: #0f1014;
+}
+
+.main-navigation {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.nav-container {
+  min-height: 64px;
+}
+
+.nav-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  padding: 8px 10px;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.nav-link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav-link:focus-visible,
+.dropdown-item:focus-visible,
+.profile-action-btn:focus-visible,
+.profile-action-btn-secondary:focus-visible,
+.booking-tab:focus-visible,
+.booking-sub-tab:focus-visible,
+.filter-apply-btn:focus-visible {
+  outline: 2px solid #f401f5;
+  outline-offset: 2px;
+}
+
+.nav-user {
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.nav-user:hover {
+  border-color: var(--profile-border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.page-content-wrapper {
+  margin-top: 32px;
+}
+
+.profile-page-title,
+.classes-page-title,
+.activity-page-title,
+.settings-page-title {
+  font-size: var(--type-h1);
+  letter-spacing: 0.2px;
+}
+
+.dashboard-card,
+.profile-card,
+.activity-history-section,
+.settings-section,
+.bookings-section,
+.bookings-filters,
+.activity-stat-card {
+  background: linear-gradient(180deg, rgba(20, 22, 30, 0.92) 0%, rgba(15, 16, 24, 0.92) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+}
+
+.dashboard-card-title,
+.profile-card-title,
+.activity-section-title,
+.settings-section-title {
+  font-size: var(--type-h2);
+  margin-bottom: 14px;
+}
+
+.profile-info-label {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: var(--type-h3);
+  margin: 0 0 6px;
+}
+
+.profile-detail-row,
+.dashboard-info-item,
+.settings-item {
+  min-height: 44px;
+  align-items: center;
+  padding: 9px 0;
+}
+
+.profile-detail-label,
+.dashboard-info-label,
+.activity-stat-label {
+  font-size: var(--type-label);
+}
+
+.profile-detail-value,
+.dashboard-info-value,
+.activity-stat-value {
+  font-size: var(--type-body);
+  line-height: 1.35;
+}
+
+.profile-action-btn,
+.filter-apply-btn,
+.booking-tab,
+.booking-sub-tab {
+  min-height: 44px;
+}
+
+.profile-action-btn {
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(244, 1, 245, 0.25);
+}
+
+.profile-action-btn:hover,
+.filter-apply-btn:hover,
+.booking-tab.active:hover,
+.booking-sub-tab.active:hover {
+  filter: brightness(1.05);
+}
+
+.profile-cards-grid {
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .nav-container {
+    max-width: 1480px;
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+
+  .page-content-wrapper {
+    max-width: 1480px;
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+
+  .profile-cards-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-auto-rows: minmax(120px, auto);
+    gap: 20px;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(1) {
+    grid-column: 1 / span 6;
+    grid-row: span 2;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(2) {
+    grid-column: 7 / span 6;
+    grid-row: span 1;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(3) {
+    grid-column: 7 / span 6;
+    grid-row: span 1;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .profile-cards-grid > .profile-card:nth-child(1) {
+    grid-column: 1 / span 7;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(2) {
+    grid-column: 8 / span 5;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(3) {
+    grid-column: 8 / span 5;
+  }
+}
+
+@media (max-width: 699px) {
+  .main-navigation {
+    position: sticky;
+  }
+
+  .nav-container {
+    padding: 10px 12px;
+    min-height: 56px;
+  }
+
+  .page-content-wrapper {
+    margin-top: 18px;
+  }
+
+  .profile-card,
+  .dashboard-card {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .profile-detail-row,
+  .dashboard-info-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    min-height: unset;
+  }
+
+  .profile-detail-value,
+  .dashboard-info-value {
+    text-align: left;
+  }
+}
+
+@media (min-width: 700px) and (max-width: 1023px) {
+  .page-content-wrapper {
+    max-width: 1100px;
+    padding: 0 16px 28px;
+  }
+
+  .profile-cards-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-auto-rows: minmax(110px, auto);
+    gap: 14px;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(1) {
+    grid-column: 1 / span 3;
+    grid-row: span 2;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(2) {
+    grid-column: 4 / span 3;
+    grid-row: span 1;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: span 1;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(3) .profile-card-content {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(3) .profile-detail-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .profile-cards-grid > .profile-card:nth-child(3) .profile-detail-value {
+    text-align: right;
+    white-space: nowrap;
+  }
+}
+
+/* --- Final deterministic profile grid (legacy conflict guard) --- */
+body.authenticated #pageProfile .profile-cards-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  column-gap: 12px !important;
+  row-gap: 8px !important;
+}
+
+body.authenticated #pageProfile .profile-page-container {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+body.authenticated #pageContentWrapper {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+body.authenticated #pageProfile .profile-cards-grid > .profile-card:nth-child(1),
+body.authenticated #pageProfile .profile-cards-grid > .profile-card:nth-child(2) {
+  grid-column: auto !important;
+  grid-row: auto !important;
+}
+
+body.authenticated #pageProfile .profile-cards-grid > .profile-card:nth-child(3) {
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+}
+
+body.authenticated #pageProfile .profile-cards-grid > .profile-card:nth-child(3) .profile-card-content {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+}
+
+body.authenticated #pageProfile .profile-card-content .profile-info-section {
+  min-width: 0;
+}
+
+body.authenticated #pageProfile .profile-detail-row {
+  display: grid !important;
+  grid-template-columns: minmax(120px, 1fr) auto !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+body.authenticated #pageProfile .profile-detail-value {
+  text-align: right !important;
+  word-break: break-word;
+}
+
+@media (max-width: 839px) {
+  body.authenticated #pageProfile .profile-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  body.authenticated #pageProfile .profile-cards-grid > .profile-card:nth-child(3) .profile-card-content {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.authenticated #pageProfile .profile-detail-row {
+    grid-template-columns: 1fr !important;
+    gap: 4px !important;
+  }
+
+  body.authenticated #pageProfile .profile-detail-value {
+    text-align: left !important;
+  }
+}
+
+/* Settings page controls polish */
+body.authenticated #pageSettings .settings-page-container {
+  display: grid;
+  gap: 12px;
+}
+
+body.authenticated #pageSettings .settings-section {
+  margin: 0;
+}
+
+body.authenticated #pageSettings .settings-item {
+  display: block !important;
+  min-height: 0;
+  align-items: initial;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+body.authenticated #pageSettings .settings-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+body.authenticated #pageSettings .settings-item-label {
+  font-size: var(--type-label);
+  color: rgba(255, 255, 255, 0.88);
+  font-weight: 500;
+}
+
+body.authenticated #pageSettings .settings-item-content {
+  margin-top: 0;
+  width: 100%;
+}
+
+body.authenticated #pageSettings .settings-item-value {
+  display: block;
+  font-size: var(--type-body);
+  color: #fff;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+body.authenticated #pageSettings .settings-item-description {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: var(--type-meta);
+}
+
+/* Notifications & Privacy layout cleanup */
+body.authenticated #pageSettings #notificationsPrivacySection .settings-item {
+  display: block !important;
+  min-height: unset;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+body.authenticated #pageSettings #notificationsPrivacySection .settings-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+body.authenticated #pageSettings #notificationsPrivacySection .settings-toggle {
+  flex-shrink: 0;
+}
+
+body.authenticated #pageSettings #notificationsPrivacySection .settings-item-description {
+  margin-top: 6px;
+  margin-left: 0;
+  max-width: 580px;
+  line-height: 1.35;
+}
+
+body.authenticated #pageSettings #accountActionsSection .settings-item {
+  display: flex !important;
+  width: 100% !important;
+  justify-content: flex-end;
+  align-items: center !important;
+}
+
+body.authenticated #pageSettings #accountActionsSection #logoutBtn {
+  margin-left: auto;
+  display: inline-flex;
+  align-self: center;
+}
+
+body.authenticated #pageSettings .settings-edit-btn,
+body.authenticated #pageSettings .settings-save-btn,
+body.authenticated #pageSettings .settings-cancel-btn,
+body.authenticated #pageSettings .settings-action-btn {
+  min-height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-weight: 600;
+  font-size: var(--type-meta);
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+/* Compact controls specifically for Account Settings rows */
+body.authenticated #pageSettings #accountSettingsSection .settings-edit-btn {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: var(--type-meta);
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  width: auto;
+  align-self: flex-start;
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+}
+
+body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
+  min-height: 34px;
+  padding: 6px 12px;
+  max-width: fit-content;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-header {
+  margin-bottom: 2px;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-label {
+  line-height: 1.2;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-content {
+  margin-top: 0;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-value {
+  line-height: 1.2;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-edit {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-edit .settings-input {
+  min-height: 38px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(7, 10, 18, 0.85);
+  padding: 8px 11px;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-edit .settings-input:focus {
+  outline: none;
+  border-color: rgba(244, 1, 245, 0.65);
+  box-shadow: 0 0 0 2px rgba(244, 1, 245, 0.22);
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-form-actions .settings-save-btn,
+body.authenticated #pageSettings #accountSettingsSection .settings-form-actions .settings-cancel-btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: var(--type-meta);
+  box-shadow: none;
+}
+
+/* Email/Phone now use modal editing, keep legacy inline forms hidden */
+body.authenticated #pageSettings #accountSettingsSection #emailEditForm,
+body.authenticated #pageSettings #accountSettingsSection #phoneEditForm {
+  display: none !important;
+}
+
+/* Settings modal system for profile page */
+body.authenticated .settings-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(2, 4, 10, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 5000;
+}
+
+body.authenticated .settings-modal .settings-modal-content {
+  width: min(100%, 520px);
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(14, 16, 26, 0.98) 0%, rgba(12, 13, 20, 0.98) 100%);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.52);
+}
+
+body.authenticated .settings-modal .settings-modal-header,
+body.authenticated .settings-modal .settings-modal-body,
+body.authenticated .settings-modal .settings-modal-footer {
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+body.authenticated .settings-modal .settings-modal-header {
+  padding-top: 16px;
+  padding-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.authenticated .settings-modal .settings-modal-body {
+  padding-top: 8px;
+  padding-bottom: 14px;
+}
+
+body.authenticated .settings-modal .settings-modal-footer {
+  padding-top: 10px;
+  padding-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+body.authenticated .settings-modal .settings-modal-title {
+  margin: 0;
+  font-size: var(--type-h3);
+  line-height: 1.2;
+}
+
+body.authenticated .settings-modal .settings-modal-close {
+  min-width: 32px;
+  min-height: 32px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+}
+
+body.authenticated .settings-modal .settings-form-error {
+  margin-top: 8px;
+  color: #ffb3c5;
+  font-size: var(--type-meta);
+}
+
+/* Sleek contact edit modal polish */
+body.authenticated #contactFieldModal .settings-modal-content {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(14, 16, 26, 0.98) 0%, rgba(12, 13, 20, 0.98) 100%);
+}
+
+body.authenticated #contactFieldModal .settings-modal-title {
+  font-size: var(--type-h3);
+}
+
+/* Password modal spacing polish */
+body.authenticated #passwordModal .settings-modal-content {
+  max-width: 520px;
+}
+
+body.authenticated #passwordModal .settings-modal-header {
+  padding-top: 14px;
+  padding-bottom: 8px;
+}
+
+body.authenticated #passwordModal .settings-modal-body {
+  padding-top: 6px;
+  padding-bottom: 10px;
+}
+
+body.authenticated #passwordModal .settings-form-group {
+  margin: 0 0 10px;
+}
+
+body.authenticated #passwordModal .settings-form-group:last-of-type {
+  margin-bottom: 0;
+}
+
+body.authenticated #passwordModal .settings-form-label {
+  display: block;
+  margin: 0 0 5px;
+  font-size: var(--type-label);
+  line-height: 1.25;
+}
+
+body.authenticated #passwordModal .settings-input {
+  min-height: 40px;
+  padding: 8px 11px;
+  border-radius: 10px;
+}
+
+body.authenticated #passwordModal .settings-modal-footer {
+  padding-top: 8px;
+  gap: 8px;
+}
+
+body.authenticated #passwordModal .settings-cancel-btn,
+body.authenticated #passwordModal .settings-save-btn {
+  min-height: 36px;
+  padding: 7px 12px;
+}
+
+/* Force icon-only rendering for edit pens */
+body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn {
+  font-size: 0;
+  line-height: 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-inline {
+  display: block !important;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-value {
+  text-align: right;
+  white-space: normal;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn {
+  min-height: 34px;
+  min-width: 34px;
+  width: 34px;
+  padding: 0;
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+body.authenticated #pageSettings #accountSettingsSection #editEmailBtn,
+body.authenticated #pageSettings #accountSettingsSection #editPhoneBtn,
+body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
+  min-height: 34px;
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+body.authenticated #pageSettings #accountSettingsSection #editEmailBtn svg,
+body.authenticated #pageSettings #accountSettingsSection #editPhoneBtn svg,
+body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn svg {
+  width: 18px;
+  height: 18px;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn:hover,
+body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn:active {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body.authenticated #pageSettings #accountSettingsSection .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+body.authenticated #pageSettings .settings-edit-btn:hover,
+body.authenticated #pageSettings .settings-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+body.authenticated #pageSettings .settings-save-btn,
+body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger) {
+  background: linear-gradient(180deg, #ff00d6, #c800ff);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(244, 1, 245, 0.24);
+}
+
+body.authenticated #pageSettings .settings-save-btn:hover,
+body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger):hover {
+  filter: brightness(1.05);
+}
+
+body.authenticated #pageSettings .settings-action-btn-danger {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+body.authenticated #pageSettings .settings-action-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.22);
+}
+
+body.authenticated #pageSettings .settings-input {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.24);
+  color: #fff;
+  padding: 9px 12px;
+}
+
+body.authenticated #pageSettings .settings-input:focus {
+  outline: 2px solid #f401f5;
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+body.authenticated #pageSettings .settings-toggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.authenticated #pageSettings .settings-toggle input[type="checkbox"] {
+  appearance: none;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+body.authenticated #pageSettings .settings-toggle input[type="checkbox"]::after {
+  content: '';
+  position: relative;
+  left: 3px;
+  top: 2px;
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 180ms ease;
+}
+
+body.authenticated #pageSettings .settings-toggle input[type="checkbox"]:checked {
+  background: rgba(244, 1, 245, 0.85);
+  border-color: rgba(244, 1, 245, 0.95);
+}
+
+body.authenticated #pageSettings .settings-toggle input[type="checkbox"]:checked::after {
+  transform: translateX(18px);
+}
+
+body.authenticated #pageSettings .settings-toggle-slider {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  body.authenticated #pageSettings .settings-page-container {
+    gap: 10px;
+  }
+
+  body.authenticated #pageSettings .settings-item {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  body.authenticated #pageSettings .settings-item-header {
+    align-items: flex-start;
+  }
+
+  body.authenticated #pageSettings .settings-item {
+    align-items: flex-start;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-edit-btn,
+  body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
+    min-height: 32px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 0.86rem;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn {
+    min-height: 32px;
+    min-width: 32px;
+    width: 32px;
+    padding: 0;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection #editEmailBtn,
+  body.authenticated #pageSettings #accountSettingsSection #editPhoneBtn,
+  body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
+    min-height: 32px;
+    min-width: 32px;
+    width: 32px;
+    height: 32px;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection #editEmailBtn svg,
+  body.authenticated #pageSettings #accountSettingsSection #editPhoneBtn svg,
+  body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-item {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-item-edit {
+    margin-top: 6px;
+    padding: 7px;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-form-actions {
+    gap: 6px;
+    margin-top: 7px;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-form-actions .settings-save-btn,
+  body.authenticated #pageSettings #accountSettingsSection .settings-form-actions .settings-cancel-btn {
+    min-height: 30px;
+    padding: 5px 10px;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-header {
+    align-items: flex-start;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-item-trailing {
+    max-width: 62%;
+  }
+
+  body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-value {
+    font-size: var(--type-meta);
+    line-height: 1.25;
+  }
+
+  body.authenticated #pageSettings #notificationsPrivacySection .settings-item-description {
+    max-width: none;
+    padding-right: 8px;
+  }
+
+  .settings-page-title,
+  .profile-page-title,
+  .classes-page-title,
+  .activity-page-title {
+    line-height: 1.15;
+  }
+}
+
+@media (max-width: 699px) {
+  body.authenticated #pageProfile .profile-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.authenticated #pageProfile .profile-cards-grid > .profile-card:nth-child(3) .profile-card-content {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.authenticated #pageProfile .profile-detail-row {
+    grid-template-columns: 1fr !important;
+    gap: 4px !important;
+  }
+
+  body.authenticated #pageProfile .profile-detail-value {
+    text-align: left !important;
+  }
+}

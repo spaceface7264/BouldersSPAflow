@@ -59,6 +59,14 @@ const copyFunctionsPlugin = () => ({
       fs.copyFileSync(headersFile, distHeadersFile);
       console.log(`[Vite] Copied _headers to dist/`);
     }
+
+    // Copy _redirects file to dist root for route aliases like /profile
+    const redirectsFile = path.resolve(__dirname, '_redirects');
+    if (fs.existsSync(redirectsFile)) {
+      const distRedirectsFile = path.resolve(__dirname, 'dist', '_redirects');
+      fs.copyFileSync(redirectsFile, distRedirectsFile);
+      console.log(`[Vite] Copied _redirects to dist/`);
+    }
   }
 });
 
@@ -175,6 +183,13 @@ export default defineConfig(({ command }) => {
       assetsDir: 'assets',
       // Enable source maps for better error debugging in Sentry
       sourcemap: true,
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          profile: path.resolve(__dirname, 'profile.html'),
+          profileMain: path.resolve(__dirname, 'profile-main.js'),
+        },
+      },
     }
   }
 })
