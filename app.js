@@ -13034,6 +13034,7 @@ function updateCartSummary() {
         type: 'membership',
         productId: membership.id, // Store API product ID for order creation
         externalDescription: externalDesc, // Store separately for rendering (renamed from imageBannerText)
+        description: membership.externalDescription || membership.description || '',
         productName: membership.name || 'Membership', // Store original name
       });
       state.totals.membershipMonthly = price;
@@ -13081,6 +13082,7 @@ function updateCartSummary() {
           type: 'value-card',
           quantity: quantity,
           productId: valueCard.id, // Store API product ID for order creation
+          description: valueCard.externalDescription || valueCard.description || '',
           punchesPerCard: punchesPerCard ?? undefined,
           totalPunches: totalPunches ?? undefined,
         });
@@ -13101,6 +13103,7 @@ function updateCartSummary() {
       amount: roundToHalfKrone(price),
       type: 'addon',
       productId: addon.id, // Store API product ID for order creation
+      description: addon.externalDescription || addon.description || addon.addition?.description || '',
     });
   });
 
@@ -13295,9 +13298,11 @@ function renderCartItems() {
     gymInfoText.textContent = `${t('homeGym.label')} ${selectedGym.name}`;
     
     // Create info icon
-    const infoIcon = document.createElement('span');
+    const infoIcon = document.createElement('button');
     infoIcon.className = 'home-gym-info-icon';
+    infoIcon.setAttribute('type', 'button');
     infoIcon.setAttribute('aria-label', 'Information about home gym');
+    infoIcon.setAttribute('aria-expanded', 'false');
     infoIcon.innerHTML = sanitizeHTML(`
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"></circle>
@@ -13320,29 +13325,55 @@ function renderCartItems() {
       </div>
     `);
     
-    // Add click handler to toggle tooltip
-    infoIcon.addEventListener('click', (e) => {
-      e.stopPropagation();
-      // Close other tooltips
-      document.querySelectorAll('.home-gym-tooltip').forEach(t => {
-        if (t !== tooltip) t.classList.remove('show');
+    const closeAllTooltipsExcept = () => {
+      document.querySelectorAll('.home-gym-tooltip, .product-info-tooltip').forEach((node) => {
+        if (node !== tooltip) node.classList.remove('show');
       });
-      const wasVisible = tooltip.classList.contains('show');
-      tooltip.classList.toggle('show');
-      
-      // If tooltip is now visible, set up outside click handler
-      if (!wasVisible && tooltip.classList.contains('show')) {
-        setTimeout(() => {
-          const outsideClickHandler = (e) => {
-            if (!infoWrapper.contains(e.target)) {
-              tooltip.classList.remove('show');
-              document.removeEventListener('click', outsideClickHandler);
-            }
-          };
-          document.addEventListener('click', outsideClickHandler, { once: true });
-        }, 0);
-      }
-    });
+    };
+
+    const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (supportsHover) {
+      infoWrapper.addEventListener('mouseenter', () => {
+        closeAllTooltipsExcept();
+        tooltip.classList.add('show');
+        infoIcon.setAttribute('aria-expanded', 'true');
+      });
+      infoWrapper.addEventListener('mouseleave', () => {
+        tooltip.classList.remove('show');
+        infoIcon.setAttribute('aria-expanded', 'false');
+      });
+      infoWrapper.addEventListener('focusin', () => {
+        closeAllTooltipsExcept();
+        tooltip.classList.add('show');
+        infoIcon.setAttribute('aria-expanded', 'true');
+      });
+      infoWrapper.addEventListener('focusout', () => {
+        tooltip.classList.remove('show');
+        infoIcon.setAttribute('aria-expanded', 'false');
+      });
+    } else {
+      // Mobile/touch: toggle on tap
+      infoIcon.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllTooltipsExcept();
+        const wasVisible = tooltip.classList.contains('show');
+        tooltip.classList.toggle('show');
+        infoIcon.setAttribute('aria-expanded', tooltip.classList.contains('show') ? 'true' : 'false');
+        
+        if (!wasVisible && tooltip.classList.contains('show')) {
+          setTimeout(() => {
+            const outsideClickHandler = (event) => {
+              if (!infoWrapper.contains(event.target)) {
+                tooltip.classList.remove('show');
+                infoIcon.setAttribute('aria-expanded', 'false');
+                document.removeEventListener('click', outsideClickHandler);
+              }
+            };
+            document.addEventListener('click', outsideClickHandler, { once: true });
+          }, 0);
+        }
+      });
+    }
     
     infoWrapper.appendChild(infoIcon);
     infoWrapper.appendChild(tooltip);
@@ -13350,6 +13381,132 @@ function renderCartItems() {
     gymInfoContainer.appendChild(infoWrapper);
     
     return gymInfoContainer;
+  }
+
+  function createProductDescriptionInfo(descriptionText) {
+    if (!descriptionText || !String(descriptionText).trim()) return null;
+
+    const infoWrapper = document.createElement('span');
+    infoWrapper.className = 'product-info-wrapper';
+
+    const infoIcon = document.createElement('button');
+    infoIcon.className = 'product-info-icon';
+    infoIcon.setAttribute('type', 'button');
+    infoIcon.setAttribute('aria-label', 'Show product description');
+    infoIcon.innerHTML = sanitizeHTML(`
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+    `);
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'product-info-tooltip';
+    const tooltipHtml = String(descriptionText)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    tooltip.innerHTML = sanitizeHTML(`
+      <div class="tooltip-content">
+        <p>${tooltipHtml}</p>
+      </div>
+    `);
+
+    const closeAllTooltipsExcept = () => {
+      document.querySelectorAll('.product-info-tooltip, .home-gym-tooltip').forEach((node) => {
+        if (node !== tooltip) node.classList.remove('show');
+      });
+    };
+
+    const syncExpandedState = () => {
+      infoIcon.setAttribute('aria-expanded', tooltip.classList.contains('show') ? 'true' : 'false');
+    };
+
+    const positionTooltip = () => {
+      const iconRect = infoIcon.getBoundingClientRect();
+      const viewportPadding = 12;
+      const tooltipWidth = Math.min(320, window.innerWidth - viewportPadding * 2);
+      const desiredLeft = iconRect.left;
+      const clampedLeft = Math.max(
+        viewportPadding,
+        Math.min(desiredLeft, window.innerWidth - tooltipWidth - viewportPadding)
+      );
+      const top = Math.max(8, iconRect.top - 12);
+      tooltip.style.left = `${clampedLeft}px`;
+      tooltip.style.top = `${top}px`;
+      tooltip.style.setProperty('--tooltip-arrow-left', `${Math.max(10, iconRect.left - clampedLeft + (iconRect.width / 2))}px`);
+    };
+
+    const onViewportChange = () => {
+      if (tooltip.classList.contains('show')) {
+        positionTooltip();
+      }
+    };
+
+    const bindViewportTracking = () => {
+      window.addEventListener('scroll', onViewportChange, { passive: true });
+      window.addEventListener('resize', onViewportChange);
+    };
+
+    const unbindViewportTracking = () => {
+      window.removeEventListener('scroll', onViewportChange);
+      window.removeEventListener('resize', onViewportChange);
+    };
+
+    const openTooltip = () => {
+      closeAllTooltipsExcept();
+      positionTooltip();
+      tooltip.classList.add('show');
+      syncExpandedState();
+      bindViewportTracking();
+    };
+
+    const closeTooltip = () => {
+      tooltip.classList.remove('show');
+      syncExpandedState();
+      unbindViewportTracking();
+    };
+
+    const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (supportsHover) {
+      infoWrapper.addEventListener('mouseenter', () => {
+        openTooltip();
+      });
+      infoWrapper.addEventListener('mouseleave', () => {
+        closeTooltip();
+      });
+      infoWrapper.addEventListener('focusin', () => {
+        openTooltip();
+      });
+      infoWrapper.addEventListener('focusout', () => {
+        closeTooltip();
+      });
+    } else {
+      infoIcon.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasVisible = tooltip.classList.contains('show');
+        if (wasVisible) {
+          closeTooltip();
+        } else {
+          openTooltip();
+          setTimeout(() => {
+            const outsideClickHandler = (event) => {
+              if (!infoWrapper.contains(event.target)) {
+                closeTooltip();
+                document.removeEventListener('click', outsideClickHandler);
+              }
+            };
+            document.addEventListener('click', outsideClickHandler, { once: true });
+          }, 0);
+        }
+      });
+    }
+
+    infoWrapper.appendChild(infoIcon);
+    infoWrapper.appendChild(tooltip);
+    return infoWrapper;
   }
 
   // Get selected gym info
@@ -13384,23 +13541,16 @@ function renderCartItems() {
         
         const nameContainer = document.createElement('div');
         nameContainer.style.display = 'flex';
-        nameContainer.style.flexDirection = 'column';
-        nameContainer.style.gap = '4px';
+        nameContainer.style.alignItems = 'center';
+        nameContainer.style.gap = '6px';
         
         const productNameSpan = document.createElement('span');
         productNameSpan.textContent = item.productName || item.name;
         productNameSpan.style.fontWeight = '500';
         
-        const descTextSpan = document.createElement('span');
-        // Preserve line breaks from backend - replace newlines with <br> tags
-        const descTextWithBreaks = item.externalDescription.replace(/\n/g, '<br>');
-        descTextSpan.innerHTML = sanitizeHTML(descTextWithBreaks);
-        descTextSpan.style.fontSize = 'var(--font-size-sm)';
-        descTextSpan.style.color = 'var(--color-text-muted)';
-        descTextSpan.style.whiteSpace = 'pre-line'; // Preserve line breaks and wrap text
-        
         nameContainer.appendChild(productNameSpan);
-        nameContainer.appendChild(descTextSpan);
+        const descriptionInfo = createProductDescriptionInfo(item.description || item.externalDescription || '');
+        if (descriptionInfo) nameContainer.appendChild(descriptionInfo);
         nameEl.appendChild(nameContainer);
         
         // Add Home Gym info below the name container for first item
@@ -13414,7 +13564,14 @@ function renderCartItems() {
         const productNameSpan = document.createElement('span');
         productNameSpan.textContent = item.name;
         productNameSpan.style.fontWeight = '500';
-        nameEl.appendChild(productNameSpan);
+        const nameRow = document.createElement('div');
+        nameRow.style.display = 'flex';
+        nameRow.style.alignItems = 'center';
+        nameRow.style.gap = '6px';
+        nameRow.appendChild(productNameSpan);
+        const descriptionInfo = createProductDescriptionInfo(item.description || '');
+        if (descriptionInfo) nameRow.appendChild(descriptionInfo);
+        nameEl.appendChild(nameRow);
         
         if (isFirstSubscriptionItem && selectedGym) {
           const gymInfo = createHomeGymInfo(selectedGym);
@@ -13422,7 +13579,17 @@ function renderCartItems() {
         }
       } else {
         // For addon items and other types, we'll add the plus sign later in the rendering loop
-        nameEl.textContent = item.name;
+        nameEl.textContent = '';
+        const productNameSpan = document.createElement('span');
+        productNameSpan.textContent = item.name;
+        const nameRow = document.createElement('div');
+        nameRow.style.display = 'flex';
+        nameRow.style.alignItems = 'center';
+        nameRow.style.gap = '6px';
+        nameRow.appendChild(productNameSpan);
+        const descriptionInfo = createProductDescriptionInfo(item.description || '');
+        if (descriptionInfo) nameRow.appendChild(descriptionInfo);
+        nameEl.appendChild(nameRow);
         
         // Add Home Gym info below the first item's name
         if (isFirstSubscriptionItem && selectedGym) {
@@ -13530,18 +13697,20 @@ function renderCartItems() {
         const nameEl = cartItem.querySelector('[data-element="name"]');
         if (nameEl) {
           const currentText = nameEl.textContent || nameEl.innerText || '';
-          if (currentText && !currentText.trim().startsWith('+')) {
-            nameEl.style.flexDirection = 'row';
-            nameEl.style.alignItems = 'center';
-            const plusSpan = document.createElement('span');
-            plusSpan.textContent = '+ ';
-            plusSpan.style.color = 'var(--color-brand-accent)';
-            plusSpan.style.marginRight = '4px';
-            nameEl.innerHTML = '';
-            nameEl.appendChild(plusSpan);
-            const textSpan = document.createElement('span');
-            textSpan.textContent = currentText.trim();
-            nameEl.appendChild(textSpan);
+          const rowEl = nameEl.firstElementChild;
+          if (rowEl) {
+            rowEl.style.display = 'flex';
+            rowEl.style.alignItems = 'center';
+            rowEl.style.gap = '4px';
+            const firstText = rowEl.querySelector('span');
+            if (firstText && !firstText.textContent.trim().startsWith('+')) {
+              const plusSpan = document.createElement('span');
+              plusSpan.textContent = '+';
+              plusSpan.style.color = 'var(--color-brand-accent)';
+              plusSpan.style.fontWeight = '600';
+              firstText.textContent = firstText.textContent.trim();
+              rowEl.insertBefore(plusSpan, firstText);
+            }
           }
         }
         DOM.cartAddonItems.appendChild(cartItem);
