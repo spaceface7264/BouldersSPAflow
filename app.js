@@ -17212,6 +17212,33 @@ function buildCheckoutPayload() {
   return payload;
 }
 
+function toNumericAmount(value) {
+  if (value == null) return null;
+  if (typeof value === 'object' && value.amount != null) {
+    const nested = Number(value.amount);
+    return Number.isFinite(nested) ? nested : null;
+  }
+  const raw = Number(value);
+  return Number.isFinite(raw) ? raw : null;
+}
+
+function getOrderTotalDKK(order, fallback = 0) {
+  // Backend payment link uses order.price.amount (in cents) as authoritative.
+  const priceAmount = toNumericAmount(order?.price?.amount);
+  if (priceAmount != null) return priceAmount / 100;
+
+  const priceTotal = toNumericAmount(order?.price?.total);
+  if (priceTotal != null) return priceTotal / 100;
+
+  const leftToPay = toNumericAmount(order?.price?.leftToPay ?? order?.leftToPay);
+  if (leftToPay != null) return leftToPay / 100;
+
+  const directTotal = toNumericAmount(order?.total ?? order?.totalAmount ?? order?.data?.total);
+  if (directTotal != null) return directTotal > 10000 ? directTotal / 100 : directTotal;
+
+  return fallback;
+}
+
 function buildOrderSummary(payload, order = null, customer = null) {
   const now = new Date();
   
@@ -17301,7 +17328,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
     number: orderNumber,
     date: order?.createdAt ? new Date(order.createdAt) : (order?.created ? new Date(order.created) : now),
     items: [...state.cartItems],
-    total: order?.total || order?.totalAmount || state.totals.cartTotal,
+    total: getOrderTotalDKK(order, state.totals.cartTotal),
     memberName: memberName || '—',
     membershipNumber: membershipId,
     membershipType: membership?.name ?? '—',
@@ -17894,8 +17921,8 @@ async function loadOrderForConfirmation(orderId) {
       customer.primaryGym = primaryGym || customer.primaryGym || customer.primary_gym;
     }
     
-    // Use order total if available, otherwise use stored total
-    const orderTotal = order?.total || order?.totalAmount || order?.data?.total || storedOrder?.totals?.cartTotal || 0;
+    // Use normalized backend order total (prefer price.amount) or stored fallback.
+    const orderTotal = getOrderTotalDKK(order, storedOrder?.totals?.cartTotal || 0);
     
     // Store diagnostic data for easy access (after customer is extracted)
     window.lastPaymentDiagnostics = {
