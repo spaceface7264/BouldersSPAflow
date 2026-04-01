@@ -5,6 +5,7 @@ interface TokenData {
   accessToken: string;
   refreshToken: string;
   expiresAt?: number; // Optional: timestamp when access token expires
+  customerId?: string; // BRP customer ID returned as `username` from auth/login
 }
 
 interface StoredTokenData extends TokenData {
@@ -113,13 +114,15 @@ export function saveTokens(
   accessToken: string,
   refreshToken: string,
   expiresAt?: number,
-  metadata: Record<string, unknown> = {}
+  metadata: Record<string, unknown> = {},
+  customerId?: string
 ): void {
   const tokenData: StoredTokenData = {
     accessToken,
     refreshToken,
     expiresAt,
     metadata,
+    customerId,
   };
 
   // Store in memory (primary)
@@ -257,4 +260,28 @@ export function isTokenExpired(): boolean {
  */
 export function hasTokens(): boolean {
   return getAccessToken() !== null;
+}
+
+/**
+ * Get the BRP customer ID stored alongside the tokens.
+ * This is the `username` field returned from auth/login.
+ */
+export function getCustomerId(): string | null {
+  if (tokenStore?.customerId) return tokenStore.customerId;
+
+  if (isBrowser) {
+    try {
+      const stored = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+      if (stored) {
+        const tokenData: StoredTokenData = JSON.parse(stored);
+        tokenStore = tokenData;
+        return tokenData.customerId ?? null;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const cookieTokens = hydrateFromCookie();
+  return cookieTokens?.customerId ?? null;
 }
