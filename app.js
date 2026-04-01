@@ -5181,6 +5181,16 @@ function has15DayPassLabel(product) {
   });
 }
 
+function isFirstMonthFreeCampaignName(name) {
+  const normalizedName = String(name || '').toLowerCase();
+  if (!normalizedName) return false;
+  return (
+    /0\s*(?:kr|dkk)/.test(normalizedName) ||
+    /første\s*måned/.test(normalizedName) ||
+    /first\s*month(?:\s*free|\W*0(?:\s*dkk)?)/.test(normalizedName)
+  );
+}
+
 // Load and filter products with boost labels for the selected plan
 async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
@@ -14129,7 +14139,7 @@ function updatePaymentOverview() {
         p => String(p.id) === String(productId)
       );
       const productNameLower = String(subscriptionItem?.product?.name || '').toLowerCase();
-      const isFirstMonthFreeCampaignByName = /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameLower);
+      const isFirstMonthFreeCampaignByName = isFirstMonthFreeCampaignName(productNameLower);
       const isFirstMonthFreeCampaign = isCampaignProduct && (orderPriceDKK === 0 || isFirstMonthFreeCampaignByName);
 
       if (isFirstMonthFreeCampaign) {
@@ -14276,9 +14286,8 @@ function updatePaymentOverview() {
             p => String(p.id) === String(membership.id)
           );
           const productNameForCampaign = (membership.name || '').toLowerCase();
-          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
-            /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
-          );
+          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder &&
+            isFirstMonthFreeCampaignName(productNameForCampaign);
 
           if (isFirstMonthFreeCampaignNoOrder) {
             // Before login/order creation, campaign pay-now cannot be trusted from fallback math.
@@ -14443,8 +14452,8 @@ function updatePaymentOverview() {
   }
 
   const cartMembershipName = String(state.cartItems?.find((item) => item.type === 'membership')?.name || '').toLowerCase();
-  const firstMonthFreeByName = /0\s*kr|første\s*måned|first\s*month\s*free/.test(productName.toLowerCase()) ||
-    /0\s*kr|første\s*måned|first\s*month\s*free/.test(cartMembershipName);
+  const firstMonthFreeByName = isFirstMonthFreeCampaignName(productName) ||
+    isFirstMonthFreeCampaignName(cartMembershipName);
   const isCampaignProductDisplay =
     Array.isArray(state.campaignSubscriptions) &&
     state.campaignSubscriptions.some((p) => String(p.id) === String(currentProduct?.id || productFromOrder?.id || state.selectedProductId));
