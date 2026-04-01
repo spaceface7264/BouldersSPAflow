@@ -1233,3 +1233,176 @@ body.authenticated #pageSettings .settings-toggle-slider {
     text-align: left !important;
   }
 }
+
+/* Dashboard handholding: access status, classes, Bloc Life */
+.dashboard-handhold-intro {
+  margin: 0 0 16px;
+  max-width: 52rem;
+  color: var(--profile-muted);
+  font-size: var(--type-body);
+  line-height: 1.5;
+}
+
+.dashboard-access-hero {
+  margin-bottom: 14px;
+}
+
+.dashboard-access-hero-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.dashboard-access-title {
+  margin: 0;
+  font-size: var(--type-h2);
+  line-height: 1.2;
+}
+
+.dashboard-access-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: var(--type-label);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(255, 0, 214, 0.25), rgba(200, 0, 255, 0.2));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f0ff;
+}
+
+.dashboard-access-lead {
+  margin: 0 0 14px;
+  color: var(--profile-muted);
+  font-size: var(--type-body);
+  line-height: 1.5;
+  max-width: 48rem;
+}
+
+.dashboard-access-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.dashboard-access-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--profile-border);
+}
+
+.dashboard-access-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.dashboard-access-label {
+  color: var(--profile-muted);
+  font-size: var(--type-label);
+  flex-shrink: 0;
+}
+
+.dashboard-access-value {
+  color: var(--profile-text);
+  font-weight: 600;
+  font-size: var(--type-body);
+  text-align: right;
+}
+
+.dashboard-classes-subtitle {
+  margin: -4px 0 12px;
+  color: var(--profile-muted);
+  font-size: var(--type-label);
+  line-height: 1.45;
+}
+
+.dashboard-class-booked {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--profile-border);
+}
+
+.dashboard-class-booked:last-child {
+  border-bottom: 0;
+}
+
+.dashboard-class-booked-title {
+  display: block;
+  font-size: var(--type-body);
+  margin-bottom: 4px;
+}
+
+.dashboard-class-booked-meta {
+  font-size: var(--type-label);
+  color: var(--profile-muted);
+}
+
+.dashboard-classes-empty-title {
+  margin: 0 0 8px;
+  font-size: var(--type-body);
+  font-weight: 700;
+  color: var(--profile-text);
+}
+
+.dashboard-classes-empty-text {
+  margin: 0 0 12px;
+  color: var(--profile-muted);
+  font-size: var(--type-body);
+  line-height: 1.45;
+}
+
+.dashboard-classes-steps {
+  margin: 0 0 16px;
+  padding-left: 1.25rem;
+  color: var(--profile-text);
+  font-size: var(--type-body);
+  line-height: 1.55;
+}
+
+.dashboard-classes-steps li {
+  margin-bottom: 6px;
+}
+
+.dashboard-book-class-cta {
+  width: fit-content;
+}
+
+.dashboard-loyalty-tier {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.dashboard-loyalty-tier-name {
+  font-weight: 700;
+  font-size: var(--type-body);
+  color: var(--profile-text);
+}
+
+.dashboard-loyalty-tier-level {
+  font-size: var(--type-label);
+  color: var(--profile-muted);
+}
+
+.dashboard-loyalty-benefit-line {
+  margin: 0 0 8px;
+  font-size: var(--type-body);
+  line-height: 1.45;
+  color: var(--profile-muted);
+}
+
+.dashboard-loyalty-benefit-line:last-child {
+  margin-bottom: 0;
+}
+
+.dashboard-loyalty-benefit-line-api {
+  color: var(--profile-text);
+}

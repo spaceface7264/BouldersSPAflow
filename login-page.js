@@ -65,8 +65,525 @@ function initializeLoginPage(DOM) {
     return state?.authenticatedCustomer || null;
   }
 
+  const DASHBOARD_WELCOME_SEEN_KEY = 'boulders.dashboardWelcomeSeen.v1';
+
+  function getDashboardAccountKey() {
+    const customer = getBestCustomerData();
+    const meta = getTokenMetadata() || {};
+    const email = (state?.authenticatedEmail || customer?.email || meta?.email || '')
+      .trim()
+      .toLowerCase();
+    if (email) return email;
+    return String(
+      customer?.id ||
+        customer?.customerNumber ||
+        state?.customerId ||
+        meta?.username ||
+        ''
+    ).trim();
+  }
+
+  function readDashboardSeenMap() {
+    try {
+      const raw = localStorage.getItem(DASHBOARD_WELCOME_SEEN_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function hasSeenDashboardWelcome() {
+    const key = getDashboardAccountKey();
+    if (!key) return false;
+    return readDashboardSeenMap()[key] === true;
+  }
+
+  function markDashboardWelcomeSeen() {
+    const key = getDashboardAccountKey();
+    if (!key) return;
+    try {
+      const map = readDashboardSeenMap();
+      map[key] = true;
+      localStorage.setItem(DASHBOARD_WELCOME_SEEN_KEY, JSON.stringify(map));
+    } catch {
+      // ignore quota / private mode
+    }
+  }
+
+  function updateDashboardWelcomeMessage() {
+    const titleEl = document.getElementById('dashboardWelcomeTitle');
+    if (!titleEl) return;
+
+    const accountKey = getDashboardAccountKey();
+    const customer = getBestCustomerData();
+    const meta = getTokenMetadata() || {};
+    const firstName =
+      customer?.firstName && String(customer.firstName).trim() && customer.firstName !== '-'
+        ? String(customer.firstName).trim()
+        : '';
+    const lastName =
+      customer?.lastName && String(customer.lastName).trim() && customer.lastName !== '-'
+        ? String(customer.lastName).trim()
+        : '';
+    const fullName = [firstName, lastName].filter(Boolean).join(' ');
+    const fromUsername = meta?.username ? String(meta.username).split(/[\s@._-]+/)[0] : '';
+    const fromEmailLocal = state?.authenticatedEmail
+      ? state.authenticatedEmail.split('@')[0]
+      : meta?.email
+        ? String(meta.email).split('@')[0]
+        : '';
+    const displayName = firstName || fullName || fromUsername || fromEmailLocal || 'there';
+
+    if (!accountKey) {
+      titleEl.textContent =
+        displayName && displayName !== 'there' ? `Welcome, ${displayName}! 👋` : 'Welcome! 👋';
+      return;
+    }
+
+    if (!hasSeenDashboardWelcome()) {
+      titleEl.textContent = `Welcome, ${displayName}! 👋`;
+      markDashboardWelcomeSeen();
+    } else {
+      titleEl.textContent = 'Welcome back! 👋';
+    }
+  }
+
+  const BLOC_LIFE_COPY = {
+    default: {
+      benefits: [
+        'Every visit counts toward your Bloc Life level.',
+        'Higher levels unlock rewards and recognition at Boulders.',
+        'Check in at the front desk so your sessions are tracked.',
+      ],
+    },
+  };
+
+  function subscriptionSearchText(sub) {
+    if (!sub || typeof sub !== 'object') return '';
+    const parts = [
+      sub.name,
+      sub.productName,
+      sub.type,
+      sub.subscriptionType,
+      sub.planName,
+      sub.membershipType,
+      sub.description,
+    ]
+      .filter(Boolean)
+      .map((s) => String(s).toLowerCase());
+    return parts.join(' ');
+  }
+
+  function collectSubscriptionsArray(customer) {
+    if (!customer) return [];
+    const list = [];
+    const push = (x) => {
+      if (x && typeof x === 'object' && !list.includes(x)) list.push(x);
+    };
+    push(customer.activeSubscription);
+    if (Array.isArray(customer.subscriptions)) customer.subscriptions.forEach(push);
+    if (Array.isArray(customer.memberships)) customer.memberships.forEach(push);
+    push(customer.membership);
+    return list;
+  }
+
+  function isTrialLikeSub(sub) {
+    if (!sub) return false;
+    if (sub.trial === true || sub.isTrial === true || sub.accessType === 'trial') return true;
+    const t = subscriptionSearchText(sub);
+    return (
+      /\bintro\b/i.test(t) ||
+      /15\s*day|15\s*dage|fifteen|prøve|trial|guest pass|gæst|prøveperiode|15-dags|15 dages/i.test(t)
+    );
+  }
+
+  function extractPunchCardFromCustomer(customer, subs) {
+    const cards = []
+      .concat(customer?.valueCards || [])
+      .concat(customer?.activeValueCards || [])
+      .concat(customer?.punchCards || [])
+      .concat(customer?.clipCards || [])
+      .concat(customer?.valueCardBalances || []);
+
+    const fromCard = cards.find(Boolean);
+    if (fromCard) {
+      const entriesLeft =
+        fromCard.remainingEntries ??
+        fromCard.entriesLeft ??
+        fromCard.clipsLeft ??
+        fromCard.balance ??
+        fromCard.visitsRemaining ??
+        fromCard.remainingVisits;
+      const exp =
+        fromCard.validTo ??
+        fromCard.expiryDate ??
+        fromCard.expires ??
+        fromCard.expiry ??
+        fromCard.validUntil;
+      if (entriesLeft != null || exp) {
+        return {
+          entriesLeft: entriesLeft != null ? entriesLeft : null,
+          expiryRaw: exp || null,
+        };
+      }
+    }
+
+    const subPunch = subs.find((s) => {
+      const text = subscriptionSearchText(s);
+      const hasCount =
+        s?.remainingEntries != null ||
+        s?.entriesRemaining != null ||
+        s?.clipsRemaining != null ||
+        s?.punchesRemaining != null;
+      if (hasCount) return true;
+      return /punch|klip|klippekort|value\s*card|clip|times?\s*card|gange/i.test(text);
+    });
+    if (!subPunch) return null;
+    const entriesLeft =
+      subPunch.remainingEntries ??
+      subPunch.entriesRemaining ??
+      subPunch.clipsRemaining ??
+      subPunch.punchesRemaining ??
+      subPunch.balance;
+    const exp =
+      subPunch.validTo ??
+      subPunch.expiryDate ??
+      subPunch.endDate ??
+      subPunch.expires ??
+      subPunch.validUntil;
+    if (entriesLeft == null && !exp) return null;
+    return { entriesLeft: entriesLeft != null ? entriesLeft : null, expiryRaw: exp || null };
+  }
+
+  function detectPrimaryAccess(customer) {
+    if (!customer) return { kind: 'unknown' };
+    const subs = collectSubscriptionsArray(customer);
+    if (subs.some((s) => isTrialLikeSub(s))) {
+      const trialSub = subs.find((s) => isTrialLikeSub(s));
+      return { kind: 'trial', trialSub };
+    }
+    const punch = extractPunchCardFromCustomer(customer, subs);
+    if (punch) return { kind: 'punch_card', punch };
+    if (hasActiveMembership(customer)) return { kind: 'membership' };
+    return { kind: 'unknown' };
+  }
+
+  function formatPriceDisplay(price) {
+    if (price == null || price === '' || price === '-') return '—';
+    if (typeof price === 'number') {
+      return price % 1 === 0 ? `${price} kr.` : `${price.toFixed(2)} kr.`;
+    }
+    const s = String(price);
+    if (/kr|€|\$|[\d.,]+\s*[^\s]+$/i.test(s)) return s;
+    if (/^\d+([.,]\d+)?$/.test(s)) return `${s.replace(',', '.')} kr.`;
+    return s;
+  }
+
+  function clearDashboardEl(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  }
+
+  function addAccessRow(container, label, value) {
+    const row = document.createElement('div');
+    row.className = 'dashboard-access-row';
+    const l = document.createElement('span');
+    l.className = 'dashboard-access-label';
+    l.textContent = label;
+    const v = document.createElement('span');
+    v.className = 'dashboard-access-value';
+    v.textContent = value == null || value === '' ? '—' : String(value);
+    row.append(l, v);
+    container.appendChild(row);
+  }
+
+  function renderDashboardAccessPanel(customer) {
+    const leadEl = document.getElementById('dashboardAccessLead');
+    const rowsEl = document.getElementById('dashboardAccessRows');
+    const badgeEl = document.getElementById('dashboardAccessBadge');
+    if (!leadEl || !rowsEl || !badgeEl) return;
+
+    clearDashboardEl(rowsEl);
+    const access = detectPrimaryAccess(customer || {});
+    const membership = getMembershipData(customer || {});
+
+    if (access.kind === 'membership') {
+      badgeEl.textContent = 'Membership';
+      leadEl.textContent =
+        'You’re on a recurring membership. Here’s what we have on file—if anything looks off, reach out to medlem@boulders.dk.';
+      addAccessRow(rowsEl, 'Member since', formatDisplayDate(membership.activeSince));
+      addAccessRow(rowsEl, 'Price', formatPriceDisplay(membership.price));
+      addAccessRow(rowsEl, 'Home gym / location', membership.gym);
+      if (membership.boundUntil) {
+        addAccessRow(rowsEl, 'Bound until', formatDisplayDate(membership.boundUntil));
+      }
+      addAccessRow(rowsEl, 'Plan', membership.type);
+      return;
+    }
+
+    if (access.kind === 'punch_card') {
+      badgeEl.textContent = 'Punch card';
+      leadEl.textContent =
+        'You’re using clip-based access. Each visit uses an entry until your card runs out or expires.';
+      const entries =
+        access.punch.entriesLeft != null && access.punch.entriesLeft !== ''
+          ? String(access.punch.entriesLeft)
+          : '—';
+      addAccessRow(rowsEl, 'Entries left', entries);
+      addAccessRow(
+        rowsEl,
+        'Valid until',
+        access.punch.expiryRaw ? formatDisplayDate(access.punch.expiryRaw) : '—'
+      );
+      addAccessRow(rowsEl, 'Home gym', membership.gym !== '-' ? membership.gym : '—');
+      return;
+    }
+
+    if (access.kind === 'trial') {
+      badgeEl.textContent = '15-day trial';
+      const t = access.trialSub || {};
+      const start = t.startDate || t.activeSince || t.validFrom || t.beginDate;
+      const end = t.endDate || t.expires || t.validTo || t.trialEndDate;
+      leadEl.textContent =
+        'Your trial gives you access for the window below. Ready to stay? You can switch to a full membership anytime.';
+      addAccessRow(rowsEl, 'Active from', formatDisplayDate(start));
+      addAccessRow(rowsEl, 'Active until', formatDisplayDate(end));
+      addAccessRow(rowsEl, 'Plan', t.name || t.productName || membership.type || '—');
+      addAccessRow(rowsEl, 'Location', membership.gym !== '-' ? membership.gym : '—');
+      return;
+    }
+
+    badgeEl.textContent = 'Access';
+    leadEl.textContent =
+      'We couldn’t match your profile to a specific membership, punch card, or trial yet. If you just signed up, wait a moment and refresh—or contact medlem@boulders.dk.';
+    if (membership.type && membership.type !== '-') {
+      addAccessRow(rowsEl, 'Plan on file', membership.type);
+    }
+    addAccessRow(rowsEl, 'Home gym', membership.gym !== '-' ? membership.gym : '—');
+  }
+
+  function extractUpcomingBookings(customer) {
+    if (!customer) return [];
+    const candidates = [
+      customer.upcomingBookings,
+      customer.upcomingClasses,
+      customer.classBookings,
+      customer.groupActivityBookings,
+      customer.bookings,
+    ];
+    for (const c of candidates) {
+      if (!Array.isArray(c) || !c.length) continue;
+      const upcoming = c.filter((b) => {
+        if (!b || typeof b !== 'object') return false;
+        if (b.past === true || b.isPast === true) return false;
+        if (b.status && String(b.status).toLowerCase() === 'cancelled') return false;
+        return true;
+      });
+      return upcoming.length ? upcoming : c;
+    }
+    return [];
+  }
+
+  function bookingDisplayLine(b) {
+    const title =
+      b.title ||
+      b.name ||
+      b.className ||
+      b.activityName ||
+      b.groupActivityName ||
+      'Class';
+    const when =
+      b.startTime ||
+      b.startDateTime ||
+      b.dateTime ||
+      b.scheduledStart ||
+      b.date ||
+      b.start;
+    const where = b.locationName || b.gymName || b.businessUnitName || b.room || '';
+    const whenStr = when ? formatDisplayDate(when) : '—';
+    return { title: String(title), whenStr, where: where ? String(where) : '' };
+  }
+
+  function openClassesBrowseTab() {
+    setRoute('classes');
+    requestAnimationFrame(() => {
+      document.querySelector('.booking-tab[data-tab="browse"]')?.click();
+    });
+  }
+
+  function renderDashboardClassesSection(customer) {
+    const wrap = document.getElementById('dashboardUpcomingClasses');
+    if (!wrap) return;
+    clearDashboardEl(wrap);
+    const bookings = extractUpcomingBookings(customer || {});
+
+    if (bookings.length) {
+      const frag = document.createDocumentFragment();
+      bookings.slice(0, 6).forEach((b) => {
+        const { title, whenStr, where } = bookingDisplayLine(b);
+        const row = document.createElement('div');
+        row.className = 'dashboard-class-booked';
+        const main = document.createElement('div');
+        main.className = 'dashboard-class-booked-main';
+        const t = document.createElement('strong');
+        t.className = 'dashboard-class-booked-title';
+        t.textContent = title;
+        const meta = document.createElement('div');
+        meta.className = 'dashboard-class-booked-meta';
+        meta.textContent = [whenStr, where].filter(Boolean).join(' · ');
+        main.append(t, meta);
+        row.append(main);
+        frag.appendChild(row);
+      });
+      wrap.appendChild(frag);
+      return;
+    }
+
+    const empty = document.createElement('div');
+    empty.className = 'dashboard-classes-empty';
+    const title = document.createElement('p');
+    title.className = 'dashboard-classes-empty-title';
+    title.textContent = 'No classes booked yet';
+    const blurb = document.createElement('p');
+    blurb.className = 'dashboard-classes-empty-text';
+    blurb.textContent = 'Pick a session that fits your week—it only takes a minute.';
+    const steps = document.createElement('ol');
+    steps.className = 'dashboard-classes-steps';
+    steps.innerHTML =
+      '<li>Open <strong>Classes &amp; Bookings</strong> in the menu above.</li>' +
+      '<li>Tap <strong>Browse Classes</strong>.</li>' +
+      '<li>Choose your gym, date, and a class—then confirm your booking.</li>';
+    const cta = document.createElement('button');
+    cta.type = 'button';
+    cta.className = 'profile-action-btn dashboard-book-class-cta';
+    cta.id = 'dashboardBookClassCTA';
+    cta.textContent = 'Browse classes';
+    cta.addEventListener('click', (e) => {
+      e.preventDefault();
+      openClassesBrowseTab();
+    });
+    empty.append(title, blurb, steps, cta);
+    wrap.appendChild(empty);
+  }
+
+  function normalizeLoyaltyKey(raw) {
+    if (!raw) return 'default';
+    const s = String(raw).toLowerCase();
+    if (/bronze|tier\s*1|\blevel\s*1\b|^1$/.test(s)) return 'bronze';
+    if (/silver|tier\s*2|\blevel\s*2\b|^2$/.test(s)) return 'silver';
+    if (/gold|tier\s*3|\blevel\s*3\b|^3$/.test(s)) return 'gold';
+    return 'default';
+  }
+
+  function renderDashboardLoyaltySection(customer) {
+    const tierNameEl = document.getElementById('dashboardLoyaltyTier');
+    const levelEl = document.getElementById('dashboardLoyaltyLevel');
+    const benefitsEl = document.getElementById('dashboardLoyaltyBenefits');
+    if (!tierNameEl || !levelEl || !benefitsEl) return;
+
+    const loyalty = customer?.loyalty || {};
+    const rawTier =
+      customer?.loyaltyTier ||
+      customer?.blocLifeTier ||
+      loyalty.tierName ||
+      loyalty.levelName ||
+      loyalty.name ||
+      '';
+    const rawLevel =
+      customer?.loyaltyLevel ||
+      customer?.blocLifeLevel ||
+      loyalty.stage ||
+      loyalty.level ||
+      loyalty.tierLevel ||
+      '';
+
+    const key = normalizeLoyaltyKey(rawTier || rawLevel);
+    const tierLabels = {
+      default: 'Bloc Life',
+      bronze: 'Bloc Life — Bronze',
+      silver: 'Bloc Life — Silver',
+      gold: 'Bloc Life — Gold',
+    };
+    tierNameEl.textContent = tierLabels[key] || tierLabels.default;
+
+    levelEl.textContent =
+      rawTier || rawLevel
+        ? `Current level: ${rawTier || rawLevel}`
+        : 'Your level will appear here as you climb and check in.';
+
+    clearDashboardEl(benefitsEl);
+    BLOC_LIFE_COPY.default.benefits.forEach((line) => {
+      const p = document.createElement('p');
+      p.className = 'dashboard-loyalty-benefit-line';
+      p.textContent = line;
+      benefitsEl.appendChild(p);
+    });
+
+    if (Array.isArray(loyalty.benefits) && loyalty.benefits.length) {
+      loyalty.benefits.forEach((line) => {
+        const p = document.createElement('p');
+        p.className = 'dashboard-loyalty-benefit-line dashboard-loyalty-benefit-line-api';
+        p.textContent = String(line);
+        benefitsEl.appendChild(p);
+      });
+    }
+  }
+
+  function refreshDashboardPanels() {
+    if (!isUserAuthenticated()) return;
+    const customer = getBestCustomerData();
+    renderDashboardAccessPanel(customer);
+    renderDashboardClassesSection(customer);
+    renderDashboardLoyaltySection(customer);
+  }
+
+  function initBookingsTabSwitching() {
+    const tabs = document.querySelectorAll('.booking-tab[data-tab]');
+    tabs.forEach((tab) => {
+      if (tab.dataset.boundBookingsTab === 'true') return;
+      tab.dataset.boundBookingsTab = 'true';
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        const name = tab.getAttribute('data-tab');
+        tabs.forEach((t) => t.classList.toggle('active', t === tab));
+        const myBook = document.getElementById('myBookingsSection');
+        const browse = document.getElementById('browseClasses');
+        if (myBook) {
+          myBook.style.display = name === 'myBookings' ? 'block' : 'none';
+          myBook.classList.toggle('active', name === 'myBookings');
+        }
+        if (browse) {
+          browse.style.display = name === 'browse' ? 'block' : 'none';
+          browse.classList.toggle('active', name === 'browse');
+        }
+      });
+    });
+
+    const subTabs = document.querySelectorAll('.booking-sub-tab[data-sub-tab]');
+    subTabs.forEach((tab) => {
+      if (tab.dataset.boundBookingsSubTab === 'true') return;
+      tab.dataset.boundBookingsSubTab = 'true';
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        const name = tab.getAttribute('data-sub-tab');
+        subTabs.forEach((t) => t.classList.toggle('active', t === tab));
+        const map = {
+          upcoming: 'upcomingBookings',
+          past: 'pastBookings',
+          waiting: 'waitingListBookings',
+        };
+        Object.entries(map).forEach(([subName, id]) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const show = name === subName;
+          el.style.display = show ? 'block' : 'none';
+          el.classList.toggle('active', show);
+        });
+      });
+    });
+  }
+
   function setRoute(route) {
-    const safeRoute = PAGE_ROUTES.includes(route) ? route : 'profile';
+    const safeRoute = PAGE_ROUTES.includes(route) ? route : 'dashboard';
 
     Object.values(PAGE_ROUTE_MAP).forEach((id) => {
       const section = document.getElementById(id);
@@ -87,6 +604,11 @@ function initializeLoginPage(DOM) {
 
     if (window.location.hash !== `#${safeRoute}`) {
       window.location.hash = safeRoute;
+    }
+
+    if (safeRoute === 'dashboard') {
+      updateDashboardWelcomeMessage();
+      refreshDashboardPanels();
     }
   }
 
@@ -217,12 +739,9 @@ function initializeLoginPage(DOM) {
     const address = getAddress(customer || {});
     const membership = getMembershipData(customer || {});
 
-    setText('dashboardUserName', fullName);
     setText('dashboardName', fullName);
     setText('dashboardEmail', email);
     setText('dashboardPhone', phone);
-    setText('dashboardMembershipType', membership.type);
-    setText('dashboardMembershipLocation', membership.gym);
 
     setText('activityMemberSince', formatDisplayDate(membership.activeSince));
     setText('activityLoyaltyTier', customer?.loyaltyTier || '-');
@@ -337,7 +856,7 @@ function initializeLoginPage(DOM) {
       populateProfileEditForm();
       populateProfileViews(customer, metadata);
       const hashRoute = window.location.hash.replace('#', '');
-      setRoute(PAGE_ROUTES.includes(hashRoute) ? hashRoute : 'profile');
+      setRoute(PAGE_ROUTES.includes(hashRoute) ? hashRoute : 'dashboard');
     } else {
       if (window.location.hash) {
         window.location.hash = '';
@@ -347,8 +866,11 @@ function initializeLoginPage(DOM) {
 
   function updateNavigation() {
     const hashRoute = window.location.hash.replace('#', '');
-    if (isUserAuthenticated() && PAGE_ROUTES.includes(hashRoute)) {
+    if (!isUserAuthenticated()) return;
+    if (PAGE_ROUTES.includes(hashRoute)) {
       setRoute(hashRoute);
+    } else {
+      setRoute('dashboard');
     }
   }
 
@@ -408,7 +930,7 @@ function initializeLoginPage(DOM) {
       link.addEventListener('click', (e) => {
         e.preventDefault();
         if (!isUserAuthenticated()) return;
-        setRoute(link.getAttribute('data-route') || 'profile');
+        setRoute(link.getAttribute('data-route') || 'dashboard');
       });
     });
 
@@ -743,6 +1265,8 @@ function initializeLoginPage(DOM) {
       closeAllSubscriptionModals();
       showToast('Cancellation request flow completed.', 'success');
     });
+
+    initBookingsTabSwitching();
   }
 
   window.refreshLoginPageUI = refreshLoginPageUI;
@@ -750,6 +1274,7 @@ function initializeLoginPage(DOM) {
   window.navigateToRoute = setRoute;
   window.updateNavigation = updateNavigation;
   window.initNavigation = initNavigation;
+  window.refreshDashboardPanels = refreshDashboardPanels;
 
   // Refresh UI on page load
   refreshLoginPageUI();

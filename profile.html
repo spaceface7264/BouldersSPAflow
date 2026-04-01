@@ -545,10 +545,10 @@
                 </a>
             </div>
             <nav class="nav-links">
-                <a href="#" class="nav-link" data-route="dashboard">Dashboard</a>
+                <a href="#" class="nav-link active" data-route="dashboard">Dashboard</a>
                 <a href="#" class="nav-link" data-route="classes">Classes & Bookings</a>
                 <a href="#" class="nav-link" data-route="activity">Activity</a>
-                <a href="#" class="nav-link active" data-route="profile">Profile</a>
+                <a href="#" class="nav-link" data-route="profile">Profile</a>
             </nav>
             <div class="nav-user" id="navUser">
                 <span class="user-name" id="navUserName">User</span>
@@ -591,10 +591,21 @@
             <div class="dashboard-page-container">
                 <!-- Welcome Header -->
                 <div class="dashboard-welcome">
-                    <h1 class="dashboard-welcome-title">
-                        Welcome back, <span id="dashboardUserName">User</span>! 👋
-                    </h1>
+                    <h1 class="dashboard-welcome-title" id="dashboardWelcomeTitle" aria-live="polite">Welcome! 👋</h1>
                 </div>
+
+                <p class="dashboard-handhold-intro" id="dashboardAccessIntro">
+                    Here’s your Boulders snapshot: what access you have, what’s coming up, and your Bloc Life level—all in one place.
+                </p>
+
+                <section class="dashboard-access-hero dashboard-card dashboard-card-full-width" aria-labelledby="dashboardAccessHeading">
+                    <div class="dashboard-access-hero-head">
+                        <h2 class="dashboard-access-title" id="dashboardAccessHeading">Your access</h2>
+                        <span class="dashboard-access-badge" id="dashboardAccessBadge">Status</span>
+                    </div>
+                    <p class="dashboard-access-lead" id="dashboardAccessLead"></p>
+                    <div class="dashboard-access-rows" id="dashboardAccessRows"></div>
+                </section>
 
                 <!-- Dashboard Grid -->
                 <div class="dashboard-grid">
@@ -642,44 +653,11 @@
                         </div>
                     </div>
 
-                    <!-- My Membership Card -->
-                    <div class="dashboard-card">
-                        <h2 class="dashboard-card-title">My membership</h2>
-                        <div class="dashboard-info-list">
-                            <div class="dashboard-info-item">
-                                <span class="dashboard-info-label">Type:</span>
-                                <span class="dashboard-info-value" id="dashboardMembershipType">-</span>
-                            </div>
-                            <div class="dashboard-info-item">
-                                <span class="dashboard-info-label">Location:</span>
-                                <span class="dashboard-info-value" id="dashboardMembershipLocation">-</span>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- My Upcoming Classes Card -->
                     <div class="dashboard-card dashboard-card-large">
-                        <h2 class="dashboard-card-title">My upcoming classes</h2>
-                        <div class="dashboard-classes-list" id="dashboardUpcomingClasses">
-                            <div class="dashboard-loading">
-                                <div class="dashboard-skeleton-list">
-                                    <div class="skeleton-list-item">
-                                        <div class="skeleton skeleton-avatar"></div>
-                                        <div style="flex: 1;">
-                                            <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
-                                            <div class="skeleton skeleton-text" style="width: 50%;"></div>
-                                        </div>
-                                    </div>
-                                    <div class="skeleton-list-item">
-                                        <div class="skeleton skeleton-avatar"></div>
-                                        <div style="flex: 1;">
-                                            <div class="skeleton skeleton-text" style="width: 70%; margin-bottom: 8px;"></div>
-                                            <div class="skeleton skeleton-text" style="width: 50%;"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <h2 class="dashboard-card-title">Classes &amp; bookings</h2>
+                        <p class="dashboard-card-subtitle dashboard-classes-subtitle">Upcoming sessions you’ve booked, or a quick path to find your next class.</p>
+                        <div class="dashboard-classes-list" id="dashboardUpcomingClasses"></div>
                     </div>
 
                     <!-- Bloc Life Loyalty Program Card -->
@@ -687,18 +665,10 @@
                         <h2 class="dashboard-card-title">Bloc Life Loyalty Program</h2>
                         <div class="dashboard-loyalty-content">
                             <div class="dashboard-loyalty-tier">
-                                <span class="dashboard-loyalty-tier-name" id="dashboardLoyaltyTier">-</span>
-                                <span class="dashboard-loyalty-tier-level" id="dashboardLoyaltyLevel">-</span>
+                                <span class="dashboard-loyalty-tier-name" id="dashboardLoyaltyTier">Bloc Life</span>
+                                <span class="dashboard-loyalty-tier-level" id="dashboardLoyaltyLevel">—</span>
                             </div>
-                            <div class="dashboard-loyalty-benefits" id="dashboardLoyaltyBenefits">
-                                <div class="dashboard-loading">
-                                    <div class="dashboard-skeleton-list">
-                                        <div class="skeleton skeleton-text"></div>
-                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
-                                        <div class="skeleton skeleton-text" style="width: 60%;"></div>
-                                    </div>
-                                </div>
-                            </div>
+                            <div class="dashboard-loyalty-benefits" id="dashboardLoyaltyBenefits"></div>
                         </div>
                     </div>
 

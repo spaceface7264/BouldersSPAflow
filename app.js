@@ -11273,9 +11273,7 @@ function handleGlobalClick(event) {
     }
     case 'open-login': {
       event.preventDefault();
-      state.currentStep = 4;
-      showStep(4);
-      switchAuthMode('login');
+      window.location.href = '/profile';
       break;
     }
     case 'logout': {
