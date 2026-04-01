@@ -20431,10 +20431,23 @@ function showStep(stepNumber) {
       }
       
       updateCartSummary();
-      // If order exists, update payment overview
-      if (state.orderId && state.fullOrder) {
-        updatePaymentOverview();
-      }
+      // Load backend pricing as soon as step 4 is visible for authenticated users.
+      // This avoids showing placeholder dashes until checkout click.
+      (async () => {
+        if (isUserAuthenticated()) {
+          try {
+            await autoEnsureOrderIfReady('step4-display');
+            if (state.orderId && !state.fullOrder) {
+              state.fullOrder = await orderAPI.getOrder(state.orderId);
+            }
+          } catch (error) {
+            console.warn('[showStep] Could not preload backend order pricing on step 4:', error);
+          }
+        }
+        if (state.orderId && state.fullOrder) {
+          updatePaymentOverview();
+        }
+      })();
     }, 100);
   } else {
     // When leaving step 2, reset main content margin
