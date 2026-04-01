@@ -14289,12 +14289,12 @@ function updatePaymentOverview() {
             isFirstMonthFreeCampaignName(productNameForCampaign);
 
           if (isFirstMonthFreeCampaignNoOrder) {
-            // Before login/order creation, campaign pay-now cannot be trusted from fallback math.
-            // Show pending state until backend order amount is available.
+            // Before login/order creation, keep a concrete amount (0) instead of placeholder.
+            // Once order data exists, backend order.price.amount is authoritative.
             payNowAmount = 0;
             billingPeriod = null;
-            isCampaignPayNowPending = true;
-            console.log('[Payment Overview] ⏳ First month free campaign (no order): pay-now pending backend order');
+            isCampaignPayNowPending = false;
+            console.log('[Payment Overview] First month free campaign (no order): showing 0 until backend order amount is available');
           } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
@@ -14467,8 +14467,12 @@ function updatePaymentOverview() {
     const chargeEnd = endOfMonth(chargeStart);
     const campaignPayNow = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
 
-    payNowAmount = campaignPayNow;
-    billingPeriod = { start: chargeStart, end: chargeEnd };
+    // CRITICAL: When backend order exists, always trust backend due-now amount.
+    // Only fall back to campaign projection before order data is available.
+    if (!hasOrderData) {
+      payNowAmount = campaignPayNow;
+      billingPeriod = { start: chargeStart, end: chargeEnd };
+    }
     isCampaignPayNowPending = false;
 
     if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = '';
@@ -14539,7 +14543,7 @@ function updatePaymentOverview() {
   
   if (DOM.payNow) {
     const amountText = formatCurrencyHalfKrone(state.totals.payNowAmount);
-    DOM.payNow.textContent = isCampaignPayNowPending ? '—' : amountText;
+    DOM.payNow.textContent = amountText;
     
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
