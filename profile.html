@@ -594,18 +594,41 @@
                     <h1 class="dashboard-welcome-title" id="dashboardWelcomeTitle" aria-live="polite">Welcome! 👋</h1>
                 </div>
 
-                <p class="dashboard-handhold-intro" id="dashboardAccessIntro">
-                    Here’s your Boulders snapshot: what access you have, what’s coming up, and your Bloc Life level—all in one place.
-                </p>
+                <div class="dashboard-top-row">
+                    <section class="dashboard-access-hero dashboard-card" aria-labelledby="dashboardAccessHeading">
+                        <div class="dashboard-access-hero-head">
+                            <h2 class="dashboard-access-title" id="dashboardAccessHeading">My Access</h2>
+                            <span class="dashboard-access-badge" id="dashboardAccessBadge">Status</span>
+                        </div>
+                        <p class="dashboard-access-lead" id="dashboardAccessLead"></p>
+                        <div class="dashboard-access-rows" id="dashboardAccessRows"></div>
+                        <div id="dashboardAccessSupportSlot" class="dashboard-access-support-slot" hidden></div>
+                    </section>
 
-                <section class="dashboard-access-hero dashboard-card dashboard-card-full-width" aria-labelledby="dashboardAccessHeading">
-                    <div class="dashboard-access-hero-head">
-                        <h2 class="dashboard-access-title" id="dashboardAccessHeading">Your access</h2>
-                        <span class="dashboard-access-badge" id="dashboardAccessBadge">Status</span>
+                    <div class="dashboard-top-aside">
+                        <div class="dashboard-card dashboard-info-aside">
+                            <h2 class="dashboard-card-title">My info</h2>
+                            <div class="dashboard-info-list">
+                                <div class="dashboard-info-item">
+                                    <span class="dashboard-info-label">Name:</span>
+                                    <span class="dashboard-info-value" id="dashboardName">-</span>
+                                </div>
+                                <div class="dashboard-info-item">
+                                    <span class="dashboard-info-label">Email:</span>
+                                    <span class="dashboard-info-value" id="dashboardEmail">-</span>
+                                </div>
+                                <div class="dashboard-info-item">
+                                    <span class="dashboard-info-label">Phone:</span>
+                                    <span class="dashboard-info-value" id="dashboardPhone">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="dashboard-card dashboard-valuecards-card" id="dashboardValueCardsCard" style="display: none;">
+                            <h2 class="dashboard-card-title">Add-ons &amp; extras</h2>
+                            <div class="profile-addons-list profile-addons-list--dashboard" id="dashboardValueCardsList"></div>
+                        </div>
                     </div>
-                    <p class="dashboard-access-lead" id="dashboardAccessLead"></p>
-                    <div class="dashboard-access-rows" id="dashboardAccessRows"></div>
-                </section>
+                </div>
 
                 <!-- Dashboard Grid -->
                 <div class="dashboard-grid">
@@ -618,37 +641,47 @@
                             </div>
                         </div>
                         <div class="dashboard-chart-container">
-                            <div class="dashboard-chart" id="activityChart">
-                                <div class="dashboard-loading">
-                                    <div class="dashboard-skeleton-chart">
-                                        <div class="dashboard-skeleton-chart-bar" style="height: 60%;"></div>
-                                        <div class="dashboard-skeleton-chart-bar" style="height: 80%;"></div>
-                                        <div class="dashboard-skeleton-chart-bar" style="height: 45%;"></div>
-                                        <div class="dashboard-skeleton-chart-bar" style="height: 90%;"></div>
-                                        <div class="dashboard-skeleton-chart-bar" style="height: 70%;"></div>
-                                        <div class="dashboard-skeleton-chart-bar" style="height: 55%;"></div>
-                                        <div class="dashboard-skeleton-chart-bar" style="height: 85%;"></div>
+                            <div
+                                class="dashboard-chart"
+                                id="activityChart"
+                                role="status"
+                                aria-busy="true"
+                                aria-label="Loading activity for the last 30 days"
+                            >
+                                <div class="dashboard-activity-skeleton">
+                                    <div class="dashboard-activity-skeleton-stats">
+                                        <div class="dashboard-activity-skeleton-stat">
+                                            <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--label"></span>
+                                            <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--value"></span>
+                                        </div>
+                                        <div class="dashboard-activity-skeleton-stat">
+                                            <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--label"></span>
+                                            <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--value dashboard-activity-skeleton-line--value-short"></span>
+                                        </div>
+                                    </div>
+                                    <div class="dashboard-activity-skeleton-chart" aria-hidden="true">
+                                        <div class="dashboard-activity-skeleton-chart-inner">
+                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 32%"></span>
+                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 55%"></span>
+                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 42%"></span>
+                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 78%"></span>
+                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 48%"></span>
+                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 92%"></span>
+                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 65%"></span>
+                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 38%"></span>
+                                        </div>
+                                    </div>
+                                    <div class="dashboard-activity-skeleton-axis" aria-hidden="true">
+                                        <span class="dashboard-activity-skeleton-tick"></span>
+                                        <span class="dashboard-activity-skeleton-tick"></span>
+                                        <span class="dashboard-activity-skeleton-tick"></span>
+                                        <span class="dashboard-activity-skeleton-tick"></span>
+                                        <span class="dashboard-activity-skeleton-tick"></span>
+                                        <span class="dashboard-activity-skeleton-tick"></span>
+                                        <span class="dashboard-activity-skeleton-tick"></span>
+                                        <span class="dashboard-activity-skeleton-tick"></span>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- My Info Card -->
-                    <div class="dashboard-card">
-                        <h2 class="dashboard-card-title">My info</h2>
-                        <div class="dashboard-info-list">
-                            <div class="dashboard-info-item">
-                                <span class="dashboard-info-label">Name:</span>
-                                <span class="dashboard-info-value" id="dashboardName">-</span>
-                            </div>
-                            <div class="dashboard-info-item">
-                                <span class="dashboard-info-label">Email:</span>
-                                <span class="dashboard-info-value" id="dashboardEmail">-</span>
-                            </div>
-                            <div class="dashboard-info-item">
-                                <span class="dashboard-info-label">Phone:</span>
-                                <span class="dashboard-info-value" id="dashboardPhone">-</span>
                             </div>
                         </div>
                     </div>
@@ -656,7 +689,6 @@
                     <!-- My Upcoming Classes Card -->
                     <div class="dashboard-card dashboard-card-large">
                         <h2 class="dashboard-card-title">Classes &amp; bookings</h2>
-                        <p class="dashboard-card-subtitle dashboard-classes-subtitle">Upcoming sessions you’ve booked, or a quick path to find your next class.</p>
                         <div class="dashboard-classes-list" id="dashboardUpcomingClasses"></div>
                     </div>
 
@@ -665,34 +697,10 @@
                         <h2 class="dashboard-card-title">Bloc Life Loyalty Program</h2>
                         <div class="dashboard-loyalty-content">
                             <div class="dashboard-loyalty-tier">
-                                <span class="dashboard-loyalty-tier-name" id="dashboardLoyaltyTier">Bloc Life</span>
-                                <span class="dashboard-loyalty-tier-level" id="dashboardLoyaltyLevel">—</span>
+                                <span class="dashboard-loyalty-tier-name" id="dashboardLoyaltyTier"></span>
+                                <span class="dashboard-loyalty-tier-level" id="dashboardLoyaltyLevel"></span>
                             </div>
                             <div class="dashboard-loyalty-benefits" id="dashboardLoyaltyBenefits"></div>
-                        </div>
-                    </div>
-
-                    <!-- Purchase History Card -->
-                    <div class="dashboard-card dashboard-card-full-width">
-                        <div id="dashboardPurchases">
-                            <div class="dashboard-loading">
-                                <div class="dashboard-skeleton-list">
-                                    <div class="skeleton-list-item">
-                                        <div style="flex: 1;">
-                                            <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
-                                            <div class="skeleton skeleton-text" style="width: 40%;"></div>
-                                        </div>
-                                        <div class="skeleton skeleton-badge"></div>
-                                    </div>
-                                    <div class="skeleton-list-item">
-                                        <div style="flex: 1;">
-                                            <div class="skeleton skeleton-text" style="width: 60%; margin-bottom: 8px;"></div>
-                                            <div class="skeleton skeleton-text" style="width: 40%;"></div>
-                                        </div>
-                                        <div class="skeleton skeleton-badge"></div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -942,6 +950,14 @@
                         </div>
                     </div>
 
+                    <!-- Value cards from signup (e.g. coffee card) -->
+                    <div class="profile-card profile-card--valuecards" id="profileAddonsCard" style="display: none;">
+                        <h2 class="profile-card-title">Add-ons &amp; extras</h2>
+                        <div class="profile-card-content profile-card-content--valuecards">
+                            <div class="profile-addons-list" id="profileAddonsList"></div>
+                        </div>
+                    </div>
+
                     <!-- My Membership Card -->
                     <div class="profile-card">
                         <h2 class="profile-card-title">My membership</h2>
@@ -1018,16 +1034,6 @@
                                 <a href="./index.html" class="profile-action-btn" style="text-decoration: none; display: inline-block; text-align: center;">
                                     Sign up for membership
                                 </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- My Products Card -->
-                    <div class="profile-card" id="profileProductsCard" style="display: none;">
-                        <h2 class="profile-card-title">My products</h2>
-                        <div class="profile-card-content">
-                            <div id="profileProductsList">
-                                <!-- Products will be populated here -->
                             </div>
                         </div>
                     </div>

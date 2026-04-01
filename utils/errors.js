@@ -237,21 +237,74 @@ export function extractErrorFields(error) {
   return fields;
 }
 
+/** Prefer this over matching the first 3-digit number in a message (e.g. "120 seconds" vs 429). */
+function extractHttpStatusFromMessage(message) {
+  if (!message || typeof message !== 'string') return null;
+  const patterns = [
+    /\bHTTP error!\s*status:\s*(\d{3})\b/i,
+    /\bLogin failed:\s*(\d{3})\b/,
+    /\bstatus:\s*(\d{3})\b/i,
+  ];
+  for (const re of patterns) {
+    const m = message.match(re);
+    if (m) return parseInt(m[1], 10);
+  }
+  return null;
+}
+
 // Helper function to get user-friendly error messages
 export function getErrorMessage(error, context = 'operation') {
+  if (!error) {
+    return 'An unexpected error occurred. Please try again.';
+  }
+
+  const msg = error.message || '';
+
   // Network errors
-  if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
     return 'Network error. Please check your connection and try again.';
   }
 
+  if (error.status === 429 || error.isRateLimit) {
+    return msg.includes('Rate limit exceeded') || msg.includes('wait')
+      ? msg
+      : 'Too many requests. Please wait a moment before trying again.';
+  }
+
+  const msgLower = msg.toLowerCase();
+  if (
+    msgLower.includes('rate limit') ||
+    msgLower.includes('too many requests') ||
+    msgLower.includes('too many login')
+  ) {
+    return 'Too many requests. Please wait a moment before trying again.';
+  }
+
+  if (
+    context === 'Login' &&
+    error.status === 401 &&
+    error.payload &&
+    typeof error.payload === 'object'
+  ) {
+    const payloadStr = JSON.stringify(error.payload).toLowerCase();
+    if (
+      payloadStr.includes('rate') ||
+      payloadStr.includes('too many') ||
+      payloadStr.includes('throttle') ||
+      payloadStr.includes('429')
+    ) {
+      return 'Too many requests. Please wait a moment before trying again.';
+    }
+  }
+
   // Try to parse validation errors from API response (400/401/403 errors with details)
-  if (error.message.includes('400') || error.message.includes('401') || error.message.includes('403')) {
+  if (msg.includes('400') || msg.includes('401') || msg.includes('403')) {
     try {
       // Extract JSON from error message - try multiple patterns
-      let jsonMatch = error.message.match(/\{[\s\S]*\}/);
+      let jsonMatch = msg.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         // Also try to parse the entire error text if it's JSON
-        jsonMatch = error.message.match(/-\s*(\{[\s\S]*\})/);
+        jsonMatch = msg.match(/-\s*(\{[\s\S]*\})/);
         if (jsonMatch) {
           jsonMatch = [jsonMatch[1]];
         }
@@ -364,11 +417,14 @@ export function getErrorMessage(error, context = 'operation') {
     }
   }
 
-  // Parse status code from error message
-  const statusMatch = error.message.match(/(\d{3})/);
-  if (statusMatch) {
-    const status = parseInt(statusMatch[1]);
-    
+  const resolvedStatus =
+    typeof error.status === 'number' && Number.isFinite(error.status)
+      ? error.status
+      : extractHttpStatusFromMessage(msg);
+
+  if (resolvedStatus != null) {
+    const status = resolvedStatus;
+
     switch (status) {
       case 400:
         return 'Invalid information provided. Please check your details and try again.';
@@ -398,5 +454,5 @@ export function getErrorMessage(error, context = 'operation') {
   }
 
   // Default message
-  return error.message || 'An unexpected error occurred. Please try again.';
+  return msg || 'An unexpected error occurred. Please try again.';
 }

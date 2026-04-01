@@ -76,7 +76,6 @@ const RecommendedClassRow: React.FC<{ activity: GroupActivityOut }> = ({ activit
 
 const EmptyClasses: React.FC<{ homeGym?: BusinessUnitOutRef }> = ({ homeGym }) => (
   <div className="py-6 text-center">
-    <p className="text-sm text-gray-400 mb-1">No classes booked yet</p>
     {homeGym && (
       <p className="text-xs text-gray-300">Looking for classes at {homeGym.name}</p>
     )}

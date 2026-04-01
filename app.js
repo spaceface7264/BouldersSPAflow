@@ -545,10 +545,11 @@ class AuthAPI {
   async login(email, password, options = {}) {
     try {
       const { saveTokens = true } = options;
+      // BRP API3 member auth (proxied to boulders.brpsystems.com). Join API at /api/auth/login is a separate store.
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: '/api/auth/login',
+        path: '/api/ver3/auth/login',
       });
       
       devLog('[Step 6] Logging in:', url);
@@ -591,17 +592,31 @@ class AuthAPI {
           const retryMessage = retryMinutes > 0
             ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
             : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
-          throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${error.status} - ${payloadText})`);
+          const rateErr = new Error(
+            `Rate limit exceeded. Please wait ${retryMessage} before trying again.`
+          );
+          rateErr.status = 429;
+          rateErr.payload = errorPayload;
+          rateErr.isRateLimit = true;
+          throw rateErr;
         }
 
         // Handle 401 errors - preserve error structure for getErrorMessage
         if (error.status === 401 && errorPayload && typeof errorPayload === 'object') {
           if (errorPayload.error?.code === 'INVALID_CREDENTIALS' || errorPayload.error?.message) {
-            throw new Error(`Login failed: ${error.status} - ${payloadText}`);
+            const loginErr = new Error(`Login failed: ${error.status} - ${payloadText}`);
+            loginErr.status = 401;
+            loginErr.payload = errorPayload;
+            throw loginErr;
           }
         }
 
-        throw new Error(`Login failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        const fallbackErr = new Error(
+          `Login failed: ${error.status || 'unknown'} - ${payloadText || error.message}`
+        );
+        fallbackErr.status = error.status;
+        fallbackErr.payload = errorPayload;
+        throw fallbackErr;
       }
 
       devLog('[Step 6] Login response:', data);
@@ -671,13 +686,11 @@ class AuthAPI {
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: '/api/auth/validate',
+        path: '/api/ver3/auth/validate',
       });
       
       devLog('[Step 6] Validating token:', url);
       
-      // Note: Authorization header will be added automatically by HttpClient
-      // But since we're using fetch directly, we need to add it manually
       const accessToken = typeof window.getAccessToken === 'function' 
         ? window.getAccessToken() 
         : null;
@@ -696,7 +709,7 @@ class AuthAPI {
         url,
         method: 'POST',
         headers,
-        body: { accessToken },
+        body: {},
       });
       devLog('[Step 6] Token validation response:', data);
       return data;
@@ -712,7 +725,7 @@ class AuthAPI {
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: '/api/auth/refresh',
+        path: '/api/ver3/auth/refresh',
       });
       
       devLog('[Step 6] Refreshing token:', url);
@@ -1008,6 +1021,58 @@ class AuthAPI {
     }
   }
 
+  /**
+   * BRP GET /customers/{id} does not embed subscriptions; list them via
+   * /customers/{id}/subscriptions and value cards via /customers/{id}/valuecards.
+   */
+  async enrichBrpCustomerProfile(customer, headers, requestedCustomerId) {
+    if (!customer || typeof customer !== 'object') return customer;
+    const rawId = customer.id != null ? customer.id : requestedCustomerId;
+    const idNum =
+      typeof rawId === 'number' && Number.isFinite(rawId)
+        ? rawId
+        : parseInt(String(rawId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) return customer;
+
+    let next = { ...customer };
+    const lacksSubs = !Array.isArray(next.subscriptions) || next.subscriptions.length === 0;
+    const lacksCards = !Array.isArray(next.valueCards) || next.valueCards.length === 0;
+
+    if (lacksSubs) {
+      try {
+        const subsUrl = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/ver3/customers/${idNum}/subscriptions`,
+        });
+        const subs = await requestJson({ url: subsUrl, headers });
+        if (Array.isArray(subs) && subs.length > 0) {
+          next = { ...next, subscriptions: subs };
+        }
+      } catch (e) {
+        devWarn('[Step 6] Could not load customer subscriptions:', e?.status ?? e);
+      }
+    }
+
+    if (lacksCards) {
+      try {
+        const vcUrl = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/ver3/customers/${idNum}/valuecards`,
+        });
+        const cards = await requestJson({ url: vcUrl, headers });
+        if (Array.isArray(cards) && cards.length > 0) {
+          next = { ...next, valueCards: cards };
+        }
+      } catch (e) {
+        devWarn('[Step 6] Could not load customer value cards:', e?.status ?? e);
+      }
+    }
+
+    return next;
+  }
+
   // Step 6: Get customer profile
   async getCustomer(customerId) {
     try {
@@ -1033,6 +1098,12 @@ class AuthAPI {
         'Authorization': `Bearer ${accessToken}`,
       };
 
+      const ver3CustomerUrl = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/ver3/customers/${customerId}`,
+      });
+
       try {
         const data = await requestJson({ url, headers });
         devLog('[Step 6] Get customer response:', data);
@@ -1049,31 +1120,25 @@ class AuthAPI {
 
         if (!hasProfileDetails) {
           const fallbackUrl = this.useProxy
-            ? buildApiUrl({
-                baseUrl: this.baseUrl,
-                useProxy: this.useProxy,
-                path: `/api/ver3/customers/${customerId}`,
-              })
+            ? ver3CustomerUrl
             : `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}`;
           devWarn('[Step 6] Customer profile missing details. Retrying with ver3:', fallbackUrl);
           const fallbackData = await requestJson({ url: fallbackUrl, headers });
           devLog('[Step 6] Get customer response (ver3):', fallbackData);
-          return fallbackData;
+          return this.enrichBrpCustomerProfile(fallbackData, headers, customerId);
         }
 
-        return data;
+        return this.enrichBrpCustomerProfile(data, headers, customerId);
       } catch (error) {
-        if (error.status === 404 && this.useProxy) {
-          // Fallback to ver3 endpoint if legacy customer profile requires it
-          const fallbackUrl = buildApiUrl({
-            baseUrl: this.baseUrl,
-            useProxy: this.useProxy,
-            path: `/api/ver3/customers/${customerId}`,
-          });
-          devWarn('[Step 6] Customer profile not found on /api/customers. Retrying:', fallbackUrl);
-          const data = await requestJson({ url: fallbackUrl, headers });
+        const numericId = String(customerId).trim();
+        const isNumericCustomer = /^\d+$/.test(numericId);
+        const tryVer3 =
+          isNumericCustomer && (error.status === 404 || error.status === 401);
+        if (tryVer3) {
+          devWarn('[Step 6] Join /api/customers failed; retrying ver3:', error.status, ver3CustomerUrl);
+          const data = await requestJson({ url: ver3CustomerUrl, headers });
           devLog('[Step 6] Get customer response (ver3):', data);
-          return data;
+          return this.enrichBrpCustomerProfile(data, headers, customerId);
         }
         throw error;
       }
@@ -2571,7 +2636,7 @@ const orderAPI = new OrderAPI();
 const paymentAPI = new PaymentAPI();
 
 // Step 6: Token validation on app reload
-// Keep tokens fresh by calling POST /api/auth/validate when app reloads with saved credentials
+// Keep tokens fresh by calling POST /api/ver3/auth/validate when app reloads with saved credentials
 async function validateTokensOnLoad() {
   const accessToken = window.getAccessToken();
   const refreshToken = window.getRefreshToken();
@@ -20968,4 +21033,5 @@ if (typeof window !== 'undefined') {
   window.showToast = showToast;
   window.getErrorMessage = getErrorMessage;
   window.handleLogout = handleLogout;
+  window.getProductPlaceholderImage = getProductPlaceholderImage;
 }

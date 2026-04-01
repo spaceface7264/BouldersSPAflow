@@ -148,21 +148,12 @@ function initializeLoginPage(DOM) {
     }
   }
 
-  const BLOC_LIFE_COPY = {
-    default: {
-      benefits: [
-        'Every visit counts toward your Bloc Life level.',
-        'Higher levels unlock rewards and recognition at Boulders.',
-        'Check in at the front desk so your sessions are tracked.',
-      ],
-    },
-  };
-
   function subscriptionSearchText(sub) {
     if (!sub || typeof sub !== 'object') return '';
     const parts = [
       sub.name,
       sub.productName,
+      sub.subscriptionProduct?.name,
       sub.type,
       sub.subscriptionType,
       sub.planName,
@@ -172,6 +163,11 @@ function initializeLoginPage(DOM) {
       .filter(Boolean)
       .map((s) => String(s).toLowerCase());
     return parts.join(' ');
+  }
+
+  function subscriptionIsTerminated(sub) {
+    if (!sub?.statuses || !Array.isArray(sub.statuses)) return false;
+    return sub.statuses.some((st) => st && st.code === 'TERMINATED');
   }
 
   function collectSubscriptionsArray(customer) {
@@ -185,6 +181,394 @@ function initializeLoginPage(DOM) {
     if (Array.isArray(customer.memberships)) customer.memberships.forEach(push);
     push(customer.membership);
     return list;
+  }
+
+  /** BRP value cards and similar (signup add-ons, punch-style products). */
+  function collectValueCardsArray(customer) {
+    if (!customer) return [];
+    const raw = []
+      .concat(customer.valueCards || [])
+      .concat(customer.activeValueCards || [])
+      .concat(customer.punchCards || [])
+      .concat(customer.clipCards || [])
+      .concat(customer.valueCardBalances || []);
+    const seen = new Set();
+    const out = [];
+    raw.forEach((c) => {
+      if (!c || typeof c !== 'object') return;
+      const key = c.id != null ? `id:${c.id}` : `k:${out.length}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(c);
+    });
+    return out;
+  }
+
+  function formatAddonExpiryDisplay(value) {
+    if (!value) return '—';
+    const str = typeof value === 'string' ? value : String(value);
+    const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+    return str;
+  }
+
+  function valueCardIsExpiredOrInvalid(card) {
+    if (card?.isValid === false) return true;
+    const v = card?.validUntil;
+    if (!v || typeof v !== 'string') return false;
+    const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return false;
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T23:59:59`);
+    return d < new Date();
+  }
+
+  function formatValueCardRemainingLabel(card) {
+    if (!card || typeof card !== 'object') return '—';
+    const currency = 'DKK';
+    if (card.allowNegativeUnits) {
+      return 'Active (unlimited)';
+    }
+    if (valueCardIsExpiredOrInvalid(card)) {
+      return 'Expired or inactive';
+    }
+    const t = String(card.type || '').toUpperCase();
+    const isAmountType = t === 'AMOUT' || t === 'AMOUNT';
+    if (isAmountType && card.amountLeft != null) {
+      const n = Number(card.amountLeft);
+      const formatted = Number.isFinite(n)
+        ? new Intl.NumberFormat('da-DK', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }).format(n)
+        : String(card.amountLeft);
+      return `${formatted} ${currency}`;
+    }
+    const units = card.unitsLeft;
+    if (units != null) {
+      let label = `${units} stk`;
+      if (card.amountLeft != null && Number(card.amountLeft) > 0) {
+        const n = Number(card.amountLeft);
+        const formatted = Number.isFinite(n)
+          ? new Intl.NumberFormat('da-DK', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }).format(n)
+          : String(card.amountLeft);
+        label += ` (${formatted} ${currency})`;
+      }
+      return label;
+    }
+    if (card.isValid === true) return 'Active';
+    return '—';
+  }
+
+  function valueCardProductRef(card) {
+    if (!card) return null;
+    return card.validCardProduct || card.valueCardProduct || card.product || null;
+  }
+
+  function valueCardProductId(card) {
+    const p = valueCardProductRef(card);
+    const raw =
+      p?.id ??
+      card?.validCardProductId ??
+      card?.valueCardProductId ??
+      card?.productId;
+    if (raw == null || raw === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function valueCardProductDisplayName(card) {
+    const p = valueCardProductRef(card);
+    const tryName = (v) => (v != null && String(v).trim() ? String(v).trim() : '');
+    let raw = tryName(p?.name) || tryName(p?.Name) || tryName(card?.name) || tryName(card?.Name);
+    if (!raw && Array.isArray(card?.validForProducts)) {
+      const names = card.validForProducts
+        .map((x) => tryName(x?.name) || tryName(x?.Name))
+        .filter(Boolean);
+      if (names.length) raw = names.join(', ');
+    }
+    if (raw) return raw;
+    const desc = tryName(p?.description) || tryName(card?.description);
+    if (desc) {
+      const line = desc.split(/\r?\n/)[0].trim();
+      if (line) return line.length > 80 ? `${line.slice(0, 77)}…` : line;
+    }
+    return 'Product';
+  }
+
+  function brpAssetUrlFromReference(referenceId) {
+    if (referenceId == null || referenceId === '') return null;
+    const enc = encodeURIComponent(String(referenceId));
+    return `https://boulders.brpsystems.com/apiserver/api/assets/${enc}`;
+  }
+
+  function resolveProductAssetImageUrl(product) {
+    if (!product || typeof product !== 'object') return null;
+    const assets = product.assets;
+    if (!Array.isArray(assets) || assets.length === 0) return null;
+    const mainAsset =
+      assets.find((a) => a && (a.type === 'MAIN' || a.type === 'CENTERED')) || assets[0];
+    if (!mainAsset) return null;
+    let url = mainAsset.contentUrl || mainAsset.url || null;
+    if (url && /^https?:\/\//i.test(url)) return url;
+    if (url && url.startsWith('/')) return url;
+    const ref = mainAsset.reference;
+    if (!ref) return null;
+    const host = window.location.hostname;
+    const isDev = host === 'localhost' || host === '127.0.0.1';
+    const isPages =
+      host.includes('pages.dev') ||
+      host.includes('join.boulders.dk') ||
+      host === 'boulders.dk';
+    if (isPages) return `/api-proxy?path=/api/assets/${encodeURIComponent(ref)}`;
+    if (isDev) {
+      return brpAssetUrlFromReference(ref) || `/api/assets/${encodeURIComponent(ref)}`;
+    }
+    return brpAssetUrlFromReference(ref) || `https://api-join.boulders.dk/api/assets/${encodeURIComponent(ref)}`;
+  }
+
+  async function fetchValueCardProductDetail(productId, businessUnitId, customerId) {
+    if (productId == null) return null;
+    const token = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    const params = new URLSearchParams();
+    if (businessUnitId != null && businessUnitId !== '') {
+      params.set('businessUnit', String(businessUnitId));
+    }
+    if (customerId != null && customerId !== '') {
+      params.set('customer', String(customerId));
+    }
+    const qs = params.toString() ? `?${params}` : '';
+    const headers = {
+      'Accept-Language': 'da-DK',
+      Accept: 'application/json',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    try {
+      const res = await fetch(`/api/ver3/products/valuecards/${productId}${qs}`, { headers });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  let profileValueCardLightbox = null;
+
+  function ensureProfileValueCardLightbox() {
+    if (profileValueCardLightbox) return profileValueCardLightbox;
+    const root = document.createElement('div');
+    root.className = 'profile-vc-lightbox';
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
+    root.setAttribute('aria-label', 'Product');
+    root.innerHTML =
+      '<div class="profile-vc-lightbox__inner">' +
+      '<button type="button" class="profile-vc-lightbox__close" aria-label="Close">×</button>' +
+      '<img class="profile-vc-lightbox__img" alt="" />' +
+      '<p class="profile-vc-lightbox__desc"></p>' +
+      '</div>';
+    const close = () => {
+      root.classList.remove('profile-vc-lightbox--open');
+      const ret = root._returnFocus;
+      if (ret && typeof ret.focus === 'function') {
+        ret.focus();
+      }
+      root._returnFocus = null;
+    };
+    root.querySelector('.profile-vc-lightbox__close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      close();
+    });
+    root.addEventListener('click', (e) => {
+      if (e.target === root) close();
+    });
+    root.querySelector('.profile-vc-lightbox__inner').addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && root.classList.contains('profile-vc-lightbox--open')) {
+        close();
+      }
+    });
+    document.body.appendChild(root);
+    profileValueCardLightbox = root;
+    return root;
+  }
+
+  function openProfileValueCardLightbox({ src, alt, description, returnFocus }) {
+    const root = ensureProfileValueCardLightbox();
+    const imgEl = root.querySelector('.profile-vc-lightbox__img');
+    const descEl = root.querySelector('.profile-vc-lightbox__desc');
+    imgEl.src = src || '';
+    imgEl.alt = alt || '';
+    const desc = (description && String(description).trim()) || '';
+    if (desc) {
+      descEl.textContent = desc;
+      descEl.removeAttribute('hidden');
+    } else {
+      descEl.textContent = '';
+      descEl.setAttribute('hidden', '');
+    }
+    root._returnFocus = returnFocus || null;
+    root.classList.add('profile-vc-lightbox--open');
+    root.querySelector('.profile-vc-lightbox__close').focus();
+  }
+
+  async function hydrateProfileAddonCardMedia(article, card) {
+    const img = article.querySelector('.profile-addon-card__img');
+    const titleEl = article.querySelector('.profile-addon-card__title');
+    const mediaBtn = article.querySelector('.profile-addon-card__media-btn');
+    const productRef = valueCardProductRef(card);
+    const productId = valueCardProductId(card);
+    const customerId = state?.customerId;
+    let detail = null;
+    if (productRef?.assets?.length) {
+      detail = productRef;
+    }
+    if (productId != null) {
+      const loaded = await fetchValueCardProductDetail(
+        productId,
+        card.businessUnit?.id,
+        customerId
+      );
+      if (loaded && typeof loaded === 'object') {
+        detail = loaded;
+      }
+    }
+    const nameFromDetail = detail?.name && String(detail.name).trim();
+    if (titleEl && nameFromDetail) {
+      titleEl.textContent = nameFromDetail;
+    }
+    const url =
+      resolveProductAssetImageUrl(detail) ||
+      resolveProductAssetImageUrl(productRef);
+    const placeholder =
+      typeof window.getProductPlaceholderImage === 'function'
+        ? window.getProductPlaceholderImage()
+        : '';
+    const displayName = (nameFromDetail || valueCardProductDisplayName(card) || 'Product').trim();
+    const descText = (
+      detail?.description ||
+      productRef?.description ||
+      ''
+    )
+      .trim()
+      .replace(/\r\n/g, '\n');
+    if (img) {
+      img.src = url || placeholder;
+      img.alt = displayName;
+    }
+    if (mediaBtn) {
+      mediaBtn.setAttribute('aria-label', `View larger: ${displayName}`);
+      const handler = (e) => {
+        e.preventDefault();
+        const src = img?.src || '';
+        openProfileValueCardLightbox({
+          src,
+          alt: displayName,
+          description: descText,
+          returnFocus: mediaBtn,
+        });
+      };
+      mediaBtn.addEventListener('click', handler);
+      mediaBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handler(e);
+        }
+      });
+    }
+  }
+
+  function buildAddonCardElement(card) {
+    const article = document.createElement('article');
+    article.className = 'profile-addon-card';
+    const expired = valueCardIsExpiredOrInvalid(card);
+    const titleText = valueCardProductDisplayName(card);
+
+    const side = document.createElement('div');
+    side.className = 'profile-addon-card__side';
+
+    const mediaBtn = document.createElement('button');
+    mediaBtn.type = 'button';
+    mediaBtn.className = 'profile-addon-card__media-btn';
+
+    const img = document.createElement('img');
+    img.className = 'profile-addon-card__img';
+    img.width = 44;
+    img.height = 44;
+    img.decoding = 'async';
+    img.loading = 'lazy';
+    if (typeof window.getProductPlaceholderImage === 'function') {
+      img.src = window.getProductPlaceholderImage();
+    }
+    img.alt = titleText;
+    mediaBtn.appendChild(img);
+
+    side.appendChild(mediaBtn);
+
+    const head = document.createElement('div');
+    head.className = 'profile-addon-card__head';
+
+    const intro = document.createElement('div');
+    intro.className = 'profile-addon-card__intro';
+
+    const title = document.createElement('h3');
+    title.className = 'profile-addon-card__title';
+    title.textContent = titleText;
+
+    const lead = document.createElement('p');
+    lead.className = 'profile-addon-card__lead';
+    lead.textContent = 'Pick these up in the gym';
+
+    intro.append(title, lead);
+
+    const badge = document.createElement('span');
+    badge.className = 'profile-addon-card__badge' + (expired ? ' profile-addon-card__badge--muted' : '');
+    badge.textContent = formatValueCardRemainingLabel(card);
+
+    const meta = document.createElement('p');
+    meta.className = 'profile-addon-card__meta';
+    const gym = card.businessUnit?.name || '';
+    const expRaw = formatAddonExpiryDisplay(card.validUntil);
+    const expPart = expRaw !== '—' ? `Expires ${expRaw}` : '';
+    meta.textContent = [gym, expPart].filter(Boolean).join(' • ') || '—';
+
+    head.append(intro, badge, side);
+    article.append(head, meta);
+    return article;
+  }
+
+  function renderValueCardsIntoList(listEl, customer) {
+    if (!listEl) return 0;
+    clearDashboardEl(listEl);
+    const valueCards = collectValueCardsArray(customer || {});
+    valueCards.forEach((vc) => {
+      const el = buildAddonCardElement(vc);
+      listEl.appendChild(el);
+      hydrateProfileAddonCardMedia(el, vc).catch(() => {});
+    });
+    return valueCards.length;
+  }
+
+  function renderDashboardValueCardsSection(customer) {
+    const card = document.getElementById('dashboardValueCardsCard');
+    const list = document.getElementById('dashboardValueCardsList');
+    if (!card || !list) return;
+    const n = renderValueCardsIntoList(list, customer);
+    card.style.display = n > 0 ? '' : 'none';
+  }
+
+  function renderProfileAddonsSection(customer) {
+    const card = document.getElementById('profileAddonsCard');
+    const list = document.getElementById('profileAddonsList');
+    if (!card || !list) return;
+    const n = renderValueCardsIntoList(list, customer);
+    card.style.display = n > 0 ? '' : 'none';
   }
 
   function isTrialLikeSub(sub) {
@@ -219,7 +603,8 @@ function initializeLoginPage(DOM) {
         fromCard.expiryDate ??
         fromCard.expires ??
         fromCard.expiry ??
-        fromCard.validUntil;
+        fromCard.validUntil ??
+        fromCard.validToDate;
       if (entriesLeft != null || exp) {
         return {
           entriesLeft: entriesLeft != null ? entriesLeft : null,
@@ -250,7 +635,8 @@ function initializeLoginPage(DOM) {
       subPunch.expiryDate ??
       subPunch.endDate ??
       subPunch.expires ??
-      subPunch.validUntil;
+      subPunch.validUntil ??
+      subPunch.boundUntil;
     if (entriesLeft == null && !exp) return null;
     return { entriesLeft: entriesLeft != null ? entriesLeft : null, expiryRaw: exp || null };
   }
@@ -262,9 +648,9 @@ function initializeLoginPage(DOM) {
       const trialSub = subs.find((s) => isTrialLikeSub(s));
       return { kind: 'trial', trialSub };
     }
+    if (hasActiveMembership(customer)) return { kind: 'membership' };
     const punch = extractPunchCardFromCustomer(customer, subs);
     if (punch) return { kind: 'punch_card', punch };
-    if (hasActiveMembership(customer)) return { kind: 'membership' };
     return { kind: 'unknown' };
   }
 
@@ -296,13 +682,27 @@ function initializeLoginPage(DOM) {
     container.appendChild(row);
   }
 
+  function createDashboardAccessSupportLink() {
+    const a = document.createElement('a');
+    a.href = 'mailto:medlem@boulders.dk';
+    a.className = 'profile-action-btn-secondary dashboard-access-support-btn';
+    a.textContent = 'Something wrong? Contact support';
+    return a;
+  }
+
   function renderDashboardAccessPanel(customer) {
     const leadEl = document.getElementById('dashboardAccessLead');
     const rowsEl = document.getElementById('dashboardAccessRows');
     const badgeEl = document.getElementById('dashboardAccessBadge');
+    const supportSlot = document.getElementById('dashboardAccessSupportSlot');
     if (!leadEl || !rowsEl || !badgeEl) return;
 
+    leadEl.style.display = '';
     clearDashboardEl(rowsEl);
+    if (supportSlot) {
+      clearDashboardEl(supportSlot);
+      supportSlot.setAttribute('hidden', '');
+    }
     const access = detectPrimaryAccess(customer || {});
     const membership = getMembershipData(customer || {});
 
@@ -317,6 +717,10 @@ function initializeLoginPage(DOM) {
         addAccessRow(rowsEl, 'Bound until', formatDisplayDate(membership.boundUntil));
       }
       addAccessRow(rowsEl, 'Plan', membership.type);
+      if (supportSlot) {
+        supportSlot.appendChild(createDashboardAccessSupportLink());
+        supportSlot.removeAttribute('hidden');
+      }
       return;
     }
 
@@ -335,6 +739,10 @@ function initializeLoginPage(DOM) {
         access.punch.expiryRaw ? formatDisplayDate(access.punch.expiryRaw) : '—'
       );
       addAccessRow(rowsEl, 'Home gym', membership.gym !== '-' ? membership.gym : '—');
+      if (supportSlot) {
+        supportSlot.appendChild(createDashboardAccessSupportLink());
+        supportSlot.removeAttribute('hidden');
+      }
       return;
     }
 
@@ -349,16 +757,38 @@ function initializeLoginPage(DOM) {
       addAccessRow(rowsEl, 'Active until', formatDisplayDate(end));
       addAccessRow(rowsEl, 'Plan', t.name || t.productName || membership.type || '—');
       addAccessRow(rowsEl, 'Location', membership.gym !== '-' ? membership.gym : '—');
+      if (supportSlot) {
+        supportSlot.appendChild(createDashboardAccessSupportLink());
+        supportSlot.removeAttribute('hidden');
+      }
       return;
     }
 
-    badgeEl.textContent = 'Access';
-    leadEl.textContent =
-      'We couldn’t match your profile to a specific membership, punch card, or trial yet. If you just signed up, wait a moment and refresh—or contact medlem@boulders.dk.';
+    badgeEl.textContent = 'No access found';
+    leadEl.textContent = '';
+    leadEl.style.display = 'none';
     if (membership.type && membership.type !== '-') {
       addAccessRow(rowsEl, 'Plan on file', membership.type);
     }
-    addAccessRow(rowsEl, 'Home gym', membership.gym !== '-' ? membership.gym : '—');
+    if (membership.gym && membership.gym !== '-') {
+      addAccessRow(rowsEl, 'Home gym', membership.gym);
+    }
+
+    const ctaWrap = document.createElement('div');
+    ctaWrap.className = 'dashboard-access-cta';
+    const sum = document.createElement('p');
+    sum.className = 'dashboard-access-empty-summary';
+    sum.textContent =
+      'Ready to climb with us? Pick your gym and choose a plan—it only takes a few minutes.';
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'dashboard-access-cta-actions';
+    const signupBtn = document.createElement('a');
+    signupBtn.href = './index.html';
+    signupBtn.className = 'profile-action-btn dashboard-access-signup-btn';
+    signupBtn.textContent = 'Get access';
+    actionsRow.append(signupBtn, createDashboardAccessSupportLink());
+    ctaWrap.append(sum, actionsRow);
+    rowsEl.appendChild(ctaWrap);
   }
 
   function extractUpcomingBookings(customer) {
@@ -443,25 +873,16 @@ function initializeLoginPage(DOM) {
     const title = document.createElement('p');
     title.className = 'dashboard-classes-empty-title';
     title.textContent = 'No classes booked yet';
-    const blurb = document.createElement('p');
-    blurb.className = 'dashboard-classes-empty-text';
-    blurb.textContent = 'Pick a session that fits your week—it only takes a minute.';
-    const steps = document.createElement('ol');
-    steps.className = 'dashboard-classes-steps';
-    steps.innerHTML =
-      '<li>Open <strong>Classes &amp; Bookings</strong> in the menu above.</li>' +
-      '<li>Tap <strong>Browse Classes</strong>.</li>' +
-      '<li>Choose your gym, date, and a class—then confirm your booking.</li>';
     const cta = document.createElement('button');
     cta.type = 'button';
     cta.className = 'profile-action-btn dashboard-book-class-cta';
     cta.id = 'dashboardBookClassCTA';
-    cta.textContent = 'Browse classes';
+    cta.textContent = 'Find a class';
     cta.addEventListener('click', (e) => {
       e.preventDefault();
       openClassesBrowseTab();
     });
-    empty.append(title, blurb, steps, cta);
+    empty.append(title, cta);
     wrap.appendChild(empty);
   }
 
@@ -480,6 +901,30 @@ function initializeLoginPage(DOM) {
     const benefitsEl = document.getElementById('dashboardLoyaltyBenefits');
     if (!tierNameEl || !levelEl || !benefitsEl) return;
 
+    const tierBlock = tierNameEl.closest('.dashboard-loyalty-tier');
+    const hasMember = hasActiveMembership(customer || {});
+
+    clearDashboardEl(benefitsEl);
+
+    if (!hasMember) {
+      if (tierBlock) tierBlock.style.display = 'none';
+      const wrap = document.createElement('div');
+      wrap.className = 'dashboard-loyalty-no-membership';
+      const msg = document.createElement('p');
+      msg.className = 'dashboard-loyalty-no-membership-text';
+      msg.textContent =
+        'No membership found. To start your Bloc Life journey, become a member.';
+      const cta = document.createElement('a');
+      cta.href = './index.html';
+      cta.className = 'profile-action-btn dashboard-loyalty-become-member-btn';
+      cta.textContent = 'Become a member';
+      wrap.append(msg, cta);
+      benefitsEl.appendChild(wrap);
+      return;
+    }
+
+    if (tierBlock) tierBlock.style.display = '';
+
     const loyalty = customer?.loyalty || {};
     const rawTier =
       customer?.loyaltyTier ||
@@ -496,27 +941,23 @@ function initializeLoginPage(DOM) {
       loyalty.tierLevel ||
       '';
 
-    const key = normalizeLoyaltyKey(rawTier || rawLevel);
+    const combined = String(rawTier || rawLevel || '').trim();
+    const key = normalizeLoyaltyKey(combined);
     const tierLabels = {
-      default: 'Bloc Life',
       bronze: 'Bloc Life — Bronze',
       silver: 'Bloc Life — Silver',
       gold: 'Bloc Life — Gold',
     };
-    tierNameEl.textContent = tierLabels[key] || tierLabels.default;
 
-    levelEl.textContent =
-      rawTier || rawLevel
-        ? `Current level: ${rawTier || rawLevel}`
-        : 'Your level will appear here as you climb and check in.';
-
-    clearDashboardEl(benefitsEl);
-    BLOC_LIFE_COPY.default.benefits.forEach((line) => {
-      const p = document.createElement('p');
-      p.className = 'dashboard-loyalty-benefit-line';
-      p.textContent = line;
-      benefitsEl.appendChild(p);
-    });
+    if (combined) {
+      tierNameEl.textContent =
+        key !== 'default' && tierLabels[key] ? tierLabels[key] : combined;
+      levelEl.textContent = '';
+    } else {
+      tierNameEl.textContent = '';
+      levelEl.textContent = '';
+      if (tierBlock) tierBlock.style.display = 'none';
+    }
 
     if (Array.isArray(loyalty.benefits) && loyalty.benefits.length) {
       loyalty.benefits.forEach((line) => {
@@ -533,6 +974,7 @@ function initializeLoginPage(DOM) {
     const customer = getBestCustomerData();
     renderDashboardAccessPanel(customer);
     renderDashboardClassesSection(customer);
+    renderDashboardValueCardsSection(customer);
     renderDashboardLoyaltySection(customer);
   }
 
@@ -609,6 +1051,9 @@ function initializeLoginPage(DOM) {
     if (safeRoute === 'dashboard') {
       updateDashboardWelcomeMessage();
       refreshDashboardPanels();
+    }
+    if (safeRoute === 'profile') {
+      renderProfileAddonsSection(getBestCustomerData());
     }
   }
 
@@ -690,27 +1135,74 @@ function initializeLoginPage(DOM) {
     return '-';
   }
 
+  function pickDisplaySubscription(customer) {
+    const all = collectSubscriptionsArray(customer);
+    const active = all.filter((s) => !subscriptionIsTerminated(s));
+    return active[0] || all[0] || null;
+  }
+
   function getMembershipData(customer) {
     const sub =
+      pickDisplaySubscription(customer) ||
       customer?.activeSubscription ||
       customer?.membership ||
-      (Array.isArray(customer?.subscriptions) ? customer.subscriptions[0] : null) ||
-      (Array.isArray(customer?.memberships) ? customer.memberships[0] : null) ||
       null;
 
+    let planName =
+      sub?.name ||
+      sub?.productName ||
+      sub?.subscriptionProduct?.name ||
+      sub?.type ||
+      customer?.membershipType ||
+      '-';
+    if (planName === '-' && customer?.hasMembership === true) {
+      planName = 'Membership';
+    }
+
+    const activeSince =
+      sub?.startDate ||
+      sub?.start ||
+      sub?.activeSince ||
+      customer?.memberJoinDate ||
+      customer?.memberSince ||
+      '-';
+
+    const priceRaw = sub?.price;
+    let price = '-';
+    if (priceRaw != null && typeof priceRaw === 'object' && priceRaw.amount != null) {
+      const cur = priceRaw.currency || 'DKK';
+      price = `${priceRaw.amount} ${cur}`;
+    } else if (priceRaw != null && priceRaw !== '') {
+      price = priceRaw;
+    } else if (sub?.monthlyPrice != null) {
+      price = sub.monthlyPrice;
+    }
+
+    const gym =
+      sub?.gymName ||
+      sub?.businessUnitName ||
+      sub?.businessUnit?.name ||
+      customer?.primaryGym ||
+      customer?.gymName ||
+      '-';
+
     return {
-      type: sub?.name || sub?.type || customer?.membershipType || '-',
-      activeSince: sub?.startDate || sub?.activeSince || customer?.memberSince || '-',
-      price: sub?.price || sub?.monthlyPrice || '-',
-      gym: sub?.gymName || sub?.businessUnitName || customer?.primaryGym || customer?.gymName || '-',
+      type: planName,
+      activeSince,
+      price,
+      gym,
       memberId: sub?.memberId || sub?.id || customer?.membershipNumber || customer?.memberId || customer?.id || '-',
       contractStatus: sub?.contractStatus || customer?.contractStatus || '-',
-      boundUntil: sub?.boundUntil || customer?.boundUntil || null,
+      boundUntil: sub?.boundUntil || sub?.end || customer?.boundUntil || null,
       cardConsentStatus: sub?.cardConsentStatus || customer?.cardConsentStatus || null
     };
   }
 
   function hasActiveMembership(customer) {
+    if (!customer) return false;
+    if (customer.hasMembership === true) return true;
+    const subs = collectSubscriptionsArray(customer);
+    if (subs.some((s) => !subscriptionIsTerminated(s))) return true;
     const membership = getMembershipData(customer || {});
     const hasDirectSub = Boolean(
       customer?.activeSubscription ||
@@ -787,6 +1279,8 @@ function initializeLoginPage(DOM) {
     if (membership.cardConsentStatus) setText('profileCardConsentStatus', membership.cardConsentStatus);
 
     updateSubscriptionActionVisibility(customer);
+    renderProfileAddonsSection(customer);
+    renderDashboardValueCardsSection(customer);
   }
 
   function refreshLoginPageUI() {

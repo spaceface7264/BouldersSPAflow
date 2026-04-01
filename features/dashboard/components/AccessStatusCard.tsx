@@ -254,10 +254,15 @@ const PunchCardCard: React.FC<{ card: CustomerValueCardOut }> = ({ card }) => {
 // ── No Access ─────────────────────────────────────────────────────────────────
 
 const NoAccessCard: React.FC = () => (
-  <div className="bg-white rounded-2xl shadow-sm border border-dashed border-gray-200 p-6 text-center">
-    <p className="text-gray-400 text-sm mb-3">No active membership found</p>
+  <div className="bg-white rounded-2xl shadow-sm border border-dashed border-gray-200 p-6">
+    <p className="text-gray-600 text-sm leading-relaxed mb-2">
+      We don’t see an active membership, punch card, or trial on this account yet.
+    </p>
+    <p className="text-gray-500 text-sm leading-relaxed mb-4">
+      Pick your gym and choose a plan to get started—it only takes a few minutes.
+    </p>
     <a
-      href="/signup/membership"
+      href="/signup/personal"
       className="inline-flex items-center px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
     >
       Get access
@@ -302,7 +307,7 @@ export const AccessStatusCard: React.FC<AccessStatusCardProps> = ({
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-gray-700">Your Access</h2>
+      <h2 className="text-base font-semibold text-gray-700">My Access</h2>
 
       {trial && <TrialCard subscription={trial} />}
 
@@ -319,6 +324,13 @@ export const AccessStatusCard: React.FC<AccessStatusCardProps> = ({
       {!trial && !membership && !terminatedMembership && activeCards.length === 0 && (
         <NoAccessCard />
       )}
+
+      <a
+        href="mailto:medlem@boulders.dk"
+        className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors w-fit"
+      >
+        Something wrong? Contact support
+      </a>
     </div>
   );
 };
