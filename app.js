@@ -10926,6 +10926,10 @@ function setupNewAccessStep() {
 function initAuthModeToggle() {
   const loginSection = document.querySelector('[data-auth-section="login"]');
   const createSection = document.querySelector('[data-auth-section="create"]');
+  if (!loginSection || !createSection) {
+    // profile.html and other standalone pages do not include checkout auth sections.
+    return;
+  }
   
   // Set initial state - if user is logged in, select login tab, otherwise create account
   const isAuthenticated = isUserAuthenticated();
@@ -10967,6 +10971,7 @@ function switchAuthMode(mode, email = null) {
   const loginSection = document.querySelector('[data-auth-section="login"]');
   const createSection = document.querySelector('[data-auth-section="create"]');
   const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
+  if (!loginSection || !createSection) return;
   
   // Store current mode
   state.currentAuthMode = mode;

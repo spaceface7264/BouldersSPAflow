@@ -308,6 +308,27 @@ body.authenticated {
   margin-top: 32px;
 }
 
+/* Logged-out profile page: center login card */
+.login-page-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 24px;
+}
+
+.login-page-wrapper .form-container {
+  margin-top: 0;
+  width: min(100%, 360px);
+}
+
+.login-page-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
 .profile-page-title,
 .classes-page-title,
 .activity-page-title,
