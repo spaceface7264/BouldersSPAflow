@@ -14511,10 +14511,7 @@ function updatePaymentOverview() {
     billingPeriodText = state.billingPeriod;
   }
   
-  // If still no billing period, show default message
-  if (!billingPeriodText) {
-    billingPeriodText = t('cart.billingPeriodConfirmed');
-  }
+  // If no concrete period is available, keep period text empty and hide it in UI.
   
   // If discount is applied but order price isn't available yet, reflect discount in pay-now
   if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
