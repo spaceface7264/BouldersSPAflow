@@ -14218,172 +14218,11 @@ function updatePaymentOverview() {
     }
   }
   } else {
-    // No order data yet - calculate price from product data
-    // This allows prices to be shown before login/account creation
-    if (state.selectedProductId && state.subscriptions) {
-      const productIdNum = typeof state.selectedProductId === 'string' 
-        ? parseInt(state.selectedProductId) 
-        : state.selectedProductId;
-      
-      // Check all subscription types: campaign, membership, and 15-Day Trial Pass
-      const allSubscriptions = [
-        ...(state.campaignSubscriptions || []),
-        ...(state.subscriptions || []),
-        ...(state.dayPassSubscriptions || [])
-      ];
-      const membership = allSubscriptions.find(p => 
-        p.id === state.selectedProductId || 
-        p.id === productIdNum ||
-        String(p.id) === String(state.selectedProductId)
-      );
-      
-      if (membership) {
-        const membershipLabels = membership.productLabels || membership.labels || [];
-        const membershipForLabelCheck = {
-          ...membership,
-          productLabels: membershipLabels
-        };
-        const isMembership15DayPass =
-          state.selectedProductType === '15daypass' ||
-          (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-')) ||
-          has15DayPassLabel(membershipForLabelCheck) ||
-          (membership.name && (
-            membership.name.toLowerCase().includes('15-day trial pass') ||
-            membership.name.toLowerCase().includes('15 day pass') ||
-            membership.name.toLowerCase().includes('15 dages')
-          ));
-        
-        if (isMembership15DayPass) {
-          // For 15-day pass: always use full price (one-time payment)
-          const priceInCents = membership.priceWithInterval?.price?.amount || 0;
-          payNowAmount = priceInCents / 100;
-          
-          // Use selected activation date or today; end = start + 15 days
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const startDate = state.subscriptionStartDate
-            ? new Date(state.subscriptionStartDate + 'T12:00:00')
-            : today;
-          startDate.setHours(0, 0, 0, 0);
-          const validUntil = new Date(startDate);
-          validUntil.setDate(validUntil.getDate() + 15);
-          
-          billingPeriod = {
-            start: startDate,
-            end: validUntil,
-            is15DayPass: true
-          };
-          
-          console.log('[Payment Overview] ✅ 15-day pass: Full price (one-time payment):', payNowAmount, 'DKK');
-        } else {
-          // Regular membership: Calculate partial month price client-side
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const startDateStr = getTodayLocalDateString();
-          const dayOfMonth = today.getDate();
-          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
-            p => String(p.id) === String(membership.id)
-          );
-          const productNameForCampaign = (membership.name || '').toLowerCase();
-          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder &&
-            isFirstMonthFreeCampaignName(productNameForCampaign);
-
-          if (isFirstMonthFreeCampaignNoOrder) {
-            // Before login/order creation, keep a concrete amount (0) instead of placeholder.
-            // Once order data exists, backend order.price.amount is authoritative.
-            payNowAmount = 0;
-            billingPeriod = null;
-            isCampaignPayNowPending = false;
-            console.log('[Payment Overview] First month free campaign (no order): showing 0 until backend order amount is available');
-          } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
-          // Try to use the helper function if available
-            const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
-            if (expectedPrice) {
-              payNowAmount = expectedPrice.amountInDKK;
-              
-              // Set billing period based on whether next month is included
-              const currentMonth = today.getMonth();
-              const currentYear = today.getFullYear();
-              const dayOfMonth = today.getDate();
-              
-              if (expectedPrice.includesNextMonth) {
-                // Billing period extends to end of next month
-                const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-                const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-                const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
-                billingPeriod = {
-                  start: today,
-                  end: lastDayOfNextMonth
-                };
-                console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month):', payNowAmount, 'DKK');
-              } else {
-                // Billing period is just rest of current month
-                const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-                billingPeriod = {
-                  start: today,
-                  end: lastDayOfMonth
-                };
-                console.log('[Payment Overview] ✅ Pay now calculated (partial month):', payNowAmount, 'DKK');
-              }
-            } else {
-              // Fallback to full month price
-              const priceInCents = membership.priceWithInterval?.price?.amount || 0;
-              payNowAmount = priceInCents / 100;
-              console.log('[Payment Overview] ⚠️ Pay now from product data (full month - fallback):', payNowAmount, 'DKK');
-            }
-          } else {
-            // Calculate partial month price manually
-            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
-            const monthlyPrice = priceInCents / 100;
-            
-            // Calculate days until end of month
-            const currentMonth = today.getMonth();
-            const currentYear = today.getFullYear();
-            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
-            const daysInMonth = lastDayOfMonth.getDate();
-            const dayOfMonth = today.getDate();
-            const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
-            
-            // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
-            if (dayOfMonth >= 16) {
-              // Calculate: (rest of current month) + (full next month)
-              const partialCurrentMonthPrice = (monthlyPrice / daysInMonth) * daysRemaining;
-              payNowAmount = partialCurrentMonthPrice + monthlyPrice;
-              
-              // Billing period extends to end of next month
-              const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
-              const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
-              const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
-              
-              billingPeriod = {
-                start: today,
-                end: lastDayOfNextMonth
-              };
-              
-              console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month, manual calc):', payNowAmount, 'DKK');
-            } else {
-              // Calculate: just rest of current month (prorated)
-              payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
-              
-              billingPeriod = {
-                start: today,
-                end: lastDayOfMonth
-              };
-              
-              console.log('[Payment Overview] ✅ Pay now calculated (partial month, manual calc):', payNowAmount, 'DKK');
-            }
-          }
-        }
-      } else {
-        // Fallback: Use cart total
-        payNowAmount = state.totals.cartTotal || 0;
-        console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - product not found');
-      }
-    } else {
-      // Fallback: Use cart total if product data not available
-      payNowAmount = state.totals.cartTotal || 0;
-      console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - product data not available');
-    }
+    // STRICT MODE: prices in cart should come from backend order only.
+    payNowAmount = 0;
+    billingPeriod = null;
+    isCampaignPayNowPending = true;
+    console.log('[Payment Overview] Waiting for backend order data before showing pay-now amount');
   }
   
   // ============================================================================
@@ -14415,36 +14254,8 @@ function updatePaymentOverview() {
         : productPriceAmount / 100;
       console.log('[Payment Overview] ⚠️ Monthly payment from API (product.priceWithInterval - fallback):', monthlyPaymentAmount, 'DKK');
     } else {
-      // No order data yet - use product data from API response
-      // Check all subscription types: campaign, membership, and 15-Day Trial Pass
-      const allSubscriptionsForMonthly = [
-        ...(state.campaignSubscriptions || []),
-        ...(state.subscriptions || []),
-        ...(state.dayPassSubscriptions || [])
-      ];
-      if (state.selectedProductId && allSubscriptionsForMonthly.length > 0) {
-        const productIdNum = typeof state.selectedProductId === 'string' 
-          ? parseInt(state.selectedProductId) 
-          : state.selectedProductId;
-        
-        const membership = allSubscriptionsForMonthly.find(p => 
-          p.id === state.selectedProductId || 
-          p.id === productIdNum ||
-          String(p.id) === String(state.selectedProductId)
-        );
-        
-        if (membership?.priceWithInterval?.price?.amount !== undefined) {
-          // Use price from API product data
-          monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
-          console.log('[Payment Overview] Monthly payment from API product data (priceWithInterval):', monthlyPaymentAmount, 'DKK');
-        } else {
-          monthlyPaymentAmount = state.totals.membershipMonthly || 0;
-          console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
-        }
-      } else {
-        monthlyPaymentAmount = state.totals.membershipMonthly || 0;
-        console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
-      }
+      monthlyPaymentAmount = 0;
+      console.log('[Payment Overview] Waiting for backend order data before showing monthly payment');
     }
   } else {
     console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass - one-time payment)');
@@ -14456,7 +14267,7 @@ function updatePaymentOverview() {
   const isCampaignProductDisplay =
     Array.isArray(state.campaignSubscriptions) &&
     state.campaignSubscriptions.some((p) => String(p.id) === String(currentProduct?.id || productFromOrder?.id || state.selectedProductId));
-  const useSplitCampaignDisplay = !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
+  const useSplitCampaignDisplay = hasOrderData && !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
 
   if (useSplitCampaignDisplay) {
     const today = new Date();
@@ -14541,7 +14352,7 @@ function updatePaymentOverview() {
   
   if (DOM.payNow) {
     const amountText = formatCurrencyHalfKrone(state.totals.payNowAmount);
-    DOM.payNow.textContent = amountText;
+    DOM.payNow.textContent = isCampaignPayNowPending ? '—' : amountText;
     
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
