@@ -1537,7 +1537,7 @@ class OrderAPI {
       const isCampaignProduct = Array.isArray(state.campaignSubscriptions) &&
         state.campaignSubscriptions.some((p) => String(p.id) === String(subscriptionProductId));
       const isFirstMonthFreeCampaignProduct = isCampaignProduct &&
-        isFirstMonthFreeCampaignName(matchedProduct?.name || '');
+        FIRST_MONTH_FREE_NAME_REGEX.test(String(matchedProduct?.name || '').toLowerCase());
       
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
@@ -4006,7 +4006,8 @@ const pendingNavigationTimeouts = {
 // Language management
 const SUPPORTED_LANGUAGES = {
   'da-DK': { code: 'da-DK', name: 'Dansk', flag: '🇩🇰' },
-  'en-GB': { code: 'en-GB', name: 'English', flag: '🇬🇧' }
+  'en-GB': { code: 'en-GB', name: 'English', flag: '🇬🇧' },
+  'de-DE': { code: 'de-DE', name: 'Deutsch', flag: '🇩🇪' }
 };
 
 const DEFAULT_LANGUAGE = 'da-DK';
@@ -4250,6 +4251,7 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
 
 const DOM = {};
 const templates = {};
+const FIRST_MONTH_FREE_NAME_REGEX = /0\s*(kr|dkk)|første\s*måned|first\s*month\s*(free|0(\s*dkk)?)/;
 const TOTAL_STEPS = 5;
 const buttonGlareTimeouts = new WeakMap();
 const carouselResizeObservers = new WeakMap();
@@ -5180,16 +5182,6 @@ function has15DayPassLabel(product) {
   });
 }
 
-function isFirstMonthFreeCampaignName(name) {
-  const normalizedName = String(name || '').toLowerCase();
-  if (!normalizedName) return false;
-  return (
-    /0\s*(?:kr|dkk)/.test(normalizedName) ||
-    /første\s*måned/.test(normalizedName) ||
-    /first\s*month(?:\s*free|\W*0(?:\s*dkk)?)/.test(normalizedName)
-  );
-}
-
 // Load and filter products with boost labels for the selected plan
 async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
@@ -5953,7 +5945,7 @@ function updatePageTranslations() {
     if (translation && translation.includes('{date}')) {
       const dateIso = element.getAttribute('data-i18n-date-iso');
       if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
-        const locale = langCode === 'en' ? 'en-US' : 'da-DK';
+        const locale = langCode === 'de' ? 'de-DE' : langCode === 'en' ? 'en-US' : 'da-DK';
         const date = new Date(`${dateIso}T12:00:00`);
         if (!isNaN(date.getTime())) {
           const dateText = new Intl.DateTimeFormat(locale, {
@@ -6505,7 +6497,7 @@ function updateLanguageSwitcherUI() {
   const triggerFlag = document.getElementById('languageSwitcherTriggerFlag');
   const triggerName = document.getElementById('languageSwitcherTriggerName');
   if (triggerFlag) triggerFlag.textContent = info?.flag ?? '🇩🇰';
-  if (triggerName) triggerName.textContent = currentLang === 'en-GB' ? 'EN' : 'DA';
+  if (triggerName) triggerName.textContent = currentLang === 'da-DK' ? 'DA' : currentLang === 'en-GB' ? 'EN' : 'DE';
   
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
@@ -14138,7 +14130,7 @@ function updatePaymentOverview() {
         p => String(p.id) === String(productId)
       );
       const productNameLower = String(subscriptionItem?.product?.name || '').toLowerCase();
-      const isFirstMonthFreeCampaignByName = isFirstMonthFreeCampaignName(productNameLower);
+      const isFirstMonthFreeCampaignByName = FIRST_MONTH_FREE_NAME_REGEX.test(productNameLower);
       const isFirstMonthFreeCampaign = isCampaignProduct && (orderPriceDKK === 0 || isFirstMonthFreeCampaignByName);
 
       if (isFirstMonthFreeCampaign) {
@@ -14218,11 +14210,173 @@ function updatePaymentOverview() {
     }
   }
   } else {
-    // STRICT MODE: prices in cart should come from backend order only.
-    payNowAmount = 0;
-    billingPeriod = null;
-    isCampaignPayNowPending = true;
-    console.log('[Payment Overview] Waiting for backend order data before showing pay-now amount');
+    // No order data yet - calculate price from product data
+    // This allows prices to be shown before login/account creation
+    if (state.selectedProductId && state.subscriptions) {
+      const productIdNum = typeof state.selectedProductId === 'string' 
+        ? parseInt(state.selectedProductId) 
+        : state.selectedProductId;
+      
+      // Check all subscription types: campaign, membership, and 15-Day Trial Pass
+      const allSubscriptions = [
+        ...(state.campaignSubscriptions || []),
+        ...(state.subscriptions || []),
+        ...(state.dayPassSubscriptions || [])
+      ];
+      const membership = allSubscriptions.find(p => 
+        p.id === state.selectedProductId || 
+        p.id === productIdNum ||
+        String(p.id) === String(state.selectedProductId)
+      );
+      
+      if (membership) {
+        const membershipLabels = membership.productLabels || membership.labels || [];
+        const membershipForLabelCheck = {
+          ...membership,
+          productLabels: membershipLabels
+        };
+        const isMembership15DayPass =
+          state.selectedProductType === '15daypass' ||
+          (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-')) ||
+          has15DayPassLabel(membershipForLabelCheck) ||
+          (membership.name && (
+            membership.name.toLowerCase().includes('15-day trial pass') ||
+            membership.name.toLowerCase().includes('15 day pass') ||
+            membership.name.toLowerCase().includes('15 dages')
+          ));
+        
+        if (isMembership15DayPass) {
+          // For 15-day pass: always use full price (one-time payment)
+          const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+          payNowAmount = priceInCents / 100;
+          
+          // Use selected activation date or today; end = start + 15 days
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const startDate = state.subscriptionStartDate
+            ? new Date(state.subscriptionStartDate + 'T12:00:00')
+            : today;
+          startDate.setHours(0, 0, 0, 0);
+          const validUntil = new Date(startDate);
+          validUntil.setDate(validUntil.getDate() + 15);
+          
+          billingPeriod = {
+            start: startDate,
+            end: validUntil,
+            is15DayPass: true
+          };
+          
+          console.log('[Payment Overview] ✅ 15-day pass: Full price (one-time payment):', payNowAmount, 'DKK');
+        } else {
+          // Regular membership: Calculate partial month price client-side
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const startDateStr = getTodayLocalDateString();
+          const dayOfMonth = today.getDate();
+          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
+            p => String(p.id) === String(membership.id)
+          );
+          const productNameForCampaign = (membership.name || '').toLowerCase();
+          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
+            FIRST_MONTH_FREE_NAME_REGEX.test(productNameForCampaign)
+          );
+
+          if (isFirstMonthFreeCampaignNoOrder) {
+            // Before login/order creation, campaign pay-now cannot be trusted from fallback math.
+            // Show pending state until backend order amount is available.
+            payNowAmount = 0;
+            billingPeriod = null;
+            isCampaignPayNowPending = true;
+            console.log('[Payment Overview] ⏳ First month free campaign (no order): pay-now pending backend order');
+          } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
+          // Try to use the helper function if available
+            const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
+            if (expectedPrice) {
+              payNowAmount = expectedPrice.amountInDKK;
+              
+              // Set billing period based on whether next month is included
+              const currentMonth = today.getMonth();
+              const currentYear = today.getFullYear();
+              const dayOfMonth = today.getDate();
+              
+              if (expectedPrice.includesNextMonth) {
+                // Billing period extends to end of next month
+                const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+                const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+                const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+                billingPeriod = {
+                  start: today,
+                  end: lastDayOfNextMonth
+                };
+                console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month):', payNowAmount, 'DKK');
+              } else {
+                // Billing period is just rest of current month
+                const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+                billingPeriod = {
+                  start: today,
+                  end: lastDayOfMonth
+                };
+                console.log('[Payment Overview] ✅ Pay now calculated (partial month):', payNowAmount, 'DKK');
+              }
+            } else {
+              // Fallback to full month price
+              const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+              payNowAmount = priceInCents / 100;
+              console.log('[Payment Overview] ⚠️ Pay now from product data (full month - fallback):', payNowAmount, 'DKK');
+            }
+          } else {
+            // Calculate partial month price manually
+            const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+            const monthlyPrice = priceInCents / 100;
+            
+            // Calculate days until end of month
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            const daysInMonth = lastDayOfMonth.getDate();
+            const dayOfMonth = today.getDate();
+            const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
+            
+            // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
+            if (dayOfMonth >= 16) {
+              // Calculate: (rest of current month) + (full next month)
+              const partialCurrentMonthPrice = (monthlyPrice / daysInMonth) * daysRemaining;
+              payNowAmount = partialCurrentMonthPrice + monthlyPrice;
+              
+              // Billing period extends to end of next month
+              const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
+              const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear;
+              const lastDayOfNextMonth = new Date(nextYear, nextMonth + 1, 0);
+              
+              billingPeriod = {
+                start: today,
+                end: lastDayOfNextMonth
+              };
+              
+              console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month, manual calc):', payNowAmount, 'DKK');
+            } else {
+              // Calculate: just rest of current month (prorated)
+              payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+              
+              billingPeriod = {
+                start: today,
+                end: lastDayOfMonth
+              };
+              
+              console.log('[Payment Overview] ✅ Pay now calculated (partial month, manual calc):', payNowAmount, 'DKK');
+            }
+          }
+        }
+      } else {
+        // Fallback: Use cart total
+        payNowAmount = state.totals.cartTotal || 0;
+        console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - product not found');
+      }
+    } else {
+      // Fallback: Use cart total if product data not available
+      payNowAmount = state.totals.cartTotal || 0;
+      console.log('[Payment Overview] ⚠️ Pay now from cartTotal (fallback):', payNowAmount, 'DKK - product data not available');
+    }
   }
   
   // ============================================================================
@@ -14254,37 +14408,60 @@ function updatePaymentOverview() {
         : productPriceAmount / 100;
       console.log('[Payment Overview] ⚠️ Monthly payment from API (product.priceWithInterval - fallback):', monthlyPaymentAmount, 'DKK');
     } else {
-      monthlyPaymentAmount = 0;
-      console.log('[Payment Overview] Waiting for backend order data before showing monthly payment');
+      // No order data yet - use product data from API response
+      // Check all subscription types: campaign, membership, and 15-Day Trial Pass
+      const allSubscriptionsForMonthly = [
+        ...(state.campaignSubscriptions || []),
+        ...(state.subscriptions || []),
+        ...(state.dayPassSubscriptions || [])
+      ];
+      if (state.selectedProductId && allSubscriptionsForMonthly.length > 0) {
+        const productIdNum = typeof state.selectedProductId === 'string' 
+          ? parseInt(state.selectedProductId) 
+          : state.selectedProductId;
+        
+        const membership = allSubscriptionsForMonthly.find(p => 
+          p.id === state.selectedProductId || 
+          p.id === productIdNum ||
+          String(p.id) === String(state.selectedProductId)
+        );
+        
+        if (membership?.priceWithInterval?.price?.amount !== undefined) {
+          // Use price from API product data
+          monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
+          console.log('[Payment Overview] Monthly payment from API product data (priceWithInterval):', monthlyPaymentAmount, 'DKK');
+        } else {
+          monthlyPaymentAmount = state.totals.membershipMonthly || 0;
+          console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
+        }
+      } else {
+        monthlyPaymentAmount = state.totals.membershipMonthly || 0;
+        console.log('[Payment Overview] ⚠️ Monthly payment from state.totals.membershipMonthly (fallback):', monthlyPaymentAmount, 'DKK');
+      }
     }
   } else {
     console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass - one-time payment)');
   }
 
   const cartMembershipName = String(state.cartItems?.find((item) => item.type === 'membership')?.name || '').toLowerCase();
-  const firstMonthFreeByName = isFirstMonthFreeCampaignName(productName) ||
-    isFirstMonthFreeCampaignName(cartMembershipName);
+  const firstMonthFreeByName = FIRST_MONTH_FREE_NAME_REGEX.test(productName.toLowerCase()) ||
+    FIRST_MONTH_FREE_NAME_REGEX.test(cartMembershipName);
   const isCampaignProductDisplay =
     Array.isArray(state.campaignSubscriptions) &&
     state.campaignSubscriptions.some((p) => String(p.id) === String(currentProduct?.id || productFromOrder?.id || state.selectedProductId));
-  const useSplitCampaignDisplay = hasOrderData && !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
+  const useSplitCampaignDisplay = !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
 
   if (useSplitCampaignDisplay) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const firstMonthEnd = addMonthsClamped(today, 1);
-    // When no order exists yet, estimate due-now from the upcoming billed month so
-    // the cart preview is aligned with what backend typically charges at checkout.
-    if (!hasOrderData && monthlyPaymentAmount > 0) {
-      const chargeStart = new Date(firstMonthEnd);
-      chargeStart.setHours(0, 0, 0, 0);
-      const chargeEnd = endOfMonth(chargeStart);
-      const daysInMonth = new Date(chargeEnd.getFullYear(), chargeEnd.getMonth() + 1, 0).getDate();
-      const msPerDay = 24 * 60 * 60 * 1000;
-      const billedDays = Math.max(1, Math.floor((chargeEnd.getTime() - chargeStart.getTime()) / msPerDay) + 1);
-      payNowAmount = (monthlyPaymentAmount / daysInMonth) * billedDays;
-      billingPeriod = { start: chargeStart, end: chargeEnd };
-    }
+    const chargeStart = new Date(firstMonthEnd);
+    chargeStart.setHours(0, 0, 0, 0);
+    const chargeEnd = endOfMonth(chargeStart);
+    const campaignPayNow = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
+
+    payNowAmount = campaignPayNow;
+    billingPeriod = { start: chargeStart, end: chargeEnd };
     isCampaignPayNowPending = false;
 
     if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = '';
@@ -14332,7 +14509,10 @@ function updatePaymentOverview() {
     billingPeriodText = state.billingPeriod;
   }
   
-  // If no concrete period is available, keep period text empty and hide it in UI.
+  // If still no billing period, show default message
+  if (!billingPeriodText) {
+    billingPeriodText = t('cart.billingPeriodConfirmed');
+  }
   
   // If discount is applied but order price isn't available yet, reflect discount in pay-now
   if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
@@ -16133,7 +16313,7 @@ async function handleCheckout() {
                 (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
               const isFirstMonthFreeCampaignCheckout =
                 hasCampaignInCart() &&
-                isFirstMonthFreeCampaignName(productName || '');
+                FIRST_MONTH_FREE_NAME_REGEX.test(String(productName || '').toLowerCase());
 
               if (is15DayPass) {
                 console.log('[checkout] ✅ Skipping partial-month price verification for 15-Day Trial Pass');
@@ -17023,33 +17203,6 @@ function buildCheckoutPayload() {
   return payload;
 }
 
-function toNumericAmount(value) {
-  if (value == null) return null;
-  if (typeof value === 'object' && value.amount != null) {
-    const nested = Number(value.amount);
-    return Number.isFinite(nested) ? nested : null;
-  }
-  const raw = Number(value);
-  return Number.isFinite(raw) ? raw : null;
-}
-
-function getOrderTotalDKK(order, fallback = 0) {
-  // Backend payment link uses order.price.amount (in cents) as authoritative.
-  const priceAmount = toNumericAmount(order?.price?.amount);
-  if (priceAmount != null) return priceAmount / 100;
-
-  const priceTotal = toNumericAmount(order?.price?.total);
-  if (priceTotal != null) return priceTotal / 100;
-
-  const leftToPay = toNumericAmount(order?.price?.leftToPay ?? order?.leftToPay);
-  if (leftToPay != null) return leftToPay / 100;
-
-  const directTotal = toNumericAmount(order?.total ?? order?.totalAmount ?? order?.data?.total);
-  if (directTotal != null) return directTotal > 10000 ? directTotal / 100 : directTotal;
-
-  return fallback;
-}
-
 function buildOrderSummary(payload, order = null, customer = null) {
   const now = new Date();
   
@@ -17139,7 +17292,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
     number: orderNumber,
     date: order?.createdAt ? new Date(order.createdAt) : (order?.created ? new Date(order.created) : now),
     items: [...state.cartItems],
-    total: getOrderTotalDKK(order, state.totals.cartTotal),
+    total: order?.total || order?.totalAmount || state.totals.cartTotal,
     memberName: memberName || '—',
     membershipNumber: membershipId,
     membershipType: membership?.name ?? '—',
@@ -17732,8 +17885,8 @@ async function loadOrderForConfirmation(orderId) {
       customer.primaryGym = primaryGym || customer.primaryGym || customer.primary_gym;
     }
     
-    // Use normalized backend order total (prefer price.amount) or stored fallback.
-    const orderTotal = getOrderTotalDKK(order, storedOrder?.totals?.cartTotal || 0);
+    // Use order total if available, otherwise use stored total
+    const orderTotal = order?.total || order?.totalAmount || order?.data?.total || storedOrder?.totals?.cartTotal || 0;
     
     // Store diagnostic data for easy access (after customer is extracted)
     window.lastPaymentDiagnostics = {
@@ -19052,7 +19205,9 @@ function renderConfirmationView() {
     }
 
     const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
-    const locale = langCode === 'en' ? 'en-US' : 'da-DK';
+    const locale = langCode === 'de' ? 'de-DE'
+      : langCode === 'en' ? 'en-US'
+      : 'da-DK';
     const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
       year: 'numeric',
       month: 'long',
@@ -20431,23 +20586,10 @@ function showStep(stepNumber) {
       }
       
       updateCartSummary();
-      // Load backend pricing as soon as step 4 is visible for authenticated users.
-      // This avoids showing placeholder dashes until checkout click.
-      (async () => {
-        if (isUserAuthenticated()) {
-          try {
-            await autoEnsureOrderIfReady('step4-display');
-            if (state.orderId && !state.fullOrder) {
-              state.fullOrder = await orderAPI.getOrder(state.orderId);
-            }
-          } catch (error) {
-            console.warn('[showStep] Could not preload backend order pricing on step 4:', error);
-          }
-        }
-        if (state.orderId && state.fullOrder) {
-          updatePaymentOverview();
-        }
-      })();
+      // If order exists, update payment overview
+      if (state.orderId && state.fullOrder) {
+        updatePaymentOverview();
+      }
     }, 100);
   } else {
     // When leaving step 2, reset main content margin
