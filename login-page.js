@@ -307,17 +307,27 @@ function initializeLoginPage(DOM) {
     const access = detectPrimaryAccess(customer || {});
     const membership = getMembershipData(customer || {});
 
-    if (access.kind === 'membership') {
-      badgeEl.textContent = 'Membership';
+    if (access.kind === ‘membership’) {
+      badgeEl.textContent = ‘Membership’;
       leadEl.textContent =
-        'You’re on a recurring membership. Here’s what we have on file—if anything looks off, reach out to medlem@boulders.dk.';
-      addAccessRow(rowsEl, 'Member since', formatDisplayDate(membership.activeSince));
-      addAccessRow(rowsEl, 'Price', formatPriceDisplay(membership.price));
-      addAccessRow(rowsEl, 'Home gym / location', membership.gym);
-      if (membership.boundUntil) {
-        addAccessRow(rowsEl, 'Bound until', formatDisplayDate(membership.boundUntil));
+        ‘You’re on a recurring membership. Here’s what we have on file—if anything looks off, reach out to medlem@boulders.dk.’;
+      // memberJoinDate is on the base customer profile; activeSince may come from subscription
+      const memberSinceDate = membership.activeSince !== ‘-’
+        ? membership.activeSince
+        : (customer?.memberJoinDate || null);
+      addAccessRow(rowsEl, ‘Member since’, formatDisplayDate(memberSinceDate));
+      if (membership.price && membership.price !== ‘-’) {
+        addAccessRow(rowsEl, ‘Price’, formatPriceDisplay(membership.price));
       }
-      addAccessRow(rowsEl, 'Plan', membership.type);
+      addAccessRow(rowsEl, ‘Home gym / location’, membership.gym);
+      if (membership.boundUntil) {
+        addAccessRow(rowsEl, ‘Bound until’, formatDisplayDate(membership.boundUntil));
+      }
+      // Show plan — fall back to customerType name (kundetype = Bloc Life tier)
+      const planLabel = membership.type !== ‘-’
+        ? membership.type
+        : (customer?.customerType?.name || ‘-’);
+      addAccessRow(rowsEl, ‘Plan’, planLabel);
       return;
     }
 
@@ -499,19 +509,38 @@ function initializeLoginPage(DOM) {
       loyalty.tierLevel ||
       '';
 
-    const key = normalizeLoyaltyKey(rawTier || rawLevel);
+    // Filter out BRP price list names (e.g. "Regular pricelist") — not meaningful as tier labels
+    const PRICELIST_NOISE = /pricelist|prisliste|regular\s|standard\s/i;
+    const cleanTier = (rawTier && !PRICELIST_NOISE.test(rawTier)) ? rawTier : '';
+    const cleanLevel = (rawLevel && !PRICELIST_NOISE.test(rawLevel)) ? rawLevel : '';
+
+    const key = normalizeLoyaltyKey(cleanTier || cleanLevel);
     const tierLabels = {
       default: 'Bloc Life',
       bronze: 'Bloc Life — Bronze',
       silver: 'Bloc Life — Silver',
       gold: 'Bloc Life — Gold',
     };
-    tierNameEl.textContent = tierLabels[key] || tierLabels.default;
 
-    levelEl.textContent =
-      rawTier || rawLevel
-        ? `Current level: ${rawTier || rawLevel}`
-        : 'Your level will appear here as you climb and check in.';
+    // Map known BRP kundetype names to Bloc Life display names
+    const kundetypeDisplayMap = {
+      'o.g': 'Bloc Life — O.G',
+      'og': 'Bloc Life — O.G',
+      'legend': 'Bloc Life — Legend',
+      'young g': 'Bloc Life — Young G',
+      'studerende': 'Bloc Life — Studerende',
+    };
+    const lowerTier = cleanTier.toLowerCase();
+    const kundetypeLabel = Object.entries(kundetypeDisplayMap).find(([k]) => lowerTier.includes(k))?.[1];
+    tierNameEl.textContent = kundetypeLabel || tierLabels[key] || tierLabels.default;
+
+    if (cleanTier && kundetypeLabel) {
+      levelEl.textContent = `Member type: ${cleanTier}`;
+    } else if (cleanTier || cleanLevel) {
+      levelEl.textContent = `Current level: ${cleanTier || cleanLevel}`;
+    } else {
+      levelEl.textContent = 'Your level will appear here as you climb and check in.';
+    }
 
     clearDashboardEl(benefitsEl);
     BLOC_LIFE_COPY.default.benefits.forEach((line) => {
@@ -731,7 +760,9 @@ function initializeLoginPage(DOM) {
       (Array.isArray(customer?.subscriptions) && customer.subscriptions.length > 0) ||
       (Array.isArray(customer?.memberships) && customer.memberships.length > 0)
     );
-    return hasDirectSub || (membership.type && membership.type !== '-');
+    // BRP CustomerOut has a hasMembership boolean — use as fallback when no subscription records are returned
+    const hasMembershipFlag = customer?.hasMembership === true;
+    return hasDirectSub || hasMembershipFlag || (membership.type && membership.type !== '-');
   }
 
   function updateSubscriptionActionVisibility(customer) {
