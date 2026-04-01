@@ -14462,8 +14462,18 @@ function updatePaymentOverview() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const firstMonthEnd = addMonthsClamped(today, 1);
-    // Never synthesize campaign pay-now client-side.
-    // Keep backend order amount when available; otherwise keep the pre-order 0 fallback.
+    // When no order exists yet, estimate due-now from the upcoming billed month so
+    // the cart preview is aligned with what backend typically charges at checkout.
+    if (!hasOrderData && monthlyPaymentAmount > 0) {
+      const chargeStart = new Date(firstMonthEnd);
+      chargeStart.setHours(0, 0, 0, 0);
+      const chargeEnd = endOfMonth(chargeStart);
+      const daysInMonth = new Date(chargeEnd.getFullYear(), chargeEnd.getMonth() + 1, 0).getDate();
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const billedDays = Math.max(1, Math.floor((chargeEnd.getTime() - chargeStart.getTime()) / msPerDay) + 1);
+      payNowAmount = (monthlyPaymentAmount / daysInMonth) * billedDays;
+      billingPeriod = { start: chargeStart, end: chargeEnd };
+    }
     isCampaignPayNowPending = false;
 
     if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = '';
