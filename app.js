@@ -14462,17 +14462,8 @@ function updatePaymentOverview() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const firstMonthEnd = addMonthsClamped(today, 1);
-    const chargeStart = new Date(firstMonthEnd);
-    chargeStart.setHours(0, 0, 0, 0);
-    const chargeEnd = endOfMonth(chargeStart);
-    const campaignPayNow = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
-
-    // CRITICAL: When backend order exists, always trust backend due-now amount.
-    // Only fall back to campaign projection before order data is available.
-    if (!hasOrderData) {
-      payNowAmount = campaignPayNow;
-      billingPeriod = { start: chargeStart, end: chargeEnd };
-    }
+    // Never synthesize campaign pay-now client-side.
+    // Keep backend order amount when available; otherwise keep the pre-order 0 fallback.
     isCampaignPayNowPending = false;
 
     if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = '';
