@@ -1080,6 +1080,330 @@ function initializeLoginPage(DOM) {
     main.appendChild(sub);
   }
 
+  function isBrowseSlotsFullyBooked(slots) {
+    if (!slots || typeof slots !== 'object') return false;
+    const leftRaw =
+      slots.leftToBookIncDropin ?? slots.leftToBook ?? slots.available ?? slots.left;
+    if (leftRaw == null) return false;
+    const n = Number(leftRaw);
+    return Number.isFinite(n) && n <= 0;
+  }
+
+  let classCardExpandRoot = null;
+  let classCardExpandEscapeBound = false;
+
+  function closeClassCardExpand() {
+    if (!classCardExpandRoot) return;
+    classCardExpandRoot.classList.remove('class-card-expand--open');
+    classCardExpandRoot.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('class-card-expand-open');
+  }
+
+  function ensureClassCardExpandRoot() {
+    if (classCardExpandRoot) return classCardExpandRoot;
+    const root = document.createElement('div');
+    root.className = 'class-card-expand';
+    root.setAttribute('aria-hidden', 'true');
+    root.innerHTML =
+      '<div class="class-card-expand__backdrop" data-class-card-expand-dismiss tabindex="-1"></div>' +
+      '<div class="class-card-expand__sheet" role="dialog" aria-modal="true" aria-labelledby="classCardExpandTitle">' +
+      '<button type="button" class="class-card-expand__close" data-class-card-expand-dismiss aria-label="Close">×</button>' +
+      '<div class="class-card-expand__hero">' +
+      '<img class="class-card-expand__hero-img" alt="" /></div>' +
+      '<div class="class-card-expand__body">' +
+      '<h2 id="classCardExpandTitle" class="class-card-expand__title"></h2>' +
+      '<div class="class-card-expand__lines"></div>' +
+      '<div class="class-card-expand__desc"></div>' +
+      '<div class="class-card-expand__actions"></div>' +
+      '</div></div>';
+    document.body.appendChild(root);
+    root.querySelectorAll('[data-class-card-expand-dismiss]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        closeClassCardExpand();
+      });
+    });
+    if (!classCardExpandEscapeBound) {
+      classCardExpandEscapeBound = true;
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        if (classCardExpandRoot?.classList.contains('class-card-expand--open')) {
+          closeClassCardExpand();
+        }
+      });
+    }
+    classCardExpandRoot = root;
+    return root;
+  }
+
+  function buildBrowseExpandLines(activity, gymSel) {
+    const lines = [];
+    const startA = activity.duration?.start;
+    const endA = activity.duration?.end;
+    lines.push(
+      formatClassSessionWhenLine(
+        typeof startA === 'string' ? startA : '',
+        typeof endA === 'string' ? endA : null
+      )
+    );
+    const mins = formatClassSessionDurationMinutes(
+      typeof startA === 'string' ? startA : '',
+      typeof endA === 'string' ? endA : null
+    );
+    const avail = formatGroupActivitySlotsAvailability(activity.slots);
+    const extra = [mins != null ? `${mins} min` : '', avail].filter(Boolean).join(' · ');
+    if (extra) lines.push(extra);
+    const loc = groupActivityBrowseLocationLabel(activity, gymSel);
+    if (loc) lines.push(loc);
+    return lines.join('\n');
+  }
+
+  function buildBookingExpandLines(book) {
+    const lines = [];
+    const startIso =
+      book.duration?.start ||
+      book.startTime ||
+      book.startDateTime ||
+      book.dateTime ||
+      book.scheduledStart ||
+      book.date ||
+      book.start;
+    const endIso = book.duration?.end || book.endTime || book.endDateTime || null;
+    lines.push(
+      formatClassSessionWhenLine(
+        typeof startIso === 'string' ? startIso : '',
+        typeof endIso === 'string' ? endIso : null
+      )
+    );
+    const mins = formatClassSessionDurationMinutes(
+      typeof startIso === 'string' ? startIso : '',
+      typeof endIso === 'string' ? endIso : null
+    );
+    const avail = formatClassCardAvailabilityFromContext({ slots: book.slots, booking: book });
+    const extra = [mins != null ? `${mins} min` : '', avail].filter(Boolean).join(' · ');
+    if (extra) lines.push(extra);
+    const { where } = bookingDisplayLine(book);
+    if (where) lines.push(where);
+    return lines.join('\n');
+  }
+
+  async function runBrowseBookCommit(activity, allowWaitingList, primaryBtn) {
+    const gid = activity.id;
+    const cid = getBrpNumericCustomerId(getBestCustomerData());
+    if (gid == null || !Number.isFinite(Number(gid))) {
+      showToast('Missing class id.', 'error');
+      return;
+    }
+    if (!cid) {
+      showToast('Log in to book.', 'error');
+      return;
+    }
+    if (!authAPI || typeof authAPI.bookCustomerGroupActivity !== 'function') {
+      showToast('Booking is not available.', 'error');
+      return;
+    }
+    primaryBtn.disabled = true;
+    try {
+      await authAPI.bookCustomerGroupActivity(cid, {
+        groupActivityId: gid,
+        allowWaitingList,
+      });
+      showToast(
+        allowWaitingList ? 'You are on the waiting list.' : 'Booked! Check My classes.',
+        'success'
+      );
+      closeClassCardExpand();
+      ensureGroupActivityBookingsLoaded().then(() => {
+        refreshClassesBookingsLists();
+        refreshDashboardPanels();
+      });
+      applyBrowseClassFilters();
+    } catch (err) {
+      showToast(getErrorMessage(err), 'error');
+    } finally {
+      primaryBtn.disabled = false;
+    }
+  }
+
+  function openClassCardExpandBrowse(activity, gymSel) {
+    const root = ensureClassCardExpandRoot();
+    const titleEl = root.querySelector('.class-card-expand__title');
+    const linesEl = root.querySelector('.class-card-expand__lines');
+    const descEl = root.querySelector('.class-card-expand__desc');
+    const actionsEl = root.querySelector('.class-card-expand__actions');
+    const hero = root.querySelector('.class-card-expand__hero');
+    const heroImg = root.querySelector('.class-card-expand__hero-img');
+    const browseTitle = activity.name || 'Class';
+
+    titleEl.textContent = browseTitle;
+    linesEl.textContent = buildBrowseExpandLines(activity, gymSel);
+    descEl.textContent = '';
+    actionsEl.innerHTML = '';
+
+    hero.classList.remove('class-card-expand__hero--empty');
+    const primaryUrl = resolveGroupActivityClassImageUrl(activity);
+    const fallback =
+      typeof window.getProductPlaceholderImage === 'function'
+        ? window.getProductPlaceholderImage()
+        : '';
+    heroImg.alt = browseTitle;
+    if (primaryUrl || fallback) {
+      applyClassCardImgSrc(heroImg, primaryUrl || fallback);
+      hero.classList.toggle('class-card-expand__hero--empty', !(primaryUrl || fallback));
+    } else {
+      heroImg.removeAttribute('src');
+      hero.classList.add('class-card-expand__hero--empty');
+    }
+
+    const ext = activity.externalMessage && String(activity.externalMessage).trim();
+    if (ext) {
+      descEl.textContent = ext;
+    } else {
+      descEl.textContent = 'Loading description…';
+    }
+    const productId = extractGroupActivityProductId(activity);
+    const buId = classCardBusinessUnitId(activity);
+    const customerId = getBrpNumericCustomerId(getBestCustomerData());
+    if (productId) {
+      fetchGroupActivityProductDetail(productId, buId, customerId).then((detail) => {
+        if (!descEl.isConnected) return;
+        const pd = detail?.description && String(detail.description).trim();
+        const parts = [ext, pd].filter(Boolean);
+        descEl.textContent = parts.length ? parts.join('\n\n') : 'No description for this class.';
+      });
+    } else if (!ext) {
+      descEl.textContent = 'No description for this class.';
+    }
+
+    const fully = isBrowseSlotsFullyBooked(activity.slots);
+    const wl = activity.slots && activity.slots.hasWaitingList === true;
+
+    if (!isUserAuthenticated()) {
+      const hint = document.createElement('p');
+      hint.className = 'class-card-expand__hint';
+      hint.textContent = 'Log in to book this class.';
+      actionsEl.appendChild(hint);
+    } else if (fully && wl) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'profile-action-btn class-card-expand__btn-primary';
+      btn.textContent = 'Join waiting list';
+      btn.addEventListener('click', () => runBrowseBookCommit(activity, true, btn));
+      actionsEl.appendChild(btn);
+    } else if (fully && !wl) {
+      const p = document.createElement('p');
+      p.className = 'class-card-expand__muted';
+      p.textContent = 'This class is fully booked.';
+      actionsEl.appendChild(p);
+    } else {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'profile-action-btn class-card-expand__btn-primary';
+      btn.textContent = 'Book now';
+      btn.addEventListener('click', () => runBrowseBookCommit(activity, false, btn));
+      actionsEl.appendChild(btn);
+    }
+
+    root.classList.add('class-card-expand--open');
+    root.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('class-card-expand-open');
+    requestAnimationFrame(() => {
+      root.querySelector('.class-card-expand__close')?.focus();
+    });
+  }
+
+  function openClassCardExpandBooking(book) {
+    const root = ensureClassCardExpandRoot();
+    const { title } = bookingDisplayLine(book);
+    const titleEl = root.querySelector('.class-card-expand__title');
+    const linesEl = root.querySelector('.class-card-expand__lines');
+    const descEl = root.querySelector('.class-card-expand__desc');
+    const actionsEl = root.querySelector('.class-card-expand__actions');
+    const hero = root.querySelector('.class-card-expand__hero');
+    const heroImg = root.querySelector('.class-card-expand__hero-img');
+
+    titleEl.textContent = title;
+    linesEl.textContent = buildBookingExpandLines(book);
+    actionsEl.innerHTML = '';
+
+    hero.classList.remove('class-card-expand__hero--empty');
+    const primaryUrl = resolveGroupActivityClassImageUrl(book);
+    const fallback =
+      typeof window.getProductPlaceholderImage === 'function'
+        ? window.getProductPlaceholderImage()
+        : '';
+    heroImg.alt = title;
+    if (primaryUrl || fallback) {
+      applyClassCardImgSrc(heroImg, primaryUrl || fallback);
+    } else {
+      heroImg.removeAttribute('src');
+      hero.classList.add('class-card-expand__hero--empty');
+    }
+
+    const bMsg =
+      (book.externalMessage && String(book.externalMessage).trim()) ||
+      (book.groupActivity?.externalMessage && String(book.groupActivity.externalMessage).trim()) ||
+      '';
+    if (bMsg) {
+      descEl.textContent = bMsg;
+    } else {
+      descEl.textContent =
+        'You have a booking for this class. Times and location are shown above.';
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+    closeBtn.textContent = 'Close';
+    closeBtn.addEventListener('click', () => closeClassCardExpand());
+    actionsEl.appendChild(closeBtn);
+
+    root.classList.add('class-card-expand--open');
+    root.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('class-card-expand-open');
+    requestAnimationFrame(() => {
+      root.querySelector('.class-card-expand__close')?.focus();
+    });
+  }
+
+  function attachBrowseClassCardClick(card, activity, gymSel) {
+    card.classList.add('booking-item-card--clickable');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-haspopup', 'dialog');
+    const open = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openClassCardExpandBrowse(activity, gymSel);
+    };
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open(e);
+      }
+    });
+  }
+
+  function attachBookingClassCardClick(card, book) {
+    card.classList.add('booking-item-card--clickable');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-haspopup', 'dialog');
+    const open = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openClassCardExpandBooking(book);
+    };
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open(e);
+      }
+    });
+  }
+
   function extractUpcomingBookings(customer) {
     if (!customer) return [];
     const fromBrp = customer.groupActivityBookings;
@@ -1236,6 +1560,7 @@ function initializeLoginPage(DOM) {
           pos != null ? `Waiting list · #${pos}` : 'Waiting list';
         card.appendChild(badge);
       }
+      attachBookingClassCardClick(card, b);
       container.appendChild(card);
     });
   }
@@ -1489,6 +1814,7 @@ function initializeLoginPage(DOM) {
         );
         appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(a, gymSel));
         card.appendChild(main);
+        attachBrowseClassCardClick(card, a, gymSel);
         results.appendChild(card);
       });
     } catch (err) {
@@ -1582,6 +1908,7 @@ function initializeLoginPage(DOM) {
           main.appendChild(pills);
         }
         row.append(main);
+        attachBookingClassCardClick(row, b);
         frag.appendChild(row);
       });
       wrap.appendChild(frag);

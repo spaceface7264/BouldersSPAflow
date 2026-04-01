@@ -1353,6 +1353,50 @@ class AuthAPI {
     return Array.isArray(data) ? data : [];
   }
 
+  /** BRP ver3 POST — book a group activity (or join waiting list when allowed). */
+  async bookCustomerGroupActivity(customerId, { groupActivityId, allowWaitingList = false } = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      throw new Error('Invalid customer ID');
+    }
+    const gid =
+      typeof groupActivityId === 'number' && Number.isFinite(groupActivityId)
+        ? groupActivityId
+        : parseInt(String(groupActivityId), 10);
+    if (!Number.isFinite(gid) || gid <= 0) {
+      throw new Error('Invalid group activity ID');
+    }
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const path = `/api/ver3/customers/${idNum}/bookings/groupactivities`;
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path,
+    });
+    return requestJson({
+      url,
+      method: 'POST',
+      headers,
+      body: {
+        groupActivity: gid,
+        allowWaitingList: !!allowWaitingList,
+      },
+    });
+  }
+
   /** BRP ver3 GET — gyms / business units (authenticated) */
   async listVer3BusinessUnits() {
     const accessToken =
