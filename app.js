@@ -1537,7 +1537,7 @@ class OrderAPI {
       const isCampaignProduct = Array.isArray(state.campaignSubscriptions) &&
         state.campaignSubscriptions.some((p) => String(p.id) === String(subscriptionProductId));
       const isFirstMonthFreeCampaignProduct = isCampaignProduct &&
-        /0\s*kr|første\s*måned|first\s*month\s*free/.test(String(matchedProduct?.name || '').toLowerCase());
+        isFirstMonthFreeCampaignName(matchedProduct?.name || '');
       
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
@@ -16320,7 +16320,7 @@ async function handleCheckout() {
                 (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
               const isFirstMonthFreeCampaignCheckout =
                 hasCampaignInCart() &&
-                /0\s*kr|første\s*måned|first\s*month\s*free/.test(String(productName || '').toLowerCase());
+                isFirstMonthFreeCampaignName(productName || '');
 
               if (is15DayPass) {
                 console.log('[checkout] ✅ Skipping partial-month price verification for 15-Day Trial Pass');
