@@ -642,6 +642,12 @@ function initializeLoginPage(DOM) {
       updateDashboardWelcomeMessage();
       refreshDashboardPanels();
     }
+
+    if (safeRoute === 'profile') {
+      const customer = getBestCustomerData();
+      const metadata = getTokenMetadata() || {};
+      populateProfileViews(customer, metadata);
+    }
   }
 
   function populateProfileEditForm() {
