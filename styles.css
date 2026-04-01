@@ -9427,9 +9427,14 @@ main {
         font-size: var(--font-size-sm);
     }
 
-    /* Reserve space for the absolute-positioned select button */
+    /* Prevent title text from flowing underneath the top-right select button */
+    .plan-card:not(.addon-card) .plan-type {
+        max-width: calc(100% - 96px);
+    }
+
+    /* Keep text readable on mobile while still leaving slight room for the select button */
     .plan-card:not(.addon-card) .plan-info {
-        padding-right: 88px;
+        padding-right: clamp(8px, 2vw, 14px);
     }
 
     /* Mobile Plan Cards Carousel */
