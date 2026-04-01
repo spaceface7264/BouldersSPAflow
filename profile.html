@@ -625,6 +625,7 @@
                         </div>
                         <div class="dashboard-card dashboard-valuecards-card" id="dashboardValueCardsCard" style="display: none;">
                             <h2 class="dashboard-card-title">Add-ons &amp; extras</h2>
+                            <p class="profile-addons-section-lead">Pick these up in the gym</p>
                             <div class="profile-addons-list profile-addons-list--dashboard" id="dashboardValueCardsList"></div>
                         </div>
                     </div>
@@ -813,13 +814,13 @@
                                 <option value="nextMonth">Next Month</option>
                                 <option value="custom">Custom Range</option>
                             </select>
-                            <div id="customDateRangeContainer" class="custom-date-range-container" style="display: none; margin-top: 8px; gap: 8px; flex-direction: column;">
+                            <div id="customDateRangeContainer" class="custom-date-range-container">
                                 <div class="date-input-container">
-                                    <label for="browseDateStart" class="filter-label-small">Start Date</label>
+                                    <label for="browseDateStart" class="filter-label-small">Start date</label>
                                     <input type="date" id="browseDateStart" class="filter-input date-input" />
                                 </div>
                                 <div class="date-input-container">
-                                    <label for="browseDateEnd" class="filter-label-small">End Date</label>
+                                    <label for="browseDateEnd" class="filter-label-small">End date</label>
                                     <input type="date" id="browseDateEnd" class="filter-input date-input" />
                                 </div>
                             </div>
@@ -832,7 +833,10 @@
                                 <option value="event">Events</option>
                             </select>
                         </div>
-                        <button class="filter-apply-btn" id="applyFiltersBtn">Apply Filters</button>
+                        <div class="filter-group filter-group-actions">
+                            <span class="filter-label filter-label--spacer" aria-hidden="true">&nbsp;</span>
+                            <button type="button" class="filter-apply-btn" id="applyFiltersBtn">Apply filters</button>
+                        </div>
                     </div>
 
                     <!-- Browse Results -->
@@ -946,94 +950,6 @@
                                     <span class="profile-detail-label">Valid student ID:</span>
                                     <span class="profile-detail-value" id="profileStudentId">-</span>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Value cards from signup (e.g. coffee card) -->
-                    <div class="profile-card profile-card--valuecards" id="profileAddonsCard" style="display: none;">
-                        <h2 class="profile-card-title">Add-ons &amp; extras</h2>
-                        <div class="profile-card-content profile-card-content--valuecards">
-                            <div class="profile-addons-list" id="profileAddonsList"></div>
-                        </div>
-                    </div>
-
-                    <!-- My Membership Card -->
-                    <div class="profile-card">
-                        <h2 class="profile-card-title">My membership</h2>
-                        <div class="profile-card-content">
-                            <!-- Membership details (shown when user has subscription) -->
-                            <div id="membershipDetails">
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Membership type (subscription):</span>
-                                    <span class="profile-detail-value" id="profileMembershipType">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Active since:</span>
-                                    <span class="profile-detail-value" id="profileActiveSince">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Price:</span>
-                                    <span class="profile-detail-value" id="profileMembershipPrice">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Primary gym:</span>
-                                    <span class="profile-detail-value" id="profileMembershipGym">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Member ID:</span>
-                                    <span class="profile-detail-value" id="profileMemberId">-</span>
-                                </div>
-                                <div class="profile-detail-row" id="profileBoundUntilRow" style="display: none;">
-                                    <span class="profile-detail-label">Bound until:</span>
-                                    <span class="profile-detail-value" id="profileBoundUntil">-</span>
-                                </div>
-                                <div class="profile-detail-row" id="profileCardConsentRow" style="display: none;">
-                                    <span class="profile-detail-label">Card consent:</span>
-                                    <span class="profile-detail-value" id="profileCardConsentStatus">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Contract status:</span>
-                                    <span class="profile-detail-value" id="profileContractStatus">-</span>
-                                </div>
-                                <!-- Bloc Life Loyalty tier: Hidden as requested -->
-                                <div class="profile-detail-row" style="display: none;">
-                                    <span class="profile-detail-label">Bloc Life Loyalty tier:</span>
-                                    <span class="profile-detail-value" id="profileLoyaltyTier"></span>
-                                </div>
-                                <button class="profile-action-btn" id="manageMembershipBtn">Manage membership</button>
-                            </div>
-                            <!-- Warning/CTA for missing card consent (hidden by default) -->
-                            <div id="cardConsentWarning" style="display: none;">
-                                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 16px; margin-top: 20px;">
-                                    <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #EF4444; flex-shrink: 0; margin-top: 2px;">
-                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                                            <line x1="12" y1="9" x2="12" y2="13"></line>
-                                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                        </svg>
-                                        <div style="flex: 1;">
-                                            <p style="color: #FFFFFF; margin: 0 0 8px 0; font-weight: 500; font-size: 15px;">
-                                                Card consent required
-                                            </p>
-                                            <p style="color: rgba(255, 255, 255, 0.8); margin: 0; font-size: 14px; line-height: 1.5;">
-                                                Your membership requires a valid card consent (Kort Sammentykke) for recurring payments. Please register your payment card to continue your membership.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button class="profile-action-btn" id="registerCardConsentBtn" style="width: 100%; margin-top: 12px;">
-                                        Register payment card
-                                    </button>
-                                </div>
-                            </div>
-                            <!-- CTA for users without subscription (hidden by default) -->
-                            <div id="membershipCTA" style="display: none;">
-                                <p style="color: var(--color-text-secondary); margin-bottom: 24px; line-height: 1.6;">
-                                    You don't have an active membership yet. Sign up now to get access to all Boulders gyms and exclusive benefits!
-                                </p>
-                                <a href="./index.html" class="profile-action-btn" style="text-decoration: none; display: inline-block; text-align: center;">
-                                    Sign up for membership
-                                </a>
                             </div>
                         </div>
                     </div>
@@ -1200,13 +1116,7 @@
                 <div class="settings-section">
                     <div class="settings-section-header-with-action">
                         <h2 class="settings-section-title">Saved payment methods</h2>
-                        <button class="settings-action-btn settings-action-btn-header" id="settingsRegisterCardConsentBtn" style="display: none;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                            <span>Register payment card</span>
-                        </button>
+                        <button type="button" class="settings-payment-update-btn" id="settingsRegisterCardConsentBtn" style="display: none;">change</button>
                     </div>
                     <div id="settingsPaymentMethods">
                         <div class="settings-loading">
@@ -1231,7 +1141,7 @@
                 </div>
 
                 <!-- Invoices Section -->
-                <div class="settings-section" id="accountActionsSection">
+                <div class="settings-section" id="settingsInvoicesSection">
                     <h2 class="settings-section-title">Invoices</h2>
                     <div id="settingsInvoices">
                         <div class="settings-loading">
@@ -1258,6 +1168,9 @@
                 <!-- Notifications & Privacy Section -->
                 <div class="settings-section" id="notificationsPrivacySection">
                     <h2 class="settings-section-title">Notifications & Privacy</h2>
+                    <p class="settings-item-description" id="settingsNotificationPrivacyIntro" style="margin-top: 0; margin-bottom: 14px; max-width: 40rem;">
+                        These match your account’s marketing permissions in our member system. Each switch saves immediately.
+                    </p>
                     
                     <!-- Email Marketing -->
                     <div class="settings-item">
@@ -1297,7 +1210,7 @@
                 </div>
 
                 <!-- Account Actions Section -->
-                <div class="settings-section">
+                <div class="settings-section" id="settingsAccountActionsSection">
                     <h2 class="settings-section-title">Account Actions</h2>
                     
                     <!-- Subscription actions (shown only when user has active subscription) -->

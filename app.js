@@ -1148,6 +1148,232 @@ class AuthAPI {
     }
   }
 
+  /**
+   * BRP ver3: saved cards for recurring payments (ROLE_CUSTOMER).
+   * @returns {Promise<Array>} CardConsentOut[]
+   */
+  async listCustomerCardConsents(customerId) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      throw new Error('Invalid customer ID');
+    }
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/customers/${idNum}/consents/cards`,
+    });
+    const data = await requestJson({ url, headers });
+    return Array.isArray(data) ? data : [];
+  }
+
+  /**
+   * BRP ver3 PUT customer — mass-send / marketing flags (CustomerOut allowMassSend*).
+   * @param {object} prefs { allowMassSendEmail, allowMassSendSms, allowMassSendMail }
+   */
+  async updateCustomerMarketingPreferences(customerId, prefs) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      throw new Error('Invalid customer ID');
+    }
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/customers/${idNum}`,
+    });
+    const body = {
+      allowMassSendEmail: Boolean(prefs?.allowMassSendEmail),
+      allowMassSendSms: Boolean(prefs?.allowMassSendSms),
+      allowMassSendMail: Boolean(prefs?.allowMassSendMail),
+    };
+    return requestJson({ url, method: 'PUT', headers, body });
+  }
+
+  /**
+   * BRP ver3 list invoices (ROLE_CUSTOMER). Spec documents POST; many gateways only allow GET here — try GET first, then POST on 405.
+   * @param {object} [options] periodStart, periodEnd (ISO), excludePaid, excludeExported
+   */
+  async listCustomerInvoices(customerId, options = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      throw new Error('Invalid customer ID');
+    }
+    const params = new URLSearchParams();
+    if (options.periodStart) {
+      params.set('period.start', options.periodStart);
+    }
+    if (options.periodEnd) {
+      params.set('period.end', options.periodEnd);
+    }
+    if (!options.periodStart && !options.periodEnd) {
+      const end = new Date();
+      const start = new Date();
+      start.setFullYear(start.getFullYear() - 2);
+      params.set('period.start', start.toISOString());
+      params.set('period.end', end.toISOString());
+    }
+    if (options.excludePaid === true) params.set('excludePaid', 'true');
+    if (options.excludeExported === true) params.set('excludeExported', 'true');
+    const qs = params.toString();
+    const path = `/api/ver3/customers/${idNum}/invoices${qs ? `?${qs}` : ''}`;
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path,
+    });
+    const getHeaders = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const postHeaders = {
+      ...getHeaders,
+      'Content-Type': 'application/json',
+    };
+
+    const normalize = (data) => (Array.isArray(data) ? data : []);
+
+    try {
+      const data = await requestJson({ url, method: 'GET', headers: getHeaders });
+      return normalize(data);
+    } catch (getErr) {
+      if (getErr.status !== 405) {
+        throw getErr;
+      }
+    }
+
+    const data = await requestJson({ url, method: 'POST', headers: postHeaders, body: {} });
+    return normalize(data);
+  }
+
+  /** BRP ver3 GET — group activity + waiting list bookings for customer */
+  async listCustomerGroupActivityBookings(customerId, options = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      throw new Error('Invalid customer ID');
+    }
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const params = new URLSearchParams();
+    if (options.startTimePoint) {
+      params.set('startTimePoint', options.startTimePoint);
+    }
+    const qs = params.toString();
+    const path = `/api/ver3/customers/${idNum}/bookings/groupactivities${qs ? `?${qs}` : ''}`;
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path,
+    });
+    const data = await requestJson({ url, method: 'GET', headers });
+    return Array.isArray(data) ? data : [];
+  }
+
+  /** BRP ver3 GET — schedule at a business unit */
+  async listBusinessUnitGroupActivities(businessUnitId, options = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const bu =
+      typeof businessUnitId === 'number' && Number.isFinite(businessUnitId)
+        ? businessUnitId
+        : parseInt(String(businessUnitId), 10);
+    if (!Number.isFinite(bu) || bu <= 0) {
+      throw new Error('Invalid business unit ID');
+    }
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const params = new URLSearchParams();
+    if (options.periodStart) params.set('period.start', options.periodStart);
+    if (options.periodEnd) params.set('period.end', options.periodEnd);
+    if (options.customerId != null) {
+      const cid = parseInt(String(options.customerId), 10);
+      if (Number.isFinite(cid) && cid > 0) params.set('customer', String(cid));
+    }
+    if (options.webCategory != null) {
+      params.set('webCategory', String(options.webCategory));
+    }
+    const qs = params.toString();
+    const path = `/api/ver3/businessunits/${bu}/groupactivities${qs ? `?${qs}` : ''}`;
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path,
+    });
+    const data = await requestJson({ url, method: 'GET', headers });
+    return Array.isArray(data) ? data : [];
+  }
+
+  /** BRP ver3 GET — gyms / business units (authenticated) */
+  async listVer3BusinessUnits() {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: '/api/ver3/businessunits',
+    });
+    const data = await requestJson({ url, method: 'GET', headers });
+    return Array.isArray(data) ? data : [];
+  }
+
   // Step 6: Update customer
   async updateCustomer(customerId, customerData) {
     try {
