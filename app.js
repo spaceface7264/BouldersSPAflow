@@ -4006,8 +4006,7 @@ const pendingNavigationTimeouts = {
 // Language management
 const SUPPORTED_LANGUAGES = {
   'da-DK': { code: 'da-DK', name: 'Dansk', flag: '🇩🇰' },
-  'en-GB': { code: 'en-GB', name: 'English', flag: '🇬🇧' },
-  'de-DE': { code: 'de-DE', name: 'Deutsch', flag: '🇩🇪' }
+  'en-GB': { code: 'en-GB', name: 'English', flag: '🇬🇧' }
 };
 
 const DEFAULT_LANGUAGE = 'da-DK';
@@ -5954,7 +5953,7 @@ function updatePageTranslations() {
     if (translation && translation.includes('{date}')) {
       const dateIso = element.getAttribute('data-i18n-date-iso');
       if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
-        const locale = langCode === 'de' ? 'de-DE' : langCode === 'en' ? 'en-US' : 'da-DK';
+        const locale = langCode === 'en' ? 'en-US' : 'da-DK';
         const date = new Date(`${dateIso}T12:00:00`);
         if (!isNaN(date.getTime())) {
           const dateText = new Intl.DateTimeFormat(locale, {
@@ -6506,7 +6505,7 @@ function updateLanguageSwitcherUI() {
   const triggerFlag = document.getElementById('languageSwitcherTriggerFlag');
   const triggerName = document.getElementById('languageSwitcherTriggerName');
   if (triggerFlag) triggerFlag.textContent = info?.flag ?? '🇩🇰';
-  if (triggerName) triggerName.textContent = currentLang === 'da-DK' ? 'DA' : currentLang === 'en-GB' ? 'EN' : 'DE';
+  if (triggerName) triggerName.textContent = currentLang === 'en-GB' ? 'EN' : 'DA';
   
   const buttons = switcher.querySelectorAll('.language-btn');
   buttons.forEach(btn => {
@@ -19213,9 +19212,7 @@ function renderConfirmationView() {
     }
 
     const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
-    const locale = langCode === 'de' ? 'de-DE'
-      : langCode === 'en' ? 'en-US'
-      : 'da-DK';
+    const locale = langCode === 'en' ? 'en-US' : 'da-DK';
     const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
       year: 'numeric',
       month: 'long',
