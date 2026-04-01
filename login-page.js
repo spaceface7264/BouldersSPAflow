@@ -144,7 +144,7 @@ function initializeLoginPage(DOM) {
       titleEl.textContent = `Welcome, ${displayName}! 👋`;
       markDashboardWelcomeSeen();
     } else {
-      titleEl.textContent = 'Welcome back! 👋';
+      titleEl.textContent = `Welcome back, ${displayName}! 👋`;
     }
   }
 
@@ -163,6 +163,7 @@ function initializeLoginPage(DOM) {
     const parts = [
       sub.name,
       sub.productName,
+      sub.subscriptionProduct?.name, // BRP API3 field
       sub.type,
       sub.subscriptionType,
       sub.planName,
@@ -481,9 +482,11 @@ function initializeLoginPage(DOM) {
     if (!tierNameEl || !levelEl || !benefitsEl) return;
 
     const loyalty = customer?.loyalty || {};
+    // BRP API3 stores the kundetype (Bloc Life tier) in customerType.name
     const rawTier =
       customer?.loyaltyTier ||
       customer?.blocLifeTier ||
+      customer?.customerType?.name ||
       loyalty.tierName ||
       loyalty.levelName ||
       loyalty.name ||
@@ -698,11 +701,21 @@ function initializeLoginPage(DOM) {
       (Array.isArray(customer?.memberships) ? customer.memberships[0] : null) ||
       null;
 
+    // BRP API3 field mappings:
+    // subscriptionProduct.name → type, start → activeSince, price.amount + currency → price
+    // businessUnit.name → gym, boundUntil → boundUntil
+    const subProductName = sub?.subscriptionProduct?.name || sub?.name || sub?.type;
+    const subPrice = sub?.price?.amount != null
+      ? `${sub.price.amount} ${sub.price.currency || 'kr.'}`
+      : (sub?.price || sub?.monthlyPrice);
+    const subGym = sub?.businessUnit?.name || sub?.gymName || sub?.businessUnitName;
+    const subStart = sub?.start || sub?.startDate || sub?.activeSince;
+
     return {
-      type: sub?.name || sub?.type || customer?.membershipType || '-',
-      activeSince: sub?.startDate || sub?.activeSince || customer?.memberSince || '-',
-      price: sub?.price || sub?.monthlyPrice || '-',
-      gym: sub?.gymName || sub?.businessUnitName || customer?.primaryGym || customer?.gymName || '-',
+      type: subProductName || customer?.membershipType || '-',
+      activeSince: subStart || customer?.memberSince || customer?.memberJoinDate || '-',
+      price: subPrice || '-',
+      gym: subGym || customer?.businessUnit?.name || customer?.primaryGym || customer?.gymName || '-',
       memberId: sub?.memberId || sub?.id || customer?.membershipNumber || customer?.memberId || customer?.id || '-',
       contractStatus: sub?.contractStatus || customer?.contractStatus || '-',
       boundUntil: sub?.boundUntil || customer?.boundUntil || null,

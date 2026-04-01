@@ -4110,6 +4110,61 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
       const customerData = await authAPI.getCustomer(state.customerId);
       state.authenticatedCustomer = customerData;
       console.log('[Auth] Customer profile loaded:', customerData);
+
+      // Enrich customer object with subscriptions, valuecards, and bookings from BRP API3.
+      // These live on separate endpoints — the base customer profile only has hasMembership.
+      try {
+        const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+        if (accessToken && customerData) {
+          const cid = state.customerId;
+          const headers = {
+            'Accept-Language': getAcceptLanguageHeader(),
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          };
+          const ver3Url = (path) => buildApiUrl({
+            baseUrl: authAPI.baseUrl,
+            useProxy: authAPI.useProxy,
+            path: `/api/ver3/customers/${cid}${path}`,
+          });
+
+          const [subsResult, cardsResult, bookingsResult] = await Promise.allSettled([
+            requestJson({ url: ver3Url('/subscriptions'), headers }),
+            requestJson({ url: ver3Url('/valuecards'), headers }),
+            requestJson({ url: ver3Url('/bookings/groupactivities'), headers }),
+          ]);
+
+          if (subsResult.status === 'fulfilled' && Array.isArray(subsResult.value)) {
+            customerData.subscriptions = subsResult.value;
+          }
+          if (cardsResult.status === 'fulfilled' && Array.isArray(cardsResult.value)) {
+            // Map BRP CustomerValueCardOut fields to expected names
+            customerData.valueCards = cardsResult.value.map((c) => ({
+              ...c,
+              remainingEntries: c.unitsLeft,
+              expiryDate: c.validUntil,
+              name: c.validCardProduct?.name,
+            }));
+          }
+          if (bookingsResult.status === 'fulfilled' && Array.isArray(bookingsResult.value)) {
+            const now = new Date();
+            customerData.upcomingBookings = bookingsResult.value
+              .filter((b) => b.duration?.start && new Date(b.duration.start) > now)
+              .map((b) => ({
+                ...b,
+                title: b.groupActivity?.name,
+                startTime: b.duration?.start,
+                locationName: b.businessUnit?.name,
+              }));
+          }
+          devLog('[Auth] Extended customer data loaded — subs:', customerData.subscriptions?.length,
+            'cards:', customerData.valueCards?.length,
+            'bookings:', customerData.upcomingBookings?.length);
+        }
+      } catch (extendError) {
+        devWarn('[Auth] Could not load extended customer data:', extendError);
+      }
+
       // Refresh UI after loading profile to show all fields
       refreshLoginUI();
     } catch (profileError) {
