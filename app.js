@@ -14457,17 +14457,11 @@ function updatePaymentOverview() {
     Array.isArray(state.campaignSubscriptions) &&
     state.campaignSubscriptions.some((p) => String(p.id) === String(currentProduct?.id || productFromOrder?.id || state.selectedProductId));
   const useSplitCampaignDisplay = !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
-  const campaignBindingMonths = 2;
-  let estimatedCampaignBoundUntil = null;
 
   if (useSplitCampaignDisplay) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const firstMonthEnd = addMonthsClamped(today, 1);
-    // Campaign model: 1 promo month + binding months.
-    // With 2 binding months this yields an effective 3-month timeline from signup.
-    const bindingAnchor = addMonthsClamped(firstMonthEnd, Math.max(0, campaignBindingMonths - 1));
-    estimatedCampaignBoundUntil = endOfMonth(bindingAnchor);
     // Never synthesize campaign pay-now client-side.
     // Keep backend order amount when available; otherwise keep the pre-order 0 fallback.
     isCampaignPayNowPending = false;
@@ -14636,10 +14630,6 @@ function updatePaymentOverview() {
       const boundUntilDate = new Date(subscriptionItem.boundUntil);
       const boundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(boundUntilDate)}`;
       DOM.paymentBoundUntil.textContent = boundUntilText;
-      DOM.paymentBoundUntil.style.display = 'block';
-    } else if (!hasOrderData && useSplitCampaignDisplay && estimatedCampaignBoundUntil && !is15DayPass) {
-      const estimatedBoundUntilText = `${t('cart.boundUntil').charAt(0).toUpperCase() + t('cart.boundUntil').slice(1)} ${formatDateDMY(estimatedCampaignBoundUntil)}`;
-      DOM.paymentBoundUntil.textContent = estimatedBoundUntilText;
       DOM.paymentBoundUntil.style.display = 'block';
     } else {
       DOM.paymentBoundUntil.style.display = 'none';
