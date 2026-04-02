@@ -334,9 +334,6 @@ function initializeLoginPage(DOM) {
     if (typeof source.__resolvedImageUrl === 'string' && source.__resolvedImageUrl.trim()) {
       return source.__resolvedImageUrl.trim();
     }
-    if (typeof source.__resolvedImageUrl === 'string' && source.__resolvedImageUrl.trim()) {
-      return source.__resolvedImageUrl.trim();
-    }
     const fromProduct = (o) => {
       if (!o || typeof o !== 'object') return null;
       const p =
@@ -1170,6 +1167,7 @@ function initializeLoginPage(DOM) {
 
   function formatClassCardAvailabilityFromContext(ctx) {
     if (!ctx || typeof ctx !== 'object') return '';
+    if (ctx.source && isDropInOnlyClass(ctx.source)) return '';
     const slotText = ctx.slots ? formatGroupActivitySlotsAvailability(ctx.slots) : '';
     if (slotText) return slotText;
     if (ctx.booking) return formatBookingCardAvailabilityLine(ctx.booking);
@@ -2083,6 +2081,327 @@ function initializeLoginPage(DOM) {
     return { title: String(title), where: where ? String(where) : '' };
   }
 
+  function resolveSavedClassesOwnerKeys() {
+    const ids = [];
+    const cid = getBrpNumericCustomerId(getBestCustomerData());
+    if (cid) ids.push(String(cid));
+    if (state?.customerId) ids.push(String(state.customerId));
+    if (typeof getTokenMetadata === 'function') {
+      const md = getTokenMetadata() || {};
+      if (md?.username) ids.push(String(md.username));
+      if (md?.userName) ids.push(String(md.userName));
+    }
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    const primary = unique[0] || 'anon';
+    const all = Array.from(new Set([primary, ...unique, 'anon']));
+    return {
+      primaryKey: `boulders:saved-classes:${primary}`,
+      allKeys: all.map((id) => `boulders:saved-classes:${id}`),
+    };
+  }
+
+  function loadSavedClasses() {
+    try {
+      const { primaryKey, allKeys } = resolveSavedClassesOwnerKeys();
+      const merged = [];
+      allKeys.forEach((k) => {
+        const raw = localStorage.getItem(k);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed)) merged.push(...parsed);
+      });
+      const deduped = [];
+      const seen = new Set();
+      merged.forEach((rec) => {
+        if (!rec || !rec.key || seen.has(rec.key)) return;
+        seen.add(rec.key);
+        deduped.push(rec);
+      });
+      // Keep one canonical copy for this profile to avoid split lists.
+      localStorage.setItem(primaryKey, JSON.stringify(deduped));
+      return deduped;
+    } catch {
+      return [];
+    }
+  }
+
+  function persistSavedClasses(list) {
+    try {
+      const { primaryKey } = resolveSavedClassesOwnerKeys();
+      localStorage.setItem(primaryKey, JSON.stringify(Array.isArray(list) ? list : []));
+    } catch (_) {
+      // ignore quota/privacy mode errors
+    }
+  }
+
+  function classSaveKey(source) {
+    if (Array.isArray(source?.__seriesBookings) && source.__seriesBookings.length) {
+      const bu = classCardBusinessUnitId(source);
+      const name = normalizeSeriesNameForBookings(bookingDisplayLine(source).title);
+      const first = bookingStartIsoValue(source.__seriesBookings[0]);
+      const last = bookingStartIsoValue(source.__seriesBookings[source.__seriesBookings.length - 1]);
+      return `series:${bu || 'x'}:${name}:${first}:${last}:${source.__seriesBookings.length}`;
+    }
+    const eventId = bookingEventIdValue(source);
+    if (eventId) return `event:${eventId}`;
+    const id = source?.id ?? source?.groupActivity?.id ?? source?.groupActivityBookingId;
+    if (id != null) return `ga:${id}`;
+    const { title, where } = bookingDisplayLine(source || {});
+    return `fallback:${normalizeSeriesNameForBookings(title)}:${normalizeSeriesNameForBookings(where)}:${bookingStartIsoValue(source)}`;
+  }
+
+  function isClassSaved(source) {
+    const key = classSaveKey(source);
+    return loadSavedClasses().some((x) => x && x.key === key);
+  }
+
+  function saveClassRecord(source, title, where, startIso, endIso, isSeries = false) {
+    const key = classSaveKey(source);
+    const imageUrl =
+      resolveGroupActivityClassImageUrl(source) ||
+      (typeof source?.__resolvedImageUrl === 'string' ? source.__resolvedImageUrl : '');
+    const record = {
+      key,
+      title: String(title || 'Class'),
+      where: where ? String(where) : '',
+      buId: classCardBusinessUnitId(source) || null,
+      productId: extractGroupActivityProductId(source) || null,
+      kind:
+        source?.__kind === 'event' || source?.occasions
+          ? 'event'
+          : source?.__kind === 'groupActivity'
+            ? 'groupActivity'
+            : 'unknown',
+      startIso: startIso || '',
+      endIso: endIso || '',
+      imageUrl: imageUrl || '',
+      isSeries: !!isSeries,
+      seriesCount: isSeries && Array.isArray(source?.__seriesBookings) ? source.__seriesBookings.length : 0,
+      seriesLines:
+        isSeries && Array.isArray(source?.__seriesBookings)
+          ? source.__seriesBookings.map((rec, idx, arr) => {
+              const s = bookingStartIsoValue(rec);
+              const e = rec.duration?.end || rec.endTime || rec.endDateTime || null;
+              return `${idx + 1}/${arr.length} · ${formatClassSessionWhenLine(
+                typeof s === 'string' ? s : '',
+                typeof e === 'string' ? e : null
+              )}`;
+            })
+          : [],
+      savedAt: new Date().toISOString(),
+    };
+    const list = loadSavedClasses();
+    const idx = list.findIndex((x) => x && x.key === key);
+    if (idx >= 0) list[idx] = record;
+    else list.unshift(record);
+    persistSavedClasses(list);
+  }
+
+  async function resolveSavedRecordImageUrl(rec) {
+    if (!rec || rec.imageUrl) return rec?.imageUrl || '';
+    let buId = Number(rec?.buId);
+    const startMs = Date.parse(rec?.startIso || '');
+    if (!Number.isFinite(startMs)) {
+      return '';
+    }
+    if ((!Number.isFinite(buId) || buId <= 0) && rec?.where && authAPI?.listVer3BusinessUnits) {
+      try {
+        const units = await authAPI.listVer3BusinessUnits();
+        const want = String(rec.where).trim().toLowerCase();
+        const hit = (Array.isArray(units) ? units : []).find((u) =>
+          String(u?.name || u?.displayName || '').trim().toLowerCase() === want
+        );
+        const maybe = Number(hit?.id);
+        if (Number.isFinite(maybe) && maybe > 0) buId = maybe;
+      } catch {
+        // ignore
+      }
+    }
+    if (!Number.isFinite(buId) || buId <= 0) return '';
+    try {
+      const day = new Date(startMs);
+      day.setHours(0, 0, 0, 0);
+      const periodStart = new Date(day.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const periodEnd = new Date(day.getTime() + 3 * 24 * 60 * 60 * 1000 - 1).toISOString();
+      const normalize = (s) =>
+        String(s || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const targetName = normalize(rec?.title);
+      const sameName = (name) => {
+        const n = normalize(name);
+        return n && (n === targetName || n.includes(targetName) || targetName.includes(n));
+      };
+
+      // 1) Prefer direct product lookup if available.
+      const directProductId = Number(rec?.productId);
+      if (Number.isFinite(directProductId) && directProductId > 0) {
+        const customerId = getBrpNumericCustomerId(getBestCustomerData());
+        if (rec?.kind === 'event') {
+          const detail = await fetchEventProductDetail(directProductId, buId);
+          const url = detail ? resolveProductAssetImageUrl(detail) : '';
+          if (url) return url;
+        } else {
+          const detail = await fetchGroupActivityProductDetail(directProductId, buId, customerId);
+          const url = detail ? resolveProductAssetImageUrl(detail) : '';
+          if (url) return url;
+        }
+      }
+
+      // 2) Group activity schedule around time window.
+      if (authAPI?.listBusinessUnitGroupActivities) {
+        const customerId = getBrpNumericCustomerId(getBestCustomerData());
+        const acts = await authAPI.listBusinessUnitGroupActivities(buId, {
+          periodStart,
+          periodEnd,
+          customerId: customerId || undefined,
+        });
+        const actMatch = (Array.isArray(acts) ? acts : []).find((a) => sameName(a?.name));
+        if (actMatch) {
+          let url = resolveGroupActivityClassImageUrl(actMatch);
+          if (!url) {
+            const productId = extractGroupActivityProductId(actMatch);
+            if (productId) {
+              const detail = await fetchGroupActivityProductDetail(productId, buId, customerId);
+              url = detail ? resolveProductAssetImageUrl(detail) : '';
+            }
+          }
+          if (url) return url;
+        }
+      }
+
+      // 3) Event schedule fallback.
+      if (authAPI?.listBusinessUnitEvents) {
+        const events = await authAPI.listBusinessUnitEvents(buId, { periodStart, periodEnd });
+        const match = (Array.isArray(events) ? events : []).find((ev) => sameName(ev?.name));
+        if (match) {
+          let url = resolveGroupActivityClassImageUrl(match);
+          if (!url) {
+            const productId = extractGroupActivityProductId(match);
+            if (productId) {
+              const detail = await fetchEventProductDetail(productId, buId);
+              url = detail ? resolveProductAssetImageUrl(detail) : '';
+            }
+          }
+          if (url) return url;
+        }
+      }
+      return '';
+    } catch {
+      return '';
+    }
+  }
+
+  function removeSavedClass(source) {
+    const key = classSaveKey(source);
+    persistSavedClasses(loadSavedClasses().filter((x) => x && x.key !== key));
+  }
+
+  function createSaveButton(source, meta) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'booking-item-card__save-btn';
+    const sync = () => {
+      const saved = isClassSaved(source);
+      btn.classList.toggle('is-saved', saved);
+      btn.setAttribute('aria-pressed', saved ? 'true' : 'false');
+      btn.textContent = saved ? '★' : '☆';
+      btn.title = saved ? 'Remove from saved' : 'Save class';
+    };
+    sync();
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const saved = isClassSaved(source);
+      if (saved) {
+        removeSavedClass(source);
+      } else {
+        saveClassRecord(
+          source,
+          meta?.title || bookingDisplayLine(source).title,
+          meta?.where || bookingDisplayLine(source).where,
+          meta?.startIso || bookingStartIsoValue(source),
+          meta?.endIso || source?.duration?.end || source?.endTime || source?.endDateTime || '',
+          !!meta?.isSeries
+        );
+      }
+      sync();
+      renderSavedBookingsList();
+    });
+    return btn;
+  }
+
+  function renderSavedBookingsList() {
+    const container = document.getElementById('savedBookingsList');
+    if (!container) return;
+    const list = loadSavedClasses();
+    container.innerHTML = '';
+    if (!list.length) {
+      const p = document.createElement('p');
+      p.className = 'bookings-empty-msg';
+      p.textContent = 'No saved classes yet.';
+      container.appendChild(p);
+      return;
+    }
+    list.forEach((rec) => {
+      const card = document.createElement('div');
+      card.className = 'booking-item-card';
+      const mediaSource = rec?.imageUrl ? { __resolvedImageUrl: rec.imageUrl } : {};
+      card.appendChild(createClassCardMediaEl(mediaSource, rec?.title || 'Class'));
+      const main = document.createElement('div');
+      main.className = 'booking-item-card__main';
+      const h = document.createElement('strong');
+      h.className = 'booking-item-card__title';
+      h.textContent = rec?.title || 'Class';
+      const meta = document.createElement('div');
+      meta.className = 'booking-item-card__meta';
+      meta.textContent =
+        rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length
+          ? `${rec.seriesCount || rec.seriesLines.length} sessions saved`
+          : formatClassSessionWhenLine(rec?.startIso || '', rec?.endIso || null);
+      main.append(h, meta);
+      if (rec?.where) {
+        appendLocationPillToCardMain(main, rec.where);
+      }
+      if (rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length) {
+        const rows = document.createElement('div');
+        rows.className = 'booking-item-card__series-list';
+        rec.seriesLines.forEach((line) => {
+          const row = document.createElement('div');
+          row.className = 'booking-item-card__series-row';
+          row.textContent = line;
+          rows.appendChild(row);
+        });
+        main.appendChild(rows);
+      }
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+      saveBtn.textContent = 'Remove';
+      saveBtn.addEventListener('click', () => {
+        persistSavedClasses(loadSavedClasses().filter((x) => x && x.key !== rec.key));
+        renderSavedBookingsList();
+      });
+      main.appendChild(saveBtn);
+      card.appendChild(main);
+      container.appendChild(card);
+      if (!rec?.imageUrl) {
+        resolveSavedRecordImageUrl(rec).then((url) => {
+          if (!url || !card.isConnected) return;
+          const current = loadSavedClasses();
+          const idx = current.findIndex((x) => x && x.key === rec.key);
+          if (idx < 0) return;
+          current[idx] = { ...current[idx], imageUrl: url };
+          persistSavedClasses(current);
+          const media = card.querySelector('.booking-item-card__media');
+          if (!media) return;
+          media.replaceWith(createClassCardMediaEl({ __resolvedImageUrl: url }, rec?.title || 'Class'));
+        });
+      }
+    });
+  }
+
   function bookingIdValue(b) {
     const raw =
       b?.id ??
@@ -2393,6 +2712,15 @@ function initializeLoginPage(DOM) {
           pills.appendChild(locPill);
         }
         main.appendChild(pills);
+        main.appendChild(
+          createSaveButton({ ...first, __seriesBookings: bookings }, {
+            title,
+            where,
+            startIso: bookingStartIsoValue(bookings[0]),
+            endIso: bookings[bookings.length - 1]?.duration?.end || '',
+            isSeries: true,
+          })
+        );
         card.appendChild(main);
         attachBookingClassCardClick(card, { ...first, __seriesBookings: bookings });
         container.appendChild(card);
@@ -2432,6 +2760,15 @@ function initializeLoginPage(DOM) {
         { slots: b.slots, booking: b }
       );
       appendLocationPillToCardMain(main, where);
+      main.appendChild(
+        createSaveButton(b, {
+          title,
+          where,
+          startIso: typeof startIso === 'string' ? startIso : '',
+          endIso: typeof endIso === 'string' ? endIso : '',
+          isSeries: false,
+        })
+      );
       card.appendChild(main);
       if (isBrpWaitingListBooking(b)) {
         const pos = b.waitingListBooking?.waitingListPosition;
@@ -2487,6 +2824,7 @@ function initializeLoginPage(DOM) {
       waiting,
       'You are not on any waiting lists.'
     );
+    renderSavedBookingsList();
   }
 
   function refreshClassesBookingsPage() {
@@ -3057,9 +3395,17 @@ function initializeLoginPage(DOM) {
           meta.textContent = formatEventDateRangeLine(a);
           main.append(h, meta);
           appendSeriesPillToCardMain(main, a);
-          appendLocationPillToCardMain(
-            main,
-            a.businessUnit?.name || a.businessUnit?.displayName || groupActivityBrowseLocationLabel(a, gymSel)
+          const whereLabel =
+            a.businessUnit?.name || a.businessUnit?.displayName || groupActivityBrowseLocationLabel(a, gymSel);
+          appendLocationPillToCardMain(main, whereLabel);
+          main.appendChild(
+            createSaveButton(a, {
+              title: browseTitle,
+              where: whereLabel || '',
+              startIso: a.duration?.start || '',
+              endIso: a.duration?.end || '',
+              isSeries: isGroupedEventSeries(a),
+            })
           );
         } else {
           const startA = a.duration?.start;
@@ -3073,10 +3419,19 @@ function initializeLoginPage(DOM) {
             main,
             typeof startA === 'string' ? startA : '',
             typeof endA === 'string' ? endA : null,
-            { slots: a.slots }
+            { slots: a.slots, source: a }
           );
         appendDropInPillToCardMain(main, a);
           appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(a, gymSel));
+          main.appendChild(
+            createSaveButton(a, {
+              title: browseTitle,
+              where: groupActivityBrowseLocationLabel(a, gymSel),
+              startIso: a.duration?.start || '',
+              endIso: a.duration?.end || '',
+              isSeries: false,
+            })
+          );
           const canBookNow =
             !isBrowseSlotsFullyBooked(a.slots) &&
             !isDropInOnlyClass(a) &&
@@ -3148,6 +3503,16 @@ function initializeLoginPage(DOM) {
     setRoute('classes');
     requestAnimationFrame(() => {
       document.querySelector('.booking-tab[data-tab="browse"]')?.click();
+    });
+  }
+
+  function openSavedBookingsTab() {
+    setRoute('classes');
+    requestAnimationFrame(() => {
+      document.querySelector('.booking-tab[data-tab="myBookings"]')?.click();
+      requestAnimationFrame(() => {
+        document.querySelector('.booking-sub-tab[data-sub-tab="saved"]')?.click();
+      });
     });
   }
 
@@ -3336,7 +3701,7 @@ function initializeLoginPage(DOM) {
           main,
           typeof rec.duration?.start === 'string' ? rec.duration.start : '',
           typeof rec.duration?.end === 'string' ? rec.duration.end : null,
-          { slots: rec.slots }
+          { slots: rec.slots, source: rec }
         );
         const gymSel = document.getElementById('browseGymFilter');
         appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(rec, gymSel));
@@ -3359,6 +3724,49 @@ function initializeLoginPage(DOM) {
     if (!wrap) return;
     clearDashboardEl(wrap);
     const bookings = extractUpcomingBookings(customer || {});
+    const saved = loadSavedClasses();
+
+    if (saved.length) {
+      const reminder = document.createElement('div');
+      reminder.className = 'dashboard-saved-reminder';
+      const title = document.createElement('p');
+      title.className = 'dashboard-saved-reminder__title';
+      title.textContent = saved.length > 1 ? `${saved.length} saved classes` : '1 saved class';
+      const meta = document.createElement('p');
+      meta.className = 'dashboard-saved-reminder__meta';
+      meta.textContent = 'Reminder: review your saved classes before they fill up.';
+      const actions = document.createElement('div');
+      actions.className = 'dashboard-saved-reminder__actions';
+      const cta = document.createElement('button');
+      cta.type = 'button';
+      cta.className = 'profile-action-btn-secondary dashboard-access-cta';
+      cta.textContent = 'View saved';
+      cta.addEventListener('click', (e) => {
+        e.preventDefault();
+        openSavedBookingsTab();
+      });
+      actions.appendChild(cta);
+      const savedList = document.createElement('div');
+      savedList.className = 'dashboard-saved-reminder__list';
+      saved.forEach((rec) => {
+        const row = document.createElement('div');
+        row.className = 'dashboard-saved-reminder__item';
+        const rowTitle = document.createElement('strong');
+        rowTitle.className = 'dashboard-saved-reminder__item-title';
+        rowTitle.textContent = rec?.title || 'Class';
+        const rowMeta = document.createElement('div');
+        rowMeta.className = 'dashboard-saved-reminder__item-meta';
+        if (rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length) {
+          rowMeta.textContent = `${rec.seriesLines.length} sessions`;
+        } else {
+          rowMeta.textContent = formatClassSessionWhenLine(rec?.startIso || '', rec?.endIso || null);
+        }
+        row.append(rowTitle, rowMeta);
+        savedList.appendChild(row);
+      });
+      reminder.append(title, meta, savedList, actions);
+      wrap.appendChild(reminder);
+    }
 
     if (bookings.length) {
       const frag = document.createDocumentFragment();
@@ -3571,6 +3979,7 @@ function initializeLoginPage(DOM) {
         subTabs.forEach((t) => t.classList.toggle('active', t === tab));
         const map = {
           upcoming: 'upcomingBookings',
+          saved: 'savedBookings',
           past: 'pastBookings',
           waiting: 'waitingListBookings',
         };
@@ -4337,8 +4746,10 @@ function initializeLoginPage(DOM) {
     const authenticated = Boolean(isUserAuthenticated());
     const metadata = getTokenMetadata() || {};
     const customer = getBestCustomerData();
+    const profileHydrating = authenticated && !customer;
 
     document.body.classList.toggle('authenticated', authenticated);
+    document.body.classList.toggle('profile-hydrating', profileHydrating);
 
     if (DOM.loginFormContainerPage) {
       DOM.loginFormContainerPage.style.display = authenticated ? 'none' : '';
@@ -4390,7 +4801,9 @@ function initializeLoginPage(DOM) {
 
     if (authenticated) {
       populateProfileEditForm();
-      populateProfileViews(customer, metadata);
+      if (!profileHydrating) {
+        populateProfileViews(customer, metadata);
+      }
       const hashRoute = window.location.hash.replace('#', '');
       setRoute(PAGE_ROUTES.includes(hashRoute) ? hashRoute : 'dashboard');
     } else {
@@ -4878,6 +5291,10 @@ function initializeLoginPage(DOM) {
         passwordInputExists: !!passwordInput
       });
 
+      if (isUserAuthenticated() && (!email || !password)) {
+        // Ignore stray/programmatic submits after auth sync on refresh.
+        return;
+      }
       if (!email || !password) {
         console.warn('[Login Page] Validation failed', { email: !!email, password: !!password });
         showToast('Please enter both email and password.', 'error');
@@ -5000,7 +5417,8 @@ function initializeLoginPage(DOM) {
         if (!useMockLogin) {
           let displayName = email; // Default fallback
           if (getUserDisplayName) {
-            displayName = getUserDisplayName();
+            const fromHelper = getUserDisplayName();
+            if (fromHelper && String(fromHelper).trim()) displayName = String(fromHelper).trim();
           } else if (state.authenticatedCustomer) {
             // Fallback if getUserDisplayName not available yet
             const customer = state.authenticatedCustomer;
@@ -5011,6 +5429,9 @@ function initializeLoginPage(DOM) {
             } else if (customer?.lastName) {
               displayName = customer.lastName;
             }
+          }
+          if (!displayName || !String(displayName).trim()) {
+            displayName = username || email || 'member';
           }
           showToast(`Logged in as ${displayName}.`, 'success');
         }

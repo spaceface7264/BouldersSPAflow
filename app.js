@@ -7864,6 +7864,10 @@ async function handleLoginSubmit(event) {
   const email = DOM.loginEmail?.value?.trim() || '';
   const password = DOM.loginPassword?.value || '';
 
+  if (isUserAuthenticated && isUserAuthenticated() && (!email || !password)) {
+    // Ignore stale submits after auth restoration.
+    return;
+  }
   if (!email || !password) {
     showToast('Please enter both email and password.', 'error');
     if (!email) {
@@ -7904,7 +7908,8 @@ async function handleLoginSubmit(event) {
         } else if (customerData?.lastName) {
           displayName = customerData.lastName;
         }
-        showToast(`Logged in as ${displayName}.`, 'success');
+        const safeName = displayName && String(displayName).trim() ? String(displayName).trim() : (email || username || 'member');
+        showToast(`Logged in as ${safeName}.`, 'success');
         
         // Refresh UI again to show profile data
         refreshLoginUI();
