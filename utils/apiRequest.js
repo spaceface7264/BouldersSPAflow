@@ -21,9 +21,15 @@ export async function requestJson({
     body: body ? JSON.stringify(body) : undefined,
   });
 
+  // Successful no-content responses are valid for DELETE/cancel endpoints.
+  if (response.status === 204 || response.status === 205) {
+    return null;
+  }
+
   const contentType = response.headers.get('Content-Type') || '';
   const isJson = contentType.includes('application/json');
-  const payload = isJson ? await response.json() : await response.text();
+  const raw = await response.text();
+  const payload = isJson && raw ? JSON.parse(raw) : raw;
 
   if (!response.ok) {
     const error = new Error(`HTTP error! status: ${response.status}`);

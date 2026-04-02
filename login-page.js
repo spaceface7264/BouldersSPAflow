@@ -331,6 +331,12 @@ function initializeLoginPage(DOM) {
 
   function resolveGroupActivityClassImageUrl(source) {
     if (!source || typeof source !== 'object') return null;
+    if (typeof source.__resolvedImageUrl === 'string' && source.__resolvedImageUrl.trim()) {
+      return source.__resolvedImageUrl.trim();
+    }
+    if (typeof source.__resolvedImageUrl === 'string' && source.__resolvedImageUrl.trim()) {
+      return source.__resolvedImageUrl.trim();
+    }
     const fromProduct = (o) => {
       if (!o || typeof o !== 'object') return null;
       const p =
@@ -451,6 +457,74 @@ function initializeLoginPage(DOM) {
       return await res.json();
     } catch {
       return null;
+    }
+  }
+
+  const bookingEventImageCache = new Map();
+  function bookingStartIsoValue(b) {
+    return (
+      b?.duration?.start ||
+      b?.startTime ||
+      b?.startDateTime ||
+      b?.dateTime ||
+      b?.scheduledStart ||
+      b?.date ||
+      b?.start ||
+      ''
+    );
+  }
+
+  async function resolveBookedClassImageUrlFromEvents(booking) {
+    if (!booking || typeof booking !== 'object' || !authAPI?.listBusinessUnitEvents) return '';
+    const buId = classCardBusinessUnitId(booking);
+    const title = bookingDisplayLine(booking).title;
+    const startIso = bookingStartIsoValue(booking);
+    const startMs = Date.parse(startIso);
+    if (!buId || !title || !Number.isFinite(startMs)) return '';
+    const day = new Date(startMs);
+    day.setHours(0, 0, 0, 0);
+    const key = `${buId}|${String(title).toLowerCase().trim()}|${day.toISOString().slice(0, 10)}`;
+    if (bookingEventImageCache.has(key)) return bookingEventImageCache.get(key) || '';
+    const start = new Date(day.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const end = new Date(day.getTime() + 3 * 24 * 60 * 60 * 1000 - 1).toISOString();
+    try {
+      const events = await authAPI.listBusinessUnitEvents(buId, { periodStart: start, periodEnd: end });
+      const normalize = (s) =>
+        String(s || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const name = normalize(title);
+      const match = (Array.isArray(events) ? events : []).find((ev) => {
+        const evName = normalize(ev?.name);
+        if (!evName) return false;
+        const sameName = evName === name || evName.includes(name) || name.includes(evName);
+        if (!sameName) return false;
+        const evStart = Date.parse(ev?.duration?.start || '');
+        const evEnd = Date.parse(ev?.duration?.end || '');
+        if (!Number.isFinite(evStart)) return false;
+        const effectiveEnd = Number.isFinite(evEnd) ? evEnd : evStart;
+        return startMs >= evStart && startMs <= effectiveEnd + 24 * 60 * 60 * 1000;
+      });
+      if (!match) {
+        bookingEventImageCache.set(key, '');
+        return '';
+      }
+      let url = resolveGroupActivityClassImageUrl(match);
+      if (!url) {
+        const productId = extractGroupActivityProductId(match);
+        if (productId) {
+          const detail = await fetchEventProductDetail(productId, buId);
+          url = detail ? resolveProductAssetImageUrl(detail) : '';
+        }
+      }
+      const finalUrl = url || '';
+      bookingEventImageCache.set(key, finalUrl);
+      return finalUrl;
+    } catch {
+      bookingEventImageCache.set(key, '');
+      return '';
     }
   }
 
@@ -1299,6 +1373,28 @@ function initializeLoginPage(DOM) {
   }
 
   function buildBookingExpandLines(book) {
+    if (Array.isArray(book?.__seriesBookings) && book.__seriesBookings.length > 1) {
+      const rows = [...book.__seriesBookings]
+        .sort((a, b) => brpBookingStartMs(a) - brpBookingStartMs(b))
+        .map((rec, idx, arr) => {
+          const startIso =
+            rec.duration?.start ||
+            rec.startTime ||
+            rec.startDateTime ||
+            rec.dateTime ||
+            rec.scheduledStart ||
+            rec.date ||
+            rec.start;
+          const endIso = rec.duration?.end || rec.endTime || rec.endDateTime || null;
+          return `Session ${idx + 1}/${arr.length} · ${formatClassSessionWhenLine(
+            typeof startIso === 'string' ? startIso : '',
+            typeof endIso === 'string' ? endIso : null
+          )}`;
+        });
+      const { where } = bookingDisplayLine(book);
+      if (where) rows.push(where);
+      return rows.join('\n');
+    }
     const lines = [];
     const startIso =
       book.duration?.start ||
@@ -1702,6 +1798,21 @@ function initializeLoginPage(DOM) {
         applyClassCardImgSrc(heroImg, u);
       });
     }
+    if (!primaryUrl && Array.isArray(book?.__seriesBookings) && book.__seriesBookings.length) {
+      const firstWithImage = book.__seriesBookings.find((rec) => resolveGroupActivityClassImageUrl(rec));
+      const firstSeries = firstWithImage || book.__seriesBookings[0];
+      const seriesUrl = firstSeries ? resolveGroupActivityClassImageUrl(firstSeries) : '';
+      if (seriesUrl) {
+        hero.classList.remove('class-card-expand__hero--empty');
+        applyClassCardImgSrc(heroImg, seriesUrl);
+      } else {
+        resolveBookedClassImageUrlFromEvents(firstSeries || book).then((url) => {
+          if (!url || !heroImg.isConnected) return;
+          hero.classList.remove('class-card-expand__hero--empty');
+          applyClassCardImgSrc(heroImg, url);
+        });
+      }
+    }
 
     const bMsg =
       (book.externalMessage && String(book.externalMessage).trim()) ||
@@ -1709,9 +1820,162 @@ function initializeLoginPage(DOM) {
       '';
     if (bMsg) {
       descEl.textContent = bMsg;
+    } else if (Array.isArray(book?.__seriesBookings) && book.__seriesBookings.length > 1) {
+      descEl.textContent =
+        'You are booked for all sessions in this series. Use "Cancel full series" to remove every session.';
     } else {
       descEl.textContent =
         'You have a booking for this class. Times and location are shown above.';
+    }
+
+    const isSeriesModal = Array.isArray(book?.__seriesBookings) && book.__seriesBookings.length > 1;
+    const bookingId = bookingIdValue(book);
+    const seriesHintText = String(book?.externalMessage || book?.groupActivity?.externalMessage || '');
+    const seriesLooksLike =
+      isSeriesModal ||
+      Number.isFinite(bookingEventIdValue(book)) ||
+      hasSeriesCopyHint(seriesHintText);
+
+    const cancelFullSeries = async (seriesBookings, buttonEl) => {
+      const cid = getBrpNumericCustomerId(getBestCustomerData());
+      if (!cid) {
+        showToast('Log in to manage bookings.', 'error');
+        return;
+      }
+      buttonEl.disabled = true;
+      try {
+        const title = bookingDisplayLine(book).title;
+        const buId = classCardBusinessUnitId(book);
+        const firstStart = brpBookingStartMs(seriesBookings[0]);
+        const lastStart = brpBookingStartMs(seriesBookings[seriesBookings.length - 1]);
+        const startIso = Number.isFinite(firstStart)
+          ? new Date(firstStart - 7 * 24 * 60 * 60 * 1000).toISOString()
+          : undefined;
+        const endIso = Number.isFinite(lastStart)
+          ? new Date(lastStart + 7 * 24 * 60 * 60 * 1000).toISOString()
+          : undefined;
+        if (authAPI?.listCustomerEventBookings && authAPI?.cancelCustomerEventBooking) {
+          const eventBookings = await authAPI.listCustomerEventBookings(cid, {
+            periodStart: startIso,
+            periodEnd: endIso,
+          });
+          const normalize = (s) =>
+            String(s || '')
+              .toLowerCase()
+              .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+          const targetName = normalize(title);
+          const match = (Array.isArray(eventBookings) ? eventBookings : []).find((evb) => {
+            const evName = normalize(evb?.event?.name || evb?.name);
+            if (!evName) return false;
+            const sameName = evName === targetName || evName.includes(targetName) || targetName.includes(evName);
+            if (!sameName) return false;
+            const evBu = Number(evb?.businessUnit?.id);
+            if (buId && Number.isFinite(evBu) && evBu !== buId) return false;
+            return true;
+          });
+          const eventBookingId = Number(match?.id);
+          if (Number.isFinite(eventBookingId) && eventBookingId > 0) {
+            await authAPI.cancelCustomerEventBooking(cid, eventBookingId, { tryToRefund: false });
+            showToast('Series bookings cancelled.', 'success');
+            closeClassCardExpand();
+            ensureGroupActivityBookingsLoaded().then(() => {
+              refreshClassesBookingsLists();
+              refreshDashboardPanels();
+            });
+            applyBrowseClassFilters();
+            return;
+          }
+        }
+        // Fallback: cancel each session booking one by one.
+        for (const rec of seriesBookings) {
+          const bid = bookingIdValue(rec);
+          if (!bid) continue;
+          await authAPI.cancelCustomerGroupActivityBooking(cid, bid, {
+            tryToRefund: false,
+            bookingType: 'groupActivityBooking',
+          });
+        }
+        showToast('Series bookings cancelled.', 'success');
+        closeClassCardExpand();
+        ensureGroupActivityBookingsLoaded().then(() => {
+          refreshClassesBookingsLists();
+          refreshDashboardPanels();
+        });
+        applyBrowseClassFilters();
+      } catch (err) {
+        if (Number(err?.status) === 403) {
+          showToast('You do not have permission to perform this action.', 'error');
+        } else {
+          showToast(getErrorMessage(err), 'error');
+        }
+      } finally {
+        buttonEl.disabled = false;
+      }
+    };
+    if (
+      isUserAuthenticated() &&
+      Number.isFinite(bookingId) &&
+      bookingId > 0 &&
+      authAPI?.cancelCustomerGroupActivityBooking
+    ) {
+      if (!seriesLooksLike) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+        cancelBtn.textContent = 'Cancel booking';
+        cancelBtn.addEventListener('click', async () => {
+          const confirmed = window.confirm('Cancel this booking?');
+          if (!confirmed) return;
+          const cid = getBrpNumericCustomerId(getBestCustomerData());
+          if (!cid) {
+            showToast('Log in to manage bookings.', 'error');
+            return;
+          }
+          cancelBtn.disabled = true;
+          try {
+            await authAPI.cancelCustomerGroupActivityBooking(cid, bookingId, {
+              tryToRefund: false,
+              bookingType: 'groupActivityBooking',
+            });
+            showToast('Booking cancelled.', 'success');
+            closeClassCardExpand();
+            ensureGroupActivityBookingsLoaded().then(() => {
+              refreshClassesBookingsLists();
+              refreshDashboardPanels();
+            });
+            applyBrowseClassFilters();
+          } catch (err) {
+            showToast(getErrorMessage(err), 'error');
+          } finally {
+            cancelBtn.disabled = false;
+          }
+        });
+        actionsEl.appendChild(cancelBtn);
+      }
+
+      const seriesBookings = getSeriesBookingsForBooking(book).filter((b) => bookingIdValue(b));
+      if (seriesLooksLike || seriesBookings.length > 1) {
+        const cancelSeriesBtn = document.createElement('button');
+        cancelSeriesBtn.type = 'button';
+        cancelSeriesBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+        cancelSeriesBtn.textContent =
+          seriesBookings.length > 1
+            ? `Cancel full series (${seriesBookings.length})`
+            : 'Cancel series booking';
+        cancelSeriesBtn.addEventListener('click', async () => {
+          const count = Math.max(1, seriesBookings.length);
+          const confirmed = window.confirm(
+            count > 1
+              ? `Cancel all ${count} booked sessions in this course series?`
+              : 'Cancel this series booking?'
+          );
+          if (!confirmed) return;
+          await cancelFullSeries(seriesBookings.length ? seriesBookings : [book], cancelSeriesBtn);
+        });
+        actionsEl.appendChild(cancelSeriesBtn);
+      }
     }
 
     const closeBtn = document.createElement('button');
@@ -1819,6 +2083,83 @@ function initializeLoginPage(DOM) {
     return { title: String(title), where: where ? String(where) : '' };
   }
 
+  function bookingIdValue(b) {
+    const raw =
+      b?.id ??
+      b?.groupActivityBooking?.id ??
+      b?.groupActivityBookingId ??
+      b?.bookingId;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function bookingEventIdValue(b) {
+    const raw =
+      b?.event?.id ??
+      b?.groupActivity?.event?.id ??
+      b?.eventId ??
+      b?.groupActivity?.eventId;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function normalizeSeriesNameForBookings(name) {
+    return String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function getSeriesBookingsForBooking(targetBooking) {
+    if (Array.isArray(targetBooking?.__seriesBookings) && targetBooking.__seriesBookings.length) {
+      return targetBooking.__seriesBookings;
+    }
+    const list = Array.isArray(getBestCustomerData()?.groupActivityBookings)
+      ? getBestCustomerData().groupActivityBookings
+      : [];
+    if (!targetBooking || !list.length) return [];
+    const targetId = bookingIdValue(targetBooking);
+    const targetEventId = bookingEventIdValue(targetBooking);
+    const targetBu = classCardBusinessUnitId(targetBooking);
+    const targetName = normalizeSeriesNameForBookings(bookingDisplayLine(targetBooking).title);
+    const now = Date.now();
+
+    if (targetEventId) {
+      return list.filter((b) => {
+        if (!b || isBrpWaitingListBooking(b)) return false;
+        if (b.status && String(b.status).toLowerCase() === 'cancelled') return false;
+        const start = brpBookingStartMs(b);
+        if (start && start < now) return false;
+        return bookingEventIdValue(b) === targetEventId;
+      });
+    }
+
+    const targetMsg = String(
+      targetBooking?.externalMessage || targetBooking?.groupActivity?.externalMessage || ''
+    );
+    const targetLooksSeries = hasSeriesCopyHint(targetMsg);
+    if (!targetLooksSeries || !targetBu || !targetName) {
+      return targetId ? [targetBooking] : [];
+    }
+    return list.filter((b) => {
+      if (!b || isBrpWaitingListBooking(b)) return false;
+      if (b.status && String(b.status).toLowerCase() === 'cancelled') return false;
+      const bid = bookingIdValue(b);
+      if (!bid) return false;
+      const start = brpBookingStartMs(b);
+      if (start && start < now) return false;
+      const bu = classCardBusinessUnitId(b);
+      if (bu !== targetBu) return false;
+      const name = normalizeSeriesNameForBookings(bookingDisplayLine(b).title);
+      if (!name) return false;
+      const sameName = name === targetName || name.includes(targetName) || targetName.includes(name);
+      if (!sameName) return false;
+      const msg = String(b?.externalMessage || b?.groupActivity?.externalMessage || '');
+      return hasSeriesCopyHint(msg);
+    });
+  }
+
   function groupActivityBrowseLocationLabel(activity, gymSelectEl) {
     if (!activity || typeof activity !== 'object') return '';
     let gym =
@@ -1910,7 +2251,155 @@ function initializeLoginPage(DOM) {
       container.appendChild(p);
       return;
     }
+    const bookingStartMsValue = (b) => {
+      const ms = Date.parse(bookingStartIsoValue(b));
+      return Number.isFinite(ms) ? ms : NaN;
+    };
+    const seriesKeyForBooking = (b) => {
+      const eventId = bookingEventIdValue(b);
+      if (eventId) return `event:${eventId}`;
+      const msg = String(b?.externalMessage || b?.groupActivity?.externalMessage || '');
+      if (!hasSeriesCopyHint(msg)) return null;
+      const bu = classCardBusinessUnitId(b);
+      const name = normalizeSeriesNameForBookings(bookingDisplayLine(b).title);
+      if (!bu || !name) return null;
+      return `series:${bu}:${name}`;
+    };
+    const keyBuckets = new Map();
+    const bookingToSeriesKey = new WeakMap();
     items.forEach((b) => {
+      const k = seriesKeyForBooking(b);
+      if (!k) return;
+      if (!keyBuckets.has(k)) keyBuckets.set(k, []);
+      keyBuckets.get(k).push(b);
+      bookingToSeriesKey.set(b, k);
+    });
+    // Fallback grouping for tenants where event id / series markers are missing:
+    // same gym + same normalized name + same start-time-of-day and weekly cadence.
+    const fallbackGroups = new Map();
+    items.forEach((b) => {
+      if (seriesKeyForBooking(b)) return;
+      const bu = classCardBusinessUnitId(b);
+      const name = normalizeSeriesNameForBookings(bookingDisplayLine(b).title);
+      const startMs = bookingStartMsValue(b);
+      if (!bu || !name || !Number.isFinite(startMs)) return;
+      const d = new Date(startMs);
+      const minuteOfDay = d.getHours() * 60 + d.getMinutes();
+      const key = `fallback:${bu}:${name}:${minuteOfDay}`;
+      if (!fallbackGroups.has(key)) fallbackGroups.set(key, []);
+      fallbackGroups.get(key).push(b);
+    });
+    fallbackGroups.forEach((group, key) => {
+      if (!Array.isArray(group) || group.length < 3) return;
+      const sorted = [...group].sort((a, b) => bookingStartMsValue(a) - bookingStartMsValue(b));
+      const deltas = [];
+      for (let i = 1; i < sorted.length; i += 1) {
+        const prev = bookingStartMsValue(sorted[i - 1]);
+        const cur = bookingStartMsValue(sorted[i]);
+        if (!Number.isFinite(prev) || !Number.isFinite(cur)) continue;
+        deltas.push((cur - prev) / (24 * 60 * 60 * 1000));
+      }
+      if (!deltas.length) return;
+      const weeklyLike = deltas.every((d) => d >= 5.5 && d <= 8.5);
+      if (!weeklyLike) return;
+      keyBuckets.set(key, sorted);
+      sorted.forEach((rec) => bookingToSeriesKey.set(rec, key));
+    });
+    const emittedKeys = new Set();
+    const renderUnits = [];
+    items.forEach((b) => {
+      const key = bookingToSeriesKey.get(b) || seriesKeyForBooking(b);
+      if (!key) {
+        renderUnits.push({ kind: 'single', booking: b });
+        return;
+      }
+      if (emittedKeys.has(key)) return;
+      emittedKeys.add(key);
+      const group = keyBuckets.get(key) || [b];
+      if (group.length > 1) {
+        renderUnits.push({
+          kind: 'series',
+          bookings: [...group].sort((a, c) => brpBookingStartMs(a) - brpBookingStartMs(c)),
+        });
+      } else {
+        renderUnits.push({ kind: 'single', booking: b });
+      }
+    });
+
+    const attachBookingImageFallback = (card, bookingSource, titleText) => {
+      if (!resolveGroupActivityClassImageUrl(bookingSource)) {
+        resolveBookedClassImageUrlFromEvents(bookingSource).then((url) => {
+          if (!url || !card.isConnected) return;
+          bookingSource.__resolvedImageUrl = url;
+          const media = card.querySelector('.booking-item-card__media');
+          if (!media) return;
+          media.replaceWith(createClassCardMediaEl(bookingSource, titleText));
+        });
+      }
+    };
+
+    renderUnits.forEach((unit) => {
+      if (unit.kind === 'series') {
+        const bookings = unit.bookings;
+        const first = bookings[0];
+        const { title, where } = bookingDisplayLine(first);
+        const card = document.createElement('div');
+        card.className = 'booking-item-card';
+        card.appendChild(createClassCardMediaEl(first, title));
+        const main = document.createElement('div');
+        main.className = 'booking-item-card__main';
+        const h = document.createElement('strong');
+        h.className = 'booking-item-card__title';
+        h.textContent = title;
+        const meta = document.createElement('div');
+        meta.className = 'booking-item-card__meta';
+        const firstStart = bookingStartIsoValue(bookings[0]);
+        const lastStart = bookingStartIsoValue(bookings[bookings.length - 1]);
+        const firstText = formatDateLong(firstStart);
+        const lastText = formatDateLong(lastStart);
+        meta.textContent =
+          firstText && lastText && firstText !== '—' && lastText !== '—' && firstText !== lastText
+            ? `${firstText} – ${lastText}`
+            : firstText;
+        main.append(h, meta);
+        const sub = document.createElement('div');
+        sub.className = 'booking-item-card__submeta';
+        sub.textContent = `${bookings.length} sessions booked`;
+        main.appendChild(sub);
+        const seriesRows = document.createElement('div');
+        seriesRows.className = 'booking-item-card__series-list';
+        bookings.forEach((rec, idx) => {
+          const startIso = bookingStartIsoValue(rec);
+          const endIso = rec.duration?.end || rec.endTime || rec.endDateTime || null;
+          const row = document.createElement('div');
+          row.className = 'booking-item-card__series-row';
+          row.textContent = `${idx + 1}/${bookings.length} · ${formatClassSessionWhenLine(
+            typeof startIso === 'string' ? startIso : '',
+            typeof endIso === 'string' ? endIso : null
+          )}`;
+          seriesRows.appendChild(row);
+        });
+        main.appendChild(seriesRows);
+        const pills = document.createElement('div');
+        pills.className = 'booking-item-card__pills';
+        const seriesPill = document.createElement('span');
+        seriesPill.className = 'booking-item-card__pill booking-item-card__pill--dropin';
+        seriesPill.textContent = `${bookings.length} sessions`;
+        pills.appendChild(seriesPill);
+        if (where) {
+          const locPill = document.createElement('span');
+          locPill.className = 'booking-item-card__pill booking-item-card__pill--location';
+          locPill.textContent = where;
+          pills.appendChild(locPill);
+        }
+        main.appendChild(pills);
+        card.appendChild(main);
+        attachBookingClassCardClick(card, { ...first, __seriesBookings: bookings });
+        container.appendChild(card);
+        attachBookingImageFallback(card, first, title);
+        return;
+      }
+      const b = unit.booking;
       const { title, where } = bookingDisplayLine(b);
       const startIso =
         b.duration?.start ||
@@ -1954,6 +2443,7 @@ function initializeLoginPage(DOM) {
       }
       attachBookingClassCardClick(card, b);
       container.appendChild(card);
+      attachBookingImageFallback(card, b, title);
     });
   }
 

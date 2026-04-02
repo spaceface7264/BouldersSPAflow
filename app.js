@@ -1313,6 +1313,31 @@ class AuthAPI {
     return Array.isArray(data) ? data : [];
   }
 
+  /** BRP ver3 GET — event bookings for customer */
+  async listCustomerEventBookings(customerId, options = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) throw new Error('No access token available');
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) throw new Error('Invalid customer ID');
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const params = new URLSearchParams();
+    if (options.periodStart) params.set('period.start', options.periodStart);
+    if (options.periodEnd) params.set('period.end', options.periodEnd);
+    const qs = params.toString();
+    const path = `/api/ver3/customers/${idNum}/bookings/events${qs ? `?${qs}` : ''}`;
+    const url = buildApiUrl({ baseUrl: this.baseUrl, useProxy: this.useProxy, path });
+    const data = await requestJson({ url, method: 'GET', headers });
+    return Array.isArray(data) ? data : [];
+  }
+
   /** BRP ver3 GET — schedule at a business unit */
   async listBusinessUnitGroupActivities(businessUnitId, options = {}) {
     const accessToken =
@@ -1450,6 +1475,71 @@ class AuthAPI {
         allowWaitingList: !!allowWaitingList,
       },
     });
+  }
+
+  /** BRP ver3 DELETE — cancel a group activity booking. */
+  async cancelCustomerGroupActivityBooking(
+    customerId,
+    bookingId,
+    { tryToRefund = false, bookingType = 'groupActivityBooking' } = {}
+  ) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    const bid =
+      typeof bookingId === 'number' && Number.isFinite(bookingId)
+        ? bookingId
+        : parseInt(String(bookingId), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) throw new Error('Invalid customer ID');
+    if (!Number.isFinite(bid) || bid <= 0) throw new Error('Invalid booking ID');
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const params = new URLSearchParams();
+    params.set('tryToRefund', tryToRefund ? 'true' : 'false');
+    if (bookingType) params.set('bookingType', String(bookingType));
+    const path = `/api/ver3/customers/${idNum}/bookings/groupactivities/${bid}?${params.toString()}`;
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path,
+    });
+    return requestJson({ url, method: 'DELETE', headers });
+  }
+
+  /** BRP ver3 DELETE — cancel an event booking. */
+  async cancelCustomerEventBooking(customerId, eventBookingId, { tryToRefund = false } = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) throw new Error('No access token available');
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    const bid =
+      typeof eventBookingId === 'number' && Number.isFinite(eventBookingId)
+        ? eventBookingId
+        : parseInt(String(eventBookingId), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) throw new Error('Invalid customer ID');
+    if (!Number.isFinite(bid) || bid <= 0) throw new Error('Invalid event booking ID');
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const path =
+      `/api/ver3/customers/${idNum}/bookings/events/${bid}` +
+      `?tryToRefund=${tryToRefund ? 'true' : 'false'}`;
+    const url = buildApiUrl({ baseUrl: this.baseUrl, useProxy: this.useProxy, path });
+    return requestJson({ url, method: 'DELETE', headers });
   }
 
   /** BRP booking flow for events (multi-session / course series) via order items. */
