@@ -24,6 +24,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setDropdownOpen(false);
 
     navUser.addEventListener('click', (e) => {
+      if (userDropdown.contains(e.target)) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       const isOpen = userDropdown.style.display === 'block';

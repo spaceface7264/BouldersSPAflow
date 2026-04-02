@@ -3897,9 +3897,10 @@ async function loadGymsFromAPI() {
     if (state.currentStep === 2) {
       updateSelectedGymDisplay();
     }
+
+    const gymList = document.querySelector('.gym-list');
     
     // Clear existing gym list
-    const gymList = document.querySelector('.gym-list');
     if (gymList) {
       gymList.innerHTML = '';
     }
@@ -3912,6 +3913,12 @@ async function loadGymsFromAPI() {
         noResults.textContent = 'No business units found. Please check API authentication.';
       }
       console.warn('No business units returned from API');
+      return;
+    }
+
+    // Signup step-1 UI is not in the DOM (e.g. profile/dashboard) — keep gyms in state only
+    if (!gymList) {
+      devLog('[Load Gyms] No .gym-list element; skipping gym list render');
       return;
     }
     
@@ -7543,7 +7550,14 @@ function setupEventListeners() {
   // Setup save account button validation
   setupSaveAccountButtonValidation();
 
-  if (DOM.loginForm) {
+  // index.html uses #loginEmail / #loginPassword; profile.html uses #loginPageForm with *Page ids.
+  // Do not attach here when those fields are missing or the form is the profile-only login page.
+  if (
+    DOM.loginForm &&
+    DOM.loginEmail &&
+    DOM.loginPassword &&
+    DOM.loginForm.id !== 'loginPageForm'
+  ) {
     DOM.loginForm.addEventListener('submit', handleLoginSubmit);
   }
   
@@ -7844,6 +7858,10 @@ function setLoginLoadingState(isLoading) {
 async function handleLoginSubmit(event) {
   event.preventDefault();
   if (state.loginInProgress) {
+    return;
+  }
+
+  if (!DOM.loginEmail || !DOM.loginPassword) {
     return;
   }
 

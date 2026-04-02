@@ -4848,6 +4848,11 @@ function initializeLoginPage(DOM) {
       setDropdownOpen(false);
 
       navUser.addEventListener('click', (e) => {
+        // Clicks on dropdown items live inside navUser; let them bubble so handlers
+        // on items or document (e.g. nav-logout) can run.
+        if (userDropdown.contains(e.target)) {
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         toggleDropdown();
