@@ -25,7 +25,7 @@ const FIELD_LABELS = {
   'customer.address.city': 'City',
 };
 
-// Error code mapping to user-friendly messages
+// Field-level error codes (INVALID_INPUT.fieldErrors[].errorCode)
 const ERROR_CODE_MESSAGES = {
   'PHONENUMBER_INVALID': 'Please enter a valid phone number',
   'PHONENUMBER_REQUIRED': 'Phone number is required',
@@ -35,8 +35,57 @@ const ERROR_CODE_MESSAGES = {
   'DATE_REQUIRED': 'Date of birth is required',
   'EMAIL_INVALID': 'Please enter a valid email address',
   'EMAIL_REQUIRED': 'Email is required',
+  'STRING_TOO_LONG': (fieldError) => {
+    const minV = fieldError?.minValue ?? fieldError?.mixValue;
+    const maxV = fieldError?.maxValue;
+    if (minV != null && maxV != null) {
+      return `Use between ${minV} and ${maxV} characters`;
+    }
+    if (maxV != null) {
+      return `Use at most ${maxV} characters`;
+    }
+    return 'That value is too long';
+  },
+  'STRING_TOO_SHORT': (fieldError) => {
+    const minV = fieldError?.minValue ?? fieldError?.mixValue;
+    if (minV != null) {
+      return `Use at least ${minV} characters`;
+    }
+    return 'That value is too short';
+  },
   'REQUIRED': 'This field is required',
   'INVALID': 'Invalid value provided',
+  'FIELD_MANDATORY': 'This field is required',
+  'FIELD_EMPTY': 'This field cannot be empty',
+  'PASSWORD_INVALID': 'Please choose a valid password',
+  'INCORRECT_PASSOWRD': 'Incorrect password',
+};
+
+/**
+ * Top-level BRP API errorCode → short customer-facing message.
+ * @see docs/brp-api3-openapi.yaml (error codes table)
+ */
+const BRP_TOP_LEVEL_MESSAGES = {
+  EMAIL_ALREADY_EXISTS: 'This email is already registered. Try logging in or use reset password.',
+  EMAIL_ALREADY_EXISTS_NAME: (data) => {
+    const name = data?.fullName;
+    return name
+      ? `This email is already in use (account: ${name}). Try logging in or contact us if that is not you.`
+      : 'This email is already registered. Try logging in or use reset password.';
+  },
+  EMAIL_BLOCKED: 'This email cannot be used. Please contact the gym for help.',
+  PRODUCT_NOT_ALLOWED: 'This offer is not available for your account right now.',
+  COUPON_NOT_APPLICABLE: 'This code does not apply to your current order.',
+  COUPON_NOT_FOUND_ON_ORDER: 'That discount code was not found.',
+  COUPON_INVALID_TIME: 'This code is not valid for the dates of your order.',
+  COUPON_AFTER_VALUE_CARD_RESERVATION: 'This code cannot be used after a punch card step in your order.',
+  CUSTOMER_SUSPENDED: 'Your membership account is suspended. Please contact the gym.',
+  ID_NOT_FOUND: 'We could not find that record. Refresh the page or try again.',
+  INSUFFICIENT_RIGHTS: 'You are not allowed to do that. Log in again or contact the gym.',
+  INVALID_INPUT: 'Please check the highlighted fields and try again.',
+  PAYMENT_FAILED: 'Payment could not be completed. Try again or use another payment method.',
+  ORDER_DELETE_NOT_ALLOWED: 'This order cannot be changed anymore.',
+  FUNCTIONALITY_DISABLED: 'That action is not available at the moment. Please try again later.',
 };
 
 // Helper to get user-friendly field label
@@ -78,14 +127,19 @@ function getErrorCodeMessage(errorCode, fieldError) {
   if (codeUpper === 'DATE_AGE_TOO_OLD' && fieldError?.maxAge !== undefined) {
     return ERROR_CODE_MESSAGES[codeUpper](fieldError.maxAge);
   }
-  
+  if (codeUpper === 'STRING_TOO_LONG' && typeof ERROR_CODE_MESSAGES[codeUpper] === 'function') {
+    return ERROR_CODE_MESSAGES[codeUpper](fieldError);
+  }
+  if (codeUpper === 'STRING_TOO_SHORT' && typeof ERROR_CODE_MESSAGES[codeUpper] === 'function') {
+    return ERROR_CODE_MESSAGES[codeUpper](fieldError);
+  }
+
   // Direct mapping
   if (ERROR_CODE_MESSAGES[codeUpper]) {
-    return typeof ERROR_CODE_MESSAGES[codeUpper] === 'function' 
-      ? ERROR_CODE_MESSAGES[codeUpper]() 
-      : ERROR_CODE_MESSAGES[codeUpper];
+    const entry = ERROR_CODE_MESSAGES[codeUpper];
+    return typeof entry === 'function' ? entry(fieldError) : entry;
   }
-  
+
   return null;
 }
 
@@ -155,14 +209,115 @@ function getFieldId(apiField) {
   return null;
 }
 
+/** Parsed JSON body from failed fetch (see utils/apiRequest.js — errors include `payload`). */
+function extractApiErrorPayload(error) {
+  if (!error) return null;
+  if (error.payload != null && typeof error.payload === 'object' && !Array.isArray(error.payload)) {
+    return error.payload;
+  }
+  if (typeof error.payload === 'string') {
+    try {
+      const p = JSON.parse(error.payload);
+      if (p && typeof p === 'object' && !Array.isArray(p)) return p;
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+function tryParseErrorJsonFromMessage(message) {
+  if (!message || typeof message !== 'string') return null;
+  try {
+    const trimmed = message.trim();
+    if (trimmed.startsWith('{')) {
+      const p = JSON.parse(trimmed);
+      if (p && typeof p === 'object') return p;
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  let jsonMatch = message.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    jsonMatch = message.match(/-\s*(\{[\s\S]*\})/);
+    if (jsonMatch) {
+      jsonMatch = [jsonMatch[1]];
+    }
+  }
+  if (!jsonMatch) return null;
+  try {
+    const p = JSON.parse(jsonMatch[0]);
+    if (p && typeof p === 'object') return p;
+  } catch (_) {
+    /* ignore */
+  }
+  return null;
+}
+
+/** Native BRP body: { errorCode, fieldErrors?, message?, ... } */
+function formatTopLevelBrpError(errorData) {
+  if (!errorData || typeof errorData !== 'object') return null;
+  const rawCode = errorData.errorCode ?? errorData.error_code;
+  if (!rawCode || typeof rawCode !== 'string') return null;
+  const codeUpper = rawCode.toUpperCase();
+
+  if (codeUpper === 'INVALID_INPUT' && Array.isArray(errorData.fieldErrors) && errorData.fieldErrors.length > 0) {
+    const fieldErrorMessages = errorData.fieldErrors
+      .map((fieldError) => {
+        const fieldLabel = getFieldLabel(fieldError.field);
+        const codeMessage = getErrorCodeMessage(fieldError.errorCode, fieldError);
+        if (codeMessage) {
+          return `${fieldLabel}: ${codeMessage}`;
+        }
+        return `${fieldLabel}: Please check this field`;
+      })
+      .filter(Boolean)
+      .join('. ');
+    return fieldErrorMessages || BRP_TOP_LEVEL_MESSAGES.INVALID_INPUT;
+  }
+
+  const mapped = BRP_TOP_LEVEL_MESSAGES[codeUpper];
+  if (typeof mapped === 'function') {
+    return mapped(errorData);
+  }
+  if (typeof mapped === 'string') {
+    return mapped;
+  }
+
+  if (codeUpper === 'ADDON_FEATURE' && typeof errorData.message === 'string' && errorData.message.trim()) {
+    return errorData.message.trim();
+  }
+
+  return null;
+}
+
 // Extract field information from error data for highlighting
 export function extractErrorFields(error) {
   const fields = [];
-  
-  if (!error || !error.message) {
+
+  if (!error) {
     return fields;
   }
-  
+
+  const payloadObj = extractApiErrorPayload(error);
+  if (payloadObj?.fieldErrors && Array.isArray(payloadObj.fieldErrors)) {
+    const code = String(payloadObj.errorCode || '').toUpperCase();
+    if (!code || code === 'INVALID_INPUT') {
+      payloadObj.fieldErrors.forEach((fieldError) => {
+        if (fieldError.field) {
+          const fieldId = getFieldId(fieldError.field);
+          if (fieldId && !fields.find((f) => f.fieldId === fieldId)) {
+            fields.push({ fieldId, field: fieldError.field, errorCode: fieldError.errorCode });
+          }
+        }
+      });
+    }
+  }
+
+  if (!error.message) {
+    return fields;
+  }
+
   // Try to parse validation errors from API response
   if (error.message.includes('400') || error.message.includes('401') || error.message.includes('403')) {
     try {
@@ -174,7 +329,7 @@ export function extractErrorFields(error) {
           jsonMatch = [jsonMatch[1]];
         }
       }
-      
+
       if (jsonMatch) {
         const errorData = JSON.parse(jsonMatch[0]);
         
@@ -297,122 +452,126 @@ export function getErrorMessage(error, context = 'operation') {
     }
   }
 
-  // Try to parse validation errors from API response (400/401/403 errors with details)
-  if (msg.includes('400') || msg.includes('401') || msg.includes('403')) {
+  const resolvedStatusEarly =
+    typeof error.status === 'number' && Number.isFinite(error.status)
+      ? error.status
+      : extractHttpStatusFromMessage(msg);
+
+  const mayHaveJsonBody =
+    extractApiErrorPayload(error) != null ||
+    resolvedStatusEarly != null ||
+    msg.includes('400') ||
+    msg.includes('401') ||
+    msg.includes('403') ||
+    msg.includes('404') ||
+    msg.includes('409') ||
+    msg.includes('422');
+
+  const errorData =
+    extractApiErrorPayload(error) ||
+    (mayHaveJsonBody ? tryParseErrorJsonFromMessage(msg) : null);
+
+  if (errorData) {
     try {
-      // Extract JSON from error message - try multiple patterns
-      let jsonMatch = msg.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        // Also try to parse the entire error text if it's JSON
-        jsonMatch = msg.match(/-\s*(\{[\s\S]*\})/);
-        if (jsonMatch) {
-          jsonMatch = [jsonMatch[1]];
+      const topBrp = formatTopLevelBrpError(errorData);
+      if (topBrp) {
+        return topBrp;
+      }
+
+      // Handle 401 errors with specific error codes (like INVALID_CREDENTIALS)
+      if (errorData.code === 'INVALID_CREDENTIALS' || errorData.error?.code === 'INVALID_CREDENTIALS') {
+        return errorData.message || errorData.error?.message || 'Invalid username or password';
+      }
+
+      // Handle VALIDATION_ERROR with details array (e.g., username validation)
+      if (errorData.error?.code === 'VALIDATION_ERROR' && errorData.error?.details && Array.isArray(errorData.error.details)) {
+        const validationMessages = errorData.error.details
+          .map((detail) => {
+            const fieldLabel = getFieldLabel(detail.field);
+            if (detail.message) {
+              return detail.message;
+            }
+            return `${fieldLabel} is invalid`;
+          })
+          .filter((m) => m)
+          .join('. ');
+
+        if (validationMessages) {
+          return validationMessages;
         }
       }
-      
-      if (jsonMatch) {
-        const errorData = JSON.parse(jsonMatch[0]);
-        
-        // Handle 401 errors with specific error codes (like INVALID_CREDENTIALS)
-        if (errorData.code === 'INVALID_CREDENTIALS' || errorData.error?.code === 'INVALID_CREDENTIALS') {
-          return errorData.message || errorData.error?.message || 'Invalid username or password';
-        }
-        
-        // Handle VALIDATION_ERROR with details array (e.g., username validation)
-        if (errorData.error?.code === 'VALIDATION_ERROR' && errorData.error?.details && Array.isArray(errorData.error.details)) {
-          const validationMessages = errorData.error.details
-            .map(detail => {
-              const fieldLabel = getFieldLabel(detail.field);
-              // Use the message from API if available, otherwise format it
-              if (detail.message) {
-                return detail.message;
-              }
-              return `${fieldLabel} is invalid`;
-            })
-            .filter(msg => msg) // Remove empty messages
-            .join('. ');
-          
-          if (validationMessages) {
-            return validationMessages;
-          }
-        }
-        
-        // Handle EXTERNAL_API_ERROR with fieldErrors in details (e.g., phone number, birth date)
-        if (errorData.error?.code === 'EXTERNAL_API_ERROR' && errorData.error?.details) {
-          const details = errorData.error.details;
-          
-          // Check for fieldErrors array in details
-          if (details.fieldErrors && Array.isArray(details.fieldErrors) && details.fieldErrors.length > 0) {
-            const fieldErrorMessages = details.fieldErrors
-              .map(fieldError => {
-                const fieldLabel = getFieldLabel(fieldError.field);
-                const errorCode = fieldError.errorCode;
-                
-                // Try to get user-friendly message from error code
-                const codeMessage = getErrorCodeMessage(errorCode, fieldError);
-                if (codeMessage) {
-                  return `${fieldLabel}: ${codeMessage}`;
-                }
-                
-                // Fallback: format the error code
-                return `${fieldLabel}: ${errorCode || 'Invalid value'}`;
-              })
-              .filter(msg => msg)
-              .join('. ');
-            
-            if (fieldErrorMessages) {
-              return fieldErrorMessages;
-            }
-          }
-        }
-        
-        // Handle validation errors with details array (generic fallback)
-        if (errorData.error?.details && Array.isArray(errorData.error.details)) {
-          const validationErrors = errorData.error.details
-            .map(detail => {
-              const fieldLabel = getFieldLabel(detail.field);
-              if (detail.message) {
-                return `${fieldLabel}: ${detail.message}`;
-              }
-              return `${fieldLabel} is invalid`;
-            })
-            .filter(msg => msg)
-            .join('. ');
-          
-          if (validationErrors) {
-            return validationErrors;
-          }
-        }
-        
-        // Handle field errors (like customerType) - legacy format
-        if (errorData.error?.details?.fieldErrors && Array.isArray(errorData.error.details.fieldErrors)) {
-          const fieldErrors = errorData.error.details.fieldErrors
-            .map(fieldError => {
+
+      // Handle EXTERNAL_API_ERROR with fieldErrors in details (e.g., phone number, birth date)
+      if (errorData.error?.code === 'EXTERNAL_API_ERROR' && errorData.error?.details) {
+        const details = errorData.error.details;
+
+        if (details.fieldErrors && Array.isArray(details.fieldErrors) && details.fieldErrors.length > 0) {
+          const fieldErrorMessages = details.fieldErrors
+            .map((fieldError) => {
               const fieldLabel = getFieldLabel(fieldError.field);
-              const codeMessage = getErrorCodeMessage(fieldError.errorCode, fieldError);
+              const errorCode = fieldError.errorCode;
+
+              const codeMessage = getErrorCodeMessage(errorCode, fieldError);
               if (codeMessage) {
                 return `${fieldLabel}: ${codeMessage}`;
               }
-              return `${fieldLabel}: ${fieldError.errorCode || 'required'}`;
+
+              return `${fieldLabel}: ${errorCode || 'Invalid value'}`;
             })
-            .filter(msg => msg)
+            .filter((m) => m)
             .join('. ');
-          
-          if (fieldErrors) {
-            return fieldErrors;
+
+          if (fieldErrorMessages) {
+            return fieldErrorMessages;
           }
         }
-        
-        // Handle generic error messages from API
-        if (errorData.error?.message) {
-          return errorData.error.message;
-        }
-        if (errorData.message) {
-          return errorData.message;
+      }
+
+      // Handle validation errors with details array (generic fallback)
+      if (errorData.error?.details && Array.isArray(errorData.error.details)) {
+        const validationErrors = errorData.error.details
+          .map((detail) => {
+            const fieldLabel = getFieldLabel(detail.field);
+            if (detail.message) {
+              return `${fieldLabel}: ${detail.message}`;
+            }
+            return `${fieldLabel} is invalid`;
+          })
+          .filter((m) => m)
+          .join('. ');
+
+        if (validationErrors) {
+          return validationErrors;
         }
       }
+
+      // Handle field errors (like customerType) - legacy format
+      if (errorData.error?.details?.fieldErrors && Array.isArray(errorData.error.details.fieldErrors)) {
+        const fieldErrors = errorData.error.details.fieldErrors
+          .map((fieldError) => {
+            const fieldLabel = getFieldLabel(fieldError.field);
+            const codeMessage = getErrorCodeMessage(fieldError.errorCode, fieldError);
+            if (codeMessage) {
+              return `${fieldLabel}: ${codeMessage}`;
+            }
+            return `${fieldLabel}: ${fieldError.errorCode || 'required'}`;
+          })
+          .filter((m) => m)
+          .join('. ');
+
+        if (fieldErrors) {
+          return fieldErrors;
+        }
+      }
+
+      // Handle generic error messages from API
+      if (errorData.error?.message) {
+        return errorData.error.message;
+      }
+      if (errorData.message && !errorData.errorCode) {
+        return errorData.message;
+      }
     } catch (e) {
-      // If parsing fails, fall through to default error message
       console.warn('[getErrorMessage] Failed to parse error JSON:', e);
     }
   }
