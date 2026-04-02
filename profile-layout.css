@@ -1125,15 +1125,16 @@ body.authenticated {
 
   .profile-detail-row,
   .dashboard-info-item {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 12px;
     min-height: unset;
   }
 
   .profile-detail-value,
   .dashboard-info-value {
-    text-align: left;
+    text-align: right;
   }
 }
 
@@ -1246,12 +1247,12 @@ body.authenticated #pageProfile .profile-detail-value {
   }
 
   body.authenticated #pageProfile .profile-detail-row {
-    grid-template-columns: 1fr !important;
-    gap: 4px !important;
+    grid-template-columns: minmax(120px, 1fr) auto !important;
+    gap: 12px !important;
   }
 
   body.authenticated #pageProfile .profile-detail-value {
-    text-align: left !important;
+    text-align: right !important;
   }
 }
 
@@ -1964,12 +1965,12 @@ body.authenticated #pageSettings .settings-toggle-slider {
   }
 
   body.authenticated #pageProfile .profile-detail-row {
-    grid-template-columns: 1fr !important;
-    gap: 4px !important;
+    grid-template-columns: minmax(120px, 1fr) auto !important;
+    gap: 12px !important;
   }
 
   body.authenticated #pageProfile .profile-detail-value {
-    text-align: left !important;
+    text-align: right !important;
   }
 }
 
