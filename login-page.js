@@ -333,12 +333,19 @@ function initializeLoginPage(DOM) {
     if (!source || typeof source !== 'object') return null;
     const fromProduct = (o) => {
       if (!o || typeof o !== 'object') return null;
-      const p = o.groupActivityProduct || o.product || o.groupActivity?.product;
+      const p =
+        o.groupActivityProduct ||
+        o.eventProduct ||
+        o.product ||
+        o.groupActivity?.product ||
+        o.event?.eventProduct;
       return resolveProductAssetImageUrl(p);
     };
     let url = fromProduct(source);
     if (url) return url;
     url = fromProduct(source.groupActivity);
+    if (url) return url;
+    url = fromProduct(source.event);
     if (url) return url;
     if (Array.isArray(source.assets) && source.assets.length) {
       return resolveProductAssetImageUrl({ assets: source.assets });
@@ -350,15 +357,39 @@ function initializeLoginPage(DOM) {
     if (!source || typeof source !== 'object') return null;
     const p =
       source.groupActivityProduct ||
+      source.eventProduct ||
       source.groupactivityProduct ||
       source.groupActivity?.groupActivityProduct ||
-      source.groupActivity?.product;
+      source.groupActivity?.product ||
+      source.event?.eventProduct;
     const raw =
       p?.id ??
       source.groupActivityProductId ??
-      source.groupActivity?.product?.id;
+      source.groupActivity?.product?.id ??
+      source.eventProductId ??
+      source.event?.eventProduct?.id;
     const n = raw != null ? Number(raw) : NaN;
     return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  async function fetchEventProductDetail(productId, businessUnitId) {
+    if (productId == null) return null;
+    const bu = businessUnitId != null ? Number(businessUnitId) : NaN;
+    if (!Number.isFinite(bu) || bu <= 0) return null;
+    const params = new URLSearchParams();
+    params.set('businessUnit', String(bu));
+    const qs = `?${params.toString()}`;
+    const headers = {
+      'Accept-Language': 'da-DK',
+      Accept: 'application/json',
+    };
+    try {
+      const res = await fetch(`/api/ver3/products/events/${productId}${qs}`, { headers });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
   }
 
   function classCardBusinessUnitId(source) {
@@ -444,6 +475,7 @@ function initializeLoginPage(DOM) {
     const productId = extractGroupActivityProductId(source);
     const buId = classCardBusinessUnitId(source);
     const customerId = getBrpNumericCustomerId(getBestCustomerData());
+    const isEvent = source && typeof source === 'object' && (source.__kind === 'event' || source.occasions);
 
     const img = document.createElement('img');
     img.className = 'booking-item-card__img';
@@ -495,7 +527,10 @@ function initializeLoginPage(DOM) {
       } else {
         setEmpty();
       }
-      fetchGroupActivityProductDetail(productId, buId, customerId).then((detail) => {
+      const fetchDetail = isEvent
+        ? fetchEventProductDetail(productId, buId)
+        : fetchGroupActivityProductDetail(productId, buId, customerId);
+      Promise.resolve(fetchDetail).then((detail) => {
         const u = detail && resolveProductAssetImageUrl(detail);
         if (!u || !wrap.isConnected) return;
         clearEmpty();
@@ -1040,7 +1075,8 @@ function initializeLoginPage(DOM) {
         parts.push(`${left} spots left`);
       }
     }
-    if (slots.hasWaitingList === true) {
+    const isFull = left != null && Number.isFinite(left) && left <= 0;
+    if (slots.hasWaitingList === true && isFull) {
       const w = slots.inWaitingList;
       parts.push(
         w != null && Number.isFinite(Number(w)) ? `Waiting list: ${w}` : 'Waiting list open'
@@ -1068,13 +1104,11 @@ function initializeLoginPage(DOM) {
 
   function appendClassCardDurationAvailability(main, startIso, endIso, ctx) {
     if (!main) return;
-    const mins = formatClassSessionDurationMinutes(startIso, endIso);
     const avail = formatClassCardAvailabilityFromContext(ctx || {});
-    if (mins == null && !avail) return;
+    if (!avail) return;
     const sub = document.createElement('div');
     sub.className = 'booking-item-card__submeta';
     const bits = [];
-    if (mins != null) bits.push(`${mins} min`);
     if (avail) bits.push(avail);
     sub.textContent = bits.join(' · ');
     main.appendChild(sub);
@@ -1087,6 +1121,71 @@ function initializeLoginPage(DOM) {
     if (leftRaw == null) return false;
     const n = Number(leftRaw);
     return Number.isFinite(n) && n <= 0;
+  }
+
+  function isDropInOnlyClass(activity) {
+    const slots = activity?.slots;
+    if (!slots || typeof slots !== 'object') return false;
+    const leftToBook = Number(slots.leftToBook);
+    const leftToBookIncDropin = Number(slots.leftToBookIncDropin);
+    const reservedForDropin = Number(slots.reservedForDropin);
+    const hasBookableExhausted = Number.isFinite(leftToBook) && leftToBook <= 0;
+    const hasDropinCapacity =
+      (Number.isFinite(leftToBookIncDropin) && leftToBookIncDropin > 0) ||
+      (Number.isFinite(reservedForDropin) && reservedForDropin > 0);
+    return hasBookableExhausted && hasDropinCapacity;
+  }
+
+  function isLikelySeriesSession(activity) {
+    if (!activity || typeof activity !== 'object') return false;
+    // BRP sometimes exposes series-linked sessions as groupactivities with event references.
+    if (activity.event || activity.eventProduct || activity.eventProductId) return true;
+    const ext = String(activity.externalMessage || '').toLowerCase();
+    if (!ext) return false;
+    // Defensive copy cues seen in production payloads for intro-course session rows.
+    return (
+      ext.includes('opsummering af dato og tider') ||
+      ext.includes('summary of dates and times') ||
+      ext.includes('multi-session')
+    );
+  }
+
+  const SERIES_COPY_HINTS = [
+    'opsummering af dato og tider',
+    'summary of dates and times',
+    'multi-session',
+    'attend all sessions in the series',
+  ];
+  const seriesSessionProductCache = new Map();
+
+  function hasSeriesCopyHint(text) {
+    const v = String(text || '').toLowerCase();
+    if (!v) return false;
+    return SERIES_COPY_HINTS.some((hint) => v.includes(hint));
+  }
+
+  async function isSeriesSessionByProductDetail(activity) {
+    if (!activity || typeof activity !== 'object') return false;
+    const productId = extractGroupActivityProductId(activity);
+    if (!productId) return false;
+    if (seriesSessionProductCache.has(productId)) {
+      return seriesSessionProductCache.get(productId) === true;
+    }
+    const buId = classCardBusinessUnitId(activity);
+    const customerId = getBrpNumericCustomerId(getBestCustomerData());
+    const detail = await fetchGroupActivityProductDetail(productId, buId, customerId);
+    const isSeries = hasSeriesCopyHint(detail?.description) || hasSeriesCopyHint(activity?.externalMessage);
+    seriesSessionProductCache.set(productId, isSeries);
+    return isSeries;
+  }
+
+  async function shouldBlockDirectSessionBooking(activity) {
+    if (isLikelySeriesSession(activity)) return true;
+    try {
+      return await isSeriesSessionByProductDetail(activity);
+    } catch (_) {
+      return false;
+    }
   }
 
   let classCardExpandRoot = null;
@@ -1117,6 +1216,51 @@ function initializeLoginPage(DOM) {
       '<div class="class-card-expand__actions"></div>' +
       '</div></div>';
     document.body.appendChild(root);
+
+    const hero = root.querySelector('.class-card-expand__hero');
+    const heroImg = root.querySelector('.class-card-expand__hero-img');
+    if (hero && heroImg && !heroImg.dataset.brpHeroBound) {
+      heroImg.dataset.brpHeroBound = '1';
+      heroImg.loading = 'lazy';
+      heroImg.decoding = 'async';
+      heroImg.addEventListener('error', () => {
+        const fallback =
+          typeof window.getProductPlaceholderImage === 'function'
+            ? window.getProductPlaceholderImage()
+            : '';
+        const token = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+        if (token && heroImg.dataset.brpImgTokenRetry !== '1' && heroImg.src && !heroImg.src.startsWith('data:')) {
+          try {
+            const u = new URL(heroImg.src, window.location.href);
+            const path = u.pathname || '';
+            if (
+              (path.includes('/api/assets/') || path.includes('/apiserver/api/assets/')) &&
+              !u.searchParams.has('access_token')
+            ) {
+              heroImg.dataset.brpImgTokenRetry = '1';
+              u.searchParams.set('access_token', token);
+              heroImg.src = u.toString();
+              return;
+            }
+          } catch (_) {
+            /* continue */
+          }
+        }
+        if (heroImg.dataset.brpMediaFallback === '1') {
+          heroImg.removeAttribute('src');
+          hero.classList.add('class-card-expand__hero--empty');
+          return;
+        }
+        if (fallback && heroImg.src !== fallback) {
+          heroImg.dataset.brpMediaFallback = '1';
+          heroImg.src = fallback;
+          return;
+        }
+        heroImg.removeAttribute('src');
+        hero.classList.add('class-card-expand__hero--empty');
+      });
+    }
+
     root.querySelectorAll('[data-class-card-expand-dismiss]').forEach((el) => {
       el.addEventListener('click', (e) => {
         e.preventDefault();
@@ -1146,12 +1290,8 @@ function initializeLoginPage(DOM) {
         typeof endA === 'string' ? endA : null
       )
     );
-    const mins = formatClassSessionDurationMinutes(
-      typeof startA === 'string' ? startA : '',
-      typeof endA === 'string' ? endA : null
-    );
     const avail = formatGroupActivitySlotsAvailability(activity.slots);
-    const extra = [mins != null ? `${mins} min` : '', avail].filter(Boolean).join(' · ');
+    const extra = [avail].filter(Boolean).join(' · ');
     if (extra) lines.push(extra);
     const loc = groupActivityBrowseLocationLabel(activity, gymSel);
     if (loc) lines.push(loc);
@@ -1175,19 +1315,192 @@ function initializeLoginPage(DOM) {
         typeof endIso === 'string' ? endIso : null
       )
     );
-    const mins = formatClassSessionDurationMinutes(
-      typeof startIso === 'string' ? startIso : '',
-      typeof endIso === 'string' ? endIso : null
-    );
     const avail = formatClassCardAvailabilityFromContext({ slots: book.slots, booking: book });
-    const extra = [mins != null ? `${mins} min` : '', avail].filter(Boolean).join(' · ');
+    const extra = [avail].filter(Boolean).join(' · ');
     if (extra) lines.push(extra);
     const { where } = bookingDisplayLine(book);
     if (where) lines.push(where);
     return lines.join('\n');
   }
 
+  function browseBookingConfirmationInfo(activity, gymSel) {
+    const startIso = activity?.duration?.start;
+    const endIso = activity?.duration?.end || null;
+    const when = formatClassSessionWhenLine(
+      typeof startIso === 'string' ? startIso : '',
+      typeof endIso === 'string' ? endIso : null
+    );
+    const location = groupActivityBrowseLocationLabel(activity, gymSel) || 'Location not available';
+    return {
+      when: when && when !== '—' ? when : 'Date and time not available',
+      location,
+    };
+  }
+
+  function renderBrowseBookingConfirmation(actionsEl, activity, gymSel) {
+    if (!actionsEl) return;
+    if (isLikelySeriesSession(activity)) {
+      actionsEl.innerHTML = '';
+      const titleEl = document.createElement('p');
+      titleEl.className = 'class-card-expand__hint';
+      titleEl.style.marginBottom = '6px';
+      titleEl.textContent = 'This class is part of a multi-session course.';
+      actionsEl.appendChild(titleEl);
+
+      const detailsEl = document.createElement('p');
+      detailsEl.className = 'class-card-expand__muted';
+      detailsEl.style.marginBottom = '12px';
+      detailsEl.textContent = 'Please book the course series card to join all sessions.';
+      actionsEl.appendChild(detailsEl);
+
+      const backBtn = document.createElement('button');
+      backBtn.type = 'button';
+      backBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+      backBtn.textContent = 'Back';
+      backBtn.addEventListener('click', () => openClassCardExpandBrowse(activity, gymSel));
+      actionsEl.appendChild(backBtn);
+      return;
+    }
+    const fully = isBrowseSlotsFullyBooked(activity?.slots);
+    const allowWaitingList = fully;
+    const title = allowWaitingList ? 'Join waiting list?' : 'Confirm booking?';
+    const confirmLabel = allowWaitingList ? 'Confirm waitlist' : 'Confirm booking';
+    const { when, location } = browseBookingConfirmationInfo(activity, gymSel);
+
+    actionsEl.innerHTML = '';
+
+    const titleEl = document.createElement('p');
+    titleEl.className = 'class-card-expand__hint';
+    titleEl.style.marginBottom = '6px';
+    titleEl.textContent = title;
+    actionsEl.appendChild(titleEl);
+
+    const detailsEl = document.createElement('p');
+    detailsEl.className = 'class-card-expand__muted';
+    detailsEl.style.marginBottom = '12px';
+    detailsEl.textContent = `${when}\n${location}`;
+    detailsEl.style.whiteSpace = 'pre-line';
+    actionsEl.appendChild(detailsEl);
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'profile-action-btn class-card-expand__btn-primary';
+    confirmBtn.textContent = confirmLabel;
+    confirmBtn.addEventListener('click', async () => {
+      confirmBtn.disabled = true;
+      const shouldBlock = await shouldBlockDirectSessionBooking(activity);
+      if (shouldBlock) {
+        actionsEl.innerHTML = '';
+        const titleBlocked = document.createElement('p');
+        titleBlocked.className = 'class-card-expand__hint';
+        titleBlocked.style.marginBottom = '6px';
+        titleBlocked.textContent = 'This class is part of a multi-session course.';
+        actionsEl.appendChild(titleBlocked);
+
+        const detailsBlocked = document.createElement('p');
+        detailsBlocked.className = 'class-card-expand__muted';
+        detailsBlocked.style.marginBottom = '12px';
+        detailsBlocked.textContent = 'Please book the course series card to join all sessions.';
+        actionsEl.appendChild(detailsBlocked);
+
+        const backBlocked = document.createElement('button');
+        backBlocked.type = 'button';
+        backBlocked.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+        backBlocked.textContent = 'Back';
+        backBlocked.addEventListener('click', () => openClassCardExpandBrowse(activity, gymSel));
+        actionsEl.appendChild(backBlocked);
+        showToast(
+          'This class cannot be booked directly. If it is part of a multi-session course, please book the course series card.',
+          'error'
+        );
+        return;
+      }
+      runBrowseBookCommit(activity, allowWaitingList, confirmBtn);
+    });
+    actionsEl.appendChild(confirmBtn);
+
+    const backBtn = document.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+    backBtn.textContent = 'Back';
+    backBtn.addEventListener('click', () => openClassCardExpandBrowse(activity, gymSel));
+    actionsEl.appendChild(backBtn);
+  }
+
+  function openDropInClassInfoExpand(activity, gymSel) {
+    const root = ensureClassCardExpandRoot();
+    const titleEl = root.querySelector('.class-card-expand__title');
+    const linesEl = root.querySelector('.class-card-expand__lines');
+    const descEl = root.querySelector('.class-card-expand__desc');
+    const actionsEl = root.querySelector('.class-card-expand__actions');
+    const info = browseBookingConfirmationInfo(activity, gymSel);
+
+    titleEl.textContent = 'No need to book this class, just show up!';
+    linesEl.textContent = `${info.when}\n${info.location}`;
+    descEl.textContent = 'This is a drop-in class and cannot be booked in advance.';
+    actionsEl.innerHTML = '';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'profile-action-btn class-card-expand__btn-primary';
+    closeBtn.textContent = 'Got it';
+    closeBtn.addEventListener('click', () => closeClassCardExpand());
+    actionsEl.appendChild(closeBtn);
+  }
+
+  function renderClassExpandDescSkeleton(descEl) {
+    if (!descEl) return;
+    descEl.classList.add('class-card-expand__desc--loading');
+    descEl.innerHTML =
+      '<span class="class-card-expand__skeleton-line"></span>' +
+      '<span class="class-card-expand__skeleton-line class-card-expand__skeleton-line--short"></span>' +
+      '<span class="class-card-expand__skeleton-line"></span>' +
+      '<span class="class-card-expand__skeleton-line class-card-expand__skeleton-line--mid"></span>';
+  }
+
+  function clearClassExpandDescSkeleton(descEl) {
+    if (!descEl) return;
+    descEl.classList.remove('class-card-expand__desc--loading');
+    descEl.innerHTML = '';
+  }
+
+  function renderBrowseCardsSkeleton(container, count = 8) {
+    if (!container) return;
+    container.innerHTML = '';
+    const n = Math.max(2, Math.min(12, Number(count) || 8));
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < n; i += 1) {
+      const card = document.createElement('div');
+      card.className = 'booking-item-card booking-item-card--browse booking-item-card--skeleton';
+      const media = document.createElement('div');
+      media.className = 'booking-item-card__media booking-item-card__media--skeleton';
+      const main = document.createElement('div');
+      main.className = 'booking-item-card__main';
+
+      const line1 = document.createElement('span');
+      line1.className = 'booking-item-card__skeleton-line booking-item-card__skeleton-line--title';
+      const line2 = document.createElement('span');
+      line2.className = 'booking-item-card__skeleton-line booking-item-card__skeleton-line--meta';
+      const line3 = document.createElement('span');
+      line3.className = 'booking-item-card__skeleton-line booking-item-card__skeleton-line--sub';
+      const line4 = document.createElement('span');
+      line4.className = 'booking-item-card__skeleton-line booking-item-card__skeleton-line--subshort';
+
+      main.append(line1, line2, line3, line4);
+      card.append(media, main);
+      frag.appendChild(card);
+    }
+    container.appendChild(frag);
+  }
+
   async function runBrowseBookCommit(activity, allowWaitingList, primaryBtn) {
+    if (await shouldBlockDirectSessionBooking(activity)) {
+      showToast(
+        'This class cannot be booked directly. If it is part of a multi-session course, please book the course series card.',
+        'error'
+      );
+      return;
+    }
     const gid = activity.id;
     const cid = getBrpNumericCustomerId(getBestCustomerData());
     if (gid == null || !Number.isFinite(Number(gid))) {
@@ -1219,7 +1532,15 @@ function initializeLoginPage(DOM) {
       });
       applyBrowseClassFilters();
     } catch (err) {
-      showToast(getErrorMessage(err), 'error');
+      const status = Number(err?.status);
+      if (status === 403) {
+        showToast(
+          'This class cannot be booked directly. If it is part of a multi-session course, please book the course series card.',
+          'error'
+        );
+      } else {
+        showToast(getErrorMessage(err), 'error');
+      }
     } finally {
       primaryBtn.disabled = false;
     }
@@ -1246,6 +1567,9 @@ function initializeLoginPage(DOM) {
       typeof window.getProductPlaceholderImage === 'function'
         ? window.getProductPlaceholderImage()
         : '';
+    const productIdForHero = extractGroupActivityProductId(activity);
+    const buIdForHero = classCardBusinessUnitId(activity);
+    const customerIdForHero = getBrpNumericCustomerId(getBestCustomerData());
     heroImg.alt = browseTitle;
     if (primaryUrl || fallback) {
       applyClassCardImgSrc(heroImg, primaryUrl || fallback);
@@ -1255,11 +1579,22 @@ function initializeLoginPage(DOM) {
       hero.classList.add('class-card-expand__hero--empty');
     }
 
+    if (!primaryUrl && productIdForHero) {
+      fetchGroupActivityProductDetail(productIdForHero, buIdForHero, customerIdForHero).then((detail) => {
+        if (!heroImg.isConnected) return;
+        const u = detail && resolveProductAssetImageUrl(detail);
+        if (!u) return;
+        hero.classList.remove('class-card-expand__hero--empty');
+        applyClassCardImgSrc(heroImg, u);
+      });
+    }
+
     const ext = activity.externalMessage && String(activity.externalMessage).trim();
     if (ext) {
+      clearClassExpandDescSkeleton(descEl);
       descEl.textContent = ext;
     } else {
-      descEl.textContent = 'Loading description…';
+      renderClassExpandDescSkeleton(descEl);
     }
     const productId = extractGroupActivityProductId(activity);
     const buId = classCardBusinessUnitId(activity);
@@ -1269,26 +1604,41 @@ function initializeLoginPage(DOM) {
         if (!descEl.isConnected) return;
         const pd = detail?.description && String(detail.description).trim();
         const parts = [ext, pd].filter(Boolean);
+        clearClassExpandDescSkeleton(descEl);
         descEl.textContent = parts.length ? parts.join('\n\n') : 'No description for this class.';
       });
     } else if (!ext) {
+      clearClassExpandDescSkeleton(descEl);
       descEl.textContent = 'No description for this class.';
     }
 
     const fully = isBrowseSlotsFullyBooked(activity.slots);
     const wl = activity.slots && activity.slots.hasWaitingList === true;
+    const dropInOnly = isDropInOnlyClass(activity);
 
     if (!isUserAuthenticated()) {
       const hint = document.createElement('p');
       hint.className = 'class-card-expand__hint';
       hint.textContent = 'Log in to book this class.';
       actionsEl.appendChild(hint);
+    } else if (dropInOnly) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'profile-action-btn class-card-expand__btn-primary';
+      btn.textContent = 'Drop In class';
+      btn.addEventListener('click', () => openDropInClassInfoExpand(activity, gymSel));
+      actionsEl.appendChild(btn);
+    } else if (isLikelySeriesSession(activity)) {
+      const p = document.createElement('p');
+      p.className = 'class-card-expand__muted';
+      p.textContent = 'This session belongs to a multi-session course. Please book the course series card.';
+      actionsEl.appendChild(p);
     } else if (fully && wl) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'profile-action-btn class-card-expand__btn-primary';
       btn.textContent = 'Join waiting list';
-      btn.addEventListener('click', () => runBrowseBookCommit(activity, true, btn));
+      btn.addEventListener('click', () => renderBrowseBookingConfirmation(actionsEl, activity, gymSel));
       actionsEl.appendChild(btn);
     } else if (fully && !wl) {
       const p = document.createElement('p');
@@ -1300,7 +1650,7 @@ function initializeLoginPage(DOM) {
       btn.type = 'button';
       btn.className = 'profile-action-btn class-card-expand__btn-primary';
       btn.textContent = 'Book now';
-      btn.addEventListener('click', () => runBrowseBookCommit(activity, false, btn));
+      btn.addEventListener('click', () => renderBrowseBookingConfirmation(actionsEl, activity, gymSel));
       actionsEl.appendChild(btn);
     }
 
@@ -1332,12 +1682,25 @@ function initializeLoginPage(DOM) {
       typeof window.getProductPlaceholderImage === 'function'
         ? window.getProductPlaceholderImage()
         : '';
+    const productIdForHero = extractGroupActivityProductId(book);
+    const buIdForHero = classCardBusinessUnitId(book);
+    const customerIdForHero = getBrpNumericCustomerId(getBestCustomerData());
     heroImg.alt = title;
     if (primaryUrl || fallback) {
       applyClassCardImgSrc(heroImg, primaryUrl || fallback);
     } else {
       heroImg.removeAttribute('src');
       hero.classList.add('class-card-expand__hero--empty');
+    }
+
+    if (!primaryUrl && productIdForHero) {
+      fetchGroupActivityProductDetail(productIdForHero, buIdForHero, customerIdForHero).then((detail) => {
+        if (!heroImg.isConnected) return;
+        const u = detail && resolveProductAssetImageUrl(detail);
+        if (!u) return;
+        hero.classList.remove('class-card-expand__hero--empty');
+        applyClassCardImgSrc(heroImg, u);
+      });
     }
 
     const bMsg =
@@ -1478,6 +1841,35 @@ function initializeLoginPage(DOM) {
     pill.textContent = labelText;
     pills.appendChild(pill);
     main.appendChild(pills);
+  }
+
+  function appendDropInPillToCardMain(main, source) {
+    if (!main || !source || !isDropInOnlyClass(source)) return;
+    let pills = main.querySelector('.booking-item-card__pills');
+    if (!pills) {
+      pills = document.createElement('div');
+      pills.className = 'booking-item-card__pills';
+      main.appendChild(pills);
+    }
+    const pill = document.createElement('span');
+    pill.className = 'booking-item-card__pill booking-item-card__pill--dropin';
+    pill.textContent = 'Drop In';
+    pills.appendChild(pill);
+  }
+
+  function appendSeriesPillToCardMain(main, source) {
+    if (!main || !source || !isGroupedEventSeries(source)) return;
+    let pills = main.querySelector('.booking-item-card__pills');
+    if (!pills) {
+      pills = document.createElement('div');
+      pills.className = 'booking-item-card__pills';
+      main.appendChild(pills);
+    }
+    const n = Number(source?.occasions?.numberOf);
+    const pill = document.createElement('span');
+    pill.className = 'booking-item-card__pill booking-item-card__pill--dropin';
+    pill.textContent = Number.isFinite(n) ? `${n} sessions` : 'Series';
+    pills.appendChild(pill);
   }
 
   let groupActivityBookingsLoadPromise = null;
@@ -1685,6 +2077,132 @@ function initializeLoginPage(DOM) {
       .catch((e) => console.warn('[Browse] Business units:', e));
   }
 
+  function isGroupedEventSeries(ev) {
+    const n = Number(ev?.occasions?.numberOf);
+    return Number.isFinite(n) && n > 1;
+  }
+
+  function formatDateLong(iso) {
+    if (!iso) return '—';
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return '—';
+    try {
+      return new Intl.DateTimeFormat('da-DK', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }).format(new Date(ms));
+    } catch {
+      return new Date(ms).toDateString();
+    }
+  }
+
+  function formatEventSeriesLine(ev) {
+    const start = ev?.duration?.start;
+    const end = ev?.duration?.end;
+    const startText = typeof start === 'string' ? formatDateLong(start) : '—';
+    const endText = typeof end === 'string' ? formatDateLong(end) : '';
+    const range = endText && endText !== '—' && endText !== startText ? `${startText} – ${endText}` : startText;
+    const count = Number(ev?.occasions?.numberOf);
+    const countText = Number.isFinite(count) && count > 1 ? `${count} sessions` : '';
+    return [range, countText].filter(Boolean).join(' · ');
+  }
+
+  function formatEventDateRangeLine(ev) {
+    const start = ev?.duration?.start;
+    const end = ev?.duration?.end;
+    const startText = typeof start === 'string' ? formatDateLong(start) : '—';
+    const endText = typeof end === 'string' ? formatDateLong(end) : '';
+    return endText && endText !== '—' && endText !== startText ? `${startText} – ${endText}` : startText;
+  }
+
+  function extractEventSessionLines(ev) {
+    const times = Array.isArray(ev?.occasions?.times) ? ev.occasions.times : [];
+    if (!times.length) return [];
+    const lines = times
+      .map((slot) => {
+        if (!slot || typeof slot !== 'object') return '';
+        const start =
+          slot.start ||
+          slot.duration?.start ||
+          slot.timeRange?.start ||
+          slot.period?.start ||
+          '';
+        const end =
+          slot.end ||
+          slot.duration?.end ||
+          slot.timeRange?.end ||
+          slot.period?.end ||
+          '';
+        const s = typeof start === 'string' ? start : '';
+        const e = typeof end === 'string' ? end : null;
+        const when = formatClassSessionWhenLine(s, e);
+        return when && when !== '—' ? when : '';
+      })
+      .filter(Boolean);
+    return Array.from(new Set(lines));
+  }
+
+  function openEventExpand(ev) {
+    const root = ensureClassCardExpandRoot();
+    const titleEl = root.querySelector('.class-card-expand__title');
+    const linesEl = root.querySelector('.class-card-expand__lines');
+    const descEl = root.querySelector('.class-card-expand__desc');
+    const actionsEl = root.querySelector('.class-card-expand__actions');
+    const hero = root.querySelector('.class-card-expand__hero');
+    const heroImg = root.querySelector('.class-card-expand__hero-img');
+
+    titleEl.textContent = ev?.name || 'Event';
+    const sessions = extractEventSessionLines(ev);
+    linesEl.textContent = sessions.length
+      ? sessions.join('\n')
+      : formatEventSeriesLine(ev);
+    descEl.textContent = isGroupedEventSeries(ev)
+      ? 'This is a multi-session course. You’ll attend all sessions in the series.'
+      : 'This is an event.';
+
+    actionsEl.innerHTML = '';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'profile-action-btn class-card-expand__btn-primary';
+    closeBtn.textContent = 'Close';
+    closeBtn.addEventListener('click', () => closeClassCardExpand());
+    actionsEl.appendChild(closeBtn);
+
+    const fallback =
+      typeof window.getProductPlaceholderImage === 'function'
+        ? window.getProductPlaceholderImage()
+        : '';
+    const primaryUrl = resolveGroupActivityClassImageUrl(ev);
+    const buId = classCardBusinessUnitId(ev);
+    const productId = extractGroupActivityProductId(ev);
+    hero.classList.remove('class-card-expand__hero--empty');
+    heroImg.alt = ev?.name || 'Event';
+    if (primaryUrl || fallback) {
+      applyClassCardImgSrc(heroImg, primaryUrl || fallback);
+      hero.classList.toggle('class-card-expand__hero--empty', !(primaryUrl || fallback));
+    } else {
+      heroImg.removeAttribute('src');
+      hero.classList.add('class-card-expand__hero--empty');
+    }
+    if (!primaryUrl && productId && buId) {
+      fetchEventProductDetail(productId, buId).then((detail) => {
+        if (!heroImg.isConnected) return;
+        const u = detail && resolveProductAssetImageUrl(detail);
+        if (!u) return;
+        hero.classList.remove('class-card-expand__hero--empty');
+        applyClassCardImgSrc(heroImg, u);
+      });
+    }
+
+    root.classList.add('class-card-expand--open');
+    root.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('class-card-expand-open');
+    requestAnimationFrame(() => {
+      root.querySelector('.class-card-expand__close')?.focus();
+    });
+  }
+
   async function applyBrowseClassFilters() {
     const results = document.getElementById('browseResults');
     const gymSel = document.getElementById('browseGymFilter');
@@ -1709,9 +2227,10 @@ function initializeLoginPage(DOM) {
     }
 
     const typeVal = typeSel?.value || '';
-    if (typeVal === 'event') {
+    const browseMode = typeVal === 'event' ? 'event' : typeVal === 'groupActivity' ? 'groupActivity' : 'all';
+    if ((browseMode === 'event' || browseMode === 'all') && !authAPI?.listBusinessUnitEvents) {
       results.innerHTML =
-        '<p class="bookings-empty-msg">Events use a different schedule in BRP. Choose <strong>Classes</strong> or leave type empty.</p>';
+        '<p class="bookings-empty-msg">Events are not available on this connection.</p>';
       return;
     }
 
@@ -1745,35 +2264,219 @@ function initializeLoginPage(DOM) {
       buIds = buIds.slice(0, MAX_PARALLEL_GYMS);
     }
 
-    results.innerHTML = '<div class="bookings-loading">Loading classes…</div>';
+    renderBrowseCardsSkeleton(results, 8);
     const q = searchEl?.value?.trim().toLowerCase() || '';
 
-    try {
-      const chunks = await Promise.all(
-        buIds.map((buId) =>
-          authAPI
+    const rangeStartMs = Date.parse(periodStart);
+    const rangeEndMs = Date.parse(periodEnd);
+    const hasRange = Number.isFinite(rangeStartMs) && Number.isFinite(rangeEndMs) && rangeEndMs >= rangeStartMs;
+    const rangeDays = hasRange ? Math.ceil((rangeEndMs - rangeStartMs) / (24 * 60 * 60 * 1000)) : 0;
+    const SHOULD_CHUNK_RANGE_DAYS = 8;
+    const CHUNK_DAYS = 7;
+    // Include ongoing multi-session events that started before the visible window.
+    // This keeps "series cards" bookable even after session 1 has begun.
+    const EVENT_LOOKBACK_DAYS = 42;
+    const eventPeriodStartIso = hasRange
+      ? new Date(rangeStartMs - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
+
+    async function listActivitiesForBuRange(buId) {
+      const base = { customerId: cid || undefined };
+      if (!hasRange) {
+        if (browseMode === 'event') {
+          const evs = await authAPI.listBusinessUnitEvents(buId, {});
+          return (Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' }));
+        }
+        if (browseMode === 'all') {
+          const [acts, evs] = await Promise.all([
+            authAPI.listBusinessUnitGroupActivities(buId, base).catch(() => []),
+            authAPI.listBusinessUnitEvents(buId, {}).catch(() => []),
+          ]);
+          return [
+            ...(Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' })),
+            ...(Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' })),
+          ];
+        }
+        const acts = await authAPI.listBusinessUnitGroupActivities(buId, base);
+        return (Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' }));
+      }
+      // BRP schedule endpoints may behave poorly on very wide ranges; chunk long ranges.
+      if (rangeDays <= SHOULD_CHUNK_RANGE_DAYS) {
+        if (browseMode === 'event') {
+          const evs = await authAPI.listBusinessUnitEvents(buId, {
+            periodStart: eventPeriodStartIso || periodStart,
+            periodEnd,
+          });
+          return (Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' }));
+        }
+        if (browseMode === 'all') {
+          const [acts, evs] = await Promise.all([
+            authAPI
+              .listBusinessUnitGroupActivities(buId, { ...base, periodStart, periodEnd })
+              .catch(() => []),
+            authAPI
+              .listBusinessUnitEvents(buId, {
+                periodStart: eventPeriodStartIso || periodStart,
+                periodEnd,
+              })
+              .catch(() => []),
+          ]);
+          return [
+            ...(Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' })),
+            ...(Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' })),
+          ];
+        }
+        const acts = await authAPI.listBusinessUnitGroupActivities(buId, { ...base, periodStart, periodEnd });
+        return (Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' }));
+      }
+      const out = [];
+      let cur = rangeStartMs;
+      while (cur <= rangeEndMs) {
+        const chunkStart = new Date(cur);
+        const chunkEnd = new Date(Math.min(rangeEndMs, cur + CHUNK_DAYS * 24 * 60 * 60 * 1000 - 1));
+        if (browseMode === 'event') {
+          const evs = await authAPI
+              .listBusinessUnitEvents(buId, {
+                periodStart: new Date(
+                  chunkStart.getTime() - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+                ).toISOString(),
+                periodEnd: chunkEnd.toISOString(),
+              })
+            .catch(() => []);
+          if (Array.isArray(evs) && evs.length) out.push(...evs.map((e) => ({ ...e, __kind: 'event' })));
+        } else if (browseMode === 'all') {
+          const [acts, evs] = await Promise.all([
+            authAPI
+              .listBusinessUnitGroupActivities(buId, {
+                ...base,
+                periodStart: chunkStart.toISOString(),
+                periodEnd: chunkEnd.toISOString(),
+              })
+              .catch(() => []),
+            authAPI
+              .listBusinessUnitEvents(buId, {
+                periodStart: new Date(
+                  chunkStart.getTime() - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+                ).toISOString(),
+                periodEnd: chunkEnd.toISOString(),
+              })
+              .catch(() => []),
+          ]);
+          if (Array.isArray(acts) && acts.length) out.push(...acts.map((a) => ({ ...a, __kind: 'groupActivity' })));
+          if (Array.isArray(evs) && evs.length) out.push(...evs.map((e) => ({ ...e, __kind: 'event' })));
+        } else {
+          const acts = await authAPI
             .listBusinessUnitGroupActivities(buId, {
-              periodStart,
-              periodEnd,
-              customerId: cid || undefined,
+              ...base,
+              periodStart: chunkStart.toISOString(),
+              periodEnd: chunkEnd.toISOString(),
             })
-            .then((acts) =>
-              (Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId }))
-            )
-            .catch(() => [])
-        )
-      );
+            .catch(() => []);
+          if (Array.isArray(acts) && acts.length) out.push(...acts.map((a) => ({ ...a, __kind: 'groupActivity' })));
+        }
+        cur = cur + CHUNK_DAYS * 24 * 60 * 60 * 1000;
+      }
+      return out.map((a) => ({ ...a, __buId: buId }));
+    }
+
+    try {
+      const chunks = await Promise.all(buIds.map((buId) => listActivitiesForBuRange(buId).catch(() => [])));
       let flat = chunks.flat();
       const seen = new Set();
       flat = flat.filter((a) => {
         const id = a.id;
-        if (id == null) return true;
-        if (seen.has(id)) return false;
-        seen.add(id);
+        const kind = a.__kind || 'groupActivity';
+        const key = id == null ? null : `${kind}:${id}`;
+        if (!key) return true;
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       });
+      if (hasRange) {
+        flat = flat.filter((item) => {
+          const kind = item.__kind || 'groupActivity';
+          const startMs = Date.parse(item?.duration?.start || '');
+          const endMs = Date.parse(item?.duration?.end || '');
+          if (kind === 'event') {
+            if (!Number.isFinite(startMs)) return false;
+            const effectiveEndMs = Number.isFinite(endMs) ? endMs : startMs;
+            return effectiveEndMs >= rangeStartMs && startMs <= rangeEndMs;
+          }
+          return Number.isFinite(startMs) && startMs >= rangeStartMs && startMs <= rangeEndMs;
+        });
+      }
       if (q) {
         flat = flat.filter((a) => String(a.name || '').toLowerCase().includes(q));
+      }
+
+      // Fallback guard: when BRP exposes a series session as plain group activity,
+      // proactively resolve product detail and remove that session card from browse.
+      const groupCandidates = flat.filter((item) => (item.__kind || 'groupActivity') === 'groupActivity');
+      if (groupCandidates.length) {
+        await Promise.all(
+          groupCandidates.map(async (item) => {
+            item.__blockDirectSessionBooking = await shouldBlockDirectSessionBooking(item);
+          })
+        );
+        flat = flat.filter((item) => {
+          const kind = item.__kind || 'groupActivity';
+          if (kind !== 'groupActivity') return true;
+          return item.__blockDirectSessionBooking !== true;
+        });
+      }
+
+      // If a grouped event series exists (e.g. Intro course with 3 sessions),
+      // hide the individual group-activity sessions that fall inside the series range
+      // to avoid showing duplicates in "All Types".
+      const seriesEvents = flat.filter((x) => (x.__kind || 'groupActivity') === 'event' && isGroupedEventSeries(x));
+      if (seriesEvents.length) {
+        const normalizeSeriesName = (name) =>
+          String(name || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const dayStartMs = (ms) => {
+          const d = new Date(ms);
+          d.setHours(0, 0, 0, 0);
+          return d.getTime();
+        };
+        const seriesIndex = seriesEvents
+          .map((ev) => {
+            const buId = classCardBusinessUnitId(ev);
+            const name = normalizeSeriesName(ev?.name);
+            const a = Date.parse(ev?.duration?.start || '');
+            const b = Date.parse(ev?.duration?.end || '');
+            if (!buId || !name || !Number.isFinite(a)) return null;
+            const startDay = dayStartMs(a);
+            const endDay = Number.isFinite(b) ? dayStartMs(b) : startDay;
+            return {
+              buId,
+              name,
+              startDayMs: startDay,
+              endDayMs: endDay >= startDay ? endDay : startDay,
+            };
+          })
+          .filter(Boolean);
+
+        if (seriesIndex.length) {
+          flat = flat.filter((item) => {
+            const kind = item.__kind || 'groupActivity';
+            if (kind !== 'groupActivity') return true;
+            const buId = classCardBusinessUnitId(item);
+            const name = normalizeSeriesName(item?.name);
+            const startMs = Date.parse(item?.duration?.start || '');
+            if (!buId || !name || !Number.isFinite(startMs)) return true;
+            const startDayMs = dayStartMs(startMs);
+            return !seriesIndex.some((ev) => {
+              if (ev.buId !== buId) return false;
+              // Match exact name OR close variant ("introhold" / "intro hold")
+              const sameName = ev.name === name || ev.name.includes(name) || name.includes(ev.name);
+              if (!sameName) return false;
+              return startDayMs >= ev.startDayMs && startDayMs <= ev.endDayMs;
+            });
+          });
+        }
       }
       flat.sort((a, b) => {
         const ta = a.duration?.start ? Date.parse(a.duration.start) : 0;
@@ -1790,7 +2493,8 @@ function initializeLoginPage(DOM) {
       flat.forEach((a) => {
         const card = document.createElement('div');
         card.className = 'booking-item-card booking-item-card--browse';
-        const browseTitle = a.name || 'Class';
+        const kind = a.__kind || 'groupActivity';
+        const browseTitle = a.name || (kind === 'event' ? 'Event' : 'Class');
         card.appendChild(createClassCardMediaEl(a, browseTitle));
         const main = document.createElement('div');
         main.className = 'booking-item-card__main';
@@ -1799,22 +2503,69 @@ function initializeLoginPage(DOM) {
         h.textContent = browseTitle;
         const meta = document.createElement('div');
         meta.className = 'booking-item-card__meta';
-        const startA = a.duration?.start;
-        const endA = a.duration?.end;
-        meta.textContent = formatClassSessionWhenLine(
-          typeof startA === 'string' ? startA : '',
-          typeof endA === 'string' ? endA : null
-        );
-        main.append(h, meta);
-        appendClassCardDurationAvailability(
-          main,
-          typeof startA === 'string' ? startA : '',
-          typeof endA === 'string' ? endA : null,
-          { slots: a.slots }
-        );
-        appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(a, gymSel));
+        if (kind === 'event') {
+          meta.textContent = formatEventDateRangeLine(a);
+          main.append(h, meta);
+          appendSeriesPillToCardMain(main, a);
+          appendLocationPillToCardMain(
+            main,
+            a.businessUnit?.name || a.businessUnit?.displayName || groupActivityBrowseLocationLabel(a, gymSel)
+          );
+        } else {
+          const startA = a.duration?.start;
+          const endA = a.duration?.end;
+          meta.textContent = formatClassSessionWhenLine(
+            typeof startA === 'string' ? startA : '',
+            typeof endA === 'string' ? endA : null
+          );
+          main.append(h, meta);
+          appendClassCardDurationAvailability(
+            main,
+            typeof startA === 'string' ? startA : '',
+            typeof endA === 'string' ? endA : null,
+            { slots: a.slots }
+          );
+        appendDropInPillToCardMain(main, a);
+          appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(a, gymSel));
+          const canBookNow =
+            !isBrowseSlotsFullyBooked(a.slots) &&
+            !isDropInOnlyClass(a) &&
+            !isLikelySeriesSession(a) &&
+            a.__blockDirectSessionBooking !== true;
+          if (canBookNow) {
+            const cardBookBtn = document.createElement('button');
+            cardBookBtn.type = 'button';
+            cardBookBtn.className = 'profile-action-btn booking-item-card__book-btn';
+            cardBookBtn.textContent = 'Book now';
+            cardBookBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openClassCardExpandBrowse(a, gymSel);
+            });
+            main.appendChild(cardBookBtn);
+          }
+        }
         card.appendChild(main);
-        attachBrowseClassCardClick(card, a, gymSel);
+        if (kind === 'event') {
+          card.classList.add('booking-item-card--clickable');
+          card.setAttribute('role', 'button');
+          card.setAttribute('tabindex', '0');
+          card.setAttribute('aria-haspopup', 'dialog');
+          const open = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openEventExpand(a);
+          };
+          card.addEventListener('click', open);
+          card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              open(e);
+            }
+          });
+        } else {
+          attachBrowseClassCardClick(card, a, gymSel);
+        }
         results.appendChild(card);
       });
     } catch (err) {
@@ -1848,6 +2599,209 @@ function initializeLoginPage(DOM) {
     requestAnimationFrame(() => {
       document.querySelector('.booking-tab[data-tab="browse"]')?.click();
     });
+  }
+
+  function customerCityToken(customer) {
+    const addr = getAddress(customer || {});
+    const rawCity = addr?.city && addr.city !== '-' ? String(addr.city) : String(customer?.city || '');
+    const cleaned = rawCity
+      .replace(/\b\d{3,5}\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return cleaned.toLowerCase();
+  }
+
+  async function getRecommendedDashboardClass(customer) {
+    if (!authAPI?.listBusinessUnitGroupActivities) return null;
+    const city = customerCityToken(customer);
+    const homeBuId = customer?.businessUnit?.id;
+    const cid = getBrpNumericCustomerId(customer);
+    const now = Date.now();
+    const periodStart = startOfDay(new Date(now)).toISOString();
+    const periodEnd = endOfDay(new Date(now + 14 * 24 * 60 * 60 * 1000)).toISOString();
+
+    let candidateUnits = [];
+    if (authAPI.listVer3BusinessUnits) {
+      try {
+        const units = await authAPI.listVer3BusinessUnits();
+        if (Array.isArray(units) && units.length) {
+          if (city) {
+            candidateUnits = units.filter((u) =>
+              String(u?.name || u?.displayName || '')
+                .toLowerCase()
+                .includes(city)
+            );
+          }
+          if (!candidateUnits.length && homeBuId != null) {
+            candidateUnits = units.filter((u) => Number(u?.id) === Number(homeBuId));
+          }
+          if (!candidateUnits.length) {
+            candidateUnits = units.slice(0, 4);
+          }
+        }
+      } catch (_) {
+        candidateUnits = [];
+      }
+    }
+
+    if (!candidateUnits.length && homeBuId != null) {
+      candidateUnits = [{ id: homeBuId, name: customer?.businessUnit?.name || `Gym ${homeBuId}` }];
+    }
+    if (!candidateUnits.length) return null;
+
+    const unitIds = candidateUnits
+      .map((u) => Number(u?.id))
+      .filter((id) => Number.isFinite(id) && id > 0)
+      .slice(0, 4);
+    if (!unitIds.length) return null;
+
+    const chunks = await Promise.all(
+      unitIds.map((buId) =>
+        authAPI
+          .listBusinessUnitGroupActivities(buId, {
+            periodStart,
+            periodEnd,
+            customerId: cid || undefined,
+          })
+          .then((acts) =>
+            (Array.isArray(acts) ? acts : []).map((a) => ({
+              ...a,
+              __buId: buId,
+            }))
+          )
+          .catch(() => [])
+      )
+    );
+
+    let all = chunks.flat().filter((a) => {
+      if (!a || a.cancelled === true) return false;
+      const startMs = a.duration?.start ? Date.parse(a.duration.start) : NaN;
+      return Number.isFinite(startMs) && startMs >= now;
+    });
+    if (authAPI?.listBusinessUnitEvents && all.length) {
+      const EVENT_LOOKBACK_DAYS = 42;
+      const eventsChunks = await Promise.all(
+        unitIds.map((buId) =>
+          authAPI
+            .listBusinessUnitEvents(buId, {
+              periodStart: new Date(
+                Date.parse(periodStart) - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+              ).toISOString(),
+              periodEnd,
+            })
+            .then((evs) =>
+              (Array.isArray(evs) ? evs : [])
+                .filter((ev) => isGroupedEventSeries(ev))
+                .map((ev) => ({ ...ev, __buId: buId }))
+            )
+            .catch(() => [])
+        )
+      );
+      const seriesEvents = eventsChunks.flat();
+      if (seriesEvents.length) {
+        const normalizeSeriesName = (name) =>
+          String(name || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const dayStartMs = (ms) => {
+          const d = new Date(ms);
+          d.setHours(0, 0, 0, 0);
+          return d.getTime();
+        };
+        const seriesIndex = seriesEvents
+          .map((ev) => {
+            const buId = classCardBusinessUnitId(ev);
+            const name = normalizeSeriesName(ev?.name);
+            const a = Date.parse(ev?.duration?.start || '');
+            const b = Date.parse(ev?.duration?.end || '');
+            if (!buId || !name || !Number.isFinite(a)) return null;
+            const startDay = dayStartMs(a);
+            const endDay = Number.isFinite(b) ? dayStartMs(b) : startDay;
+            return {
+              buId,
+              name,
+              startDayMs: startDay,
+              endDayMs: endDay >= startDay ? endDay : startDay,
+            };
+          })
+          .filter(Boolean);
+        if (seriesIndex.length) {
+          all = all.filter((item) => {
+            const buId = classCardBusinessUnitId(item);
+            const name = normalizeSeriesName(item?.name);
+            const startMs = Date.parse(item?.duration?.start || '');
+            if (!buId || !name || !Number.isFinite(startMs)) return true;
+            const startDayMs = dayStartMs(startMs);
+            return !seriesIndex.some((ev) => {
+              if (ev.buId !== buId) return false;
+              const sameName = ev.name === name || ev.name.includes(name) || name.includes(ev.name);
+              if (!sameName) return false;
+              return startDayMs >= ev.startDayMs && startDayMs <= ev.endDayMs;
+            });
+          });
+        }
+      }
+    }
+    if (!all.length) return null;
+    all.sort((a, b) => Date.parse(a.duration.start) - Date.parse(b.duration.start));
+    return all[0];
+  }
+
+  function renderDashboardClassesRecommendation(hostEl, customer) {
+    if (!hostEl) return;
+    const hint = document.createElement('p');
+    hint.className = 'dashboard-classes-empty-summary';
+    hint.textContent = 'Finding a recommended class near you…';
+    hostEl.appendChild(hint);
+
+    getRecommendedDashboardClass(customer)
+      .then((rec) => {
+        if (!hostEl.isConnected || !hint.isConnected) return;
+        hint.remove();
+        if (!rec) return;
+
+        const recLabel = document.createElement('p');
+        recLabel.className = 'dashboard-classes-empty-summary';
+        recLabel.textContent = 'Recommended for you';
+        hostEl.appendChild(recLabel);
+
+        const card = document.createElement('div');
+        card.className = 'booking-item-card booking-item-card--browse';
+        const cardTitle = rec.name || 'Class';
+        card.appendChild(createClassCardMediaEl(rec, cardTitle));
+        const main = document.createElement('div');
+        main.className = 'booking-item-card__main';
+
+        const h = document.createElement('strong');
+        h.className = 'booking-item-card__title';
+        h.textContent = cardTitle;
+        const meta = document.createElement('div');
+        meta.className = 'booking-item-card__meta';
+        meta.textContent = formatClassSessionWhenLine(rec.duration?.start || '', rec.duration?.end || null);
+        main.append(h, meta);
+
+        appendClassCardDurationAvailability(
+          main,
+          typeof rec.duration?.start === 'string' ? rec.duration.start : '',
+          typeof rec.duration?.end === 'string' ? rec.duration.end : null,
+          { slots: rec.slots }
+        );
+        const gymSel = document.getElementById('browseGymFilter');
+        appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(rec, gymSel));
+
+        card.appendChild(main);
+        attachBrowseClassCardClick(card, rec, gymSel);
+        const cardGrid = document.createElement('div');
+        cardGrid.className = 'browse-results dashboard-recommended-results';
+        cardGrid.appendChild(card);
+        hostEl.appendChild(cardGrid);
+      })
+      .catch(() => {
+        if (!hostEl.isConnected || !hint.isConnected) return;
+        hint.remove();
+      });
   }
 
   function renderDashboardClassesSection(customer) {
@@ -1920,16 +2874,19 @@ function initializeLoginPage(DOM) {
     const title = document.createElement('p');
     title.className = 'dashboard-classes-empty-title';
     title.textContent = 'No classes booked yet';
+    const recSlot = document.createElement('div');
+    recSlot.className = 'dashboard-classes-recommendation-slot';
     const cta = document.createElement('button');
     cta.type = 'button';
     cta.className = 'profile-action-btn dashboard-book-class-cta';
     cta.id = 'dashboardBookClassCTA';
-    cta.textContent = 'Find a class';
+    cta.textContent = 'See more classes';
     cta.addEventListener('click', (e) => {
       e.preventDefault();
       openClassesBrowseTab();
     });
-    empty.append(title, cta);
+    empty.append(title, recSlot, cta);
+    renderDashboardClassesRecommendation(recSlot, customer || {});
     wrap.appendChild(empty);
   }
 
