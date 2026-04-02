@@ -1353,6 +1353,61 @@ class AuthAPI {
     return Array.isArray(data) ? data : [];
   }
 
+  /** BRP api3 ver3 GET — events at a business unit (multi-session / courses). */
+  async listBusinessUnitEvents(businessUnitId, options = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const bu =
+      typeof businessUnitId === 'number' && Number.isFinite(businessUnitId)
+        ? businessUnitId
+        : parseInt(String(businessUnitId), 10);
+    if (!Number.isFinite(bu) || bu <= 0) {
+      throw new Error('Invalid business unit ID');
+    }
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+    const params = new URLSearchParams();
+    if (options.periodStart) params.set('period.start', options.periodStart);
+    if (options.periodEnd) params.set('period.end', options.periodEnd);
+    if (options.webCategory != null) {
+      params.set('webCategory', String(options.webCategory));
+    }
+    const qs = params.toString();
+    const tryPaths = [
+      // BRP docs sometimes list events under /api3/ver3
+      `/api3/ver3/businessunits/${bu}/events${qs ? `?${qs}` : ''}`,
+      // Some installations expose it under /api/ver3 (same auth)
+      `/api/ver3/businessunits/${bu}/events${qs ? `?${qs}` : ''}`,
+    ];
+    let lastErr = null;
+    for (const path of tryPaths) {
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path,
+      });
+      try {
+        const data = await requestJson({ url, method: 'GET', headers });
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        lastErr = e;
+        // Only fall back on “endpoint not found / not supported” style failures.
+        const status = e?.status;
+        if (status && ![400, 404, 405].includes(status)) {
+          throw e;
+        }
+      }
+    }
+    if (lastErr) throw lastErr;
+    return [];
+  }
+
   /** BRP ver3 POST — book a group activity (or join waiting list when allowed). */
   async bookCustomerGroupActivity(customerId, { groupActivityId, allowWaitingList = false } = {}) {
     const accessToken =
@@ -1395,6 +1450,119 @@ class AuthAPI {
         allowWaitingList: !!allowWaitingList,
       },
     });
+  }
+
+  /** BRP booking flow for events (multi-session / course series) via order items. */
+  async bookCustomerEvent(customerId, { eventId, businessUnitId = null, participant = null } = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      throw new Error('Invalid customer ID');
+    }
+    const eid =
+      typeof eventId === 'number' && Number.isFinite(eventId)
+        ? eventId
+        : parseInt(String(eventId), 10);
+    if (!Number.isFinite(eid) || eid <= 0) {
+      throw new Error('Invalid event ID');
+    }
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+
+    const tryDirectPaths = [
+      `/api/ver3/customers/${idNum}/bookings/events`,
+      `/api3/ver3/customers/${idNum}/bookings/events`,
+    ];
+    let lastErr = null;
+    for (const path of tryDirectPaths) {
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path,
+      });
+      try {
+        return await requestJson({
+          url,
+          method: 'POST',
+          headers,
+          body: { event: eid },
+        });
+      } catch (e) {
+        lastErr = e;
+        const status = e?.status;
+        if (status && ![400, 403, 404, 405].includes(status)) throw e;
+      }
+    }
+
+    const createOrderUrl = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: '/api/ver3/orders',
+    });
+    const buNum = Number(businessUnitId);
+    const orderPayloadVariants = [];
+    const withBoth = { businessUnit: Number.isFinite(buNum) && buNum > 0 ? buNum : state.selectedBusinessUnit };
+    withBoth.customer = idNum;
+    orderPayloadVariants.push(withBoth);
+    const withBuOnly = { businessUnit: Number.isFinite(buNum) && buNum > 0 ? buNum : state.selectedBusinessUnit };
+    orderPayloadVariants.push(withBuOnly);
+    if (Number.isFinite(buNum) && buNum > 0) {
+      orderPayloadVariants.push({ businessUnit: buNum, customer: idNum, source: 'WEB' });
+    }
+
+    for (const orderPayload of orderPayloadVariants) {
+      try {
+        if (!orderPayload?.businessUnit) continue;
+        const orderData = await requestJson({
+          url: createOrderUrl,
+          method: 'POST',
+          headers,
+          body: orderPayload,
+        });
+        const orderId = Number(orderData?.id ?? orderData?.orderId);
+        if (!Number.isFinite(orderId) || orderId <= 0) continue;
+        const addItemUrl = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/ver3/orders/${orderId}/items/events`,
+        });
+        return await requestJson({
+          url: addItemUrl,
+          method: 'POST',
+          headers,
+          body: {
+            event: eid,
+            participants: [
+              {
+                customer: idNum,
+                ...(participant?.firstName ? { firstName: String(participant.firstName) } : {}),
+                ...(participant?.lastName ? { lastName: String(participant.lastName) } : {}),
+                ...(participant?.birthDate ? { birthDate: String(participant.birthDate) } : {}),
+                ...(participant?.ssn ? { ssn: String(participant.ssn) } : {}),
+              },
+            ],
+            acceptedRegistrationTerms: new Date().toISOString(),
+          },
+        });
+      } catch (e) {
+        lastErr = e;
+        const status = e?.status;
+        if (status && ![400, 403, 404, 405].includes(status)) throw e;
+      }
+    }
+    if (lastErr) throw lastErr;
+    throw new Error('Event booking is not available for this user.');
   }
 
   /** BRP ver3 GET — gyms / business units (authenticated) */

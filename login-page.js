@@ -2162,9 +2162,69 @@ function initializeLoginPage(DOM) {
       : 'This is an event.';
 
     actionsEl.innerHTML = '';
+    if (isUserAuthenticated()) {
+      const eventIdNum = Number(ev?.id);
+      if (Number.isFinite(eventIdNum) && eventIdNum > 0 && authAPI?.bookCustomerEvent) {
+        const bookBtn = document.createElement('button');
+        bookBtn.type = 'button';
+        bookBtn.className = 'profile-action-btn class-card-expand__btn-primary';
+        bookBtn.textContent = 'Book now';
+        bookBtn.addEventListener('click', async () => {
+          const cid = getBrpNumericCustomerId(getBestCustomerData());
+          if (!cid) {
+            showToast('Log in to book.', 'error');
+            return;
+          }
+          bookBtn.disabled = true;
+          try {
+            const customer = getBestCustomerData() || {};
+            await authAPI.bookCustomerEvent(cid, {
+              eventId: eventIdNum,
+              businessUnitId: classCardBusinessUnitId(ev),
+              participant: {
+                firstName: customer.firstName || customer.givenName || '',
+                lastName: customer.lastName || customer.familyName || '',
+                birthDate: customer.birthDate || customer.dateOfBirth || '',
+                ssn: customer.ssn || customer.socialSecurityNumber || '',
+              },
+            });
+            showToast('Booked! Check My classes.', 'success');
+            closeClassCardExpand();
+            ensureGroupActivityBookingsLoaded().then(() => {
+              refreshClassesBookingsLists();
+              refreshDashboardPanels();
+            });
+            applyBrowseClassFilters();
+          } catch (err) {
+            if (Number(err?.status) === 403) {
+              showToast(
+                'You do not have permission to book this course online. Please contact reception and ask them to add you to the full series.',
+                'error'
+              );
+              bookBtn.disabled = true;
+              bookBtn.textContent = 'Contact reception';
+              bookBtn.classList.add('profile-action-btn-secondary');
+              bookBtn.classList.remove('profile-action-btn');
+            } else {
+              showToast(getErrorMessage(err), 'error');
+            }
+          } finally {
+            if (bookBtn.textContent !== 'Contact reception') {
+              bookBtn.disabled = false;
+            }
+          }
+        });
+        actionsEl.appendChild(bookBtn);
+      }
+    } else {
+      const hint = document.createElement('p');
+      hint.className = 'class-card-expand__hint';
+      hint.textContent = 'Log in to book this course.';
+      actionsEl.appendChild(hint);
+    }
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
-    closeBtn.className = 'profile-action-btn class-card-expand__btn-primary';
+    closeBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
     closeBtn.textContent = 'Close';
     closeBtn.addEventListener('click', () => closeClassCardExpand());
     actionsEl.appendChild(closeBtn);
