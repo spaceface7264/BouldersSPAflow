@@ -21578,6 +21578,7 @@ function setupFAQAccordion() {
 if (typeof window !== 'undefined') {
   window.state = state;
   window.authAPI = authAPI;
+  window.businessUnitsAPI = businessUnitsAPI;
   window.isUserAuthenticated = isUserAuthenticated;
   window.syncAuthenticatedCustomerState = syncAuthenticatedCustomerState;
   window.refreshLoginUI = refreshLoginUI;
@@ -21585,4 +21586,5 @@ if (typeof window !== 'undefined') {
   window.getErrorMessage = getErrorMessage;
   window.handleLogout = handleLogout;
   window.getProductPlaceholderImage = getProductPlaceholderImage;
+  window.getGymOpeningHours = getGymOpeningHours;
 }

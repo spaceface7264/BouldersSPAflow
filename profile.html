@@ -12,509 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        body {
-            background: #1a1a1a;
-            margin: 0;
-            padding: 0;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .login-page-wrapper {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 40px 20px;
-            position: relative;
-            background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            background-repeat: no-repeat;
-        }
-        
-        .login-page-wrapper::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            background-repeat: no-repeat;
-            opacity: 0.4;
-            z-index: 0;
-            pointer-events: none;
-        }
-        
-        /* Show/hide based on authentication state */
-        body:not(.authenticated) .page-content-wrapper {
-            display: none !important;
-        }
-        
-        body.authenticated .login-page-wrapper {
-            display: none !important;
-        }
-        
-        body.authenticated .page-content-wrapper {
-            display: block;
-            flex: 1;
-        }
-        
-        
-        .login-page-close-btn {
-            position: absolute;
-            right: 20px;
-            top: 20px;
-            z-index: 2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            padding: 0;
-            background-color: transparent;
-            border: none;
-            color: rgba(255, 255, 255, 0.5);
-            font-size: 28px;
-            font-weight: 300;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            line-height: 1;
-        }
-        
-        .login-page-close-btn:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            color: #FFFFFF;
-        }
-        
-        .profile-edit-section {
-            margin-top: 40px;
-            padding-top: 32px;
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        
-        /* Inherit styles from signup flow login modal */
-        .form-container {
-            background-color: #1a1a1a;
-            border-radius: 12px;
-            padding: 32px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-            max-width: 480px;
-            margin: 0 auto;
-        }
-        
-        .form-container-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 24px;
-        }
-        
-        .info-section-title {
-            font-size: var(--font-size-md);
-            text-align: left;
-            font-weight: bold;
-            margin: 0;
-            color: white;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .form-container-logo {
-            display: flex;
-            align-items: center;
-            flex-shrink: 0;
-        }
-        
-        .form-logo-image {
-            height: 20px;
-            width: auto;
-            object-fit: contain;
-            display: block;
-        }
-        
-        .form-logo-fallback {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 800;
-            font-family: 'Inter', sans-serif;
-            letter-spacing: 1px;
-            color: white;
-            background: linear-gradient(135deg, #F401F5 0%, #8B5CF6 100%);
-            border-radius: 6px;
-            padding: 4px 10px;
-            height: 20px;
-            min-width: 70px;
-        }
-        
-        .form-container .form-group {
-            margin-bottom: 24px;
-        }
-        
-        .form-container .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: var(--color-text-secondary);
-            font-size: var(--font-size-base);
-        }
-        
-        .form-container .form-group input {
-            width: 100%;
-            padding: 12px 16px;
-            background-color: #2a2a2a;
-            border: 2px solid #374151;
-            border-radius: 8px;
-            color: white;
-            font-size: var(--font-size-base);
-            transition: border-color 0.3s ease;
-        }
-        
-        .form-container .form-group input:focus {
-            outline: none;
-            border-color: #F401F5;
-        }
-        
-        .form-container .form-group input::placeholder {
-            color: #6B7280;
-        }
-        
-        .form-container .forgot-password-link {
-            display: inline-block;
-            margin-top: 8px;
-            color: #F401F5;
-            font-size: var(--font-size-sm);
-            text-decoration: none;
-            transition: color 0.2s ease;
-        }
-        
-        .form-container .forgot-password-link:hover {
-            color: #D401D5;
-            text-decoration: underline;
-        }
-        
-        .form-container .login-btn {
-            width: 100%;
-            padding: 16px 24px;
-            background-color: #F401F5;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: var(--font-size-md);
-            font-weight: bold;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            text-transform: uppercase;
-        }
-        
-        .form-container .login-btn:hover {
-            background-color: #D401D5;
-        }
-        
-        .new-user-section {
-            margin-top: 24px;
-            text-align: center;
-        }
-        
-        .new-user-text {
-            font-size: 14px;
-            color: rgba(255, 255, 255, 0.7);
-            margin: 0;
-            font-family: 'Inter', sans-serif;
-        }
-        
-        .new-user-link {
-            color: #F401F5;
-            text-decoration: none;
-            font-weight: 600;
-            transition: color 0.2s ease;
-        }
-        
-        .new-user-link:hover {
-            color: #8B5CF6;
-            text-decoration: underline;
-        }
-        
-        /* Login status section styles */
-        .login-status {
-            background: linear-gradient(135deg, rgba(244, 1, 245, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 32px;
-        }
-        
-        .login-status-header {
-            margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        
-        .login-status-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: #9CA3AF;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-        
-        .login-status-name {
-            font-size: 20px;
-            font-weight: 700;
-            color: #FFFFFF;
-            margin-bottom: 4px;
-            letter-spacing: -0.3px;
-        }
-        
-        .login-status-email {
-            font-size: 14px;
-            color: #D1D5DB;
-            margin-bottom: 16px;
-        }
-        
-        .profile-detail-item {
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        
-        .profile-detail-item:last-child {
-            border-bottom: none;
-        }
-        
-        .profile-detail-label {
-            font-size: 13px;
-            font-weight: 500;
-            color: #9CA3AF;
-        }
-        
-        .profile-detail-value {
-            font-size: 13px;
-            font-weight: 500;
-            color: #FFFFFF;
-        }
-        
-        .login-status .login-btn {
-            position: static;
-            width: 100%;
-            margin-top: 20px;
-            padding: 12px 20px;
-            font-size: 14px;
-            font-weight: 600;
-            background-color: rgba(244, 1, 245, 0.1);
-            border: 1px solid rgba(244, 1, 245, 0.3);
-            color: #F401F5;
-            border-radius: 10px;
-            transition: all 0.2s ease;
-        }
-        
-        .login-status .login-btn:hover {
-            background-color: rgba(244, 1, 245, 0.2);
-            border-color: #F401F5;
-            transform: translateY(-1px);
-        }
-        
-        /* Profile edit form styles */
-        .profile-edit-section .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-        
-        .profile-edit-section .form-group input {
-            width: 100%;
-            padding: 14px 16px;
-            background-color: rgba(17, 24, 39, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            color: #FFFFFF;
-            font-size: 15px;
-            transition: all 0.2s ease;
-        }
-        
-        .profile-edit-section .form-group input:focus {
-            outline: none;
-            border-color: #F401F5;
-            background-color: rgba(17, 24, 39, 0.8);
-            box-shadow: 0 0 0 3px rgba(244, 1, 245, 0.1);
-        }
-        
-        .profile-edit-section .form-group input::placeholder {
-            color: #6B7280;
-        }
-        
-        .profile-edit-section .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            color: #D1D5DB;
-            letter-spacing: 0.1px;
-        }
-        
-        .profile-edit-section .login-btn {
-            margin-top: 8px;
-        }
-        
-        @media (max-width: 768px) {
-            .login-page-wrapper {
-                padding: 20px 16px;
-            }
-            
-            
-            .login-page-close-btn {
-                right: 16px;
-                top: 16px;
-            }
-            
-            .form-container-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 16px;
-            }
-            
-            .form-container-logo {
-                align-self: flex-end;
-            }
-            
-            .form-logo-image {
-                height: 18px;
-            }
-            
-            .form-logo-fallback {
-                height: 18px;
-                font-size: 11px;
-                padding: 3px 8px;
-                min-width: 65px;
-            }
-            
-            .profile-edit-section .form-row {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        /* Forgot password modal styles */
-        .forgot-password-modal {
-            backdrop-filter: blur(8px);
-        }
-        
-        .forgot-password-modal-content {
-            background-color: rgba(31, 41, 55, 0.98);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-        }
-        
-        .forgot-password-description {
-            color: #D1D5DB;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        
-        .forgot-password-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 24px;
-        }
-        
-        .forgot-password-cancel-btn {
-            flex: 1;
-            padding: 14px 20px;
-            background-color: rgba(255, 255, 255, 0.08);
-            color: #D1D5DB;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .forgot-password-cancel-btn:hover {
-            background-color: rgba(255, 255, 255, 0.12);
-            border-color: rgba(255, 255, 255, 0.25);
-            color: #FFFFFF;
-        }
-        
-        .forgot-password-success {
-            text-align: center;
-            padding: 24px 0;
-        }
-        
-        .forgot-password-success-message {
-            color: #10B981;
-            font-size: 14px;
-            margin-bottom: 24px;
-            line-height: 1.6;
-            font-weight: 500;
-        }
-        
-        @media (max-width: 480px) {
-            .login-page-wrapper {
-                padding: 16px 12px;
-            }
-            
-            .login-page-close-btn {
-                right: 12px;
-                top: 12px;
-                width: 28px;
-                height: 28px;
-                font-size: 24px;
-            }
-            
-            .form-container-header {
-                gap: 12px;
-            }
-            
-            .form-logo-image {
-                height: 16px;
-            }
-            
-            .form-logo-fallback {
-                height: 16px;
-                font-size: 10px;
-                padding: 3px 6px;
-                min-width: 60px;
-            }
-            
-            
-            
-            .login-page-close-btn {
-                width: 28px;
-                height: 28px;
-                font-size: 24px;
-            }
-            
-            .forgot-password-modal-content {
-                padding: 24px;
-            }
-            
-            .forgot-password-actions {
-                flex-direction: column;
-            }
-            
-            .forgot-password-cancel-btn,
-            .forgot-password-actions .login-btn {
-                width: 100%;
-            }
-        }
-    </style>
-</head>
+    </head>
 <body>
     <!-- Contract Signing Banner (shown when contract is not signed) -->
     <div class="contract-signing-banner" id="contractSigningBanner" style="display: none;">
@@ -539,49 +37,53 @@
     <header class="main-navigation" id="mainNavigation" style="display: none;">
         <div class="nav-container">
             <div class="nav-logo">
-                <a href="./index.html" class="nav-logo-link">
+                <a href="#dashboard" class="nav-logo-link">
                     <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="nav-logo-image" style="height:22px;width:auto;max-width:180px;display:block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
                     <span class="nav-logo-fallback">BOULDERS</span>
                 </a>
             </div>
-            <nav class="nav-links">
+            <nav class="nav-links" id="primaryNav" aria-label="Main navigation">
                 <a href="#" class="nav-link active" data-route="dashboard">Dashboard</a>
                 <a href="#" class="nav-link" data-route="classes">Classes & Bookings</a>
                 <a href="#" class="nav-link" data-route="activity">Activity</a>
+                <a href="#" class="nav-link" data-route="gyms">Gyms</a>
                 <a href="#" class="nav-link" data-route="profile">Profile</a>
             </nav>
-            <div class="nav-user" id="navUser">
-                <span class="user-name" id="navUserName">User</span>
-                <div class="user-avatar" id="navUserAvatar" data-initials="U"></div>
-                <svg class="dropdown-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-                <div class="user-dropdown" id="userDropdown" style="display: none;">
-                    <a href="#" class="dropdown-item" data-action="nav-profile">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="12" cy="7" r="4"></circle>
-                        </svg>
-                        Profile
-                    </a>
-                    <a href="#" class="dropdown-item" data-action="nav-settings">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
-                        </svg>
-                        Settings
-                    </a>
-                    <a href="#" class="dropdown-item" data-action="nav-logout">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                            <polyline points="16 17 21 12 16 7"></polyline>
-                            <line x1="21" y1="12" x2="9" y2="12"></line>
-                        </svg>
-                        Logout
-                    </a>
+            <div class="nav-end">
+                <button type="button" class="nav-menu-toggle" id="navMenuToggle" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">
+                    <span class="nav-menu-toggle__inner" aria-hidden="true">
+                        <span class="nav-menu-toggle__bar"></span>
+                        <span class="nav-menu-toggle__bar"></span>
+                        <span class="nav-menu-toggle__bar"></span>
+                    </span>
+                </button>
+                <div class="nav-user" id="navUser">
+                    <span class="user-name" id="navUserName">User</span>
+                    <div class="user-avatar" id="navUserAvatar" data-initials="U"></div>
+                    <svg class="dropdown-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                    <div class="user-dropdown" id="userDropdown" style="display: none;">
+                        <a href="#" class="dropdown-item" data-action="nav-settings">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+                            </svg>
+                            Settings
+                        </a>
+                        <a href="#" class="dropdown-item" data-action="nav-logout">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                <polyline points="16 17 21 12 16 7"></polyline>
+                                <line x1="21" y1="12" x2="9" y2="12"></line>
+                            </svg>
+                            Logout
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
+        <div class="nav-mobile-backdrop" id="navMobileBackdrop" hidden></div>
     </header>
 
     <!-- Page Content Container (shown when authenticated) -->
@@ -600,7 +102,6 @@
                             <h2 class="dashboard-access-title" id="dashboardAccessHeading">My Access</h2>
                             <span class="dashboard-access-badge" id="dashboardAccessBadge">Status</span>
                         </div>
-                        <p class="dashboard-access-lead" id="dashboardAccessLead"></p>
                         <div class="dashboard-access-rows" id="dashboardAccessRows"></div>
                         <div id="dashboardAccessSupportSlot" class="dashboard-access-support-slot" hidden></div>
                     </section>
@@ -688,7 +189,7 @@
                     </div>
 
                     <!-- My Upcoming Classes Card -->
-                    <div class="dashboard-card dashboard-card-large">
+                    <div class="dashboard-card dashboard-card-large dashboard-card-classes">
                         <h2 class="dashboard-card-title">Classes &amp; bookings</h2>
                         <div class="dashboard-classes-list" id="dashboardUpcomingClasses"></div>
                     </div>
@@ -915,6 +416,59 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Gyms directory -->
+        <div class="page-section" id="pageGyms" style="display: none;">
+            <div class="gyms-page-container">
+                <header class="gyms-page-header">
+                    <h1 class="gyms-page-title">Gyms</h1>
+                    <p class="gyms-page-lead">Addresses &amp; maps.</p>
+                </header>
+
+                <section class="dashboard-card gyms-directory-section" aria-label="Boulders locations" id="gymsDirectorySection">
+                    <div id="gymsDirectorySkeleton" class="gym-directory-skeleton-grid" hidden>
+                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
+                        </div>
+                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
+                        </div>
+                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
+                        </div>
+                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
+                        </div>
+                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
+                        </div>
+                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
+                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
+                        </div>
+                    </div>
+                    <p id="gymsDirectoryError" class="gyms-directory-error" hidden role="alert"></p>
+                    <div id="gymsDirectoryList" class="gym-directory-grid"></div>
+                </section>
             </div>
         </div>
 
