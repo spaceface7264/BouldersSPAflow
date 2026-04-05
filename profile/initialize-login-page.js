@@ -40,7 +40,6 @@ import {
   isLikelySeriesSession,
   hasSeriesCopyHint,
 } from './lib/class-activity-pure.js';
-
 export function initializeLoginPage(DOM) {
   const ctx = buildProfileContext(DOM);
   const {
@@ -763,9 +762,14 @@ export function initializeLoginPage(DOM) {
   let classCardExpandRoot = null;
   let classCardExpandEscapeBound = false;
 
+  function clearClassCardExpandLayoutModifiers(root) {
+    root?.classList.remove('class-card-expand--saved-fallback');
+  }
+
   function closeClassCardExpand() {
     if (!classCardExpandRoot) return;
     classCardExpandRoot.classList.remove('class-card-expand--open');
+    clearClassCardExpandLayoutModifiers(classCardExpandRoot);
     classCardExpandRoot.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('class-card-expand-open');
   }
@@ -1033,6 +1037,7 @@ export function initializeLoginPage(DOM) {
 
   function openDropInClassInfoExpand(activity, gymSel) {
     const root = ensureClassCardExpandRoot();
+    clearClassCardExpandLayoutModifiers(root);
     const titleEl = root.querySelector('.class-card-expand__title');
     const linesEl = root.querySelector('.class-card-expand__lines');
     const descEl = root.querySelector('.class-card-expand__desc');
@@ -1041,6 +1046,7 @@ export function initializeLoginPage(DOM) {
 
     titleEl.textContent = 'No need to book this class, just show up!';
     linesEl.textContent = `${info.when}\n${info.location}`;
+    resetClassCardExpandDescEl(descEl);
     descEl.textContent = 'This is a drop-in class and cannot be booked in advance.';
     actionsEl.innerHTML = '';
 
@@ -1052,8 +1058,16 @@ export function initializeLoginPage(DOM) {
     actionsEl.appendChild(closeBtn);
   }
 
+  function resetClassCardExpandDescEl(descEl) {
+    if (!descEl) return;
+    descEl.className = 'class-card-expand__desc';
+    descEl.removeAttribute('role');
+    descEl.textContent = '';
+  }
+
   function renderClassExpandDescSkeleton(descEl) {
     if (!descEl) return;
+    resetClassCardExpandDescEl(descEl);
     descEl.classList.add('class-card-expand__desc--loading');
     descEl.innerHTML =
       '<span class="class-card-expand__skeleton-line"></span>' +
@@ -1152,6 +1166,7 @@ export function initializeLoginPage(DOM) {
 
   function openClassCardExpandBrowse(activity, gymSel) {
     const root = ensureClassCardExpandRoot();
+    clearClassCardExpandLayoutModifiers(root);
     const titleEl = root.querySelector('.class-card-expand__title');
     const linesEl = root.querySelector('.class-card-expand__lines');
     const descEl = root.querySelector('.class-card-expand__desc');
@@ -1162,7 +1177,7 @@ export function initializeLoginPage(DOM) {
 
     titleEl.textContent = browseTitle;
     linesEl.textContent = buildBrowseExpandLines(activity, gymSel);
-    descEl.textContent = '';
+    resetClassCardExpandDescEl(descEl);
     actionsEl.innerHTML = '';
 
     hero.classList.remove('class-card-expand__hero--empty');
@@ -1268,6 +1283,7 @@ export function initializeLoginPage(DOM) {
 
   function openClassCardExpandBooking(book) {
     const root = ensureClassCardExpandRoot();
+    clearClassCardExpandLayoutModifiers(root);
     const { title } = bookingDisplayLine(book);
     const titleEl = root.querySelector('.class-card-expand__title');
     const linesEl = root.querySelector('.class-card-expand__lines');
@@ -1278,6 +1294,7 @@ export function initializeLoginPage(DOM) {
 
     titleEl.textContent = title;
     linesEl.textContent = buildBookingExpandLines(book);
+    resetClassCardExpandDescEl(descEl);
     actionsEl.innerHTML = '';
 
     hero.classList.remove('class-card-expand__hero--empty');
@@ -1669,6 +1686,50 @@ export function initializeLoginPage(DOM) {
     return loadSavedClasses().some((x) => x && x.key === key);
   }
 
+  const MAX_SAVED_CLASS_SNAPSHOT_JSON = 200000;
+
+  function safeCloneForSavedClassSnapshot(source) {
+    if (!source || typeof source !== 'object') return null;
+    try {
+      const json = JSON.stringify(source);
+      if (!json || json.length > MAX_SAVED_CLASS_SNAPSHOT_JSON) return null;
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Opens expand from JSON stored at save time (browse / event card). Avoids schedule re-fetch mismatches.
+   */
+  function tryOpenSavedClassSnapshot(rec) {
+    const snap = rec?.browseSnapshot;
+    if (!snap || typeof snap !== 'object') return false;
+    const gymSel = document.getElementById('browseGymFilter');
+    try {
+      if (Array.isArray(snap.__seriesBookings) && snap.__seriesBookings.length > 0) {
+        openClassCardExpandBooking(snap);
+        return true;
+      }
+      if (snap.__kind === 'event' || (snap.occasions && snap.__kind !== 'groupActivity')) {
+        const ev = { ...snap };
+        if (rec.buId && !classCardBusinessUnitId(ev)) ev.__buId = rec.buId;
+        openEventExpand(ev);
+        return true;
+      }
+      if (snap.__kind === 'groupActivity' || snap.slots != null || snap.groupActivity != null) {
+        const activity = { ...snap };
+        if (rec.buId && !classCardBusinessUnitId(activity)) activity.__buId = rec.buId;
+        if (!activity.__kind) activity.__kind = 'groupActivity';
+        openClassCardExpandBrowse(activity, gymSel);
+        return true;
+      }
+    } catch (_) {
+      return false;
+    }
+    return false;
+  }
+
   function saveClassRecord(source, title, where, startIso, endIso, isSeries = false) {
     const key = classSaveKey(source);
     const imageUrl =
@@ -1728,6 +1789,25 @@ export function initializeLoginPage(DOM) {
       seriesLines,
       savedAt: new Date().toISOString(),
     };
+    if (
+      source &&
+      typeof source === 'object' &&
+      (source.__kind === 'groupActivity' ||
+        source.__kind === 'event' ||
+        (source.occasions && !Array.isArray(source.__seriesBookings)))
+    ) {
+      const snap = safeCloneForSavedClassSnapshot(source);
+      if (snap) record.browseSnapshot = snap;
+    } else if (
+      source &&
+      typeof source === 'object' &&
+      isSeries &&
+      Array.isArray(source.__seriesBookings) &&
+      source.__seriesBookings.length
+    ) {
+      const snap = safeCloneForSavedClassSnapshot(source);
+      if (snap) record.browseSnapshot = snap;
+    }
     const list = loadSavedClasses();
     const idx = list.findIndex((x) => x && x.key === key);
     if (idx >= 0) list[idx] = record;
@@ -1859,12 +1939,19 @@ export function initializeLoginPage(DOM) {
       try {
         const units = await authAPI.listVer3BusinessUnits();
         const want = String(rec.where).trim().toLowerCase();
-        const hit = (Array.isArray(units) ? units : []).find((u) => {
-          const n = String(u?.name || u?.displayName || '')
+        const list = Array.isArray(units) ? units : [];
+        const norm = (u) =>
+          String(u?.name || u?.displayName || '')
             .trim()
             .toLowerCase();
-          return n === want;
-        });
+        let hit = list.find((u) => norm(u) === want);
+        if (!hit && want.length >= 4) {
+          const partial = list
+            .map((u) => ({ u, n: norm(u) }))
+            .filter(({ n }) => n && (n.includes(want) || want.includes(n)));
+          partial.sort((a, b) => b.n.length - a.n.length);
+          hit = partial[0]?.u;
+        }
         const maybe = Number(hit?.id);
         if (Number.isFinite(maybe) && maybe > 0) return maybe;
       } catch (_) {
@@ -1922,9 +2009,25 @@ export function initializeLoginPage(DOM) {
       return Boolean(t && n && (n === t || n.includes(t) || t.includes(n)));
     };
 
-    const withBu = (item, kind) => {
+    function groupActivityBrowseTitle(a) {
+      if (!a || typeof a !== 'object') return '';
+      return (
+        a.name ||
+        a.groupActivity?.name ||
+        a.title ||
+        a.className ||
+        a.activityName ||
+        ''
+      );
+    }
+
+    const withBu = (item, kind, buOverride) => {
       const out = { ...item, __kind: kind };
-      if (!classCardBusinessUnitId(out) && buId) out.__buId = buId;
+      const effectiveBu =
+        buOverride != null && Number.isFinite(Number(buOverride)) && Number(buOverride) > 0
+          ? Number(buOverride)
+          : buId;
+      if (!classCardBusinessUnitId(out) && effectiveBu) out.__buId = effectiveBu;
       return out;
     };
 
@@ -1933,7 +2036,11 @@ export function initializeLoginPage(DOM) {
       const now = Date.now();
       const GRACE_MS = 20 * 60 * 1000;
       const candidates = (Array.isArray(activities) ? activities : [])
-        .map((a) => ({ a, t: Date.parse(a?.duration?.start || '') }))
+        .map((a) => {
+          const s = bookingStartIsoValue(a);
+          const t = typeof s === 'string' && s ? Date.parse(s) : NaN;
+          return { a, t };
+        })
         .filter((x) => Number.isFinite(x.t) && predicate(x.a, x.t));
       if (!candidates.length) return null;
       const upcoming = candidates.filter((x) => x.t >= now - GRACE_MS).sort((x, y) => x.t - y.t);
@@ -1967,7 +2074,7 @@ export function initializeLoginPage(DOM) {
           const byProduct = pickBestGroupActivityOccurrence(list, (a) => extractGroupActivityProductId(a) === savedPid);
           if (byProduct) return { item: withBu(byProduct, 'groupActivity'), kind: 'groupActivity' };
         }
-        const byName = pickBestGroupActivityOccurrence(list, (a) => nameMatches(a?.name));
+        const byName = pickBestGroupActivityOccurrence(list, (a) => nameMatches(groupActivityBrowseTitle(a)));
         if (byName) return { item: withBu(byName, 'groupActivity'), kind: 'groupActivity' };
       } catch (_) {
         /* continue */
@@ -1996,9 +2103,7 @@ export function initializeLoginPage(DOM) {
       }
     }
 
-    if (!buId) return null;
-
-    if (rec.isSeries && authAPI?.listBusinessUnitEvents) {
+    if (buId && rec.isSeries && authAPI?.listBusinessUnitEvents) {
       try {
         const evs = await authAPI.listBusinessUnitEvents(buId, {
           periodStart: eventPeriodStart,
@@ -2007,7 +2112,8 @@ export function initializeLoginPage(DOM) {
         const list = Array.isArray(evs) ? evs : [];
         const hit = list.find((ev) => {
           if (!isGroupedEventSeries(ev) || !nameMatches(ev?.name)) return false;
-          const a = Date.parse(ev?.duration?.start || '');
+          const startStr = bookingStartIsoValue(ev);
+          const a = typeof startStr === 'string' && startStr ? Date.parse(startStr) : NaN;
           const b = Date.parse(ev?.duration?.end || '');
           if (!Number.isFinite(a)) return false;
           if (!Number.isFinite(startMs)) return true;
@@ -2024,7 +2130,11 @@ export function initializeLoginPage(DOM) {
       const now = Date.now();
       const GRACE_MS = 20 * 60 * 1000;
       const candidates = (Array.isArray(events) ? events : [])
-        .map((ev) => ({ ev, t: Date.parse(ev?.duration?.start || '') }))
+        .map((ev) => {
+          const s = bookingStartIsoValue(ev);
+          const t = typeof s === 'string' && s ? Date.parse(s) : NaN;
+          return { ev, t };
+        })
         .filter((x) => Number.isFinite(x.t) && predicate(x.ev, x.t));
       if (!candidates.length) return null;
       const upcoming = candidates.filter((x) => x.t >= now - GRACE_MS).sort((x, y) => x.t - y.t);
@@ -2038,6 +2148,7 @@ export function initializeLoginPage(DOM) {
     }
 
     if (
+      buId &&
       (rec.kind === 'event' || parsed.type === 'event' || parsed.type === 'unknown') &&
       authAPI?.listBusinessUnitEvents
     ) {
@@ -2054,28 +2165,58 @@ export function initializeLoginPage(DOM) {
       }
     }
 
-    if (
-      rec.kind !== 'event' &&
-      authAPI?.listBusinessUnitGroupActivities
-    ) {
+    async function attemptMatchGroupActivitiesAtBu(tryBu, opts) {
+      if (!tryBu || !authAPI?.listBusinessUnitGroupActivities) return null;
       try {
-        const acts = await authAPI.listBusinessUnitGroupActivities(buId, {
-          periodStart,
-          periodEnd,
-          customerId: cid || undefined,
-        });
+        const acts = await authAPI.listBusinessUnitGroupActivities(tryBu, opts);
         const list = Array.isArray(acts) ? acts : [];
-        if (parsed.type !== 'ga') {
-          const savedPid = Number(rec.productId);
-          if (Number.isFinite(savedPid) && savedPid > 0) {
-            const byProduct = pickBestGroupActivityOccurrence(list, (a) => extractGroupActivityProductId(a) === savedPid);
-            if (byProduct) return { item: withBu(byProduct, 'groupActivity'), kind: 'groupActivity' };
-          }
+        const savedPid = Number(rec.productId);
+        if (Number.isFinite(savedPid) && savedPid > 0) {
+          const byProduct = pickBestGroupActivityOccurrence(list, (a) => extractGroupActivityProductId(a) === savedPid);
+          if (byProduct) return { item: withBu(byProduct, 'groupActivity', tryBu), kind: 'groupActivity' };
         }
-        const byName = pickBestGroupActivityOccurrence(list, (a) => nameMatches(a?.name));
-        if (byName) return { item: withBu(byName, 'groupActivity'), kind: 'groupActivity' };
+        const byName = pickBestGroupActivityOccurrence(list, (a) => nameMatches(groupActivityBrowseTitle(a)));
+        if (byName) return { item: withBu(byName, 'groupActivity', tryBu), kind: 'groupActivity' };
       } catch (_) {
-        /* continue */
+        /* ignore */
+      }
+      return null;
+    }
+
+    if (rec.kind !== 'event' && authAPI?.listBusinessUnitGroupActivities) {
+      const buQueue = [];
+      if (Number.isFinite(buId) && buId > 0) buQueue.push(buId);
+      const homeBuId = Number(getBestCustomerData()?.businessUnit?.id);
+      if (Number.isFinite(homeBuId) && homeBuId > 0 && !buQueue.includes(homeBuId)) {
+        buQueue.push(homeBuId);
+      }
+      if (authAPI.listVer3BusinessUnits) {
+        try {
+          const units = await authAPI.listVer3BusinessUnits();
+          for (const u of Array.isArray(units) ? units : []) {
+            const id = Number(u?.id);
+            if (!Number.isFinite(id) || id <= 0) continue;
+            if (!buQueue.includes(id)) buQueue.push(id);
+            if (buQueue.length >= 10) break;
+          }
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      for (let bi = 0; bi < buQueue.length; bi += 1) {
+        const tryBu = buQueue[bi];
+        const fetchPlans =
+          bi === 0
+            ? [
+                { periodStart, periodEnd, customerId: cid || undefined },
+                { periodStart, periodEnd },
+                {},
+              ]
+            : [{ periodStart, periodEnd }, {}];
+        for (const opts of fetchPlans) {
+          const hit = await attemptMatchGroupActivitiesAtBu(tryBu, opts);
+          if (hit) return hit;
+        }
       }
     }
 
@@ -2098,9 +2239,17 @@ export function initializeLoginPage(DOM) {
         : formatClassSessionWhenLine(savedRec?.startIso || '', savedRec?.endIso || null);
     const bits = [when, savedRec?.where ? `Location: ${savedRec.where}` : ''].filter(Boolean);
     linesEl.textContent = bits.join('\n');
-    descEl.textContent =
-      'We could not match this to a current class in the schedule. It may have moved or ended. Browse classes to find it, or open your full saved list.';
-    descEl.classList.remove('class-card-expand__desc--loading');
+    resetClassCardExpandDescEl(descEl);
+    descEl.classList.add('class-card-expand__desc--notice');
+    descEl.setAttribute('role', 'status');
+    const noticeLead = document.createElement('p');
+    noticeLead.className = 'class-card-expand__desc-notice-lead';
+    noticeLead.textContent = 'We could not find this class on the current schedule.';
+    const noticeBody = document.createElement('p');
+    noticeBody.className = 'class-card-expand__desc-notice-body';
+    noticeBody.textContent =
+      'It may have moved or ended. Browse classes to find it, or open your full saved list.';
+    descEl.append(noticeLead, noticeBody);
     actionsEl.innerHTML = '';
 
     const browseBtn = document.createElement('button');
@@ -2139,6 +2288,7 @@ export function initializeLoginPage(DOM) {
       hero.classList.add('class-card-expand__hero--empty');
     }
 
+    root.classList.add('class-card-expand--saved-fallback');
     root.classList.add('class-card-expand--open');
     root.setAttribute('aria-hidden', 'false');
     document.body.classList.add('class-card-expand-open');
@@ -2163,6 +2313,9 @@ export function initializeLoginPage(DOM) {
       if (row.classList.contains('is-resolving-saved-class')) return;
       row.classList.add('is-resolving-saved-class');
       try {
+        if (tryOpenSavedClassSnapshot(savedRec)) {
+          return;
+        }
         const resolved = await resolveSavedRecordToLiveActivity(savedRec);
         const gymSel = document.getElementById('browseGymFilter');
         if (resolved?.kind === 'event' && resolved.item) {
@@ -3026,6 +3179,7 @@ export function initializeLoginPage(DOM) {
 
   function openEventExpand(ev) {
     const root = ensureClassCardExpandRoot();
+    clearClassCardExpandLayoutModifiers(root);
     const titleEl = root.querySelector('.class-card-expand__title');
     const linesEl = root.querySelector('.class-card-expand__lines');
     const descEl = root.querySelector('.class-card-expand__desc');
@@ -3038,6 +3192,7 @@ export function initializeLoginPage(DOM) {
     linesEl.textContent = sessions.length
       ? sessions.join('\n')
       : formatEventSeriesLine(ev);
+    resetClassCardExpandDescEl(descEl);
     descEl.textContent = isGroupedEventSeries(ev)
       ? 'This is a multi-session course. You’ll attend all sessions in the series.'
       : 'This is an event.';
@@ -3949,6 +4104,24 @@ export function initializeLoginPage(DOM) {
     frag.appendChild(row);
   }
 
+  function createDashboardClassesSectionHeader(headingId, label, count) {
+    const header = document.createElement('div');
+    header.className = 'dashboard-classes-section__header';
+    const h3 = document.createElement('h3');
+    h3.className = 'dashboard-classes-section__heading';
+    h3.id = headingId;
+    h3.textContent = label;
+    header.appendChild(h3);
+    if (count != null && count > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'dashboard-classes-section__count';
+      badge.textContent = String(count);
+      badge.setAttribute('aria-label', count === 1 ? '1 item' : `${count} items`);
+      header.appendChild(badge);
+    }
+    return header;
+  }
+
   function renderDashboardClassesSection(customer) {
     const wrap = document.getElementById('dashboardUpcomingClasses');
     if (!wrap) return;
@@ -3958,13 +4131,18 @@ export function initializeLoginPage(DOM) {
     const bookedLookup = buildDashboardBookedLookup(bookings, bookingUnits);
     const savedAll = loadSavedClasses();
     const saved = savedAll.filter((rec) => !dashboardSavedRecordIsBooked(rec, bookedLookup));
+    const hasSaved = saved.length > 0;
+    const hasBookings = bookings.length > 0;
 
-    if (saved.length) {
+    if (hasSaved) {
+      const savedSection = document.createElement('section');
+      savedSection.className = 'dashboard-classes-section dashboard-classes-section--saved';
+      savedSection.setAttribute('aria-labelledby', 'dashboardSavedClassesHeading');
+      savedSection.appendChild(
+        createDashboardClassesSectionHeader('dashboardSavedClassesHeading', 'Saved classes', saved.length)
+      );
       const reminder = document.createElement('div');
       reminder.className = 'dashboard-saved-reminder';
-      const title = document.createElement('p');
-      title.className = 'dashboard-saved-reminder__title';
-      title.textContent = saved.length > 1 ? `${saved.length} saved classes` : '1 saved class';
       const meta = document.createElement('p');
       meta.className = 'dashboard-saved-reminder__meta';
       meta.textContent = 'Reminder: review your saved classes before they fill up.';
@@ -4027,11 +4205,24 @@ export function initializeLoginPage(DOM) {
         attachDashboardSavedReminderRow(row, rec);
         savedList.appendChild(row);
       });
-      reminder.append(title, meta, ...(hint ? [hint] : []), savedList, actions);
-      wrap.appendChild(reminder);
+      reminder.append(meta, ...(hint ? [hint] : []), savedList, actions);
+      savedSection.appendChild(reminder);
+      wrap.appendChild(savedSection);
     }
 
-    if (bookings.length) {
+    if (hasBookings) {
+      const bookedSection = document.createElement('section');
+      bookedSection.className = 'dashboard-classes-section dashboard-classes-section--booked';
+      bookedSection.setAttribute('aria-labelledby', 'dashboardBookedClassesHeading');
+      bookedSection.appendChild(
+        createDashboardClassesSectionHeader(
+          'dashboardBookedClassesHeading',
+          'Upcoming bookings',
+          bookingUnits.length
+        )
+      );
+      const body = document.createElement('div');
+      body.className = 'dashboard-classes-section__body dashboard-classes-section__body--booked';
       const frag = document.createDocumentFragment();
       const unitStartMs = (u) =>
         u.kind === 'series' ? brpBookingStartMs(u.bookings[0]) : brpBookingStartMs(u.booking);
@@ -4040,7 +4231,9 @@ export function initializeLoginPage(DOM) {
       units.slice(0, maxUnits).forEach((unit) => {
         appendDashboardBookedUnitToFragment(frag, unit);
       });
-      wrap.appendChild(frag);
+      body.appendChild(frag);
+      bookedSection.appendChild(body);
+      wrap.appendChild(bookedSection);
       return;
     }
 
@@ -4062,90 +4255,24 @@ export function initializeLoginPage(DOM) {
     });
     empty.append(title, recSlot, cta);
     renderDashboardClassesRecommendation(recSlot, customer || {});
-    wrap.appendChild(empty);
-  }
 
-  function normalizeLoyaltyKey(raw) {
-    if (!raw) return 'default';
-    const s = String(raw).toLowerCase();
-    if (/bronze|tier\s*1|\blevel\s*1\b|^1$/.test(s)) return 'bronze';
-    if (/silver|tier\s*2|\blevel\s*2\b|^2$/.test(s)) return 'silver';
-    if (/gold|tier\s*3|\blevel\s*3\b|^3$/.test(s)) return 'gold';
-    return 'default';
-  }
-
-  function renderDashboardLoyaltySection(customer) {
-    const tierNameEl = document.getElementById('dashboardLoyaltyTier');
-    const levelEl = document.getElementById('dashboardLoyaltyLevel');
-    const benefitsEl = document.getElementById('dashboardLoyaltyBenefits');
-    if (!tierNameEl || !levelEl || !benefitsEl) return;
-
-    const tierBlock = tierNameEl.closest('.dashboard-loyalty-tier');
-    const hasMember = hasActiveMembership(customer || {});
-
-    clearDashboardEl(benefitsEl);
-
-    if (!hasMember) {
-      if (tierBlock) tierBlock.style.display = 'none';
-      const wrap = document.createElement('div');
-      wrap.className = 'dashboard-loyalty-no-membership';
-      const msg = document.createElement('p');
-      msg.className = 'dashboard-loyalty-no-membership-text';
-      msg.textContent =
-        'No membership found. To start your Bloc Life journey, become a member.';
-      const cta = document.createElement('a');
-      cta.href = './index.html';
-      cta.className = 'profile-action-btn dashboard-loyalty-become-member-btn';
-      cta.textContent = 'Become a member';
-      wrap.append(msg, cta);
-      benefitsEl.appendChild(wrap);
+    if (hasSaved) {
+      const bookedSection = document.createElement('section');
+      bookedSection.className = 'dashboard-classes-section dashboard-classes-section--booked';
+      bookedSection.setAttribute('aria-labelledby', 'dashboardBookedClassesHeading');
+      bookedSection.appendChild(
+        createDashboardClassesSectionHeader('dashboardBookedClassesHeading', 'Upcoming bookings', null)
+      );
+      const body = document.createElement('div');
+      body.className =
+        'dashboard-classes-section__body dashboard-classes-section__body--booked dashboard-classes-section__body--empty-booked';
+      body.appendChild(empty);
+      bookedSection.appendChild(body);
+      wrap.appendChild(bookedSection);
       return;
     }
 
-    if (tierBlock) tierBlock.style.display = '';
-
-    const loyalty = customer?.loyalty || {};
-    const rawTier =
-      customer?.loyaltyTier ||
-      customer?.blocLifeTier ||
-      loyalty.tierName ||
-      loyalty.levelName ||
-      loyalty.name ||
-      '';
-    const rawLevel =
-      customer?.loyaltyLevel ||
-      customer?.blocLifeLevel ||
-      loyalty.stage ||
-      loyalty.level ||
-      loyalty.tierLevel ||
-      '';
-
-    const combined = String(rawTier || rawLevel || '').trim();
-    const key = normalizeLoyaltyKey(combined);
-    const tierLabels = {
-      bronze: 'Bloc Life — Bronze',
-      silver: 'Bloc Life — Silver',
-      gold: 'Bloc Life — Gold',
-    };
-
-    if (combined) {
-      tierNameEl.textContent =
-        key !== 'default' && tierLabels[key] ? tierLabels[key] : combined;
-      levelEl.textContent = '';
-    } else {
-      tierNameEl.textContent = '';
-      levelEl.textContent = '';
-      if (tierBlock) tierBlock.style.display = 'none';
-    }
-
-    if (Array.isArray(loyalty.benefits) && loyalty.benefits.length) {
-      loyalty.benefits.forEach((line) => {
-        const p = document.createElement('p');
-        p.className = 'dashboard-loyalty-benefit-line dashboard-loyalty-benefit-line-api';
-        p.textContent = String(line);
-        benefitsEl.appendChild(p);
-      });
-    }
+    wrap.appendChild(empty);
   }
 
   function refreshDashboardPanels() {
@@ -4155,7 +4282,6 @@ export function initializeLoginPage(DOM) {
       renderDashboardAccessPanel(customer);
       renderDashboardClassesSection(customer);
       renderDashboardValueCardsSection(customer);
-      renderDashboardLoyaltySection(customer);
     });
   }
 

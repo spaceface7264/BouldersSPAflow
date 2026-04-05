@@ -134,76 +134,10 @@
 
                 <!-- Dashboard Grid -->
                 <div class="dashboard-grid">
-                    <!-- My Activity Card -->
-                    <div class="dashboard-card dashboard-card-large">
-                        <div class="dashboard-card-header">
-                            <div>
-                                <h2 class="dashboard-card-title">My activity</h2>
-                                <p class="dashboard-card-subtitle">Last 30 days</p>
-                            </div>
-                        </div>
-                        <div class="dashboard-chart-container">
-                            <div
-                                class="dashboard-chart"
-                                id="activityChart"
-                                role="status"
-                                aria-busy="true"
-                                aria-label="Loading activity for the last 30 days"
-                            >
-                                <div class="dashboard-activity-skeleton">
-                                    <div class="dashboard-activity-skeleton-stats">
-                                        <div class="dashboard-activity-skeleton-stat">
-                                            <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--label"></span>
-                                            <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--value"></span>
-                                        </div>
-                                        <div class="dashboard-activity-skeleton-stat">
-                                            <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--label"></span>
-                                            <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--value dashboard-activity-skeleton-line--value-short"></span>
-                                        </div>
-                                    </div>
-                                    <div class="dashboard-activity-skeleton-chart" aria-hidden="true">
-                                        <div class="dashboard-activity-skeleton-chart-inner">
-                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 32%"></span>
-                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 55%"></span>
-                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 42%"></span>
-                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 78%"></span>
-                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 48%"></span>
-                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 92%"></span>
-                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 65%"></span>
-                                            <span class="dashboard-activity-skeleton-bar" style="--bar-h: 38%"></span>
-                                        </div>
-                                    </div>
-                                    <div class="dashboard-activity-skeleton-axis" aria-hidden="true">
-                                        <span class="dashboard-activity-skeleton-tick"></span>
-                                        <span class="dashboard-activity-skeleton-tick"></span>
-                                        <span class="dashboard-activity-skeleton-tick"></span>
-                                        <span class="dashboard-activity-skeleton-tick"></span>
-                                        <span class="dashboard-activity-skeleton-tick"></span>
-                                        <span class="dashboard-activity-skeleton-tick"></span>
-                                        <span class="dashboard-activity-skeleton-tick"></span>
-                                        <span class="dashboard-activity-skeleton-tick"></span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- My Upcoming Classes Card -->
                     <div class="dashboard-card dashboard-card-large dashboard-card-classes">
                         <h2 class="dashboard-card-title">Classes &amp; bookings</h2>
                         <div class="dashboard-classes-list" id="dashboardUpcomingClasses"></div>
-                    </div>
-
-                    <!-- Bloc Life Loyalty Program Card -->
-                    <div class="dashboard-card">
-                        <h2 class="dashboard-card-title">Bloc Life Loyalty Program</h2>
-                        <div class="dashboard-loyalty-content">
-                            <div class="dashboard-loyalty-tier">
-                                <span class="dashboard-loyalty-tier-name" id="dashboardLoyaltyTier"></span>
-                                <span class="dashboard-loyalty-tier-level" id="dashboardLoyaltyLevel"></span>
-                            </div>
-                            <div class="dashboard-loyalty-benefits" id="dashboardLoyaltyBenefits"></div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -384,6 +318,60 @@
                         <div class="activity-stat-value" id="activityLoyaltyTier">-</div>
                     </div>
                 </div>
+
+                <!-- Last 30 days chart (moved from dashboard) -->
+                <section class="dashboard-card dashboard-card-large activity-last-30-section" aria-labelledby="activityLast30Heading">
+                    <div class="dashboard-card-header">
+                        <div>
+                            <h2 class="dashboard-card-title" id="activityLast30Heading">My activity</h2>
+                            <p class="dashboard-card-subtitle">Last 30 days</p>
+                        </div>
+                    </div>
+                    <div class="dashboard-chart-container">
+                        <div
+                            class="dashboard-chart"
+                            id="activityChart"
+                            role="status"
+                            aria-busy="true"
+                            aria-label="Loading activity for the last 30 days"
+                        >
+                            <div class="dashboard-activity-skeleton">
+                                <div class="dashboard-activity-skeleton-stats">
+                                    <div class="dashboard-activity-skeleton-stat">
+                                        <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--label"></span>
+                                        <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--value"></span>
+                                    </div>
+                                    <div class="dashboard-activity-skeleton-stat">
+                                        <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--label"></span>
+                                        <span class="dashboard-activity-skeleton-line dashboard-activity-skeleton-line--value dashboard-activity-skeleton-line--value-short"></span>
+                                    </div>
+                                </div>
+                                <div class="dashboard-activity-skeleton-chart" aria-hidden="true">
+                                    <div class="dashboard-activity-skeleton-chart-inner">
+                                        <span class="dashboard-activity-skeleton-bar" style="--bar-h: 32%"></span>
+                                        <span class="dashboard-activity-skeleton-bar" style="--bar-h: 55%"></span>
+                                        <span class="dashboard-activity-skeleton-bar" style="--bar-h: 42%"></span>
+                                        <span class="dashboard-activity-skeleton-bar" style="--bar-h: 78%"></span>
+                                        <span class="dashboard-activity-skeleton-bar" style="--bar-h: 48%"></span>
+                                        <span class="dashboard-activity-skeleton-bar" style="--bar-h: 92%"></span>
+                                        <span class="dashboard-activity-skeleton-bar" style="--bar-h: 65%"></span>
+                                        <span class="dashboard-activity-skeleton-bar" style="--bar-h: 38%"></span>
+                                    </div>
+                                </div>
+                                <div class="dashboard-activity-skeleton-axis" aria-hidden="true">
+                                    <span class="dashboard-activity-skeleton-tick"></span>
+                                    <span class="dashboard-activity-skeleton-tick"></span>
+                                    <span class="dashboard-activity-skeleton-tick"></span>
+                                    <span class="dashboard-activity-skeleton-tick"></span>
+                                    <span class="dashboard-activity-skeleton-tick"></span>
+                                    <span class="dashboard-activity-skeleton-tick"></span>
+                                    <span class="dashboard-activity-skeleton-tick"></span>
+                                    <span class="dashboard-activity-skeleton-tick"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
 
                 <!-- Check-in History -->
                 <div class="activity-history-section">
