@@ -1,5 +1,3 @@
 # Redirect /hero to /hero/ so hero landing page loads
 /hero    /hero/    302
 
-# Profile page route alias
-/profile    /profile.html    200
