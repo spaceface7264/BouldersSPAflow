@@ -22,9 +22,12 @@ export function initLoginPage() {
   };
 
   // Wait for app.js to be loaded and state to be available
+  let hasInitialized = false;
   const checkAppReady = setInterval(() => {
     if (typeof window.state !== 'undefined' && typeof window.authAPI !== 'undefined') {
       clearInterval(checkAppReady);
+      clearTimeout(readinessTimeout);
+      hasInitialized = true;
       initializeLoginPage(DOM);
       // Initialize navigation
       if (typeof window.initNavigation === 'function') {
@@ -34,9 +37,9 @@ export function initLoginPage() {
   }, 100);
 
   // Timeout after 5 seconds
-  setTimeout(() => {
+  const readinessTimeout = setTimeout(() => {
     clearInterval(checkAppReady);
-    if (typeof window.state === 'undefined' || typeof window.authAPI === 'undefined') {
+    if (!hasInitialized && (typeof window.state === 'undefined' || typeof window.authAPI === 'undefined')) {
       console.error('[Login Page] App.js not loaded properly');
     }
   }, 5000);

@@ -16,33 +16,16 @@ export function bindProfileAuthUi(ctx) {
     PAGE_ROUTES,
   } = ctx;
 
-  // Auto-populate form from URL parameters if present
+  // Auto-populate non-sensitive form fields from URL parameters if present.
+  // Never accept passwords via URL query params.
   const urlParams = new URLSearchParams(window.location.search);
   const urlEmail = urlParams.get('loginEmail');
-  const urlPassword = urlParams.get('loginPassword');
 
   if (urlEmail && DOM.loginPageForm) {
     const emailInput = document.getElementById('loginEmailPage');
     if (emailInput) {
-      emailInput.value = decodeURIComponent(urlEmail);
+      emailInput.value = urlEmail;
       console.log('[Login Page] Auto-populated email from URL');
-    }
-  }
-  if (urlPassword && DOM.loginPageForm) {
-    const passwordInput = document.getElementById('loginPasswordPage');
-    if (passwordInput) {
-      passwordInput.value = decodeURIComponent(urlPassword);
-      console.log('[Login Page] Auto-populated password from URL');
-
-      // Auto-submit if both email and password are in URL
-      if (urlEmail) {
-        console.log('[Login Page] Both email and password in URL, auto-submitting...');
-        setTimeout(() => {
-          if (DOM.loginPageForm) {
-            DOM.loginPageForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-          }
-        }, 100);
-      }
     }
   }
 
