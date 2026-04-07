@@ -1381,6 +1381,11 @@ class AuthAPI {
 
 // Step 7: Order and Items API
 // Handles order creation, adding items (subscriptions, value cards, articles), and order management
+const orderGetInFlight = new Map();
+const orderGetLastFetchedAt = new Map();
+const orderGetLastResponse = new Map();
+let orderGetCooldownUntil = 0;
+
 class OrderAPI {
   constructor(baseUrl = null) {
     const config = getApiConfig({ baseUrlOverride: baseUrl });
@@ -2170,7 +2175,33 @@ class OrderAPI {
 
   // Step 7: Get order - GET /api/orders/{orderId}
   async getOrder(orderId) {
-    try {
+    const orderKey = String(orderId);
+    const inFlight = orderGetInFlight.get(orderKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const now = Date.now();
+    const isLocalDev = isLocalDevHost();
+    const cachedOrder = orderGetLastResponse.get(orderKey);
+    const lastFetchedAt = orderGetLastFetchedAt.get(orderKey) || 0;
+
+    // Localhost protection: avoid hammering GET /api/orders/{id}
+    if (isLocalDev && now < orderGetCooldownUntil) {
+      const secondsLeft = Math.ceil((orderGetCooldownUntil - now) / 1000);
+      console.log(`[Step 7] Skipping getOrder(${orderKey}) during cooldown (${secondsLeft}s remaining)`);
+      if (cachedOrder) {
+        return cachedOrder;
+      }
+    }
+
+    // Localhost protection: reuse very recent response for rapid duplicate reads
+    if (isLocalDev && cachedOrder && now - lastFetchedAt < 1500) {
+      return cachedOrder;
+    }
+
+    const fetchPromise = (async () => {
+      try {
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
@@ -2197,16 +2228,33 @@ class OrderAPI {
           ? error.payload
           : JSON.stringify(error.payload);
         console.error(`[Step 7] Get order error (${error.status || 'unknown'}):`, payloadText || error);
+        if (isLocalDev && isRateLimitError(error)) {
+          const retryMs = getRetryDelayFromError(error);
+          orderGetCooldownUntil = Date.now() + retryMs;
+          console.warn(`[Step 7] getOrder rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
+          if (cachedOrder) {
+            return cachedOrder;
+          }
+        }
         const wrapped = new Error(`Get order failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
         wrapped.status = error.status;
+        wrapped.payload = error.payload;
         throw wrapped;
       }
       console.log('[Step 7] Get order response:', data);
+      orderGetLastFetchedAt.set(orderKey, Date.now());
+      orderGetLastResponse.set(orderKey, data);
       return data;
     } catch (error) {
       console.error('[Step 7] Get order error:', error);
       throw error;
+    } finally {
+      orderGetInFlight.delete(orderKey);
     }
+    })();
+
+    orderGetInFlight.set(orderKey, fetchPromise);
+    return fetchPromise;
   }
 
   // Step 7: Update order - PUT /api/orders/{orderId}
@@ -3404,7 +3452,23 @@ let gymsWithDistances = [];
 
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
+  const now = Date.now();
+  if (isLocalDevHost() && now < gymLoadCooldownUntil) {
+    const secondsLeft = Math.ceil((gymLoadCooldownUntil - now) / 1000);
+    console.log(`[Step 1] Skipping gym load (cooldown ${secondsLeft}s remaining)`);
+    const noResults = document.getElementById('noResults');
+    if (noResults) {
+      noResults.classList.remove('hidden');
+      noResults.textContent = `API rate limit in local dev. Retrying in ~${secondsLeft}s...`;
+    }
+    return;
+  }
+
   try {
+    if (gymLoadRetryTimeoutId) {
+      clearTimeout(gymLoadRetryTimeoutId);
+      gymLoadRetryTimeoutId = null;
+    }
     const response = await businessUnitsAPI.getBusinessUnits();
     
     // Handle different response formats - could be array or object with data property
@@ -3591,6 +3655,25 @@ async function loadGymsFromAPI() {
     }
     
   } catch (error) {
+    if (isLocalDevHost() && isRateLimitError(error)) {
+      const retryMs = getRetryDelayFromError(error);
+      gymLoadCooldownUntil = Date.now() + retryMs;
+      console.warn(`[Step 1] Business units rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
+      const noResults = document.getElementById('noResults');
+      if (noResults) {
+        noResults.classList.remove('hidden');
+        noResults.textContent = `API rate limit in local dev. Retrying in ~${Math.ceil(retryMs / 1000)}s...`;
+      }
+      if (!gymLoadRetryTimeoutId) {
+        gymLoadRetryTimeoutId = setTimeout(() => {
+          gymLoadRetryTimeoutId = null;
+          loadGymsFromAPI().catch((retryError) => {
+            console.warn('[Step 1] Auto-retry gym load failed:', retryError);
+          });
+        }, Math.max(retryMs + 250, 1000));
+      }
+      return;
+    }
     console.error('Failed to load gyms from API:', error);
     
     // Show user-friendly error message
@@ -4126,6 +4209,9 @@ const state = {
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
 let tokenValidationCooldownUntil = 0;
+let gymLoadCooldownUntil = 0;
+let gymLoadRetryTimeoutId = null;
+let customerSyncCooldownUntil = 0;
 let loginCooldownUntil = 0;
 let campaignCountdownIntervalId = null;
 let campaignGuardCustomerRefreshPromise = null;
@@ -4206,6 +4292,11 @@ function getTokenMetadata() {
   return null;
 }
 
+function isLocalDevHost() {
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
 async function syncAuthenticatedCustomerState(username = null, email = null) {
   const metadata = getTokenMetadata();
   const resolvedUsername = username || state.customerId || metadata?.username || metadata?.userName;
@@ -4222,6 +4313,20 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
   // Fetch customer profile if we have customer ID and access token
   // Always fetch to ensure we have complete profile data (not just partial form data)
   if (state.customerId && isUserAuthenticated()) {
+    const now = Date.now();
+    if (isLocalDevHost() && now < customerSyncCooldownUntil) {
+      const secondsLeft = Math.ceil((customerSyncCooldownUntil - now) / 1000);
+      console.log(`[Auth] Skipping customer profile refresh (cooldown ${secondsLeft}s remaining)`);
+      refreshLoginUI();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth-state-changed'));
+      }
+      if (state.currentStep === 4) {
+        updatePaymentOverview();
+      }
+      return;
+    }
+
     try {
       const customerData = await authAPI.getCustomer(state.customerId);
       state.authenticatedCustomer = customerData;
@@ -4229,6 +4334,11 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
       // Refresh UI after loading profile to show all fields
       refreshLoginUI();
     } catch (profileError) {
+      if (isLocalDevHost() && isRateLimitError(profileError)) {
+        const retryMs = getRetryDelayFromError(profileError);
+        customerSyncCooldownUntil = Date.now() + retryMs;
+        console.warn(`[Auth] Customer profile request rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
+      }
       console.warn('[Auth] Could not fetch customer profile:', profileError);
       // Continue even if profile fetch fails - refresh UI with whatever data we have
       refreshLoginUI();
