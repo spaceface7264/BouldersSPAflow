@@ -3414,6 +3414,7 @@ function renderProductsFromAPI() {
     try {
       setupNewAccessStep();
       updatePageTranslations();
+      applyFirstMonthFreeLandingCategoryFocus();
     } catch (e) {
       console.warn('[Step 2] setupNewAccessStep failed (raf):', e);
     }
@@ -4295,6 +4296,38 @@ function getTokenMetadata() {
 function isLocalDevHost() {
   const host = window.location.hostname;
   return host === 'localhost' || host === '127.0.0.1';
+}
+
+function isFirstMonthFreeLandingRoute() {
+  const path = (window.location.pathname || '').toLowerCase();
+  return path === '/firstmonthfree' || path === '/firstmonthfree/';
+}
+
+function applyFirstMonthFreeLandingCategoryFocus() {
+  const categoryList = document.querySelector('.category-list');
+  const categoryItems = document.querySelectorAll('.category-item');
+  if (!isFirstMonthFreeLandingRoute()) {
+    if (categoryList) categoryList.classList.remove('firstmonthfree-plans-only');
+    categoryItems.forEach((item) => {
+      item.style.display = '';
+      item.classList.remove('expanded', 'selected');
+    });
+    return;
+  }
+
+  if (categoryList) categoryList.classList.add('firstmonthfree-plans-only');
+  const campaignCategory = document.querySelector('.category-item[data-category="campaign"]');
+  if (!campaignCategory || campaignCategory.style.display === 'none') return;
+
+  categoryItems.forEach((item) => {
+    if (item !== campaignCategory) {
+      item.style.display = 'none';
+      item.classList.remove('expanded', 'selected');
+    } else {
+      item.style.display = '';
+    }
+  });
+  campaignCategory.classList.add('expanded', 'selected');
 }
 
 async function syncAuthenticatedCustomerState(username = null, email = null) {
@@ -11702,7 +11735,8 @@ function handleGlobalClick(event) {
     }
     case 'go-to-step-1': {
       event.preventDefault();
-      handleBackToGym();
+      // Header logo should always take users to the regular first page.
+      window.location.assign('/');
       break;
     }
     case 'toggle-addons-step': {

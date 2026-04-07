@@ -1,2 +1,6 @@
 # Redirect /hero to /hero/ so hero landing page loads
 /hero    /hero/    302
+
+# Serve SPA for first-month-free landing route
+/firstmonthfree      /index.html   200
+/firstmonthfree/*    /index.html   200

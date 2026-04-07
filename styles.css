@@ -2752,6 +2752,67 @@ body {
     max-height: none; /* Remove max-height constraint for selected items to show all content */
 }
 
+/* firstmonthfree landing: show only plan cards, no category chrome */
+.category-list.firstmonthfree-plans-only .category-item {
+    display: none;
+}
+
+.category-list.firstmonthfree-plans-only .category-item[data-category="campaign"] {
+    display: block;
+    background: var(--color-item-bg);
+    border: 0;
+    box-shadow: none;
+    cursor: default;
+    overflow: visible;
+}
+
+.category-list.firstmonthfree-plans-only .category-item[data-category="campaign"].selected,
+.category-list.firstmonthfree-plans-only .category-item[data-category="campaign"].expanded.selected {
+    background: var(--color-item-bg);
+    border: 0;
+    box-shadow: none;
+}
+
+.category-list.firstmonthfree-plans-only .category-item[data-category="campaign"]::after {
+    display: none;
+}
+
+.category-list.firstmonthfree-plans-only .category-item[data-category="campaign"] .category-header,
+.category-list.firstmonthfree-plans-only .category-item[data-category="campaign"] .category-description {
+    display: none;
+}
+
+.category-list.firstmonthfree-plans-only .category-item[data-category="campaign"] .category-content {
+    max-height: none;
+    opacity: 1;
+    transform: none;
+    display: block;
+    overflow: visible;
+    padding-bottom: 0;
+}
+
+.category-list.firstmonthfree-plans-only .category-item[data-category="campaign"] .plans-list {
+    max-height: none;
+    opacity: 1;
+    transform: none;
+    overflow: visible;
+}
+
+.category-list.firstmonthfree-plans-only .plan-card.selected:not(.addon-card) {
+    border-left: 1px solid #f0f;
+    border-right: 1px solid #f0f;
+}
+
+.category-list.firstmonthfree-plans-only .plan-card:first-child {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+
+.category-list.firstmonthfree-plans-only .plan-card:first-child.selected:not(.addon-card) {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+
 /* 15-day pass: activation date section */
 .activation-date-section {
     padding: 16px 20px 20px;
