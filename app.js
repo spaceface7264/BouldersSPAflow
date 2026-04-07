@@ -1405,10 +1405,10 @@ class AuthAPI {
     }
     const qs = params.toString();
     const tryPaths = [
-      // BRP docs sometimes list events under /api3/ver3
-      `/api3/ver3/businessunits/${bu}/events${qs ? `?${qs}` : ''}`,
-      // Some installations expose it under /api/ver3 (same auth)
+      // Most environments expose events under /api/ver3.
       `/api/ver3/businessunits/${bu}/events${qs ? `?${qs}` : ''}`,
+      // Fallback: some BRP installations expose this under /api3/ver3.
+      `/api3/ver3/businessunits/${bu}/events${qs ? `?${qs}` : ''}`,
     ];
     let lastErr = null;
     for (const path of tryPaths) {

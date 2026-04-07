@@ -795,7 +795,7 @@
                         <h3 class="settings-modal-title">Taking a break?<br><span style="font-weight: 400; font-size: 0.9em;">We'll be waiting for you!</span></h3>
                         <button class="settings-modal-close" id="closeFreezeSubscriptionModal">&times;</button>
                     </div>
-                    <div class="settings-modal-body">
+                    <form class="settings-modal-body" id="cancelSubscriptionStep2Form" onsubmit="return false;">
                         <div class="settings-form-group">
                             <p class="settings-info-text">
                                 You can freeze your membership for 1-3 months at a time, up to 3 times a year for 49,- per time. 
@@ -958,10 +958,10 @@
                         </div>
                         <div class="settings-form-group">
                             <label class="settings-form-label" for="cancelPasswordInput">Confirm your password</label>
-                            <input type="password" class="settings-input" id="cancelPasswordInput" placeholder="Enter your password" />
+                            <input type="password" class="settings-input" id="cancelPasswordInput" placeholder="Enter your password" autocomplete="current-password" />
                         </div>
                         <div class="settings-form-error" id="cancelSubscriptionErrorStep2" style="display: none;"></div>
-                    </div>
+                    </form>
                     <div class="settings-modal-footer">
                         <button class="settings-action-btn" id="stayMembershipCancelBtn" style="background-color: #F401F5; color: #FFFFFF; border: none;">I'll stay!</button>
                         <button class="settings-save-btn" id="confirmCancelSubscriptionBtn">Proceed</button>
@@ -1030,21 +1030,21 @@
                         <h3 class="settings-modal-title">Change Password</h3>
                         <button class="settings-modal-close" id="closePasswordModal">&times;</button>
                     </div>
-                    <div class="settings-modal-body">
+                    <form class="settings-modal-body" id="passwordModalForm" onsubmit="return false;">
                         <div class="settings-form-group">
                             <label class="settings-form-label" for="oldPasswordInput">Current Password</label>
-                            <input type="password" class="settings-input" id="oldPasswordInput" placeholder="Enter current password" />
+                            <input type="password" class="settings-input" id="oldPasswordInput" placeholder="Enter current password" autocomplete="current-password" />
                         </div>
                         <div class="settings-form-group">
                             <label class="settings-form-label" for="newPasswordInput">New Password</label>
-                            <input type="password" class="settings-input" id="newPasswordInput" placeholder="Enter new password" />
+                            <input type="password" class="settings-input" id="newPasswordInput" placeholder="Enter new password" autocomplete="new-password" />
                         </div>
                         <div class="settings-form-group">
                             <label class="settings-form-label" for="confirmPasswordInput">Confirm New Password</label>
-                            <input type="password" class="settings-input" id="confirmPasswordInput" placeholder="Confirm new password" />
+                            <input type="password" class="settings-input" id="confirmPasswordInput" placeholder="Confirm new password" autocomplete="new-password" />
                         </div>
                         <div class="settings-form-error" id="passwordFormError" style="display: none;"></div>
-                    </div>
+                    </form>
                     <div class="settings-modal-footer">
                         <button class="settings-cancel-btn" id="cancelPasswordBtn">Cancel</button>
                         <button class="settings-save-btn" id="savePasswordBtn">Change Password</button>
@@ -1102,7 +1102,7 @@
                 </div>
                 <div class="form-group">
                     <label for="loginPasswordPage">Password*</label>
-                    <input type="password" id="loginPasswordPage" name="loginPassword" placeholder="Enter your password">
+                    <input type="password" id="loginPasswordPage" name="loginPassword" placeholder="Enter your password" autocomplete="current-password">
                     <a href="#" class="forgot-password-link" data-action="forgot-password">Forgot password?</a>
                 </div>
                 <button type="submit" class="login-btn">LOG IN</button>
