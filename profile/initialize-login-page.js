@@ -381,6 +381,13 @@ export function initializeLoginPage(DOM) {
       setEmpty();
     }
 
+    if (source && isDropInOnlyClass(source)) {
+      const badge = document.createElement('span');
+      badge.className = 'booking-item-card__dropin-ribbon';
+      badge.textContent = 'DROP-IN';
+      wrap.appendChild(badge);
+    }
+
     return wrap;
   }
 
@@ -3627,7 +3634,6 @@ export function initializeLoginPage(DOM) {
             typeof endA === 'string' ? endA : null,
             { slots: a.slots, source: a }
           );
-        appendDropInPillToCardMain(main, a);
           appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(a, gymSel));
           appendSaveButtonToCardMain(main, a, {
             title: browseTitle,

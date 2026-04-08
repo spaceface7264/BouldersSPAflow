@@ -702,6 +702,29 @@ body.profile-hydrating #pageDashboard .dashboard-info-value::after {
   overflow: hidden;
 }
 
+.booking-item-card__dropin-ribbon {
+  position: absolute;
+  top: 14px;
+  right: -42px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 210px;
+  height: 26px;
+  padding: 0 14px;
+  transform: rotate(22deg);
+  transform-origin: center;
+  background: linear-gradient(180deg, #ff00d6, #de00ff);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
 .booking-item-card__media--skeleton {
   background: rgba(255, 255, 255, 0.05);
 }
@@ -795,6 +818,7 @@ body.profile-hydrating #pageDashboard .dashboard-info-value::after {
   font-size: var(--type-meta);
   color: var(--profile-muted);
   line-height: 1.4;
+  margin-bottom: 12px !important;
 }
 
 .booking-item-card__submeta {
@@ -815,6 +839,27 @@ body.profile-hydrating #pageDashboard .dashboard-info-value::after {
 
 .booking-item-card__pills .booking-item-card__save-btn {
   margin-top: 0;
+  width: 100%;
+  flex: 1 0 100%;
+  align-self: stretch;
+  text-align: center;
+}
+
+/* Save action should be a full-width row anchored at card bottom. */
+.booking-item-card__main .booking-item-card__pills {
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.booking-item-card__pill:has(> .booking-item-card__save-btn) {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.booking-item-card__pill:has(> .booking-item-card__save-btn) > .booking-item-card__save-btn {
+  width: 100%;
 }
 
 .booking-item-card__pill {
@@ -862,12 +907,12 @@ body.profile-hydrating #pageDashboard .dashboard-info-value::after {
 
 .booking-item-card__save-btn {
   align-self: flex-start;
-  margin-top: 10px;
+  margin-top: 12px !important;
   min-height: 36px;
   padding: 8px 14px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(8, 13, 29, 0.82);
+  background: transparent;
   color: rgba(255, 255, 255, 0.88);
   cursor: pointer;
   line-height: 1.25;
@@ -3447,10 +3492,11 @@ body.authenticated #pageSettings .settings-toggle-slider {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)) !important;
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
   color: #fff !important;
-  border-radius: 14px !important;
+  border-radius: 7px !important;
   box-shadow: none !important;
   font-weight: 700;
   letter-spacing: 0.01em;
+  
 }
 
 :is(
