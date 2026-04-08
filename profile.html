@@ -11,7 +11,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     </head>
 <body>
     <!-- Contract Signing Banner (shown when contract is not signed) -->
@@ -180,16 +180,20 @@
                             <div class="bookings-loading">
                                 <div class="bookings-skeleton-list">
                                     <div class="bookings-skeleton-card">
-                                        <div class="skeleton skeleton-title"></div>
-                                        <div class="skeleton skeleton-text"></div>
-                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
-                                        <div class="skeleton skeleton-text" style="width: 60%; margin-top: 12px;"></div>
+                                        <div class="bookings-skeleton-card__thumb" aria-hidden="true"></div>
+                                        <div class="bookings-skeleton-card__body">
+                                            <div class="skeleton skeleton-title"></div>
+                                            <div class="skeleton skeleton-text"></div>
+                                            <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        </div>
                                     </div>
                                     <div class="bookings-skeleton-card">
-                                        <div class="skeleton skeleton-title"></div>
-                                        <div class="skeleton skeleton-text"></div>
-                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
-                                        <div class="skeleton skeleton-text" style="width: 60%; margin-top: 12px;"></div>
+                                        <div class="bookings-skeleton-card__thumb" aria-hidden="true"></div>
+                                        <div class="bookings-skeleton-card__body">
+                                            <div class="skeleton skeleton-title"></div>
+                                            <div class="skeleton skeleton-text"></div>
+                                            <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -209,9 +213,12 @@
                             <div class="bookings-loading">
                                 <div class="bookings-skeleton-list">
                                     <div class="bookings-skeleton-card">
-                                        <div class="skeleton skeleton-title"></div>
-                                        <div class="skeleton skeleton-text"></div>
-                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        <div class="bookings-skeleton-card__thumb" aria-hidden="true"></div>
+                                        <div class="bookings-skeleton-card__body">
+                                            <div class="skeleton skeleton-title"></div>
+                                            <div class="skeleton skeleton-text"></div>
+                                            <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -224,9 +231,12 @@
                             <div class="bookings-loading">
                                 <div class="bookings-skeleton-list">
                                     <div class="bookings-skeleton-card">
-                                        <div class="skeleton skeleton-title"></div>
-                                        <div class="skeleton skeleton-text"></div>
-                                        <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        <div class="bookings-skeleton-card__thumb" aria-hidden="true"></div>
+                                        <div class="bookings-skeleton-card__body">
+                                            <div class="skeleton skeleton-title"></div>
+                                            <div class="skeleton skeleton-text"></div>
+                                            <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -238,51 +248,76 @@
                 <div class="bookings-section" id="browseClasses" style="display: none;">
                     <!-- Filters -->
                     <div class="browse-filters">
-                        <div class="filter-group filter-group-search">
-                            <label for="browseSearchFilter" class="filter-label">Search</label>
-                            <input type="text" id="browseSearchFilter" class="filter-input" placeholder="Search classes by name..." />
+                        <div class="srch">
+                            <svg class="si" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M10 18a8 8 0 1 1 5.293-14.004A8 8 0 0 1 10 18m0-2a6 6 0 1 0 0-12a6 6 0 0 0 0 12m8.707.293l3 3l-1.414 1.414l-3-3z"/>
+                            </svg>
+                            <input type="text" id="browseSearchFilter" class="sinp" placeholder="Search classes..." />
+                            <span class="sc browse-results-count" id="browseResultsCount"></span>
                         </div>
-                        <div class="filter-group">
-                            <label for="browseGymFilter" class="filter-label">Gym</label>
-                            <select id="browseGymFilter" class="filter-select">
-                                <option value="">All Gyms</option>
-                            </select>
+                        <div class="fr">
+                            <span class="clbl">GYMS</span>
+                            <div class="railfade">
+                                <div class="cr browse-chip-group--gym" id="browseGymChips"></div>
+                            </div>
                         </div>
-                        <div class="filter-group filter-group-date-range">
-                            <label for="browseDateRangePreset" class="filter-label">Date Range</label>
-                            <select id="browseDateRangePreset" class="filter-select">
-                                <option value="today">Today</option>
-                                <option value="tomorrow">Tomorrow</option>
-                                <option value="thisWeek" selected>This Week</option>
-                                <option value="nextWeek">Next Week</option>
-                                <option value="thisMonth">This Month</option>
-                                <option value="nextMonth">Next Month</option>
-                                <option value="custom">Custom Range</option>
-                            </select>
-                            <div id="customDateRangeContainer" class="custom-date-range-container">
-                                <div class="date-input-container">
-                                    <label for="browseDateStart" class="filter-label-small">Start date</label>
-                                    <input type="date" id="browseDateStart" class="filter-input date-input" />
-                                </div>
-                                <div class="date-input-container">
-                                    <label for="browseDateEnd" class="filter-label-small">End date</label>
-                                    <input type="date" id="browseDateEnd" class="filter-input date-input" />
+                        <div class="fr">
+                            <span class="clbl">WHEN</span>
+                            <div class="railfade">
+                                <div class="cr browse-chip-group--when" id="browseWhenChips">
+                                    <button type="button" class="chip" data-preset="anyTime">Any time</button>
+                                    <button type="button" class="chip active" data-preset="thisWeek">This week</button>
+                                    <button type="button" class="chip" data-preset="nextWeek">Next week</button>
+                                    <button type="button" class="chip" data-preset="thisMonth">This month</button>
+                                    <button type="button" class="chip" data-preset="nextMonth">Next month</button>
                                 </div>
                             </div>
                         </div>
-                        <div class="filter-group">
-                            <label for="browseTypeFilter" class="filter-label">Type</label>
-                            <select id="browseTypeFilter" class="filter-select">
-                                <option value="">All Types</option>
-                                <option value="groupActivity">Classes</option>
-                                <option value="event">Events</option>
-                            </select>
-                        </div>
-                        <div class="filter-group filter-group-actions">
-                            <span class="filter-label filter-label--spacer" aria-hidden="true">&nbsp;</span>
-                            <button type="button" class="filter-apply-btn" id="applyFiltersBtn">Apply filters</button>
+                        <div class="fr">
+                            <span class="clbl">TYPE</span>
+                            <div class="railfade">
+                                <div class="cr browse-chip-group--type" id="browseTypeChips">
+                                    <button type="button" class="chip active" data-quick-type="all">All</button>
+                                    <button type="button" class="chip" data-quick-type="introhold">Introhold</button>
+                                    <button type="button" class="chip" data-quick-type="dropin">Drop-in</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    <div class="browse-filter-hidden-controls" hidden>
+                        <select id="browseGymFilter" class="filter-select">
+                            <option value="">All Gyms</option>
+                        </select>
+                        <select id="browseDateRangePreset" class="filter-select">
+                            <option value="anyTime">Any time</option>
+                            <option value="today">Today</option>
+                            <option value="tomorrow">Tomorrow</option>
+                            <option value="thisWeek" selected>This Week</option>
+                            <option value="nextWeek">Next Week</option>
+                            <option value="thisMonth">This Month</option>
+                            <option value="nextMonth">Next Month</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                        <div id="customDateRangeContainer" class="custom-date-range-container">
+                            <div class="date-input-container">
+                                <label for="browseDateStart" class="filter-label-small">Start date</label>
+                                <input type="date" id="browseDateStart" class="filter-input date-input" />
+                            </div>
+                            <div class="date-input-container">
+                                <label for="browseDateEnd" class="filter-label-small">End date</label>
+                                <input type="date" id="browseDateEnd" class="filter-input date-input" />
+                            </div>
+                        </div>
+                        <select id="browseTypeFilter" class="filter-select">
+                            <option value="">All Types</option>
+                            <option value="groupActivity">Classes</option>
+                            <option value="event">Events</option>
+                        </select>
+                        <input type="checkbox" id="browseOnlyAvailableFilter" class="filter-checkbox-input" />
+                        <input type="hidden" id="browseQuickTypeFilter" value="all" />
+                        <button type="button" class="filter-apply-btn" id="applyFiltersBtn">Apply filters</button>
+                    </div>
+                    <div class="browse-active-filters" id="browseActiveFilters" aria-live="polite" hidden></div>
 
                     <!-- Browse Results -->
                     <div class="browse-results" id="browseResults">

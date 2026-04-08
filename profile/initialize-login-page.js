@@ -32,6 +32,7 @@ import {
   brpBookingStartMs,
   brpBookingEndMs,
   formatClassSessionWhenLine,
+  formatTimeShort,
   formatClassSessionDurationMinutes,
   formatGroupActivitySlotsAvailability,
   formatClassCardAvailabilityFromContext,
@@ -1592,6 +1593,12 @@ export function initializeLoginPage(DOM) {
       if (e?.target && e.target.closest && e.target.closest('.dashboard-class-booked-details')) {
         return;
       }
+      if (e?.target && e.target.closest && e.target.closest('.booking-item-card__series-expand')) {
+        return;
+      }
+      if (e?.target && e.target.closest && e.target.closest('.booking-item-card__series-date-row')) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       openClassCardExpandBooking(book);
@@ -1600,6 +1607,12 @@ export function initializeLoginPage(DOM) {
     card.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
       if (e.target instanceof HTMLElement && e.target.closest('.dashboard-class-booked-details summary')) {
+        return;
+      }
+      if (e.target instanceof HTMLElement && e.target.closest('.booking-item-card__series-expand')) {
+        return;
+      }
+      if (e.target instanceof HTMLElement && e.target.closest('.booking-item-card__series-date-row')) {
         return;
       }
       e.preventDefault();
@@ -1611,12 +1624,8 @@ export function initializeLoginPage(DOM) {
     if (!customer) return [];
     const fromBrp = customer.groupActivityBookings;
     if (Array.isArray(fromBrp) && fromBrp.length) {
-      const now = Date.now();
-      return fromBrp.filter((b) => {
+      return buildUpcomingBrpGroupActivityBookings(fromBrp).filter((b) => {
         if (!b || typeof b !== 'object') return false;
-        if (isBrpWaitingListBooking(b)) return false;
-        const start = brpBookingStartMs(b);
-        if (start) return start >= now;
         if (b.past === true || b.isPast === true) return false;
         if (b.status && String(b.status).toLowerCase() === 'cancelled') return false;
         return true;
@@ -1656,7 +1665,13 @@ export function initializeLoginPage(DOM) {
       b.gymName ||
       b.businessUnitName ||
       '';
-    return { title: String(title), where: where ? String(where) : '' };
+    const whereText = where ? String(where) : '';
+    return { title: String(title), where: whereText ? displayGymTitle(whereText) : '' };
+  }
+
+  function isIntroholdTitle(value) {
+    const s = String(value || '').toLowerCase().replace(/\s+/g, '');
+    return s.includes('introhold');
   }
 
   function resolveSavedClassesOwnerKeys() {
@@ -1792,7 +1807,16 @@ export function initializeLoginPage(DOM) {
       (lastSlot && (lastSlot.end || lastSlot.start)) || (typeof endIso === 'string' ? endIso : '') || '';
 
     let seriesLines = [];
+    let seriesSessionSlots = [];
     if (isSeries && Array.isArray(source?.__seriesBookings) && source.__seriesBookings.length) {
+      seriesSessionSlots = source.__seriesBookings.map((rec) => {
+        const s = bookingStartIsoValue(rec);
+        const e = rec.duration?.end || rec.endTime || rec.endDateTime || null;
+        return {
+          start: typeof s === 'string' ? s : '',
+          end: typeof e === 'string' ? e : null,
+        };
+      });
       seriesLines = source.__seriesBookings.map((rec, idx, arr) => {
         const s = bookingStartIsoValue(rec);
         const e = rec.duration?.end || rec.endTime || rec.endDateTime || null;
@@ -1802,6 +1826,10 @@ export function initializeLoginPage(DOM) {
         )}`;
       });
     } else if (isSeries && occasionSlots.length) {
+      seriesSessionSlots = occasionSlots.map(({ start: s, end: e }) => ({
+        start: s || '',
+        end: e || null,
+      }));
       const totalRaw = Number(source?.occasions?.numberOf);
       const total = Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : occasionSlots.length;
       seriesLines = occasionSlots.map(({ start: s, end: e }, idx) => {
@@ -1833,6 +1861,7 @@ export function initializeLoginPage(DOM) {
             ? Number(source?.occasions?.numberOf) || occasionSlots.length || 0
             : 0,
       seriesLines,
+      seriesSessionSlots,
       savedAt: new Date().toISOString(),
     };
     if (
@@ -2449,34 +2478,63 @@ export function initializeLoginPage(DOM) {
     }
     list.forEach((rec) => {
       const card = document.createElement('div');
-      card.className = 'booking-item-card';
+      card.className = 'booking-item-card booking-item-card--my-bookings-list';
       const mediaSource = rec?.imageUrl ? { __resolvedImageUrl: rec.imageUrl } : {};
       card.appendChild(createClassCardMediaEl(mediaSource, rec?.title || 'Class'));
       const main = document.createElement('div');
       main.className = 'booking-item-card__main';
-      const h = document.createElement('strong');
-      h.className = 'booking-item-card__title';
-      h.textContent = rec?.title || 'Class';
-      const meta = document.createElement('div');
-      meta.className = 'booking-item-card__meta';
-      meta.textContent =
-        rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length
-          ? `${rec.seriesCount || rec.seriesLines.length} sessions saved`
-          : formatClassSessionWhenLine(rec?.startIso || '', rec?.endIso || null);
-      main.append(h, meta);
+      const savedTitleText = rec?.title || 'Class';
+      const isSavedSeries =
+        rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length;
+      if (isSavedSeries) {
+        let stepRows = null;
+        if (
+          Array.isArray(rec.seriesSessionSlots) &&
+          rec.seriesSessionSlots.length &&
+          rec.seriesSessionSlots.length === rec.seriesLines.length
+        ) {
+          stepRows = rec.seriesSessionSlots.map((slot) => ({
+            step: {
+              startIso: typeof slot?.start === 'string' ? slot.start : '',
+              endIso: typeof slot?.end === 'string' ? slot.end : null,
+            },
+          }));
+        } else if (rec.browseSnapshot && typeof rec.browseSnapshot === 'object') {
+          try {
+            const slots = mapEventOccasionSlots(rec.browseSnapshot);
+            if (slots.length && slots.length === rec.seriesLines.length) {
+              stepRows = slots.map((slot) => ({
+                step: {
+                  startIso: slot.start || '',
+                  endIso: slot.end || null,
+                },
+              }));
+            }
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        appendMyBookingsSeriesCollapsibleBlock(main, {
+          titleText: savedTitleText,
+          rangeText: savedClassSeriesRangeLine(rec),
+          sessionCount: rec.seriesLines.length,
+          rows:
+            stepRows ||
+            rec.seriesLines.map((line) => ({
+              fallbackText: line,
+            })),
+        });
+      } else {
+        const h = document.createElement('strong');
+        h.className = 'booking-item-card__title';
+        h.textContent = savedTitleText;
+        const meta = document.createElement('div');
+        meta.className = 'booking-item-card__meta';
+        meta.textContent = formatClassSessionWhenLine(rec?.startIso || '', rec?.endIso || null);
+        main.append(h, meta);
+      }
       if (rec?.where) {
         appendLocationPillToCardMain(main, rec.where);
-      }
-      if (rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length) {
-        const rows = document.createElement('div');
-        rows.className = 'booking-item-card__series-list';
-        rec.seriesLines.forEach((line) => {
-          const row = document.createElement('div');
-          row.className = 'booking-item-card__series-row';
-          row.textContent = line;
-          rows.appendChild(row);
-        });
-        main.appendChild(rows);
       }
       const saveBtn = document.createElement('button');
       saveBtn.type = 'button';
@@ -2487,6 +2545,7 @@ export function initializeLoginPage(DOM) {
         renderSavedBookingsList();
       });
       main.appendChild(saveBtn);
+      finalizeMyBookingsListCardMain(main);
       card.appendChild(main);
       container.appendChild(card);
       if (!rec?.imageUrl) {
@@ -2546,13 +2605,19 @@ export function initializeLoginPage(DOM) {
     const targetBu = classCardBusinessUnitId(targetBooking);
     const targetName = normalizeSeriesNameForBookings(bookingDisplayLine(targetBooking).title);
     const now = Date.now();
+    const sessionFullyPast = (b) => {
+      const end = brpBookingEndMs(b);
+      const start = brpBookingStartMs(b);
+      if (end) return end < now;
+      if (start) return start < now;
+      return false;
+    };
 
     if (targetEventId) {
       return list.filter((b) => {
         if (!b || isBrpWaitingListBooking(b)) return false;
         if (b.status && String(b.status).toLowerCase() === 'cancelled') return false;
-        const start = brpBookingStartMs(b);
-        if (start && start < now) return false;
+        if (sessionFullyPast(b)) return false;
         return bookingEventIdValue(b) === targetEventId;
       });
     }
@@ -2569,8 +2634,7 @@ export function initializeLoginPage(DOM) {
       if (b.status && String(b.status).toLowerCase() === 'cancelled') return false;
       const bid = bookingIdValue(b);
       if (!bid) return false;
-      const start = brpBookingStartMs(b);
-      if (start && start < now) return false;
+      if (sessionFullyPast(b)) return false;
       const bu = classCardBusinessUnitId(b);
       if (bu !== targetBu) return false;
       const name = normalizeSeriesNameForBookings(bookingDisplayLine(b).title);
@@ -2880,7 +2944,253 @@ export function initializeLoginPage(DOM) {
     return renderUnits;
   }
 
-  function renderBookingsListInto(container, items, emptyMessage) {
+  /**
+   * Flat list of group-activity bookings for “upcoming” UIs: includes every session in a series
+   * while any session is still active (end ≥ now), and uses end time—not start—to drop finished sessions.
+   */
+  function buildUpcomingBrpGroupActivityBookings(rawItems) {
+    const list = dedupeCustomerBookings(Array.isArray(rawItems) ? rawItems : []);
+    if (!list.length) return [];
+    const now = Date.now();
+    const sessionNotPast = (b) => {
+      if (!b || isBrpWaitingListBooking(b)) return false;
+      const end = brpBookingEndMs(b);
+      const start = brpBookingStartMs(b);
+      if (end) return end >= now;
+      if (start) return start >= now;
+      return true;
+    };
+    const units = buildGroupedBookingRenderUnits(list);
+    const out = [];
+    units.forEach((unit) => {
+      if (unit.kind === 'single') {
+        const b = unit.booking;
+        if (!sessionNotPast(b)) return;
+        out.push(b);
+        return;
+      }
+      const g = unit.bookings.filter((b) => b && !isBrpWaitingListBooking(b));
+      if (!g.length) return;
+      if (!g.some((b) => sessionNotPast(b))) return;
+      g.forEach((b) => out.push(b));
+    });
+    out.sort((a, b) => brpBookingStartMs(a) - brpBookingStartMs(b));
+    return out;
+  }
+
+  let brpMyBookingsSeriesPanelSeq = 0;
+
+  /** Past / completed session → filled dot; upcoming → hollow dot. */
+  function myBookingsSeriesSessionCompleted(startIso, endIso, nowMs = Date.now()) {
+    const endMs = typeof endIso === 'string' ? Date.parse(endIso) : NaN;
+    const startMs = typeof startIso === 'string' ? Date.parse(startIso) : NaN;
+    const compareMs = Number.isFinite(endMs) && endMs > startMs ? endMs : startMs;
+    return Number.isFinite(compareMs) && compareMs < nowMs;
+  }
+
+  function formatMyBookingsSeriesStepLine(startIso, endIso) {
+    const startMs = typeof startIso === 'string' ? Date.parse(startIso) : NaN;
+    if (!Number.isFinite(startMs)) {
+      return { dateStr: '—', timeStr: '—', completed: false };
+    }
+    const d0 = new Date(startMs);
+    let dateStr = '—';
+    try {
+      dateStr = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(d0);
+    } catch {
+      dateStr = formatDisplayDate(startIso);
+    }
+    const endMs = typeof endIso === 'string' ? Date.parse(endIso) : NaN;
+    const hasEnd = Number.isFinite(endMs) && endMs > startMs;
+    let timeStr = '—';
+    if (hasEnd) {
+      const d1 = new Date(endMs);
+      const sameDay =
+        d0.getFullYear() === d1.getFullYear() &&
+        d0.getMonth() === d1.getMonth() &&
+        d0.getDate() === d1.getDate();
+      const ts = formatTimeShort(startIso);
+      const te = formatTimeShort(endIso);
+      if (sameDay && ts && te) {
+        timeStr = `${ts}\u2013${te}`;
+      } else {
+        timeStr = [ts, te].filter(Boolean).join(' \u2192 ') || '—';
+      }
+    } else {
+      timeStr = formatTimeShort(startIso) || '—';
+    }
+    const completed = myBookingsSeriesSessionCompleted(startIso, endIso);
+    return { dateStr, timeStr, completed };
+  }
+
+  function stripSavedSeriesLinePrefix(line) {
+    return String(line || '').replace(/^\d+\s*\/\s*\d+\s*[·•]\s*/u, '').trim();
+  }
+
+  function savedClassSeriesRangeLine(rec) {
+    const firstText = formatDateLong(rec?.startIso);
+    const lastText = formatDateLong(rec?.endIso);
+    if (!firstText || firstText === '—') return '—';
+    if (!lastText || lastText === '—' || lastText === firstText) return firstText;
+    return `${firstText} – ${lastText}`;
+  }
+
+  const MY_BOOKINGS_SERIES_CALENDAR_SVG =
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+
+  /**
+   * Collapsible session list for My Bookings list cards (bookings + saved series).
+   * @param {object} main — card main element
+   * @param {{ titleText: string, rangeText: string, sessionCount: number, rows: { step?: { startIso: string, endIso?: string | null }, fallbackText?: string, text?: string }[] }} spec
+   */
+  function appendMyBookingsSeriesCollapsibleBlock(main, { titleText, rangeText, sessionCount, rows }) {
+    brpMyBookingsSeriesPanelSeq += 1;
+    const panelId = `brpSeriesPanel_${brpMyBookingsSeriesPanelSeq}`;
+    const titleRow = document.createElement('div');
+    titleRow.className = 'booking-item-card__series-title-row';
+    const h = document.createElement('strong');
+    h.className = 'booking-item-card__title';
+    h.textContent = titleText || 'Class';
+    const expandBtn = document.createElement('button');
+    expandBtn.type = 'button';
+    expandBtn.className = 'booking-item-card__series-expand';
+    expandBtn.setAttribute('aria-expanded', 'false');
+    expandBtn.setAttribute('aria-controls', panelId);
+    expandBtn.setAttribute('aria-label', `Show ${sessionCount} session times`);
+    const sessionsPill = document.createElement('span');
+    sessionsPill.className =
+      'booking-item-card__pill booking-item-card__pill--series-sessions booking-item-card__pill--series-inline';
+    sessionsPill.textContent = `${sessionCount} sessions`;
+    const chev = document.createElement('span');
+    chev.className = 'booking-item-card__series-chevron';
+    chev.setAttribute('aria-hidden', 'true');
+    chev.innerHTML =
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    expandBtn.appendChild(sessionsPill);
+    titleRow.append(h, expandBtn);
+    main.appendChild(titleRow);
+
+    const dateRow = document.createElement('div');
+    dateRow.className = 'booking-item-card__series-date-row';
+    dateRow.setAttribute('role', 'button');
+    dateRow.tabIndex = 0;
+    dateRow.setAttribute('aria-expanded', 'false');
+    dateRow.setAttribute('aria-controls', panelId);
+    dateRow.setAttribute('aria-label', `Show ${sessionCount} session times`);
+    const calWrap = document.createElement('span');
+    calWrap.className = 'booking-item-card__series-calendar-icon';
+    calWrap.setAttribute('aria-hidden', 'true');
+    calWrap.innerHTML = MY_BOOKINGS_SERIES_CALENDAR_SVG;
+    const rangeEl = document.createElement('span');
+    rangeEl.className = 'booking-item-card__meta booking-item-card__meta--series-range';
+    rangeEl.textContent = rangeText;
+    dateRow.append(calWrap, rangeEl, chev);
+    main.appendChild(dateRow);
+
+    const seriesPanel = document.createElement('div');
+    seriesPanel.className = 'booking-item-card__series-panel';
+    seriesPanel.id = panelId;
+    seriesPanel.setAttribute('role', 'region');
+    seriesPanel.setAttribute('aria-label', 'Sessions');
+    const panelSleeve = document.createElement('div');
+    panelSleeve.className = 'booking-item-card__series-panel-sleeve';
+    const seriesRows = document.createElement('div');
+    seriesRows.className =
+      'booking-item-card__series-list booking-item-card__series-list--my-bookings';
+    rows.forEach((rowSpec) => {
+      const row = document.createElement('div');
+      row.className = 'booking-item-card__series-row';
+      if (rowSpec.step) {
+        const { startIso, endIso } = rowSpec.step;
+        const { dateStr, timeStr, completed } = formatMyBookingsSeriesStepLine(
+          typeof startIso === 'string' ? startIso : '',
+          endIso != null && typeof endIso === 'string' ? endIso : null
+        );
+        row.classList.add('booking-item-card__series-row--step');
+        const dot = document.createElement('span');
+        dot.className = `booking-item-card__series-step-dot${completed ? ' is-complete' : ' is-upcoming'}`;
+        dot.setAttribute('aria-hidden', 'true');
+        dot.textContent = completed ? '\u25cf' : '\u25cb';
+        const body = document.createElement('span');
+        body.className = 'booking-item-card__series-step-body';
+        const dateEl = document.createElement('span');
+        dateEl.className = 'booking-item-card__series-step-date';
+        dateEl.textContent = dateStr;
+        const timeEl = document.createElement('span');
+        timeEl.className = 'booking-item-card__series-step-time';
+        timeEl.textContent = timeStr;
+        body.append(dateEl, timeEl);
+        row.append(dot, body);
+        row.setAttribute(
+          'aria-label',
+          `${completed ? 'Completed session' : 'Upcoming session'}: ${dateStr} ${timeStr}`
+        );
+      } else if (rowSpec.fallbackText != null) {
+        row.classList.add('booking-item-card__series-row--fallback');
+        row.textContent = stripSavedSeriesLinePrefix(rowSpec.fallbackText);
+      } else if (rowSpec.text) {
+        row.textContent = rowSpec.text;
+      }
+      seriesRows.appendChild(row);
+    });
+    panelSleeve.appendChild(seriesRows);
+    seriesPanel.appendChild(panelSleeve);
+    main.appendChild(seriesPanel);
+
+    const toggleSeriesPanel = () => {
+      const open = !seriesPanel.classList.contains('is-expanded');
+      seriesPanel.classList.toggle('is-expanded', open);
+      const exp = open ? 'true' : 'false';
+      const label = open ? 'Hide session times' : `Show ${sessionCount} session times`;
+      expandBtn.setAttribute('aria-expanded', exp);
+      expandBtn.setAttribute('aria-label', label);
+      dateRow.setAttribute('aria-expanded', exp);
+      dateRow.setAttribute('aria-label', label);
+    };
+    expandBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSeriesPanel();
+    });
+    dateRow.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSeriesPanel();
+    });
+    dateRow.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggleSeriesPanel();
+    });
+  }
+
+  /** Horizontal list-row layout: primary info vs trailing pills / remove (My Bookings lists only). */
+  function finalizeMyBookingsListCardMain(main) {
+    if (!main || main.dataset.listLayoutFinalized === '1') return;
+    main.dataset.listLayoutFinalized = '1';
+    const pills = main.querySelector('.booking-item-card__pills');
+    const removeBtn = main.querySelector(
+      'button.profile-action-btn-secondary.class-card-expand__btn-secondary'
+    );
+    const info = document.createElement('div');
+    info.className = 'booking-item-card__list-info';
+    const trail = document.createElement('div');
+    trail.className = 'booking-item-card__list-trail';
+    const nodes = Array.from(main.childNodes);
+    nodes.forEach((node) => {
+      if (node === pills || node === removeBtn) return;
+      if (node.nodeType === Node.ELEMENT_NODE) info.appendChild(node);
+    });
+    main.appendChild(info);
+    if (pills || removeBtn) {
+      if (pills) trail.appendChild(pills);
+      if (removeBtn) trail.appendChild(removeBtn);
+      main.appendChild(trail);
+    }
+  }
+
+  function renderBookingsListInto(container, items, emptyMessage, listKind = 'upcoming') {
     if (!container) return;
     container.innerHTML = '';
     if (!items.length) {
@@ -2910,48 +3220,37 @@ export function initializeLoginPage(DOM) {
         const first = bookings[0];
         const { title, where } = bookingDisplayLine(first);
         const card = document.createElement('div');
-        card.className = 'booking-item-card';
+        card.className =
+          'booking-item-card booking-item-card--my-bookings-list' +
+          (listKind === 'past' ? ' booking-item-card--past-list' : '');
         card.appendChild(createClassCardMediaEl(first, title));
         const main = document.createElement('div');
         main.className = 'booking-item-card__main';
-        const h = document.createElement('strong');
-        h.className = 'booking-item-card__title';
-        h.textContent = title;
-        const meta = document.createElement('div');
-        meta.className = 'booking-item-card__meta';
         const firstStart = bookingStartIsoValue(bookings[0]);
         const lastStart = bookingStartIsoValue(bookings[bookings.length - 1]);
         const firstText = formatDateLong(firstStart);
         const lastText = formatDateLong(lastStart);
-        meta.textContent =
+        const rangeLine =
           firstText && lastText && firstText !== '—' && lastText !== '—' && firstText !== lastText
             ? `${firstText} – ${lastText}`
             : firstText;
-        main.append(h, meta);
-        const sub = document.createElement('div');
-        sub.className = 'booking-item-card__submeta';
-        sub.textContent = `${bookings.length} sessions booked`;
-        main.appendChild(sub);
-        const seriesRows = document.createElement('div');
-        seriesRows.className = 'booking-item-card__series-list';
-        bookings.forEach((rec, idx) => {
-          const startIso = bookingStartIsoValue(rec);
-          const endIso = rec.duration?.end || rec.endTime || rec.endDateTime || null;
-          const row = document.createElement('div');
-          row.className = 'booking-item-card__series-row';
-          row.textContent = `${idx + 1}/${bookings.length} · ${formatClassSessionWhenLine(
-            typeof startIso === 'string' ? startIso : '',
-            typeof endIso === 'string' ? endIso : null
-          )}`;
-          seriesRows.appendChild(row);
+        appendMyBookingsSeriesCollapsibleBlock(main, {
+          titleText: title,
+          rangeText: rangeLine,
+          sessionCount: bookings.length,
+          rows: bookings.map((rec) => {
+            const startIso = bookingStartIsoValue(rec);
+            const endIso = rec.duration?.end || rec.endTime || rec.endDateTime || null;
+            return {
+              step: {
+                startIso: typeof startIso === 'string' ? startIso : '',
+                endIso: typeof endIso === 'string' ? endIso : null,
+              },
+            };
+          }),
         });
-        main.appendChild(seriesRows);
         const pills = document.createElement('div');
         pills.className = 'booking-item-card__pills';
-        const seriesPill = document.createElement('span');
-        seriesPill.className = 'booking-item-card__pill booking-item-card__pill--dropin';
-        seriesPill.textContent = `${bookings.length} sessions`;
-        pills.appendChild(seriesPill);
         if (where) {
           const locPill = document.createElement('span');
           locPill.className = 'booking-item-card__pill booking-item-card__pill--location';
@@ -2970,6 +3269,7 @@ export function initializeLoginPage(DOM) {
             isSeries: true,
           }
         );
+        finalizeMyBookingsListCardMain(main);
         card.appendChild(main);
         attachBookingClassCardClick(card, { ...first, __seriesBookings: bookings });
         container.appendChild(card);
@@ -2988,7 +3288,9 @@ export function initializeLoginPage(DOM) {
         b.start;
       const endIso = b.duration?.end || b.endTime || b.endDateTime || null;
       const card = document.createElement('div');
-      card.className = 'booking-item-card';
+      card.className =
+        'booking-item-card booking-item-card--my-bookings-list' +
+        (listKind === 'past' ? ' booking-item-card--past-list' : '');
       card.appendChild(createClassCardMediaEl(b, title));
       const main = document.createElement('div');
       main.className = 'booking-item-card__main';
@@ -3016,6 +3318,7 @@ export function initializeLoginPage(DOM) {
         endIso: typeof endIso === 'string' ? endIso : '',
         isSeries: false,
       });
+      finalizeMyBookingsListCardMain(main);
       card.appendChild(main);
       if (isBrpWaitingListBooking(b)) {
         const pos = b.waitingListBooking?.waitingListPosition;
@@ -3033,17 +3336,13 @@ export function initializeLoginPage(DOM) {
 
   function refreshClassesBookingsLists() {
     const customer = getBestCustomerData();
-    const list = Array.isArray(customer?.groupActivityBookings) ? customer.groupActivityBookings : [];
+    const rawList = Array.isArray(customer?.groupActivityBookings) ? customer.groupActivityBookings : [];
+    const fullList = dedupeCustomerBookings(rawList);
     const now = Date.now();
 
-    const upcoming = list.filter((b) => {
-      if (!b || isBrpWaitingListBooking(b)) return false;
-      const start = brpBookingStartMs(b);
-      return start ? start >= now : true;
-    });
-    upcoming.sort((a, b) => brpBookingStartMs(a) - brpBookingStartMs(b));
+    const upcomingRender = buildUpcomingBrpGroupActivityBookings(rawList);
 
-    const past = list.filter((b) => {
+    const pastTime = fullList.filter((b) => {
       if (!b || isBrpWaitingListBooking(b)) return false;
       const end = brpBookingEndMs(b);
       const start = brpBookingStartMs(b);
@@ -3051,25 +3350,30 @@ export function initializeLoginPage(DOM) {
       if (start) return start < now;
       return false;
     });
-    past.sort((a, b) => brpBookingEndMs(b) - brpBookingEndMs(a));
+    const upcomingSet = new Set(upcomingRender);
+    const pastRender = pastTime.filter((b) => !upcomingSet.has(b));
+    pastRender.sort((a, b) => brpBookingEndMs(b) - brpBookingEndMs(a));
 
-    const waiting = list.filter((b) => b && isBrpWaitingListBooking(b));
+    const waiting = fullList.filter((b) => b && isBrpWaitingListBooking(b));
     waiting.sort((a, b) => brpBookingStartMs(a) - brpBookingStartMs(b));
 
     renderBookingsListInto(
       document.getElementById('upcomingBookingsList'),
-      upcoming,
-      'No upcoming bookings.'
+      upcomingRender,
+      'No upcoming bookings.',
+      'upcoming'
     );
     renderBookingsListInto(
       document.getElementById('pastBookingsList'),
-      past,
-      'No past bookings in the loaded period.'
+      pastRender,
+      'No past bookings in the loaded period.',
+      'past'
     );
     renderBookingsListInto(
       document.getElementById('waitingListBookingsList'),
       waiting,
-      'You are not on any waiting lists.'
+      'You are not on any waiting lists.',
+      'waiting'
     );
     renderSavedBookingsList();
   }
@@ -3096,7 +3400,10 @@ export function initializeLoginPage(DOM) {
     const now = new Date();
     let start = startOfDay(now);
     let end = endOfDay(now);
-    if (preset === 'tomorrow') {
+    if (preset === 'anyTime') {
+      start = startOfDay(now);
+      end = endOfDay(new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000));
+    } else if (preset === 'tomorrow') {
       start.setDate(start.getDate() + 1);
       end = new Date(start);
       end.setHours(23, 59, 59, 999);
@@ -3148,8 +3455,51 @@ export function initializeLoginPage(DOM) {
           sel.value = String(homeId);
         }
         sel.dataset.brpPopulated = '1';
+        renderBrowseGymChips();
       })
       .catch((e) => console.warn('[Browse] Business units:', e));
+  }
+
+  function renderBrowseGymChips() {
+    const host = document.getElementById('browseGymChips');
+    const sel = document.getElementById('browseGymFilter');
+    if (!host || !sel) return;
+    const selected = new Set(
+      Array.from(host.querySelectorAll('.chip.active[data-gym-value]'))
+        .map((el) => String(el.getAttribute('data-gym-value') || ''))
+        .filter(Boolean)
+    );
+    if (!selected.size && sel.value) selected.add(String(sel.value));
+    host.innerHTML = '';
+    const allBtn = document.createElement('button');
+    allBtn.type = 'button';
+    allBtn.className = `chip${selected.size ? '' : ' active'}`;
+    allBtn.dataset.gymValue = '';
+    allBtn.textContent = 'All';
+    host.appendChild(allBtn);
+    if (selected.size) {
+      const countChip = document.createElement('span');
+      countChip.className = 'chip chip-meta';
+      countChip.textContent = `${selected.size} selected`;
+      host.appendChild(countChip);
+      const resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.className = 'chip chip-reset';
+      resetBtn.dataset.gymReset = '1';
+      resetBtn.textContent = 'Reset gyms';
+      host.appendChild(resetBtn);
+    }
+    Array.from(sel.options)
+      .filter((opt) => opt.value)
+      .forEach((opt) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `chip${selected.has(String(opt.value)) ? ' active' : ''}`;
+        btn.dataset.gymValue = String(opt.value);
+        btn.textContent = opt.textContent || opt.value;
+        host.appendChild(btn);
+      });
+    refreshBrowseRailFades();
   }
 
   function isGroupedEventSeries(ev) {
@@ -3352,6 +3702,7 @@ export function initializeLoginPage(DOM) {
     const gymSel = document.getElementById('browseGymFilter');
     const presetSel = document.getElementById('browseDateRangePreset');
     const typeSel = document.getElementById('browseTypeFilter');
+    const onlyAvailableEl = document.getElementById('browseOnlyAvailableFilter');
     const searchEl = document.getElementById('browseSearchFilter');
     const customWrap = document.getElementById('customDateRangeContainer');
     const startIn = document.getElementById('browseDateStart');
@@ -3381,9 +3732,13 @@ export function initializeLoginPage(DOM) {
     const cid = getBrpNumericCustomerId(getBestCustomerData());
     const homeBu = getBestCustomerData()?.businessUnit?.id;
     let buIds = [];
-    const gval = gymSel?.value || '';
-    if (gval) {
-      buIds = [parseInt(gval, 10)].filter((n) => Number.isFinite(n) && n > 0);
+    const selectedGymIds = Array.from(
+      document.querySelectorAll('#browseGymChips .chip.active[data-gym-value]')
+    )
+      .map((el) => parseInt(String(el.getAttribute('data-gym-value') || ''), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (selectedGymIds.length) {
+      buIds = Array.from(new Set(selectedGymIds));
     } else if (authAPI.listVer3BusinessUnits) {
       try {
         const all = await authAPI.listVer3BusinessUnits();
@@ -3410,6 +3765,8 @@ export function initializeLoginPage(DOM) {
 
     renderBrowseCardsSkeleton(results, 8);
     const q = searchEl?.value?.trim().toLowerCase() || '';
+    const onlyAvailable = onlyAvailableEl?.checked === true;
+    const resultsCountEl = document.getElementById('browseResultsCount');
 
     const rangeStartMs = Date.parse(periodStart);
     const rangeEndMs = Date.parse(periodEnd);
@@ -3553,6 +3910,20 @@ export function initializeLoginPage(DOM) {
         flat = flat.filter((a) => String(a.name || '').toLowerCase().includes(q));
       }
 
+      if (onlyAvailable) {
+        flat = flat.filter((a) => {
+          if (!isIntroholdTitle(a?.name)) return true;
+          return !isBrowseSlotsFullyBooked(a?.slots);
+        });
+      }
+
+      const quickType = (document.getElementById('browseQuickTypeFilter')?.value || 'all').toLowerCase();
+      if (quickType === 'introhold') {
+        flat = flat.filter((a) => isIntroholdTitle(a?.name));
+      } else if (quickType === 'dropin') {
+        flat = flat.filter((a) => isDropInOnlyClass(a));
+      }
+
       // Fallback guard: when BRP exposes a series session as plain group activity,
       // proactively resolve product detail and remove that session card from browse.
       const groupCandidates = flat.filter((item) => (item.__kind || 'groupActivity') === 'groupActivity');
@@ -3629,6 +4000,9 @@ export function initializeLoginPage(DOM) {
       });
 
       results.innerHTML = '';
+      if (resultsCountEl) {
+        resultsCountEl.textContent = `${flat.length} class${flat.length === 1 ? '' : 'es'}`;
+      }
       if (!flat.length) {
         results.innerHTML =
           '<p class="bookings-empty-msg">No classes match these filters.</p>';
@@ -3736,10 +4110,130 @@ export function initializeLoginPage(DOM) {
     }
   }
 
+  function renderBrowseActiveFilterChips() {
+    const host = document.getElementById('browseActiveFilters');
+    if (!host) return;
+    host.hidden = true;
+    host.innerHTML = '';
+    return;
+  }
+
+  function bindBrowseChipInteractions() {
+    const gymHost = document.getElementById('browseGymChips');
+    const whenHost = document.getElementById('browseWhenChips');
+    const typeHost = document.getElementById('browseTypeChips');
+    const gymSel = document.getElementById('browseGymFilter');
+    const presetSel = document.getElementById('browseDateRangePreset');
+    const quickTypeIn = document.getElementById('browseQuickTypeFilter');
+    if (gymHost && !gymHost.dataset.bound) {
+      gymHost.dataset.bound = '1';
+      gymHost.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-gym-value]');
+        if (!gymSel) return;
+        const resetBtn = e.target.closest('[data-gym-reset]');
+        if (resetBtn) {
+          gymHost.querySelectorAll('.chip[data-gym-value]').forEach((el) => el.classList.remove('active'));
+          const allChip = gymHost.querySelector('.chip[data-gym-value=""]');
+          if (allChip) allChip.classList.add('active');
+          gymSel.value = '';
+          renderBrowseGymChips();
+          applyBrowseClassFilters();
+          return;
+        }
+        if (!btn) return;
+        const clickedValue = String(btn.dataset.gymValue || '');
+        const selected = new Set(
+          Array.from(gymHost.querySelectorAll('.chip.active[data-gym-value]'))
+            .map((el) => String(el.getAttribute('data-gym-value') || ''))
+            .filter(Boolean)
+        );
+        if (!clickedValue) {
+          selected.clear();
+        } else if (selected.has(clickedValue)) {
+          selected.delete(clickedValue);
+        } else {
+          selected.add(clickedValue);
+        }
+        gymHost.querySelectorAll('.chip[data-gym-value]').forEach((el) => {
+          const value = String(el.getAttribute('data-gym-value') || '');
+          if (!value) {
+            el.classList.toggle('active', selected.size === 0);
+          } else {
+            el.classList.toggle('active', selected.has(value));
+          }
+        });
+        gymSel.value = selected.size === 1 ? Array.from(selected)[0] : '';
+        renderBrowseGymChips();
+        applyBrowseClassFilters();
+      });
+    }
+    if (whenHost && !whenHost.dataset.bound) {
+      whenHost.dataset.bound = '1';
+      whenHost.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-preset]');
+        if (!btn || !presetSel) return;
+        const v = btn.dataset.preset || 'thisWeek';
+        presetSel.value = v;
+        whenHost.querySelectorAll('.chip').forEach((el) => el.classList.remove('active'));
+        btn.classList.add('active');
+        applyBrowseClassFilters();
+      });
+    }
+    if (typeHost && !typeHost.dataset.bound) {
+      typeHost.dataset.bound = '1';
+      typeHost.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-quick-type]');
+        if (!btn || !quickTypeIn) return;
+        quickTypeIn.value = btn.dataset.quickType || 'all';
+        typeHost.querySelectorAll('.chip').forEach((el) => el.classList.remove('active'));
+        btn.classList.add('active');
+        applyBrowseClassFilters();
+      });
+    }
+    if (quickTypeIn && !quickTypeIn.value) quickTypeIn.value = 'all';
+    const resultsCountEl = document.getElementById('browseResultsCount');
+    if (resultsCountEl && !resultsCountEl.textContent.trim()) resultsCountEl.textContent = '';
+    bindBrowseRailFades();
+  }
+
+  function refreshBrowseRailFades() {
+    document.querySelectorAll('#browseClasses .railfade').forEach((wrap) => {
+      const rail = wrap.querySelector('.cr');
+      if (!rail) return;
+      const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
+      const x = Math.max(0, rail.scrollLeft);
+      wrap.classList.toggle('at-start', x <= 1);
+      wrap.classList.toggle('at-end', x >= maxScroll - 1);
+    });
+  }
+
+  function bindBrowseRailFades() {
+    const rails = Array.from(document.querySelectorAll('#browseClasses .railfade .cr'));
+    rails.forEach((rail) => {
+      if (rail.dataset.fadeBound === '1') return;
+      rail.dataset.fadeBound = '1';
+      rail.addEventListener('scroll', refreshBrowseRailFades, { passive: true });
+    });
+    if (!window.__browseRailFadeResizeBound) {
+      window.__browseRailFadeResizeBound = true;
+      window.addEventListener('resize', () => {
+        requestAnimationFrame(refreshBrowseRailFades);
+      });
+    }
+    requestAnimationFrame(refreshBrowseRailFades);
+  }
+
   function initBookingsBrowseControls() {
     const presetSel = document.getElementById('browseDateRangePreset');
     const customWrap = document.getElementById('customDateRangeContainer');
     const applyBtn = document.getElementById('applyFiltersBtn');
+    const onlyAvailableEl = document.getElementById('browseOnlyAvailableFilter');
+    const searchEl = document.getElementById('browseSearchFilter');
+    const gymSel = document.getElementById('browseGymFilter');
+    const typeSel = document.getElementById('browseTypeFilter');
+    const startIn = document.getElementById('browseDateStart');
+    const endIn = document.getElementById('browseDateEnd');
+    let browseSearchDebounce;
     if (presetSel && customWrap && !presetSel.dataset.browseBound) {
       presetSel.dataset.browseBound = '1';
       presetSel.addEventListener('change', () => {
@@ -3753,6 +4247,28 @@ export function initializeLoginPage(DOM) {
         applyBrowseClassFilters();
       });
     }
+    if (onlyAvailableEl && !onlyAvailableEl.dataset.browseBound) {
+      onlyAvailableEl.dataset.browseBound = '1';
+      onlyAvailableEl.addEventListener('change', () => {
+        applyBrowseClassFilters();
+      });
+    }
+    if (searchEl && !searchEl.dataset.browseBound) {
+      searchEl.dataset.browseBound = '1';
+      searchEl.addEventListener('input', () => {
+        clearTimeout(browseSearchDebounce);
+        browseSearchDebounce = setTimeout(() => applyBrowseClassFilters(), 220);
+      });
+    }
+    [gymSel, typeSel, startIn, endIn].forEach((el) => {
+      if (!el || el.dataset.browseBound) return;
+      el.dataset.browseBound = '1';
+      el.addEventListener('change', () => {
+        if (el === gymSel) renderBrowseGymChips();
+      });
+    });
+    bindBrowseChipInteractions();
+    renderBrowseGymChips();
   }
 
   function openClassesBrowseTab() {
