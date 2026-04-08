@@ -4239,9 +4239,14 @@ export function initializeLoginPage(DOM) {
 
     const empty = document.createElement('div');
     empty.className = 'dashboard-classes-empty';
+    const emptyMain = document.createElement('div');
+    emptyMain.className = 'dashboard-classes-empty-main';
     const title = document.createElement('p');
     title.className = 'dashboard-classes-empty-title';
-    title.textContent = 'No classes booked yet';
+    title.textContent = 'No bookings yet';
+    const lead = document.createElement('p');
+    lead.className = 'dashboard-classes-empty-lead';
+    lead.textContent = 'Your upcoming classes will appear here once you book something.';
     const recSlot = document.createElement('div');
     recSlot.className = 'dashboard-classes-recommendation-slot';
     const cta = document.createElement('button');
@@ -4253,7 +4258,8 @@ export function initializeLoginPage(DOM) {
       e.preventDefault();
       openClassesBrowseTab();
     });
-    empty.append(title, recSlot, cta);
+    emptyMain.append(title, lead, cta);
+    empty.append(emptyMain, recSlot);
     renderDashboardClassesRecommendation(recSlot, customer || {});
 
     if (hasSaved) {

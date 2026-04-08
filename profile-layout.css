@@ -2659,9 +2659,10 @@ body.authenticated #pageSettings .settings-toggle-slider {
 }
 
 .dashboard-card-classes > .dashboard-card-title {
-  max-width: var(--dashboard-classes-rail-max);
-  margin-inline: auto;
+  max-width: none;
+  margin: 0 0 14px;
   width: 100%;
+  text-align: left;
 }
 
 .dashboard-card-classes:has(.dashboard-classes-section--saved):has(.dashboard-classes-section--booked)
@@ -2675,8 +2676,8 @@ body.authenticated #pageSettings .settings-toggle-slider {
   flex-direction: column;
   gap: 0;
   width: 100%;
-  max-width: var(--dashboard-classes-rail-max, min(100%, 480px));
-  margin-inline: auto;
+  max-width: none;
+  margin-inline: 0;
   box-sizing: border-box;
 }
 
@@ -2888,48 +2889,49 @@ body.authenticated #pageSettings .settings-toggle-slider {
   width: 100%;
 }
 
-/* Mobile: CTA directly under headline; recommendation loads below */
-.dashboard-book-class-cta {
-  order: 2;
+.dashboard-classes-empty-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01));
 }
 
 .dashboard-classes-recommendation-slot {
-  order: 3;
   min-width: 0;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 @media (min-width: 768px) {
   .dashboard-classes-empty {
     display: grid;
-    grid-template-columns: minmax(0, min(300px, 38%)) minmax(0, 1fr);
-    gap: 18px 22px;
-    align-items: stretch;
+    grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
+    gap: 16px;
+    align-items: start;
   }
 
-  .dashboard-classes-empty-title,
-  .dashboard-book-class-cta,
-  .dashboard-classes-recommendation-slot {
-    order: 0;
-  }
-
-  .dashboard-classes-empty-title {
+  .dashboard-classes-empty-main {
     grid-column: 1;
-    grid-row: 1;
-  }
-
-  .dashboard-book-class-cta {
-    grid-column: 1;
-    grid-row: 2;
-    align-self: start;
+    min-height: 100%;
   }
 
   .dashboard-classes-recommendation-slot {
     grid-column: 2;
-    grid-row: 1 / span 2;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
+    align-items: flex-start;
   }
 }
 
@@ -3074,6 +3076,7 @@ body.authenticated #pageSettings .settings-toggle-slider {
   width: 100%;
   min-width: 0;
   display: block;
+  max-width: 100%;
 }
 
 .dashboard-recommended-results .booking-item-card {
@@ -3085,19 +3088,45 @@ body.authenticated #pageSettings .settings-toggle-slider {
   max-width: 100%;
 }
 
-.dashboard-classes-empty-title {
-  order: 1;
-  margin: 0;
-  font-size: var(--type-body);
-  font-weight: 600;
-  color: var(--profile-text);
+/* Dashboard recommendation should keep normal card height (not stretched by parent grid/flex). */
+.dashboard-classes-empty .dashboard-recommended-results .booking-item-card,
+.dashboard-classes-empty .dashboard-recommended-results .dashboard-class-booked {
+  height: auto;
+  min-height: 0;
+  align-self: start;
 }
 
-.dashboard-classes-empty-summary {
-  margin: 0 0 10px;
-  color: var(--profile-muted);
-  font-size: var(--type-meta);
+.dashboard-classes-empty-title {
+  margin: 0;
+  font-size: var(--type-h2);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--profile-text);
+  line-height: 1.2;
+}
+
+.dashboard-classes-empty-lead {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: var(--type-body);
   line-height: 1.45;
+  max-width: 36ch;
+}
+
+.dashboard-classes-recommendation-slot .dashboard-classes-empty-summary {
+  margin: 0 0 2px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--type-label);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.dashboard-book-class-cta {
+  margin-top: auto;
+  min-width: 180px;
+  padding-inline: 18px;
+  border-radius: 12px;
 }
 
 /* My activity — last 30 days placeholder skeleton */
@@ -3400,6 +3429,57 @@ body.authenticated #pageSettings .settings-toggle-slider {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Unified button visual language (dark outlined, bold label). */
+:is(
+  .profile-action-btn,
+  .profile-action-btn-secondary,
+  .filter-apply-btn,
+  .booking-tab,
+  .booking-sub-tab,
+  .booking-tab.active,
+  .booking-sub-tab.active,
+  body.authenticated #pageSettings .settings-save-btn,
+  body.authenticated #pageSettings .settings-cancel-btn,
+  body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger)
+) {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+:is(
+  .profile-action-btn,
+  .profile-action-btn-secondary,
+  .filter-apply-btn,
+  .booking-tab,
+  .booking-sub-tab,
+  body.authenticated #pageSettings .settings-save-btn,
+  body.authenticated #pageSettings .settings-cancel-btn,
+  body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger)
+):hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.04)) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  filter: none !important;
+}
+
+:is(
+  .profile-action-btn,
+  .profile-action-btn-secondary,
+  .filter-apply-btn,
+  .booking-tab,
+  .booking-sub-tab,
+  body.authenticated #pageSettings .settings-save-btn,
+  body.authenticated #pageSettings .settings-cancel-btn,
+  body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger)
+):focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.45) !important;
+  outline-offset: 2px;
 }
 
 .profile-addons-list {
