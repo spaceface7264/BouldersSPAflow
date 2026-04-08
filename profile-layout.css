@@ -828,6 +828,39 @@ body.profile-hydrating #pageDashboard .dashboard-info-value::after {
   line-height: 1.45;
 }
 
+.booking-item-card__availability {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px !important;
+}
+
+.booking-item-card__availability-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.booking-item-card__availability-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.booking-item-card__availability-dot--filled {
+  background: #f401f5;
+}
+
+.booking-item-card__availability-label {
+  font-size: var(--type-meta);
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: lowercase;
+}
+
 .booking-item-card__pills {
   display: flex;
   flex-direction: row;

@@ -135,7 +135,6 @@ export function isDropInOnlyClass(activity) {
 
 export function formatClassCardAvailabilityFromContext(ctx) {
   if (!ctx || typeof ctx !== 'object') return '';
-  if (ctx.source && isDropInOnlyClass(ctx.source)) return '';
   const slotText = ctx.slots ? formatGroupActivitySlotsAvailability(ctx.slots) : '';
   if (slotText) return slotText;
   if (ctx.booking) return formatBookingCardAvailabilityLine(ctx.booking);

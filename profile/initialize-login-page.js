@@ -883,6 +883,45 @@ export function initializeLoginPage(DOM) {
 
   function appendClassCardDurationAvailability(main, startIso, endIso, ctx) {
     if (!main) return;
+    const sourceName = String(
+      ctx?.source?.name || ctx?.booking?.name || ctx?.booking?.groupActivity?.name || ''
+    ).trim();
+    const normalizedName = sourceName.toLowerCase().replace(/\s+/g, '');
+    if (!normalizedName.includes('introhold')) return;
+
+    const slots = ctx && typeof ctx === 'object' ? ctx.slots : null;
+    const leftRaw = slots?.leftToBookIncDropin ?? slots?.leftToBook ?? slots?.available ?? slots?.left;
+    const totalRaw = slots?.total ?? slots?.totalBookable;
+    const left = leftRaw != null ? Number(leftRaw) : NaN;
+    const total = totalRaw != null ? Number(totalRaw) : NaN;
+    if (Number.isFinite(left) && Number.isFinite(total) && total > 0) {
+      const wrap = document.createElement('div');
+      wrap.className = 'booking-item-card__availability';
+      const dots = document.createElement('div');
+      dots.className = 'booking-item-card__availability-dots';
+      const visibleDots = Math.max(1, Math.min(10, Math.round(total)));
+      const used = Math.max(0, total - left);
+      const fillRatio = Math.max(0, Math.min(1, used / total));
+      const filledDots = Math.max(0, Math.min(visibleDots, Math.round(fillRatio * visibleDots)));
+      dots.setAttribute(
+        'aria-label',
+        left <= 0 ? 'Fully booked' : `${left} of ${total} spots left`
+      );
+      dots.setAttribute('role', 'img');
+      for (let i = 0; i < visibleDots; i += 1) {
+        const dot = document.createElement('span');
+        dot.className = `booking-item-card__availability-dot${
+          i < filledDots ? ' booking-item-card__availability-dot--filled' : ''
+        }`;
+        dots.appendChild(dot);
+      }
+      const label = document.createElement('span');
+      label.className = 'booking-item-card__availability-label';
+      label.textContent = left <= 0 ? 'full' : `${left} left`;
+      wrap.append(dots, label);
+      main.appendChild(wrap);
+      return;
+    }
     const avail = formatClassCardAvailabilityFromContext(ctx || {});
     if (!avail) return;
     const sub = document.createElement('div');
@@ -2553,7 +2592,9 @@ export function initializeLoginPage(DOM) {
       const opt = gymSelectEl.querySelector(`option[value="${String(activity.__buId)}"]`);
       if (opt?.textContent) gym = opt.textContent.trim();
     }
-    return gym || '';
+    const raw = String(gym || '').trim();
+    if (!raw) return '';
+    return raw.replace(/^boulders\s+/i, '').trim() || raw;
   }
 
   function appendLocationPillToCardMain(main, labelText) {
@@ -3100,7 +3141,7 @@ export function initializeLoginPage(DOM) {
           if (id == null) return;
           const opt = document.createElement('option');
           opt.value = String(id);
-          opt.textContent = u.name || u.displayName || `Gym ${id}`;
+          opt.textContent = displayGymTitle(u.name || u.displayName || `Gym ${id}`);
           sel.appendChild(opt);
         });
         if (homeId != null) {
@@ -3609,9 +3650,14 @@ export function initializeLoginPage(DOM) {
         if (kind === 'event') {
           meta.textContent = formatEventDateRangeLine(a);
           main.append(h, meta);
+          appendClassCardDurationAvailability(
+            main,
+            typeof a.duration?.start === 'string' ? a.duration.start : '',
+            typeof a.duration?.end === 'string' ? a.duration.end : null,
+            { slots: a.slots, source: a, booking: a }
+          );
           appendSeriesPillToCardMain(main, a);
-          const whereLabel =
-            a.businessUnit?.name || a.businessUnit?.displayName || groupActivityBrowseLocationLabel(a, gymSel);
+          const whereLabel = groupActivityBrowseLocationLabel(a, gymSel);
           appendLocationPillToCardMain(main, whereLabel);
           appendSaveButtonToCardMain(main, a, {
             title: browseTitle,
