@@ -3380,9 +3380,10 @@ body.authenticated #pageSettings .settings-toggle-slider {
 
 .dashboard-access-accordion__summary {
   cursor: pointer;
-  color: var(--profile-text);
-  font-weight: 600;
-  font-size: var(--type-body);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
   list-style: none;
 }
 
@@ -3390,14 +3391,27 @@ body.authenticated #pageSettings .settings-toggle-slider {
   display: none;
 }
 
-.dashboard-access-accordion__summary::after {
-  content: '▾';
-  float: right;
+.dashboard-access-accordion__summary-label {
   color: var(--profile-muted);
-  transition: transform 0.15s ease;
+  font-size: var(--type-label);
+  flex-shrink: 0;
 }
 
-.dashboard-access-accordion[open] .dashboard-access-accordion__summary::after {
+.dashboard-access-accordion__summary-value {
+  color: var(--profile-text);
+  font-weight: 600;
+  font-size: var(--type-body);
+  text-align: right;
+}
+
+.dashboard-access-accordion__summary-value::after {
+  content: ' ▾';
+  color: var(--profile-muted);
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.dashboard-access-accordion[open] .dashboard-access-accordion__summary-value::after {
   transform: rotate(180deg);
 }
 

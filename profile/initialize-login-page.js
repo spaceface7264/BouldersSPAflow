@@ -655,7 +655,13 @@ export function initializeLoginPage(DOM) {
 
     const summary = document.createElement('summary');
     summary.className = 'dashboard-access-accordion__summary';
-    summary.textContent = `Punch card details (${cards.length})`;
+    const summaryLabel = document.createElement('span');
+    summaryLabel.className = 'dashboard-access-accordion__summary-label';
+    summaryLabel.textContent = `Punch card details (${cards.length})`;
+    const summaryValue = document.createElement('span');
+    summaryValue.className = 'dashboard-access-accordion__summary-value';
+    summaryValue.textContent = '';
+    summary.append(summaryLabel, summaryValue);
 
     const list = document.createElement('div');
     list.className = 'dashboard-access-accordion__list';
