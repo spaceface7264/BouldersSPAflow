@@ -100,7 +100,11 @@
                     <section class="dashboard-access-hero dashboard-card" aria-labelledby="dashboardAccessHeading">
                         <div class="dashboard-access-hero-head">
                             <h2 class="dashboard-access-title" id="dashboardAccessHeading">My Access</h2>
-                            <span class="dashboard-access-badge" id="dashboardAccessBadge">Status</span>
+                            <select class="dashboard-access-badge dashboard-access-select" id="dashboardAccessBadge" aria-label="Choose access type">
+                                <option value="trial">15-day trial</option>
+                                <option value="punch_card">Punch card</option>
+                                <option value="membership">Membership</option>
+                            </select>
                         </div>
                         <div class="dashboard-access-rows" id="dashboardAccessRows"></div>
                         <div id="dashboardAccessSupportSlot" class="dashboard-access-support-slot" hidden></div>

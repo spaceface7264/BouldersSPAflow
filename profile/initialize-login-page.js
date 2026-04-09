@@ -10,6 +10,9 @@ import {
   getMembershipData,
   hasActiveMembership,
   detectPrimaryAccess,
+  collectSubscriptionsArray,
+  isTrialLikeSub,
+  extractPunchCardFromCustomer,
 } from './lib/subscriptions-and-access.js';
 import {
   collectValueCardsArray,
@@ -597,10 +600,13 @@ export function initializeLoginPage(DOM) {
     return article;
   }
 
-  function renderValueCardsIntoList(listEl, customer) {
+  function renderValueCardsIntoList(listEl, customer, filterFn = null) {
     if (!listEl) return 0;
     clearDashboardEl(listEl);
-    const valueCards = collectValueCardsArray(customer || {});
+    const allValueCards = collectValueCardsArray(customer || {});
+    const valueCards = typeof filterFn === 'function'
+      ? allValueCards.filter((card) => filterFn(card))
+      : allValueCards;
     valueCards.forEach((vc) => {
       const el = buildAddonCardElement(vc);
       listEl.appendChild(el);
@@ -609,11 +615,13 @@ export function initializeLoginPage(DOM) {
     return valueCards.length;
   }
 
+  let selectedDashboardAccessKind = null;
+
   function renderDashboardValueCardsSection(customer) {
     const card = document.getElementById('dashboardValueCardsCard');
     const list = document.getElementById('dashboardValueCardsList');
     if (!card || !list) return;
-    const n = renderValueCardsIntoList(list, customer);
+    const n = renderValueCardsIntoList(list, customer, (cardItem) => !isPunchCardLikeValueCard(cardItem));
     card.style.display = n > 0 ? '' : 'none';
   }
 
@@ -644,6 +652,49 @@ export function initializeLoginPage(DOM) {
     return a;
   }
 
+  function isPunchCardLikeValueCard(card) {
+    const name = (valueCardProductDisplayName(card) || '').toLowerCase();
+    return /punch|klip|klippekort|value\s*card|entries|entry/.test(name);
+  }
+
+  function getDashboardAccessSources(customer) {
+    const safeCustomer = customer || {};
+    const subs = collectSubscriptionsArray(safeCustomer);
+    return {
+      membership: getMembershipData(safeCustomer),
+      hasMembership: hasActiveMembership(safeCustomer),
+      trialSub: subs.find((s) => isTrialLikeSub(s)) || null,
+      punch: extractPunchCardFromCustomer(safeCustomer, subs),
+    };
+  }
+
+  function resolveDashboardAccessKind(sources, preferredKind) {
+    const order = ['trial', 'punch_card', 'membership'];
+    const available = {
+      trial: Boolean(sources?.trialSub),
+      punch_card: Boolean(sources?.punch),
+      membership: Boolean(sources?.hasMembership),
+    };
+    if (selectedDashboardAccessKind && available[selectedDashboardAccessKind]) {
+      return selectedDashboardAccessKind;
+    }
+    if (preferredKind && available[preferredKind]) return preferredKind;
+    const primaryKind = detectPrimaryAccess(getBestCustomerData() || {}).kind;
+    if (available[primaryKind]) return primaryKind;
+    return order.find((k) => available[k]) || 'trial';
+  }
+
+  function bindDashboardAccessSelect(selectEl) {
+    if (!selectEl || selectEl.tagName !== 'SELECT' || selectEl.dataset.accessSelectBound === '1') return;
+    selectEl.dataset.accessSelectBound = '1';
+    selectEl.addEventListener('change', () => {
+      selectedDashboardAccessKind = selectEl.value;
+      const customer = getBestCustomerData();
+      renderDashboardAccessPanel(customer);
+      renderDashboardValueCardsSection(customer);
+    });
+  }
+
   function renderDashboardAccessPanel(customer) {
     const rowsEl = document.getElementById('dashboardAccessRows');
     const badgeEl = document.getElementById('dashboardAccessBadge');
@@ -655,11 +706,40 @@ export function initializeLoginPage(DOM) {
       clearDashboardEl(supportSlot);
       supportSlot.setAttribute('hidden', '');
     }
-    const access = detectPrimaryAccess(customer || {});
-    const membership = getMembershipData(customer || {});
+    const sources = getDashboardAccessSources(customer);
+    const membership = sources.membership;
+    let selectedKind = detectPrimaryAccess(customer || {}).kind;
 
-    if (access.kind === 'membership') {
-      badgeEl.textContent = 'Membership';
+    if (badgeEl.tagName === 'SELECT') {
+      bindDashboardAccessSelect(badgeEl);
+      const optionStates = {
+        trial: Boolean(sources.trialSub),
+        punch_card: Boolean(sources.punch),
+        membership: Boolean(sources.hasMembership),
+      };
+      Object.entries(optionStates).forEach(([value, available]) => {
+        const option = badgeEl.querySelector(`option[value="${value}"]`);
+        if (option) option.disabled = !available;
+      });
+      selectedKind = resolveDashboardAccessKind(sources, selectedKind);
+      badgeEl.value = selectedKind;
+      selectedDashboardAccessKind = selectedKind;
+    } else if (badgeEl && typeof badgeEl.textContent === 'string') {
+      selectedKind = resolveDashboardAccessKind(sources, selectedKind);
+      selectedDashboardAccessKind = selectedKind;
+      badgeEl.textContent =
+        selectedKind === 'membership'
+          ? 'Membership'
+          : selectedKind === 'punch_card'
+            ? 'Punch card'
+            : '15-day trial';
+    }
+
+    if (selectedKind === 'membership') {
+      if (!sources.hasMembership) {
+        addAccessRow(rowsEl, 'Status', 'No active membership found on this account.');
+        return;
+      }
       addAccessRow(rowsEl, 'Member since', formatDisplayDate(membership.activeSince));
       addAccessRow(
         rowsEl,
@@ -678,18 +758,39 @@ export function initializeLoginPage(DOM) {
       return;
     }
 
-    if (access.kind === 'punch_card') {
-      badgeEl.textContent = 'Punch card';
-      const entries =
-        access.punch.entriesLeft != null && access.punch.entriesLeft !== ''
-          ? String(access.punch.entriesLeft)
-          : '—';
-      addAccessRow(rowsEl, 'Entries left', entries);
-      addAccessRow(
-        rowsEl,
-        'Valid until',
-        access.punch.expiryRaw ? formatDisplayDate(access.punch.expiryRaw) : '—'
-      );
+    if (selectedKind === 'punch_card') {
+      if (!sources.punch) {
+        addAccessRow(rowsEl, 'Status', 'No active punch card found on this account.');
+        return;
+      }
+      const allValueCards = collectValueCardsArray(customer || {});
+      const punchCards = allValueCards.filter((card) => isPunchCardLikeValueCard(card));
+      const activeValueCards = punchCards.filter((card) => !valueCardIsExpiredOrInvalid(card));
+      const cardsToShow = activeValueCards.length > 0 ? activeValueCards : punchCards;
+      if (cardsToShow.length > 0) {
+        cardsToShow.forEach((card, idx) => {
+          const title = valueCardProductDisplayName(card) || `Punch card ${idx + 1}`;
+          const remaining = formatValueCardRemainingLabel(card);
+          const validUntil = formatAddonExpiryDisplay(card?.validUntil);
+          const inlineValue =
+            validUntil && validUntil !== '—'
+              ? `${remaining || '—'} • Expires ${validUntil}`
+              : (remaining || '—');
+          addAccessRow(rowsEl, title, inlineValue);
+        });
+      }
+      if (cardsToShow.length === 0) {
+        const entries =
+          sources.punch.entriesLeft != null && sources.punch.entriesLeft !== ''
+            ? String(sources.punch.entriesLeft)
+            : '—';
+        addAccessRow(rowsEl, 'Entries left', entries);
+        addAccessRow(
+          rowsEl,
+          'Valid until',
+          sources.punch.expiryRaw ? formatDisplayDate(sources.punch.expiryRaw) : '—'
+        );
+      }
       addAccessRow(rowsEl, 'Home gym', membership.gym !== '-' ? membership.gym : '—');
       if (supportSlot) {
         supportSlot.appendChild(createDashboardAccessSupportLink());
@@ -698,9 +799,12 @@ export function initializeLoginPage(DOM) {
       return;
     }
 
-    if (access.kind === 'trial') {
-      badgeEl.textContent = '15-day trial';
-      const t = access.trialSub || {};
+    if (selectedKind === 'trial') {
+      if (!sources.trialSub) {
+        addAccessRow(rowsEl, 'Status', 'No active 15-day trial found on this account.');
+        return;
+      }
+      const t = sources.trialSub || {};
       const start = t.startDate || t.activeSince || t.validFrom || t.beginDate;
       const end = t.endDate || t.expires || t.validTo || t.trialEndDate;
       addAccessRow(rowsEl, 'Active from', formatDisplayDate(start));
@@ -714,7 +818,9 @@ export function initializeLoginPage(DOM) {
       return;
     }
 
-    badgeEl.textContent = 'No access found';
+    if (badgeEl.tagName !== 'SELECT') {
+      badgeEl.textContent = 'No access found';
+    }
     if (membership.type && membership.type !== '-') {
       addAccessRow(rowsEl, 'Plan on file', membership.type);
     }
