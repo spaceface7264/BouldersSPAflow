@@ -4975,7 +4975,7 @@ export function initializeLoginPage(DOM) {
     if (!hostEl) return;
     const hint = document.createElement('p');
     hint.className = 'dashboard-classes-empty-summary dashboard-recommendation-status';
-    hint.textContent = 'Finding multi-session series near you…';
+    hint.textContent = 'Finding classes near you…';
     hostEl.appendChild(hint);
 
     const gymSel = document.getElementById('browseGymFilter');
@@ -4986,7 +4986,8 @@ export function initializeLoginPage(DOM) {
         if (!Array.isArray(recs) || !recs.length) {
           const fallback = document.createElement('p');
           fallback.className = 'dashboard-classes-empty-summary dashboard-recommendation-status';
-          fallback.textContent = 'No series recommendation right now. Browse classes to discover what is next.';
+          fallback.textContent =
+            'Nothing to recommend right now. Browse classes to see what’s next.';
           hostEl.appendChild(fallback);
           return;
         }
@@ -6474,7 +6475,7 @@ export function initializeLoginPage(DOM) {
     statusPill.style.background = 'rgba(255, 0, 255, 0.09)';
     statusPill.style.color = '#ff00ff';
     statusPill.style.fontFamily = "'DM Sans', sans-serif";
-    statusPill.style.fontSize = '11px';
+    statusPill.style.fontSize = '8px';
     statusPill.style.fontWeight = '700';
     statusPill.style.letterSpacing = '0.03em';
     statusPill.style.textTransform = 'uppercase';
