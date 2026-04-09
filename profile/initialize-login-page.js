@@ -644,14 +644,6 @@ export function initializeLoginPage(DOM) {
     container.appendChild(row);
   }
 
-  function createDashboardAccessSupportLink() {
-    const a = document.createElement('a');
-    a.href = 'mailto:medlem@boulders.dk';
-    a.className = 'profile-action-btn-secondary dashboard-access-support-btn';
-    a.textContent = 'Something wrong? Contact support';
-    return a;
-  }
-
   function isPunchCardLikeValueCard(card) {
     const name = (valueCardProductDisplayName(card) || '').toLowerCase();
     return /punch|klip|klippekort|value\s*card|entries|entry/.test(name);
@@ -698,14 +690,9 @@ export function initializeLoginPage(DOM) {
   function renderDashboardAccessPanel(customer) {
     const rowsEl = document.getElementById('dashboardAccessRows');
     const badgeEl = document.getElementById('dashboardAccessBadge');
-    const supportSlot = document.getElementById('dashboardAccessSupportSlot');
     if (!rowsEl || !badgeEl) return;
 
     clearDashboardEl(rowsEl);
-    if (supportSlot) {
-      clearDashboardEl(supportSlot);
-      supportSlot.setAttribute('hidden', '');
-    }
     const sources = getDashboardAccessSources(customer);
     const membership = sources.membership;
     let selectedKind = detectPrimaryAccess(customer || {}).kind;
@@ -751,10 +738,6 @@ export function initializeLoginPage(DOM) {
         addAccessRow(rowsEl, 'Bound until', formatDisplayDate(membership.boundUntil));
       }
       addAccessRow(rowsEl, 'Plan', membership.type);
-      if (supportSlot) {
-        supportSlot.appendChild(createDashboardAccessSupportLink());
-        supportSlot.removeAttribute('hidden');
-      }
       return;
     }
 
@@ -792,10 +775,6 @@ export function initializeLoginPage(DOM) {
         );
       }
       addAccessRow(rowsEl, 'Home gym', membership.gym !== '-' ? membership.gym : '—');
-      if (supportSlot) {
-        supportSlot.appendChild(createDashboardAccessSupportLink());
-        supportSlot.removeAttribute('hidden');
-      }
       return;
     }
 
@@ -805,16 +784,31 @@ export function initializeLoginPage(DOM) {
         return;
       }
       const t = sources.trialSub || {};
-      const start = t.startDate || t.activeSince || t.validFrom || t.beginDate;
-      const end = t.endDate || t.expires || t.validTo || t.trialEndDate;
+      const start = t.startDate || t.activeSince || t.validFrom || t.beginDate || t.debitedFrom || t.createdAt;
+      const end =
+        t.endDate ||
+        t.expires ||
+        t.validTo ||
+        t.trialEndDate ||
+        t.boundUntil ||
+        t.debitedUntil ||
+        t.nextBillingDate;
+      const trialPlanName =
+        t.name ||
+        t.productName ||
+        t.subscriptionProduct?.name ||
+        t.type ||
+        t.subscriptionType ||
+        '15-day trial';
+      const trialLocation =
+        t.gymName ||
+        t.businessUnitName ||
+        t.businessUnit?.name ||
+        (membership.gym !== '-' ? membership.gym : '—');
       addAccessRow(rowsEl, 'Active from', formatDisplayDate(start));
       addAccessRow(rowsEl, 'Active until', formatDisplayDate(end));
-      addAccessRow(rowsEl, 'Plan', t.name || t.productName || membership.type || '—');
-      addAccessRow(rowsEl, 'Location', membership.gym !== '-' ? membership.gym : '—');
-      if (supportSlot) {
-        supportSlot.appendChild(createDashboardAccessSupportLink());
-        supportSlot.removeAttribute('hidden');
-      }
+      addAccessRow(rowsEl, 'Plan', trialPlanName);
+      addAccessRow(rowsEl, 'Location', trialLocation);
       return;
     }
 
@@ -840,7 +834,7 @@ export function initializeLoginPage(DOM) {
     signupBtn.href = './index.html';
     signupBtn.className = 'profile-action-btn dashboard-access-signup-btn';
     signupBtn.textContent = 'Get access';
-    actionsRow.append(signupBtn, createDashboardAccessSupportLink());
+    actionsRow.append(signupBtn);
     ctaWrap.append(sum, actionsRow);
     rowsEl.appendChild(ctaWrap);
   }
