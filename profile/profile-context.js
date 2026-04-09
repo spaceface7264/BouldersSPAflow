@@ -1,4 +1,4 @@
-export const PAGE_ROUTES = ['dashboard', 'classes', 'activity', 'gyms', 'profile', 'settings'];
+export const PAGE_ROUTES = ['dashboard', 'classes', 'activity', 'gyms', 'profile', 'account'];
 
 export const PAGE_ROUTE_MAP = {
   dashboard: 'pageDashboard',
@@ -6,7 +6,7 @@ export const PAGE_ROUTE_MAP = {
   activity: 'pageActivity',
   gyms: 'pageGyms',
   profile: 'pageProfile',
-  settings: 'pageSettings',
+  account: 'pageProfile',
 };
 
 /**

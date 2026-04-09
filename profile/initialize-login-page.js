@@ -766,51 +766,182 @@ export function initializeLoginPage(DOM) {
     return order.find((k) => available[k]) || 'trial';
   }
 
-  function bindDashboardAccessSelect(selectEl) {
-    if (!selectEl || selectEl.tagName !== 'SELECT' || selectEl.dataset.accessSelectBound === '1') return;
-    selectEl.dataset.accessSelectBound = '1';
-    selectEl.addEventListener('change', () => {
-      selectedDashboardAccessKind = selectEl.value;
+  function dashboardAccessKindLabel(kind) {
+    if (kind === 'membership') return 'Membership';
+    if (kind === 'punch_card') return 'Punch card';
+    return '15-day trial';
+  }
+
+  function bindDashboardAccessDropdown(root) {
+    if (!root || root.dataset.accessDropdownBound === '1') return;
+    const trigger = root.querySelector('.cs-trigger');
+    const list = root.querySelector('.cs-list');
+    if (!trigger || !list) return;
+    root.dataset.accessDropdownBound = '1';
+
+    function enabledOptions() {
+      return Array.from(list.querySelectorAll('[role="option"]')).filter(
+        (o) => o.getAttribute('aria-disabled') !== 'true'
+      );
+    }
+
+    function resetOptionTabindex() {
+      list.querySelectorAll('[role="option"]').forEach((o) => {
+        o.tabIndex = -1;
+      });
+    }
+
+    function closeDropdown(focusTrigger) {
+      if (!list.classList.contains('open')) return;
+      list.classList.remove('open');
+      list.setAttribute('aria-hidden', 'true');
+      trigger.setAttribute('aria-expanded', 'false');
+      root.classList.remove('is-open');
+      resetOptionTabindex();
+      if (focusTrigger) trigger.focus();
+    }
+
+    function openDropdown() {
+      if (list.classList.contains('open')) return;
+      list.classList.add('open');
+      list.setAttribute('aria-hidden', 'false');
+      trigger.setAttribute('aria-expanded', 'true');
+      root.classList.add('is-open');
+      resetOptionTabindex();
+      const opts = enabledOptions();
+      const selected = list.querySelector('[role="option"][aria-selected="true"]');
+      const toFocus =
+        selected && selected.getAttribute('aria-disabled') !== 'true' ? selected : opts[0];
+      if (toFocus) toFocus.tabIndex = 0;
+      if (toFocus) toFocus.focus();
+    }
+
+    function toggleDropdown() {
+      if (!list.classList.contains('open')) openDropdown();
+      else closeDropdown(true);
+    }
+
+    function applySelection(value) {
+      selectedDashboardAccessKind = value;
       const customer = getBestCustomerData();
       renderDashboardAccessPanel(customer);
       renderDashboardValueCardsSection(customer);
+      closeDropdown(true);
+    }
+
+    trigger.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleDropdown();
+    });
+
+    trigger.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!list.classList.contains('open')) openDropdown();
+      }
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      if (!root.contains(e.target)) closeDropdown(true);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !list.classList.contains('open')) return;
+      if (!root.contains(document.activeElement)) return;
+      e.preventDefault();
+      closeDropdown(true);
+    });
+
+    list.addEventListener('keydown', (e) => {
+      const opts = enabledOptions();
+      const cur = document.activeElement;
+      const idx = opts.indexOf(cur);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeDropdown(true);
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (idx >= 0 && idx < opts.length - 1) {
+          cur.tabIndex = -1;
+          opts[idx + 1].tabIndex = 0;
+          opts[idx + 1].focus();
+        }
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (idx > 0) {
+          cur.tabIndex = -1;
+          opts[idx - 1].tabIndex = 0;
+          opts[idx - 1].focus();
+        } else {
+          closeDropdown(true);
+        }
+        return;
+      }
+      if (e.key === 'Home' && opts[0]) {
+        e.preventDefault();
+        if (cur && cur.getAttribute('role') === 'option') cur.tabIndex = -1;
+        opts[0].tabIndex = 0;
+        opts[0].focus();
+        return;
+      }
+      if (e.key === 'End' && opts.length) {
+        e.preventDefault();
+        const last = opts[opts.length - 1];
+        if (cur && cur.getAttribute('role') === 'option') cur.tabIndex = -1;
+        last.tabIndex = 0;
+        last.focus();
+        return;
+      }
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (cur?.dataset?.value) applySelection(cur.dataset.value);
+      }
+    });
+
+    list.addEventListener('click', (e) => {
+      const opt = e.target.closest('.cs-option');
+      if (!opt || opt.getAttribute('aria-disabled') === 'true') return;
+      e.preventDefault();
+      applySelection(opt.dataset.value);
     });
   }
 
   function renderDashboardAccessPanel(customer) {
     const rowsEl = document.getElementById('dashboardAccessRows');
-    const badgeEl = document.getElementById('dashboardAccessBadge');
-    if (!rowsEl || !badgeEl) return;
+    const badgeRoot = document.getElementById('dashboardAccessBadge');
+    if (!rowsEl || !badgeRoot) return;
 
     clearDashboardEl(rowsEl);
     const sources = getDashboardAccessSources(customer);
     const membership = sources.membership;
     let selectedKind = detectPrimaryAccess(customer || {}).kind;
 
-    if (badgeEl.tagName === 'SELECT') {
-      bindDashboardAccessSelect(badgeEl);
-      const optionStates = {
-        trial: Boolean(sources.trialSub),
-        punch_card: Boolean(sources.punch),
-        membership: Boolean(sources.hasMembership),
-      };
-      Object.entries(optionStates).forEach(([value, available]) => {
-        const option = badgeEl.querySelector(`option[value="${value}"]`);
-        if (option) option.disabled = !available;
-      });
-      selectedKind = resolveDashboardAccessKind(sources, selectedKind);
-      badgeEl.value = selectedKind;
-      selectedDashboardAccessKind = selectedKind;
-    } else if (badgeEl && typeof badgeEl.textContent === 'string') {
-      selectedKind = resolveDashboardAccessKind(sources, selectedKind);
-      selectedDashboardAccessKind = selectedKind;
-      badgeEl.textContent =
-        selectedKind === 'membership'
-          ? 'Membership'
-          : selectedKind === 'punch_card'
-            ? 'Punch card'
-            : '15-day trial';
-    }
+    bindDashboardAccessDropdown(badgeRoot);
+    const optionStates = {
+      trial: Boolean(sources.trialSub),
+      punch_card: Boolean(sources.punch),
+      membership: Boolean(sources.hasMembership),
+    };
+    badgeRoot.querySelectorAll('[role="option"]').forEach((opt) => {
+      const value = opt.dataset.value;
+      const available = optionStates[value];
+      opt.setAttribute('aria-disabled', available ? 'false' : 'true');
+      opt.classList.toggle('cs-option--disabled', !available);
+    });
+    selectedKind = resolveDashboardAccessKind(sources, selectedKind);
+    selectedDashboardAccessKind = selectedKind;
+    const valueEl = badgeRoot.querySelector('.cs-value');
+    badgeRoot.querySelectorAll('[role="option"]').forEach((opt) => {
+      const sel = opt.dataset.value === selectedKind;
+      opt.setAttribute('aria-selected', sel ? 'true' : 'false');
+      opt.classList.toggle('active', sel);
+    });
+    if (valueEl) valueEl.textContent = dashboardAccessKindLabel(selectedKind);
 
     if (selectedKind === 'membership') {
       if (!sources.hasMembership) {
@@ -905,8 +1036,8 @@ export function initializeLoginPage(DOM) {
       return;
     }
 
-    if (badgeEl.tagName !== 'SELECT') {
-      badgeEl.textContent = 'No access found';
+    if (valueEl) {
+      valueEl.textContent = 'No access found';
     }
     if (membership.type && membership.type !== '-') {
       addAccessRow(rowsEl, 'Plan on file', membership.type);
@@ -5835,6 +5966,57 @@ export function initializeLoginPage(DOM) {
     if (safeRoute === 'gyms') {
       refreshGymsDirectoryPage();
     }
+    if (safeRoute === 'profile' || safeRoute === 'account') {
+      syncProfileAccountTabFromRoute(safeRoute);
+    }
+  }
+
+  /**
+   * Profil vs Konto sub-tabs (same #pageProfile). Hash: #profile | #account.
+   */
+  function syncProfileAccountTabFromRoute(route) {
+    const tabProfil = document.getElementById('tabProfil');
+    const tabKonto = document.getElementById('tabKonto');
+    const panelProfil = document.getElementById('profileTabProfil');
+    const panelKonto = document.getElementById('profileTabKonto');
+    if (!tabProfil || !tabKonto || !panelProfil || !panelKonto) return;
+
+    const wantKonto = route === 'account';
+    tabProfil.classList.toggle('active', !wantKonto);
+    tabKonto.classList.toggle('active', wantKonto);
+    tabProfil.setAttribute('aria-selected', wantKonto ? 'false' : 'true');
+    tabKonto.setAttribute('aria-selected', wantKonto ? 'true' : 'false');
+    panelProfil.toggleAttribute('hidden', wantKonto);
+    panelKonto.toggleAttribute('hidden', !wantKonto);
+
+    if (wantKonto) {
+      document.querySelectorAll('#pageProfile .profile-profil-edit-row.profile-inline-editor.on').forEach((ed) => {
+        const field = ed.getAttribute('data-profile-inline-editor');
+        if (field) closeProfileInlineEditor(field);
+      });
+    }
+  }
+
+  function bindProfileAccountTabs() {
+    const root = document.getElementById('pageProfile');
+    if (!root || root.dataset.profileAccountTabsBound === '1') return;
+    root.dataset.profileAccountTabsBound = '1';
+    root.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-profile-tab-btn]');
+      if (!btn || !root.contains(btn)) return;
+      const tab = btn.getAttribute('data-profile-tab-btn');
+      if (tab === 'konto') {
+        e.preventDefault();
+        if (!isUserAuthenticated()) return;
+        window.location.hash = 'account';
+        return;
+      }
+      if (tab === 'profil') {
+        e.preventDefault();
+        if (!isUserAuthenticated()) return;
+        window.location.hash = 'profile';
+      }
+    });
   }
 
   let notificationPrivacySaving = false;
@@ -5963,68 +6145,87 @@ export function initializeLoginPage(DOM) {
         </div>`;
 
   function getBrpNumericCustomerId(customer) {
-    const raw = customer?.id != null ? customer.id : state?.customerId;
-    if (raw == null || raw === '') return null;
-    const n =
-      typeof raw === 'number' && Number.isFinite(raw)
-        ? raw
-        : parseInt(String(raw).replace(/\D/g, ''), 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }
-
-  function buildAuthApiUrl(path) {
-    if (!path) return '';
-    const normalizedPath = String(path).startsWith('/') ? String(path) : `/${String(path)}`;
-    if (authAPI?.useProxy) {
-      const base = String(authAPI.baseUrl || '').replace(/\/+$/, '');
-      return `${base}?path=${encodeURIComponent(normalizedPath)}`;
-    }
-    const base = String(authAPI?.baseUrl || '').replace(/\/+$/, '');
-    return base ? `${base}${normalizedPath}` : normalizedPath;
-  }
-
-  async function fetchCustomerActivityCheckIns(customerId) {
-    const token = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
-    if (!token || !customerId) return [];
-    const headers = {
-      'Accept-Language': 'da-DK',
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-    };
-    const now = new Date();
-    const lookback = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-    const query = new URLSearchParams({
-      'period.start': lookback.toISOString(),
-      'period.end': now.toISOString(),
-    }).toString();
-    const candidates = [
-      `/api/ver3/customers/${customerId}/checkins?${query}`,
-      `/api/ver3/customers/${customerId}/check-ins?${query}`,
-      `/api/ver3/customers/${customerId}/visits?${query}`,
-    ];
-    for (const path of candidates) {
-      try {
-        const res = await fetch(buildAuthApiUrl(path), { method: 'GET', headers });
-        if (!res.ok) continue;
-        const payload = await res.json();
-        if (Array.isArray(payload)) return payload;
-        if (Array.isArray(payload?.items)) return payload.items;
-        if (Array.isArray(payload?.data)) return payload.data;
-        if (Array.isArray(payload?.results)) return payload.results;
-      } catch {
-        // continue fallback chain
+    const tryParseDigits = (value) => {
+      if (value == null || value === '') return null;
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+      const s = String(value).trim();
+      if (/^\d+$/.test(s)) {
+        const n = parseInt(s, 10);
+        return Number.isFinite(n) && n > 0 ? n : null;
       }
+      return null;
+    };
+
+    const fromProfileId = tryParseDigits(customer?.id);
+    if (fromProfileId != null) return fromProfileId;
+
+    const fromCustomerNumber = tryParseDigits(customer?.customerNumber);
+    if (fromCustomerNumber != null) return fromCustomerNumber;
+
+    return tryParseDigits(state?.customerId);
+  }
+
+  function parseDanishDateTimeString(value) {
+    const m = String(value || '')
+      .trim()
+      .match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    if (!m) return '';
+    const [, d, mo, y, h, mi] = m;
+    const hh = h != null ? Number(h) : 0;
+    const mm = mi != null ? Number(mi) : 0;
+    const dt = new Date(Number(y), Number(mo) - 1, Number(d), hh, mm);
+    return Number.isFinite(dt.getTime()) ? dt.toISOString() : '';
+  }
+
+  async function fetchCustomerActivityCheckIns() {
+    if (!authAPI || typeof authAPI.listCustomerAccessActivity !== 'function') return [];
+
+    const customer = getBestCustomerData();
+    const tryIds = new Set();
+    const primary = getBrpNumericCustomerId(customer);
+    if (primary != null) tryIds.add(primary);
+    if (customer?.customerNumber != null) {
+      const s = String(customer.customerNumber).trim();
+      if (/^\d+$/.test(s)) tryIds.add(parseInt(s, 10));
     }
-    return [];
+
+    if (!tryIds.size) return [];
+
+    let last = [];
+    for (const id of tryIds) {
+      last = await authAPI.listCustomerAccessActivity(id);
+      if (Array.isArray(last) && last.length) return last;
+    }
+    return Array.isArray(last) ? last : [];
   }
 
   function resolveCheckInIso(item) {
     if (!item || typeof item !== 'object') return '';
+    const fromDanish =
+      (typeof item.tid === 'string' && parseDanishDateTimeString(item.tid)) ||
+      (typeof item.timeText === 'string' && parseDanishDateTimeString(item.timeText)) ||
+      '';
+    if (fromDanish) return fromDanish;
+
+    const tp = item.time;
+    if (tp && typeof tp === 'object') {
+      const ds = tp.date || tp.day || tp.startDate;
+      const ts = tp.time || tp.clock || tp.startTime;
+      if (typeof ds === 'string' && typeof ts === 'string') {
+        const combined = `${ds} ${ts}`.trim();
+        const ms = Date.parse(combined);
+        if (Number.isFinite(ms)) return new Date(ms).toISOString();
+      }
+      if (typeof tp.start === 'string') {
+        const ms = Date.parse(tp.start);
+        if (Number.isFinite(ms)) return new Date(ms).toISOString();
+      }
+    }
+
     const candidates = [
       item.checkedIn,
       item.checkInTime,
       item.checkinTime,
-      item.time,
       item.timestamp,
       item.created,
       item.createdAt,
@@ -6032,20 +6233,37 @@ export function initializeLoginPage(DOM) {
       item.startTime,
       item?.duration?.start,
     ];
-    const iso = candidates.find((value) => typeof value === 'string' && value.trim());
-    if (!iso) return '';
-    const ms = Date.parse(iso);
-    return Number.isFinite(ms) ? new Date(ms).toISOString() : '';
+    for (const raw of candidates) {
+      if (typeof raw !== 'string' || !raw.trim()) continue;
+      const danish = parseDanishDateTimeString(raw);
+      if (danish) return danish;
+      const ms = Date.parse(raw);
+      if (Number.isFinite(ms)) return new Date(ms).toISOString();
+    }
+    return '';
   }
 
   function resolveCheckInGym(item) {
     if (!item || typeof item !== 'object') return 'Gym';
+    const reader =
+      (typeof item.reader === 'string' && item.reader.trim()) ||
+      (typeof item.readerName === 'string' && item.readerName.trim()) ||
+      (item.reader && typeof item.reader === 'object'
+        ? String(item.reader.name || item.reader.displayName || item.reader.title || '').trim()
+        : '') ||
+      (typeof item.laeser === 'string' && item.laeser.trim()) ||
+      (typeof item.læser === 'string' && item.læser.trim()) ||
+      (typeof item.accessPoint === 'string' && item.accessPoint.trim()) ||
+      (item.accessPoint && typeof item.accessPoint === 'object'
+        ? String(item.accessPoint.name || item.accessPoint.displayName || '').trim()
+        : '');
+    if (reader) return reader;
     const label =
       item?.businessUnit?.name ||
       item?.businessUnit?.displayName ||
       item?.gymName ||
       item?.locationName ||
-      item?.location ||
+      (typeof item.location === 'string' ? item.location : '') ||
       item?.center ||
       item?.facility;
     return String(label || '').trim() || 'Gym';
@@ -6081,25 +6299,29 @@ export function initializeLoginPage(DOM) {
   function renderActivityHistory(history) {
     const host = document.getElementById('activityHistoryList');
     if (!host) return;
+    host.textContent = '';
     if (!history.length) {
-      host.innerHTML = '<p class="bookings-empty-msg">No check-ins found yet.</p>';
+      const empty = document.createElement('p');
+      empty.className = 'bookings-empty-msg';
+      empty.textContent = 'No check-ins found yet.';
+      host.appendChild(empty);
       return;
     }
-    host.innerHTML = history
-      .slice(0, 30)
-      .map((entry) => {
-        const d = new Date(entry.iso);
-        const when = Number.isFinite(d.getTime())
-          ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-          : '—';
-        return `
-          <div class="activity-history-item">
-            <span class="profile-detail-label">${entry.gym}</span>
-            <span class="profile-detail-value">${when}</span>
-          </div>
-        `;
-      })
-      .join('');
+    history.slice(0, 30).forEach((entry) => {
+      const row = document.createElement('div');
+      row.className = 'activity-history-item';
+      const label = document.createElement('span');
+      label.className = 'profile-detail-label';
+      label.textContent = entry.gym;
+      const value = document.createElement('span');
+      value.className = 'profile-detail-value';
+      const d = new Date(entry.iso);
+      value.textContent = Number.isFinite(d.getTime())
+        ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+        : '—';
+      row.append(label, value);
+      host.appendChild(row);
+    });
   }
 
   function renderActivityLast30Chart(history) {
@@ -6148,17 +6370,20 @@ export function initializeLoginPage(DOM) {
     const chart = document.getElementById('activityChart');
     const historyHost = document.getElementById('activityHistoryList');
     if (!chart || !historyHost) return;
-    const customerId = getBrpNumericCustomerId(getBestCustomerData());
-    if (!customerId || !isUserAuthenticated()) {
+    if (!isUserAuthenticated()) {
       chart.setAttribute('aria-busy', 'false');
       chart.innerHTML = '<p class="bookings-empty-msg">Sign in to view activity.</p>';
       historyHost.innerHTML = '<p class="bookings-empty-msg">Sign in to view check-ins.</p>';
       renderActivitySummary([]);
       return;
     }
+    if (!getBestCustomerData()) {
+      chart.setAttribute('aria-busy', 'true');
+      return;
+    }
     const token = ++activityLoadToken;
     try {
-      const rawEntries = await fetchCustomerActivityCheckIns(customerId);
+      const rawEntries = await fetchCustomerActivityCheckIns();
       if (token !== activityLoadToken) return;
       const history = normalizeCheckInHistory(rawEntries);
       renderActivitySummary(history);
@@ -6853,15 +7078,183 @@ export function initializeLoginPage(DOM) {
       if (el) el.value = value || '';
     };
 
-    setValue('editFirstName', customer.firstName || '');
-    setValue('editLastName', customer.lastName || '');
-    setValue('editDateOfBirth', customer.dateOfBirth || customer.birthDate || '');
+    setValue('inlineProfileFirstName', customer.firstName || '');
+    setValue('inlineProfileLastName', customer.lastName || '');
+    setValue('inlineProfileDateOfBirth', customer.dateOfBirth || customer.birthDate || '');
+    setValue('inlineProfileGender', customer.gender || '');
+    setValue('inlineProfileStudentId', customer.studentId || '');
+    setValue(
+      'inlineProfilePrimaryGym',
+      customer.primaryGym || customer.gymName || getMembershipData(customer).gym || ''
+    );
 
     const address = customer.address || {};
-    setValue('editStreetAddress', typeof address === 'string' ? address : (address.street || customer.streetAddress || ''));
-    setValue('editPostalCode', address.postalCode || customer.postalCode || customer.zip || '');
-    setValue('editCity', address.city || customer.city || '');
-    setValue('editPhone', customer.mobilePhone || customer.phone || customer.phoneNumber || '');
+    const street =
+      typeof address === 'string' ? address : address.street || customer.streetAddress || '';
+    const postal = address.postalCode || customer.postalCode || customer.zip || '';
+    const city = address.city || customer.city || '';
+    const countryRaw = typeof address === 'object' && address ? address.country : customer.country;
+    setValue('inlineProfileStreetAddress', street);
+    setValue('inlineProfilePostalCode', postal);
+    setValue('inlineProfileCity', city);
+    setValue('inlineProfileCountry', countryRaw != null ? String(countryRaw) : '');
+  }
+
+  function mergeCustomerAddressPayload(customer, patch) {
+    const c = customer || {};
+    let addr = {};
+    if (c.address && typeof c.address === 'object') {
+      addr = { ...c.address };
+    }
+    const street = patch.street ?? addr.street ?? c.streetAddress ?? '';
+    const postalCode = patch.postalCode ?? addr.postalCode ?? c.postalCode ?? c.zip ?? '';
+    const city = patch.city ?? addr.city ?? c.city ?? '';
+    const country = patch.country ?? addr.country ?? c.country;
+    const out = { street, postalCode, city };
+    if (country != null && String(country).trim() !== '') {
+      out.country = country;
+    }
+    return { address: out };
+  }
+
+  function closeProfileInlineEditor(field) {
+    const ed = document.querySelector(`#pageProfile [data-profile-inline-editor="${field}"]`);
+    if (ed) {
+      ed.classList.remove('on');
+      ed.closest('.profile-profil-row')?.classList.remove('profile-profil-row--editing');
+    }
+  }
+
+  function openProfileInlineEditor(field) {
+    document.querySelectorAll('#pageProfile .profile-profil-edit-row.profile-inline-editor').forEach((el) => {
+      const k = el.getAttribute('data-profile-inline-editor');
+      if (k && k !== field) {
+        el.classList.remove('on');
+        el.closest('.profile-profil-row')?.classList.remove('profile-profil-row--editing');
+      }
+    });
+    const ed = document.querySelector(`#pageProfile [data-profile-inline-editor="${field}"]`);
+    if (ed) {
+      ed.classList.add('on');
+      ed.closest('.profile-profil-row')?.classList.add('profile-profil-row--editing');
+      const control = ed.querySelector('input, select, textarea');
+      if (control) setTimeout(() => control.focus(), 0);
+    }
+  }
+
+  async function saveProfileInlineField(field) {
+    const customer = getBestCustomerData();
+    if (!isUserAuthenticated() || !state.customerId || !authAPI?.updateCustomer) {
+      showToast('Du skal være logget ind.', 'error');
+      return;
+    }
+    const inputMap = {
+      firstName: 'inlineProfileFirstName',
+      lastName: 'inlineProfileLastName',
+      dateOfBirth: 'inlineProfileDateOfBirth',
+      gender: 'inlineProfileGender',
+      studentId: 'inlineProfileStudentId',
+      streetAddress: 'inlineProfileStreetAddress',
+      postalCode: 'inlineProfilePostalCode',
+      city: 'inlineProfileCity',
+      country: 'inlineProfileCountry',
+      primaryGym: 'inlineProfilePrimaryGym',
+    };
+    const id = inputMap[field];
+    const input = id ? document.getElementById(id) : null;
+    const value = input?.value?.trim() ?? '';
+
+    const bail = (msg) => {
+      showToast(msg, 'error');
+      return true;
+    };
+
+    /** @type {Record<string, unknown>} */
+    let payload = {};
+    if (field === 'firstName') {
+      if (!value && bail('Angiv fornavn.')) return;
+      payload = { firstName: value };
+    } else if (field === 'lastName') {
+      if (!value && bail('Angiv efternavn.')) return;
+      payload = { lastName: value };
+    } else if (field === 'dateOfBirth') {
+      if (!value && bail('Angiv fødselsdato.')) return;
+      payload = { dateOfBirth: value };
+    } else if (field === 'gender') {
+      payload = { gender: value };
+    } else if (field === 'studentId') {
+      payload = { studentId: value };
+    } else if (field === 'primaryGym') {
+      if (!value && bail('Angiv center.')) return;
+      payload = { primaryGym: value };
+    } else if (field === 'streetAddress' || field === 'postalCode' || field === 'city' || field === 'country') {
+      const patch = {};
+      if (field === 'streetAddress') patch.street = value;
+      if (field === 'postalCode') patch.postalCode = value;
+      if (field === 'city') patch.city = value;
+      if (field === 'country') patch.country = value;
+      if (field === 'streetAddress' && !value && bail('Angiv vej og husnr.')) return;
+      if (field === 'postalCode' && !value && bail('Angiv postnr.')) return;
+      payload = mergeCustomerAddressPayload(customer, patch);
+    } else {
+      return;
+    }
+
+    try {
+      await authAPI.updateCustomer(state.customerId, payload);
+      const updated = await authAPI.getCustomer(state.customerId);
+      state.authenticatedCustomer = updated;
+      closeProfileInlineEditor(field);
+      refreshLoginPageUI();
+      showToast('Gemt.', 'success');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Profil'), 'error');
+    }
+  }
+
+  /**
+   * Delegated clicks on #pageProfile so Profil pencils always work (single bind, survives tab visibility).
+   */
+  function bindProfileInlineEditors() {
+    const root = document.getElementById('pageProfile');
+    if (!root || root.dataset.profileInlineDelegation === '1') return;
+    root.dataset.profileInlineDelegation = '1';
+
+    root.addEventListener('click', async (e) => {
+      const trigger = e.target.closest('.profile-profil-card button.fedit[data-field]');
+      if (trigger && root.contains(trigger)) {
+        e.preventDefault();
+        const field = trigger.getAttribute('data-field');
+        if (!field) return;
+        populateProfileEditForm();
+        openProfileInlineEditor(field);
+        return;
+      }
+
+      const cancel = e.target.closest('[data-profile-inline-cancel]');
+      if (cancel && root.contains(cancel)) {
+        e.preventDefault();
+        const field = cancel.getAttribute('data-profile-inline-cancel');
+        if (!field) return;
+        closeProfileInlineEditor(field);
+        populateProfileEditForm();
+        refreshLoginPageUI();
+        return;
+      }
+
+      const save = e.target.closest('[data-profile-inline-save]');
+      if (save && root.contains(save)) {
+        e.preventDefault();
+        const field = save.getAttribute('data-profile-inline-save');
+        if (!field) return;
+        save.disabled = true;
+        try {
+          await saveProfileInlineField(field);
+        } finally {
+          save.disabled = false;
+        }
+      }
+    });
   }
 
   function setText(id, value) {
@@ -6989,10 +7382,23 @@ export function initializeLoginPage(DOM) {
     setText('profileBirthdate', formatDisplayDate(dob));
     setText('profileGender', customer?.gender || '-');
     setText('profileStudentId', customer?.studentId || '-');
-    setText('profilePhone', phone);
-    setText('profileEmail', email);
+    const addrObj = customer?.address && typeof customer.address === 'object' ? customer.address : null;
+    let postalDisp =
+      addrObj?.postalCode != null && String(addrObj.postalCode).trim() !== ''
+        ? String(addrObj.postalCode).trim()
+        : customer?.postalCode || customer?.zip || '';
+    let cityOnly =
+      addrObj?.city != null && String(addrObj.city).trim() !== '' ? String(addrObj.city).trim() : '';
+    if (!postalDisp && address.city && address.city !== '-') {
+      const m = String(address.city).trim().match(/^(\d{3,6})\s+(.+)$/);
+      if (m) {
+        postalDisp = m[1];
+        if (!cityOnly) cityOnly = m[2];
+      }
+    }
     setText('profileStreet', address.street);
-    setText('profileCity', formatProfileCityDisplay(address.city));
+    setText('profilePostalCode', postalDisp || '-');
+    setText('profileCity', formatProfileCityDisplay(cityOnly || address.city));
     setText('profileCountry', address.country);
 
     setText('settingsEmail', email);
@@ -7185,6 +7591,9 @@ export function initializeLoginPage(DOM) {
       el.addEventListener('click', handler);
       el.dataset.boundClick = 'true';
     };
+
+    bindProfileInlineEditors();
+    bindProfileAccountTabs();
 
     const editEmailBtn = document.getElementById('editEmailBtn');
     const editPhoneBtn = document.getElementById('editPhoneBtn');

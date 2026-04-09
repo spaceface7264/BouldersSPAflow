@@ -38,6 +38,8 @@
   --b2: rgba(255, 255, 255, 0.18);
   --bg3: rgba(255, 255, 255, 0.04);
   --t2: var(--profile-muted);
+  --t: var(--profile-text);
+  --m: var(--profile-accent);
 
   /* Layout breakpoints (px) — mirror in @media; not usable inside @media in all browsers */
   --bp-xs-max: 479px;
@@ -3132,16 +3134,16 @@ body.authenticated #pageProfile .profile-detail-value {
 }
 
 /* Settings page controls polish */
-body.authenticated #pageSettings .settings-page-container {
+body.authenticated #pageProfile .profile-account-panel .settings-page-container {
   display: grid;
   gap: 12px;
 }
 
-body.authenticated #pageSettings .settings-section {
+body.authenticated #pageProfile .profile-account-panel .settings-section {
   margin: 0;
 }
 
-body.authenticated #pageSettings .settings-section-header-with-action {
+body.authenticated #pageProfile .profile-account-panel .settings-section-header-with-action {
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-start;
@@ -3151,14 +3153,14 @@ body.authenticated #pageSettings .settings-section-header-with-action {
   width: 100%;
 }
 
-body.authenticated #pageSettings .settings-section-header-with-action .settings-section-title {
+body.authenticated #pageProfile .profile-account-panel .settings-section-header-with-action .settings-section-title {
   margin: 0;
   flex: 1;
   min-width: 0;
   line-height: 1.2;
 }
 
-body.authenticated #pageSettings .settings-payment-update-btn {
+body.authenticated #pageProfile .profile-account-panel .settings-payment-update-btn {
   flex-shrink: 0;
   margin: 0;
   margin-left: auto;
@@ -3178,23 +3180,23 @@ body.authenticated #pageSettings .settings-payment-update-btn {
   transition: color 0.15s ease;
 }
 
-body.authenticated #pageSettings .settings-payment-update-btn:hover {
+body.authenticated #pageProfile .profile-account-panel .settings-payment-update-btn:hover {
   color: #fff;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-body.authenticated #pageSettings .settings-payment-update-btn:focus {
+body.authenticated #pageProfile .profile-account-panel .settings-payment-update-btn:focus {
   outline: none;
 }
 
-body.authenticated #pageSettings .settings-payment-update-btn:focus-visible {
+body.authenticated #pageProfile .profile-account-panel .settings-payment-update-btn:focus-visible {
   outline: 2px solid rgba(244, 1, 245, 0.55);
   outline-offset: 3px;
   border-radius: 4px;
 }
 
-body.authenticated #pageSettings .settings-item {
+body.authenticated #pageProfile .profile-account-panel .settings-item {
   display: block !important;
   min-height: 0;
   align-items: initial;
@@ -3202,7 +3204,7 @@ body.authenticated #pageSettings .settings-item {
   padding-bottom: 8px;
 }
 
-body.authenticated #pageSettings .settings-item-header {
+body.authenticated #pageProfile .profile-account-panel .settings-item-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3211,18 +3213,18 @@ body.authenticated #pageSettings .settings-item-header {
   margin-bottom: 4px;
 }
 
-body.authenticated #pageSettings .settings-item-label {
+body.authenticated #pageProfile .profile-account-panel .settings-item-label {
   font-size: var(--type-label);
   color: rgba(255, 255, 255, 0.88);
   font-weight: 500;
 }
 
-body.authenticated #pageSettings .settings-item-content {
+body.authenticated #pageProfile .profile-account-panel .settings-item-content {
   margin-top: 0;
   width: 100%;
 }
 
-body.authenticated #pageSettings .settings-item-value {
+body.authenticated #pageProfile .profile-account-panel .settings-item-value {
   display: block;
   font-size: var(--type-body);
   color: #fff;
@@ -3231,61 +3233,63 @@ body.authenticated #pageSettings .settings-item-value {
   word-break: break-word;
 }
 
-body.authenticated #pageSettings .settings-item-description {
+body.authenticated #pageProfile .profile-account-panel .settings-item-description {
   margin: 8px 0 0;
   color: rgba(255, 255, 255, 0.68);
   font-size: var(--type-meta);
 }
 
 /* Notifications & Privacy layout cleanup */
-body.authenticated #pageSettings #notificationsPrivacySection .settings-item {
+body.authenticated #pageProfile .profile-account-panel #notificationsPrivacySection .settings-item {
   display: block !important;
   min-height: unset;
   padding-top: 14px;
   padding-bottom: 14px;
 }
 
-body.authenticated #pageSettings #notificationsPrivacySection .settings-item-header {
+body.authenticated #pageProfile .profile-account-panel #notificationsPrivacySection .settings-item-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
 
-body.authenticated #pageSettings #notificationsPrivacySection .settings-toggle {
+body.authenticated #pageProfile .profile-account-panel #notificationsPrivacySection .settings-toggle {
   flex-shrink: 0;
 }
 
-body.authenticated #pageSettings #notificationsPrivacySection .settings-item-description {
+body.authenticated #pageProfile .profile-account-panel #notificationsPrivacySection .settings-item-description {
   margin-top: 6px;
   margin-left: 0;
   max-width: 580px;
   line-height: 1.35;
 }
 
-body.authenticated #pageSettings #settingsAccountActionsSection .settings-item {
+body.authenticated #pageProfile .profile-account-panel #settingsAccountActionsSection .settings-item {
   display: flex !important;
   width: 100% !important;
   justify-content: flex-end;
   align-items: center !important;
 }
 
-body.authenticated #pageSettings #settingsAccountActionsSection #logoutBtn {
+body.authenticated #pageProfile .profile-account-panel #settingsAccountActionsSection #logoutBtn {
   margin-left: auto;
   display: inline-flex;
   align-self: center;
+  justify-content: center;
+  align-items: center;
 }
 
-body.authenticated #pageSettings #settingsInvoicesSection .settings-invoice-item .settings-item-header {
+body.authenticated #pageProfile .profile-account-panel #settingsInvoicesSection .settings-invoice-item .settings-item-header {
   align-items: flex-start;
 }
 
-body.authenticated #pageSettings .settings-invoice-main {
+body.authenticated #pageProfile .profile-account-panel .settings-invoice-main {
   min-width: 0;
   flex: 1;
 }
 
-body.authenticated #pageSettings .settings-invoice-trail {
+body.authenticated #pageProfile .profile-account-panel .settings-invoice-trail {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -3294,7 +3298,7 @@ body.authenticated #pageSettings .settings-invoice-trail {
   text-align: right;
 }
 
-body.authenticated #pageSettings .settings-invoice-state {
+body.authenticated #pageProfile .profile-account-panel .settings-invoice-state {
   display: inline-block;
   padding: 4px 10px;
   border-radius: 999px;
@@ -3305,20 +3309,20 @@ body.authenticated #pageSettings .settings-invoice-state {
   color: rgba(255, 255, 255, 0.78);
 }
 
-body.authenticated #pageSettings .settings-invoice-state--paid {
+body.authenticated #pageProfile .profile-account-panel .settings-invoice-state--paid {
   background: rgba(34, 197, 94, 0.18);
   color: #86efac;
 }
 
-body.authenticated #pageSettings .settings-invoice-state--attention {
+body.authenticated #pageProfile .profile-account-panel .settings-invoice-state--attention {
   background: rgba(251, 191, 36, 0.14);
   color: #fcd34d;
 }
 
-body.authenticated #pageSettings .settings-edit-btn,
-body.authenticated #pageSettings .settings-save-btn,
-body.authenticated #pageSettings .settings-cancel-btn,
-body.authenticated #pageSettings .settings-action-btn {
+body.authenticated #pageProfile .profile-account-panel .settings-edit-btn,
+body.authenticated #pageProfile .profile-account-panel .settings-save-btn,
+body.authenticated #pageProfile .profile-account-panel .settings-cancel-btn,
+body.authenticated #pageProfile .profile-account-panel .settings-action-btn {
   min-height: 38px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -3332,7 +3336,7 @@ body.authenticated #pageSettings .settings-action-btn {
 }
 
 /* Compact controls specifically for Account Settings rows */
-body.authenticated #pageSettings #accountSettingsSection .settings-edit-btn {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-btn {
   min-height: 34px;
   padding: 6px 12px;
   border-radius: 9px;
@@ -3347,34 +3351,34 @@ body.authenticated #pageSettings #accountSettingsSection .settings-edit-btn {
   z-index: 1;
 }
 
-body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #changePasswordBtn {
   min-height: 34px;
   padding: 6px 12px;
   max-width: fit-content;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item {
   padding-top: 10px;
   padding-bottom: 10px;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-header {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-header {
   margin-bottom: 2px;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-label {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-label {
   line-height: 1.2;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-content {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-content {
   margin-top: 0;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-value {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-value {
   line-height: 1.2;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-edit {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-edit {
   margin-top: 8px;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -3382,7 +3386,7 @@ body.authenticated #pageSettings #accountSettingsSection .settings-item-edit {
   background: rgba(255, 255, 255, 0.03);
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-edit .settings-input {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-edit .settings-input {
   min-height: 38px;
   border-radius: 9px;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -3390,20 +3394,20 @@ body.authenticated #pageSettings #accountSettingsSection .settings-item-edit .se
   padding: 8px 11px;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-edit .settings-input:focus {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-edit .settings-input:focus {
   outline: none;
   border-color: rgba(244, 1, 245, 0.65);
   box-shadow: 0 0 0 2px rgba(244, 1, 245, 0.22);
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-form-actions {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-form-actions {
   display: flex;
   gap: 8px;
   margin-top: 8px;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-form-actions .settings-save-btn,
-body.authenticated #pageSettings #accountSettingsSection .settings-form-actions .settings-cancel-btn {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-form-actions .settings-save-btn,
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-form-actions .settings-cancel-btn {
   min-height: 32px;
   padding: 6px 12px;
   border-radius: 8px;
@@ -3412,8 +3416,8 @@ body.authenticated #pageSettings #accountSettingsSection .settings-form-actions 
 }
 
 /* Email/Phone now use modal editing, keep legacy inline forms hidden */
-body.authenticated #pageSettings #accountSettingsSection #emailEditForm,
-body.authenticated #pageSettings #accountSettingsSection #phoneEditForm {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #emailEditForm,
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #phoneEditForm {
   display: none !important;
 }
 
@@ -3570,24 +3574,24 @@ body.authenticated #passwordModal .settings-save-btn {
 }
 
 /* Account settings trailing controls: icon-only, no fill/border */
-body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-icon-btn {
   font-size: 0;
   line-height: 0;
   color: rgba(255, 255, 255, 0.9);
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-inline {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-inline {
   display: block !important;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-header {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-inline .settings-item-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-trailing {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-trailing {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -3596,12 +3600,12 @@ body.authenticated #pageSettings #accountSettingsSection .settings-item-trailing
   min-width: 0;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-value {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-inline .settings-item-value {
   text-align: right;
   white-space: normal;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-icon-btn {
   min-height: 34px;
   min-width: 34px;
   width: 34px;
@@ -3616,14 +3620,14 @@ body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn
   box-shadow: none !important;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn svg {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-icon-btn svg {
   width: 18px;
   height: 18px;
 }
 
-body.authenticated #pageSettings #accountSettingsSection #editEmailBtn,
-body.authenticated #pageSettings #accountSettingsSection #editPhoneBtn,
-body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #editEmailBtn,
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #editPhoneBtn,
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #changePasswordBtn {
   min-height: 34px;
   min-width: 34px;
   width: 34px;
@@ -3631,52 +3635,52 @@ body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
   padding: 0;
 }
 
-body.authenticated #pageSettings #accountSettingsSection #editEmailBtn svg,
-body.authenticated #pageSettings #accountSettingsSection #editPhoneBtn svg,
-body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn svg {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #editEmailBtn svg,
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #editPhoneBtn svg,
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #changePasswordBtn svg {
   width: 18px;
   height: 18px;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn:hover,
-body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn:active {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-icon-btn:hover,
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-icon-btn:active {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .settings-edit-label {
+body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-label {
   display: none;
 }
 
-body.authenticated #pageSettings .settings-edit-btn:hover,
-body.authenticated #pageSettings .settings-cancel-btn:hover {
+body.authenticated #pageProfile .profile-account-panel .settings-edit-btn:hover,
+body.authenticated #pageProfile .profile-account-panel .settings-cancel-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.28);
 }
 
-body.authenticated #pageSettings .settings-save-btn,
-body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger) {
+body.authenticated #pageProfile .profile-account-panel .settings-save-btn,
+body.authenticated #pageProfile .profile-account-panel .settings-action-btn:not(.settings-action-btn-danger) {
   background: linear-gradient(180deg, #ff00d6, #c800ff);
   border-color: transparent;
   box-shadow: 0 4px 14px rgba(244, 1, 245, 0.24);
 }
 
-body.authenticated #pageSettings .settings-save-btn:hover,
-body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger):hover {
+body.authenticated #pageProfile .profile-account-panel .settings-save-btn:hover,
+body.authenticated #pageProfile .profile-account-panel .settings-action-btn:not(.settings-action-btn-danger):hover {
   filter: brightness(1.05);
 }
 
-body.authenticated #pageSettings .settings-action-btn-danger {
+body.authenticated #pageProfile .profile-account-panel .settings-action-btn-danger {
   background: rgba(239, 68, 68, 0.14);
   border-color: rgba(239, 68, 68, 0.45);
 }
 
-body.authenticated #pageSettings .settings-action-btn-danger:hover {
+body.authenticated #pageProfile .profile-account-panel .settings-action-btn-danger:hover {
   background: rgba(239, 68, 68, 0.22);
 }
 
-body.authenticated #pageSettings .settings-input {
+body.authenticated #pageProfile .profile-account-panel .settings-input {
   width: 100%;
   min-height: 42px;
   border-radius: 10px;
@@ -3686,13 +3690,13 @@ body.authenticated #pageSettings .settings-input {
   padding: 9px 12px;
 }
 
-body.authenticated #pageSettings .settings-input:focus {
+body.authenticated #pageProfile .profile-account-panel .settings-input:focus {
   outline: 2px solid #f401f5;
   outline-offset: 1px;
   border-color: transparent;
 }
 
-body.authenticated #pageSettings .settings-toggle {
+body.authenticated #pageProfile .profile-account-panel .settings-toggle {
   position: relative;
   width: 44px;
   height: 26px;
@@ -3701,7 +3705,7 @@ body.authenticated #pageSettings .settings-toggle {
   justify-content: center;
 }
 
-body.authenticated #pageSettings .settings-toggle input[type="checkbox"] {
+body.authenticated #pageProfile .profile-account-panel .settings-toggle input[type="checkbox"] {
   appearance: none;
   width: 44px;
   height: 26px;
@@ -3713,7 +3717,7 @@ body.authenticated #pageSettings .settings-toggle input[type="checkbox"] {
   transition: background-color 180ms ease;
 }
 
-body.authenticated #pageSettings .settings-toggle input[type="checkbox"]::after {
+body.authenticated #pageProfile .profile-account-panel .settings-toggle input[type="checkbox"]::after {
   content: '';
   position: relative;
   left: 3px;
@@ -3726,60 +3730,60 @@ body.authenticated #pageSettings .settings-toggle input[type="checkbox"]::after 
   transition: transform 180ms ease;
 }
 
-body.authenticated #pageSettings .settings-toggle input[type="checkbox"]:checked {
+body.authenticated #pageProfile .profile-account-panel .settings-toggle input[type="checkbox"]:checked {
   background: rgba(244, 1, 245, 0.85);
   border-color: rgba(244, 1, 245, 0.95);
 }
 
-body.authenticated #pageSettings .settings-toggle input[type="checkbox"]:checked::after {
+body.authenticated #pageProfile .profile-account-panel .settings-toggle input[type="checkbox"]:checked::after {
   transform: translateX(18px);
 }
 
-body.authenticated #pageSettings .settings-toggle-slider {
+body.authenticated #pageProfile .profile-account-panel .settings-toggle-slider {
   display: none;
 }
 
 @media (max-width: 1023px) {
-  body.authenticated #pageSettings .settings-page-container {
+  body.authenticated #pageProfile .profile-account-panel .settings-page-container {
     gap: 10px;
   }
 
-  body.authenticated #pageSettings .settings-item {
+  body.authenticated #pageProfile .profile-account-panel .settings-item {
     padding-top: 7px;
     padding-bottom: 7px;
   }
 
-  body.authenticated #pageSettings .settings-item-header {
+  body.authenticated #pageProfile .profile-account-panel .settings-item-header {
     align-items: flex-start;
   }
 
-  body.authenticated #pageSettings .settings-item {
+  body.authenticated #pageProfile .profile-account-panel .settings-item {
     align-items: flex-start;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-edit-btn,
-  body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-btn,
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #changePasswordBtn {
     min-height: 32px;
     padding: 5px 10px;
     border-radius: 8px;
     font-size: 0.86rem;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-icon-btn {
     min-height: 32px;
     min-width: 32px;
     width: 32px;
     padding: 0;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn svg {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-edit-icon-btn svg {
     width: 17px;
     height: 17px;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection #editEmailBtn,
-  body.authenticated #pageSettings #accountSettingsSection #editPhoneBtn,
-  body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #editEmailBtn,
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #editPhoneBtn,
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #changePasswordBtn {
     min-height: 32px;
     min-width: 32px;
     width: 32px;
@@ -3787,48 +3791,48 @@ body.authenticated #pageSettings .settings-toggle-slider {
     padding: 0;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection #editEmailBtn svg,
-  body.authenticated #pageSettings #accountSettingsSection #editPhoneBtn svg,
-  body.authenticated #pageSettings #accountSettingsSection #changePasswordBtn svg {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #editEmailBtn svg,
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #editPhoneBtn svg,
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection #changePasswordBtn svg {
     width: 17px;
     height: 17px;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-item {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item {
     padding-top: 8px;
     padding-bottom: 8px;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-item-edit {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-edit {
     margin-top: 6px;
     padding: 7px;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-form-actions {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-form-actions {
     gap: 6px;
     margin-top: 7px;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-form-actions .settings-save-btn,
-  body.authenticated #pageSettings #accountSettingsSection .settings-form-actions .settings-cancel-btn {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-form-actions .settings-save-btn,
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-form-actions .settings-cancel-btn {
     min-height: 30px;
     padding: 5px 10px;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-header {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-inline .settings-item-header {
     align-items: flex-start;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-item-trailing {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-trailing {
     max-width: none;
   }
 
-  body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-value {
+  body.authenticated #pageProfile .profile-account-panel #accountSettingsSection .settings-item-inline .settings-item-value {
     font-size: var(--type-meta);
     line-height: 1.25;
   }
 
-  body.authenticated #pageSettings #notificationsPrivacySection .settings-item-description {
+  body.authenticated #pageProfile .profile-account-panel #notificationsPrivacySection .settings-item-description {
     max-width: none;
     padding-right: 8px;
   }
@@ -3954,30 +3958,139 @@ body.authenticated #pageSettings .settings-toggle-slider {
   color: #f5f0ff;
 }
 
-.dashboard-access-select {
-  display: inline-block;
-  min-width: 168px;
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  padding-right: 30px;
-  background-image:
-    linear-gradient(135deg, rgba(255, 0, 214, 0.25), rgba(200, 0, 255, 0.2)),
-    linear-gradient(45deg, transparent 50%, #f5f0ff 50%),
-    linear-gradient(135deg, #f5f0ff 50%, transparent 50%);
-  background-repeat: no-repeat, no-repeat, no-repeat;
-  background-size: auto, 7px 7px, 7px 7px;
-  background-position: 0 0, calc(100% - 14px) calc(50% - 1px), calc(100% - 9px) calc(50% - 1px);
+.custom-select {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
 }
 
-.dashboard-access-select:focus {
+.cs-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 0.5px solid var(--b2);
+  background: var(--bg3);
+  font: inherit;
+  font-size: 13px;
+  color: var(--t);
+  cursor: pointer;
+  margin: 0;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.cs-trigger:focus {
+  outline: none;
+}
+
+.cs-trigger:focus-visible {
   outline: 2px solid rgba(244, 1, 245, 0.65);
   outline-offset: 2px;
 }
 
-.dashboard-access-select option {
-  color: #111;
+.cs-value {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-chevron {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--t);
+  opacity: 0.72;
+  transition: transform 0.15s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.custom-select.is-open .cs-chevron {
+  transform: rotate(180deg);
+}
+
+.cs-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #1c1c1c;
+  border: 0.5px solid var(--b2);
+  border-radius: 10px;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px) scale(0.98);
+  transform-origin: top right;
+  transition: all 0.15s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.cs-list.open {
+  opacity: 1;
+  pointer-events: all;
+  transform: none;
+}
+
+.cs-option {
+  padding: 9px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--t2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.cs-option:hover:not(.cs-option--disabled) {
+  background: var(--bg3);
+  color: var(--t);
+}
+
+.cs-option:focus {
+  outline: none;
+}
+
+.cs-option:focus-visible:not(.cs-option--disabled) {
+  outline: 2px solid rgba(244, 1, 245, 0.55);
+  outline-offset: -2px;
+}
+
+.cs-option.active {
+  color: var(--t);
+}
+
+.cs-option.active::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--m);
+  flex-shrink: 0;
+}
+
+.cs-option--disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.cs-option-label {
+  flex: 1;
+  min-width: 0;
+}
+
+#dashboardAccessBadge .cs-trigger {
+  min-width: 168px;
 }
 
 .dashboard-access-rows {
@@ -4943,9 +5056,9 @@ body.authenticated #pageSettings .settings-toggle-slider {
   .profile-action-btn,
   .profile-action-btn-secondary,
   .filter-apply-btn,
-  body.authenticated #pageSettings .settings-save-btn,
-  body.authenticated #pageSettings .settings-cancel-btn,
-  body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger)
+  body.authenticated #pageProfile .profile-account-panel .settings-save-btn,
+  body.authenticated #pageProfile .profile-account-panel .settings-cancel-btn,
+  body.authenticated #pageProfile .profile-account-panel .settings-action-btn:not(.settings-action-btn-danger)
 ) {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.025)) !important;
   border: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -4961,9 +5074,9 @@ body.authenticated #pageSettings .settings-toggle-slider {
   .profile-action-btn,
   .profile-action-btn-secondary,
   .filter-apply-btn,
-  body.authenticated #pageSettings .settings-save-btn,
-  body.authenticated #pageSettings .settings-cancel-btn,
-  body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger)
+  body.authenticated #pageProfile .profile-account-panel .settings-save-btn,
+  body.authenticated #pageProfile .profile-account-panel .settings-cancel-btn,
+  body.authenticated #pageProfile .profile-account-panel .settings-action-btn:not(.settings-action-btn-danger)
 ):hover {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.04)) !important;
   border-color: rgba(255, 255, 255, 0.3) !important;
@@ -4974,9 +5087,9 @@ body.authenticated #pageSettings .settings-toggle-slider {
   .profile-action-btn,
   .profile-action-btn-secondary,
   .filter-apply-btn,
-  body.authenticated #pageSettings .settings-save-btn,
-  body.authenticated #pageSettings .settings-cancel-btn,
-  body.authenticated #pageSettings .settings-action-btn:not(.settings-action-btn-danger)
+  body.authenticated #pageProfile .profile-account-panel .settings-save-btn,
+  body.authenticated #pageProfile .profile-account-panel .settings-cancel-btn,
+  body.authenticated #pageProfile .profile-account-panel .settings-action-btn:not(.settings-action-btn-danger)
 ):focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.45) !important;
   outline-offset: 2px;
@@ -5248,7 +5361,7 @@ body.authenticated .page-content-wrapper {
     padding-right: 16px;
 }
 
-body.authenticated #pageSettings .settings-page-container {
+body.authenticated #pageProfile .profile-account-panel .settings-page-container {
   width: 100%;
   max-width: 100% !important;
   margin: 0;
@@ -6012,5 +6125,429 @@ body.authenticated .page-content-wrapper {
   margin-right: auto !important;
   padding-left: 16px !important;
   padding-right: 16px !important;
+}
+
+/* --- Profil / Konto merged profile page --- */
+#pageProfile .profile-account-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+#pageProfile .profile-account-tab {
+  flex: 1;
+  min-width: 120px;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.65);
+  font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+#pageProfile .profile-account-tab:hover {
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+#pageProfile .profile-account-tab.active {
+  background: #fff;
+  color: #0a0a0a;
+  border-color: #fff;
+}
+
+#pageProfile .profile-tab-panel[hidden] {
+  display: none !important;
+}
+
+#pageProfile .konto-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--profile-border, rgba(255, 255, 255, 0.1));
+  border-radius: 16px;
+  padding: 18px 18px 8px;
+  margin-bottom: 16px;
+}
+
+#pageProfile .konto-card-title {
+  font-family: 'DM Sans', 'Inter', system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--profile-text, #fff);
+  margin: 0 0 12px;
+}
+
+#pageProfile .konto-card-title--inline {
+  margin-bottom: 0;
+}
+
+#pageProfile .konto-card-title--flush {
+  margin-bottom: 8px;
+}
+
+#pageProfile .konto-card-head {
+  margin-bottom: 8px;
+  padding: 0 0 4px;
+}
+
+#pageProfile .konto-card-body {
+  padding-bottom: 12px;
+}
+
+#pageProfile .konto-card-body.settings-section {
+  border: none;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+#pageProfile .profile-profil-card {
+  padding-bottom: 16px;
+}
+
+/* Profil tab: same row layout + icon-only pencils as Konto (not inside .profile-account-panel) */
+body.authenticated #pageProfile .profile-profil-card .settings-item.settings-item-inline {
+  display: block !important;
+}
+
+body.authenticated #pageProfile .profile-profil-card .settings-item-inline .settings-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+body.authenticated #pageProfile .profile-profil-card .settings-item-trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+body.authenticated #pageProfile .profile-profil-card .settings-item-inline .settings-item-value {
+  text-align: right;
+  white-space: normal;
+  word-break: break-word;
+}
+
+body.authenticated #pageProfile .profile-profil-card .settings-item-label {
+  color: var(--profile-muted);
+  font-size: var(--type-label, 12px);
+  flex-shrink: 0;
+  max-width: 46%;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-edit-btn,
+body.authenticated #pageProfile .profile-profil-card .settings-edit-icon-btn.profile-inline-edit-btn {
+  font-size: 0;
+  line-height: 0;
+  min-height: 32px;
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: auto;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-edit-btn:hover,
+body.authenticated #pageProfile .profile-profil-card .profile-inline-edit-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-edit-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+body.authenticated #pageProfile .profile-profil-card .settings-edit-label {
+  display: none !important;
+}
+
+/* Swap view row off; edit row (.on) replaces it in place */
+body.authenticated #pageProfile .profile-profil-card .profile-profil-row.profile-profil-row--editing .profile-profil-view-row {
+  display: none !important;
+}
+
+body.authenticated #pageProfile .profile-profil-card .settings-item-inline .settings-item-content {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Inline editor: one row — input (flex) + pill actions (mock-aligned) */
+body.authenticated #pageProfile .profile-profil-card .settings-item-edit.profile-inline-editor.profile-profil-edit-row {
+  display: none;
+  padding: 0 10px 8px 0;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+}
+
+body.authenticated #pageProfile .profile-profil-card .settings-item-edit.profile-inline-editor {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: none;
+  border-image: none;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.1);
+  color-scheme: dark;
+}
+
+body.authenticated #pageProfile .profile-profil-card .settings-item-edit.profile-inline-editor.profile-profil-edit-row.on {
+  display: flex;
+  margin-top: 0;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(200, 0, 255, 0.55);
+  background: rgba(12, 14, 22, 0.092);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-input:focus {
+  outline: none;
+  border-color: rgba(244, 1, 245, 0.9);
+  box-shadow: 0 0 0 2px rgba(244, 1, 245, 0.22);
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-form-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+  margin-top: 0;
+  flex-wrap: nowrap;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-cancel-btn {
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-save-btn {
+  min-height: 40px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: transparent;
+  background-image: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: filter 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-save-btn:hover {
+  filter: brightness(1.06);
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-save-btn:disabled,
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor.profile-profil-edit-row .settings-input {
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.96);
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor.profile-profil-edit-row .settings-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor.profile-profil-edit-row .settings-form-actions {
+  gap: 8px;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor.profile-profil-edit-row .settings-cancel-btn,
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor.profile-profil-edit-row .settings-save-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+body.authenticated #pageProfile .profile-profil-card .profile-inline-editor.profile-profil-edit-row .settings-cancel-btn {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+@media (max-width: 520px) {
+  body.authenticated #pageProfile .profile-profil-card .settings-item-edit.profile-inline-editor {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-input {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  body.authenticated #pageProfile .profile-profil-card .profile-inline-editor .settings-form-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+}
+
+#pageProfile .profile-profil-section {
+  margin-bottom: 4px;
+}
+
+#pageProfile .profile-profil-section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+
+#pageProfile .profile-profil-divider {
+  height: 1px;
+  background: var(--profile-border, rgba(255, 255, 255, 0.1));
+  margin: 16px 0;
+}
+
+#pageProfile .profile-primary-gym-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 0, 255, 0.55);
+  color: rgba(255, 0, 255, 1);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#pageProfile .danger-zone-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--profile-border, rgba(255, 255, 255, 0.08));
+}
+
+#pageProfile .danger-zone-row:last-child {
+  border-bottom: none;
+}
+
+#pageProfile .danger-zone-row__text {
+  flex: 1;
+  min-width: 0;
+}
+
+#pageProfile .danger-zone-row__title {
+  font-weight: 700;
+  color: var(--profile-text, #fff);
+  margin-bottom: 4px;
+}
+
+#pageProfile .danger-zone-row__desc {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.4;
+}
+
+#pageProfile .danger-zone-btn {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: #ff00ff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#pageProfile .danger-zone-btn--danger {
+  color: #ff8a7a;
+  border-color: rgba(255, 100, 80, 0.35);
+}
+
+#pageProfile .danger-zone-btn--ghost {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+@media (max-width: 520px) {
+  #pageProfile .danger-zone-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #pageProfile .danger-zone-btn {
+    width: 100%;
+  }
 }
 

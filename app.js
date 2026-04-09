@@ -1338,6 +1338,207 @@ class AuthAPI {
     return Array.isArray(data) ? data : [];
   }
 
+  /**
+   * BRP ver3 GET — customer gym / reader check-ins (same data as admin “access” lists).
+   * Path naming varies by BRP build; we try several resources and list-shaped JSON wrappers.
+   * Caches the first working path per customer in sessionStorage to avoid repeated probing.
+   */
+  async listCustomerAccessActivity(customerId, options = {}) {
+    const accessToken =
+      typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) throw new Error('No access token available');
+    const idNum =
+      typeof customerId === 'number' && Number.isFinite(customerId)
+        ? customerId
+        : parseInt(String(customerId).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(idNum) || idNum <= 0) throw new Error('Invalid customer ID');
+
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    };
+
+    const now = new Date();
+    const periodStart =
+      options.periodStart || new Date(now.getTime() - 370 * 24 * 60 * 60 * 1000).toISOString();
+    const periodEnd = options.periodEnd || now.toISOString();
+
+    const periodQs = new URLSearchParams();
+    periodQs.set('period.start', periodStart);
+    periodQs.set('period.end', periodEnd);
+    const periodQuery = periodQs.toString();
+
+    const extractList = (data) => {
+      const isLikelyAccessRow = (obj) => {
+        if (!obj || typeof obj !== 'object') return false;
+        return Boolean(
+          (typeof obj.tid === 'string' && obj.tid.trim()) ||
+            obj.reader ||
+            obj.readerName ||
+            obj.laeser ||
+            obj.checkedIn ||
+            obj.checkInTime ||
+            obj.checkinTime ||
+            obj.accessPoint ||
+            obj.businessUnit ||
+            obj.timestamp ||
+            obj.created ||
+            obj.dateTime
+        );
+      };
+
+      if (Array.isArray(data)) return { rows: data, matched: true };
+      if (!data || typeof data !== 'object') return { rows: [], matched: false };
+      const keys = [
+        'items',
+        'content',
+        'data',
+        'results',
+        'values',
+        'rows',
+        'entries',
+        'checkins',
+        'checkIns',
+        'accesses',
+        'accessControlAccesses',
+        'accesscontrolaccesses',
+        'gymAccesses',
+        'gymaccesses',
+        'accessLogs',
+        'accesslogs',
+        'visits',
+        'facilityAccesses',
+        'accessControlAccess',
+      ];
+      for (const k of keys) {
+        if (Array.isArray(data[k])) return { rows: data[k], matched: true };
+      }
+      if (data.page && typeof data.page === 'object' && Array.isArray(data.page.content)) {
+        return { rows: data.page.content, matched: true };
+      }
+      if (data._embedded && typeof data._embedded === 'object') {
+        for (const v of Object.values(data._embedded)) {
+          if (Array.isArray(v)) return { rows: v, matched: true };
+        }
+      }
+      for (const v of Object.values(data)) {
+        if (!Array.isArray(v) || v.length === 0) continue;
+        if (v.every(isLikelyAccessRow)) return { rows: v, matched: true };
+      }
+      return { rows: [], matched: false };
+    };
+
+    const pathSuffixes = [
+      'accesscontrolaccesses',
+      'accessControlAccesses',
+      'gymaccesses',
+      'gymAccesses',
+      'checkins',
+      'checkIns',
+      'visits',
+      'accesslogs',
+      'accessLogs',
+      'check-ins',
+      'dooraccesses',
+      'readeraccesses',
+    ];
+
+    const prefixes = ['/api/ver3', '/api3/ver3'];
+    const queryVariants = [periodQuery, ''];
+
+    const cacheKey = `boulders.customerAccessActivityPath.v1.${idNum}`;
+    const tryPath = async (pathNoQuery) => {
+      for (const q of queryVariants) {
+        const path = `${pathNoQuery}${q ? `?${q}` : ''}`;
+        const url = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path,
+        });
+        const data = await requestJson({ url, method: 'GET', headers });
+        const { rows, matched } = extractList(data);
+        if (matched) {
+          if (rows.length > 0) {
+            try {
+              window.sessionStorage.setItem(cacheKey, pathNoQuery);
+            } catch {
+              /* ignore */
+            }
+          }
+          return rows;
+        }
+      }
+      return null;
+    };
+
+    let cached = null;
+    try {
+      cached = window.sessionStorage.getItem(cacheKey);
+    } catch {
+      cached = null;
+    }
+    if (cached && typeof cached === 'string' && cached.includes(`/customers/${idNum}/`)) {
+      try {
+        const rows = await tryPath(cached);
+        if (rows != null) return rows;
+      } catch (e) {
+        devWarn('[Activity] Cached access path failed:', cached, e?.status ?? e);
+        try {
+          window.sessionStorage.removeItem(cacheKey);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    for (const prefix of prefixes) {
+      for (const suffix of pathSuffixes) {
+        const pathNoQuery = `${prefix}/customers/${idNum}/${suffix}`;
+        try {
+          const rows = await tryPath(pathNoQuery);
+          if (rows != null) return rows;
+        } catch (e) {
+          const st = e?.status;
+          if (st && [400, 404, 405].includes(st)) continue;
+          if (st === 403) {
+            devWarn('[Activity] Forbidden for path:', pathNoQuery);
+            continue;
+          }
+          throw e;
+        }
+      }
+    }
+
+    const joinSuffixes = [
+      'checkins',
+      'check-ins',
+      'visits',
+      'activity',
+      'access-log',
+      'accesslog',
+      'gym-visits',
+      'access-activity',
+    ];
+    for (const suffix of joinSuffixes) {
+      const pathNoQuery = `/api/customers/${idNum}/${suffix}`;
+      try {
+        const rows = await tryPath(pathNoQuery);
+        if (rows != null) return rows;
+      } catch (e) {
+        const st = e?.status;
+        if (st && [400, 404, 405].includes(st)) continue;
+        if (st === 403) {
+          devWarn('[Activity] Join API forbidden:', pathNoQuery);
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    return [];
+  }
+
   /** BRP ver3 GET — schedule at a business unit */
   async listBusinessUnitGroupActivities(businessUnitId, options = {}) {
     const accessToken =

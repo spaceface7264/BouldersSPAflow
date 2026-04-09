@@ -64,12 +64,12 @@
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                     <div class="user-dropdown" id="userDropdown" style="display: none;">
-                        <a href="#" class="dropdown-item" data-action="nav-settings">
+                        <a href="#" class="dropdown-item" data-action="nav-account">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
                                 <circle cx="12" cy="12" r="3"></circle>
                                 <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
                             </svg>
-                            Settings
+                            Konto
                         </a>
                         <a href="#" class="dropdown-item" data-action="nav-logout">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
@@ -152,11 +152,23 @@
                     <section class="dashboard-access-hero dashboard-card" aria-labelledby="dashboardAccessHeading">
                         <div class="dashboard-access-hero-head">
                             <h2 class="dashboard-access-title" id="dashboardAccessHeading">My Access</h2>
-                            <select class="dashboard-access-badge dashboard-access-select" id="dashboardAccessBadge" aria-label="Choose access type">
-                                <option value="trial">15-day trial</option>
-                                <option value="punch_card">Punch card</option>
-                                <option value="membership">Membership</option>
-                            </select>
+                            <div class="custom-select" id="dashboardAccessBadge">
+                                <button type="button" class="cs-trigger" id="dashboardAccessBadgeTrigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="dashboardAccessBadgeList" aria-label="Choose access type">
+                                    <span class="cs-value" id="dashboardAccessBadgeValue">15-day trial</span>
+                                    <span class="cs-chevron" aria-hidden="true"></span>
+                                </button>
+                                <ul class="cs-list" id="dashboardAccessBadgeList" role="listbox" aria-label="Access types" aria-hidden="true">
+                                    <li class="cs-option" role="option" data-value="trial" id="dashboardAccessOptTrial" tabindex="-1" aria-selected="false" aria-disabled="false">
+                                        <span class="cs-option-label">15-day trial</span>
+                                    </li>
+                                    <li class="cs-option" role="option" data-value="punch_card" id="dashboardAccessOptPunch" tabindex="-1" aria-selected="false" aria-disabled="false">
+                                        <span class="cs-option-label">Punch card</span>
+                                    </li>
+                                    <li class="cs-option" role="option" data-value="membership" id="dashboardAccessOptMembership" tabindex="-1" aria-selected="false" aria-disabled="false">
+                                        <span class="cs-option-label">Membership</span>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                         <div class="dashboard-access-rows" id="dashboardAccessRows"></div>
                     </section>
@@ -550,217 +562,377 @@
             </div>
         </div>
 
-        <!-- Profile Page -->
+        <!-- Profile + Konto (merged) -->
         <div class="page-section" id="pageProfile" style="display: none;">
             <div class="profile-page-container">
-                <!-- Profile Cards Grid -->
-                <div class="profile-cards-grid">
-                    <!-- My Profile Card -->
-                    <div class="profile-card">
-                        <h2 class="profile-card-title">My profile</h2>
-                        <div class="profile-card-content">
-                            <div class="profile-info-section">
-                                <h3 class="profile-info-label">User information</h3>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">First name:</span>
-                                    <span class="profile-detail-value" id="profileFirstName">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Last name:</span>
-                                    <span class="profile-detail-value" id="profileLastName">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Customer No:</span>
-                                    <span class="profile-detail-value" id="profileCustomerNumber">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Primary gym:</span>
-                                    <span class="profile-detail-value" id="profilePrimaryGym">-</span>
-                                </div>
-                            </div>
-                            <div class="profile-info-section">
-                                <h3 class="profile-info-label">Personal info</h3>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Birthdate:</span>
-                                    <span class="profile-detail-value" id="profileBirthdate">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Gender:</span>
-                                    <span class="profile-detail-value" id="profileGender">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Valid student ID:</span>
-                                    <span class="profile-detail-value" id="profileStudentId">-</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="profile-account-tabs" role="tablist" aria-label="Profil og konto">
+                    <button type="button" class="profile-account-tab active" role="tab" id="tabProfil" data-profile-tab-btn="profil" aria-selected="true" aria-controls="profileTabProfil">Profil</button>
+                    <button type="button" class="profile-account-tab" role="tab" id="tabKonto" data-profile-tab-btn="konto" aria-selected="false" aria-controls="profileTabKonto">Konto</button>
+                </div>
 
-                    <!-- Contact Info Card -->
-                    <div class="profile-card">
-                        <h2 class="profile-card-title">Contact info</h2>
-                        <div class="profile-card-content">
-                            <div class="profile-info-section">
-                                <h3 class="profile-info-label">Phone & E-mail</h3>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Phone number:</span>
-                                    <span class="profile-detail-value" id="profilePhone">-</span>
+                <div class="profile-tab-panel" id="profileTabProfil" data-profile-tab="profil" role="tabpanel" aria-labelledby="tabProfil">
+                    <div class="profile-profil-card konto-card">
+                        <h2 class="profile-card-title">Personlig info</h2>
+                        <div class="profile-profil-section">
+                            <h3 class="profile-profil-section-label">Identitet</h3>
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="firstName">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Fornavn</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileFirstName">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="firstName" aria-label="Rediger fornavn">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Email:</span>
-                                    <span class="profile-detail-value" id="profileEmail">-</span>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="firstName">
+                                        <input type="text" class="settings-input" id="inlineProfileFirstName" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="firstName">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="firstName">Gem</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="profile-info-section">
-                                <h3 class="profile-info-label">Address</h3>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Street:</span>
-                                    <span class="profile-detail-value" id="profileStreet">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">City:</span>
-                                    <span class="profile-detail-value" id="profileCity">-</span>
-                                </div>
-                                <div class="profile-detail-row">
-                                    <span class="profile-detail-label">Country:</span>
-                                    <span class="profile-detail-value" id="profileCountry">-</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    <!-- Consents Card (hidden - only shown in Settings) -->
-                    <div class="profile-card" style="display: none;">
-                        <h2 class="profile-card-title">Consents</h2>
-                        <div class="profile-card-content">
-                            <div class="profile-consent-row">
-                                <span class="profile-consent-label">Read Boulder's terms & conditions</span>
-                                <label class="profile-toggle">
-                                    <input type="checkbox" id="consentTerms" disabled>
-                                    <span class="profile-toggle-slider"></span>
-                                </label>
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="lastName">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Efternavn</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileLastName">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="lastName" aria-label="Rediger efternavn">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="lastName">
+                                        <input type="text" class="settings-input" id="inlineProfileLastName" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="lastName">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="lastName">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="profile-consent-row">
-                                <span class="profile-consent-label">Allow email marketing from Boulders containing news, inspiration and more</span>
-                                <label class="profile-toggle">
-                                    <input type="checkbox" id="consentEmailMarketing" disabled>
-                                    <span class="profile-toggle-slider"></span>
-                                </label>
-                            </div>
-                            <div class="profile-consent-row">
-                                <span class="profile-consent-label">Allow push notifications from Boulders containing news, inspiration and more</span>
-                                <label class="profile-toggle">
-                                    <input type="checkbox" id="consentPushNotifications" disabled>
-                                    <span class="profile-toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
 
-                    <!-- Payment Card (hidden - only shown in Settings) -->
-                    <div class="profile-card" style="display: none;">
-                        <h2 class="profile-card-title">Payment</h2>
-                        <div class="profile-card-content">
-                            <div class="profile-detail-row">
-                                <span class="profile-detail-label">Payment method:</span>
-                                <span class="profile-detail-value" id="profilePaymentMethod">-</span>
+                            <div class="settings-item settings-item-inline profile-profil-row profile-profil-row--readonly">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Kundenr.</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileCustomerNumber">-</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="profile-detail-row">
-                                <span class="profile-detail-label">Next:</span>
-                                <span class="profile-detail-value" id="profileNextBilling">-</span>
+
+                        </div>
+                        <div class="profile-profil-divider" aria-hidden="true"></div>
+                        <div class="profile-profil-section">
+                            <h3 class="profile-profil-section-label">Personlig info</h3>
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="dateOfBirth">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Fødselsdato</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileBirthdate">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="dateOfBirth" aria-label="Rediger fødselsdato">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="dateOfBirth">
+                                        <input type="date" class="settings-input" id="inlineProfileDateOfBirth" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="dateOfBirth">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="dateOfBirth">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <button class="profile-action-btn-secondary" id="allInvoicesBtn">All invoices</button>
-                            <button class="profile-action-btn-secondary" id="updatePaymentBtn">Update payment method</button>
+
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="gender">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Køn</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileGender">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="gender" aria-label="Rediger køn">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="gender">
+                                        <input type="text" class="settings-input" id="inlineProfileGender" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="gender">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="gender">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="studentId">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Gyldigt studiekort</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileStudentId">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="studentId" aria-label="Rediger gyldigt studiekort">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="studentId">
+                                        <input type="text" class="settings-input" id="inlineProfileStudentId" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="studentId">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="studentId">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="streetAddress">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Vej og husnr.</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileStreet">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="streetAddress" aria-label="Rediger vej og husnr.">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="streetAddress">
+                                        <input type="text" class="settings-input" id="inlineProfileStreetAddress" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="streetAddress">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="streetAddress">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="postalCode">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Postnr.</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profilePostalCode">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="postalCode" aria-label="Rediger postnr.">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="postalCode">
+                                        <input type="text" class="settings-input" id="inlineProfilePostalCode" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="postalCode">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="postalCode">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="city">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">By</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileCity">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="city" aria-label="Rediger by">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="city">
+                                        <input type="text" class="settings-input" id="inlineProfileCity" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="city">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="city">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="country">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Land</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="settings-item-value profile-detail-value" id="profileCountry">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="country" aria-label="Rediger land">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="country">
+                                        <input type="text" class="settings-input" id="inlineProfileCountry" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="country">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="country">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                        <div class="profile-profil-divider" aria-hidden="true"></div>
+                        <div class="profile-profil-section">
+                            <h3 class="profile-profil-section-label">Gym</h3>
+                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="primaryGym">
+                                <div class="settings-item-header profile-profil-view-row">
+                                    <span class="settings-item-label">Primært center</span>
+                                    <div class="settings-item-trailing">
+                                        <span class="profile-primary-gym-pill settings-item-value profile-detail-value" id="profilePrimaryGym">-</span>
+                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="primaryGym" aria-label="Rediger primært center">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                                    </svg>
+                                            <span class="settings-edit-label">Rediger</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-item-content">
+                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="primaryGym">
+                                        <input type="text" class="settings-input" id="inlineProfilePrimaryGym" placeholder="Center eller business unit" />
+                                        <div class="settings-form-actions">
+                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="primaryGym">Annuller</button>
+                                            <button type="button" class="settings-save-btn" data-profile-inline-save="primaryGym">Gem</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Settings Page -->
-        <div class="page-section" id="pageSettings" style="display: none;">
-            <div class="settings-page-container">
-                <!-- Account Settings Section -->
-                <div class="settings-section" id="accountSettingsSection">
-                    <h2 class="settings-section-title">Account Settings</h2>
-                    
-                    <!-- Email -->
+                <div class="profile-tab-panel profile-tab-panel--konto" id="profileTabKonto" data-profile-tab="konto" role="tabpanel" aria-labelledby="tabKonto" hidden>
+                    <div class="settings-page-container profile-account-panel">
+                        <div class="konto-card">
+                            <h2 class="konto-card-title">Login &amp; kontakt</h2>
+                            <div class="settings-section konto-card-body" id="accountSettingsSection">
                     <div class="settings-item settings-item-inline">
                         <div class="settings-item-header">
-                            <label class="settings-item-label">Email Address</label>
+                            <label class="settings-item-label" for="emailInput">E-mail</label>
                             <div class="settings-item-trailing">
                                 <span class="settings-item-value" id="settingsEmail">-</span>
-                                <button class="settings-edit-btn settings-edit-icon-btn" id="editEmailBtn" data-field="email" aria-label="Edit email address">
+                                <button type="button" class="settings-edit-btn settings-edit-icon-btn" id="editEmailBtn" data-field="email" aria-label="Rediger e-mail">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
                                         <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
                                     </svg>
-                                    <span class="settings-edit-label">Edit</span>
+                                    <span class="settings-edit-label">Rediger</span>
                                 </button>
                             </div>
                         </div>
                         <div class="settings-item-content">
                             <div class="settings-item-edit" id="emailEditForm" style="display: none;">
-                                <input type="email" class="settings-input" id="emailInput" placeholder="Enter email address" />
+                                <input type="email" class="settings-input" id="emailInput" placeholder="E-mail" />
                                 <div class="settings-form-actions">
-                                    <button class="settings-save-btn" id="saveEmailBtn">Save</button>
-                                    <button class="settings-cancel-btn" id="cancelEmailBtn">Cancel</button>
+                                    <button type="button" class="settings-save-btn" id="saveEmailBtn">Gem</button>
+                                    <button type="button" class="settings-cancel-btn" id="cancelEmailBtn">Annuller</button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Phone -->
                     <div class="settings-item settings-item-inline">
                         <div class="settings-item-header">
-                            <label class="settings-item-label">Phone Number</label>
+                            <label class="settings-item-label" for="phoneInput">Telefon</label>
                             <div class="settings-item-trailing">
                                 <span class="settings-item-value" id="settingsPhone">-</span>
-                                <button class="settings-edit-btn settings-edit-icon-btn" id="editPhoneBtn" data-field="phone" aria-label="Edit phone number">
+                                <button type="button" class="settings-edit-btn settings-edit-icon-btn" id="editPhoneBtn" data-field="phone" aria-label="Rediger telefon">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
                                         <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
                                     </svg>
-                                    <span class="settings-edit-label">Edit</span>
+                                    <span class="settings-edit-label">Rediger</span>
                                 </button>
                             </div>
                         </div>
                         <div class="settings-item-content">
                             <div class="settings-item-edit" id="phoneEditForm" style="display: none;">
-                                <input type="tel" class="settings-input" id="phoneInput" placeholder="Enter phone number" />
+                                <input type="tel" class="settings-input" id="phoneInput" placeholder="Telefon" />
                                 <div class="settings-form-actions">
-                                    <button class="settings-save-btn" id="savePhoneBtn">Save</button>
-                                    <button class="settings-cancel-btn" id="cancelPhoneBtn">Cancel</button>
+                                    <button type="button" class="settings-save-btn" id="savePhoneBtn">Gem</button>
+                                    <button type="button" class="settings-cancel-btn" id="cancelPhoneBtn">Annuller</button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Password -->
                     <div class="settings-item settings-item-inline">
                         <div class="settings-item-header">
-                            <label class="settings-item-label">Password</label>
+                            <label class="settings-item-label">Adgangskode</label>
                             <div class="settings-item-trailing">
-                                <span class="settings-item-value">••••••••</span>
-                                <button class="settings-edit-btn settings-edit-icon-btn" id="changePasswordBtn" aria-label="Change password">
+                                <span class="settings-item-value" aria-hidden="true">••••••••</span>
+                                <button type="button" class="settings-edit-btn settings-edit-icon-btn" id="changePasswordBtn" aria-label="Skift adgangskode">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
                                         <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
                                     </svg>
-                                    <span class="settings-edit-label">Change</span>
+                                    <span class="settings-edit-label">Skift</span>
                                 </button>
                             </div>
                         </div>
+                        <div class="settings-item-content">
+                            <div class="settings-item-edit" id="passwordInlineForm" style="display: none;">
+                                <p class="settings-item-description" style="margin-top:0">Vi sender nulstillingsinstruktioner til din e-mail.</p>
+                                <div class="settings-form-actions">
+                                    <button type="button" class="settings-save-btn" id="savePasswordInlineBtn">Send nulstillingslink</button>
+                                    <button type="button" class="settings-cancel-btn" id="cancelPasswordInlineBtn">Annuller</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                            </div>
+                        </div>
 
-                <!-- Saved Payment Methods Section -->
-                <div class="settings-section">
-                    <div class="settings-section-header-with-action">
-                        <h2 class="settings-section-title">Saved payment methods</h2>
-                        <button type="button" class="settings-payment-update-btn" id="settingsRegisterCardConsentBtn" style="display: none;">change</button>
-                    </div>
-                    <div id="settingsPaymentMethods">
+                        <div class="konto-card">
+                            <div class="settings-section-header-with-action konto-card-head">
+                                <h2 class="konto-card-title konto-card-title--inline">Betalingskort</h2>
+                                <button type="button" class="settings-payment-update-btn" id="settingsRegisterCardConsentBtn" style="display: none;">Skift</button>
+                            </div>
+                            <div id="settingsPaymentMethods" class="konto-card-body">
                         <div class="settings-loading">
                             <div class="settings-skeleton-list">
                                 <div class="settings-skeleton-item">
@@ -780,11 +952,11 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                        </div>
 
-                <!-- Invoices Section -->
-                <div class="settings-section" id="settingsInvoicesSection">
-                    <h2 class="settings-section-title">Invoices</h2>
+                        <div class="konto-card">
+                            <div class="settings-section konto-card-body" id="settingsInvoicesSection">
+                    <h2 class="settings-section-title konto-card-title konto-card-title--flush">Fakturaer</h2>
                     <div id="settingsInvoices">
                         <div class="settings-loading">
                             <div class="settings-skeleton-list">
@@ -793,87 +965,90 @@
                                         <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 8px;"></div>
                                         <div class="skeleton skeleton-text" style="width: 30%;"></div>
                                     </div>
-                                    <div class="skeleton skeleton-badge"></div>
+                                    <div class="skeleton settings-skeleton-badge"></div>
                                 </div>
                                 <div class="settings-skeleton-item">
                                     <div class="settings-skeleton-item-content">
                                         <div class="skeleton skeleton-text" style="width: 50%; margin-bottom: 8px;"></div>
                                         <div class="skeleton skeleton-text" style="width: 30%;"></div>
                                     </div>
-                                    <div class="skeleton skeleton-badge"></div>
+                                    <div class="skeleton settings-skeleton-badge"></div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                            </div>
+                        </div>
 
-                <!-- Notifications & Privacy Section -->
-                <div class="settings-section" id="notificationsPrivacySection">
-                    <h2 class="settings-section-title">Notifications & Privacy</h2>
+                        <div class="konto-card">
+                            <div class="settings-section konto-card-body" id="notificationsPrivacySection">
+                    <h2 class="konto-card-title konto-card-title--flush">Notifikationer &amp; privatliv</h2>
                     <p class="settings-item-description" id="settingsNotificationPrivacyIntro" style="margin-top: 0; margin-bottom: 14px; max-width: 40rem;">
-                        These match your account’s marketing permissions in our member system. Each switch saves immediately.
+                        Ændringer gemmes med det samme i medlemssystemet.
                     </p>
                     
-                    <!-- Email Marketing -->
                     <div class="settings-item">
                         <div class="settings-item-header">
-                            <label class="settings-item-label">Email Marketing</label>
+                            <label class="settings-item-label">E-mail marketing</label>
                             <label class="settings-toggle">
                                 <input type="checkbox" id="settingsEmailMarketing" />
                                 <span class="settings-toggle-slider"></span>
                             </label>
                         </div>
-                        <p class="settings-item-description">Receive promotional emails and updates</p>
+                        <p class="settings-item-description">Nyhedsbrev og tilbud på e-mail</p>
                     </div>
 
-                    <!-- SMS Marketing -->
                     <div class="settings-item">
                         <div class="settings-item-header">
-                            <label class="settings-item-label">SMS Marketing</label>
+                            <label class="settings-item-label">SMS marketing</label>
                             <label class="settings-toggle">
                                 <input type="checkbox" id="settingsSmsMarketing" />
                                 <span class="settings-toggle-slider"></span>
                             </label>
                         </div>
-                        <p class="settings-item-description">Receive promotional SMS messages</p>
+                        <p class="settings-item-description">Tilbud på SMS</p>
                     </div>
 
-                    <!-- Mail Marketing -->
                     <div class="settings-item">
                         <div class="settings-item-header">
-                            <label class="settings-item-label">Mail Marketing</label>
+                            <label class="settings-item-label">Brevpost</label>
                             <label class="settings-toggle">
                                 <input type="checkbox" id="settingsMailMarketing" />
                                 <span class="settings-toggle-slider"></span>
                             </label>
                         </div>
-                        <p class="settings-item-description">Receive promotional mail</p>
+                        <p class="settings-item-description">Reklame pr. post</p>
                     </div>
-                </div>
+                            </div>
+                        </div>
 
-                <!-- Account Actions Section -->
-                <div class="settings-section" id="settingsAccountActionsSection">
-                    <h2 class="settings-section-title">Account Actions</h2>
-                    
-                    <!-- Subscription actions (shown only when user has active subscription) -->
+                        <div class="settings-section settings-danger-zone" id="settingsAccountActionsSection">
                     <div id="subscriptionActions">
-                        <div class="settings-item">
-                            <button class="settings-action-btn" id="freezeSubscriptionSettingsBtn">
-                                Freeze Membership
-                            </button>
+                        <div class="danger-zone-row">
+                            <div class="danger-zone-row__text">
+                                <div class="danger-zone-row__title">Frys medlemskab</div>
+                                <p class="danger-zone-row__desc">Sæt dit abonnement på pause i en periode.</p>
+                            </div>
+                            <button type="button" class="danger-zone-btn" id="freezeSubscriptionSettingsBtn">Frys</button>
                         </div>
                         
-                        <div class="settings-item">
-                            <button class="settings-action-btn settings-action-btn-danger" id="cancelSubscriptionSettingsBtn">
-                                Cancel Subscription
-                            </button>
+                        <div class="danger-zone-row">
+                            <div class="danger-zone-row__text">
+                                <div class="danger-zone-row__title">Opsig abonnement</div>
+                                <p class="danger-zone-row__desc">Opsig dit medlemskab — kan ikke fortrydes.</p>
+                            </div>
+                            <button type="button" class="danger-zone-btn danger-zone-btn--danger" id="cancelSubscriptionSettingsBtn">Opsig</button>
                         </div>
                     </div>
                     
-                    <div class="settings-item">
-                        <button class="settings-action-btn settings-action-btn-danger" id="logoutBtn">
-                            Logout
-                        </button>
+                    <div class="danger-zone-row">
+                        <div class="danger-zone-row__text">
+                            <div class="danger-zone-row__title">Log ud</div>
+                            <p class="danger-zone-row__desc">Afslut sessionen på denne enhed.</p>
+                        </div>
+                        <button type="button" class="danger-zone-btn danger-zone-btn--ghost" id="logoutBtn">Log ud</button>
+                    </div>
+                            </div>
                     </div>
                 </div>
             </div>
@@ -910,7 +1085,7 @@
                             <div class="freeze-date-preview" id="freezeDatePreview" style="margin-top: 12px; padding: 12px; background-color: rgba(244, 1, 245, 0.1); border: 1px solid rgba(244, 1, 245, 0.2); border-radius: 8px; color: rgba(255, 255, 255, 0.9); font-size: 14px;"></div>
                         </div>
                         <div class="settings-form-error" id="freezeSubscriptionError" style="display: none;"></div>
-                    </div>
+                    </form>
                     <div class="settings-modal-footer">
                         <button class="settings-action-btn" id="stayMembershipBtn" style="background-color: #F401F5; color: #FFFFFF; border: none;">I'll stay!</button>
                         <button class="settings-save-btn" id="proceedFreezeBtn">Proceed</button>
@@ -1051,7 +1226,7 @@
                             <input type="password" class="settings-input" id="cancelPasswordInput" placeholder="Enter your password" autocomplete="current-password" />
                         </div>
                         <div class="settings-form-error" id="cancelSubscriptionErrorStep2" style="display: none;"></div>
-                    </form>
+                    </div>
                     <div class="settings-modal-footer">
                         <button class="settings-action-btn" id="stayMembershipCancelBtn" style="background-color: #F401F5; color: #FFFFFF; border: none;">I'll stay!</button>
                         <button class="settings-save-btn" id="confirmCancelSubscriptionBtn">Proceed</button>
@@ -1093,55 +1268,8 @@
                 </div>
             </div>
 
-            <!-- Contact Field Edit Modal -->
-            <div class="settings-modal" id="contactFieldModal" style="display: none;">
-                <div class="settings-modal-content" style="max-width: 460px;">
-                    <div class="settings-modal-header">
-                        <h3 class="settings-modal-title" id="contactFieldModalTitle">Edit</h3>
-                        <button class="settings-modal-close" id="closeContactFieldModal">&times;</button>
-                    </div>
-                    <div class="settings-modal-body">
-                        <div class="settings-form-group">
-                            <input type="text" class="settings-input" id="contactFieldInput" placeholder="" />
-                        </div>
-                        <div class="settings-form-error" id="contactFieldModalError" style="display: none;"></div>
-                    </div>
-                    <div class="settings-modal-footer">
-                        <button class="settings-cancel-btn" id="cancelContactFieldModal">Cancel</button>
-                        <button class="settings-save-btn" id="saveContactFieldModal">Save</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Password Change Modal -->
-            <div class="settings-modal" id="passwordModal" style="display: none;">
-                <div class="settings-modal-content">
-                    <div class="settings-modal-header">
-                        <h3 class="settings-modal-title">Change Password</h3>
-                        <button class="settings-modal-close" id="closePasswordModal">&times;</button>
-                    </div>
-                    <form class="settings-modal-body" id="passwordModalForm" onsubmit="return false;">
-                        <div class="settings-form-group">
-                            <label class="settings-form-label" for="oldPasswordInput">Current Password</label>
-                            <input type="password" class="settings-input" id="oldPasswordInput" placeholder="Enter current password" autocomplete="current-password" />
-                        </div>
-                        <div class="settings-form-group">
-                            <label class="settings-form-label" for="newPasswordInput">New Password</label>
-                            <input type="password" class="settings-input" id="newPasswordInput" placeholder="Enter new password" autocomplete="new-password" />
-                        </div>
-                        <div class="settings-form-group">
-                            <label class="settings-form-label" for="confirmPasswordInput">Confirm New Password</label>
-                            <input type="password" class="settings-input" id="confirmPasswordInput" placeholder="Confirm new password" autocomplete="new-password" />
-                        </div>
-                        <div class="settings-form-error" id="passwordFormError" style="display: none;"></div>
-                    </form>
-                    <div class="settings-modal-footer">
-                        <button class="settings-cancel-btn" id="cancelPasswordBtn">Cancel</button>
-                        <button class="settings-save-btn" id="savePasswordBtn">Change Password</button>
-                    </div>
-                </div>
-            </div>
         </div>
+
     </div>
 
     <!-- Login Page Content (shown when not authenticated) -->
@@ -1200,47 +1328,6 @@
             <div class="new-user-section">
                 <p class="new-user-text">New user? <a href="./index.html" class="new-user-link">Sign up here</a></p>
             </div>
-        </div>
-
-        <!-- Profile Edit Section (shown when logged in) -->
-        <div class="profile-edit-section" id="profileEditSection" style="display: none;">
-                    <h3 class="info-section-title">EDIT PROFILE</h3>
-                    <form class="profile-edit-form" id="profileEditForm">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="editFirstName">First name*</label>
-                                <input type="text" id="editFirstName" name="firstName" placeholder="First Name">
-                            </div>
-                            <div class="form-group">
-                                <label for="editLastName">Last name*</label>
-                                <input type="text" id="editLastName" name="lastName" placeholder="Last name">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="editDateOfBirth">Date of birth*</label>
-                            <input type="date" id="editDateOfBirth" name="dateOfBirth" class="date-input">
-                        </div>
-                        <div class="form-group">
-                            <label for="editStreetAddress">Street and house number*</label>
-                            <input type="text" id="editStreetAddress" name="streetAddress" placeholder="Street and house nr">
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="editPostalCode">Postal code*</label>
-                                <input type="text" id="editPostalCode" name="postalCode" placeholder="Zipcode">
-                            </div>
-                            <div class="form-group">
-                                <label for="editCity">City</label>
-                                <input type="text" id="editCity" name="city" placeholder="City">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="editPhone">Phone</label>
-                            <input type="tel" id="editPhone" name="phone" placeholder="Phone number">
-                        </div>
-                        <button type="submit" class="login-btn">SAVE CHANGES</button>
-                    </form>
-                </div>
         </div>
     </div>
 

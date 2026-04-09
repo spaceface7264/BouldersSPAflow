@@ -13,8 +13,6 @@ export function initLoginPage() {
     loginStatusPhonePage: document.querySelector('[data-auth-phone-page]'),
     loginFormContainerPage: document.querySelector('[data-login-form-container-page]'),
     loginPageForm: document.getElementById('loginPageForm'),
-    profileEditSection: document.getElementById('profileEditSection'),
-    profileEditForm: document.getElementById('profileEditForm'),
     forgotPasswordModal: document.getElementById('forgotPasswordModal'),
     forgotPasswordForm: document.getElementById('forgotPasswordForm'),
     forgotPasswordEmail: document.getElementById('forgotPasswordEmail'),
