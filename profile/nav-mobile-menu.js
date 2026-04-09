@@ -1,4 +1,4 @@
-/* Hamburger nav: sm band and below (matches --bp-sm-max) */
+/* Profile uses a fixed bottom tab bar below 768px; hamburger drawer is not used when it is present. */
 const MOBILE_NAV_MQ = '(max-width: 767px)';
 
 export function initNavMobileMenu() {
@@ -9,6 +9,24 @@ export function initNavMobileMenu() {
   if (!header || !toggle || !nav) return;
 
   const mq = window.matchMedia(MOBILE_NAV_MQ);
+  const syncCompactNavClass = () => {
+    document.body.classList.toggle('nav-compact', mq.matches);
+  };
+
+  if (document.getElementById('mobileBottomNav')) {
+    syncCompactNavClass();
+    mq.addEventListener('change', syncCompactNavClass);
+    header.classList.remove('nav-mobile-open');
+    nav.removeAttribute('aria-hidden');
+    nav.removeAttribute('inert');
+    document.body.style.overflow = '';
+    if (backdrop) {
+      backdrop.hidden = true;
+      backdrop.setAttribute('aria-hidden', 'true');
+    }
+    toggle.setAttribute('aria-expanded', 'false');
+    return;
+  }
 
   const setOpen = (open) => {
     if (!mq.matches) {

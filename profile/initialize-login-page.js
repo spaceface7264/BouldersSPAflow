@@ -5823,6 +5823,9 @@ export function initializeLoginPage(DOM) {
       initBookingsBrowseControls();
       refreshClassesBookingsPage();
     }
+    if (safeRoute === 'activity') {
+      refreshActivityPage();
+    }
     if (safeRoute === 'settings') {
       refreshSettingsPaymentMethods();
       refreshSettingsInvoices();
@@ -5968,6 +5971,207 @@ export function initializeLoginPage(DOM) {
     return Number.isFinite(n) && n > 0 ? n : null;
   }
 
+  function buildAuthApiUrl(path) {
+    if (!path) return '';
+    const normalizedPath = String(path).startsWith('/') ? String(path) : `/${String(path)}`;
+    if (authAPI?.useProxy) {
+      const base = String(authAPI.baseUrl || '').replace(/\/+$/, '');
+      return `${base}?path=${encodeURIComponent(normalizedPath)}`;
+    }
+    const base = String(authAPI?.baseUrl || '').replace(/\/+$/, '');
+    return base ? `${base}${normalizedPath}` : normalizedPath;
+  }
+
+  async function fetchCustomerActivityCheckIns(customerId) {
+    const token = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!token || !customerId) return [];
+    const headers = {
+      'Accept-Language': 'da-DK',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+    const now = new Date();
+    const lookback = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const query = new URLSearchParams({
+      'period.start': lookback.toISOString(),
+      'period.end': now.toISOString(),
+    }).toString();
+    const candidates = [
+      `/api/ver3/customers/${customerId}/checkins?${query}`,
+      `/api/ver3/customers/${customerId}/check-ins?${query}`,
+      `/api/ver3/customers/${customerId}/visits?${query}`,
+    ];
+    for (const path of candidates) {
+      try {
+        const res = await fetch(buildAuthApiUrl(path), { method: 'GET', headers });
+        if (!res.ok) continue;
+        const payload = await res.json();
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.items)) return payload.items;
+        if (Array.isArray(payload?.data)) return payload.data;
+        if (Array.isArray(payload?.results)) return payload.results;
+      } catch {
+        // continue fallback chain
+      }
+    }
+    return [];
+  }
+
+  function resolveCheckInIso(item) {
+    if (!item || typeof item !== 'object') return '';
+    const candidates = [
+      item.checkedIn,
+      item.checkInTime,
+      item.checkinTime,
+      item.time,
+      item.timestamp,
+      item.created,
+      item.createdAt,
+      item.dateTime,
+      item.startTime,
+      item?.duration?.start,
+    ];
+    const iso = candidates.find((value) => typeof value === 'string' && value.trim());
+    if (!iso) return '';
+    const ms = Date.parse(iso);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : '';
+  }
+
+  function resolveCheckInGym(item) {
+    if (!item || typeof item !== 'object') return 'Gym';
+    const label =
+      item?.businessUnit?.name ||
+      item?.businessUnit?.displayName ||
+      item?.gymName ||
+      item?.locationName ||
+      item?.location ||
+      item?.center ||
+      item?.facility;
+    return String(label || '').trim() || 'Gym';
+  }
+
+  function normalizeCheckInHistory(entries) {
+    const normalized = (Array.isArray(entries) ? entries : [])
+      .map((entry) => {
+        const iso = resolveCheckInIso(entry);
+        if (!iso) return null;
+        return { iso, gym: resolveCheckInGym(entry) };
+      })
+      .filter(Boolean);
+    normalized.sort((a, b) => Date.parse(b.iso) - Date.parse(a.iso));
+    return normalized;
+  }
+
+  function renderActivitySummary(history) {
+    const gymCounts = new Map();
+    const hourCounts = new Map();
+    history.forEach((entry) => {
+      gymCounts.set(entry.gym, (gymCounts.get(entry.gym) || 0) + 1);
+      const h = new Date(entry.iso).getHours();
+      if (Number.isFinite(h)) hourCounts.set(h, (hourCounts.get(h) || 0) + 1);
+    });
+    const mostVisitedGym = [...gymCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
+    const topHour = [...hourCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    setText('activityTotalCheckins', history.length ? String(history.length) : '0');
+    setText('activityMostVisitedGym', mostVisitedGym);
+    setText('activityTopCheckinTime', Number.isFinite(topHour) ? `${String(topHour).padStart(2, '0')}:00` : '-');
+  }
+
+  function renderActivityHistory(history) {
+    const host = document.getElementById('activityHistoryList');
+    if (!host) return;
+    if (!history.length) {
+      host.innerHTML = '<p class="bookings-empty-msg">No check-ins found yet.</p>';
+      return;
+    }
+    host.innerHTML = history
+      .slice(0, 30)
+      .map((entry) => {
+        const d = new Date(entry.iso);
+        const when = Number.isFinite(d.getTime())
+          ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+          : '—';
+        return `
+          <div class="activity-history-item">
+            <span class="profile-detail-label">${entry.gym}</span>
+            <span class="profile-detail-value">${when}</span>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  function renderActivityLast30Chart(history) {
+    const host = document.getElementById('activityChart');
+    if (!host) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const bars = Array.from({ length: 30 }, (_, index) => {
+      const day = new Date(today);
+      day.setDate(today.getDate() - (29 - index));
+      return {
+        key: day.toISOString().slice(0, 10),
+        label: day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        count: 0,
+      };
+    });
+    const byDay = new Map(bars.map((b) => [b.key, b]));
+    history.forEach((entry) => {
+      const key = String(entry.iso).slice(0, 10);
+      const bar = byDay.get(key);
+      if (bar) bar.count += 1;
+    });
+    const maxCount = Math.max(1, ...bars.map((b) => b.count));
+    host.setAttribute('aria-busy', 'false');
+    host.setAttribute('aria-label', 'Activity for the last 30 days');
+    host.innerHTML = `
+      <div style="display:flex;gap:6px;align-items:flex-end;min-height:120px;">
+        ${bars
+          .map((bar, index) => {
+            const pct = Math.max(6, Math.round((bar.count / maxCount) * 100));
+            const showTick = index % 5 === 0 || index === bars.length - 1;
+            return `
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
+                <span style="width:100%;max-width:12px;height:${pct}%;background:rgba(244,1,245,0.85);border-radius:6px;" title="${bar.label}: ${bar.count} check-ins"></span>
+                <span style="font-size:10px;opacity:${showTick ? '0.8' : '0'};white-space:nowrap;">${showTick ? bar.label : '&nbsp;'}</span>
+              </div>
+            `;
+          })
+          .join('')}
+      </div>
+    `;
+  }
+
+  let activityLoadToken = 0;
+  async function refreshActivityPage() {
+    const chart = document.getElementById('activityChart');
+    const historyHost = document.getElementById('activityHistoryList');
+    if (!chart || !historyHost) return;
+    const customerId = getBrpNumericCustomerId(getBestCustomerData());
+    if (!customerId || !isUserAuthenticated()) {
+      chart.setAttribute('aria-busy', 'false');
+      chart.innerHTML = '<p class="bookings-empty-msg">Sign in to view activity.</p>';
+      historyHost.innerHTML = '<p class="bookings-empty-msg">Sign in to view check-ins.</p>';
+      renderActivitySummary([]);
+      return;
+    }
+    const token = ++activityLoadToken;
+    try {
+      const rawEntries = await fetchCustomerActivityCheckIns(customerId);
+      if (token !== activityLoadToken) return;
+      const history = normalizeCheckInHistory(rawEntries);
+      renderActivitySummary(history);
+      renderActivityLast30Chart(history);
+      renderActivityHistory(history);
+    } catch (err) {
+      if (token !== activityLoadToken) return;
+      chart.setAttribute('aria-busy', 'false');
+      chart.innerHTML = `<p class="bookings-empty-msg">${getErrorMessage(err, 'Activity')}</p>`;
+      historyHost.innerHTML = '<p class="bookings-empty-msg">Unable to load check-ins right now.</p>';
+      renderActivitySummary([]);
+    }
+  }
+
   function refreshSettingsPaymentMethods() {
     const host = document.getElementById('settingsPaymentMethods');
     const registerBtn = document.getElementById('settingsRegisterCardConsentBtn');
@@ -6082,6 +6286,8 @@ export function initializeLoginPage(DOM) {
                 </div>
             </div>
         </div>`;
+  const SETTINGS_INVOICE_PREVIEW_LIMIT = 2;
+  let settingsInvoicesCache = [];
 
   function formatCurrencyOutDisplay(cur) {
     if (!cur || cur.amount == null || cur.amount === '') return '—';
@@ -6127,6 +6333,428 @@ export function initializeLoginPage(DOM) {
     return Number.isFinite(t) ? t : 0;
   }
 
+  function invoiceDateDisplay(value) {
+    if (!value) return '—';
+    try {
+      return formatDisplayDate(value);
+    } catch {
+      return '—';
+    }
+  }
+
+  function invoiceTypeDisplay(inv) {
+    const order = inv?.order;
+    const orderLabel =
+      order?.type ||
+      order?.name ||
+      order?.displayName ||
+      (typeof order === 'string' ? order : '');
+    if (orderLabel) return String(orderLabel);
+    if (inv?.reminderFeeAmount?.amount != null && Number(inv.reminderFeeAmount.amount) > 0) {
+      return 'Reminder';
+    }
+    return 'Standard';
+  }
+
+  function invoiceStatusPillLabel(state) {
+    const map = {
+      STATE_DONE: 'BETALT',
+      STATE_SENT: 'SENDT',
+      STATE_NOT_SENT: 'IKKE SENDT',
+      STATE_SENT_PENDING_RESPONSE: 'AFVENTER',
+      STATE_REMINDER: 'RYKKER',
+      STATE_REMINDER_SERVICE: 'RYKKER',
+      STATE_DEBT_COLLECTION: 'INKASSO',
+      STATE_EXPORTED: 'EKSPORTERET',
+      STATE_PENDING_SEND: 'AFVENTER SEND',
+      STATE_UNKNOWN: 'UKENDT',
+    };
+    return map[state] || humanizeInvoiceState(state || '').toUpperCase();
+  }
+
+  function invoiceYear(inv) {
+    const raw = String(inv?.created || '');
+    const m = raw.match(/^(\d{4})-/);
+    if (m) return m[1];
+    const ts = Date.parse(raw);
+    if (Number.isFinite(ts)) return String(new Date(ts).getFullYear());
+    return 'Unknown';
+  }
+
+  function sumInvoiceAmounts(invoices) {
+    let amountCents = 0;
+    let currency = '';
+    invoices.forEach((inv) => {
+      const cur = inv?.totalAmount;
+      const cents = Number(cur?.amount);
+      if (!Number.isFinite(cents)) return;
+      amountCents += cents;
+      if (!currency && typeof cur?.currency === 'string' && cur.currency.trim()) {
+        currency = cur.currency.trim();
+      }
+    });
+    return { amount: amountCents, currency };
+  }
+
+  async function downloadInvoicePdf(inv) {
+    const cid = getBrpNumericCustomerId(getBestCustomerData());
+    const token = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    const invoiceId = Number(inv?.id);
+    if (!cid || !token || !Number.isFinite(invoiceId) || invoiceId <= 0) {
+      showToast('PDF is not available for this invoice.', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/ver3/services/generate/invoicereport', {
+        method: 'POST',
+        headers: {
+          'Accept-Language': 'da-DK',
+          Accept: 'application/pdf',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          customer: Number(cid),
+          invoice: invoiceId,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Invoice PDF request failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${formatInvoiceNumberLabel(inv).replace(/\s+/g, '-') || `invoice-${invoiceId}`}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.warn('[Settings] Invoice PDF:', err);
+      showToast('Could not generate PDF right now. Try again later.', 'error');
+    }
+  }
+
+  function buildSettingsInvoiceItem(inv) {
+    const item = document.createElement('div');
+    item.className = 'settings-item settings-invoice-item';
+    item.style.padding = '12px 0';
+    item.style.borderBottom = '0.5px solid var(--profile-border)';
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.gap = '12px';
+    row.style.width = '100%';
+    row.style.minWidth = '0';
+    row.style.position = 'relative';
+    row.style.zIndex = '0';
+
+    const invoiceNr = document.createElement('span');
+    invoiceNr.className = 'settings-item-label';
+    invoiceNr.textContent = String(inv?.number || formatInvoiceNumberLabel(inv)).replace(/^Invoice\s+/i, '');
+    invoiceNr.style.flexShrink = '0';
+    invoiceNr.style.fontFamily = "'DM Mono', ui-monospace, monospace";
+    invoiceNr.style.fontSize = '12px';
+    invoiceNr.style.fontWeight = '700';
+    invoiceNr.style.color = 'var(--profile-text)';
+    invoiceNr.style.minWidth = '72px';
+
+    const statusPill = document.createElement('span');
+    statusPill.textContent = invoiceStatusPillLabel(inv?.state || '');
+    statusPill.style.flexShrink = '0';
+    statusPill.style.display = 'inline-flex';
+    statusPill.style.alignItems = 'center';
+    statusPill.style.justifyContent = 'center';
+    statusPill.style.padding = '4px 10px';
+    statusPill.style.borderRadius = '999px';
+    statusPill.style.border = '1px solid rgba(255, 0, 255, 0.30)';
+    statusPill.style.background = 'rgba(255, 0, 255, 0.09)';
+    statusPill.style.color = '#ff00ff';
+    statusPill.style.fontFamily = "'DM Sans', sans-serif";
+    statusPill.style.fontSize = '11px';
+    statusPill.style.fontWeight = '700';
+    statusPill.style.letterSpacing = '0.03em';
+    statusPill.style.textTransform = 'uppercase';
+
+    const meta = document.createElement('div');
+    meta.style.flex = '1';
+    meta.style.minWidth = '0';
+    meta.style.display = 'flex';
+    meta.style.flexDirection = 'column';
+    meta.style.gap = '2px';
+
+    const typeLine = document.createElement('span');
+    typeLine.textContent = invoiceTypeDisplay(inv);
+    typeLine.style.fontFamily = "'DM Sans', sans-serif";
+    typeLine.style.fontSize = '11px';
+    typeLine.style.fontWeight = '600';
+    typeLine.style.color = 'var(--color-text-secondary)';
+    typeLine.style.whiteSpace = 'nowrap';
+    typeLine.style.overflow = 'hidden';
+    typeLine.style.textOverflow = 'ellipsis';
+
+    const dateLine = document.createElement('span');
+    dateLine.textContent = `${invoiceDateDisplay(inv.created)} · forfald ${invoiceDateDisplay(inv.dueDate)}`;
+    dateLine.style.fontFamily = "'DM Mono', ui-monospace, monospace";
+    dateLine.style.fontSize = '10px';
+    dateLine.style.color = 'var(--color-text-secondary)';
+    dateLine.style.opacity = '0.75';
+    dateLine.style.whiteSpace = 'nowrap';
+    dateLine.style.overflow = 'hidden';
+    dateLine.style.textOverflow = 'ellipsis';
+
+    meta.appendChild(typeLine);
+    meta.appendChild(dateLine);
+
+    const amountEl = document.createElement('span');
+    amountEl.className = 'settings-item-value';
+    amountEl.textContent = formatCurrencyOutDisplay(inv.totalAmount);
+    amountEl.style.flexShrink = '0';
+    amountEl.style.fontFamily = "'DM Mono', ui-monospace, monospace";
+    amountEl.style.fontSize = '13px';
+    amountEl.style.fontWeight = '700';
+    amountEl.style.color = 'var(--profile-text)';
+    amountEl.style.textAlign = 'right';
+    amountEl.style.minWidth = '86px';
+
+    const pdfBtn = document.createElement('button');
+    pdfBtn.type = 'button';
+    pdfBtn.textContent = 'PDF';
+    pdfBtn.style.flexShrink = '0';
+    pdfBtn.style.padding = '7px 12px';
+    pdfBtn.style.fontSize = '12px';
+    pdfBtn.style.fontFamily = "'DM Sans', sans-serif";
+    pdfBtn.style.fontWeight = '600';
+    pdfBtn.style.lineHeight = '1';
+    pdfBtn.style.minHeight = '28px';
+    pdfBtn.style.borderRadius = '999px';
+    pdfBtn.style.background = 'transparent';
+    pdfBtn.style.border = '1px solid var(--profile-border)';
+    pdfBtn.style.color = 'var(--color-text-secondary)';
+    pdfBtn.style.cursor = 'pointer';
+    const applyPdfResting = () => {
+      pdfBtn.style.borderColor = 'var(--profile-border)';
+      pdfBtn.style.color = 'var(--color-text-secondary)';
+    };
+    const applyPdfHover = () => {
+      pdfBtn.style.borderColor = 'var(--profile-text)';
+      pdfBtn.style.color = 'var(--profile-text)';
+    };
+    pdfBtn.addEventListener('mouseenter', applyPdfHover);
+    pdfBtn.addEventListener('mouseleave', applyPdfResting);
+    pdfBtn.addEventListener('focus', applyPdfHover);
+    pdfBtn.addEventListener('blur', applyPdfResting);
+    const hasInvoiceId = Number.isFinite(Number(inv?.id)) && Number(inv.id) > 0;
+    pdfBtn.disabled = !hasInvoiceId;
+    if (!hasInvoiceId) {
+      pdfBtn.style.opacity = '0.55';
+      pdfBtn.style.cursor = 'not-allowed';
+    }
+    pdfBtn.addEventListener('click', () => downloadInvoicePdf(inv));
+
+    row.appendChild(invoiceNr);
+    row.appendChild(statusPill);
+    row.appendChild(meta);
+    row.appendChild(amountEl);
+    row.appendChild(pdfBtn);
+    item.appendChild(row);
+
+    const rest = inv.rest;
+    const restAmt = rest && rest.amount != null ? Number(rest.amount) : 0;
+    if (Number.isFinite(restAmt) && restAmt > 0) {
+      const foot = document.createElement('p');
+      foot.className = 'settings-item-description';
+      foot.style.marginTop = '6px';
+      foot.textContent = `Balance due: ${formatCurrencyOutDisplay(rest)}`;
+      item.appendChild(foot);
+    }
+
+    return item;
+  }
+
+  function renderInvoiceList(host, invoices, opts = {}) {
+    if (!host) return;
+    host.innerHTML = '';
+    const showHeader = opts.showHeader !== false;
+    const totalCount = Number.isFinite(opts.totalCount) ? opts.totalCount : invoices.length;
+    if (showHeader) {
+      const header = document.createElement('div');
+      header.style.display = 'flex';
+      header.style.justifyContent = 'space-between';
+      header.style.alignItems = 'center';
+      header.style.marginBottom = '6px';
+
+      const label = document.createElement('span');
+      label.textContent = 'Fakturaer';
+      label.style.fontFamily = "'DM Sans', sans-serif";
+      label.style.fontSize = '11px';
+      label.style.textTransform = 'uppercase';
+      label.style.letterSpacing = '0.08em';
+      label.style.color = 'var(--color-text-secondary)';
+      label.style.opacity = '0.7';
+
+      const count = document.createElement('span');
+      count.textContent = `${totalCount} total`;
+      count.style.fontFamily = "'DM Mono', ui-monospace, monospace";
+      count.style.fontSize = '11px';
+      count.style.color = 'var(--color-text-secondary)';
+      count.style.opacity = '0.7';
+
+      header.appendChild(label);
+      header.appendChild(count);
+      host.appendChild(header);
+    }
+
+    const list = document.createElement('div');
+    invoices.forEach((inv, idx) => {
+      const item = buildSettingsInvoiceItem(inv);
+      if (idx === invoices.length - 1) item.style.borderBottom = 'none';
+      list.appendChild(item);
+    });
+    host.appendChild(list);
+  }
+
+  function renderAllInvoicesModalContent(host, invoices) {
+    host.innerHTML = '';
+
+    const years = Array.from(new Set(invoices.map((inv) => invoiceYear(inv)).filter(Boolean))).sort((a, b) => {
+      if (a === 'Unknown') return 1;
+      if (b === 'Unknown') return -1;
+      return Number(b) - Number(a);
+    });
+    const allFilterValues = ['All', ...years];
+    let activeFilter = 'All';
+
+    const controls = document.createElement('div');
+    controls.style.position = 'sticky';
+    controls.style.top = '0';
+    controls.style.zIndex = '20';
+    controls.style.isolation = 'isolate';
+    controls.style.background = 'var(--color-bg, #0f1116)';
+    controls.style.paddingBottom = '10px';
+    controls.style.paddingTop = '2px';
+    controls.style.marginBottom = '10px';
+    controls.style.borderBottom = '0.5px solid var(--profile-border)';
+    controls.style.display = 'flex';
+    controls.style.flexWrap = 'wrap';
+    controls.style.gap = '8px';
+
+    const listHost = document.createElement('div');
+    listHost.style.paddingTop = '8px';
+
+    const footer = document.createElement('div');
+    footer.style.marginTop = '12px';
+    footer.style.paddingTop = '12px';
+    footer.style.borderTop = '0.5px solid var(--profile-border)';
+    footer.style.display = 'flex';
+    footer.style.justifyContent = 'space-between';
+    footer.style.alignItems = 'center';
+
+    const footerLabel = document.createElement('span');
+    footerLabel.textContent = 'Total beløb';
+    footerLabel.style.fontFamily = "'DM Sans', sans-serif";
+    footerLabel.style.fontSize = '12px';
+    footerLabel.style.color = 'var(--color-text-secondary)';
+    footerLabel.style.opacity = '0.75';
+
+    const footerValue = document.createElement('span');
+    footerValue.style.fontFamily = "'DM Mono', ui-monospace, monospace";
+    footerValue.style.fontSize = '13px';
+    footerValue.style.fontWeight = '700';
+    footerValue.style.color = 'var(--profile-text)';
+
+    const renderFiltered = () => {
+      const filtered =
+        activeFilter === 'All' ? invoices : invoices.filter((inv) => invoiceYear(inv) === activeFilter);
+      listHost.innerHTML = '';
+
+      const grouped = filtered.reduce((acc, inv) => {
+        const y = invoiceYear(inv);
+        if (!acc[y]) acc[y] = [];
+        acc[y].push(inv);
+        return acc;
+      }, {});
+
+      const groupYears = Object.keys(grouped).sort((a, b) => {
+        if (a === 'Unknown') return 1;
+        if (b === 'Unknown') return -1;
+        return Number(b) - Number(a);
+      });
+
+      groupYears.forEach((year) => {
+        const yearLabel = document.createElement('div');
+        yearLabel.textContent = year;
+        yearLabel.style.fontFamily = "'DM Mono', ui-monospace, monospace";
+        yearLabel.style.fontSize = '11px';
+        yearLabel.style.fontWeight = '700';
+        yearLabel.style.color = 'var(--color-text-secondary)';
+        yearLabel.style.opacity = '0.7';
+        yearLabel.style.margin = '8px 0 4px';
+        listHost.appendChild(yearLabel);
+
+        grouped[year].forEach((inv, idx) => {
+          const item = buildSettingsInvoiceItem(inv);
+          if (idx === grouped[year].length - 1) item.style.borderBottom = 'none';
+          listHost.appendChild(item);
+        });
+      });
+
+      const total = sumInvoiceAmounts(filtered);
+      footerValue.textContent = formatCurrencyOutDisplay(total);
+    };
+
+    allFilterValues.forEach((filterValue) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.textContent = filterValue;
+      chip.style.borderRadius = '999px';
+      chip.style.padding = '6px 14px';
+      chip.style.fontFamily = "'DM Sans', sans-serif";
+      chip.style.fontSize = '11px';
+      chip.style.fontWeight = '700';
+      chip.style.cursor = 'pointer';
+      chip.style.background = 'transparent';
+      chip.style.color = 'var(--color-text-secondary)';
+      chip.style.border = '1px solid var(--profile-border)';
+      chip.addEventListener('click', () => {
+        activeFilter = filterValue;
+        Array.from(controls.children).forEach((btn) => {
+          btn.style.background = 'transparent';
+          btn.style.border = '1px solid var(--profile-border)';
+          btn.style.color = 'var(--color-text-secondary)';
+        });
+        chip.style.background = 'rgba(255, 0, 255, 0.09)';
+        chip.style.border = '1px solid rgba(255, 0, 255, 0.30)';
+        chip.style.color = '#ff00ff';
+        renderFiltered();
+      });
+      controls.appendChild(chip);
+    });
+
+    if (controls.firstChild) controls.firstChild.click();
+
+    footer.appendChild(footerLabel);
+    footer.appendChild(footerValue);
+    host.appendChild(controls);
+    host.appendChild(listHost);
+    host.appendChild(footer);
+  }
+
+  function openAllInvoicesModal() {
+    const modal = document.getElementById('allInvoicesModal');
+    const container = document.getElementById('allInvoicesContainer');
+    if (!modal || !container) return;
+    if (!Array.isArray(settingsInvoicesCache) || !settingsInvoicesCache.length) {
+      container.innerHTML = '<p class="settings-item-description">No invoices are available yet.</p>';
+    } else {
+      renderAllInvoicesModalContent(container, settingsInvoicesCache);
+    }
+    modal.style.display = 'flex';
+  }
+
   function refreshSettingsInvoices() {
     const host = document.getElementById('settingsInvoices');
     if (!host || !isUserAuthenticated()) return;
@@ -6153,93 +6781,50 @@ export function initializeLoginPage(DOM) {
     host.innerHTML = SETTINGS_INVOICES_SKELETON.trim();
 
     authAPI
-      .listCustomerInvoices(cid)
+      .listCustomerInvoices(cid, {
+        // Request full history instead of the default 2-year window.
+        periodStart: '1970-01-01T00:00:00.000Z',
+        periodEnd: new Date().toISOString(),
+      })
       .then((invoices) => {
         host.innerHTML = '';
         const list = Array.isArray(invoices) ? [...invoices] : [];
         list.sort((a, b) => invoiceCreatedMs(b) - invoiceCreatedMs(a));
+        settingsInvoicesCache = list;
 
         if (!list.length) {
           const p = document.createElement('p');
           p.className = 'settings-item-description';
           p.textContent =
-            'No invoices for this profile in the last two years. That is normal if you have not been billed through this membership yet.';
+            'No invoices are available for this profile yet. This is normal if you have not been billed through this membership.';
           host.appendChild(p);
           return;
         }
 
-        list.forEach((inv) => {
-          const item = document.createElement('div');
-          item.className = 'settings-item settings-invoice-item';
-
-          const header = document.createElement('div');
-          header.className = 'settings-item-header';
-
-          const main = document.createElement('div');
-          main.className = 'settings-invoice-main';
-
-          const label = document.createElement('span');
-          label.className = 'settings-item-label';
-          label.textContent = formatInvoiceNumberLabel(inv);
-
-          const sub = document.createElement('p');
-          sub.className = 'settings-item-description';
-          sub.style.marginTop = '4px';
-          const bu =
-            inv.businessUnit?.displayName ||
-            inv.businessUnit?.name ||
-            (typeof inv.businessUnit === 'string' ? inv.businessUnit : '');
-          const due = inv.dueDate ? `Due ${formatDisplayDate(inv.dueDate)}` : '';
-          const created =
-            typeof inv.created === 'string'
-              ? (() => {
-                  const m = inv.created.match(/^(\d{4})-(\d{2})-(\d{2})/);
-                  return m ? `Created ${m[3]}/${m[2]}/${m[1]}` : '';
-                })()
-              : '';
-          sub.textContent = [due, created, bu].filter(Boolean).join(' · ') || '—';
-
-          main.appendChild(label);
-          main.appendChild(sub);
-
-          const trail = document.createElement('div');
-          trail.className = 'settings-item-trailing settings-invoice-trail';
-
-          const amountEl = document.createElement('span');
-          amountEl.className = 'settings-item-value';
-          amountEl.textContent = formatCurrencyOutDisplay(inv.totalAmount);
-
-          const stateEl = document.createElement('span');
-          stateEl.className = 'settings-invoice-state';
-          const st = inv.state || '';
-          if (st === 'STATE_DONE') stateEl.classList.add('settings-invoice-state--paid');
-          else if (
-            st === 'STATE_REMINDER' ||
-            st === 'STATE_REMINDER_SERVICE' ||
-            st === 'STATE_DEBT_COLLECTION'
-          ) {
-            stateEl.classList.add('settings-invoice-state--attention');
-          }
-          stateEl.textContent = humanizeInvoiceState(st);
-
-          trail.appendChild(amountEl);
-          trail.appendChild(stateEl);
-          header.appendChild(main);
-          header.appendChild(trail);
-          item.appendChild(header);
-
-          const rest = inv.rest;
-          const restAmt = rest && rest.amount != null ? Number(rest.amount) : 0;
-          if (Number.isFinite(restAmt) && restAmt > 0) {
-            const foot = document.createElement('p');
-            foot.className = 'settings-item-description';
-            foot.style.marginTop = '6px';
-            foot.textContent = `Balance due: ${formatCurrencyOutDisplay(rest)}`;
-            item.appendChild(foot);
-          }
-
-          host.appendChild(item);
+        renderInvoiceList(host, list.slice(0, SETTINGS_INVOICE_PREVIEW_LIMIT), {
+          showHeader: true,
+          totalCount: list.length,
         });
+        if (list.length > SETTINGS_INVOICE_PREVIEW_LIMIT) {
+          const actions = document.createElement('div');
+          actions.style.marginTop = '1rem';
+          const link = document.createElement('button');
+          link.type = 'button';
+          link.textContent = `Se alle fakturaer (${list.length}) \u2192`;
+          link.style.border = 'none';
+          link.style.background = 'transparent';
+          link.style.padding = '0';
+          link.style.margin = '0';
+          link.style.cursor = 'pointer';
+          link.style.fontFamily = "'DM Sans', sans-serif";
+          link.style.fontSize = '12px';
+          link.style.fontWeight = '700';
+          link.style.color = '#ff00ff';
+          link.style.textDecoration = 'none';
+          link.addEventListener('click', openAllInvoicesModal);
+          actions.appendChild(link);
+          host.appendChild(actions);
+        }
       })
       .catch((err) => {
         console.warn('[Settings] Invoices:', err);
@@ -6764,10 +7349,14 @@ export function initializeLoginPage(DOM) {
         'cancelSubscriptionModalStep3'
       ].forEach(closeModal);
     };
+    const closeAllInvoicesModal = () => closeModal('allInvoicesModal');
 
     const freezeSubscriptionSettingsBtn = document.getElementById('freezeSubscriptionSettingsBtn');
     const cancelSubscriptionSettingsBtn = document.getElementById('cancelSubscriptionSettingsBtn');
     const logoutBtn = document.getElementById('logoutBtn');
+    const allInvoicesBtn = document.getElementById('allInvoicesBtn');
+    const closeAllInvoicesModalBtn = document.getElementById('closeAllInvoicesModal');
+    const allInvoicesModal = document.getElementById('allInvoicesModal');
 
     const requireActiveMembershipOrToast = () => {
       const customer = getBestCustomerData();
@@ -6799,6 +7388,14 @@ export function initializeLoginPage(DOM) {
       logoutBtn.addEventListener('click', () => {
         handleLogout();
         refreshLoginPageUI();
+      });
+    }
+    bindClickOnce(allInvoicesBtn, openAllInvoicesModal);
+    bindClickOnce(closeAllInvoicesModalBtn, closeAllInvoicesModal);
+    if (allInvoicesModal && !allInvoicesModal.dataset.boundBackdropClose) {
+      allInvoicesModal.dataset.boundBackdropClose = 'true';
+      allInvoicesModal.addEventListener('click', (event) => {
+        if (event.target === allInvoicesModal) closeAllInvoicesModal();
       });
     }
 
