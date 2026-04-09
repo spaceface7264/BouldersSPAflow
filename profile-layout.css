@@ -3370,6 +3370,50 @@ body.authenticated #pageSettings .settings-toggle-slider {
   padding-bottom: 0;
 }
 
+.dashboard-access-row--accordion {
+  display: block;
+}
+
+.dashboard-access-accordion {
+  width: 100%;
+}
+
+.dashboard-access-accordion__summary {
+  cursor: pointer;
+  color: var(--profile-text);
+  font-weight: 600;
+  font-size: var(--type-body);
+  list-style: none;
+}
+
+.dashboard-access-accordion__summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-access-accordion__summary::after {
+  content: '▾';
+  float: right;
+  color: var(--profile-muted);
+  transition: transform 0.15s ease;
+}
+
+.dashboard-access-accordion[open] .dashboard-access-accordion__summary::after {
+  transform: rotate(180deg);
+}
+
+.dashboard-access-accordion__list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-access-accordion__item {
+  color: var(--profile-muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
 .dashboard-access-label {
   color: var(--profile-muted);
   font-size: var(--type-label);
@@ -3381,6 +3425,16 @@ body.authenticated #pageSettings .settings-toggle-slider {
   font-weight: 600;
   font-size: var(--type-body);
   text-align: right;
+}
+
+.dashboard-access-value--muted {
+  color: var(--profile-muted);
+  font-weight: 500;
+}
+
+.dashboard-access-value--positive {
+  color: #7ee2a8;
+  font-weight: 700;
 }
 
 /* Readable rail inside full-width dashboard card (avoids ultra-wide class tiles) */
@@ -4089,26 +4143,6 @@ body.authenticated #pageSettings .settings-toggle-slider {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.dashboard-access-support-slot {
-  margin-top: 16px;
-}
-
-.dashboard-access-support-slot[hidden] {
-  display: none !important;
-}
-
-.dashboard-access-support-btn {
-  width: fit-content;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: max(10px, 0.625rem);
-  line-height: 1.35;
-  padding: 8px 12px;
-  min-height: 0;
 }
 
 .dashboard-loyalty-tier {

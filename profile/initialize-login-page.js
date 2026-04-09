@@ -631,22 +631,110 @@ export function initializeLoginPage(DOM) {
     while (el.firstChild) el.removeChild(el.firstChild);
   }
 
-  function addAccessRow(container, label, value) {
+  function addAccessRow(container, label, value, opts = {}) {
+    const { valueMuted = false, valuePositive = false } = opts;
     const row = document.createElement('div');
     row.className = 'dashboard-access-row';
     const l = document.createElement('span');
     l.className = 'dashboard-access-label';
     l.textContent = label;
     const v = document.createElement('span');
-    v.className = 'dashboard-access-value';
+    v.className = `dashboard-access-value${valueMuted ? ' dashboard-access-value--muted' : ''}${valuePositive ? ' dashboard-access-value--positive' : ''}`;
     v.textContent = value == null || value === '' ? '—' : String(value);
     row.append(l, v);
     container.appendChild(row);
   }
 
+  function addPunchCardAccordion(container, cards) {
+    if (!container || !Array.isArray(cards) || cards.length === 0) return;
+    const row = document.createElement('div');
+    row.className = 'dashboard-access-row dashboard-access-row--accordion';
+
+    const details = document.createElement('details');
+    details.className = 'dashboard-access-accordion';
+
+    const summary = document.createElement('summary');
+    summary.className = 'dashboard-access-accordion__summary';
+    summary.textContent = `Punch card details (${cards.length})`;
+
+    const list = document.createElement('div');
+    list.className = 'dashboard-access-accordion__list';
+
+    cards.forEach((card, idx) => {
+      const item = document.createElement('div');
+      item.className = 'dashboard-access-accordion__item';
+      const title = valueCardProductDisplayName(card) || `Punch card ${idx + 1}`;
+      const remaining = formatValueCardRemainingLabel(card);
+      const validUntil = formatAddonExpiryDisplay(card?.validUntil);
+      const value =
+        validUntil && validUntil !== '—'
+          ? `${remaining || '—'} • Expires ${validUntil}`
+          : (remaining || '—');
+      item.textContent = `${title}: ${value}`;
+      list.appendChild(item);
+    });
+
+    details.append(summary, list);
+    row.appendChild(details);
+    container.appendChild(row);
+  }
+
+  function appendInactiveAccessCta(container, selectedKind) {
+    if (!container) return;
+    const kindLabel =
+      selectedKind === 'membership'
+        ? 'membership'
+        : selectedKind === 'punch_card'
+          ? 'punch card'
+          : '15-day trial';
+    const ctaWrap = document.createElement('div');
+    ctaWrap.className = 'dashboard-access-cta';
+    const sum = document.createElement('p');
+    sum.className = 'dashboard-access-empty-summary';
+    sum.textContent = `No active ${kindLabel} found on your profile right now.`;
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'dashboard-access-cta-actions';
+    const joinBtn = document.createElement('a');
+    joinBtn.href = 'https://join.boulders.dk';
+    joinBtn.target = '_blank';
+    joinBtn.rel = 'noopener noreferrer';
+    joinBtn.className = 'profile-action-btn dashboard-access-signup-btn';
+    joinBtn.textContent = 'Go to join.boulders.dk';
+    actionsRow.append(joinBtn);
+    ctaWrap.append(sum, actionsRow);
+    container.appendChild(ctaWrap);
+  }
+
+  function deriveTrialStartFromEnd(endRaw) {
+    if (!endRaw) return null;
+    const source = typeof endRaw === 'string' ? endRaw : String(endRaw);
+    const m = source.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return null;
+    d.setUTCDate(d.getUTCDate() - 14);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
   function isPunchCardLikeValueCard(card) {
     const name = (valueCardProductDisplayName(card) || '').toLowerCase();
     return /punch|klip|klippekort|value\s*card|entries|entry/.test(name);
+  }
+
+  function numericPunchesLeft(card) {
+    if (!card || typeof card !== 'object') return null;
+    const raw =
+      card.unitsLeft ??
+      card.remainingEntries ??
+      card.entriesLeft ??
+      card.clipsLeft ??
+      card.visitsRemaining ??
+      card.remainingVisits;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
   }
 
   function getDashboardAccessSources(customer) {
@@ -724,9 +812,11 @@ export function initializeLoginPage(DOM) {
 
     if (selectedKind === 'membership') {
       if (!sources.hasMembership) {
-        addAccessRow(rowsEl, 'Status', 'No active membership found on this account.');
+        addAccessRow(rowsEl, 'Status', 'Inactive', { valueMuted: true });
+        appendInactiveAccessCta(rowsEl, selectedKind);
         return;
       }
+      addAccessRow(rowsEl, 'Status', 'Active', { valuePositive: true });
       addAccessRow(rowsEl, 'Member since', formatDisplayDate(membership.activeSince));
       addAccessRow(
         rowsEl,
@@ -743,25 +833,23 @@ export function initializeLoginPage(DOM) {
 
     if (selectedKind === 'punch_card') {
       if (!sources.punch) {
-        addAccessRow(rowsEl, 'Status', 'No active punch card found on this account.');
+        addAccessRow(rowsEl, 'Status', 'Inactive', { valueMuted: true });
+        appendInactiveAccessCta(rowsEl, selectedKind);
         return;
       }
+      addAccessRow(rowsEl, 'Status', 'Active', { valuePositive: true });
       const allValueCards = collectValueCardsArray(customer || {});
       const punchCards = allValueCards.filter((card) => isPunchCardLikeValueCard(card));
       const activeValueCards = punchCards.filter((card) => !valueCardIsExpiredOrInvalid(card));
       const cardsToShow = activeValueCards.length > 0 ? activeValueCards : punchCards;
-      if (cardsToShow.length > 0) {
-        cardsToShow.forEach((card, idx) => {
-          const title = valueCardProductDisplayName(card) || `Punch card ${idx + 1}`;
-          const remaining = formatValueCardRemainingLabel(card);
-          const validUntil = formatAddonExpiryDisplay(card?.validUntil);
-          const inlineValue =
-            validUntil && validUntil !== '—'
-              ? `${remaining || '—'} • Expires ${validUntil}`
-              : (remaining || '—');
-          addAccessRow(rowsEl, title, inlineValue);
-        });
-      }
+      const cardsForTotals = activeValueCards.length > 0 ? activeValueCards : punchCards;
+      const totalPunches = cardsForTotals.reduce((sum, card) => {
+        const n = numericPunchesLeft(card);
+        return n == null ? sum : sum + n;
+      }, 0);
+      const hasNumericTotal = cardsForTotals.some((card) => numericPunchesLeft(card) != null);
+      addAccessRow(rowsEl, 'Total punches available', hasNumericTotal ? String(totalPunches) : '—');
+      if (cardsToShow.length > 0) addPunchCardAccordion(rowsEl, cardsToShow);
       if (cardsToShow.length === 0) {
         const entries =
           sources.punch.entriesLeft != null && sources.punch.entriesLeft !== ''
@@ -780,11 +868,21 @@ export function initializeLoginPage(DOM) {
 
     if (selectedKind === 'trial') {
       if (!sources.trialSub) {
-        addAccessRow(rowsEl, 'Status', 'No active 15-day trial found on this account.');
+        addAccessRow(rowsEl, 'Status', 'Inactive', { valueMuted: true });
+        appendInactiveAccessCta(rowsEl, selectedKind);
         return;
       }
+      addAccessRow(rowsEl, 'Status', 'Active', { valuePositive: true });
       const t = sources.trialSub || {};
-      const start = t.startDate || t.activeSince || t.validFrom || t.beginDate || t.debitedFrom || t.createdAt;
+      const startRaw =
+        t.startDate ||
+        t.activeSince ||
+        t.validFrom ||
+        t.beginDate ||
+        t.debitedFrom ||
+        t.boundFrom ||
+        t.validFromDate ||
+        t.createdAt;
       const end =
         t.endDate ||
         t.expires ||
@@ -793,6 +891,7 @@ export function initializeLoginPage(DOM) {
         t.boundUntil ||
         t.debitedUntil ||
         t.nextBillingDate;
+      const start = startRaw || deriveTrialStartFromEnd(end);
       const trialPlanName =
         t.name ||
         t.productName ||
@@ -821,22 +920,10 @@ export function initializeLoginPage(DOM) {
     if (membership.gym && membership.gym !== '-') {
       addAccessRow(rowsEl, 'Home gym', membership.gym);
     }
+    addAccessRow(rowsEl, 'Status', 'Inactive', { valueMuted: true });
+    appendInactiveAccessCta(rowsEl, selectedKind);
 
-    const ctaWrap = document.createElement('div');
-    ctaWrap.className = 'dashboard-access-cta';
-    const sum = document.createElement('p');
-    sum.className = 'dashboard-access-empty-summary';
-    sum.textContent =
-      'Ready to climb with us? Pick your gym and choose a plan—it only takes a few minutes.';
-    const actionsRow = document.createElement('div');
-    actionsRow.className = 'dashboard-access-cta-actions';
-    const signupBtn = document.createElement('a');
-    signupBtn.href = './index.html';
-    signupBtn.className = 'profile-action-btn dashboard-access-signup-btn';
-    signupBtn.textContent = 'Get access';
-    actionsRow.append(signupBtn);
-    ctaWrap.append(sum, actionsRow);
-    rowsEl.appendChild(ctaWrap);
+    return;
   }
 
 
