@@ -54,13 +54,35 @@ export function formatTimeShort(iso) {
   return d.toLocaleTimeString(undefined, { timeStyle: 'short' });
 }
 
+function formatClassDateNoYear(iso) {
+  if (!iso || typeof iso !== 'string') return '—';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '—';
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      day: 'numeric',
+      month: 'short',
+    }).format(d);
+  } catch {
+    return d.toDateString();
+  }
+}
+
+function formatClassDateTimeNoYear(iso) {
+  if (!iso || typeof iso !== 'string') return '—';
+  const dateText = formatClassDateNoYear(iso);
+  const timeText = formatTimeShort(iso);
+  if (!timeText) return dateText;
+  return `${dateText}, ${timeText}`;
+}
+
 export function formatClassSessionWhenLine(startIso, endIso) {
   if (!startIso) return '—';
   const startMs = Date.parse(startIso);
   const endMs = endIso ? Date.parse(endIso) : NaN;
   const hasValidEnd = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
   if (!hasValidEnd) {
-    return formatDateTimeDisplay(startIso);
+    return formatClassDateTimeNoYear(startIso);
   }
   const startDate = new Date(startMs);
   const endDate = new Date(endMs);
@@ -69,9 +91,9 @@ export function formatClassSessionWhenLine(startIso, endIso) {
     startDate.getMonth() === endDate.getMonth() &&
     startDate.getDate() === endDate.getDate();
   if (sameLocalDay) {
-    return `${formatDateTimeDisplay(startIso)} – ${formatTimeShort(endIso)}`;
+    return `${formatClassDateTimeNoYear(startIso)} – ${formatTimeShort(endIso)}`;
   }
-  return `${formatDateTimeDisplay(startIso)} – ${formatDateTimeDisplay(endIso)}`;
+  return `${formatClassDateTimeNoYear(startIso)} – ${formatClassDateTimeNoYear(endIso)}`;
 }
 
 export function formatClassSessionDurationMinutes(startIso, endIso) {

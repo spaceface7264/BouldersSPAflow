@@ -584,10 +584,6 @@ export function initializeLoginPage(DOM) {
     title.className = 'profile-addon-card__title';
     title.textContent = titleText;
 
-    const badge = document.createElement('span');
-    badge.className = 'profile-addon-card__badge' + (expired ? ' profile-addon-card__badge--muted' : '');
-    badge.textContent = formatValueCardRemainingLabel(card);
-
     const meta = document.createElement('p');
     meta.className = 'profile-addon-card__meta';
     const gym = card.businessUnit?.name || '';
@@ -595,7 +591,7 @@ export function initializeLoginPage(DOM) {
     const expPart = expRaw !== '—' ? `Expires ${expRaw}` : '';
     meta.textContent = [gym, expPart].filter(Boolean).join(' • ') || '—';
 
-    head.append(title, badge, side);
+    head.append(title, side);
     article.append(head, meta);
     return article;
   }
@@ -829,7 +825,6 @@ export function initializeLoginPage(DOM) {
         'Price',
         formatPriceDisplay(membership.price, membership.priceCurrency)
       );
-      addAccessRow(rowsEl, 'Home gym / location', membership.gym);
       if (membership.boundUntil) {
         addAccessRow(rowsEl, 'Bound until', formatDisplayDate(membership.boundUntil));
       }
@@ -868,7 +863,6 @@ export function initializeLoginPage(DOM) {
           sources.punch.expiryRaw ? formatDisplayDate(sources.punch.expiryRaw) : '—'
         );
       }
-      addAccessRow(rowsEl, 'Home gym', membership.gym !== '-' ? membership.gym : '—');
       return;
     }
 
@@ -905,15 +899,9 @@ export function initializeLoginPage(DOM) {
         t.type ||
         t.subscriptionType ||
         '15-day trial';
-      const trialLocation =
-        t.gymName ||
-        t.businessUnitName ||
-        t.businessUnit?.name ||
-        (membership.gym !== '-' ? membership.gym : '—');
       addAccessRow(rowsEl, 'Active from', formatDisplayDate(start));
       addAccessRow(rowsEl, 'Active until', formatDisplayDate(end));
       addAccessRow(rowsEl, 'Plan', trialPlanName);
-      addAccessRow(rowsEl, 'Location', trialLocation);
       return;
     }
 
@@ -922,9 +910,6 @@ export function initializeLoginPage(DOM) {
     }
     if (membership.type && membership.type !== '-') {
       addAccessRow(rowsEl, 'Plan on file', membership.type);
-    }
-    if (membership.gym && membership.gym !== '-') {
-      addAccessRow(rowsEl, 'Home gym', membership.gym);
     }
     addAccessRow(rowsEl, 'Status', 'Inactive', { valueMuted: true });
     appendInactiveAccessCta(rowsEl, selectedKind);
@@ -1111,7 +1096,8 @@ export function initializeLoginPage(DOM) {
       }
       const label = document.createElement('span');
       label.className = 'booking-item-card__availability-label';
-      label.textContent = left <= 0 ? 'full' : `${left} left`;
+      label.textContent =
+        left <= 0 ? 'Fully booked' : `${left} spot${left === 1 ? '' : 's'} left`;
       wrap.append(dots, label);
       main.appendChild(wrap);
       return;
@@ -1352,6 +1338,15 @@ export function initializeLoginPage(DOM) {
   }
 
   async function runBrowseBookCommit(activity, allowWaitingList, primaryBtn) {
+    const lockKey = bookingLockKey(activity);
+    if (bookingRequestLocks.has(lockKey)) {
+      showToast('Booking already in progress for this class.', 'error');
+      return;
+    }
+    if (isBrowseSourceAlreadyBooked(activity)) {
+      showToast('You are already booked for this class.', 'error');
+      return;
+    }
     if (await shouldBlockDirectSessionBooking(activity)) {
       showToast(
         'This class cannot be booked directly. If it is part of a multi-session course, please book the course series card.',
@@ -1373,12 +1368,14 @@ export function initializeLoginPage(DOM) {
       showToast('Booking is not available.', 'error');
       return;
     }
+    bookingRequestLocks.add(lockKey);
     primaryBtn.disabled = true;
     try {
       await authAPI.bookCustomerGroupActivity(cid, {
         groupActivityId: gid,
         allowWaitingList,
       });
+      markRecentBookingLock(activity);
       showToast(
         allowWaitingList ? 'You are on the waiting list.' : 'Booked! Check My classes.',
         'success'
@@ -1400,6 +1397,7 @@ export function initializeLoginPage(DOM) {
         showToast(getErrorMessage(err), 'error');
       }
     } finally {
+      bookingRequestLocks.delete(lockKey);
       primaryBtn.disabled = false;
     }
   }
@@ -1474,12 +1472,18 @@ export function initializeLoginPage(DOM) {
     const fully = isBrowseSlotsFullyBooked(activity.slots);
     const wl = activity.slots && activity.slots.hasWaitingList === true;
     const dropInOnly = isDropInOnlyClass(activity);
+    const alreadyBooked = isBrowseSourceAlreadyBooked(activity);
 
     if (!isUserAuthenticated()) {
       const hint = document.createElement('p');
       hint.className = 'class-card-expand__hint';
       hint.textContent = 'Log in to book this class.';
       actionsEl.appendChild(hint);
+    } else if (alreadyBooked) {
+      const p = document.createElement('p');
+      p.className = 'class-card-expand__muted';
+      p.textContent = 'You are already booked for this class.';
+      actionsEl.appendChild(p);
     } else if (dropInOnly) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -1619,7 +1623,19 @@ export function initializeLoginPage(DOM) {
         const endIso = Number.isFinite(lastStart)
           ? new Date(lastStart + 7 * 24 * 60 * 60 * 1000).toISOString()
           : undefined;
-        if (authAPI?.listCustomerEventBookings && authAPI?.cancelCustomerEventBooking) {
+        // Prefer cancelling concrete session bookings so browse slot counts are released per class.
+        let cancelledSessionCount = 0;
+        for (const rec of seriesBookings) {
+          const bid = bookingIdValue(rec);
+          if (!bid) continue;
+          await authAPI.cancelCustomerGroupActivityBooking(cid, bid, {
+            tryToRefund: false,
+            bookingType: 'groupActivityBooking',
+          });
+          cancelledSessionCount += 1;
+        }
+        if (cancelledSessionCount === 0 && authAPI?.listCustomerEventBookings && authAPI?.cancelCustomerEventBooking) {
+          // Fallback when we cannot resolve per-session booking ids.
           const eventBookings = await authAPI.listCustomerEventBookings(cid, {
             periodStart: startIso,
             periodEnd: endIso,
@@ -1643,24 +1659,7 @@ export function initializeLoginPage(DOM) {
           const eventBookingId = Number(match?.id);
           if (Number.isFinite(eventBookingId) && eventBookingId > 0) {
             await authAPI.cancelCustomerEventBooking(cid, eventBookingId, { tryToRefund: false });
-            showToast('Series bookings cancelled.', 'success');
-            closeClassCardExpand();
-            ensureGroupActivityBookingsLoaded().then(() => {
-              refreshClassesBookingsLists();
-              refreshDashboardPanels();
-            });
-            applyBrowseClassFilters();
-            return;
           }
-        }
-        // Fallback: cancel each session booking one by one.
-        for (const rec of seriesBookings) {
-          const bid = bookingIdValue(rec);
-          if (!bid) continue;
-          await authAPI.cancelCustomerGroupActivityBooking(cid, bid, {
-            tryToRefund: false,
-            bookingType: 'groupActivityBooking',
-          });
         }
         showToast('Series bookings cancelled.', 'success');
         closeClassCardExpand();
@@ -1668,7 +1667,11 @@ export function initializeLoginPage(DOM) {
           refreshClassesBookingsLists();
           refreshDashboardPanels();
         });
+        // Trigger immediate + delayed refresh to absorb backend eventual consistency on slot counters.
         applyBrowseClassFilters();
+        window.setTimeout(() => {
+          applyBrowseClassFilters();
+        }, 1400);
       } catch (err) {
         if (Number(err?.status) === 403) {
           showToast('You do not have permission to perform this action.', 'error');
@@ -2602,7 +2605,12 @@ export function initializeLoginPage(DOM) {
     };
 
     row.addEventListener('click', (e) => {
-      if (e.target.closest && e.target.closest('.dashboard-saved-reminder__series-details')) {
+      if (
+        e.target.closest &&
+        e.target.closest(
+          '.dashboard-saved-reminder__series-details, summary, button, .class-card-expand__btn-secondary'
+        )
+      ) {
         return;
       }
       void activate(e);
@@ -2670,76 +2678,13 @@ export function initializeLoginPage(DOM) {
       return;
     }
     list.forEach((rec) => {
-      const card = document.createElement('div');
-      card.className = 'booking-item-card booking-item-card--my-bookings-list';
-      const mediaSource = rec?.imageUrl ? { __resolvedImageUrl: rec.imageUrl } : {};
-      card.appendChild(createClassCardMediaEl(mediaSource, rec?.title || 'Class'));
-      const main = document.createElement('div');
-      main.className = 'booking-item-card__main';
-      const savedTitleText = rec?.title || 'Class';
-      const isSavedSeries =
-        rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length;
-      if (isSavedSeries) {
-        let stepRows = null;
-        if (
-          Array.isArray(rec.seriesSessionSlots) &&
-          rec.seriesSessionSlots.length &&
-          rec.seriesSessionSlots.length === rec.seriesLines.length
-        ) {
-          stepRows = rec.seriesSessionSlots.map((slot) => ({
-            step: {
-              startIso: typeof slot?.start === 'string' ? slot.start : '',
-              endIso: typeof slot?.end === 'string' ? slot.end : null,
-            },
-          }));
-        } else if (rec.browseSnapshot && typeof rec.browseSnapshot === 'object') {
-          try {
-            const slots = mapEventOccasionSlots(rec.browseSnapshot);
-            if (slots.length && slots.length === rec.seriesLines.length) {
-              stepRows = slots.map((slot) => ({
-                step: {
-                  startIso: slot.start || '',
-                  endIso: slot.end || null,
-                },
-              }));
-            }
-          } catch (_) {
-            /* ignore */
-          }
-        }
-        appendMyBookingsSeriesCollapsibleBlock(main, {
-          titleText: savedTitleText,
-          rangeText: savedClassSeriesRangeLine(rec),
-          sessionCount: rec.seriesLines.length,
-          rows:
-            stepRows ||
-            rec.seriesLines.map((line) => ({
-              fallbackText: line,
-            })),
-        });
-      } else {
-        const h = document.createElement('strong');
-        h.className = 'booking-item-card__title';
-        h.textContent = savedTitleText;
-        const meta = document.createElement('div');
-        meta.className = 'booking-item-card__meta';
-        meta.textContent = formatClassSessionWhenLine(rec?.startIso || '', rec?.endIso || null);
-        main.append(h, meta);
-      }
-      if (rec?.where) {
-        appendLocationPillToCardMain(main, rec.where);
-      }
-      const saveBtn = document.createElement('button');
-      saveBtn.type = 'button';
-      saveBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
-      saveBtn.textContent = 'Remove';
-      saveBtn.addEventListener('click', () => {
-        persistSavedClasses(loadSavedClasses().filter((x) => x && x.key !== rec.key));
-        renderSavedBookingsList();
+      const card = buildSavedClassListCard(rec, {
+        onRemove: () => {
+          persistSavedClasses(loadSavedClasses().filter((x) => x && x.key !== rec.key));
+          renderSavedBookingsList();
+          refreshDashboardPanels();
+        },
       });
-      main.appendChild(saveBtn);
-      finalizeMyBookingsListCardMain(main);
-      card.appendChild(main);
       container.appendChild(card);
       if (!rec?.imageUrl) {
         resolveSavedRecordImageUrl(rec).then((url) => {
@@ -2755,6 +2700,103 @@ export function initializeLoginPage(DOM) {
         });
       }
     });
+  }
+
+  function buildSavedClassListCard(rec, options = {}) {
+    const card = document.createElement('div');
+    card.className = 'booking-item-card booking-item-card--my-bookings-list';
+    const mediaSource = rec?.imageUrl ? { __resolvedImageUrl: rec.imageUrl } : {};
+    card.appendChild(createClassCardMediaEl(mediaSource, rec?.title || 'Class'));
+    const main = document.createElement('div');
+    main.className = 'booking-item-card__main';
+    const savedTitleText = rec?.title || 'Class';
+    const isSavedSeries = rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length;
+    if (isSavedSeries) {
+      let stepRows = null;
+      if (
+        Array.isArray(rec.seriesSessionSlots) &&
+        rec.seriesSessionSlots.length &&
+        rec.seriesSessionSlots.length === rec.seriesLines.length
+      ) {
+        stepRows = rec.seriesSessionSlots.map((slot) => ({
+          step: {
+            startIso: typeof slot?.start === 'string' ? slot.start : '',
+            endIso: typeof slot?.end === 'string' ? slot.end : null,
+          },
+        }));
+      } else if (rec.browseSnapshot && typeof rec.browseSnapshot === 'object') {
+        try {
+          const slots = mapEventOccasionSlots(rec.browseSnapshot);
+          if (slots.length && slots.length === rec.seriesLines.length) {
+            stepRows = slots.map((slot) => ({
+              step: {
+                startIso: slot.start || '',
+                endIso: slot.end || null,
+              },
+            }));
+          }
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      appendMyBookingsSeriesCollapsibleBlock(main, {
+        titleText: savedTitleText,
+        rangeText: savedClassSeriesRangeLine(rec),
+        sessionCount: rec.seriesLines.length,
+        rows:
+          stepRows ||
+          rec.seriesLines.map((line) => ({
+            fallbackText: line,
+          })),
+      });
+    } else {
+      const h = document.createElement('strong');
+      h.className = 'booking-item-card__title';
+      h.textContent = savedTitleText;
+      const meta = document.createElement('div');
+      meta.className = 'booking-item-card__meta';
+      meta.textContent = formatClassSessionWhenLine(rec?.startIso || '', rec?.endIso || null);
+      main.append(h, meta);
+    }
+    if (rec?.where) appendLocationPillToCardMain(main, rec.where);
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+    removeBtn.textContent = 'Remove';
+    let confirmTimeoutId = 0;
+    const resetRemoveConfirmState = () => {
+      removeBtn.dataset.confirmArmed = '0';
+      removeBtn.textContent = 'Remove';
+      removeBtn.setAttribute('aria-label', 'Remove saved class');
+      if (confirmTimeoutId) {
+        window.clearTimeout(confirmTimeoutId);
+        confirmTimeoutId = 0;
+      }
+    };
+    removeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (removeBtn.dataset.confirmArmed !== '1') {
+        removeBtn.dataset.confirmArmed = '1';
+        removeBtn.textContent = 'Remove?';
+        removeBtn.setAttribute('aria-label', 'Confirm removal of saved class');
+        confirmTimeoutId = window.setTimeout(() => {
+          resetRemoveConfirmState();
+        }, 3200);
+        return;
+      }
+      resetRemoveConfirmState();
+      if (typeof options.onRemove === 'function') options.onRemove(rec);
+    });
+    removeBtn.addEventListener('blur', () => {
+      if (removeBtn.dataset.confirmArmed === '1') {
+        resetRemoveConfirmState();
+      }
+    });
+    main.appendChild(removeBtn);
+    finalizeMyBookingsListCardMain(main);
+    card.appendChild(main);
+    return card;
   }
 
   function bookingIdValue(b) {
@@ -2775,6 +2817,100 @@ export function initializeLoginPage(DOM) {
       b?.groupActivity?.eventId;
     const n = Number(raw);
     return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function bookingGroupActivityIdValue(b) {
+    const raw =
+      b?.groupActivity?.id ??
+      b?.groupActivityId ??
+      b?.groupActivity?.groupActivityId ??
+      b?.activityId;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  const bookingRequestLocks = new Set();
+  const recentlyBookedAtByKey = new Map();
+  const RECENT_BOOKING_LOCK_MS = 2 * 60 * 1000;
+
+  function bookingLockKey(source) {
+    return classSaveKey(source || {});
+  }
+
+  function pruneRecentBookingLocks(nowMs = Date.now()) {
+    for (const [key, ts] of recentlyBookedAtByKey.entries()) {
+      if (!Number.isFinite(ts) || nowMs - ts > RECENT_BOOKING_LOCK_MS) {
+        recentlyBookedAtByKey.delete(key);
+      }
+    }
+  }
+
+  function hasRecentBookingLock(source) {
+    pruneRecentBookingLocks();
+    return recentlyBookedAtByKey.has(bookingLockKey(source));
+  }
+
+  function markRecentBookingLock(source) {
+    recentlyBookedAtByKey.set(bookingLockKey(source), Date.now());
+  }
+
+  function activeNonCancelledBookings() {
+    const raw = Array.isArray(getBestCustomerData()?.groupActivityBookings)
+      ? getBestCustomerData().groupActivityBookings
+      : [];
+    const now = Date.now();
+    return dedupeCustomerBookings(raw).filter((b) => {
+      if (!b || typeof b !== 'object') return false;
+      if (b.status && String(b.status).toLowerCase() === 'cancelled') return false;
+      const end = brpBookingEndMs(b);
+      const start = brpBookingStartMs(b);
+      if (end) return end >= now;
+      if (start) return start >= now;
+      return true;
+    });
+  }
+
+  function isBrowseSourceAlreadyBooked(source) {
+    if (!source || typeof source !== 'object') return false;
+    if (hasRecentBookingLock(source)) return true;
+    const list = activeNonCancelledBookings();
+    if (!list.length) return false;
+    const kind = source.__kind || (source.occasions ? 'event' : 'groupActivity');
+    const targetEventId =
+      kind === 'event'
+        ? (() => {
+            const n = Number(source?.id ?? source?.event?.id);
+            return Number.isFinite(n) && n > 0 ? n : null;
+          })()
+        : null;
+    if (targetEventId) return list.some((b) => bookingEventIdValue(b) === targetEventId);
+
+    const targetGaId =
+      kind === 'groupActivity'
+        ? (() => {
+            const n = Number(source?.id ?? source?.groupActivity?.id ?? source?.groupActivityId);
+            return Number.isFinite(n) && n > 0 ? n : null;
+          })()
+        : null;
+    if (targetGaId && list.some((b) => bookingGroupActivityIdValue(b) === targetGaId)) return true;
+
+    const targetStart = Date.parse(bookingStartIsoValue(source) || source?.duration?.start || '');
+    const targetName = normalizeSeriesNameForBookings(source?.name || bookingDisplayLine(source).title);
+    const targetBu = classCardBusinessUnitId(source);
+    return list.some((b) => {
+      if (isBrpWaitingListBooking(b)) return false;
+      const bStart = Date.parse(bookingStartIsoValue(b));
+      if (Number.isFinite(targetStart) && Number.isFinite(bStart)) {
+        const sameMinute = Math.floor(targetStart / 60000) === Math.floor(bStart / 60000);
+        if (!sameMinute) return false;
+      }
+      const bName = normalizeSeriesNameForBookings(bookingDisplayLine(b).title);
+      if (!bName || !targetName) return false;
+      const sameName = bName === targetName || bName.includes(targetName) || targetName.includes(bName);
+      if (!sameName) return false;
+      const bBu = classCardBusinessUnitId(b);
+      return !targetBu || !bBu || bBu === targetBu;
+    });
   }
 
   function normalizeSeriesNameForBookings(name) {
@@ -2895,6 +3031,47 @@ export function initializeLoginPage(DOM) {
     pill.className = 'booking-item-card__pill booking-item-card__pill--dropin';
     pill.textContent = Number.isFinite(n) ? `${n} sessions` : 'Series';
     pills.appendChild(pill);
+  }
+
+  function appendUrgencyPillsToCardMain(main, source) {
+    if (!main || !source || typeof source !== 'object') return;
+    let pills = main.querySelector('.booking-item-card__pills');
+    if (!pills) {
+      pills = document.createElement('div');
+      pills.className = 'booking-item-card__pills';
+      main.appendChild(pills);
+    }
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const startMs = Date.parse(source?.duration?.start || '');
+    if (Number.isFinite(startMs)) {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const startDay = new Date(startMs);
+      const startDayStart = new Date(
+        startDay.getFullYear(),
+        startDay.getMonth(),
+        startDay.getDate()
+      ).getTime();
+      const daysUntil = Math.round((startDayStart - todayStart) / DAY_MS);
+      if (daysUntil >= 0 && daysUntil <= 7) {
+        const soonPill = document.createElement('span');
+        soonPill.className = 'booking-item-card__pill booking-item-card__pill--urgency-soon';
+        soonPill.textContent =
+          daysUntil === 0 ? 'Starting today' : `Starting in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`;
+        pills.appendChild(soonPill);
+      }
+    }
+
+    const slots = source?.slots && typeof source.slots === 'object' ? source.slots : null;
+    const leftRaw = slots?.leftToBookIncDropin ?? slots?.leftToBook ?? slots?.available ?? slots?.left;
+    const left = leftRaw != null ? Number(leftRaw) : NaN;
+    if (Number.isFinite(left) && left > 0 && left <= 3) {
+      const spotsPill = document.createElement('span');
+      spotsPill.className = 'booking-item-card__pill booking-item-card__pill--urgency-spots';
+      spotsPill.textContent = `Only ${left} spot${left === 1 ? '' : 's'} left`;
+      pills.appendChild(spotsPill);
+    }
   }
 
   let groupActivityBookingsLoadPromise = null;
@@ -3387,10 +3564,21 @@ export function initializeLoginPage(DOM) {
     if (!container) return;
     container.innerHTML = '';
     if (!items.length) {
+      const emptyWrap = document.createElement('div');
+      emptyWrap.className = 'bookings-empty-state';
       const p = document.createElement('p');
       p.className = 'bookings-empty-msg';
       p.textContent = emptyMessage || 'Nothing here yet.';
-      container.appendChild(p);
+      const cta = document.createElement('button');
+      cta.type = 'button';
+      cta.className = 'profile-action-btn bookings-empty-cta';
+      cta.textContent = 'Browse classes';
+      cta.addEventListener('click', (e) => {
+        e.preventDefault();
+        openClassesBrowseTab();
+      });
+      emptyWrap.append(p, cta);
+      container.appendChild(emptyWrap);
       return;
     }
     const renderUnits = buildGroupedBookingRenderUnits(items);
@@ -3708,7 +3896,6 @@ export function initializeLoginPage(DOM) {
       return new Intl.DateTimeFormat('da-DK', {
         day: 'numeric',
         month: 'short',
-        year: 'numeric',
       }).format(new Date(ms));
     } catch {
       return new Date(ms).toDateString();
@@ -3768,6 +3955,87 @@ export function initializeLoginPage(DOM) {
     return Array.from(new Set(lines));
   }
 
+  async function tryJoinEventWaitlistViaGroupActivity(ev) {
+    if (!ev || !authAPI?.bookCustomerGroupActivity || !authAPI?.listBusinessUnitGroupActivities) return false;
+    const cid = getBrpNumericCustomerId(getBestCustomerData());
+    if (!cid) return false;
+    const buCandidates = [];
+    const pushBu = (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) return;
+      if (!buCandidates.includes(n)) buCandidates.push(n);
+    };
+    pushBu(classCardBusinessUnitId(ev));
+    pushBu(ev?.businessUnit?.id);
+    pushBu(getBestCustomerData()?.businessUnit?.id);
+    if (authAPI?.listVer3BusinessUnits) {
+      try {
+        const units = await authAPI.listVer3BusinessUnits();
+        (Array.isArray(units) ? units : []).forEach((u) => pushBu(u?.id));
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    if (!buCandidates.length) return false;
+    const norm = (s) =>
+      String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const targetName = norm(ev?.name);
+    if (!targetName) return false;
+    const targetProductId = Number(extractGroupActivityProductId(ev));
+    const eventStartMs = Date.parse(bookingStartIsoValue(ev) || '');
+    const aroundStart = Number.isFinite(eventStartMs) ? eventStartMs : Date.now();
+    const periodStart = new Date(aroundStart - 45 * 86400000).toISOString();
+    const periodEnd = new Date(aroundStart + 120 * 86400000).toISOString();
+    for (const buId of buCandidates) {
+      const candidateFetches = [
+        { periodStart, periodEnd, customerId: cid || undefined },
+        { periodStart, periodEnd },
+        {},
+      ];
+      for (const opts of candidateFetches) {
+        const acts = await authAPI.listBusinessUnitGroupActivities(buId, opts);
+        const list = Array.isArray(acts) ? acts : [];
+        const scored = list
+          .map((a) => {
+            const aName = norm(a?.name);
+            const aProductId = Number(extractGroupActivityProductId(a));
+            const productMatch =
+              Number.isFinite(targetProductId) &&
+              targetProductId > 0 &&
+              Number.isFinite(aProductId) &&
+              aProductId === targetProductId;
+            const nameMatch =
+              aName && (aName === targetName || aName.includes(targetName) || targetName.includes(aName));
+            if (!productMatch && !nameMatch) return null;
+            const aStartMs = Date.parse(bookingStartIsoValue(a) || '');
+            const delta =
+              Number.isFinite(eventStartMs) && Number.isFinite(aStartMs) ? Math.abs(aStartMs - eventStartMs) : 0;
+            return { a, delta, score: productMatch ? 0 : 1 };
+          })
+          .filter(Boolean)
+          .sort((x, y) => x.score - y.score || x.delta - y.delta);
+        for (const candidate of scored) {
+          const gid = Number(candidate?.a?.id);
+          if (!Number.isFinite(gid) || gid <= 0) continue;
+          try {
+            await authAPI.bookCustomerGroupActivity(cid, {
+              groupActivityId: gid,
+              allowWaitingList: true,
+            });
+            return true;
+          } catch (_) {
+            // Try next candidate before giving up.
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   function openEventExpand(ev) {
     const root = ensureClassCardExpandRoot();
     clearClassCardExpandLayoutModifiers(root);
@@ -3778,36 +4046,70 @@ export function initializeLoginPage(DOM) {
     const hero = root.querySelector('.class-card-expand__hero');
     const heroImg = root.querySelector('.class-card-expand__hero-img');
 
-    titleEl.textContent = ev?.name || 'Event';
+    const eventTitle = ev?.name || 'Event';
+    const gymSel = document.getElementById('browseGymFilter');
+    const eventLocation = groupActivityBrowseLocationLabel(ev, gymSel);
+    titleEl.textContent = eventTitle;
     const sessions = extractEventSessionLines(ev);
-    linesEl.textContent = sessions.length
-      ? sessions.join('\n')
-      : formatEventSeriesLine(ev);
+    const baseLines = sessions.length ? sessions : [formatEventSeriesLine(ev)];
+    const lines = [...baseLines, ...(eventLocation ? [eventLocation] : [])];
+    linesEl.textContent = lines.filter(Boolean).join('\n');
     resetClassCardExpandDescEl(descEl);
+    const extMsg = ev?.externalMessage && String(ev.externalMessage).trim();
+    const isIntrohold = isIntroholdTitle(eventTitle);
+    const defaultSeriesCopy = isIntrohold
+      ? 'Introhold is a multi-session course. You will attend all sessions in the series.'
+      : 'This is a multi-session course. You’ll attend all sessions in the series.';
     descEl.textContent = isGroupedEventSeries(ev)
-      ? 'This is a multi-session course. You’ll attend all sessions in the series.'
-      : 'This is an event.';
+      ? extMsg || defaultSeriesCopy
+      : extMsg || 'This is an event.';
 
     actionsEl.innerHTML = '';
     if (isUserAuthenticated()) {
+      const alreadyBooked = isBrowseSourceAlreadyBooked({ ...ev, __kind: 'event' });
       const eventIdNum = Number(ev?.id);
-      if (Number.isFinite(eventIdNum) && eventIdNum > 0 && authAPI?.bookCustomerEvent) {
+      if (alreadyBooked) {
+        const p = document.createElement('p');
+        p.className = 'class-card-expand__muted';
+        p.textContent = 'You are already booked for this course.';
+        actionsEl.appendChild(p);
+      } else if (Number.isFinite(eventIdNum) && eventIdNum > 0 && authAPI?.bookCustomerEvent) {
+        const lockKey = bookingLockKey({ ...ev, __kind: 'event' });
+        const slots = ev?.slots && typeof ev.slots === 'object' ? ev.slots : null;
+        const leftRaw = slots?.leftToBookIncDropin ?? slots?.leftToBook ?? slots?.available ?? slots?.left;
+        const left = leftRaw != null ? Number(leftRaw) : NaN;
+        const slotsKnown = Number.isFinite(left);
+        const fullyBooked = slotsKnown ? left <= 0 : isBrowseSlotsFullyBooked(slots);
+        const introholdSeries = isGroupedEventSeries(ev) && isIntroholdTitle(ev?.name);
+        const allowWaitingList =
+          (fullyBooked && slots?.hasWaitingList === true) ||
+          (introholdSeries && (!slotsKnown || fullyBooked));
         const bookBtn = document.createElement('button');
         bookBtn.type = 'button';
         bookBtn.className = 'profile-action-btn class-card-expand__btn-primary';
-        bookBtn.textContent = 'Book now';
+        bookBtn.textContent = allowWaitingList ? 'Join waiting list' : 'Book now';
         bookBtn.addEventListener('click', async () => {
+          if (bookingRequestLocks.has(lockKey)) {
+            showToast('Booking already in progress for this course.', 'error');
+            return;
+          }
+          if (isBrowseSourceAlreadyBooked({ ...ev, __kind: 'event' })) {
+            showToast('You are already booked for this course.', 'error');
+            return;
+          }
           const cid = getBrpNumericCustomerId(getBestCustomerData());
           if (!cid) {
             showToast('Log in to book.', 'error');
             return;
           }
+          bookingRequestLocks.add(lockKey);
           bookBtn.disabled = true;
           try {
             const customer = getBestCustomerData() || {};
             await authAPI.bookCustomerEvent(cid, {
               eventId: eventIdNum,
               businessUnitId: classCardBusinessUnitId(ev),
+              allowWaitingList,
               participant: {
                 firstName: customer.firstName || customer.givenName || '',
                 lastName: customer.lastName || customer.familyName || '',
@@ -3815,7 +4117,11 @@ export function initializeLoginPage(DOM) {
                 ssn: customer.ssn || customer.socialSecurityNumber || '',
               },
             });
-            showToast('Booked! Check My classes.', 'success');
+            markRecentBookingLock({ ...ev, __kind: 'event' });
+            showToast(
+              allowWaitingList ? 'You are on the waiting list.' : 'Booked! Check My classes.',
+              'success'
+            );
             closeClassCardExpand();
             ensureGroupActivityBookingsLoaded().then(() => {
               refreshClassesBookingsLists();
@@ -3824,6 +4130,23 @@ export function initializeLoginPage(DOM) {
             applyBrowseClassFilters();
           } catch (err) {
             if (Number(err?.status) === 403) {
+              if (allowWaitingList || (isGroupedEventSeries(ev) && isIntroholdTitle(ev?.name))) {
+                try {
+                  const joined = await tryJoinEventWaitlistViaGroupActivity(ev);
+                  if (joined) {
+                    showToast('You are on the waiting list.', 'success');
+                    closeClassCardExpand();
+                    ensureGroupActivityBookingsLoaded().then(() => {
+                      refreshClassesBookingsLists();
+                      refreshDashboardPanels();
+                    });
+                    applyBrowseClassFilters();
+                    return;
+                  }
+                } catch (_) {
+                  /* fall back to standard 403 handling */
+                }
+              }
               showToast(
                 'You do not have permission to book this course online. Please contact reception and ask them to add you to the full series.',
                 'error'
@@ -3836,6 +4159,7 @@ export function initializeLoginPage(DOM) {
               showToast(getErrorMessage(err), 'error');
             }
           } finally {
+            bookingRequestLocks.delete(lockKey);
             if (bookBtn.textContent !== 'Contact reception') {
               bookBtn.disabled = false;
             }
@@ -3879,6 +4203,22 @@ export function initializeLoginPage(DOM) {
         if (!u) return;
         hero.classList.remove('class-card-expand__hero--empty');
         applyClassCardImgSrc(heroImg, u);
+      });
+    }
+
+    if (productId && buId) {
+      fetchEventProductDetail(productId, buId).then((detail) => {
+        if (!descEl.isConnected) return;
+        const pd = detail?.description && String(detail.description).trim();
+        const parts = [
+          isGroupedEventSeries(ev) ? extMsg || defaultSeriesCopy : extMsg || '',
+          pd || '',
+        ].filter(Boolean);
+        descEl.textContent = parts.length
+          ? parts.join('\n\n')
+          : isGroupedEventSeries(ev)
+            ? defaultSeriesCopy
+            : 'This is an event.';
       });
     }
 
@@ -4205,6 +4545,7 @@ export function initializeLoginPage(DOM) {
         const card = document.createElement('div');
         card.className = 'booking-item-card booking-item-card--browse';
         const kind = a.__kind || 'groupActivity';
+        const alreadyBooked = isBrowseSourceAlreadyBooked(a);
         const browseTitle = a.name || (kind === 'event' ? 'Event' : 'Class');
         card.appendChild(createClassCardMediaEl(a, browseTitle));
         const main = document.createElement('div');
@@ -4259,7 +4600,16 @@ export function initializeLoginPage(DOM) {
             !isBrowseSlotsFullyBooked(a.slots) &&
             !isDropInOnlyClass(a) &&
             !isLikelySeriesSession(a) &&
-            a.__blockDirectSessionBooking !== true;
+            a.__blockDirectSessionBooking !== true &&
+            !alreadyBooked;
+          const canJoinWaitingList =
+            isIntroholdTitle(a?.name) &&
+            isBrowseSlotsFullyBooked(a.slots) &&
+            a?.slots?.hasWaitingList === true &&
+            !isDropInOnlyClass(a) &&
+            !isLikelySeriesSession(a) &&
+            a.__blockDirectSessionBooking !== true &&
+            !alreadyBooked;
           if (canBookNow) {
             const cardBookBtn = document.createElement('button');
             cardBookBtn.type = 'button';
@@ -4271,6 +4621,17 @@ export function initializeLoginPage(DOM) {
               openClassCardExpandBrowse(a, gymSel);
             });
             main.appendChild(cardBookBtn);
+          } else if (canJoinWaitingList) {
+            const cardWlBtn = document.createElement('button');
+            cardWlBtn.type = 'button';
+            cardWlBtn.className = 'profile-action-btn booking-item-card__book-btn';
+            cardWlBtn.textContent = 'Join waiting list';
+            cardWlBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openClassCardExpandBrowse(a, gymSel);
+            });
+            main.appendChild(cardWlBtn);
           }
         }
         card.appendChild(main);
@@ -4481,42 +4842,81 @@ export function initializeLoginPage(DOM) {
     });
   }
 
-  function customerCityToken(customer) {
+  function customerGeoProfile(customer) {
     const addr = getAddress(customer || {});
-    const rawCity = addr?.city && addr.city !== '-' ? String(addr.city) : String(customer?.city || '');
-    const cleaned = rawCity
+    const rawCity = (addr?.city && addr.city !== '-' ? String(addr.city) : String(customer?.city || '')).trim();
+    const city = rawCity
       .replace(/\b\d{3,5}\b/g, ' ')
       .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    const postalRaw =
+      customer?.postalCode ||
+      customer?.zip ||
+      customer?.address?.postalCode ||
+      '';
+    const postal = String(postalRaw || '')
+      .replace(/[^\d]/g, '')
       .trim();
-    return cleaned.toLowerCase();
+    return { city, postal };
   }
 
-  async function getRecommendedDashboardClass(customer) {
-    if (!authAPI?.listBusinessUnitGroupActivities) return null;
-    const city = customerCityToken(customer);
+  function unitGeoScore(unit, geo, homeBuId) {
+    if (!unit || typeof unit !== 'object') return Number.NEGATIVE_INFINITY;
+    const unitId = Number(unit?.id);
+    const isHome = Number.isFinite(unitId) && Number(unitId) === Number(homeBuId);
+    const cityNeedle = String(geo?.city || '').trim();
+    const postalNeedle = String(geo?.postal || '').trim();
+    const unitName = String(unit?.name || unit?.displayName || '').toLowerCase();
+    const unitAddr = unit?.address && typeof unit.address === 'object' ? unit.address : {};
+    const unitCity = String(unitAddr?.city || '').toLowerCase().trim();
+    const unitPostal = String(unitAddr?.postalCode || unitAddr?.zip || '')
+      .replace(/[^\d]/g, '')
+      .trim();
+
+    let score = 0;
+    if (isHome) score += 1;
+    if (postalNeedle && unitPostal) {
+      if (unitPostal === postalNeedle) score += 4;
+      else if (unitPostal.startsWith(postalNeedle) || postalNeedle.startsWith(unitPostal)) score += 2;
+    }
+    if (cityNeedle) {
+      const cityMatch =
+        (unitCity && (unitCity === cityNeedle || unitCity.includes(cityNeedle) || cityNeedle.includes(unitCity))) ||
+        (unitName && unitName.includes(cityNeedle));
+      if (cityMatch) score += 6;
+    }
+    return score;
+  }
+
+  async function getRecommendedDashboardSeries(customer, options = {}) {
+    if (!authAPI?.listBusinessUnitEvents) return [];
+    const limitRaw = Number(options?.limit);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : 16;
+    const geo = customerGeoProfile(customer);
     const homeBuId = customer?.businessUnit?.id;
-    const cid = getBrpNumericCustomerId(customer);
     const now = Date.now();
     const periodStart = startOfDay(new Date(now)).toISOString();
-    const periodEnd = endOfDay(new Date(now + 14 * 24 * 60 * 60 * 1000)).toISOString();
+    const periodEnd = endOfDay(new Date(now + 60 * 24 * 60 * 60 * 1000)).toISOString();
 
     let candidateUnits = [];
     if (authAPI.listVer3BusinessUnits) {
       try {
         const units = await authAPI.listVer3BusinessUnits();
         if (Array.isArray(units) && units.length) {
-          if (city) {
-            candidateUnits = units.filter((u) =>
-              String(u?.name || u?.displayName || '')
-                .toLowerCase()
-                .includes(city)
-            );
-          }
-          if (!candidateUnits.length && homeBuId != null) {
+          const scored = units
+            .map((u) => ({ unit: u, score: unitGeoScore(u, geo, homeBuId) }))
+            .sort((a, b) => b.score - a.score);
+          const municipalityish = scored.filter((x) => x.score >= 6).map((x) => x.unit);
+          const nearby = scored.filter((x) => x.score >= 2).map((x) => x.unit);
+          if (municipalityish.length) {
+            candidateUnits = municipalityish;
+          } else if (nearby.length) {
+            candidateUnits = nearby;
+          } else if (homeBuId != null) {
             candidateUnits = units.filter((u) => Number(u?.id) === Number(homeBuId));
-          }
-          if (!candidateUnits.length) {
-            candidateUnits = units.slice(0, 4);
+          } else {
+            candidateUnits = units.slice(0, 8);
           }
         }
       } catch (_) {
@@ -4527,25 +4927,25 @@ export function initializeLoginPage(DOM) {
     if (!candidateUnits.length && homeBuId != null) {
       candidateUnits = [{ id: homeBuId, name: customer?.businessUnit?.name || `Gym ${homeBuId}` }];
     }
-    if (!candidateUnits.length) return null;
+    if (!candidateUnits.length) return [];
 
     const unitIds = candidateUnits
       .map((u) => Number(u?.id))
       .filter((id) => Number.isFinite(id) && id > 0)
-      .slice(0, 4);
-    if (!unitIds.length) return null;
+      .slice(0, 8);
+    if (!unitIds.length) return [];
 
     const chunks = await Promise.all(
       unitIds.map((buId) =>
         authAPI
-          .listBusinessUnitGroupActivities(buId, {
+          .listBusinessUnitEvents(buId, {
             periodStart,
             periodEnd,
-            customerId: cid || undefined,
           })
-          .then((acts) =>
-            (Array.isArray(acts) ? acts : []).map((a) => ({
-              ...a,
+          .then((events) =>
+            (Array.isArray(events) ? events : []).map((ev) => ({
+              ...ev,
+              __kind: 'event',
               __buId: buId,
             }))
           )
@@ -4553,134 +4953,160 @@ export function initializeLoginPage(DOM) {
       )
     );
 
-    let all = chunks.flat().filter((a) => {
-      if (!a || a.cancelled === true) return false;
-      const startMs = a.duration?.start ? Date.parse(a.duration.start) : NaN;
-      return Number.isFinite(startMs) && startMs >= now;
-    });
-    if (authAPI?.listBusinessUnitEvents && all.length) {
-      const EVENT_LOOKBACK_DAYS = 42;
-      const eventsChunks = await Promise.all(
-        unitIds.map((buId) =>
-          authAPI
-            .listBusinessUnitEvents(buId, {
-              periodStart: new Date(
-                Date.parse(periodStart) - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
-              ).toISOString(),
-              periodEnd,
-            })
-            .then((evs) =>
-              (Array.isArray(evs) ? evs : [])
-                .filter((ev) => isGroupedEventSeries(ev))
-                .map((ev) => ({ ...ev, __buId: buId }))
-            )
-            .catch(() => [])
-        )
-      );
-      const seriesEvents = eventsChunks.flat();
-      if (seriesEvents.length) {
-        const normalizeSeriesName = (name) =>
-          String(name || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        const dayStartMs = (ms) => {
-          const d = new Date(ms);
-          d.setHours(0, 0, 0, 0);
-          return d.getTime();
-        };
-        const seriesIndex = seriesEvents
-          .map((ev) => {
-            const buId = classCardBusinessUnitId(ev);
-            const name = normalizeSeriesName(ev?.name);
-            const a = Date.parse(ev?.duration?.start || '');
-            const b = Date.parse(ev?.duration?.end || '');
-            if (!buId || !name || !Number.isFinite(a)) return null;
-            const startDay = dayStartMs(a);
-            const endDay = Number.isFinite(b) ? dayStartMs(b) : startDay;
-            return {
-              buId,
-              name,
-              startDayMs: startDay,
-              endDayMs: endDay >= startDay ? endDay : startDay,
-            };
-          })
-          .filter(Boolean);
-        if (seriesIndex.length) {
-          all = all.filter((item) => {
-            const buId = classCardBusinessUnitId(item);
-            const name = normalizeSeriesName(item?.name);
-            const startMs = Date.parse(item?.duration?.start || '');
-            if (!buId || !name || !Number.isFinite(startMs)) return true;
-            const startDayMs = dayStartMs(startMs);
-            return !seriesIndex.some((ev) => {
-              if (ev.buId !== buId) return false;
-              const sameName = ev.name === name || ev.name.includes(name) || name.includes(ev.name);
-              if (!sameName) return false;
-              return startDayMs >= ev.startDayMs && startDayMs <= ev.endDayMs;
-            });
-          });
-        }
-      }
-    }
-    if (!all.length) return null;
-    all.sort((a, b) => Date.parse(a.duration.start) - Date.parse(b.duration.start));
-    return all[0];
+    const dedupe = new Set();
+    const series = chunks
+      .flat()
+      .filter((ev) => {
+        if (!ev || ev.cancelled === true || !isGroupedEventSeries(ev)) return false;
+        const startMs = Date.parse(ev?.duration?.start || '');
+        if (!Number.isFinite(startMs) || startMs < now) return false;
+        if (isBrowseSourceAlreadyBooked({ ...ev, __kind: 'event' })) return false;
+        const key = `${classCardBusinessUnitId(ev) || 'x'}|${String(ev?.name || '').toLowerCase()}|${startMs}`;
+        if (dedupe.has(key)) return false;
+        dedupe.add(key);
+        return true;
+      })
+      .sort((a, b) => Date.parse(a.duration?.start || '') - Date.parse(b.duration?.start || ''));
+
+    return series.slice(0, limit);
   }
 
   function renderDashboardClassesRecommendation(hostEl, customer) {
     if (!hostEl) return;
     const hint = document.createElement('p');
-    hint.className = 'dashboard-classes-empty-summary';
-    hint.textContent = 'Finding a recommended class near you…';
+    hint.className = 'dashboard-classes-empty-summary dashboard-recommendation-status';
+    hint.textContent = 'Finding multi-session series near you…';
     hostEl.appendChild(hint);
 
-    getRecommendedDashboardClass(customer)
-      .then((rec) => {
+    const gymSel = document.getElementById('browseGymFilter');
+    getRecommendedDashboardSeries(customer, { limit: 16 })
+      .then((recs) => {
         if (!hostEl.isConnected || !hint.isConnected) return;
         hint.remove();
-        if (!rec) return;
+        if (!Array.isArray(recs) || !recs.length) {
+          const fallback = document.createElement('p');
+          fallback.className = 'dashboard-classes-empty-summary dashboard-recommendation-status';
+          fallback.textContent = 'No series recommendation right now. Browse classes to discover what is next.';
+          hostEl.appendChild(fallback);
+          return;
+        }
 
+        const header = document.createElement('div');
+        header.className = 'dashboard-recommendation-header';
         const recLabel = document.createElement('p');
-        recLabel.className = 'dashboard-classes-empty-summary';
+        recLabel.className = 'dashboard-classes-empty-summary dashboard-recommendation-kicker';
         recLabel.textContent = 'Recommended for you';
-        hostEl.appendChild(recLabel);
+        const recLead = document.createElement('p');
+        recLead.className = 'dashboard-recommendation-lead';
+        recLead.textContent = 'Multi-session course series picked for your schedule.';
+        header.append(recLabel, recLead);
+        hostEl.appendChild(header);
 
-        const card = document.createElement('div');
-        card.className = 'booking-item-card booking-item-card--browse';
-        const cardTitle = rec.name || 'Class';
-        card.appendChild(createClassCardMediaEl(rec, cardTitle));
-        const main = document.createElement('div');
-        main.className = 'booking-item-card__main';
-
-        const h = document.createElement('strong');
-        h.className = 'booking-item-card__title';
-        h.textContent = cardTitle;
-        const meta = document.createElement('div');
-        meta.className = 'booking-item-card__meta';
-        meta.textContent = formatClassSessionWhenLine(rec.duration?.start || '', rec.duration?.end || null);
-        main.append(h, meta);
-
-        appendClassCardDurationAvailability(
-          main,
-          typeof rec.duration?.start === 'string' ? rec.duration.start : '',
-          typeof rec.duration?.end === 'string' ? rec.duration.end : null,
-          { slots: rec.slots, source: rec }
-        );
-        const gymSel = document.getElementById('browseGymFilter');
-        appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(rec, gymSel));
-
-        card.appendChild(main);
-        attachBrowseClassCardClick(card, rec, gymSel);
+        const cardWrap = document.createElement('div');
+        cardWrap.className = 'dashboard-recommended-carousel';
         const cardGrid = document.createElement('div');
-        cardGrid.className = 'browse-results dashboard-recommended-results';
-        cardGrid.appendChild(card);
-        hostEl.appendChild(cardGrid);
+        cardGrid.className = 'dashboard-recommended-results';
+        cardWrap.appendChild(cardGrid);
+
+        const renderSeriesCard = (series) => {
+          cardGrid.innerHTML = '';
+          const card = document.createElement('div');
+          card.className = 'booking-item-card booking-item-card--browse booking-item-card--clickable';
+          card.setAttribute('role', 'button');
+          card.setAttribute('tabindex', '0');
+          card.setAttribute('aria-haspopup', 'dialog');
+          const cardTitle = series?.name || 'Series';
+          card.appendChild(createClassCardMediaEl(series, cardTitle));
+          const main = document.createElement('div');
+          main.className = 'booking-item-card__main';
+          const h = document.createElement('strong');
+          h.className = 'booking-item-card__title';
+          h.textContent = cardTitle;
+          const meta = document.createElement('div');
+          meta.className = 'booking-item-card__meta';
+          meta.textContent = formatEventDateRangeLine(series);
+          main.append(h, meta);
+          appendClassCardDurationAvailability(
+            main,
+            typeof series?.duration?.start === 'string' ? series.duration.start : '',
+            typeof series?.duration?.end === 'string' ? series.duration.end : null,
+            { slots: series?.slots, source: series, booking: series }
+          );
+          appendSeriesPillToCardMain(main, series);
+          appendUrgencyPillsToCardMain(main, series);
+          appendLocationPillToCardMain(main, groupActivityBrowseLocationLabel(series, gymSel));
+          card.appendChild(main);
+          const open = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openEventExpand(series);
+          };
+          card.addEventListener('click', open);
+          card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              open(e);
+            }
+          });
+          cardGrid.appendChild(card);
+          return card;
+        };
+
+        let activeIdx = 0;
+        let activeCard = renderSeriesCard(recs[activeIdx]);
+        let counterEl = null;
+        const updateCounter = () => {
+          if (counterEl) counterEl.textContent = `${activeIdx + 1} / ${recs.length}`;
+        };
+        const setActive = (idx) => {
+          const safe = ((idx % recs.length) + recs.length) % recs.length;
+          activeIdx = safe;
+          activeCard = renderSeriesCard(recs[activeIdx]);
+          updateCounter();
+        };
+
+        if (recs.length > 1) {
+          const nav = document.createElement('div');
+          nav.className = 'dashboard-recommendation-carousel-nav';
+          const prev = document.createElement('button');
+          prev.type = 'button';
+          prev.className = 'profile-action-btn-secondary dashboard-recommendation-nav-btn';
+          prev.textContent = 'Prev';
+          prev.setAttribute('aria-label', 'Previous recommended series');
+          prev.addEventListener('click', () => setActive(activeIdx - 1));
+          counterEl = document.createElement('span');
+          counterEl.className = 'dashboard-recommendation-carousel-counter';
+          const next = document.createElement('button');
+          next.type = 'button';
+          next.className = 'profile-action-btn-secondary dashboard-recommendation-nav-btn';
+          next.textContent = 'Next';
+          next.setAttribute('aria-label', 'Next recommended series');
+          next.addEventListener('click', () => setActive(activeIdx + 1));
+          nav.append(prev, counterEl, next);
+          updateCounter();
+          cardWrap.appendChild(nav);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'dashboard-recommendation-actions';
+        const viewClassBtn = document.createElement('button');
+        viewClassBtn.type = 'button';
+        viewClassBtn.className = 'profile-action-btn-secondary dashboard-recommendation-cta';
+        viewClassBtn.textContent = 'View series details';
+        viewClassBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          activeCard?.click();
+        });
+        actions.appendChild(viewClassBtn);
+        hostEl.append(cardWrap, actions);
       })
       .catch(() => {
         if (!hostEl.isConnected || !hint.isConnected) return;
         hint.remove();
+        const fallback = document.createElement('p');
+        fallback.className = 'dashboard-classes-empty-summary dashboard-recommendation-status';
+        fallback.textContent = 'Unable to load recommendations right now.';
+        hostEl.appendChild(fallback);
       });
   }
 
@@ -4934,35 +5360,14 @@ export function initializeLoginPage(DOM) {
       const savedList = document.createElement('div');
       savedList.className = 'dashboard-saved-reminder__list';
       saved.forEach((rec) => {
-        const row = document.createElement('div');
-        row.className = 'dashboard-saved-reminder__item';
-        const rowTitle = document.createElement('strong');
-        rowTitle.className = 'dashboard-saved-reminder__item-title';
-        rowTitle.textContent = rec?.title || 'Class';
-        row.appendChild(rowTitle);
-        if (rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length > 1) {
-          const det = document.createElement('details');
-          det.className = 'dashboard-saved-reminder__series-details';
-          const sum = document.createElement('summary');
-          sum.className = 'dashboard-saved-reminder__series-summary';
-          const firstPlain = String(rec.seriesLines[0]).replace(/^\d+\/\d+\s*·\s*/, '');
-          sum.textContent = `${rec.seriesLines.length} sessions — ${firstPlain}`;
-          const body = document.createElement('div');
-          body.className = 'dashboard-saved-reminder__series-body';
-          body.style.whiteSpace = 'pre-line';
-          body.textContent = rec.seriesLines.join('\n');
-          det.append(sum, body);
-          row.appendChild(det);
-        } else {
-          const rowMeta = document.createElement('div');
-          rowMeta.className = 'dashboard-saved-reminder__item-meta';
-          if (rec?.isSeries && Array.isArray(rec?.seriesLines) && rec.seriesLines.length === 1) {
-            rowMeta.textContent = rec.seriesLines[0];
-          } else {
-            rowMeta.textContent = formatClassSessionWhenLine(rec?.startIso || '', rec?.endIso || null);
-          }
-          row.appendChild(rowMeta);
-        }
+        const row = buildSavedClassListCard(rec, {
+          onRemove: () => {
+            persistSavedClasses(loadSavedClasses().filter((x) => x && x.key !== rec.key));
+            refreshDashboardPanels();
+            renderSavedBookingsList();
+          },
+        });
+        row.classList.add('dashboard-saved-reminder__item');
         attachDashboardSavedReminderRow(row, rec);
         savedList.appendChild(row);
       });
@@ -5397,8 +5802,13 @@ export function initializeLoginPage(DOM) {
       activeSection.classList.add('active');
     }
 
-    document.querySelectorAll('.nav-link[data-route]').forEach((link) => {
-      link.classList.toggle('active', link.getAttribute('data-route') === safeRoute);
+    document.querySelectorAll('.nav-link[data-route], .mobile-bottom-nav__btn[data-route]').forEach((el) => {
+      const isActive = el.getAttribute('data-route') === safeRoute;
+      el.classList.toggle('active', isActive);
+      if (el.classList.contains('mobile-bottom-nav__btn')) {
+        if (isActive) el.setAttribute('aria-current', 'page');
+        else el.removeAttribute('aria-current');
+      }
     });
 
     if (window.location.hash !== `#${safeRoute}`) {
@@ -6002,14 +6412,61 @@ export function initializeLoginPage(DOM) {
     setText('settingsEmail', email);
     setText('settingsPhone', phone);
 
+    // Account settings action controls should stay icon-only in compact layouts.
+    const forceIconOnlySettingsAction = (id, ariaLabel) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.setAttribute('aria-label', ariaLabel);
+      Array.from(btn.childNodes).forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (node.textContent && node.textContent.trim()) {
+            node.textContent = '';
+          }
+          return;
+        }
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const el = /** @type {HTMLElement} */ (node);
+          if (el.tagName.toLowerCase() !== 'svg') {
+            el.setAttribute('aria-hidden', 'true');
+            el.style.display = 'none';
+          }
+        }
+      });
+    };
+    forceIconOnlySettingsAction('editEmailBtn', 'Edit email address');
+    forceIconOnlySettingsAction('editPhoneBtn', 'Edit phone number');
+    forceIconOnlySettingsAction('changePasswordBtn', 'Change password');
+
     const headerFirstName = firstName && firstName !== '-'
       ? firstName
       : (metadata?.username ? String(metadata.username).split(/[\s@._-]+/)[0] : 'User');
     const navUserName = document.getElementById('navUserName');
     if (navUserName) navUserName.textContent = headerFirstName || 'User';
-    const navUserAvatar = document.getElementById('navUserAvatar');
+    const navUser = document.getElementById('navUser');
+    if (navUser) {
+      navUser.setAttribute('aria-label', `Account menu for ${headerFirstName || 'user'}`);
+    }
+    let navUserAvatar = document.getElementById('navUserAvatar');
+    if (!navUserAvatar && navUser) {
+      navUserAvatar = document.createElement('div');
+      navUserAvatar.id = 'navUserAvatar';
+      navUserAvatar.className = 'user-avatar';
+      const userDropdown = document.getElementById('userDropdown');
+      if (userDropdown && userDropdown.parentElement === navUser) {
+        navUser.insertBefore(navUserAvatar, userDropdown);
+      } else {
+        navUser.appendChild(navUserAvatar);
+      }
+    }
     if (navUserAvatar) {
-      navUserAvatar.style.display = 'none';
+      const firstInitial = firstName && firstName !== '-' ? String(firstName).trim().charAt(0) : '';
+      const lastInitial = lastName && lastName !== '-' ? String(lastName).trim().charAt(0) : '';
+      const fallbackSeed = headerFirstName && headerFirstName !== '-' ? headerFirstName : 'User';
+      const fallbackInitials = String(fallbackSeed).replace(/[^a-zA-Z0-9]/g, '').slice(0, 2);
+      const initials = `${firstInitial}${lastInitial}`.toUpperCase() || fallbackInitials.toUpperCase() || 'U';
+      navUserAvatar.dataset.initials = initials;
+      navUserAvatar.textContent = initials;
+      navUserAvatar.style.display = 'inline-flex';
     }
 
     updateSubscriptionActionVisibility(customer);
@@ -6110,7 +6567,7 @@ export function initializeLoginPage(DOM) {
 
     // User menu: see profile/nav-user-dropdown.js (duplicate listeners here toggled twice per click).
 
-    document.querySelectorAll('.nav-link[data-route]').forEach((link) => {
+    document.querySelectorAll('.nav-link[data-route], .mobile-bottom-nav__btn[data-route]').forEach((link) => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
         if (!isUserAuthenticated()) return;

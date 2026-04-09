@@ -784,6 +784,17 @@ body.profile-hydrating #pageDashboard .dashboard-info-value::after {
   line-height: 1.45;
 }
 
+.bookings-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.bookings-empty-cta {
+  margin: 0;
+}
+
 /* My Bookings sub-tabs — compact horizontal list cards (thumb + info + location + actions) */
 #myBookingsSection .bookings-list {
   display: flex;
@@ -1280,6 +1291,412 @@ body.profile-hydrating #pageDashboard .dashboard-info-value::after {
   color: #d4a853;
 }
 
+/* Dashboard saved list should use the exact same compact row-card look as My Bookings saved list. */
+.dashboard-saved-reminder__list .booking-item-card.booking-item-card--my-bookings-list {
+  flex-direction: row;
+  align-items: center;
+  height: auto;
+  min-height: 0;
+  padding: 0.85rem 0.9rem;
+  gap: 10px;
+  border-radius: 8px;
+  background: #1a1a1a;
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card.booking-item-card--my-bookings-list:has(.booking-item-card__series-panel) {
+  align-items: flex-start;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__dropin-ribbon {
+  display: none;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__media {
+  width: 40px;
+  height: 40px;
+  aspect-ratio: 1;
+  min-height: 0;
+  border-radius: 8px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list:nth-child(odd)
+  .booking-item-card__media--empty {
+  background: linear-gradient(135deg, #2e2a70, #5ab830);
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list:nth-child(even)
+  .booking-item-card__media--empty {
+  background: linear-gradient(135deg, #1a1760, #e8a800);
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__media--empty {
+  aspect-ratio: 1;
+  min-height: 0;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 10px;
+  padding: 0;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__list-info {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__list-trail {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f0f0;
+  margin: 0 0 2px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__meta {
+  font-size: 10px;
+  color: #a0a0a0;
+  font-family: 'DM Mono', ui-monospace, monospace;
+  line-height: 1.35;
+  margin: 0 !important;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__submeta,
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__availability-label {
+  font-size: 10px;
+  color: #a0a0a0;
+  font-family: 'DM Mono', ui-monospace, monospace;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__availability {
+  margin-top: 4px;
+  margin-bottom: 0 !important;
+}
+
+/* Multi-session compact behavior (same as Saved Classes list). */
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-title-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-title-row
+  .booking-item-card__title {
+  margin: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-date-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin-left: -4px;
+  margin-right: -4px;
+  padding: 2px 4px;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-date-row:focus {
+  outline: none;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-date-row:focus-visible {
+  outline: 2px solid var(--profile-accent, #f401f5);
+  outline-offset: 2px;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-calendar-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-calendar-icon
+  svg {
+  display: block;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__meta--series-range {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.88);
+  border-radius: 100px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-expand:focus-visible {
+  outline: 2px solid var(--profile-accent, #f401f5);
+  outline-offset: 2px;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__pill--series-inline {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 100px;
+  border: 0.5px solid rgba(244, 1, 245, 0.55);
+  background: rgba(244, 1, 245, 0.2);
+  color: #ffc6ff;
+  pointer-events: none;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-chevron {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-chevron svg {
+  display: block;
+  transition: transform 0.26s ease;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-date-row[aria-expanded='true']
+  .booking-item-card__series-chevron
+  svg {
+  transform: rotate(180deg);
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-panel {
+  width: 100%;
+  flex-basis: 100%;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s ease-out;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-panel.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-panel-sleeve {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-list--my-bookings {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 0;
+  padding-top: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-list--my-bookings
+  .booking-item-card__series-row--step {
+  display: grid;
+  grid-template-columns: 1.15em minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: baseline;
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-step-dot {
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+  user-select: none;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-step-dot.is-complete {
+  color: #ff3df0;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-step-dot.is-upcoming {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-step-body {
+  display: grid;
+  grid-template-columns: 5.85rem minmax(0, 1fr);
+  gap: 10px 12px;
+  min-width: 0;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-step-date {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-step-time {
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__series-list--my-bookings
+  .booking-item-card__series-row--fallback {
+  font-size: 10px;
+  line-height: 1.35;
+  font-family: 'DM Mono', ui-monospace, monospace;
+  color: rgba(255, 255, 255, 0.72);
+  padding-left: 0.25em;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__pills {
+  margin: 0;
+  padding: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  .booking-item-card__main
+  .booking-item-card__pills {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.dashboard-saved-reminder__list
+  .booking-item-card--my-bookings-list
+  button.profile-action-btn-secondary.class-card-expand__btn-secondary {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 100px;
+  border: 0.5px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #a0a0a0;
+  margin: 0;
+  min-height: 0;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__pill {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 100px;
+  background: #1f1f1f;
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  color: #a0a0a0;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__pill--location {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #1f1f1f;
+  color: #a0a0a0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-panel {
+    transition: none;
+  }
+
+  .dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__series-chevron svg {
+    transition: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-saved-reminder__list .booking-item-card--my-bookings-list .booking-item-card__list-trail {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 420px) {
   #myBookingsSection .booking-item-card--my-bookings-list .booking-item-card__list-trail {
     flex: 1 1 100%;
@@ -1538,6 +1955,19 @@ body.profile-hydrating #pageDashboard .dashboard-info-value::after {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   font-size: var(--type-label);
+}
+
+.booking-item-card__pill--urgency-soon {
+  border-color: rgba(245, 158, 11, 0.48);
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+}
+
+.booking-item-card__pill--urgency-spots {
+  border-color: rgba(251, 113, 133, 0.52);
+  background: rgba(244, 63, 94, 0.22);
+  color: #fecdd3;
+  font-weight: 700;
 }
 
 .booking-item-card__book-btn {
@@ -1939,8 +2369,30 @@ body.class-card-expand-open {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--profile-text);
+}
+
+.nav-user .user-name {
+  display: none;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--profile-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .user-dropdown {
@@ -2199,12 +2651,174 @@ body.authenticated {
   }
 }
 
-/* Hamburger + backdrop only ≤767px; never show overlay on tablet/desktop */
+/* --- Fixed bottom nav: max-width 767px; replaces header links (see profile.html #mobileBottomNav) --- */
+.mobile-bottom-nav {
+  display: none;
+  box-sizing: border-box;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 0;
+  margin: 0;
+  padding: 10px 4px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--profile-border);
+  background: linear-gradient(0deg, rgba(10, 12, 18, 0.98), rgba(13, 14, 18, 0.96));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.mobile-bottom-nav__btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 4px 2px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 180ms ease;
+}
+
+.mobile-bottom-nav__btn.active {
+  color: var(--profile-accent);
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.mobile-bottom-nav__btn:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.mobile-bottom-nav__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.mobile-bottom-nav__icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.mobile-bottom-nav__label {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 767px) {
+  .nav-menu-toggle {
+    display: none !important;
+  }
+
+  .nav-mobile-backdrop {
+    display: none !important;
+    pointer-events: none !important;
+  }
+
+  .nav-links {
+    display: none !important;
+  }
+
+  .nav-container {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  .nav-end {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .nav-user .user-name {
+    display: none;
+  }
+
+  body.authenticated .mobile-bottom-nav {
+    display: flex;
+  }
+
+  body.authenticated .page-content-wrapper {
+    padding-bottom: calc(40px + 56px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.authenticated .global-footer {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 @media (min-width: 768px) {
   .nav-mobile-backdrop {
     display: none !important;
     pointer-events: none !important;
   }
+
+  .mobile-bottom-nav {
+    display: none !important;
+  }
+}
+
+/* Deterministic compact-nav mode, driven by JS (body.nav-compact) */
+body.nav-compact #mainNavigation .nav-menu-toggle {
+  display: none !important;
+}
+
+body.nav-compact #mainNavigation .nav-mobile-backdrop {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+body.nav-compact #mainNavigation .nav-links {
+  display: none !important;
+}
+
+body.nav-compact #mainNavigation .nav-container {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+
+body.nav-compact #mainNavigation .nav-end {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+body.nav-compact #mainNavigation .nav-user .user-name {
+  display: none;
+}
+
+body.authenticated.nav-compact .mobile-bottom-nav {
+  display: flex !important;
+}
+
+body.authenticated.nav-compact .page-content-wrapper {
+  padding-bottom: calc(40px + 56px + env(safe-area-inset-bottom, 0px));
+}
+
+body.authenticated.nav-compact .global-footer {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+}
+
+body:not(.nav-compact) .mobile-bottom-nav {
+  display: none !important;
 }
 
 .page-content-wrapper {
@@ -2934,7 +3548,7 @@ body.authenticated #passwordModal .settings-save-btn {
   padding: 7px 12px;
 }
 
-/* Force icon-only rendering for edit pens */
+/* Account settings trailing controls: icon-only, no fill/border */
 body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn {
   font-size: 0;
   line-height: 0;
@@ -2975,6 +3589,7 @@ body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0;
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
@@ -3009,15 +3624,8 @@ body.authenticated #pageSettings #accountSettingsSection .settings-edit-icon-btn
   box-shadow: none !important;
 }
 
-body.authenticated #pageSettings #accountSettingsSection .visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  border: 0;
+body.authenticated #pageSettings #accountSettingsSection .settings-edit-label {
+  display: none;
 }
 
 body.authenticated #pageSettings .settings-edit-btn:hover,
@@ -3155,6 +3763,7 @@ body.authenticated #pageSettings .settings-toggle-slider {
     min-width: 32px;
     width: 32px;
     height: 32px;
+    padding: 0;
   }
 
   body.authenticated #pageSettings #accountSettingsSection #editEmailBtn svg,
@@ -3190,7 +3799,7 @@ body.authenticated #pageSettings .settings-toggle-slider {
   }
 
   body.authenticated #pageSettings #accountSettingsSection .settings-item-trailing {
-    max-width: 62%;
+    max-width: none;
   }
 
   body.authenticated #pageSettings #accountSettingsSection .settings-item-inline .settings-item-value {
@@ -3447,8 +4056,16 @@ body.authenticated #pageSettings .settings-toggle-slider {
 }
 
 .dashboard-access-value--positive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 0.5px solid rgba(126, 226, 168, 0.35);
+  background: rgba(126, 226, 168, 0.15);
   color: #7ee2a8;
   font-weight: 700;
+  line-height: 1.2;
 }
 
 /* Readable rail inside full-width dashboard card (avoids ultra-wide class tiles) */
@@ -3564,6 +4181,13 @@ body.authenticated #pageSettings .settings-toggle-slider {
 
 .dashboard-classes-section__body--empty-booked .dashboard-classes-empty {
   grid-column: 1 / -1;
+}
+
+/* Empty-booked state should render as one full-width block, not as a card tile in the auto-fill grid. */
+.dashboard-classes-section__body--empty-booked {
+  display: block;
+  width: 100%;
+  min-width: 0;
 }
 
 /* Direct empty state (no saved): full-width block inside narrow rail */
@@ -3707,22 +4331,28 @@ body.authenticated #pageSettings .settings-toggle-slider {
 .dashboard-classes-recommendation-slot {
   min-width: 0;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  align-items: stretch;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(93, 104, 141, 0.38);
+  background:
+    linear-gradient(180deg, rgba(31, 41, 73, 0.38), rgba(20, 26, 47, 0.24)),
+    rgba(8, 10, 18, 0.56);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 @media (min-width: 768px) {
   .dashboard-classes-empty {
     display: grid;
-    grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 16px;
     align-items: start;
+    min-width: 0;
   }
 
   .dashboard-classes-empty-main {
@@ -3735,61 +4365,47 @@ body.authenticated #pageSettings .settings-toggle-slider {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    align-items: flex-start;
+    align-items: stretch;
   }
 }
 
 .dashboard-saved-reminder {
-  border: 1px solid rgba(147, 197, 253, 0.28);
-  background: linear-gradient(145deg, rgba(28, 35, 62, 0.9), rgba(20, 24, 44, 0.92));
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
 }
 
 .dashboard-saved-reminder__title {
   margin: 0;
-  color: #dbeafe;
-  font-weight: 700;
-  font-size: var(--type-h3);
+  color: #f0f0f0;
+  font-weight: 600;
+  font-size: 13px;
   line-height: 1.3;
 }
 
 .dashboard-saved-reminder__meta {
-  margin: 6px 0 0;
-  color: rgba(226, 232, 240, 0.9);
-  font-size: var(--type-meta);
-  line-height: 1.45;
+  display: none;
 }
 
 .dashboard-saved-reminder__hint {
-  margin: 8px 0 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: var(--type-meta);
-  line-height: 1.45;
-  color: rgba(187, 247, 208, 0.92);
-  background: rgba(22, 101, 52, 0.22);
-  border: 1px solid rgba(74, 222, 128, 0.22);
+  display: none;
 }
 
 .dashboard-saved-reminder__actions {
-  margin-top: 10px;
-  display: flex;
-  justify-content: flex-start;
+  display: none;
 }
 
 .dashboard-saved-reminder__list {
-  margin-top: 8px;
-  display: grid;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
 .dashboard-saved-reminder__item {
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 10px;
-  padding: 6px 10px;
-  background: rgba(15, 23, 42, 0.35);
+  margin: 0;
 }
 
 .dashboard-saved-reminder__item--clickable {
@@ -3800,8 +4416,8 @@ body.authenticated #pageSettings .settings-toggle-slider {
 }
 
 .dashboard-saved-reminder__item--clickable:hover {
-  border-color: rgba(186, 198, 220, 0.45);
-  background: rgba(30, 41, 59, 0.55);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .dashboard-saved-reminder__item--clickable:focus-visible {
@@ -3817,17 +4433,17 @@ body.authenticated #pageSettings .settings-toggle-slider {
 
 .dashboard-saved-reminder__item-title {
   display: block;
-  color: #f1f5f9;
+  color: #f0f0f0;
   line-height: 1.25;
-  font-size: var(--type-body);
+  font-size: 13px;
   font-weight: 600;
 }
 
 .dashboard-saved-reminder__item-meta {
   margin-top: 2px;
-  color: rgba(203, 213, 225, 0.9);
+  color: rgba(255, 255, 255, 0.68);
   font-size: var(--type-meta);
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .dashboard-saved-reminder__item-meta--multiline {
@@ -3879,13 +4495,52 @@ body.authenticated #pageSettings .settings-toggle-slider {
 .dashboard-recommended-results {
   width: 100%;
   min-width: 0;
-  display: block;
   max-width: 100%;
+  display: block;
+  box-sizing: border-box;
+}
+
+.dashboard-recommended-carousel {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-recommendation-carousel-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dashboard-recommendation-nav-btn {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: var(--type-label);
+}
+
+.dashboard-recommendation-carousel-counter {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: var(--type-label);
+  color: rgba(218, 226, 255, 0.75);
+  font-weight: 600;
 }
 
 .dashboard-recommended-results .booking-item-card {
   width: 100%;
   max-width: none;
+  border-radius: 14px;
+  border-color: rgba(132, 144, 184, 0.28);
+  background: linear-gradient(180deg, rgba(18, 24, 41, 0.9), rgba(14, 19, 33, 0.86));
+}
+
+.dashboard-classes-recommendation-slot > * {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .dashboard-classes-empty .dashboard-recommended-results .booking-item-card {
@@ -3918,12 +4573,50 @@ body.authenticated #pageSettings .settings-toggle-slider {
 }
 
 .dashboard-classes-recommendation-slot .dashboard-classes-empty-summary {
-  margin: 0 0 2px;
+  margin: 0;
   color: rgba(255, 255, 255, 0.72);
   font-size: var(--type-label);
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.dashboard-recommendation-header {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-recommendation-kicker {
+  color: rgba(182, 198, 255, 0.9);
+}
+
+.dashboard-recommendation-lead {
+  margin: 0;
+  color: rgba(229, 236, 255, 0.84);
+  font-size: var(--type-body);
+  line-height: 1.45;
+  max-width: 35ch;
+}
+
+.dashboard-recommendation-status {
+  color: rgba(215, 224, 255, 0.72);
+}
+
+.dashboard-recommendation-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-recommendation-cta {
+  min-height: 40px;
+  padding-inline: 14px;
+  border-radius: 11px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-book-class-cta {
@@ -4518,6 +5211,18 @@ body.authenticated .login-page-wrapper {
 body.authenticated .page-content-wrapper {
     display: block;
     flex: 1;
+    width: 100%;
+    max-width: 1280px !important;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+body.authenticated #pageSettings .settings-page-container {
+  width: 100%;
+  max-width: 100% !important;
+  margin: 0;
 }
 
 
@@ -5267,5 +5972,16 @@ body.authenticated .page-content-wrapper {
   outline: 2px solid rgba(255, 255, 255, 0.45) !important;
   outline-offset: -2px !important;
   border-radius: 4px !important;
+}
+
+/* Final content container guard: keep authenticated pages readable, not full-bleed */
+body.authenticated #pageContentWrapper,
+body.authenticated .page-content-wrapper {
+  width: 100% !important;
+  max-width: 1200px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
 }
 

@@ -1543,7 +1543,10 @@ class AuthAPI {
   }
 
   /** BRP booking flow for events (multi-session / course series) via order items. */
-  async bookCustomerEvent(customerId, { eventId, businessUnitId = null, participant = null } = {}) {
+  async bookCustomerEvent(
+    customerId,
+    { eventId, businessUnitId = null, allowWaitingList = false, participant = null } = {}
+  ) {
     const accessToken =
       typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
     if (!accessToken) {
@@ -1586,7 +1589,7 @@ class AuthAPI {
           url,
           method: 'POST',
           headers,
-          body: { event: eid },
+          body: { event: eid, allowWaitingList: !!allowWaitingList },
         });
       } catch (e) {
         lastErr = e;
@@ -1633,6 +1636,7 @@ class AuthAPI {
           headers,
           body: {
             event: eid,
+            allowWaitingList: !!allowWaitingList,
             participants: [
               {
                 customer: idNum,
