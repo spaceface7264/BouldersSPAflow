@@ -3094,6 +3094,14 @@ async function loadProductsFromAPI() {
     dayPassSubscriptions.sort(byPriceHighToLow);
     regularValueCards.sort(byPriceHighToLow);
 
+    // Enrich value card products with GET /api/products/valuecards/{id} when the list payload
+    // omits unit/clip fields (authoritative counts for cart totals).
+    try {
+      await mergeValueCardProductDetails([campaignValueCards, regularValueCards]);
+    } catch (mergeErr) {
+      console.warn('[Products] Value card detail merge failed:', mergeErr);
+    }
+
     // Store in state
     state.campaignSubscriptions = campaignSubscriptions;
     state.campaignValueCards = campaignValueCards; // Value cards for Campaign category
@@ -3104,6 +3112,7 @@ async function loadProductsFromAPI() {
 
     // Re-render the membership plans with API data
     renderProductsFromAPI();
+    updateCartSummary();
 
     // Prewarm boost modal resources in the background so first open feels instant.
     prewarmBoostModalResources();
@@ -13247,7 +13256,10 @@ function updateCartSummary() {
         // Extract price from API structure (cents to DKK)
         const priceInCents = valueCard.price?.amount || valueCard.amount || 0;
         const price = priceInCents / 100;
-        const punchesPerCard = getPunchesPerCard(valueCard);
+        const punchesPerCard = resolveClipsPerCardForValueCardProduct(
+          valueCard,
+          state.fullOrder?.valueCardItems
+        );
         const totalPunches = punchesPerCard != null ? quantity * punchesPerCard : null;
         const productName = valueCard.name || 'Punch Card';
         // Name only on left; ×N and total punches shown on the right
@@ -21210,10 +21222,130 @@ function findValueCard(id) {
   return allValueCards.find((plan) => String(plan.id) === normalizedId) ?? null;
 }
 
+/** @returns {number|null} */
+function parsePositiveInt(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.round(value);
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+    const n = parseInt(value.trim(), 10);
+    return n > 0 ? n : null;
+  }
+  return null;
+}
+
 /**
- * Get number of punches per card for a value card product.
- * API ValueCardProductOut does not expose this; we parse from name/description.
- * Supports e.g. "10 Klip", "Klippekort: 10 Klip + 2 Extra", "10 clips".
+ * Clip/punch count from value card product JSON (list or detail GET).
+ * Tries common BRP / extension field names; ignores non-numeric text fields.
+ * @param {Object} product
+ * @returns {number|null}
+ */
+function getClipsPerCardFromApiProduct(product) {
+  if (!product || typeof product !== 'object') return null;
+
+  const pick = (...vals) => {
+    for (const v of vals) {
+      const n = parsePositiveInt(v);
+      if (n != null) return n;
+    }
+    return null;
+  };
+
+  const fromFlat = pick(
+    product.units,
+    product.numberOfUnits,
+    product.initialUnits,
+    product.totalUnits,
+    product.totalunits,
+    product.clipCount,
+    product.clips,
+    product.numberOfClips,
+    product.entryCount,
+    product.number_of_units,
+    product.total_units,
+    product.initial_units
+  );
+  if (fromFlat != null) return fromFlat;
+
+  const nested = product.valueCard;
+  if (nested && typeof nested === 'object') {
+    const type = String(nested.type || '').toUpperCase();
+    if (type === 'UNIT') {
+      const u = parsePositiveInt(nested.unitsLeft);
+      if (u != null) return u;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Clips per card from order line items (backend-issued value card snapshot).
+ * @param {number|string} productId
+ * @param {Array} valueCardItems
+ * @returns {number|null}
+ */
+function getClipsPerCardFromOrderValueCardItems(productId, valueCardItems) {
+  if (productId == null || !Array.isArray(valueCardItems) || valueCardItems.length === 0) {
+    return null;
+  }
+  const pid = String(productId);
+  for (const item of valueCardItems) {
+    if (item?.product?.id == null || String(item.product.id) !== pid) continue;
+
+    for (const key of ['units', 'numberOfUnits', 'totalUnits', 'initialUnits']) {
+      const n = parsePositiveInt(item[key]);
+      if (n != null) return n;
+    }
+
+    const vc = item.valueCard;
+    if (vc && typeof vc === 'object' && String(vc.type || '').toUpperCase() === 'UNIT') {
+      const u = parsePositiveInt(vc.unitsLeft);
+      if (u != null) return u;
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve clips per card: order lines (if present), then product API fields, then name/description parse.
+ * @param {Object} product
+ * @param {Array|undefined} orderValueCardItems
+ * @returns {number|null}
+ */
+function resolveClipsPerCardForValueCardProduct(product, orderValueCardItems) {
+  if (!product) return null;
+  const fromOrder = getClipsPerCardFromOrderValueCardItems(product.id, orderValueCardItems);
+  if (fromOrder != null) return fromOrder;
+  const fromApi = getClipsPerCardFromApiProduct(product);
+  if (fromApi != null) return fromApi;
+  return getPunchesPerCard(product);
+}
+
+/**
+ * Merge GET /products/valuecards/{id} into list entries when list payload lacks unit counts.
+ * @param {Array<Array<Object>>} cardArrays
+ */
+async function mergeValueCardProductDetails(cardArrays) {
+  const flat = cardArrays.flat().filter(Boolean);
+  const seen = new Set();
+  await Promise.all(
+    flat.map(async (vc) => {
+      if (!vc?.id || seen.has(vc.id)) return;
+      seen.add(vc.id);
+      if (getClipsPerCardFromApiProduct(vc) != null) return;
+      try {
+        const detail = await businessUnitsAPI.getValueCardById(vc.id, state.selectedBusinessUnit);
+        if (detail && typeof detail === 'object') Object.assign(vc, detail);
+      } catch (e) {
+        console.warn('[Products] Value card detail fetch failed:', vc.id, e);
+      }
+    })
+  );
+}
+
+/**
+ * Fallback: parse clip count from product name/description when API does not send numeric fields.
+ * Supports e.g. "10 Klip", "Klippekort: 10 Klip + 2 Extra", "10 clips", "10 Entries (+2 Free)".
  * @param {Object} product - Value card product (name, description, etc.)
  * @returns {number|null} Punches per card, or null if unknown
  */
@@ -21223,11 +21355,11 @@ function getPunchesPerCard(product) {
   const desc = (product.description || product.externalDescription || '').trim();
   const text = `${name} ${desc}`;
   if (!text) return null;
-  // Main count: "10 Klip", "10 klip", "10 clips", "10 Clips"
-  const mainMatch = text.match(/(\d+)\s*(?:klip|clips?)\b/i);
+  // Main count: "10 Klip", "10 clips", "10 Entries", "10 punches" (English product names)
+  const mainMatch = text.match(/(\d+)\s*(?:klip|clips?|entr(?:y|ies)|punches?)\b/i);
   const main = mainMatch ? parseInt(mainMatch[1], 10) : null;
-  // Optional extra: "+ 2 Extra", "+ 2 ekstra"
-  const extraMatch = text.match(/\+\s*(\d+)\s*(?:extra|ekstra)?/i);
+  // Optional extra: "+ 2 Extra", "+ 2 ekstra", "(+2 Free)"
+  const extraMatch = text.match(/\+\s*(\d+)\s*(?:extra|ekstra|free)?/i);
   const extra = extraMatch ? parseInt(extraMatch[1], 10) : 0;
   if (main != null && !Number.isNaN(main)) {
     return main + (Number.isNaN(extra) ? 0 : extra);
