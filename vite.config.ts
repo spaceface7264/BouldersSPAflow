@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import { sentryVitePlugin } from '@sentry/vite-plugin'
 import fs from 'fs'
 import path from 'path'
@@ -90,7 +89,7 @@ const resolveBasePath = () => {
 
 export default defineConfig(({ command }) => {
   // Conditionally include Sentry plugin only in production builds with auth token
-  const plugins = [react(), copyFunctionsPlugin()];
+  const plugins = [copyFunctionsPlugin()];
 
   // Only upload source maps to Sentry if auth token is provided
   // Set SENTRY_AUTH_TOKEN in your CI/CD environment

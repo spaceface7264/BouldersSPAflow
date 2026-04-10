@@ -45,7 +45,15 @@ import {
   hasSeriesCopyHint,
 } from './lib/class-activity-pure.js';
 import L from 'leaflet';
+import DOMPurify from 'dompurify';
 import { enrichGymsWithCoordinates } from '../utils/geolocation.js';
+
+/** Assign HTML from static templates or server-derived strings after sanitization (profile bundle). */
+function setProfileHtml(el, html) {
+  if (!el) return;
+  el.innerHTML = DOMPurify.sanitize(String(html ?? ''));
+}
+
 export function initializeLoginPage(DOM) {
   const ctx = buildProfileContext(DOM);
   const {
@@ -433,12 +441,14 @@ export function initializeLoginPage(DOM) {
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-modal', 'true');
     root.setAttribute('aria-label', 'Product');
-    root.innerHTML =
+    setProfileHtml(
+      root,
       '<div class="profile-vc-lightbox__inner">' +
-      '<button type="button" class="profile-vc-lightbox__close" aria-label="Close">×</button>' +
-      '<img class="profile-vc-lightbox__img" alt="" />' +
-      '<p class="profile-vc-lightbox__desc"></p>' +
-      '</div>';
+        '<button type="button" class="profile-vc-lightbox__close" aria-label="Close">×</button>' +
+        '<img class="profile-vc-lightbox__img" alt="" />' +
+        '<p class="profile-vc-lightbox__desc"></p>' +
+        '</div>'
+    );
     const close = () => {
       root.classList.remove('profile-vc-lightbox--open');
       const ret = root._returnFocus;
@@ -1098,18 +1108,20 @@ export function initializeLoginPage(DOM) {
     const root = document.createElement('div');
     root.className = 'class-card-expand';
     root.setAttribute('aria-hidden', 'true');
-    root.innerHTML =
+    setProfileHtml(
+      root,
       '<div class="class-card-expand__backdrop" data-class-card-expand-dismiss tabindex="-1"></div>' +
-      '<div class="class-card-expand__sheet" role="dialog" aria-modal="true" aria-labelledby="classCardExpandTitle">' +
-      '<button type="button" class="class-card-expand__close" data-class-card-expand-dismiss aria-label="Close">×</button>' +
-      '<div class="class-card-expand__hero">' +
-      '<img class="class-card-expand__hero-img" alt="" /></div>' +
-      '<div class="class-card-expand__body">' +
-      '<h2 id="classCardExpandTitle" class="class-card-expand__title"></h2>' +
-      '<div class="class-card-expand__lines"></div>' +
-      '<div class="class-card-expand__desc"></div>' +
-      '<div class="class-card-expand__actions"></div>' +
-      '</div></div>';
+        '<div class="class-card-expand__sheet" role="dialog" aria-modal="true" aria-labelledby="classCardExpandTitle">' +
+        '<button type="button" class="class-card-expand__close" data-class-card-expand-dismiss aria-label="Close">×</button>' +
+        '<div class="class-card-expand__hero">' +
+        '<img class="class-card-expand__hero-img" alt="" /></div>' +
+        '<div class="class-card-expand__body">' +
+        '<h2 id="classCardExpandTitle" class="class-card-expand__title"></h2>' +
+        '<div class="class-card-expand__lines"></div>' +
+        '<div class="class-card-expand__desc"></div>' +
+        '<div class="class-card-expand__actions"></div>' +
+        '</div></div>'
+    );
     document.body.appendChild(root);
 
     const hero = root.querySelector('.class-card-expand__hero');
@@ -1428,11 +1440,13 @@ export function initializeLoginPage(DOM) {
     if (!descEl) return;
     resetClassCardExpandDescEl(descEl);
     descEl.classList.add('class-card-expand__desc--loading');
-    descEl.innerHTML =
+    setProfileHtml(
+      descEl,
       '<span class="class-card-expand__skeleton-line"></span>' +
-      '<span class="class-card-expand__skeleton-line class-card-expand__skeleton-line--short"></span>' +
-      '<span class="class-card-expand__skeleton-line"></span>' +
-      '<span class="class-card-expand__skeleton-line class-card-expand__skeleton-line--mid"></span>';
+        '<span class="class-card-expand__skeleton-line class-card-expand__skeleton-line--short"></span>' +
+        '<span class="class-card-expand__skeleton-line"></span>' +
+        '<span class="class-card-expand__skeleton-line class-card-expand__skeleton-line--mid"></span>'
+    );
   }
 
   function clearClassExpandDescSkeleton(descEl) {
@@ -3567,8 +3581,10 @@ export function initializeLoginPage(DOM) {
     const chev = document.createElement('span');
     chev.className = 'booking-item-card__series-chevron';
     chev.setAttribute('aria-hidden', 'true');
-    chev.innerHTML =
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    setProfileHtml(
+      chev,
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>'
+    );
     expandBtn.appendChild(sessionsPill);
     titleRow.append(h, expandBtn);
     main.appendChild(titleRow);
@@ -3583,7 +3599,7 @@ export function initializeLoginPage(DOM) {
     const calWrap = document.createElement('span');
     calWrap.className = 'booking-item-card__series-calendar-icon';
     calWrap.setAttribute('aria-hidden', 'true');
-    calWrap.innerHTML = MY_BOOKINGS_SERIES_CALENDAR_SVG;
+    setProfileHtml(calWrap, MY_BOOKINGS_SERIES_CALENDAR_SVG);
     const rangeEl = document.createElement('span');
     rangeEl.className = 'booking-item-card__meta booking-item-card__meta--series-range';
     rangeEl.textContent = rangeText;
@@ -3956,7 +3972,7 @@ export function initializeLoginPage(DOM) {
       .then((units) => {
         if (!Array.isArray(units) || !units.length) return;
         const homeId = getBestCustomerData()?.businessUnit?.id;
-        sel.innerHTML = '<option value="">All gyms (search each)</option>';
+        setProfileHtml(sel, '<option value="">All gyms (search each)</option>');
         units.forEach((u) => {
           const id = u.id;
           if (id == null) return;
@@ -4390,8 +4406,10 @@ export function initializeLoginPage(DOM) {
     const typeVal = typeSel?.value || '';
     const browseMode = typeVal === 'event' ? 'event' : typeVal === 'groupActivity' ? 'groupActivity' : 'all';
     if ((browseMode === 'event' || browseMode === 'all') && !authAPI?.listBusinessUnitEvents) {
-      results.innerHTML =
-        '<p class="bookings-empty-msg">Events are not available on this connection.</p>';
+      setProfileHtml(
+        results,
+        '<p class="bookings-empty-msg">Events are not available on this connection.</p>'
+      );
       return;
     }
 
@@ -4419,8 +4437,10 @@ export function initializeLoginPage(DOM) {
     }
 
     if (!buIds.length) {
-      results.innerHTML =
-        '<p class="bookings-empty-msg">No gym selected. Choose a gym or log in with a profile that has a home gym.</p>';
+      setProfileHtml(
+        results,
+        '<p class="bookings-empty-msg">No gym selected. Choose a gym or log in with a profile that has a home gym.</p>'
+      );
       return;
     }
 
@@ -4670,8 +4690,10 @@ export function initializeLoginPage(DOM) {
         resultsCountEl.textContent = `${flat.length} class${flat.length === 1 ? '' : 'es'}`;
       }
       if (!flat.length) {
-        results.innerHTML =
-          '<p class="bookings-empty-msg">No classes match these filters.</p>';
+        setProfileHtml(
+          results,
+          '<p class="bookings-empty-msg">No classes match these filters.</p>'
+        );
         return;
       }
       flat.forEach((a) => {
@@ -4792,8 +4814,10 @@ export function initializeLoginPage(DOM) {
       });
     } catch (err) {
       console.warn('[Browse] Classes:', err);
-      results.innerHTML =
-        '<p class="bookings-empty-msg">Could not load classes. Try again or pick another gym.</p>';
+      setProfileHtml(
+        results,
+        '<p class="bookings-empty-msg">Could not load classes. Try again or pick another gym.</p>'
+      );
     }
   }
 
@@ -6711,22 +6735,37 @@ export function initializeLoginPage(DOM) {
     const maxCount = Math.max(1, ...bars.map((b) => b.count));
     host.setAttribute('aria-busy', 'false');
     host.setAttribute('aria-label', 'Activity for the last 30 days');
-    host.innerHTML = `
-      <div style="display:flex;gap:6px;align-items:flex-end;min-height:120px;">
-        ${bars
-          .map((bar, index) => {
-            const pct = Math.max(6, Math.round((bar.count / maxCount) * 100));
-            const showTick = index % 5 === 0 || index === bars.length - 1;
-            return `
-              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
-                <span style="width:100%;max-width:12px;height:${pct}%;background:rgba(244,1,245,0.85);border-radius:6px;" title="${bar.label}: ${bar.count} check-ins"></span>
-                <span style="font-size:10px;opacity:${showTick ? '0.8' : '0'};white-space:nowrap;">${showTick ? bar.label : '&nbsp;'}</span>
-              </div>
-            `;
-          })
-          .join('')}
-      </div>
-    `;
+    host.textContent = '';
+    const outer = document.createElement('div');
+    outer.style.display = 'flex';
+    outer.style.gap = '6px';
+    outer.style.alignItems = 'flex-end';
+    outer.style.minHeight = '120px';
+    bars.forEach((bar, index) => {
+      const pct = Math.max(6, Math.round((bar.count / maxCount) * 100));
+      const showTick = index % 5 === 0 || index === bars.length - 1;
+      const col = document.createElement('div');
+      col.style.flex = '1';
+      col.style.display = 'flex';
+      col.style.flexDirection = 'column';
+      col.style.alignItems = 'center';
+      col.style.gap = '6px';
+      const barEl = document.createElement('span');
+      barEl.style.width = '100%';
+      barEl.style.maxWidth = '12px';
+      barEl.style.height = `${pct}%`;
+      barEl.style.background = 'rgba(244,1,245,0.85)';
+      barEl.style.borderRadius = '6px';
+      barEl.setAttribute('title', `${bar.label}: ${bar.count} check-ins`);
+      const tick = document.createElement('span');
+      tick.style.fontSize = '10px';
+      tick.style.opacity = showTick ? '0.8' : '0';
+      tick.style.whiteSpace = 'nowrap';
+      tick.textContent = showTick ? bar.label : '\u00a0';
+      col.append(barEl, tick);
+      outer.appendChild(col);
+    });
+    host.appendChild(outer);
   }
 
   let activityLoadToken = 0;
@@ -6736,8 +6775,8 @@ export function initializeLoginPage(DOM) {
     if (!chart || !historyHost) return;
     if (!isUserAuthenticated()) {
       chart.setAttribute('aria-busy', 'false');
-      chart.innerHTML = '<p class="bookings-empty-msg">Sign in to view activity.</p>';
-      historyHost.innerHTML = '<p class="bookings-empty-msg">Sign in to view check-ins.</p>';
+      setProfileHtml(chart, '<p class="bookings-empty-msg">Sign in to view activity.</p>');
+      setProfileHtml(historyHost, '<p class="bookings-empty-msg">Sign in to view check-ins.</p>');
       renderActivitySummary([]);
       return;
     }
@@ -6756,8 +6795,15 @@ export function initializeLoginPage(DOM) {
     } catch (err) {
       if (token !== activityLoadToken) return;
       chart.setAttribute('aria-busy', 'false');
-      chart.innerHTML = `<p class="bookings-empty-msg">${getErrorMessage(err, 'Activity')}</p>`;
-      historyHost.innerHTML = '<p class="bookings-empty-msg">Unable to load check-ins right now.</p>';
+      chart.textContent = '';
+      const activityErr = document.createElement('p');
+      activityErr.className = 'bookings-empty-msg';
+      activityErr.textContent = getErrorMessage(err, 'Activity');
+      chart.appendChild(activityErr);
+      setProfileHtml(
+        historyHost,
+        '<p class="bookings-empty-msg">Unable to load check-ins right now.</p>'
+      );
       renderActivitySummary([]);
     }
   }
@@ -6793,7 +6839,7 @@ export function initializeLoginPage(DOM) {
       return;
     }
 
-    host.innerHTML = SETTINGS_PAYMENT_METHODS_SKELETON.trim();
+    setProfileHtml(host, SETTINGS_PAYMENT_METHODS_SKELETON.trim());
     setRegisterVisible(false);
 
     authAPI
@@ -7338,7 +7384,10 @@ export function initializeLoginPage(DOM) {
     const container = document.getElementById('allInvoicesContainer');
     if (!modal || !container) return;
     if (!Array.isArray(settingsInvoicesCache) || !settingsInvoicesCache.length) {
-      container.innerHTML = '<p class="settings-item-description">No invoices are available yet.</p>';
+      setProfileHtml(
+        container,
+        '<p class="settings-item-description">No invoices are available yet.</p>'
+      );
     } else {
       renderAllInvoicesModalContent(container, settingsInvoicesCache);
     }
@@ -7368,7 +7417,7 @@ export function initializeLoginPage(DOM) {
       return;
     }
 
-    host.innerHTML = SETTINGS_INVOICES_SKELETON.trim();
+    setProfileHtml(host, SETTINGS_INVOICES_SKELETON.trim());
 
     authAPI
       .listCustomerInvoices(cid, {

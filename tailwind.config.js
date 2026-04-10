@@ -1,25 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-    "./app/**/*.{js,ts,jsx,tsx}",
-    "./features/**/*.{js,ts,jsx,tsx}",
-    "./shared/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ['./index.html', './profile.html', './*.js', './profile/**/*.js', './utils/**/*.js'],
   theme: {
-    extend: {
-      colors: {
-        'boulders-dark': '#1a1a1a',
-        'boulders-purple': '#8B5CF6',
-        'boulders-magenta': '#EC4899',
-        'boulders-pink': '#F472B6',
-      },
-      fontFamily: {
-        'sans': ['Inter', 'system-ui', 'sans-serif'],
-      },
-    },
+    extend: {},
   },
   plugins: [],
 }
-
