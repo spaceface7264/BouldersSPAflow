@@ -22,6 +22,7 @@ Tracked improvements that are **not** blocking day-to-day development. Pick item
 
 - **Drop `npx` from npm scripts** — Use local bins (`vite`, `tsc`, `eslint`). Add **`wrangler` as a devDependency** if scripts should call `wrangler` without `npx`.
 - **Collapse deploy entrypoints** — Today: `deploy.sh`, `npm run deploy`, `deploy:worker`, `deploy:cloudflare`, plus `wrangler.toml` / docs that disagree (Pages vs Workers). Pick **one** production path, delete or archive the rest, update `.github/workflows/deploy.yml` and deployment docs under `docs/deployment/`.
+- **`.github/workflows/deploy.yml` (GitHub Pages trap)** — On push to **`main`**, CI builds and deploys **`dist/`** to **GitHub Pages**, while the real product path is **Cloudflare** (`wrangler pages deploy`, etc.). Easy to assume `main` → prod or to maintain two dead/conflicting hosts. Fix: remove or retarget the workflow, add a loud comment in the YAML, or align triggers with the canonical deploy doc.
 
 ---
 
@@ -42,6 +43,7 @@ Tracked improvements that are **not** blocking day-to-day development. Pick item
 
 - **Sentry loading** — Either add **SRI** on the Sentry CDN script in `index.html`, or **prefer**: initialize via **`@sentry/browser`** from npm (already a dependency), remove the CDN tag, and ship Sentry in the Vite bundle. That supports tightening **CSP** (drop `browser.sentry-cdn.com` from `script-src`).
 - **CSP: nonces / drop `'unsafe-inline'`** — Blocked by large inline bootstraps in `index.html` (e.g. ~lines 21–121: consent, Sentry, etc.). **Roughly a day** of work to split into nonced scripts or external files; biggest remaining CSP win after Sentry is bundled.
+- **Join flow (`app.js`) innerHTML / DOM XSS pass** — The profile bundle uses DOMPurify for assigned markup; **`app.js`** (signup/checkout) should get the same pass: audit every `innerHTML`, template literals fed by API or user input, prefer `textContent` or sanitize consistently.
 
 ---
 

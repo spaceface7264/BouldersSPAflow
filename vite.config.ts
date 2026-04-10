@@ -118,11 +118,6 @@ export default defineConfig(({ command }) => {
   return {
     plugins,
     base: resolveBasePath(),
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-      },
-    },
     server: {
       host: true,
       port: 5173,

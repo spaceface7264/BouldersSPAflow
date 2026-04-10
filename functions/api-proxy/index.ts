@@ -65,7 +65,12 @@ function getSecurityHeaders(origin: string): Record<string, string> {
   };
 }
 
-export async function onRequest(context: any) {
+/** Minimal context shape for Cloudflare Pages / Functions `onRequest`. */
+interface PagesFunctionContext {
+  request: Request;
+}
+
+export async function onRequest(context: PagesFunctionContext) {
   const request = context.request;
   const url = new URL(request.url);
 
@@ -241,9 +246,9 @@ export async function onRequest(context: any) {
 
     // Get the response data
     const data = await response.text();
-    let jsonData: any;
+    let jsonData: unknown;
     try {
-      jsonData = JSON.parse(data);
+      jsonData = JSON.parse(data) as unknown;
     } catch {
       jsonData = data;
     }
@@ -264,12 +269,13 @@ export async function onRequest(context: any) {
         headers: responseHeaders,
       }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
     // Log full error details server-side for debugging
     console.error('[API Proxy] Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
     });
     
     // Return generic error message to client (don't leak internal details)
