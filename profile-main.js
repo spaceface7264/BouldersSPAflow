@@ -1,6 +1,3 @@
-import './styles.css';
-import './profile-layout.css';
-import 'leaflet/dist/leaflet.css';
 import './app.js';
 import { initNavUserDropdown } from './profile/nav-user-dropdown.js';
 import { initNavMobileMenu } from './profile/nav-mobile-menu.js';
