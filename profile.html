@@ -14,6 +14,12 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     </head>
 <body>
+    <!-- Public beta notice (dismiss persists in this browser) -->
+    <div class="beta-release-banner" id="betaReleaseBanner" role="status" aria-live="polite">
+        <span class="beta-release-banner__text">You’re using the public beta — features may change.</span>
+        <button type="button" class="beta-release-banner__dismiss" id="betaBannerDismiss" aria-label="Dismiss beta notice">Dismiss</button>
+    </div>
+
     <!-- Contract Signing Banner (shown when contract is not signed) -->
     <div class="contract-signing-banner" id="contractSigningBanner" style="display: none;">
         <div class="contract-banner-content">
@@ -36,18 +42,20 @@
     <!-- Main Navigation -->
     <header class="main-navigation" id="mainNavigation" style="display: none;">
         <div class="nav-container">
-            <div class="nav-logo">
-                <a href="#dashboard" class="nav-logo-link">
-                    <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="nav-logo-image" style="height:22px;width:auto;max-width:180px;display:block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-                    <span class="nav-logo-fallback">BOULDERS</span>
-                </a>
+            <div class="nav-logo-group">
+                <div class="nav-logo">
+                    <a href="#dashboard" class="nav-logo-link">
+                        <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="nav-logo-image" style="height:22px;width:auto;max-width:180px;display:block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                        <span class="nav-logo-fallback">BOULDERS</span>
+                    </a>
+                </div>
+                <span class="beta-badge beta-badge--nav" title="Public beta">Beta</span>
             </div>
             <nav class="nav-links" id="primaryNav" aria-label="Main navigation">
                 <a href="#" class="nav-link active" data-route="dashboard">Dashboard</a>
                 <a href="#" class="nav-link" data-route="classes">Classes & Bookings</a>
                 <a href="#" class="nav-link" data-route="activity">Activity</a>
                 <a href="#" class="nav-link" data-route="gyms">Gyms</a>
-                <a href="#" class="nav-link" data-route="profile">Profile</a>
             </nav>
             <div class="nav-end">
                 <button type="button" class="nav-menu-toggle" id="navMenuToggle" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">
@@ -60,26 +68,6 @@
                 <div class="nav-user" id="navUser">
                     <span class="user-name" id="navUserName">User</span>
                     <div class="user-avatar" id="navUserAvatar" data-initials="U"></div>
-                    <svg class="dropdown-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                    <div class="user-dropdown" id="userDropdown" style="display: none;">
-                        <a href="#" class="dropdown-item" data-action="nav-account">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
-                                <circle cx="12" cy="12" r="3"></circle>
-                                <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
-                            </svg>
-                            Konto
-                        </a>
-                        <a href="#" class="dropdown-item" data-action="nav-logout">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; vertical-align: middle;">
-                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                                <polyline points="16 17 21 12 16 7"></polyline>
-                                <line x1="21" y1="12" x2="9" y2="12"></line>
-                            </svg>
-                            Logout
-                        </a>
-                    </div>
                 </div>
             </div>
         </div>
@@ -179,15 +167,15 @@
                             <div class="dashboard-info-list">
                                 <div class="dashboard-info-item">
                                     <span class="dashboard-info-label">Name:</span>
-                                    <span class="dashboard-info-value" id="dashboardName">-</span>
+                                    <span class="dashboard-info-value" id="dashboardName">N/A</span>
                                 </div>
                                 <div class="dashboard-info-item">
                                     <span class="dashboard-info-label">Email:</span>
-                                    <span class="dashboard-info-value" id="dashboardEmail">-</span>
+                                    <span class="dashboard-info-value" id="dashboardEmail">N/A</span>
                                 </div>
                                 <div class="dashboard-info-item">
                                     <span class="dashboard-info-label">Phone:</span>
-                                    <span class="dashboard-info-value" id="dashboardPhone">-</span>
+                                    <span class="dashboard-info-value" id="dashboardPhone">N/A</span>
                                 </div>
                             </div>
                         </div>
@@ -401,23 +389,23 @@
                 <div class="activity-stats-grid">
                     <div class="activity-stat-card">
                         <div class="activity-stat-label">Member since</div>
-                        <div class="activity-stat-value" id="activityMemberSince">-</div>
+                        <div class="activity-stat-value" id="activityMemberSince">N/A</div>
                     </div>
                     <div class="activity-stat-card">
                         <div class="activity-stat-label">Total check-ins</div>
-                        <div class="activity-stat-value" id="activityTotalCheckins">-</div>
+                        <div class="activity-stat-value" id="activityTotalCheckins">N/A</div>
                     </div>
                     <div class="activity-stat-card">
                         <div class="activity-stat-label">Most visited gym</div>
-                        <div class="activity-stat-value" id="activityMostVisitedGym">-</div>
+                        <div class="activity-stat-value" id="activityMostVisitedGym">N/A</div>
                     </div>
                     <div class="activity-stat-card">
                         <div class="activity-stat-label">Top check-in time</div>
-                        <div class="activity-stat-value" id="activityTopCheckinTime">-</div>
+                        <div class="activity-stat-value" id="activityTopCheckinTime">N/A</div>
                     </div>
                     <div class="activity-stat-card">
                         <div class="activity-stat-label">Bloc Life Loyalty</div>
-                        <div class="activity-stat-value" id="activityLoyaltyTier">-</div>
+                        <div class="activity-stat-value" id="activityLoyaltyTier">N/A</div>
                     </div>
                 </div>
 
@@ -512,52 +500,52 @@
         <!-- Gyms directory -->
         <div class="page-section" id="pageGyms" style="display: none;">
             <div class="gyms-page-container">
-                <header class="gyms-page-header">
-                    <h1 class="gyms-page-title">Gyms</h1>
-                    <p class="gyms-page-lead">Addresses &amp; maps.</p>
-                </header>
-
-                <section class="dashboard-card gyms-directory-section" aria-label="Boulders locations" id="gymsDirectorySection">
-                    <div id="gymsDirectorySkeleton" class="gym-directory-skeleton-grid" hidden>
-                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
+                <section class="gyms-split-layout" aria-label="Boulders locations" id="gymsDirectorySection">
+                    <aside class="gyms-list-panel">
+                        <header class="gyms-list-header">
+                            <p class="gyms-list-eyebrow">Boulders centre</p>
+                            <div class="gyms-list-meta-row">
+                                <h1 class="gyms-page-title">Gyms</h1>
+                                <div class="gyms-list-meta-actions">
+                                    <span id="gymsLiveCount" class="gyms-live-count">0</span>
+                                </div>
+                            </div>
+                            <label for="gymsSearchInput" class="sr-only">Search gyms</label>
+                            <input id="gymsSearchInput" class="gyms-search-input" type="search" autocomplete="off" placeholder="Search by name or city" />
+                        </header>
+                        <p id="gymsDirectoryError" class="gyms-directory-error" hidden role="alert"></p>
+                        <div id="gymsDirectorySkeleton" class="gym-directory-skeleton-list" hidden aria-hidden="true">
+                            <div class="gym-row gym-row--skeleton"></div>
+                            <div class="gym-row gym-row--skeleton"></div>
+                            <div class="gym-row gym-row--skeleton"></div>
+                            <div class="gym-row gym-row--skeleton"></div>
                         </div>
-                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
+                        <div id="gymsDirectoryList" class="gyms-list-scroll" role="listbox" aria-label="Gym list"></div>
+                    </aside>
+                    <section class="gyms-map-panel">
+                        <div class="gyms-map-shell">
+                            <button
+                                type="button"
+                                id="gymsMapFullscreenToggle"
+                                class="gyms-map-fullscreen-toggle"
+                                aria-pressed="false"
+                                aria-label="Enter map full screen"
+                            >
+                                <svg class="gyms-map-fullscreen-icon gyms-map-fullscreen-icon--expand" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <polyline points="9 21 3 21 3 15"></polyline>
+                                    <line x1="21" y1="3" x2="14" y2="10"></line>
+                                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                                </svg>
+                                <svg class="gyms-map-fullscreen-icon gyms-map-fullscreen-icon--close" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                            <div id="gymsMapCanvas" class="gyms-map-canvas" aria-label="Gym map"></div>
                         </div>
-                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
-                        </div>
-                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
-                        </div>
-                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
-                        </div>
-                        <div class="gym-directory-card gym-directory-card--skeleton" aria-hidden="true">
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--title"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--addr-short"></div>
-                            <div class="gym-directory-skeleton-line gym-directory-skeleton-line--link"></div>
-                        </div>
-                    </div>
-                    <p id="gymsDirectoryError" class="gyms-directory-error" hidden role="alert"></p>
-                    <div id="gymsDirectoryList" class="gym-directory-grid"></div>
+                        <article id="gymsDetailSheet" class="gyms-detail-sheet" hidden></article>
+                    </section>
                 </section>
             </div>
         </div>
@@ -579,7 +567,7 @@
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Fornavn</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileFirstName">-</span>
+                                        <span class="settings-item-value profile-detail-value" id="profileFirstName">N/A</span>
                                         <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="firstName" aria-label="Rediger fornavn">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -604,7 +592,7 @@
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Efternavn</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileLastName">-</span>
+                                        <span class="settings-item-value profile-detail-value" id="profileLastName">N/A</span>
                                         <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="lastName" aria-label="Rediger efternavn">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -629,61 +617,28 @@
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Kundenr.</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileCustomerNumber">-</span>
+                                        <span class="settings-item-value profile-detail-value" id="profileCustomerNumber">N/A</span>
                                     </div>
                                 </div>
                             </div>
 
                         </div>
-                        <div class="profile-profil-divider" aria-hidden="true"></div>
                         <div class="profile-profil-section">
                             <h3 class="profile-profil-section-label">Personlig info</h3>
-                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="dateOfBirth">
+                            <div class="settings-item settings-item-inline profile-profil-row">
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Fødselsdato</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileBirthdate">-</span>
-                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="dateOfBirth" aria-label="Rediger fødselsdato">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M12 20h9"></path>
-                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
-                                    </svg>
-                                            <span class="settings-edit-label">Rediger</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="settings-item-content">
-                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="dateOfBirth">
-                                        <input type="date" class="settings-input" id="inlineProfileDateOfBirth" />
-                                        <div class="settings-form-actions">
-                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="dateOfBirth">Annuller</button>
-                                            <button type="button" class="settings-save-btn" data-profile-inline-save="dateOfBirth">Gem</button>
-                                        </div>
+                                        <span class="settings-item-value profile-detail-value" id="profileBirthdate">N/A</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="gender">
+                            <div class="settings-item settings-item-inline profile-profil-row">
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Køn</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileGender">-</span>
-                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="gender" aria-label="Rediger køn">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M12 20h9"></path>
-                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
-                                    </svg>
-                                            <span class="settings-edit-label">Rediger</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="settings-item-content">
-                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="gender">
-                                        <input type="text" class="settings-input" id="inlineProfileGender" />
-                                        <div class="settings-form-actions">
-                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="gender">Annuller</button>
-                                            <button type="button" class="settings-save-btn" data-profile-inline-save="gender">Gem</button>
-                                        </div>
+                                        <span class="settings-item-value profile-detail-value" id="profileGender">N/A</span>
                                     </div>
                                 </div>
                             </div>
@@ -692,23 +647,7 @@
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Gyldigt studiekort</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileStudentId">-</span>
-                                        <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="studentId" aria-label="Rediger gyldigt studiekort">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M12 20h9"></path>
-                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
-                                    </svg>
-                                            <span class="settings-edit-label">Rediger</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="settings-item-content">
-                                    <div class="settings-item-edit profile-inline-editor profile-profil-edit-row" data-profile-inline-editor="studentId">
-                                        <input type="text" class="settings-input" id="inlineProfileStudentId" />
-                                        <div class="settings-form-actions">
-                                            <button type="button" class="settings-cancel-btn" data-profile-inline-cancel="studentId">Annuller</button>
-                                            <button type="button" class="settings-save-btn" data-profile-inline-save="studentId">Gem</button>
-                                        </div>
+                                        <span class="settings-item-value profile-detail-value" id="profileStudentId">N/A</span>
                                     </div>
                                 </div>
                             </div>
@@ -717,7 +656,7 @@
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Vej og husnr.</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileStreet">-</span>
+                                        <span class="settings-item-value profile-detail-value" id="profileStreet">N/A</span>
                                         <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="streetAddress" aria-label="Rediger vej og husnr.">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -742,7 +681,7 @@
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Postnr.</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profilePostalCode">-</span>
+                                        <span class="settings-item-value profile-detail-value" id="profilePostalCode">N/A</span>
                                         <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="postalCode" aria-label="Rediger postnr.">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -767,7 +706,7 @@
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">By</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileCity">-</span>
+                                        <span class="settings-item-value profile-detail-value" id="profileCity">N/A</span>
                                         <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="city" aria-label="Rediger by">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -792,7 +731,7 @@
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Land</span>
                                     <div class="settings-item-trailing">
-                                        <span class="settings-item-value profile-detail-value" id="profileCountry">-</span>
+                                        <span class="settings-item-value profile-detail-value" id="profileCountry">N/A</span>
                                         <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="country" aria-label="Rediger land">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -814,14 +753,13 @@
                             </div>
 
                         </div>
-                        <div class="profile-profil-divider" aria-hidden="true"></div>
                         <div class="profile-profil-section">
                             <h3 class="profile-profil-section-label">Gym</h3>
                             <div class="settings-item settings-item-inline profile-profil-row" data-profile-inline="primaryGym">
                                 <div class="settings-item-header profile-profil-view-row">
                                     <span class="settings-item-label">Primært center</span>
                                     <div class="settings-item-trailing">
-                                        <span class="profile-primary-gym-pill settings-item-value profile-detail-value" id="profilePrimaryGym">-</span>
+                                        <span class="profile-primary-gym-pill settings-item-value profile-detail-value" id="profilePrimaryGym">N/A</span>
                                         <button type="button" class="settings-edit-btn settings-edit-icon-btn profile-inline-edit-btn fedit" data-field="primaryGym" aria-label="Rediger primært center">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -854,7 +792,7 @@
                         <div class="settings-item-header">
                             <label class="settings-item-label" for="emailInput">E-mail</label>
                             <div class="settings-item-trailing">
-                                <span class="settings-item-value" id="settingsEmail">-</span>
+                                <span class="settings-item-value" id="settingsEmail">N/A</span>
                                 <button type="button" class="settings-edit-btn settings-edit-icon-btn" id="editEmailBtn" data-field="email" aria-label="Rediger e-mail">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -879,7 +817,7 @@
                         <div class="settings-item-header">
                             <label class="settings-item-label" for="phoneInput">Telefon</label>
                             <div class="settings-item-trailing">
-                                <span class="settings-item-value" id="settingsPhone">-</span>
+                                <span class="settings-item-value" id="settingsPhone">N/A</span>
                                 <button type="button" class="settings-edit-btn settings-edit-icon-btn" id="editPhoneBtn" data-field="phone" aria-label="Rediger telefon">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <path d="M12 20h9"></path>
@@ -983,10 +921,6 @@
                         <div class="konto-card">
                             <div class="settings-section konto-card-body" id="notificationsPrivacySection">
                     <h2 class="konto-card-title konto-card-title--flush">Notifikationer &amp; privatliv</h2>
-                    <p class="settings-item-description" id="settingsNotificationPrivacyIntro" style="margin-top: 0; margin-bottom: 14px; max-width: 40rem;">
-                        Ændringer gemmes med det samme i medlemssystemet.
-                    </p>
-                    
                     <div class="settings-item">
                         <div class="settings-item-header">
                             <label class="settings-item-label">E-mail marketing</label>
@@ -1057,38 +991,38 @@
             <div class="settings-modal" id="freezeSubscriptionModal" style="display: none;">
                 <div class="settings-modal-content">
                     <div class="settings-modal-header">
-                        <h3 class="settings-modal-title">Taking a break?<br><span style="font-weight: 400; font-size: 0.9em;">We'll be waiting for you!</span></h3>
+                        <h3 class="settings-modal-title">Sæt dit abonnement på pause</h3>
                         <button class="settings-modal-close" id="closeFreezeSubscriptionModal">&times;</button>
                     </div>
                     <form class="settings-modal-body" id="cancelSubscriptionStep2Form" onsubmit="return false;">
-                        <div class="settings-form-group">
-                            <p class="settings-info-text">
-                                You can freeze your membership for 1-3 months at a time, up to 3 times a year for 49,- per time. 
-                                You don't pay the monthly membership fee while you're on hold and reactivation is free.
-                            </p>
-                            <p class="settings-warning-text" style="color: rgba(255, 255, 255, 0.7); font-size: 13px;">
-                                Freezing cannot be activated during the binding period proceeding cancellation of a membership.
-                            </p>
-                        </div>
-                        <div class="settings-form-group">
-                            <label class="settings-form-label">Choose the freeze period:</label>
-                            <div class="freeze-date-range-container" style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
-                                <div class="date-input-group" style="display: flex; flex-direction: column; gap: 6px;">
-                                    <label class="settings-form-label" style="font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.8);">Start Date</label>
-                                    <input type="date" class="settings-input" id="freezeStartDate" style="width: 100%;" />
-                                </div>
-                                <div class="date-input-group" style="display: flex; flex-direction: column; gap: 6px;">
-                                    <label class="settings-form-label" style="font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.8);">End Date</label>
-                                    <input type="date" class="settings-input" id="freezeEndDate" style="width: 100%;" />
-                                </div>
+                        <div class="freeze-deal-strip" aria-label="Frysevilkår">
+                            <div class="freeze-deal-strip__item">
+                                <strong>49 kr</strong>
+                                <span>pr. frysning</span>
                             </div>
-                            <div class="freeze-date-preview" id="freezeDatePreview" style="margin-top: 12px; padding: 12px; background-color: rgba(244, 1, 245, 0.1); border: 1px solid rgba(244, 1, 245, 0.2); border-radius: 8px; color: rgba(255, 255, 255, 0.9); font-size: 14px;"></div>
+                            <div class="freeze-deal-strip__item">
+                                <strong>1-3 mdr</strong>
+                                <span>varighed</span>
+                            </div>
+                            <div class="freeze-deal-strip__item">
+                                <strong>Gratis</strong>
+                                <span>genaktivering</span>
+                            </div>
                         </div>
+                        <div class="settings-form-group">
+                            <label class="settings-form-label" for="freezeStartDate">Startdato</label>
+                            <input type="date" class="settings-input" id="freezeStartDate" />
+                        </div>
+                        <div class="settings-form-group">
+                            <label class="settings-form-label" for="freezeEndDate">Slutdato</label>
+                            <input type="date" class="settings-input" id="freezeEndDate" />
+                        </div>
+                        <div class="freeze-summary-row" id="freezeDatePreview" style="display: none;" aria-live="polite"></div>
                         <div class="settings-form-error" id="freezeSubscriptionError" style="display: none;"></div>
                     </form>
                     <div class="settings-modal-footer">
-                        <button class="settings-action-btn" id="stayMembershipBtn" style="background-color: #F401F5; color: #FFFFFF; border: none;">I'll stay!</button>
-                        <button class="settings-save-btn" id="proceedFreezeBtn">Proceed</button>
+                        <button class="settings-action-btn freeze-modal-cancel-btn" id="stayMembershipBtn">Annuller</button>
+                        <button class="settings-save-btn" id="proceedFreezeBtn" disabled>Bekræft frysning</button>
                     </div>
                 </div>
             </div>
@@ -1162,30 +1096,34 @@
             <div class="settings-modal" id="cancelSubscriptionModal" style="display: none;">
                 <div class="settings-modal-content">
                     <div class="settings-modal-header">
-                        <h3 class="settings-modal-title">Hey, <span id="cancelSubscriptionUserName">User</span></h3>
+                        <h3 class="settings-modal-title">Vil du opsige dit medlemskab?</h3>
                         <button class="settings-modal-close" id="closeCancelSubscriptionModal">&times;</button>
                     </div>
                     <div class="settings-modal-body">
                         <div class="settings-form-group">
-                            <h4 style="color: #FFFFFF; font-size: 20px; font-weight: 700; margin-bottom: 16px;">This is the danger zone!</h4>
-                            <p class="settings-warning-text" style="margin-bottom: 16px;">
-                                By cancelling your membership you will no longer have access to any Boulders gyms and you will permanently lose your Bloc Life seniority.
-                            </p>
-                            <p class="settings-info-text" style="margin-bottom: 20px;">
-                                Have you considered freezing your membership?
-                            </p>
-                            <p class="settings-info-text">
-                                Freezing your membership allows you to temporarily pause your payments. When you're ready, you can easily reactivate your membership and resume your Bloc Life seniority! 👋
-                            </p>
+                            <div class="cancel-consequences-list">
+                                <div class="cancel-consequences-item">
+                                    <span class="cancel-consequences-dot" aria-hidden="true"></span>
+                                    <p>Adgang til alle Boulders-centre ophører ved periodens udløb</p>
+                                </div>
+                                <div class="cancel-consequences-item">
+                                    <span class="cancel-consequences-dot" aria-hidden="true"></span>
+                                    <p>Din Bloc Life-anciennitet går permanent tabt</p>
+                                </div>
+                            </div>
+                            <div class="cancel-freeze-nudge">
+                                <h4>Overvejer du blot en pause?</h4>
+                                <p>Frys abonnementet i 1-3 måneder for 49 kr. og behold al din anciennitet.</p>
+                            </div>
                         </div>
                         <div class="settings-form-error" id="cancelSubscriptionError" style="display: none;"></div>
                     </div>
-                    <div class="settings-modal-footer" style="flex-direction: column; gap: 12px;">
-                        <div style="display: flex; gap: 12px; width: 100%;">
-                            <button class="settings-action-btn" id="freezeInsteadBtn" style="flex: 1;">Freeze my membership</button>
-                            <button class="settings-action-btn" id="proceedCancelBtn" style="flex: 1;">Sorry... I have to go 😟</button>
+                    <div class="settings-modal-footer cancel-modal-footer">
+                        <div class="cancel-modal-actions-row">
+                            <button class="settings-action-btn cancel-modal-freeze-btn" id="freezeInsteadBtn">Frys i stedet</button>
+                            <button class="settings-action-btn settings-action-btn-danger cancel-modal-confirm-btn" id="proceedCancelBtn">Opsig alligevel</button>
                         </div>
-                        <button class="settings-action-btn" id="nevermindCancelBtn" style="width: 100%; background-color: #F401F5; color: #FFFFFF; border: none;">Nevermind!</button>
+                        <button class="settings-action-btn cancel-modal-ghost-link" id="nevermindCancelBtn">Behold mit medlemskab</button>
                     </div>
                 </div>
             </div>
@@ -1284,19 +1222,19 @@
                 <div class="login-status-profile">
                     <div class="login-status-header">
                         <p class="login-status-label">Logged in as</p>
-                        <p class="login-status-name" data-auth-name-page>-</p>
-                        <p class="login-status-email" data-auth-email-page>-</p>
+                        <p class="login-status-name" data-auth-name-page>N/A</p>
+                        <p class="login-status-email" data-auth-email-page>N/A</p>
                         <div class="login-status-dob profile-detail-item" data-auth-dob-page style="display: none;">
                             <span class="profile-detail-label">Date of birth:</span>
-                            <span class="profile-detail-value">-</span>
+                            <span class="profile-detail-value">N/A</span>
                         </div>
                         <div class="login-status-address profile-detail-item" data-auth-address-page style="display: none;">
                             <span class="profile-detail-label">Address:</span>
-                            <span class="profile-detail-value">-</span>
+                            <span class="profile-detail-value">N/A</span>
                         </div>
                         <div class="login-status-phone profile-detail-item" data-auth-phone-page style="display: none;">
                             <span class="profile-detail-label">Phone:</span>
-                            <span class="profile-detail-value">-</span>
+                            <span class="profile-detail-value">N/A</span>
                         </div>
                     </div>
                 </div>
@@ -1311,6 +1249,7 @@
                 <div class="form-container-logo">
                     <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="form-logo-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
                     <div class="form-logo-fallback">BOULDERS</div>
+                    <span class="beta-badge beta-badge--form" title="Public beta">Beta</span>
                 </div>
             </div>
             <form class="login-form" id="loginPageForm">
@@ -1449,33 +1388,38 @@
     <!-- Footer -->
     <footer class="global-footer">
         <div class="footer-content">
-            <div class="footer-section">
-                <h4>Terms and Conditions</h4>
-                <ul>
-                    <li>
-                        <a href="#" data-action="open-terms" data-terms-type="terms">Terms and Conditions</a>
-                    </li>
+            <div class="footer-column footer-brand-column">
+                <a href="https://boulders.dk" target="_blank" rel="noopener noreferrer" class="footer-brand-link">
+                    <img src="https://storage.googleapis.com/boulderscss/logo-flat-white.png" alt="Boulders Logo" class="footer-brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-flex';" />
+                    <span class="footer-brand-fallback">BOULDERS</span>
+                </a>
+                <p class="footer-tagline">Climbing community built around movement, progress, and good sessions.</p>
+            </div>
+
+            <div class="footer-column">
+                <h4>Legal</h4>
+                <ul class="footer-link-list">
+                    <li><a href="#" data-action="open-terms" data-terms-type="terms">Terms and Conditions</a></li>
+                    <li><a href="#" data-action="open-terms" data-terms-type="privacy">Privacy Policy</a></li>
+                    <li><a href="#" data-action="open-cookie-declaration">Cookie Policy</a></li>
+                    <li><button type="button" class="footer-cookie-settings-link" id="cookieSettingsButton">Cookie Settings</button></li>
                 </ul>
             </div>
-            <div class="footer-section">
-                <h4>Policies</h4>
-                <ul>
-                    <li>
-                        <a href="#" data-action="open-terms" data-terms-type="privacy">Privacy Policy</a>
-                    </li>
-                    <li>
-                        <a href="#" data-action="open-cookie-declaration">Cookie Policy</a>
-                    </li>
-                    <li>
-                        <button type="button" class="footer-cookie-settings-link" id="cookieSettingsButton">Cookie Settings</button>
-                    </li>
+
+            <div class="footer-column">
+                <h4>Boulders</h4>
+                <ul class="footer-link-list">
+                    <li><a href="https://boulders.dk" target="_blank" rel="noopener noreferrer">Website</a></li>
+                    <li><a href="https://boulders.dk/en/about/" target="_blank" rel="noopener noreferrer">About</a></li>
+                    <li><a href="https://boulders.dk/en/contact/" target="_blank" rel="noopener noreferrer">Contact</a></li>
                 </ul>
             </div>
         </div>
+
         <div class="footer-bottom">
             <div class="footer-bottom-content">
-                <p>© 2026 Boulders. All rights reserved. <a href="https://boulders.dk" target="_blank" rel="noopener noreferrer">boulders.dk</a></p>
-                <p style="font-size: 12px; opacity: 0.72; margin-top: 8px;">Built by Rami</p>
+                <p>© 2026 Boulders. All rights reserved.<br><span class="footer-app-beta">Member profile · public beta</span></p>
+                <span class="footer-built-by" aria-label="Built by Rami">built_by rami</span>
             </div>
         </div>
     </footer>

@@ -10270,11 +10270,13 @@ function showLogoutConfirmation() {
   // Create dialog content using DOM methods (not innerHTML) to avoid sanitization issues
   const title = document.createElement('h3');
   title.textContent = 'Log out?';
-  title.style.cssText = 'margin: 0 0 16px 0; color: #FFFFFF; font-size: 18px; font-weight: 600;';
+  title.style.cssText =
+    'margin: 0 0 16px 0; color: #FFFFFF; font-size: var(--type-h1, 1.125rem); font-weight: 600; line-height: 1.25;';
   
   const message = document.createElement('p');
   message.textContent = "Are you sure you want to log out? You'll need to log in again to continue.";
-  message.style.cssText = 'margin: 0 0 24px 0; color: rgba(255, 255, 255, 0.7); line-height: 1.5; font-size: 14px;';
+  message.style.cssText =
+    'margin: 0 0 24px 0; color: rgba(255, 255, 255, 0.7); line-height: 1.45; font-size: var(--type-h2, 0.9375rem);';
   
   const buttonContainer = document.createElement('div');
   buttonContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
@@ -10290,7 +10292,7 @@ function showLogoutConfirmation() {
     color: rgba(255, 255, 255, 0.9);
     cursor: pointer;
     font-weight: 500;
-    font-size: 14px;
+    font-size: var(--type-h2, 0.9375rem);
     transition: all 0.2s ease;
   `;
   
@@ -10306,7 +10308,7 @@ function showLogoutConfirmation() {
     color: #F87171;
     cursor: pointer;
     font-weight: 600;
-    font-size: 14px;
+    font-size: var(--type-h2, 0.9375rem);
     transition: all 0.2s ease;
   `;
   
@@ -21789,6 +21791,7 @@ if (typeof window !== 'undefined') {
   window.refreshLoginUI = refreshLoginUI;
   window.showToast = showToast;
   window.getErrorMessage = getErrorMessage;
+  window.showLogoutConfirmation = showLogoutConfirmation;
   window.handleLogout = handleLogout;
   window.getProductPlaceholderImage = getProductPlaceholderImage;
   window.getGymOpeningHours = getGymOpeningHours;

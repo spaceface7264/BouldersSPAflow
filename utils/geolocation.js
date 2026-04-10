@@ -184,6 +184,51 @@ async function geocodeAddress(address, { logger } = {}) {
   }
 }
 
+async function attachGymCoordinates(gym, { logger } = {}) {
+  const { log, warn } = getLogger(logger);
+  let gymLat = Number.isFinite(Number(gym?.gymLat)) ? Number(gym.gymLat) : null;
+  let gymLon = Number.isFinite(Number(gym?.gymLon)) ? Number(gym.gymLon) : null;
+
+  if (gymLat === null || gymLon === null) {
+    if (gym.address) {
+      if (gym.address.latitude !== undefined && gym.address.longitude !== undefined) {
+        gymLat = parseFloat(gym.address.latitude);
+        gymLon = parseFloat(gym.address.longitude);
+      } else if (gym.address.coordinates && Array.isArray(gym.address.coordinates)) {
+        gymLat = parseFloat(gym.address.coordinates[1]);
+        gymLon = parseFloat(gym.address.coordinates[0]);
+      }
+    }
+
+    if ((gymLat === null || isNaN(gymLat)) && gym.coordinates && Array.isArray(gym.coordinates)) {
+      gymLat = parseFloat(gym.coordinates[1]);
+      gymLon = parseFloat(gym.coordinates[0]);
+    }
+
+    if (isNaN(gymLat) || isNaN(gymLon)) {
+      gymLat = null;
+      gymLon = null;
+    }
+  }
+
+  if ((gymLat === null || gymLon === null) && gym.address) {
+    log(`[Geocoding] Resolving ${gym.name}...`);
+    const coords = await geocodeAddress(gym.address, { logger });
+    if (coords) {
+      gymLat = coords.latitude;
+      gymLon = coords.longitude;
+    } else {
+      warn(`[Geocoding] Failed to resolve ${gym.name}`);
+    }
+  }
+
+  return { ...gym, gymLat, gymLon };
+}
+
+export async function enrichGymsWithCoordinates(gyms, { logger } = {}) {
+  return Promise.all((Array.isArray(gyms) ? gyms : []).map((gym) => attachGymCoordinates(gym, { logger })));
+}
+
 export async function calculateGymDistances(
   gyms,
   userLat,
@@ -206,44 +251,7 @@ export async function calculateGymDistances(
     });
   }
 
-  const gymsWithCoords = await Promise.all(gyms.map(async (gym) => {
-    let gymLat = null;
-    let gymLon = null;
-
-    if (gym.address) {
-      if (gym.address.latitude !== undefined && gym.address.longitude !== undefined) {
-        gymLat = parseFloat(gym.address.latitude);
-        gymLon = parseFloat(gym.address.longitude);
-      } else if (gym.address.coordinates && Array.isArray(gym.address.coordinates)) {
-        gymLat = parseFloat(gym.address.coordinates[1]);
-        gymLon = parseFloat(gym.address.coordinates[0]);
-      }
-    }
-
-    if ((gymLat === null || isNaN(gymLat)) && gym.coordinates && Array.isArray(gym.coordinates)) {
-      gymLat = parseFloat(gym.coordinates[1]);
-      gymLon = parseFloat(gym.coordinates[0]);
-    }
-
-    if (isNaN(gymLat) || isNaN(gymLon)) {
-      gymLat = null;
-      gymLon = null;
-    }
-
-    if ((gymLat === null || gymLon === null) && gym.address) {
-      log(`[Distance Calculation] Geocoding ${gym.name}...`);
-      const coords = await geocodeAddress(gym.address, { logger });
-      if (coords) {
-        gymLat = coords.latitude;
-        gymLon = coords.longitude;
-        log(`[Distance Calculation] Geocoded ${gym.name}:`, coords);
-      } else {
-        warn(`[Distance Calculation] Failed to geocode ${gym.name}`);
-      }
-    }
-
-    return { ...gym, gymLat, gymLon };
-  }));
+  const gymsWithCoords = await enrichGymsWithCoordinates(gyms, { logger });
 
   const gymsWithDistances = gymsWithCoords.map(gym => {
     if (gym.gymLat === null || gym.gymLon === null || isNaN(gym.gymLat) || isNaN(gym.gymLon)) {

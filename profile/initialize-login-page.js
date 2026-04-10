@@ -44,6 +44,8 @@ import {
   isLikelySeriesSession,
   hasSeriesCopyHint,
 } from './lib/class-activity-pure.js';
+import L from 'leaflet';
+import { enrichGymsWithCoordinates } from '../utils/geolocation.js';
 export function initializeLoginPage(DOM) {
   const ctx = buildProfileContext(DOM);
   const {
@@ -5590,6 +5592,21 @@ export function initializeLoginPage(DOM) {
   }
 
   let gymsDirectoryLoadToken = 0;
+  let gymsDirectoryRows = [];
+  const gymsDirectoryState = {
+    all: [],
+    filtered: [],
+    selectedGymId: null,
+    baseGyms: [],
+  };
+  const gymsMapState = {
+    map: null,
+    markersLayer: null,
+    markerByGymId: new Map(),
+    isFullscreen: false,
+    fullscreenBound: false,
+    fullscreenScrollY: 0,
+  };
 
   function formatGymAddressLines(gym) {
     const a = gym?.address;
@@ -5740,6 +5757,387 @@ export function initializeLoginPage(DOM) {
     linkEl.appendChild(label);
   }
 
+  function getGymDistanceKm(gym) {
+    if (!gym || typeof gym !== 'object') return null;
+    const kmCandidates = [
+      gym.distance,
+      gym.distanceKm,
+      gym.distanceInKm,
+      gym?.meta?.distanceKm,
+      gym?.location?.distanceKm,
+    ];
+    for (const v of kmCandidates) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+    const meterCandidates = [
+      gym.distanceMeters,
+      gym.distanceInMeters,
+      gym?.meta?.distanceMeters,
+      gym?.location?.distanceMeters,
+    ];
+    for (const v of meterCandidates) {
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0) return n / 1000;
+    }
+    return null;
+  }
+
+  function formatGymDistanceKm(gym) {
+    const n = getGymDistanceKm(gym);
+    if (n == null) return null;
+    return `${n < 10 ? n.toFixed(1) : n.toFixed(0)} km`;
+  }
+
+  function sortGymsForDisplay(gyms) {
+    const arr = Array.isArray(gyms) ? gyms.slice() : [];
+    arr.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), undefined, { sensitivity: 'base' }));
+    return arr;
+  }
+
+  function getGymBusynessFromApi(gym) {
+    const raw =
+      gym?.busyness ??
+      gym?.busynessLevel ??
+      gym?.busyLevel ??
+      gym?.occupancyLevel ??
+      gym?.occupancy ??
+      gym?.liveBusyness ??
+      gym?.status?.busyness ??
+      gym?.meta?.busyness;
+    if (raw == null) return null;
+
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      if (raw >= 0.75) return { level: 'high', label: 'Busy' };
+      if (raw >= 0.4) return { level: 'medium', label: 'Moderate' };
+      return { level: 'low', label: 'Calm' };
+    }
+
+    const s = String(raw).trim().toLowerCase();
+    if (!s) return null;
+    if (s.includes('high') || s.includes('busy') || s.includes('travl')) return { level: 'high', label: 'Busy' };
+    if (s.includes('med') || s.includes('moderate') || s.includes('mid')) return { level: 'medium', label: 'Moderate' };
+    if (s.includes('low') || s.includes('calm') || s.includes('quiet')) return { level: 'low', label: 'Calm' };
+    return null;
+  }
+
+  function getGymOpenStatusText(gym) {
+    const getter =
+      typeof window !== 'undefined' && typeof window.getGymOpeningHours === 'function'
+        ? window.getGymOpeningHours
+        : null;
+    const hoursText = getter ? getter(gym) : '';
+    const parsed = parseOpeningHoursRange(String(hoursText || ''));
+    if (!parsed) return { open: null, text: 'Hours unavailable' };
+    const now = getNowMinutesCopenhagen();
+    if (now >= parsed.openMin && now < parsed.closeMin) {
+      return { open: true, text: `Open · closes ${formatTimeDK(parsed.closeMin)}` };
+    }
+    return { open: false, text: `Closed · ${String(hoursText).trim()}` };
+  }
+
+  function getGymCoordinates(gym) {
+    const latCandidates = [gym?.gymLat, gym?.address?.latitude, gym?.coordinates?.[1], gym?.address?.coordinates?.[1]];
+    const lonCandidates = [gym?.gymLon, gym?.address?.longitude, gym?.coordinates?.[0], gym?.address?.coordinates?.[0]];
+    const lat = latCandidates.map((v) => Number(v)).find((v) => Number.isFinite(v));
+    const lon = lonCandidates.map((v) => Number(v)).find((v) => Number.isFinite(v));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { lat, lon };
+  }
+
+  function ensureGymsMapMounted() {
+    const el = document.getElementById('gymsMapCanvas');
+    if (!el) return null;
+    if (gymsMapState.map) {
+      gymsMapState.map.invalidateSize();
+      return gymsMapState.map;
+    }
+    const map = L.map(el, {
+      zoomControl: true,
+      attributionControl: false,
+    }).setView([56.2, 10.2], 6);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd',
+      attribution: '',
+    }).addTo(map);
+    gymsMapState.map = map;
+    gymsMapState.markersLayer = L.layerGroup().addTo(map);
+    return map;
+  }
+
+  function focusSelectedGymOnMap(gym) {
+    const map = gymsMapState.map;
+    if (!map || !gym) return;
+    const coords = getGymCoordinates(gym);
+    if (!coords) return;
+    const ll = L.latLng(coords.lat, coords.lon);
+    const targetZoom = Math.max(map.getZoom(), 10);
+    map.flyTo(ll, targetZoom, {
+      animate: true,
+      duration: 0.35,
+      easeLinearity: 0.2,
+    });
+  }
+
+  function styleGymMarker(marker, isSelected) {
+    if (!marker || typeof marker.setStyle !== 'function') return;
+    const zoom = gymsMapState.map ? gymsMapState.map.getZoom() : 10;
+    const baseRadius = zoom <= 7 ? 4.5 : zoom <= 9 ? 5 : 5.5;
+    const selectedRadius = zoom <= 7 ? 5.5 : zoom <= 9 ? 6 : 6.5;
+    marker.setStyle({
+      radius: isSelected ? selectedRadius : baseRadius,
+      weight: isSelected ? 2.5 : 2,
+      color: isSelected ? '#f401f5' : '#9aa4b2',
+      fillColor: isSelected ? '#f401f5' : '#6b7280',
+      fillOpacity: isSelected ? 0.9 : 0.75,
+    });
+    const el = marker.getElement();
+    if (el) {
+      el.classList.toggle('gym-marker--selected', isSelected);
+    }
+    if (isSelected && typeof marker.bringToFront === 'function') {
+      marker.bringToFront();
+    }
+  }
+
+  function updateGymsMarkerSelection() {
+    gymsMapState.markerByGymId.forEach((marker, id) => {
+      styleGymMarker(marker, String(id) === String(gymsDirectoryState.selectedGymId));
+    });
+  }
+
+  function setGymsMobileMapFullscreen(next) {
+    const page = document.getElementById('pageGyms');
+    const toggle = document.getElementById('gymsMapFullscreenToggle');
+    if (!page || !toggle) return;
+    const isMobile = window.matchMedia('(max-width: 700px)').matches;
+    const on = Boolean(next) && isMobile;
+    gymsMapState.isFullscreen = on;
+    page.classList.toggle('gyms-map-fullscreen-mobile', on);
+    document.body.classList.toggle('gyms-map-fullscreen-mobile-active', on);
+    if (on) {
+      gymsMapState.fullscreenScrollY = window.scrollY || window.pageYOffset || 0;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${gymsMapState.fullscreenScrollY}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      document.body.style.width = '100%';
+    } else {
+      const y = Number(gymsMapState.fullscreenScrollY || 0);
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.width = '';
+      window.scrollTo(0, y);
+    }
+    toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+    toggle.setAttribute('aria-label', on ? 'Exit map full screen' : 'Enter map full screen');
+    const sheet = document.getElementById('gymsDetailSheet');
+    if (sheet && on) {
+      sheet.classList.add('is-collapsed');
+    }
+    if (gymsMapState.map) {
+      window.requestAnimationFrame(() => gymsMapState.map?.invalidateSize());
+    }
+  }
+
+  function selectGym(gym, { source = 'list', focus = true } = {}) {
+    if (!gym) return;
+    gymsDirectoryState.selectedGymId = gym.id;
+    renderGymsListRows();
+    updateGymsMarkerSelection();
+    renderGymDetailSheet(gym);
+    if (focus && source !== 'map') {
+      focusSelectedGymOnMap(gym);
+    }
+  }
+
+  function renderGymsMapMarkers({ fitToBounds = true } = {}) {
+    const map = ensureGymsMapMounted();
+    if (!map || !gymsMapState.markersLayer) return;
+    gymsMapState.markersLayer.clearLayers();
+    gymsMapState.markerByGymId.clear();
+    const valid = gymsDirectoryState.filtered
+      .map((gym) => ({ gym, coords: getGymCoordinates(gym) }))
+      .filter((entry) => !!entry.coords);
+    valid.forEach(({ gym, coords }) => {
+      const isSelected = String(gym.id) === String(gymsDirectoryState.selectedGymId);
+      const marker = L.circleMarker([coords.lat, coords.lon], {
+        className: 'gym-marker',
+      });
+      styleGymMarker(marker, isSelected);
+      marker.on('click', () => {
+        selectGym(gym, { source: 'map', focus: false });
+      });
+      marker.bindTooltip(String(gym?.name || 'Boulders centre'));
+      marker.addTo(gymsMapState.markersLayer);
+      gymsMapState.markerByGymId.set(String(gym.id), marker);
+    });
+    if (!valid.length || !fitToBounds) return;
+    const bounds = L.latLngBounds(valid.map(({ coords }) => [coords.lat, coords.lon]));
+    if (valid.length === 1) {
+      map.setView(bounds.getCenter(), 11, { animate: false });
+    } else {
+      map.fitBounds(bounds.pad(0.18));
+    }
+  }
+
+  function ensureGymsDetailSheetDrawerBound(sheet) {
+    if (!sheet || sheet.dataset.drawerBound === '1') return;
+    sheet.dataset.drawerBound = '1';
+    const toggleCollapsedState = (evt) => {
+      const isAnchorTarget = evt?.target instanceof HTMLElement && !!evt.target.closest('a');
+      if (isAnchorTarget) {
+        return;
+      }
+      sheet.classList.toggle('is-collapsed');
+    };
+    // Use a single click handler to avoid double-toggling from mixed pointer/touch events.
+    sheet.addEventListener('click', toggleCollapsedState);
+  }
+
+  function renderGymDetailSheet(gym) {
+    const sheet = document.getElementById('gymsDetailSheet');
+    if (!sheet || !gym) return;
+    const { street, postalCity } = formatGymAddressLines(gym);
+    const open = getGymOpenStatusText(gym);
+    const mapsQuery = buildMapsSearchQuery(gym);
+    sheet.innerHTML = '';
+    const title = document.createElement('h3');
+    title.textContent = String(gym.name || 'Boulders centre');
+    const addr = document.createElement('p');
+    addr.textContent = [street, postalCity].filter(Boolean).join(', ') || 'Address unavailable';
+    const status = document.createElement('p');
+    status.textContent = open.text;
+    sheet.append(title, addr, status);
+    sheet.removeAttribute('data-map-href');
+    sheet.removeAttribute('role');
+    sheet.removeAttribute('tabindex');
+    sheet.removeAttribute('aria-label');
+    sheet.onclick = null;
+    sheet.onkeydown = null;
+    if (mapsQuery) {
+      const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+      const link = document.createElement('a');
+      link.href = href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'Open in maps';
+      sheet.appendChild(link);
+    }
+    ensureGymsDetailSheetDrawerBound(sheet);
+    if (gymsMapState.isFullscreen) {
+      sheet.classList.add('is-collapsed');
+    } else {
+      sheet.classList.remove('is-collapsed');
+    }
+    sheet.hidden = false;
+  }
+
+  function renderGymsListRows() {
+    const listEl = document.getElementById('gymsDirectoryList');
+    const countEl = document.getElementById('gymsLiveCount');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    gymsDirectoryRows = [];
+    const rows = gymsDirectoryState.filtered;
+    if (countEl) countEl.textContent = `${rows.length}`;
+
+    rows.forEach((gym) => {
+      const isPrimary = isUserAuthenticated() && isMemberPrimaryGymDirectoryEntry(gym, getBestCustomerData());
+      const isSelected = String(gym.id) === String(gymsDirectoryState.selectedGymId);
+      const busy = getGymBusynessFromApi(gym);
+      const open = getGymOpenStatusText(gym);
+
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'gym-row';
+      if (isSelected) row.classList.add('is-selected');
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      row.dataset.gymId = String(gym.id || '');
+
+      const dot = document.createElement('span');
+      dot.className = 'gym-row-dot';
+      if (isPrimary) dot.classList.add('is-primary');
+      if (isSelected) dot.classList.add('is-selected');
+
+      const main = document.createElement('div');
+      main.className = 'gym-row-main';
+
+      const titleLine = document.createElement('div');
+      titleLine.className = 'gym-row-title-line';
+      const title = document.createElement('h3');
+      title.className = 'gym-row-title';
+      title.textContent = displayGymTitle(gym?.name || 'Boulders centre');
+      titleLine.appendChild(title);
+      if (isPrimary) {
+        const pill = document.createElement('span');
+        pill.className = 'gym-row-primary-pill';
+        pill.textContent = 'Mit center';
+        titleLine.appendChild(pill);
+      }
+
+      const sub = document.createElement('div');
+      sub.className = 'gym-row-subline';
+      const distanceText = formatGymDistanceKm(gym);
+      const locationText = String(gym?.address?.city || '').trim();
+      const meta = document.createElement('span');
+      meta.textContent = [distanceText, locationText].filter(Boolean).join(' · ') || 'Location unavailable';
+      const busyDot = document.createElement('span');
+      busyDot.className = `gym-busy-dot is-${busy?.level || 'medium'}`;
+      const busyLabel = document.createElement('span');
+      busyLabel.textContent = busy?.label || 'Live status unavailable';
+      sub.append(meta);
+      if (busy) sub.append(busyDot, busyLabel);
+      main.append(titleLine, sub);
+
+      const right = document.createElement('div');
+      right.className = 'gym-row-open';
+      if (open.open === true) right.classList.add('is-open');
+      if (open.open === false) right.classList.add('is-closed');
+      right.textContent = open.text;
+
+      row.append(dot, main, right);
+      row.addEventListener('click', () => {
+        selectGym(gym, { source: 'list', focus: true });
+      });
+      gymsDirectoryRows.push(row);
+      listEl.appendChild(row);
+    });
+  }
+
+  function applyGymsSearchFilter() {
+    const q = String(document.getElementById('gymsSearchInput')?.value || '')
+      .trim()
+      .toLowerCase();
+    if (!q) {
+      gymsDirectoryState.filtered = gymsDirectoryState.all.slice();
+    } else {
+      gymsDirectoryState.filtered = gymsDirectoryState.all.filter((gym) => {
+        const name = String(gym?.name || '').toLowerCase();
+        const city = String(gym?.address?.city || '').toLowerCase();
+        return name.includes(q) || city.includes(q);
+      });
+    }
+    if (gymsDirectoryState.filtered.length && !gymsDirectoryState.filtered.some((g) => String(g.id) === String(gymsDirectoryState.selectedGymId))) {
+      gymsDirectoryState.selectedGymId = gymsDirectoryState.filtered[0].id;
+    }
+    renderGymsListRows();
+    renderGymsMapMarkers({ fitToBounds: true });
+    const selected = gymsDirectoryState.filtered.find((g) => String(g.id) === String(gymsDirectoryState.selectedGymId));
+    const sheet = document.getElementById('gymsDetailSheet');
+    if (selected) {
+      renderGymDetailSheet(selected);
+      updateGymsMarkerSelection();
+    } else if (sheet) {
+      sheet.hidden = true;
+      sheet.innerHTML = '';
+    }
+  }
+
   async function refreshGymsDirectoryPage() {
     const listEl = document.getElementById('gymsDirectoryList');
     const skeletonEl = document.getElementById('gymsDirectorySkeleton');
@@ -5765,93 +6163,56 @@ export function initializeLoginPage(DOM) {
 
     try {
       const response = await api.getBusinessUnits();
-      const gyms = Array.isArray(response) ? response : (response?.data || response?.items || []);
+      let gyms = Array.isArray(response) ? response : (response?.data || response?.items || []);
+      if (token !== gymsDirectoryLoadToken) return;
+      gyms = await enrichGymsWithCoordinates(gyms);
       if (token !== gymsDirectoryLoadToken) return;
 
       if (skeletonEl) skeletonEl.hidden = true;
       if (sectionEl) sectionEl.removeAttribute('aria-busy');
-      const customer = isUserAuthenticated() ? getBestCustomerData() : null;
-      gyms
-        .filter((g) => g && (g.name || g.address))
-        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }))
-        .forEach((gym) => {
-          const { street, postalCity } = formatGymAddressLines(gym);
-          const fullName = gym.name != null ? String(gym.name).trim() : '';
-          const shortTitle = displayGymTitle(fullName || 'Boulders location');
-          const isPrimary = customer && isMemberPrimaryGymDirectoryEntry(gym, customer);
+      gymsDirectoryState.baseGyms = gyms.filter((g) => g && (g.name || g.address));
+      gymsDirectoryState.all = sortGymsForDisplay(gymsDirectoryState.baseGyms);
+      gymsDirectoryState.filtered = gymsDirectoryState.all.slice();
+      gymsDirectoryState.selectedGymId = gymsDirectoryState.filtered[0]?.id ?? null;
 
-          const card = document.createElement('article');
-          card.className = 'gym-directory-card';
-          if (isPrimary) {
-            card.classList.add('gym-directory-card--primary');
-          }
-          if (fullName) {
-            card.setAttribute('aria-label', isPrimary ? `${fullName}, your home gym` : fullName);
-          }
+      applyGymsSearchFilter();
 
-          const head = document.createElement('div');
-          head.className = 'gym-directory-card-head';
+      ensureGymsMapMounted();
+      renderGymsMapMarkers();
 
-          const title = document.createElement('h3');
-          title.className = 'gym-directory-name';
-          title.textContent = shortTitle;
-          if (fullName && shortTitle !== fullName) {
-            title.setAttribute('title', fullName);
-          }
-          head.appendChild(title);
-
-          if (isPrimary) {
-            const badge = document.createElement('span');
-            badge.className = 'gym-directory-badge';
-            badge.textContent = 'My gym';
-            head.appendChild(badge);
-          }
-
-          card.appendChild(head);
-
-          const addr = document.createElement('div');
-          addr.className = 'gym-directory-address';
-          const oneLine = [street, postalCity].filter(Boolean).join(' · ');
-          if (oneLine) {
-            const line = document.createElement('div');
-            line.className = 'gym-directory-address-line';
-            line.textContent = oneLine;
-            addr.appendChild(line);
-          } else {
-            const na = document.createElement('div');
-            na.className = 'gym-directory-address-muted';
-            na.textContent = 'No address listed.';
-            addr.appendChild(na);
-          }
-
-          const actions = document.createElement('div');
-          actions.className = 'gym-directory-actions';
-          const q = buildMapsSearchQuery(gym);
-          if (q) {
-            const mapLink = document.createElement('a');
-            mapLink.className = 'gym-directory-link';
-            mapLink.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-            mapLink.target = '_blank';
-            mapLink.rel = 'noopener noreferrer';
-            mapLink.setAttribute('aria-label', fullName ? `Maps: ${fullName}` : 'Open in Google Maps');
-            appendMapPinIcon(mapLink);
-            actions.appendChild(mapLink);
-          }
-
-          card.appendChild(addr);
-
-          const openRow = buildGymOpeningStatusRow(gym);
-          if (openRow) {
-            card.appendChild(openRow);
-          }
-
-          if (actions.childNodes.length) {
-            card.appendChild(actions);
-          }
-          listEl.appendChild(card);
+      const searchEl = document.getElementById('gymsSearchInput');
+      if (searchEl && searchEl.dataset.bound !== '1') {
+        searchEl.dataset.bound = '1';
+        searchEl.addEventListener('input', applyGymsSearchFilter);
+      }
+      const fullscreenBtn = document.getElementById('gymsMapFullscreenToggle');
+      if (fullscreenBtn && fullscreenBtn.dataset.bound !== '1') {
+        fullscreenBtn.dataset.bound = '1';
+        fullscreenBtn.addEventListener('click', () => {
+          setGymsMobileMapFullscreen(!gymsMapState.isFullscreen);
         });
+      }
+      if (!gymsMapState.fullscreenBound) {
+        gymsMapState.fullscreenBound = true;
+        window.addEventListener('resize', () => {
+          if (!window.matchMedia('(max-width: 700px)').matches && gymsMapState.isFullscreen) {
+            setGymsMobileMapFullscreen(false);
+          }
+        });
+      }
 
-      if (!listEl.children.length) {
+      const page = document.getElementById('pageGyms');
+      const container = document.querySelector('#pageGyms .gyms-page-container');
+      if (page && container) {
+        const top = page.getBoundingClientRect().top;
+        const h = Math.max(320, window.innerHeight - Math.max(0, top) - 12);
+        container.style.setProperty('--gyms-page-height', `${h}px`);
+        if (gymsMapState.map) {
+          window.requestAnimationFrame(() => gymsMapState.map?.invalidateSize());
+        }
+      }
+
+      if (!gymsDirectoryState.filtered.length) {
         const empty = document.createElement('p');
         empty.className = 'gym-directory-empty';
         empty.textContent = 'No locations were returned. Try again later.';
@@ -5920,6 +6281,9 @@ export function initializeLoginPage(DOM) {
 
   function setRoute(route) {
     const safeRoute = PAGE_ROUTES.includes(route) ? route : 'dashboard';
+    if (safeRoute !== 'gyms' && gymsMapState.isFullscreen) {
+      setGymsMobileMapFullscreen(false);
+    }
 
     Object.values(PAGE_ROUTE_MAP).forEach((id) => {
       const section = document.getElementById(id);
@@ -7257,11 +7621,26 @@ export function initializeLoginPage(DOM) {
     });
   }
 
+  function isProfilePlaceholderValue(value) {
+    const text = value == null ? '' : String(value).trim();
+    return text === '' || text === '-' || text.toUpperCase() === 'N/A';
+  }
+
+  function normalizeProfileDisplayValue(value) {
+    return isProfilePlaceholderValue(value) ? 'N/A' : String(value);
+  }
+
+  function applyProfilePlaceholderClass(el, value) {
+    if (!el || !el.classList) return;
+    el.classList.toggle('profile-placeholder-value', isProfilePlaceholderValue(value));
+  }
+
   function setText(id, value) {
     const el = document.getElementById(id);
     if (!el) return;
-    const normalized = value === null || value === undefined || value === '' ? '-' : String(value);
+    const normalized = normalizeProfileDisplayValue(value);
     el.textContent = normalized;
+    applyProfilePlaceholderClass(el, normalized);
   }
 
 
@@ -7355,6 +7734,22 @@ export function initializeLoginPage(DOM) {
     subscriptionActions.style.display = hasActiveMembership(customer) ? '' : 'none';
   }
 
+  function hasStudentMembership(customer, membership) {
+    const values = [
+      membership?.type,
+      customer?.membershipType,
+      customer?.membershipName,
+      customer?.membership,
+      customer?.plan,
+      customer?.subscriptionName,
+    ]
+      .filter((v) => v !== null && v !== undefined)
+      .map((v) => String(v).trim())
+      .filter(Boolean);
+
+    return values.some((v) => /student|studie/i.test(v));
+  }
+
   function populateProfileViews(customer, metadata) {
     if (!customer && !metadata) return;
 
@@ -7380,8 +7775,12 @@ export function initializeLoginPage(DOM) {
     setText('profileCustomerNumber', customer?.customerNumber || customer?.id || metadata?.username || '-');
     setText('profilePrimaryGym', customer?.primaryGym || customer?.gymName || membership.gym);
     setText('profileBirthdate', formatDisplayDate(dob));
-    setText('profileGender', customer?.gender || '-');
+    setText('profileGender', customer?.gender || 'N/A');
     setText('profileStudentId', customer?.studentId || '-');
+    const studentIdRow = document.querySelector('#pageProfile [data-profile-inline="studentId"]');
+    if (studentIdRow) {
+      studentIdRow.style.display = hasStudentMembership(customer || {}, membership) ? '' : 'none';
+    }
     const addrObj = customer?.address && typeof customer.address === 'object' ? customer.address : null;
     let postalDisp =
       addrObj?.postalCode != null && String(addrObj.postalCode).trim() !== ''
@@ -7489,29 +7888,45 @@ export function initializeLoginPage(DOM) {
     if (DOM.loginStatusNamePage) {
       const name = customer?.firstName && customer?.lastName
         ? `${customer.firstName} ${customer.lastName}`
-        : (customer?.firstName || customer?.lastName || '-');
-      DOM.loginStatusNamePage.textContent = name || '-';
+        : (customer?.firstName || customer?.lastName || 'N/A');
+      const displayName = normalizeProfileDisplayValue(name);
+      DOM.loginStatusNamePage.textContent = displayName;
+      applyProfilePlaceholderClass(DOM.loginStatusNamePage, displayName);
     }
     if (DOM.loginStatusEmailPage) {
-      DOM.loginStatusEmailPage.textContent = state?.authenticatedEmail || customer?.email || metadata?.email || '-';
+      const emailValue = normalizeProfileDisplayValue(state?.authenticatedEmail || customer?.email || metadata?.email || 'N/A');
+      DOM.loginStatusEmailPage.textContent = emailValue;
+      applyProfilePlaceholderClass(DOM.loginStatusEmailPage, emailValue);
     }
     if (DOM.loginStatusDobPage) {
       const dobValueEl = DOM.loginStatusDobPage.querySelector('.profile-detail-value');
       const dobValue = customer?.dateOfBirth || customer?.birthDate || null;
       DOM.loginStatusDobPage.style.display = dobValue ? '' : 'none';
-      if (dobValueEl) dobValueEl.textContent = dobValue || '-';
+      if (dobValueEl) {
+        const dobDisplay = normalizeProfileDisplayValue(dobValue || 'N/A');
+        dobValueEl.textContent = dobDisplay;
+        applyProfilePlaceholderClass(dobValueEl, dobDisplay);
+      }
     }
     if (DOM.loginStatusAddressPage) {
       const addressText = getAddress(customer || {}).full;
       const addressValueEl = DOM.loginStatusAddressPage.querySelector('.profile-detail-value');
       DOM.loginStatusAddressPage.style.display = addressText !== '-' ? '' : 'none';
-      if (addressValueEl) addressValueEl.textContent = addressText;
+      if (addressValueEl) {
+        const addressDisplay = normalizeProfileDisplayValue(addressText);
+        addressValueEl.textContent = addressDisplay;
+        applyProfilePlaceholderClass(addressValueEl, addressDisplay);
+      }
     }
     if (DOM.loginStatusPhonePage) {
       const phoneValueEl = DOM.loginStatusPhonePage.querySelector('.profile-detail-value');
       const phoneValue = getPhoneDisplay(customer);
       DOM.loginStatusPhonePage.style.display = phoneValue && phoneValue !== '-' ? '' : 'none';
-      if (phoneValueEl) phoneValueEl.textContent = phoneValue || '-';
+      if (phoneValueEl) {
+        const phoneDisplay = normalizeProfileDisplayValue(phoneValue || 'N/A');
+        phoneValueEl.textContent = phoneDisplay;
+        applyProfilePlaceholderClass(phoneValueEl, phoneDisplay);
+      }
     }
 
     const pageContentWrapper = document.getElementById('pageContentWrapper');
@@ -7781,6 +8196,7 @@ export function initializeLoginPage(DOM) {
       freezeSubscriptionSettingsBtn.addEventListener('click', () => {
         if (!requireActiveMembershipOrToast()) return;
         openModal('freezeSubscriptionModal');
+        updateFreezeSummaryAndButtonState();
       });
     }
     if (cancelSubscriptionSettingsBtn) {
@@ -7813,11 +8229,80 @@ export function initializeLoginPage(DOM) {
     const freezeErrorStep2 = document.getElementById('freezeSubscriptionErrorStep2');
     const cancelErrorStep2 = document.getElementById('cancelSubscriptionErrorStep2');
     const freezeDatePreview = document.getElementById('freezeDatePreview');
+    const freezeStartDateInput = document.getElementById('freezeStartDate');
+    const freezeEndDateInput = document.getElementById('freezeEndDate');
+    const proceedFreezeBtn = document.getElementById('proceedFreezeBtn');
 
     const setError = (el, message) => {
       if (!el) return;
       el.textContent = message || '';
       el.style.display = message ? 'block' : 'none';
+    };
+
+    const DAY_IN_MS = 24 * 60 * 60 * 1000;
+    const parseLocalDate = (value) => {
+      if (!value) return null;
+      const parts = value.split('-').map((part) => Number(part));
+      if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) return null;
+      return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0, 0);
+    };
+
+    const getFreezeValidationState = () => {
+      const startRaw = freezeStartDateInput?.value || '';
+      const endRaw = freezeEndDateInput?.value || '';
+      if (!startRaw || !endRaw) {
+        return { hasBothDates: false, isValid: false, message: '', durationDays: 0 };
+      }
+      const startDate = parseLocalDate(startRaw);
+      const endDate = parseLocalDate(endRaw);
+      if (!startDate || !endDate) {
+        return { hasBothDates: true, isValid: false, message: 'Ugyldige datoer.', durationDays: 0 };
+      }
+      if (endDate < startDate) {
+        return {
+          hasBothDates: true,
+          isValid: false,
+          message: 'Slutdato skal ligge efter startdato.',
+          durationDays: 0
+        };
+      }
+      const maxEndDate = new Date(startDate.getTime());
+      maxEndDate.setMonth(maxEndDate.getMonth() + 3);
+      if (endDate > maxEndDate) {
+        return {
+          hasBothDates: true,
+          isValid: false,
+          message: 'Fryseperioden må maks. være 3 måneder.',
+          durationDays: 0
+        };
+      }
+      const durationDays = Math.floor((endDate.getTime() - startDate.getTime()) / DAY_IN_MS) + 1;
+      return { hasBothDates: true, isValid: true, message: '', durationDays };
+    };
+
+    const updateFreezeSummaryAndButtonState = () => {
+      const state = getFreezeValidationState();
+      if (!freezeDatePreview || !proceedFreezeBtn) return;
+
+      proceedFreezeBtn.disabled = !state.isValid;
+      freezeDatePreview.style.display = state.hasBothDates ? 'block' : 'none';
+      freezeDatePreview.classList.toggle('freeze-summary-row--error', state.hasBothDates && !state.isValid);
+
+      if (!state.hasBothDates) {
+        freezeDatePreview.textContent = '';
+        setError(freezeError, '');
+        return;
+      }
+
+      if (!state.isValid) {
+        freezeDatePreview.textContent = state.message;
+        setError(freezeError, state.message);
+        return;
+      }
+
+      const approximateMonths = (state.durationDays / 30).toFixed(1).replace('.', ',');
+      freezeDatePreview.textContent = `Varighed: ${state.durationDays} dage (~${approximateMonths} mdr) · Pris: 49 kr`;
+      setError(freezeError, '');
     };
 
     document.getElementById('closeFreezeSubscriptionModal')?.addEventListener('click', closeAllSubscriptionModals);
@@ -7827,21 +8312,24 @@ export function initializeLoginPage(DOM) {
     document.getElementById('stayMembershipBtnStep2')?.addEventListener('click', closeAllSubscriptionModals);
 
     document.getElementById('proceedFreezeBtn')?.addEventListener('click', () => {
-      const start = document.getElementById('freezeStartDate')?.value || '';
-      const end = document.getElementById('freezeEndDate')?.value || '';
-      if (!start || !end) {
-        setError(freezeError, 'Please choose both start and end dates.');
-        return;
-      }
-      if (new Date(start) > new Date(end)) {
-        setError(freezeError, 'End date must be after start date.');
+      const freezeState = getFreezeValidationState();
+      if (!freezeState.isValid) {
+        setError(freezeError, freezeState.message || 'Vælg en gyldig periode for at fortsætte.');
+        updateFreezeSummaryAndButtonState();
         return;
       }
       setError(freezeError, '');
-      if (freezeDatePreview) freezeDatePreview.textContent = `Freeze period: ${start} to ${end}`;
       closeModal('freezeSubscriptionModal');
       openModal('freezeSubscriptionModalStep2');
     });
+
+    if (freezeStartDateInput && freezeEndDateInput) {
+      ['input', 'change'].forEach((eventName) => {
+        freezeStartDateInput.addEventListener(eventName, updateFreezeSummaryAndButtonState);
+        freezeEndDateInput.addEventListener(eventName, updateFreezeSummaryAndButtonState);
+      });
+      updateFreezeSummaryAndButtonState();
+    }
 
     document.getElementById('proceedFreezeBtnStep2')?.addEventListener('click', () => {
       const accepted = document.getElementById('freezeAcceptTerms')?.checked;
@@ -7869,10 +8357,11 @@ export function initializeLoginPage(DOM) {
     document.getElementById('freezeInsteadBtn')?.addEventListener('click', () => {
       closeModal('cancelSubscriptionModal');
       openModal('freezeSubscriptionModal');
+      updateFreezeSummaryAndButtonState();
     });
     document.getElementById('proceedCancelBtn')?.addEventListener('click', () => {
-      closeModal('cancelSubscriptionModal');
-      openModal('cancelSubscriptionModalStep2');
+      closeAllSubscriptionModals();
+      showToast('Cancellation request flow completed.', 'success');
     });
     document.getElementById('confirmCancelSubscriptionBtn')?.addEventListener('click', () => {
       const password = document.getElementById('cancelPasswordInput')?.value?.trim() || '';
