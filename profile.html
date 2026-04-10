@@ -205,16 +205,16 @@
             <div class="classes-page-container">
                 <!-- Main Tabs -->
                 <div class="bookings-tabs">
-                    <button class="booking-tab active" data-tab="myBookings">
-                        <span>My Bookings</span>
-                    </button>
-                    <button class="booking-tab" data-tab="browse">
+                    <button class="booking-tab active" data-tab="browse">
                         <span>Browse Classes</span>
+                    </button>
+                    <button class="booking-tab" data-tab="myBookings">
+                        <span>My Bookings</span>
                     </button>
                 </div>
 
                 <!-- My Bookings Section -->
-                <div class="bookings-section active" id="myBookingsSection">
+                <div class="bookings-section" id="myBookingsSection" style="display: none;">
                     <!-- Sub-tabs -->
                     <div class="bookings-sub-tabs">
                         <button class="booking-sub-tab active" data-sub-tab="upcoming">
@@ -302,7 +302,7 @@
                 </div>
 
                 <!-- Browse Classes Section -->
-                <div class="bookings-section" id="browseClasses" style="display: none;">
+                <div class="bookings-section active" id="browseClasses">
                     <!-- Filters -->
                     <div class="browse-filters">
                         <div class="srch">
@@ -1219,24 +1219,24 @@
         </a>
         
         <!-- Login Status Section -->
-        <div class="login-status" data-login-status style="display: none;">
+        <div class="login-status" data-login-status data-auth-ready="false" style="display: none;">
             <div class="login-status-content">
                 <div class="login-status-profile">
                     <div class="login-status-header">
                         <p class="login-status-label">Logged in as</p>
-                        <p class="login-status-name" data-auth-name-page>N/A</p>
-                        <p class="login-status-email" data-auth-email-page>N/A</p>
+                        <p class="login-status-name" data-auth-name-page></p>
+                        <p class="login-status-email" data-auth-email-page></p>
                         <div class="login-status-dob profile-detail-item" data-auth-dob-page style="display: none;">
                             <span class="profile-detail-label">Date of birth:</span>
-                            <span class="profile-detail-value">N/A</span>
+                            <span class="profile-detail-value"></span>
                         </div>
                         <div class="login-status-address profile-detail-item" data-auth-address-page style="display: none;">
                             <span class="profile-detail-label">Address:</span>
-                            <span class="profile-detail-value">N/A</span>
+                            <span class="profile-detail-value"></span>
                         </div>
                         <div class="login-status-phone profile-detail-item" data-auth-phone-page style="display: none;">
                             <span class="profile-detail-label">Phone:</span>
-                            <span class="profile-detail-value">N/A</span>
+                            <span class="profile-detail-value"></span>
                         </div>
                     </div>
                 </div>

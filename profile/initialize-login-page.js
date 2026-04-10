@@ -7932,6 +7932,9 @@ export function initializeLoginPage(DOM) {
 
     if (DOM.loginStatusPage) {
       DOM.loginStatusPage.style.display = authenticated ? 'block' : 'none';
+      if (authenticated && customer) {
+        DOM.loginStatusPage.setAttribute('data-auth-ready', 'true');
+      }
     }
 
     if (DOM.loginStatusNamePage) {

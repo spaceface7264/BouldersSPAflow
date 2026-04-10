@@ -6281,6 +6281,8 @@ body.authenticated #pageProfile .profile-account-panel .settings-page-container 
     text-decoration: underline;
 }
 
+.login-status[data-auth-ready="false"] { display: none !important; }
+
 /* Login status section styles */
 .login-status {
     background: linear-gradient(135deg, rgba(244, 1, 245, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
