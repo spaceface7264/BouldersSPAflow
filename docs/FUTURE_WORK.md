@@ -8,6 +8,7 @@ Tracked improvements that are **not** blocking day-to-day development. Pick item
 
 - **Playwright smoke (join flow)** — One E2E path: gym select → membership → order → payment-link return. Catches most regressions that manual QA keeps recording in `progress.txt`. Needs CI, secrets/mocks strategy, and flake budget.
 - **`progress.txt` / QA notes** — When Playwright exists, align scenarios with the smoke test or trim duplication.
+- **Classes browse pagination / infinite load** — Limit initial class-card render to a fixed batch (`x` items) and then either: (1) show a **Load more** button, or (2) auto-load the next batch when the user reaches the bottom. Goal: reduce first paint work and keep long result sets responsive.
 
 ---
 
