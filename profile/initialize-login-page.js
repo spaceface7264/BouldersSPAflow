@@ -244,6 +244,7 @@ export function initializeLoginPage(DOM) {
   }
 
   const bookingEventImageCache = new Map();
+  const savedAvailabilityLiveItemCache = new Map();
 
   async function resolveBookedClassImageUrlFromEvents(booking) {
     if (!booking || typeof booking !== 'object' || !authAPI?.listBusinessUnitEvents) return '';
@@ -1207,11 +1208,6 @@ export function initializeLoginPage(DOM) {
 
   function appendClassCardDurationAvailability(main, startIso, endIso, ctx) {
     if (!main) return;
-    const sourceName = String(
-      ctx?.source?.name || ctx?.booking?.name || ctx?.booking?.groupActivity?.name || ''
-    ).trim();
-    const normalizedName = sourceName.toLowerCase().replace(/\s+/g, '');
-    if (!normalizedName.includes('introhold')) return;
 
     const slots = ctx && typeof ctx === 'object' ? ctx.slots : null;
     const leftRaw = slots?.leftToBookIncDropin ?? slots?.leftToBook ?? slots?.available ?? slots?.left;
@@ -1251,8 +1247,72 @@ export function initializeLoginPage(DOM) {
     if (!avail) return;
     const sub = document.createElement('div');
     sub.className = 'booking-item-card__submeta';
+    sub.dataset.availability = '1';
     sub.textContent = avail;
     main.appendChild(sub);
+  }
+
+  function savedRecordAvailabilityContext(rec, liveItem = null) {
+    if (!rec || typeof rec !== 'object') return null;
+    const snap = rec.browseSnapshot && typeof rec.browseSnapshot === 'object' ? rec.browseSnapshot : null;
+    const slots =
+      rec.slots ||
+      snap?.slots ||
+      snap?.groupActivity?.slots ||
+      snap?.event?.slots ||
+      liveItem?.slots ||
+      liveItem?.groupActivity?.slots ||
+      liveItem?.event?.slots ||
+      null;
+    if (!slots || typeof slots !== 'object') return null;
+    const sourceName =
+      rec.title ||
+      liveItem?.name ||
+      liveItem?.groupActivity?.name ||
+      liveItem?.event?.name ||
+      snap?.name ||
+      '';
+    return {
+      slots,
+      source: {
+        name: sourceName,
+      },
+      booking: {
+        name: sourceName,
+      },
+    };
+  }
+
+  function savedCardHasAvailability(main) {
+    if (!main) return false;
+    return Boolean(main.querySelector('.booking-item-card__availability, .booking-item-card__submeta[data-availability="1"]'));
+  }
+
+  async function hydrateSavedCardAvailability(card, rec) {
+    if (!card || !rec || !rec.key) return;
+    const info =
+      card.querySelector('.booking-item-card__list-info') || card.querySelector('.booking-item-card__main');
+    if (!info || savedCardHasAvailability(info)) return;
+    let liveItem = null;
+    if (savedAvailabilityLiveItemCache.has(rec.key)) {
+      liveItem = savedAvailabilityLiveItemCache.get(rec.key) || null;
+    } else {
+      try {
+        const resolved = await resolveSavedRecordToLiveActivity(rec);
+        liveItem = resolved?.item || null;
+        savedAvailabilityLiveItemCache.set(rec.key, liveItem || null);
+      } catch (_) {
+        savedAvailabilityLiveItemCache.set(rec.key, null);
+        return;
+      }
+    }
+    if (!card.isConnected) return;
+    const freshInfo =
+      card.querySelector('.booking-item-card__list-info') || card.querySelector('.booking-item-card__main');
+    if (!freshInfo || savedCardHasAvailability(freshInfo)) return;
+    const availabilityCtx = savedRecordAvailabilityContext(rec, liveItem);
+    if (!availabilityCtx) return;
+    appendClassCardDurationAvailability(freshInfo, rec?.startIso || '', rec?.endIso || null, availabilityCtx);
   }
 
   function buildBookingExpandLines(book) {
@@ -2731,18 +2791,7 @@ export function initializeLoginPage(DOM) {
       if (row.classList.contains('is-resolving-saved-class')) return;
       row.classList.add('is-resolving-saved-class');
       try {
-        if (tryOpenSavedClassSnapshot(savedRec)) {
-          return;
-        }
-        const resolved = await resolveSavedRecordToLiveActivity(savedRec);
-        const gymSel = document.getElementById('browseGymFilter');
-        if (resolved?.kind === 'event' && resolved.item) {
-          openEventExpand(resolved.item);
-        } else if (resolved?.kind === 'groupActivity' && resolved.item) {
-          openClassCardExpandBrowse(resolved.item, gymSel);
-        } else {
-          openSavedRecordFallbackExpand(savedRec);
-        }
+        await openSavedClassBookingFlow(savedRec);
       } catch (err) {
         showToast(getErrorMessage(err), 'error');
         openSavedRecordFallbackExpand(savedRec);
@@ -2768,6 +2817,21 @@ export function initializeLoginPage(DOM) {
       e.preventDefault();
       void activate(e);
     });
+  }
+
+  async function openSavedClassBookingFlow(savedRec) {
+    if (tryOpenSavedClassSnapshot(savedRec)) return;
+    const resolved = await resolveSavedRecordToLiveActivity(savedRec);
+    const gymSel = document.getElementById('browseGymFilter');
+    if (resolved?.kind === 'event' && resolved.item) {
+      openEventExpand(resolved.item);
+      return;
+    }
+    if (resolved?.kind === 'groupActivity' && resolved.item) {
+      openClassCardExpandBrowse(resolved.item, gymSel);
+      return;
+    }
+    openSavedRecordFallbackExpand(savedRec);
   }
 
   function appendSaveButtonToCardMain(main, source, meta) {
@@ -2905,10 +2969,42 @@ export function initializeLoginPage(DOM) {
       meta.textContent = formatClassSessionWhenLine(rec?.startIso || '', rec?.endIso || null);
       main.append(h, meta);
     }
+    const availabilityCtx = savedRecordAvailabilityContext(rec);
+    if (availabilityCtx) {
+      appendClassCardDurationAvailability(main, rec?.startIso || '', rec?.endIso || null, availabilityCtx);
+    }
     if (rec?.where) appendLocationPillToCardMain(main, rec.where);
+    const bookBtn = document.createElement('button');
+    bookBtn.type = 'button';
+    bookBtn.className = 'profile-action-btn booking-item-card__book-btn booking-item-card__book-btn--saved';
+    bookBtn.dataset.bookingCardAction = '1';
+    bookBtn.textContent = 'Book now';
+    bookBtn.setAttribute('aria-label', `Book ${savedTitleText}`);
+    let bookBtnBusy = false;
+    const setBookBtnBusy = (busy) => {
+      bookBtnBusy = !!busy;
+      bookBtn.disabled = bookBtnBusy;
+      bookBtn.textContent = bookBtnBusy ? 'Opening...' : 'Book now';
+      bookBtn.setAttribute('aria-busy', bookBtnBusy ? 'true' : 'false');
+    };
+    bookBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (bookBtnBusy) return;
+      setBookBtnBusy(true);
+      try {
+        await openSavedClassBookingFlow(rec);
+      } catch (err) {
+        showToast(getErrorMessage(err), 'error');
+        openSavedRecordFallbackExpand(rec);
+      } finally {
+        setBookBtnBusy(false);
+      }
+    });
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'profile-action-btn-secondary class-card-expand__btn-secondary';
+    removeBtn.dataset.bookingCardAction = '1';
     removeBtn.textContent = 'Remove';
     let confirmTimeoutId = 0;
     const resetRemoveConfirmState = () => {
@@ -2940,9 +3036,12 @@ export function initializeLoginPage(DOM) {
         resetRemoveConfirmState();
       }
     });
-    main.appendChild(removeBtn);
+    main.append(bookBtn, removeBtn);
     finalizeMyBookingsListCardMain(main);
     card.appendChild(main);
+    if (!savedCardHasAvailability(card)) {
+      void hydrateSavedCardAvailability(card, rec);
+    }
     return card;
   }
 
@@ -3511,12 +3610,7 @@ export function initializeLoginPage(DOM) {
       return { dateStr: '—', timeStr: '—', completed: false };
     }
     const d0 = new Date(startMs);
-    let dateStr = '—';
-    try {
-      dateStr = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(d0);
-    } catch {
-      dateStr = formatDisplayDate(startIso);
-    }
+    const dateStr = formatDateLong(startIso);
     const endMs = typeof endIso === 'string' ? Date.parse(endIso) : NaN;
     const hasEnd = Number.isFinite(endMs) && endMs > startMs;
     let timeStr = '—';
@@ -3689,22 +3783,32 @@ export function initializeLoginPage(DOM) {
     if (!main || main.dataset.listLayoutFinalized === '1') return;
     main.dataset.listLayoutFinalized = '1';
     const pills = main.querySelector('.booking-item-card__pills');
-    const removeBtn = main.querySelector(
+    const fallbackActionBtn = main.querySelector(
       'button.profile-action-btn-secondary.class-card-expand__btn-secondary'
     );
+    const actionButtons = Array.from(main.querySelectorAll('button[data-booking-card-action="1"]'));
+    if (!actionButtons.length && fallbackActionBtn) actionButtons.push(fallbackActionBtn);
     const info = document.createElement('div');
     info.className = 'booking-item-card__list-info';
     const trail = document.createElement('div');
     trail.className = 'booking-item-card__list-trail';
     const nodes = Array.from(main.childNodes);
     nodes.forEach((node) => {
-      if (node === pills || node === removeBtn) return;
+      if (node === pills) return;
+      if (
+        node.nodeType === Node.ELEMENT_NODE &&
+        node instanceof HTMLElement &&
+        node.matches('button[data-booking-card-action="1"]')
+      ) {
+        return;
+      }
+      if (node === fallbackActionBtn) return;
       if (node.nodeType === Node.ELEMENT_NODE) info.appendChild(node);
     });
     main.appendChild(info);
-    if (pills || removeBtn) {
+    if (pills || actionButtons.length) {
       if (pills) trail.appendChild(pills);
-      if (removeBtn) trail.appendChild(removeBtn);
+      actionButtons.forEach((btn) => trail.appendChild(btn));
       main.appendChild(trail);
     }
   }
@@ -4999,6 +5103,33 @@ export function initializeLoginPage(DOM) {
     });
   }
 
+  function dashboardSavedClassTypeLabel(rec) {
+    const raw = rec?.title != null ? String(rec.title).trim() : '';
+    return raw || 'Class';
+  }
+
+  function dashboardSavedClassTypeKey(rec) {
+    return dashboardSavedClassTypeLabel(rec).toLowerCase();
+  }
+
+  function promoteDashboardSavedRowLocation(row, rec) {
+    if (!row || !rec) return;
+    const where = rec.where != null ? String(rec.where).trim() : '';
+    if (!where) return;
+    const info = row.querySelector('.booking-item-card__list-info');
+    if (!info) return;
+    const label = document.createElement('p');
+    label.className = 'dashboard-saved-reminder__location-primary';
+    label.textContent = where;
+    info.insertBefore(label, info.firstChild);
+    const locPill = row.querySelector('.booking-item-card__pill--location');
+    if (locPill) {
+      const pills = locPill.closest('.booking-item-card__pills');
+      locPill.remove();
+      if (pills && !pills.children.length) pills.remove();
+    }
+  }
+
   function customerGeoProfile(customer) {
     const addr = getAddress(customer || {});
     const rawCity = (addr?.city && addr.city !== '-' ? String(addr.city) : String(customer?.city || '')).trim();
@@ -5479,6 +5610,92 @@ export function initializeLoginPage(DOM) {
     const hasSaved = saved.length > 0;
     const hasBookings = bookings.length > 0;
 
+    const buildNoBookingsMain = () => {
+      const emptyMain = document.createElement('div');
+      emptyMain.className = 'dashboard-classes-empty-main';
+      const title = document.createElement('p');
+      title.className = 'dashboard-classes-empty-title';
+      title.textContent = 'No bookings yet';
+      const lead = document.createElement('p');
+      lead.className = 'dashboard-classes-empty-lead';
+      lead.textContent = 'Your upcoming classes will appear here once you book something.';
+      const actions = document.createElement('div');
+      actions.className = 'dashboard-classes-empty-actions';
+      const cta = document.createElement('button');
+      cta.type = 'button';
+      cta.className = 'profile-action-btn dashboard-book-class-cta';
+      cta.id = 'dashboardBookClassCTA';
+      cta.textContent = 'See more classes';
+      cta.addEventListener('click', (e) => {
+        e.preventDefault();
+        openClassesBrowseTab();
+      });
+      actions.appendChild(cta);
+      if (hasSaved) {
+        const savedLink = document.createElement('button');
+        savedLink.type = 'button';
+        savedLink.className = 'dashboard-book-saved-link';
+        savedLink.textContent = 'or book a saved class';
+        savedLink.addEventListener('click', (e) => {
+          e.preventDefault();
+          openSavedBookingsTab();
+        });
+        actions.appendChild(savedLink);
+      }
+      emptyMain.append(title, lead, actions);
+      return emptyMain;
+    };
+
+    const buildBookedSection = () => {
+      const bookedSection = document.createElement('section');
+      bookedSection.className = 'dashboard-classes-section dashboard-classes-section--booked';
+      bookedSection.setAttribute('aria-labelledby', 'dashboardBookedClassesHeading');
+      bookedSection.appendChild(
+        createDashboardClassesSectionHeader(
+          'dashboardBookedClassesHeading',
+          'Upcoming bookings',
+          hasBookings ? bookingUnits.length : null
+        )
+      );
+      const body = document.createElement('div');
+      body.className = hasBookings
+        ? 'dashboard-classes-section__body dashboard-classes-section__body--booked'
+        : 'dashboard-classes-section__body dashboard-classes-section__body--booked dashboard-classes-section__body--empty-booked';
+      if (hasBookings) {
+        const frag = document.createDocumentFragment();
+        const unitStartMs = (u) =>
+          u.kind === 'series' ? brpBookingStartMs(u.bookings[0]) : brpBookingStartMs(u.booking);
+        const units = [...bookingUnits].sort((a, b) => (unitStartMs(a) || 0) - (unitStartMs(b) || 0));
+        const maxUnits = 6;
+        units.slice(0, maxUnits).forEach((unit) => {
+          appendDashboardBookedUnitToFragment(frag, unit);
+        });
+        body.appendChild(frag);
+      } else {
+        body.appendChild(buildNoBookingsMain());
+      }
+      bookedSection.appendChild(body);
+      return bookedSection;
+    };
+
+    const buildRecommendationSection = () => {
+      const recSection = document.createElement('section');
+      recSection.className = 'dashboard-classes-section dashboard-classes-section--recommended';
+      recSection.setAttribute('aria-labelledby', 'dashboardRecommendedClassesHeading');
+      recSection.appendChild(
+        createDashboardClassesSectionHeader('dashboardRecommendedClassesHeading', 'Recommendations', null)
+      );
+      const recBody = document.createElement('div');
+      recBody.className =
+        'dashboard-classes-section__body dashboard-classes-section__body--recommendations';
+      const recSlot = document.createElement('div');
+      recSlot.className = 'dashboard-classes-recommendation-slot';
+      recBody.appendChild(recSlot);
+      recSection.appendChild(recBody);
+      renderDashboardClassesRecommendation(recSlot, customer || {});
+      return recSection;
+    };
+
     if (hasSaved) {
       const savedSection = document.createElement('section');
       savedSection.className = 'dashboard-classes-section dashboard-classes-section--saved';
@@ -5517,91 +5734,71 @@ export function initializeLoginPage(DOM) {
       actions.appendChild(cta);
       const savedList = document.createElement('div');
       savedList.className = 'dashboard-saved-reminder__list';
+      const groupedSaved = new Map();
       saved.forEach((rec) => {
-        const row = buildSavedClassListCard(rec, {
-          onRemove: () => {
-            persistSavedClasses(loadSavedClasses().filter((x) => x && x.key !== rec.key));
-            refreshDashboardPanels();
-            renderSavedBookingsList();
-          },
+        const key = dashboardSavedClassTypeKey(rec);
+        const existing = groupedSaved.get(key);
+        if (existing) {
+          existing.items.push(rec);
+          return;
+        }
+        groupedSaved.set(key, {
+          label: dashboardSavedClassTypeLabel(rec),
+          items: [rec],
         });
-        row.classList.add('dashboard-saved-reminder__item');
-        attachDashboardSavedReminderRow(row, rec);
-        savedList.appendChild(row);
+      });
+      Array.from(groupedSaved.values()).forEach((group) => {
+        const groupWrap = document.createElement('section');
+        groupWrap.className = 'dashboard-saved-reminder__group';
+        const groupHeader = document.createElement('div');
+        groupHeader.className = 'dashboard-saved-reminder__group-header';
+        const groupTitle = document.createElement('h4');
+        groupTitle.className = 'dashboard-saved-reminder__group-title';
+        groupTitle.textContent = group.label;
+        const groupCount = document.createElement('span');
+        groupCount.className = 'dashboard-saved-reminder__group-count';
+        groupCount.textContent = group.items.length === 1 ? '1 class' : `${group.items.length} classes`;
+        groupHeader.append(groupTitle, groupCount);
+        const groupList = document.createElement('div');
+        groupList.className = 'dashboard-saved-reminder__group-list';
+        group.items.forEach((rec) => {
+          const row = buildSavedClassListCard(rec, {
+            onRemove: () => {
+              persistSavedClasses(loadSavedClasses().filter((x) => x && x.key !== rec.key));
+              refreshDashboardPanels();
+              renderSavedBookingsList();
+            },
+          });
+          row.classList.add('dashboard-saved-reminder__item');
+          promoteDashboardSavedRowLocation(row, rec);
+          attachDashboardSavedReminderRow(row, rec);
+          groupList.appendChild(row);
+        });
+        groupWrap.append(groupHeader, groupList);
+        savedList.appendChild(groupWrap);
       });
       reminder.append(meta, ...(hint ? [hint] : []), savedList, actions);
       savedSection.appendChild(reminder);
       wrap.appendChild(savedSection);
+      const secondaryGrid = document.createElement('div');
+      secondaryGrid.className = 'dashboard-classes-secondary-grid';
+      secondaryGrid.append(buildBookedSection(), buildRecommendationSection());
+      wrap.appendChild(secondaryGrid);
+      return;
     }
 
     if (hasBookings) {
-      const bookedSection = document.createElement('section');
-      bookedSection.className = 'dashboard-classes-section dashboard-classes-section--booked';
-      bookedSection.setAttribute('aria-labelledby', 'dashboardBookedClassesHeading');
-      bookedSection.appendChild(
-        createDashboardClassesSectionHeader(
-          'dashboardBookedClassesHeading',
-          'Upcoming bookings',
-          bookingUnits.length
-        )
-      );
-      const body = document.createElement('div');
-      body.className = 'dashboard-classes-section__body dashboard-classes-section__body--booked';
-      const frag = document.createDocumentFragment();
-      const unitStartMs = (u) =>
-        u.kind === 'series' ? brpBookingStartMs(u.bookings[0]) : brpBookingStartMs(u.booking);
-      const units = [...bookingUnits].sort((a, b) => (unitStartMs(a) || 0) - (unitStartMs(b) || 0));
-      const maxUnits = 6;
-      units.slice(0, maxUnits).forEach((unit) => {
-        appendDashboardBookedUnitToFragment(frag, unit);
-      });
-      body.appendChild(frag);
-      bookedSection.appendChild(body);
-      wrap.appendChild(bookedSection);
+      wrap.appendChild(buildBookedSection());
       return;
     }
 
     const empty = document.createElement('div');
     empty.className = 'dashboard-classes-empty';
-    const emptyMain = document.createElement('div');
-    emptyMain.className = 'dashboard-classes-empty-main';
-    const title = document.createElement('p');
-    title.className = 'dashboard-classes-empty-title';
-    title.textContent = 'No bookings yet';
-    const lead = document.createElement('p');
-    lead.className = 'dashboard-classes-empty-lead';
-    lead.textContent = 'Your upcoming classes will appear here once you book something.';
+    const emptyMain = buildNoBookingsMain();
     const recSlot = document.createElement('div');
     recSlot.className = 'dashboard-classes-recommendation-slot';
-    const cta = document.createElement('button');
-    cta.type = 'button';
-    cta.className = 'profile-action-btn dashboard-book-class-cta';
-    cta.id = 'dashboardBookClassCTA';
-    cta.textContent = 'See more classes';
-    cta.addEventListener('click', (e) => {
-      e.preventDefault();
-      openClassesBrowseTab();
-    });
-    emptyMain.append(title, lead, cta);
     empty.append(emptyMain, recSlot);
     renderDashboardClassesRecommendation(recSlot, customer || {});
-
-    if (hasSaved) {
-      const bookedSection = document.createElement('section');
-      bookedSection.className = 'dashboard-classes-section dashboard-classes-section--booked';
-      bookedSection.setAttribute('aria-labelledby', 'dashboardBookedClassesHeading');
-      bookedSection.appendChild(
-        createDashboardClassesSectionHeader('dashboardBookedClassesHeading', 'Upcoming bookings', null)
-      );
-      const body = document.createElement('div');
-      body.className =
-        'dashboard-classes-section__body dashboard-classes-section__body--booked dashboard-classes-section__body--empty-booked';
-      body.appendChild(empty);
-      bookedSection.appendChild(body);
-      wrap.appendChild(bookedSection);
-      return;
-    }
-
     wrap.appendChild(empty);
   }
 

@@ -1,5 +1,7 @@
 import { formatDisplayDate } from './display-format.js';
 
+const CLASS_DATE_LOCALE = 'da-DK';
+
 export function bookingStartIsoValue(b) {
   return (
     b?.duration?.start ||
@@ -44,14 +46,14 @@ export function formatDateTimeDisplay(iso) {
   if (typeof iso !== 'string') return formatDisplayDate(iso);
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return formatDisplayDate(iso);
-  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return d.toLocaleString(CLASS_DATE_LOCALE, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 export function formatTimeShort(iso) {
   if (!iso || typeof iso !== 'string') return '';
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return '';
-  return d.toLocaleTimeString(undefined, { timeStyle: 'short' });
+  return d.toLocaleTimeString(CLASS_DATE_LOCALE, { timeStyle: 'short' });
 }
 
 function formatClassDateNoYear(iso) {
@@ -59,7 +61,7 @@ function formatClassDateNoYear(iso) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return '—';
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(CLASS_DATE_LOCALE, {
       day: 'numeric',
       month: 'short',
     }).format(d);
