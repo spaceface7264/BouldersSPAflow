@@ -2096,34 +2096,148 @@ export function initializeLoginPage(DOM) {
     };
   }
 
+  function normalizeSavedClassRecords(list) {
+    const deduped = [];
+    const seen = new Set();
+    const src = Array.isArray(list) ? list : [];
+    src.forEach((rec) => {
+      if (!rec || typeof rec !== 'object') return;
+      const key = String(rec.key || '').trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      deduped.push({ ...rec, key });
+    });
+    return deduped;
+  }
+
+  function readSavedClassRecordsFromStorageKeys(keys) {
+    const merged = [];
+    (Array.isArray(keys) ? keys : []).forEach((k) => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) merged.push(...parsed);
+      } catch (_) {
+        // ignore malformed or blocked storage reads
+      }
+    });
+    return normalizeSavedClassRecords(merged);
+  }
+
+  function getSavedClassesAuthContext() {
+    const token = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    const customerId = window?.state?.customerId;
+    return {
+      token: token ? String(token) : '',
+      customerId: customerId != null && customerId !== '' ? String(customerId) : '',
+    };
+  }
+
+  function savedClassesStorageKeyForCustomer(customerId) {
+    return `boulders:saved-classes:${String(customerId || '').trim()}`;
+  }
+
+  function savedClassesSyncRequest(method, token, body) {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open(method, 'https://api.boulders.dk/saved-classes', false);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      if (body != null) xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send(body == null ? null : JSON.stringify(body));
+      if (xhr.status < 200 || xhr.status >= 300) {
+        return { ok: false, data: null };
+      }
+      if (!xhr.responseText) return { ok: true, data: {} };
+      try {
+        return { ok: true, data: JSON.parse(xhr.responseText) };
+      } catch (_) {
+        return { ok: true, data: {} };
+      }
+    } catch (_) {
+      return { ok: false, data: null };
+    }
+  }
+
+  function extractSavedClassIdsFromRemotePayload(payload) {
+    const raw = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.classIds)
+        ? payload.classIds
+        : [];
+    return Array.from(
+      new Set(
+        raw
+          .map((id) => String(id || '').trim())
+          .filter(Boolean)
+      )
+    );
+  }
+
   function loadSavedClasses() {
     try {
-      const { primaryKey, allKeys } = resolveSavedClassesOwnerKeys();
+      const { token, customerId } = getSavedClassesAuthContext();
+      if (!token || !customerId) {
+        const { primaryKey, allKeys } = resolveSavedClassesOwnerKeys();
+        const deduped = readSavedClassRecordsFromStorageKeys(allKeys);
+        // Keep one canonical copy for this profile to avoid split lists.
+        localStorage.setItem(primaryKey, JSON.stringify(deduped));
+        return deduped;
+      }
+
+      const customerKey = savedClassesStorageKeyForCustomer(customerId);
+      const localList = readSavedClassRecordsFromStorageKeys([customerKey]);
+      const remoteRes = savedClassesSyncRequest('GET', token, null);
+      if (!remoteRes.ok) return localList;
+
+      const remoteIds = extractSavedClassIdsFromRemotePayload(remoteRes.data);
+      const remoteIdSet = new Set(remoteIds);
+      const localByKey = new Map(localList.map((rec) => [rec.key, rec]));
       const merged = [];
-      allKeys.forEach((k) => {
-        const raw = localStorage.getItem(k);
-        const parsed = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(parsed)) merged.push(...parsed);
-      });
-      const deduped = [];
       const seen = new Set();
-      merged.forEach((rec) => {
-        if (!rec || !rec.key || seen.has(rec.key)) return;
-        seen.add(rec.key);
-        deduped.push(rec);
+      remoteIds.forEach((key) => {
+        if (seen.has(key)) return;
+        seen.add(key);
+        merged.push(localByKey.get(key) || { key });
       });
-      // Keep one canonical copy for this profile to avoid split lists.
-      localStorage.setItem(primaryKey, JSON.stringify(deduped));
-      return deduped;
+      localList.forEach((rec) => {
+        if (!rec?.key || seen.has(rec.key)) return;
+        seen.add(rec.key);
+        merged.push(rec);
+      });
+
+      const hasLocalItemsMissingRemote = localList.some((rec) => rec?.key && !remoteIdSet.has(rec.key));
+      if (hasLocalItemsMissingRemote) {
+        const putRes = savedClassesSyncRequest('PUT', token, {
+          classIds: merged.map((rec) => rec.key),
+        });
+        if (!putRes.ok) return localList;
+      }
+
+      localStorage.removeItem(customerKey);
+      return merged;
     } catch {
       return [];
     }
   }
 
   function persistSavedClasses(list) {
+    const normalized = normalizeSavedClassRecords(list);
     try {
-      const { primaryKey } = resolveSavedClassesOwnerKeys();
-      localStorage.setItem(primaryKey, JSON.stringify(Array.isArray(list) ? list : []));
+      const { token, customerId } = getSavedClassesAuthContext();
+      if (!token || !customerId) {
+        const { primaryKey } = resolveSavedClassesOwnerKeys();
+        localStorage.setItem(primaryKey, JSON.stringify(normalized));
+        return;
+      }
+
+      // Cache locally regardless of remote outcome so UI remains resilient offline.
+      const customerKey = savedClassesStorageKeyForCustomer(customerId);
+      localStorage.setItem(customerKey, JSON.stringify(normalized));
+      savedClassesSyncRequest('PUT', token, {
+        classIds: normalized.map((rec) => rec.key),
+      });
     } catch (_) {
       // ignore quota/privacy mode errors
     }
