@@ -5748,10 +5748,12 @@ const translations = {
     'activationDate.changeFailed': 'Kunne ikke ændre datoen. Gennemfør din køb eller start forfra.',
     'activationConfirm.title': 'Bekræft dit valg',
     'activationConfirm.subtitle': 'Bekræft hvornår din prøveperiode skal starte, før du går til betaling.',
+    'activationConfirm.subtitle.freetrial': 'Bekræft hvornår din prøveperiode skal starte.',
     'activationConfirm.startLabel': 'Starter',
     'activationConfirm.endLabel': 'Gyldig til',
     'activationConfirm.today': 'I dag',
     'activationConfirm.continue': 'Fortsæt til betaling',
+    'activationConfirm.continue.freetrial': 'Aktivér prøveperiode',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
@@ -5760,7 +5762,7 @@ const translations = {
     'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
     'cart.consent.sms': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS-beskeder</a>.',
     'consent.sms.explainer': 'SMS<br><br>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
-    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
+    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.freePeriod': 'Gratis periode', 'cart.activateTrial': 'AKTIVÉR PRØVEPERIODE', 'cart.noCreditCardRequired': 'Intet kreditkort kræves', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
@@ -5814,9 +5816,12 @@ const translations = {
     'confirmation.nextStep2.membership': 'Medlemskabsaktivering og automatisk fornyelse',
     'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
     'confirmation.nextStep2.15daypass.future': 'Din 15-Dages Prøveperiode bliver aktivt den {date}',
+    'confirmation.nextStep2.freetrial': 'Din prøveperiode er aktiveret og klar til brug.',
+    'confirmation.nextStep2.freetrial.future': 'Din prøveperiode aktiveres automatisk den {date}',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskort i Boulders',
     'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge ditn 15-Dages Prøveperiode',
+    'confirmation.nextStep3.freetrial': 'Mød op i hallen og kom i gang når din periode starter og oplys dit telefonnummer',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
@@ -5886,6 +5891,11 @@ const translations = {
     'faq.15daypass.validity.a': '15-dages kortet er gyldigt i 15 dage fra aktiveringsdatoen. Du har ubegrænset adgang til alle haller, samt fri leje af klatresko, i denne periode.',
     'faq.15daypass.access.q': 'Hvilken adgang får jeg med kortet?',
     'faq.15daypass.access.a': 'Med 15-dages kortet får du ubegrænset adgang til alle Boulders haller, alle klatreområder og faciliteter i 15 dage. kortet kan ikke konverteres til et fuldt medlemskab.',
+    'faq.freetrial.changeStartDate.q': 'Kan jeg ændre min startdato?',
+    'faq.freetrial.changeStartDate.a': 'Ja, skriv til os på medlem@boulders.dk, så hjælper vi dig.',
+    'faq.freetrial.changeStartDateCta': 'Vil du ændre startdatoen? Skriv til medlem@boulders.dk',
+    'faq.freetrial.creditCard.q': 'Kræver det et kreditkort?',
+    'faq.freetrial.creditCard.a': 'Nej, prøveperioden er helt gratis og kræver ingen betalingsoplysninger.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
     'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 12 måneder og kan deles med andre.',
     'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
@@ -5920,10 +5930,12 @@ const translations = {
     'activationDate.changeFailed': 'Unable to change date. Please complete your purchase or start over.',
     'activationConfirm.title': 'Confirm your selection',
     'activationConfirm.subtitle': 'Please confirm when your pass should start before continuing to checkout.',
+    'activationConfirm.subtitle.freetrial': 'Confirm when your trial period should start.',
     'activationConfirm.startLabel': 'Starts',
     'activationConfirm.endLabel': 'Valid until',
     'activationConfirm.today': 'Today',
     'activationConfirm.continue': 'Continue to checkout',
+    'activationConfirm.continue.freetrial': 'Activate trial period',
     'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
@@ -6014,9 +6026,12 @@ const translations = {
     'confirmation.nextStep2.membership': 'Membership activation & auto-renewal setup',
     'confirmation.nextStep2.15daypass': 'Your pass is active and ready to use',
     'confirmation.nextStep2.15daypass.future': 'Your pass becomes active on {date}',
+    'confirmation.nextStep2.freetrial': 'Your trial period is activated and ready to use.',
+    'confirmation.nextStep2.freetrial.future': 'Your trial period activates automatically on {date}',
     'confirmation.nextStep2.punchcard': 'Your punch card is ready to use',
     'confirmation.nextStep3.membership': 'Pick up your membership card at the gym',
     'confirmation.nextStep3.15daypass': 'Visit the gym to start using your pass',
+    'confirmation.nextStep3.freetrial': 'Visit the gym and get started when your period starts, and provide your phone number to staff',
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
     'confirmation.pending.title': 'Payment Pending',
     'confirmation.pending.message': 'Your payment is being processed. We\'re waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #',
@@ -6085,6 +6100,14 @@ const translations = {
     'faq.15daypass.validity.a': 'The 15-Day Trial Pass is valid for 15 days from the activation date. You have unlimited access to all gyms during this period.',
     'faq.15daypass.access.q': 'What access do I get with the pass?',
     'faq.15daypass.access.a': 'With the 15-Day Trial Pass, you get unlimited access to all Boulders gyms, all climbing areas and facilities for 15 days. The pass cannot be converted to a full membership.',
+    'faq.freetrial.changeStartDate.q': 'Can I change my start date?',
+    'faq.freetrial.changeStartDate.a': 'Yes, write to us at medlem@boulders.dk and we will help you.',
+    'faq.freetrial.changeStartDateCta': 'Want to change your start date? Write to medlem@boulders.dk',
+    'faq.freetrial.creditCard.q': 'Does it require a credit card?',
+    'faq.freetrial.creditCard.a': 'No, the trial period is completely free and requires no payment details.',
+    'cart.freePeriod': 'Free period',
+    'cart.activateTrial': 'ACTIVATE TRIAL PERIOD',
+    'cart.noCreditCardRequired': 'No credit card required',
     'faq.punchcard.howItWorks.q': 'How does the punch card work?',
     'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 12 months and can be shared with others.',
     'faq.punchcard.convert.q': 'Can I convert my punch card to a membership?',
@@ -6622,6 +6645,7 @@ function updateCartTranslations() {
 
   // Payment overview labels are handled by data-i18n-key attributes in HTML
   // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
+  applyFreeFlowCartUi();
 }
 
 // Update heads-up displays
@@ -10911,8 +10935,8 @@ function openCheckoutConfirmModal() {
   const subtitleEl = modal.querySelector('.checkout-confirm-subtitle');
   if (subtitleEl) {
     if (isFreeFlow) {
-      subtitleEl.removeAttribute('data-i18n-key');
-      subtitleEl.textContent = 'Bekræft hvornår din prøveperiode skal starte.';
+      subtitleEl.setAttribute('data-i18n-key', 'activationConfirm.subtitle.freetrial');
+      subtitleEl.textContent = t('activationConfirm.subtitle.freetrial');
     } else {
       subtitleEl.setAttribute('data-i18n-key', 'activationConfirm.subtitle');
       subtitleEl.textContent = t('activationConfirm.subtitle');
@@ -10922,8 +10946,8 @@ function openCheckoutConfirmModal() {
   const continueBtn = modal.querySelector('[data-action="checkout-confirm-continue"]');
   if (continueBtn) {
     if (isFreeFlow) {
-      continueBtn.removeAttribute('data-i18n-key');
-      continueBtn.textContent = 'Aktivér prøveperiode';
+      continueBtn.setAttribute('data-i18n-key', 'activationConfirm.continue.freetrial');
+      continueBtn.textContent = t('activationConfirm.continue.freetrial');
     } else {
       continueBtn.setAttribute('data-i18n-key', 'activationConfirm.continue');
       continueBtn.textContent = t('activationConfirm.continue');
@@ -14908,15 +14932,6 @@ function updatePaymentOverview() {
     
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
-    if (payNowRow) {
-      const payNowLabel = payNowRow.querySelector('.payment-label');
-      if (payNowLabel) {
-        const isFreePeriod = !isCampaignPayNowPending && Math.abs(state.totals.payNowAmount) < 0.0001;
-        payNowLabel.textContent = isFreePeriod
-          ? 'Free period:'
-          : `${t('cart.payNow') || 'Pay now'}:`;
-      }
-    }
     if (!isCampaignPayNowPending && payNowRow && billingPeriodText) {
       let periodElement = payNowRow.querySelector('.payment-label-period');
       if (!periodElement) {
@@ -14968,6 +14983,7 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ℹ️ Order data not available yet - price will be verified when order is created');
     }
   }
+  applyFreeFlowCartUi();
   
   // Update "Månedlig betaling herefter" (Monthly payment thereafter)
   // Hide monthly payment for 15-day pass (one-time payment)
@@ -19428,12 +19444,13 @@ function renderConfirmationView() {
   }
   
   if (nextStep2 && nextStep3) {
+    const isFreeTrialFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
     const step2Key = productType === 'membership' ? 'confirmation.nextStep2.membership'
-      : productType === '15daypass' ? 'confirmation.nextStep2.15daypass'
+      : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep2.freetrial' : 'confirmation.nextStep2.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep2.punchcard'
       : 'confirmation.nextStep2.membership';
     const step3Key = productType === 'membership' ? 'confirmation.nextStep3.membership'
-      : productType === '15daypass' ? 'confirmation.nextStep3.15daypass'
+      : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep3.freetrial' : 'confirmation.nextStep3.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep3.punchcard'
       : 'confirmation.nextStep3.membership';
     nextStep2.setAttribute('data-i18n-key', step2Key);
@@ -19641,7 +19658,9 @@ function renderConfirmationView() {
 
       if (startDay.getTime() > today.getTime()) {
         const dateIso = `${startDay.getFullYear()}-${String(startDay.getMonth() + 1).padStart(2, '0')}-${String(startDay.getDate()).padStart(2, '0')}`;
-        const key = 'confirmation.nextStep2.15daypass.future';
+        const key = state.landingRouteConfig?.componentName === 'LandingFreeTrial'
+          ? 'confirmation.nextStep2.freetrial.future'
+          : 'confirmation.nextStep2.15daypass.future';
         nextStep2.setAttribute('data-i18n-key', key);
         nextStep2.setAttribute('data-i18n-date-iso', dateIso);
         // Render immediately (also allows updatePageTranslations() to re-render on language switch)
@@ -19649,8 +19668,11 @@ function renderConfirmationView() {
       } else {
         // Pass is active now (or today) - restore normal i18n-managed message
         nextStep2.removeAttribute('data-i18n-date-iso');
-        nextStep2.setAttribute('data-i18n-key', 'confirmation.nextStep2.15daypass');
-        nextStep2.textContent = t('confirmation.nextStep2.15daypass');
+        const activeNowKey = state.landingRouteConfig?.componentName === 'LandingFreeTrial'
+          ? 'confirmation.nextStep2.freetrial'
+          : 'confirmation.nextStep2.15daypass';
+        nextStep2.setAttribute('data-i18n-key', activeNowKey);
+        nextStep2.textContent = t(activeNowKey);
       }
     }
   }
@@ -20364,6 +20386,47 @@ function clearErrorStates() {
   }
 }
 
+function getFreeFlowCartState() {
+  const isFreeTrialSelected = Boolean(document.querySelector('[data-category="freetrial"] .plan-card.selected')) ||
+    state.landingRouteConfig?.componentName === 'LandingFreeTrial';
+  const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
+  const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
+  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
+  return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
+}
+
+// Single source of truth for free trial cart UI.
+// Do NOT set these labels/states from translation updates or other cart refresh paths.
+function applyFreeFlowCartUi() {
+  const { isFreeTrialSelected, isZeroTotal, isFreeFlow } = getFreeFlowCartState();
+
+  const payNowRow = DOM.payNow ? DOM.payNow.closest('.payment-overview-paynow-row') : null;
+  if (payNowRow) {
+    const payNowLabel = payNowRow.querySelector('.payment-label');
+    if (payNowLabel) {
+      payNowLabel.textContent = isFreeFlow
+        ? `${t('cart.freePeriod') || 'Gratis periode'}:`
+        : `${t('cart.payNow') || 'Pay now'}:`;
+    }
+  }
+
+  if (DOM.checkoutBtn) {
+    DOM.checkoutBtn.textContent = isFreeFlow ? (t('cart.activateTrial') || 'AKTIVÉR PRØVEPERIODE') : t('cart.checkout');
+  }
+
+  const paymentRedirectText = document.querySelector('p[data-i18n-key="cart.paymentRedirect"]');
+  if (paymentRedirectText) {
+    paymentRedirectText.style.display = isFreeFlow ? 'none' : '';
+  }
+
+  const discountSection = document.querySelector('.discount-section');
+  if (discountSection) {
+    discountSection.style.display = isFreeFlow ? 'none' : '';
+  }
+
+  return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
+}
+
 function updateCheckoutButton() {
   if (!DOM.checkoutBtn) return;
   
@@ -20388,11 +20451,6 @@ function updateCheckoutButton() {
   const hasPunchCards = state.valueCardQuantities && 
     Array.from(state.valueCardQuantities.values()).some(qty => qty > 0);
   const hasAddons = state.addonIds && state.addonIds.size > 0;
-  const isFreeTrialSelected = Boolean(document.querySelector('[data-category="freetrial"] .plan-card.selected')) ||
-    state.landingRouteConfig?.componentName === 'LandingFreeTrial';
-  const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
-  const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
-  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
 
   // Payment method UI removed - always use card; ensure default is set for API
   if (!state.paymentMethod) {
@@ -20403,12 +20461,46 @@ function updateCheckoutButton() {
   // Payment method no longer required from UI - card is used by default
   const hasProduct = hasMembership || hasPunchCards || hasAddons;
   DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
-  DOM.checkoutBtn.textContent = isFreeFlow ? 'AKTIVÉR PRØVEPERIODE' : t('cart.checkout');
+  const { isFreeTrialSelected, isZeroTotal, isFreeFlow } = applyFreeFlowCartUi();
   
-  const paymentRedirectText = document.querySelector('p[data-i18n-key="cart.paymentRedirect"]');
-  if (paymentRedirectText) {
-    paymentRedirectText.style.display = isFreeFlow ? 'none' : '';
+  const consentsSection = document.querySelector('.consents-section');
+  if (consentsSection) {
+    consentsSection.style.marginTop = isFreeFlow ? '16px' : '';
   }
+
+  const shouldShowFreeTrialHint = isFreeTrialSelected && isZeroTotal;
+  let freeTrialHint = document.getElementById('freeTrialCheckoutHint');
+  if (!freeTrialHint) {
+    freeTrialHint = document.createElement('div');
+    freeTrialHint.id = 'freeTrialCheckoutHint';
+    freeTrialHint.style.display = 'none';
+    freeTrialHint.style.marginTop = '8px';
+    freeTrialHint.style.marginTop = '16px';
+    freeTrialHint.style.textAlign = 'center';
+    freeTrialHint.style.fontSize = '0.8125rem';
+    freeTrialHint.style.color = 'rgba(255, 255, 255, 0.65)';
+    freeTrialHint.style.lineHeight = '1.3';
+    const hintWrap = document.createElement('span');
+    hintWrap.style.display = 'inline-flex';
+    hintWrap.style.alignItems = 'center';
+    hintWrap.style.gap = '6px';
+    const hintIcon = document.createElement('span');
+    hintIcon.setAttribute('aria-hidden', 'true');
+    hintIcon.style.color = '#22c55e';
+    hintIcon.textContent = '✓';
+    const hintText = document.createElement('span');
+    hintText.textContent = t('cart.noCreditCardRequired') || 'Intet kreditkort kræves';
+    hintText.className = 'free-trial-checkout-hint-text';
+    hintWrap.appendChild(hintIcon);
+    hintWrap.appendChild(hintText);
+    freeTrialHint.appendChild(hintWrap);
+    DOM.checkoutBtn.insertAdjacentElement('afterend', freeTrialHint);
+  }
+  const freeTrialHintTextEl = freeTrialHint.querySelector('.free-trial-checkout-hint-text');
+  if (freeTrialHintTextEl) {
+    freeTrialHintTextEl.textContent = t('cart.noCreditCardRequired') || 'Intet kreditkort kræves';
+  }
+  freeTrialHint.style.display = shouldShowFreeTrialHint ? 'block' : 'none';
   
   console.log('[Checkout Button] State:', {
     isAuthenticated,
@@ -20421,6 +20513,7 @@ function updateCheckoutButton() {
     isFreeTrialSelected,
     isZeroTotal,
     isFreeFlow,
+    shouldShowFreeTrialHint,
     disabled: DOM.checkoutBtn.disabled,
     privacyConsentElement: DOM.privacyConsent ? 'found' : 'not found',
     termsConsentElement: DOM.termsConsent ? 'found' : 'not found'
@@ -22165,6 +22258,11 @@ const FAQ_DATA = {
   ]
 };
 
+const FREE_TRIAL_EXTRA_FAQS = [
+  { q: 'faq.freetrial.changeStartDate.q', a: 'faq.freetrial.changeStartDate.a' },
+  { q: 'faq.freetrial.creditCard.q', a: 'faq.freetrial.creditCard.a' },
+];
+
 /**
  * Determine which FAQ categories should be shown based on current step and cart.
  * Step 1: gyms only. Step 2–3: product choice (help choose product). Step 4: contextual to cart.
@@ -22209,6 +22307,7 @@ function renderFAQ() {
   
   // Get active FAQ categories
   const activeCategories = getActiveFAQs();
+  const isFreeTrialFaqFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
   
   // Clear existing FAQ items
   faqList.innerHTML = '';
@@ -22217,8 +22316,12 @@ function renderFAQ() {
   activeCategories.forEach(categoryKey => {
     const categoryFAQs = FAQ_DATA[categoryKey];
     if (!categoryFAQs) return;
-    
-    categoryFAQs.forEach(faq => {
+
+    const faqsToRender = (categoryKey === '15daypass' && isFreeTrialFaqFlow)
+      ? [...categoryFAQs, ...FREE_TRIAL_EXTRA_FAQS]
+      : categoryFAQs;
+
+    faqsToRender.forEach(faq => {
       const faqItem = document.createElement('div');
       faqItem.className = 'faq-item';
       faqItem.setAttribute('aria-expanded', 'false');
