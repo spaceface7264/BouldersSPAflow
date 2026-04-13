@@ -74,6 +74,31 @@ const devWarn = (...args) => {
 };
 const geoLogger = { log: devLog, warn: devWarn };
 
+const LANDING_ROUTE_CONFIG = Object.freeze({
+  '/freetrial': Object.freeze({
+    componentName: 'LandingFreeTrial',
+    labelKey: 'LandingFreeTrial',
+    mode: 'single',
+  }),
+  '/firstmonthfree': Object.freeze({
+    componentName: 'LandingFirstMonthFree',
+    labelKey: 'LandingFirstMonthFree',
+    mode: 'multi',
+  }),
+});
+
+function normalizePathname(pathname) {
+  const raw = String(pathname || '/').trim().toLowerCase();
+  if (!raw || raw === '/') return '/';
+  const withoutTrailingSlash = raw.replace(/\/+$/, '');
+  return withoutTrailingSlash || '/';
+}
+
+function resolveLandingRouteConfig(pathname = window.location.pathname) {
+  const normalizedPath = normalizePathname(pathname);
+  return LANDING_ROUTE_CONFIG[normalizedPath] || null;
+}
+
 const REQUIRED_FIELDS = [
   'firstName',
   'lastName',
@@ -2831,6 +2856,33 @@ function shouldDisplayProductByLabels(product) {
   return false;
 }
 
+function normalizeLabelName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function productHasLabel(product, labelKey) {
+  const normalizedKey = normalizeLabelName(labelKey);
+  if (!normalizedKey) return false;
+  if (!product || !Array.isArray(product.productLabels)) return false;
+  return product.productLabels.some((label) => normalizeLabelName(label?.name) === normalizedKey);
+}
+
+function getRouteMatchedProducts(products, labelKey) {
+  if (!Array.isArray(products) || products.length === 0) return [];
+  return products.filter((product) => productHasLabel(product, labelKey));
+}
+
+function getDisplayableRouteMatchedProducts(products, labelKey) {
+  return getRouteMatchedProducts(products, labelKey)
+    .filter((product) => shouldDisplayProductByLabels(product));
+}
+
+function getProductPriceCents(product) {
+  const amount = product?.priceWithInterval?.price?.amount ?? product?.price?.amount ?? product?.amount;
+  if (amount == null) return 0;
+  return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
+}
+
 // Step 5: Load products (subscriptions and value cards) from API
 // API Endpoints (per OpenAPI documentation):
 // - GET /api/ver3/products/subscriptions?businessUnit={id} (line ~8287)
@@ -3082,11 +3134,6 @@ async function loadProductsFromAPI() {
     });
 
     // Sort all product lists by price high to low (price in cents for consistent comparison)
-    const getProductPriceCents = (product) => {
-      const amount = product.priceWithInterval?.price?.amount ?? product.price?.amount ?? product.amount;
-      if (amount == null) return 0;
-      return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
-    };
     const byPriceHighToLow = (a, b) => getProductPriceCents(b) - getProductPriceCents(a);
     campaignSubscriptions.sort(byPriceHighToLow);
     campaignValueCards.sort(byPriceHighToLow);
@@ -3108,6 +3155,28 @@ async function loadProductsFromAPI() {
     state.subscriptions = membershipSubscriptions;
     state.dayPassSubscriptions = dayPassSubscriptions;
     state.valueCards = regularValueCards; // Only non-campaign value cards go to Punch Card category
+    
+    const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+    if (activeLandingRoute) {
+      const displayCandidates = [
+        ...campaignSubscriptions,
+        ...membershipSubscriptions,
+        ...dayPassSubscriptions,
+        ...campaignValueCards,
+        ...regularValueCards,
+      ];
+      const matched = getDisplayableRouteMatchedProducts(displayCandidates, activeLandingRoute.labelKey)
+        .sort(byPriceHighToLow);
+      state.landingMatchedProducts = activeLandingRoute.mode === 'single'
+        ? matched.slice(0, 1)
+        : matched;
+      devLog(`[Landing Route] ${activeLandingRoute.componentName} matched products:`, state.landingMatchedProducts.length);
+      if (state.landingMatchedProducts.length === 0) {
+        devWarn(`[Landing Route] No products matched label '${activeLandingRoute.labelKey}' on path '${normalizePathname(window.location.pathname)}'`);
+      }
+    } else {
+      state.landingMatchedProducts = [];
+    }
 
 
     // Re-render the membership plans with API data
@@ -3186,6 +3255,8 @@ function renderProductsFromAPI() {
     const campaignIntroPriceDisplay = category === 'campaign' ? resolveCampaignIntroPriceDisplay(product) : null;
     const isFirstMonthCampaignPricing = category === 'campaign' && campaignIntroPriceDisplay !== null;
     const originalPriceDisplay = price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '';
+    const effectiveDisplayPrice = isFirstMonthCampaignPricing ? campaignIntroPriceDisplay : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : 'FREE');
+    const showPriceUnit = isFirstMonthCampaignPricing || price > 0;
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3216,8 +3287,8 @@ function renderProductsFromAPI() {
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
           <div class="plan-price ${isFirstMonthCampaignPricing ? 'plan-price--campaign' : ''}">
-            <span class="price-amount">${isFirstMonthCampaignPricing ? campaignIntroPriceDisplay : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—')}</span>
-            <span class="price-unit">${priceUnit}</span>
+            <span class="price-amount">${effectiveDisplayPrice}</span>
+            ${showPriceUnit ? `<span class="price-unit">${priceUnit}</span>` : ''}
             ${isFirstMonthCampaignPricing && originalPriceDisplay
               ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
               : ''}
@@ -3265,8 +3336,8 @@ function renderProductsFromAPI() {
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Punch Card'}</div>
           <div class="plan-price">
-            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
-            <span class="price-unit">kr</span>
+            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : 'FREE'}</span>
+            ${price > 0 ? '<span class="price-unit">kr</span>' : ''}
           </div>
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
@@ -3287,6 +3358,140 @@ function renderProductsFromAPI() {
     
     return planCard;
   };
+
+  const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+  const landingMatchedProducts = Array.isArray(state.landingMatchedProducts)
+    ? state.landingMatchedProducts
+    : [];
+  const shouldRenderLandingRoute = !!activeLandingRoute;
+  const resolveLandingCategory = (product) => {
+    if (product?.priceWithInterval?.price?.amount !== undefined) {
+      if (hasProductLabel(product, 'publiccampaign')) return 'campaign';
+      if (has15DayPassLabel(product)) return '15daypass';
+      return 'membership';
+    }
+    return hasProductLabel(product, 'publiccampaign') ? 'campaign' : 'punchcard';
+  };
+  const ensureFreeTrialCategoryItem = () => {
+    const categoryList = document.querySelector('.category-list');
+    if (!categoryList) return null;
+    let categoryItem = categoryList.querySelector('[data-category="freetrial"]');
+    if (!categoryItem) {
+      categoryItem = document.createElement('div');
+      categoryItem.className = 'category-item expanded selected';
+      categoryItem.dataset.category = 'freetrial';
+      categoryItem.dataset.landingLocked = 'true';
+      categoryItem.innerHTML = sanitizeHTML(`
+        <div class="category-header">
+          <div class="category-info">
+            <div class="category-title">Free Trial</div>
+          </div>
+          <i data-lucide="chevron-down" class="category-icon"></i>
+        </div>
+        <div class="category-content">
+          <div class="category-description">
+            <p>Prøv Boulders gratis i 15 dage. Fuld adgang + lejesko inkluderet.</p>
+          </div>
+          <div class="plans-list"></div>
+        </div>
+      `);
+      categoryList.prepend(categoryItem);
+    }
+    return categoryItem;
+  };
+  const getLandingTargetList = () => {
+    if (activeLandingRoute?.componentName === 'LandingFreeTrial') {
+      const categoryItem = ensureFreeTrialCategoryItem();
+      return categoryItem ? categoryItem.querySelector('.plans-list') : null;
+    }
+    return document.querySelector('[data-category="membership"] .plans-list');
+  };
+  const hideNonLandingCategories = () => {
+    const categoryItems = document.querySelectorAll('.category-item');
+    categoryItems.forEach((item) => {
+      item.style.display = 'none';
+    });
+    const targetCategory = activeLandingRoute?.componentName === 'LandingFreeTrial'
+      ? ensureFreeTrialCategoryItem()
+      : document.querySelector('[data-category="membership"]');
+    if (targetCategory) {
+      targetCategory.style.display = '';
+      targetCategory.classList.add('expanded', 'selected');
+    }
+  };
+  const renderLandingCards = (products) => {
+    const plansList = getLandingTargetList();
+    if (!plansList) return;
+    plansList.innerHTML = '';
+    if (!Array.isArray(products) || products.length === 0) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'no-products-message';
+      emptyEl.innerHTML = sanitizeHTML(`
+        <div class="no-products-content">
+          <p>No offers are available for this campaign right now.</p>
+        </div>
+      `);
+      plansList.appendChild(emptyEl);
+      return;
+    }
+    products.forEach((product) => {
+      const category = resolveLandingCategory(product);
+      const isSubscriptionProduct = product?.priceWithInterval?.price?.amount !== undefined;
+      const card = isSubscriptionProduct
+        ? renderSubscriptionCard(product, category)
+        : renderValueCard(product, category === 'campaign' ? 'campaign' : 'punchcard');
+      plansList.appendChild(card);
+    });
+  };
+  const LandingFreeTrial = (products) => {
+    hideNonLandingCategories();
+    renderLandingCards((products || []).slice(0, 1));
+    devLog('[Landing Route] Rendering LandingFreeTrial');
+  };
+  const LandingFirstMonthFree = (products) => {
+    hideNonLandingCategories();
+    renderLandingCards(products || []);
+    devLog('[Landing Route] Rendering LandingFirstMonthFree');
+  };
+  if (shouldRenderLandingRoute) {
+    if (activeLandingRoute.componentName === 'LandingFreeTrial') {
+      LandingFreeTrial(landingMatchedProducts);
+    } else if (activeLandingRoute.componentName === 'LandingFirstMonthFree') {
+      LandingFirstMonthFree(landingMatchedProducts);
+    } else {
+      devWarn('[Landing Route] Unknown component name:', activeLandingRoute.componentName);
+    }
+
+    try {
+      setupNewAccessStep();
+      updatePageTranslations();
+    } catch (e) {
+      devWarn('[Step 2] setupNewAccessStep failed (landing route immediate):', e);
+    }
+    requestAnimationFrame(() => {
+      try {
+        const lockedCategory = document.querySelector('.category-item[data-landing-locked="true"]');
+        if (lockedCategory) {
+          lockedCategory.classList.add('expanded', 'selected');
+        }
+        setupNewAccessStep();
+        updatePageTranslations();
+      } catch (e) {
+        devWarn('[Step 2] setupNewAccessStep failed (landing route raf):', e);
+      }
+    });
+    return;
+  }
+
+  const freeTrialCategoryItem = document.querySelector('.category-item[data-category="freetrial"]');
+  if (freeTrialCategoryItem) {
+    freeTrialCategoryItem.remove();
+  }
+  const categoryItems = document.querySelectorAll('.category-item');
+  categoryItems.forEach((item) => {
+    item.style.display = '';
+    item.dataset.landingLocked = '';
+  });
   
   // Render campaign subscriptions and value cards into the campaign category
   const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
@@ -4155,6 +4360,8 @@ const state = {
   selectedGymId: null,
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
+  landingRouteConfig: null, // Active landing route config for path-specific product surfacing
+  landingMatchedProducts: [], // Products matched by active landing route label
   currentAuthMode: null, // Track current auth mode (login/create)
   membershipPlanId: null,
   valueCardQuantities: new Map(),
@@ -5394,6 +5601,11 @@ function applyConditionalSteps() {
 }
 
 function init() {
+  state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
+  if (state.landingRouteConfig) {
+    devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
+  }
+
   // Initialize email tracking from localStorage
   try {
     const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
@@ -10683,9 +10895,10 @@ function openCheckoutConfirmModal() {
   const modal = document.getElementById('checkoutConfirmModal');
   if (!modal) return;
 
-  // Only relevant for 15-day pass
+  // Only relevant for 15-day pass style products
   const is15DayPassSelected =
     document.querySelector('[data-category="15daypass"] .plan-card.selected') ||
+    document.querySelector('[data-category="freetrial"] .plan-card.selected') ||
     (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
   if (!is15DayPassSelected) return;
 
@@ -10817,9 +11030,10 @@ function updateActivationDateSection(category) {
 
   if (!section || !pickerWrap || !dateInput) return;
 
-  const is15DayPass = category === '15daypass';
-  const categoryItem = document.querySelector('[data-category="15daypass"]');
-  const hasSelectedPlan = categoryItem?.querySelector('.plan-card.selected');
+  const is15DayPass = category === '15daypass' || category === 'freetrial';
+  const dayPassCategoryItem = document.querySelector('[data-category="15daypass"]');
+  const freeTrialCategoryItem = document.querySelector('[data-category="freetrial"]');
+  const hasSelectedPlan = dayPassCategoryItem?.querySelector('.plan-card.selected') || freeTrialCategoryItem?.querySelector('.plan-card.selected');
 
   if (is15DayPass && hasSelectedPlan) {
     if (!isActivationDateModalOpen()) {
@@ -10868,7 +11082,7 @@ async function handlePlanSelection(selectedCard) {
   // Determine if this is a value card (punch card) by checking if planId starts with "punch-"
   // Value cards can appear in Campaign category too, so we check the planId format, not just category
   const isValueCard = typeof planId === 'string' && planId.startsWith('punch-');
-  const isMembership = !isValueCard && (category === 'campaign' || category === 'membership' || category === '15daypass');
+  const isMembership = !isValueCard && (category === 'campaign' || category === 'membership' || category === '15daypass' || category === 'freetrial');
   if (category === 'campaign' && isMembership) {
     await refreshAuthenticatedCustomerForCampaignGuard();
   }
@@ -11007,6 +11221,7 @@ function setupNewAccessStep() {
 
   // Category expansion/collapse
   categoryItems.forEach(category => {
+    const isLandingLockedCategory = category.dataset.landingLocked === 'true';
     const header = category.querySelector('.category-header');
     
     if (!header) {
@@ -11022,6 +11237,12 @@ function setupNewAccessStep() {
     
     if (!freshHeader) {
       console.error('Failed to get fresh header after clone');
+      return;
+    }
+    
+    if (isLandingLockedCategory) {
+      category.classList.add('expanded', 'selected');
+      freshHeader.style.cursor = 'default';
       return;
     }
     
@@ -11163,7 +11384,7 @@ function setupNewAccessStep() {
       // Determine if this is a value card (punch card) by checking if planId starts with "punch-"
       // Value cards can appear in Campaign category too, so we check the planId format, not just category
       const isValueCardProduct = typeof planId === 'string' && planId.startsWith('punch-');
-      const isMembership = !isValueCardProduct && (category === 'campaign' || category === 'membership' || category === '15daypass');
+      const isMembership = !isValueCardProduct && (category === 'campaign' || category === 'membership' || category === '15daypass' || category === 'freetrial');
       if (category === 'campaign' && isMembership) {
         await refreshAuthenticatedCustomerForCampaignGuard();
       }
@@ -11199,6 +11420,7 @@ function setupNewAccessStep() {
         ],
         membership: state.subscriptions || [],
         '15daypass': state.dayPassSubscriptions || [],
+        freetrial: state.landingMatchedProducts || [],
         punchcard: state.valueCards || []
       };
       const productPool = productPoolByCategory[category] || [];
@@ -11292,10 +11514,10 @@ function setupNewAccessStep() {
           // Update cart to reflect selection
           updateCartSummary();
           
-          // 15-day pass: show activation date section, don't auto-advance
-          if (category === '15daypass') {
+          // 15-day pass style routes: show activation date section, don't auto-advance
+          if (category === '15daypass' || category === 'freetrial') {
             state.subscriptionStartDate = null;
-            updateActivationDateSection('15daypass');
+            updateActivationDateSection(category);
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
             return;
@@ -11563,9 +11785,10 @@ function handleGlobalClick(event) {
     }
     case 'submit-checkout': {
       event.preventDefault();
-      // For 15-day pass: confirm activation choice before proceeding to checkout
+      // For 15-day pass style products: confirm activation choice before proceeding to checkout
       const is15DayPassSelected =
         document.querySelector('[data-category="15daypass"] .plan-card.selected') ||
+        document.querySelector('[data-category="freetrial"] .plan-card.selected') ||
         (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
       if (is15DayPassSelected && !state.checkoutConfirmAccepted) {
         openCheckoutConfirmModal();
@@ -14657,6 +14880,15 @@ function updatePaymentOverview() {
     
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
+    if (payNowRow) {
+      const payNowLabel = payNowRow.querySelector('.payment-label');
+      if (payNowLabel) {
+        const isFreePeriod = !isCampaignPayNowPending && Math.abs(state.totals.payNowAmount) < 0.0001;
+        payNowLabel.textContent = isFreePeriod
+          ? 'Free period:'
+          : `${t('cart.payNow') || 'Pay now'}:`;
+      }
+    }
     if (!isCampaignPayNowPending && payNowRow && billingPeriodText) {
       let periodElement = payNowRow.querySelector('.payment-label-period');
       if (!periodElement) {
@@ -17402,9 +17634,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
       sub.id === productId || 
       String(sub.id) === numericId
     );
-    if (foundProduct?.productLabels?.some(label => 
-      label.name && label.name.toLowerCase() === '15-Day Trial Pass'
-    )) {
+    if (has15DayPassLabel(foundProduct)) {
       productType = '15daypass';
     }
   }
@@ -18984,7 +19214,13 @@ function determineProductTypeFromOrder() {
       // Check product name for 15-Day Trial Pass
       if (product?.name) {
         const nameLower = product.name.toLowerCase();
-        if (nameLower.includes('15 day') || nameLower.includes('15-day') || nameLower.includes('15 dage')) {
+        if (
+          nameLower.includes('15 day') ||
+          nameLower.includes('15-day') ||
+          nameLower.includes('15 dage') ||
+          nameLower.includes('15 dages') ||
+          nameLower.includes('15dag')
+        ) {
           console.log('[Product Type] Detected 15daypass from product name');
           return '15daypass';
         }
@@ -19006,6 +19242,15 @@ function determineProductTypeFromOrder() {
   if (state.selectedProductType === 'punch-card') {
     console.log('[Product Type] Detected punch-card from selectedProductType');
     return 'punch-card';
+  }
+  
+  // Priority 3b: Use stored order summary product type if available
+  if (state.order?.productType) {
+    const summaryType = String(state.order.productType).toLowerCase();
+    if (summaryType === '15daypass' || summaryType === 'punch-card' || summaryType === 'membership') {
+      console.log('[Product Type] Using product type from state.order.productType:', summaryType);
+      return summaryType;
+    }
   }
   
   // Priority 4: Check membershipPlanId format
@@ -19034,6 +19279,13 @@ function determineProductTypeFromOrder() {
       console.log('[Product Type] Detected 15daypass from cartItems');
       return '15daypass';
     }
+  }
+  
+  // Priority 6: Check order summary naming signals
+  const summaryMembershipType = String(state.order?.membershipType || '').toLowerCase();
+  if (summaryMembershipType.includes('15 day') || summaryMembershipType.includes('15-day') || summaryMembershipType.includes('15 dage') || summaryMembershipType.includes('15 dages')) {
+    console.log('[Product Type] Detected 15daypass from state.order membershipType');
+    return '15daypass';
   }
   
   // Default to membership
@@ -19199,8 +19451,8 @@ function renderConfirmationView() {
   
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
-  // Use API data only - no fallbacks to state.order or calculated values
-  const apiOrder = state.fullOrder;
+  // Prefer API order data, but fall back to summary order so success page is never blank.
+  const apiOrder = state.fullOrder || state.order || null;
   
   // Order number - from API only
   if (orderNumber) {
@@ -19210,8 +19462,9 @@ function renderConfirmationView() {
   
   // Order date - from API only
   if (orderDate) {
-    if (apiOrder?.createdAt || apiOrder?.created) {
-      const date = apiOrder.createdAt ? new Date(apiOrder.createdAt) : new Date(apiOrder.created);
+    if (apiOrder?.createdAt || apiOrder?.created || apiOrder?.date) {
+      const rawDate = apiOrder.createdAt || apiOrder.created || apiOrder.date;
+      const date = new Date(rawDate);
       orderDate.textContent = new Intl.DateTimeFormat('en-US', {
         year: 'numeric',
         month: 'long',
@@ -19245,6 +19498,8 @@ function renderConfirmationView() {
             (customer.firstName && customer.lastName ? `${customer.firstName} ${customer.lastName}` : null) ||
             customer.name ||
             '—';
+    } else if (apiOrder?.memberName) {
+      name = apiOrder.memberName;
     }
     memberName.textContent = name;
     // Also update in other sections
@@ -19261,12 +19516,14 @@ function renderConfirmationView() {
       membershipId = apiOrder.subscriptionItems[0].subscription.id.toString();
     } else if (apiOrder?.customer?.id) {
       membershipId = apiOrder.customer.id.toString();
+    } else if (apiOrder?.membershipNumber) {
+      membershipId = String(apiOrder.membershipNumber);
     }
     membershipNumber.textContent = membershipId;
   }
   
   if (membershipType) {
-    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || '—';
+    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || apiOrder?.membershipType || '—';
     membershipType.textContent = type;
   }
   
@@ -19276,6 +19533,8 @@ function renderConfirmationView() {
       gym = resolveGymLabel(apiOrder.customer.primaryGym);
     } else if (apiOrder?.businessUnit?.name) {
       gym = apiOrder.businessUnit.name;
+    } else if (apiOrder?.primaryGym) {
+      gym = apiOrder.primaryGym;
     }
     primaryGym.textContent = gym;
     // Also update in other sections
