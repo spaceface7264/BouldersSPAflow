@@ -10901,6 +10901,34 @@ function openCheckoutConfirmModal() {
     document.querySelector('[data-category="freetrial"] .plan-card.selected') ||
     (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
   if (!is15DayPassSelected) return;
+  
+  const isFreeTrialSelected = Boolean(document.querySelector('[data-category="freetrial"] .plan-card.selected')) ||
+    state.landingRouteConfig?.componentName === 'LandingFreeTrial';
+  const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
+  const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
+  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
+
+  const subtitleEl = modal.querySelector('.checkout-confirm-subtitle');
+  if (subtitleEl) {
+    if (isFreeFlow) {
+      subtitleEl.removeAttribute('data-i18n-key');
+      subtitleEl.textContent = 'Bekræft hvornår din prøveperiode skal starte.';
+    } else {
+      subtitleEl.setAttribute('data-i18n-key', 'activationConfirm.subtitle');
+      subtitleEl.textContent = t('activationConfirm.subtitle');
+    }
+  }
+
+  const continueBtn = modal.querySelector('[data-action="checkout-confirm-continue"]');
+  if (continueBtn) {
+    if (isFreeFlow) {
+      continueBtn.removeAttribute('data-i18n-key');
+      continueBtn.textContent = 'Aktivér prøveperiode';
+    } else {
+      continueBtn.setAttribute('data-i18n-key', 'activationConfirm.continue');
+      continueBtn.textContent = t('activationConfirm.continue');
+    }
+  }
 
   state.checkoutConfirmAccepted = false;
   state.checkoutConfirmPreviousFocus = document.activeElement;
@@ -20360,6 +20388,11 @@ function updateCheckoutButton() {
   const hasPunchCards = state.valueCardQuantities && 
     Array.from(state.valueCardQuantities.values()).some(qty => qty > 0);
   const hasAddons = state.addonIds && state.addonIds.size > 0;
+  const isFreeTrialSelected = Boolean(document.querySelector('[data-category="freetrial"] .plan-card.selected')) ||
+    state.landingRouteConfig?.componentName === 'LandingFreeTrial';
+  const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
+  const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
+  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
 
   // Payment method UI removed - always use card; ensure default is set for API
   if (!state.paymentMethod) {
@@ -20370,6 +20403,12 @@ function updateCheckoutButton() {
   // Payment method no longer required from UI - card is used by default
   const hasProduct = hasMembership || hasPunchCards || hasAddons;
   DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
+  DOM.checkoutBtn.textContent = isFreeFlow ? 'AKTIVÉR PRØVEPERIODE' : t('cart.checkout');
+  
+  const paymentRedirectText = document.querySelector('p[data-i18n-key="cart.paymentRedirect"]');
+  if (paymentRedirectText) {
+    paymentRedirectText.style.display = isFreeFlow ? 'none' : '';
+  }
   
   console.log('[Checkout Button] State:', {
     isAuthenticated,
@@ -20379,6 +20418,9 @@ function updateCheckoutButton() {
     hasPunchCards,
     hasAddons,
     hasProduct,
+    isFreeTrialSelected,
+    isZeroTotal,
+    isFreeFlow,
     disabled: DOM.checkoutBtn.disabled,
     privacyConsentElement: DOM.privacyConsent ? 'found' : 'not found',
     termsConsentElement: DOM.termsConsent ? 'found' : 'not found'
