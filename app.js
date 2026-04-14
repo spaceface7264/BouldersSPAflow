@@ -1567,7 +1567,7 @@ class OrderAPI {
       const isCampaignProduct = Array.isArray(state.campaignSubscriptions) &&
         state.campaignSubscriptions.some((p) => String(p.id) === String(subscriptionProductId));
       const isFirstMonthFreeCampaignProduct = isCampaignProduct &&
-        FIRST_MONTH_FREE_NAME_REGEX.test(String(matchedProduct?.name || '').toLowerCase());
+        isFirstMonthFreeProduct(matchedProduct);
       
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
@@ -1664,6 +1664,9 @@ class OrderAPI {
       }
       console.log('[Step 7] Add subscription item response:', data);
       if (isFirstMonthFreeCampaignProduct) {
+        if ((data?.price?.amount / 100) !== 0) {
+          console.error('[Step 7] ❌ First-month-free campaign product returned non-zero amount:', data?.price?.amount);
+        }
         console.log('[Step 7] ✅ First-month-free campaign product: skipping custom pricing fix flow and trusting backend response');
         return data;
       }
@@ -13457,7 +13460,10 @@ function hasCampaignInCart() {
     const num = typeof id === 'string' ? parseInt(id, 10) : id;
     const inSubs = state.campaignSubscriptions?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
     const inCards = state.campaignValueCards?.some(c => c.id === id || c.id === num || String(c.id) === String(id));
-    return inSubs || inCards;
+    const inAllRawFirstMonthFree = state.allRawProducts?.some(
+      (p) => (p.id === id || p.id === num || String(p.id) === String(id)) && isFirstMonthFreeProduct(p)
+    );
+    return inSubs || inCards || inAllRawFirstMonthFree;
   };
   if (state.cartItems && state.cartItems.length > 0) {
     if (state.cartItems.some(item => item.productId && isCampaignProduct(item.productId))) return true;
@@ -13478,7 +13484,8 @@ function customerHasMembershipCampaignBlockRequirement() {
     const statusCodes = Array.isArray(sub?.statuses)
       ? sub.statuses.map((s) => String(s?.code || '').toUpperCase())
       : [];
-    if (statusCodes.includes('TERMINATED')) return false;
+    const inactiveStatuses = ['TERMINATED', 'CANCELLED', 'FROZEN', 'INACTIVE', 'SUSPENDED'];
+    if (inactiveStatuses.some(s => statusCodes.includes(s))) return false;
 
     const productLabels =
       sub?.subscriptionProduct?.productLabels ||
