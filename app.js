@@ -1543,28 +1543,35 @@ class OrderAPI {
         state.campaignSubscriptions.some((p) => String(p.id) === String(subscriptionProductId));
       const isFirstMonthFreeCampaignProduct = isCampaignProduct &&
         isFirstMonthFreeProduct(matchedProduct);
-      
+
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
       const hasExplicitStartDate = !!(startDateOverride && /^\d{4}-\d{2}-\d{2}$/.test(startDateOverride));
       const startDate = hasExplicitStartDate
         ? startDateOverride
         : getTodayLocalDateString();
-      const includeStartDate = hasExplicitStartDate || !isFirstMonthFreeCampaignProduct;
-      
+
       // Pricing calculation: When startDate is on day 16 or later, price includes:
       // - Rest of current month (prorated) + Full next month
       // When startDate is before day 16, price includes:
       // - Rest of current month only (prorated)
       // Frontend calculation now matches backend logic to ensure price consistency.
-      
+
       // Build payload according to OpenAPI spec:
       // Required: subscriptionProduct, birthDate
       // Optional: startDate, subscriber, externalMessage, additionTo, recruitedBy, paymentOption
       // Note: businessUnit is not in spec - may be inferred from order context
+      //
+      // NOTE: startDate is always sent (including for first-month-free campaign
+      // products). Previously this was omitted for first-month-free products in
+      // the belief that backend "campaign rules" would default it. In practice
+      // BRP applies product-level campaign rules (the "Anden pris 0,00" row
+      // under Ændringer) only when startDate is provided. Omitting startDate
+      // caused BRP to create a normal prorated subscription with no campaign
+      // applied, so the customer was charged full price for the first month.
       const payload = {
         subscriptionProduct: subscriptionProductId,
-        ...(includeStartDate ? { startDate } : {}),
+        startDate,
         ...(subscriberId ? { subscriber: subscriberId } : {}),
         ...(birthDate ? { birthDate } : {}),
         // businessUnit is not in OpenAPI spec - backend may infer from order
@@ -1592,7 +1599,6 @@ class OrderAPI {
         subscriptionProductId,
         productId,
         startDate,
-        includeStartDate,
         isFirstMonthFreeCampaignProduct,
         hasSubscriber: !!subscriberId,
         subscriberId,
