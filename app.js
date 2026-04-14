@@ -1542,7 +1542,7 @@ class OrderAPI {
       const isCampaignProduct = Array.isArray(state.campaignSubscriptions) &&
         state.campaignSubscriptions.some((p) => String(p.id) === String(subscriptionProductId));
       const isFirstMonthFreeCampaignProduct = isCampaignProduct &&
-        FIRST_MONTH_FREE_NAME_REGEX.test(String(matchedProduct?.name || '').toLowerCase());
+        isFirstMonthFreeProduct(matchedProduct);
       
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
@@ -4370,6 +4370,44 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
 const DOM = {};
 const templates = {};
 const FIRST_MONTH_FREE_NAME_REGEX = /0\s*(kr|dkk)|første\s*måned|first\s*month\s*(free|0(\s*dkk)?)/;
+
+// Robust first-month-free detection.
+// Relying on the name regex alone has caused charging/creation bugs when campaign
+// products are named without the literal "0 kr"/"første måned"/"first month free"
+// phrases. This helper prefers structured API fields (first-month campaign price)
+// and falls back to the regex over name + description.
+// Returns true when the product's first-month campaign price is explicitly 0.
+function isFirstMonthFreeProduct(product) {
+  if (!product) return false;
+
+  const firstMonthCandidates = [
+    product.firstCampaignPrice,
+    product.firstMonthPrice,
+    product.introPrice,
+    product.campaignPrice,
+    product.priceFirstMonth,
+    product.price?.firstMonth?.amount,
+    product.priceWithInterval?.firstMonth?.amount,
+  ];
+
+  for (const candidate of firstMonthCandidates) {
+    if (candidate === null || candidate === undefined || candidate === '') continue;
+    const raw = typeof candidate === 'number'
+      ? candidate
+      : parseFloat(String(candidate).replace(',', '.'));
+    if (!Number.isFinite(raw)) continue;
+    // API values may be in øre (cents) or DKK. Either way, 0 is unambiguously free.
+    if (raw === 0) return true;
+  }
+
+  const name = String(product.name || '').toLowerCase();
+  const externalDescription = String(product.externalDescription || '').toLowerCase();
+  const description = String(product.description || '').toLowerCase();
+  return FIRST_MONTH_FREE_NAME_REGEX.test(name)
+    || FIRST_MONTH_FREE_NAME_REGEX.test(externalDescription)
+    || FIRST_MONTH_FREE_NAME_REGEX.test(description);
+}
+
 const TOTAL_STEPS = 5;
 const buttonGlareTimeouts = new WeakMap();
 const carouselResizeObservers = new WeakMap();
@@ -14250,9 +14288,13 @@ function updatePaymentOverview() {
       const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
         p => String(p.id) === String(productId)
       );
-      const productNameLower = String(subscriptionItem?.product?.name || '').toLowerCase();
-      const isFirstMonthFreeCampaignByName = FIRST_MONTH_FREE_NAME_REGEX.test(productNameLower);
-      const isFirstMonthFreeCampaign = isCampaignProduct && (orderPriceDKK === 0 || isFirstMonthFreeCampaignByName);
+      const campaignProductFromState = isCampaignProduct
+        ? state.campaignSubscriptions.find(p => String(p.id) === String(productId))
+        : null;
+      const isFirstMonthFreeCampaignByData =
+        isFirstMonthFreeProduct(subscriptionItem?.product) ||
+        isFirstMonthFreeProduct(campaignProductFromState);
+      const isFirstMonthFreeCampaign = isCampaignProduct && (orderPriceDKK === 0 || isFirstMonthFreeCampaignByData);
 
       if (isFirstMonthFreeCampaign) {
         // For first-month-free campaigns, trust backend order total/period as authoritative.
@@ -14397,10 +14439,8 @@ function updatePaymentOverview() {
           const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
             p => String(p.id) === String(membership.id)
           );
-          const productNameForCampaign = (membership.name || '').toLowerCase();
-          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
-            FIRST_MONTH_FREE_NAME_REGEX.test(productNameForCampaign)
-          );
+          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder
+            && isFirstMonthFreeProduct(membership);
 
           if (isFirstMonthFreeCampaignNoOrder) {
             // Before login/order creation, campaign pay-now cannot be trusted from fallback math.
@@ -14565,12 +14605,20 @@ function updatePaymentOverview() {
   }
 
   const cartMembershipName = String(state.cartItems?.find((item) => item.type === 'membership')?.name || '').toLowerCase();
-  const firstMonthFreeByName = FIRST_MONTH_FREE_NAME_REGEX.test(productName.toLowerCase()) ||
+  const effectiveProductId = currentProduct?.id || productFromOrder?.id || state.selectedProductId;
+  const campaignProductForDisplay = Array.isArray(state.campaignSubscriptions)
+    ? state.campaignSubscriptions.find((p) => String(p.id) === String(effectiveProductId))
+    : null;
+  const firstMonthFreeByData =
+    isFirstMonthFreeProduct(currentProduct) ||
+    isFirstMonthFreeProduct(productFromOrder) ||
+    isFirstMonthFreeProduct(campaignProductForDisplay) ||
+    FIRST_MONTH_FREE_NAME_REGEX.test(productName.toLowerCase()) ||
     FIRST_MONTH_FREE_NAME_REGEX.test(cartMembershipName);
   const isCampaignProductDisplay =
     Array.isArray(state.campaignSubscriptions) &&
-    state.campaignSubscriptions.some((p) => String(p.id) === String(currentProduct?.id || productFromOrder?.id || state.selectedProductId));
-  const useSplitCampaignDisplay = !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
+    state.campaignSubscriptions.some((p) => String(p.id) === String(effectiveProductId));
+  const useSplitCampaignDisplay = !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByData) && firstMonthFreeByData;
 
   if (useSplitCampaignDisplay) {
     const today = new Date();
@@ -16432,9 +16480,14 @@ async function handleCheckout() {
                   productName.toLowerCase().includes('15 dages')
                 )) ||
                 (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
+              const campaignProductForCheckout = Array.isArray(state.campaignSubscriptions)
+                ? state.campaignSubscriptions.find((p) => String(p.id) === String(productId))
+                : null;
               const isFirstMonthFreeCampaignCheckout =
-                hasCampaignInCart() &&
-                FIRST_MONTH_FREE_NAME_REGEX.test(String(productName || '').toLowerCase());
+                hasCampaignInCart() && (
+                  isFirstMonthFreeProduct(product) ||
+                  isFirstMonthFreeProduct(campaignProductForCheckout)
+                );
 
               if (is15DayPass) {
                 console.log('[checkout] ✅ Skipping partial-month price verification for 15-Day Trial Pass');
