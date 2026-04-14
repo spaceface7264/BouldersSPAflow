@@ -2897,6 +2897,12 @@ async function loadProductsFromAPI() {
     return;
   }
 
+  // Deduplicate concurrent calls (preload + step transition + showStep)
+  if (productsLoadPromise) {
+    return productsLoadPromise;
+  }
+
+  productsLoadPromise = (async () => {
   try {
     // Fetch subscriptions and value cards in parallel
     // Backend should already filter by businessUnit query param, but we do additional
@@ -3189,7 +3195,13 @@ async function loadProductsFromAPI() {
     console.error('Failed to load products from API:', error);
     // Show error message to user
     showToast('Failed to load membership options. Please try again later.', 'error');
+    throw error;
+  } finally {
+    productsLoadPromise = null;
   }
+  })();
+
+  return productsLoadPromise;
 }
 
 // Step 5: Render products from API data into the UI
@@ -4424,6 +4436,7 @@ const state = {
 
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
+let productsLoadPromise = null;
 let tokenValidationCooldownUntil = 0;
 let gymLoadCooldownUntil = 0;
 let gymLoadRetryTimeoutId = null;
@@ -6793,7 +6806,6 @@ async function changeLanguage(languageCode) {
     state.dayPassSubscriptions = [];
     state.valueCards = [];
     await loadProductsFromAPI();
-    renderProductsFromAPI();
     
     // Restore UI state after re-rendering
     if (savedState.selectedProductId) {
@@ -20981,8 +20993,7 @@ function showStep(stepNumber) {
           console.log('[showStep] Step 2 shown - loading products for business unit:', state.selectedBusinessUnit);
           loadProductsFromAPI()
             .then(() => {
-              console.log('[showStep] ✅ Products loaded, rendering...');
-              renderProductsFromAPI();
+              console.log('[showStep] ✅ Products loaded');
             })
             .catch(error => {
               console.error('[showStep] ❌ Failed to load products:', error);
