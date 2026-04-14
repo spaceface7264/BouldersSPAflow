@@ -14640,33 +14640,76 @@ function updatePaymentOverview() {
     if (backendPeriodStart) backendPeriodStart.setHours(0, 0, 0, 0);
     if (backendPeriodEnd) backendPeriodEnd.setHours(0, 0, 0, 0);
 
-    const firstMonthStart = backendPeriodStart || today;
-    const firstMonthEnd = addMonthsClamped(firstMonthStart, 1);
-    const chargeStart = new Date(firstMonthEnd);
-    chargeStart.setDate(chargeStart.getDate() + 1);
-    chargeStart.setHours(0, 0, 0, 0);
-    const chargeEnd = backendPeriodEnd || endOfMonth(chargeStart);
+    // Detect whether the backend actually honored the first-month-free
+    // campaign. If the product is named "0 kr første måned" but the backend
+    // returns an initialPaymentPeriod of ~1-30 days (i.e. just a normal
+    // prorated first period, no free month folded in) the campaign was
+    // NOT applied by backend. Showing "Første måned 0 kr" + a separate
+    // "Betal nu" row in that case misleads the user, because the payment
+    // window will actually charge them for the first month at a regular
+    // prorated rate.
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysInBackendPeriod = backendPeriodStart && backendPeriodEnd
+      ? Math.round((backendPeriodEnd.getTime() - backendPeriodStart.getTime()) / msPerDay) + 1
+      : null;
+    // A free month + chargeable tail should span >32 days. Anything <=32
+    // is just a regular prorated first period without the campaign.
+    const backendHonoredFreeMonth = daysInBackendPeriod === null
+      || daysInBackendPeriod > 32;
 
-    // Trust the backend's order total for pay-now when available; only fall
-    // back to the client-side proration before an order has been created.
-    if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
-      const orderPriceAmount = state.fullOrder.price.amount;
-      payNowAmount = typeof orderPriceAmount === 'object'
-        ? orderPriceAmount.amount / 100
-        : orderPriceAmount / 100;
+    if (hasOrderData && !backendHonoredFreeMonth) {
+      console.warn(
+        '[Payment Overview] ⚠️ First-month-free campaign does NOT appear to be applied by backend.',
+        'The product is flagged as first-month-free but backend returned a',
+        daysInBackendPeriod,
+        'day initialPaymentPeriod (expected >30 days if free month applied).',
+        'This is a backend configuration issue — the campaign is not being honored.',
+        {
+          productName,
+          productId: effectiveProductId,
+          periodStart: backendPeriodStart?.toISOString?.().slice(0, 10),
+          periodEnd: backendPeriodEnd?.toISOString?.().slice(0, 10),
+          orderPriceDKK: state.fullOrder?.price?.amount
+            ? (typeof state.fullOrder.price.amount === 'object'
+                ? state.fullOrder.price.amount.amount / 100
+                : state.fullOrder.price.amount / 100)
+            : null,
+          monthlyPaymentAmount,
+        }
+      );
+      // Hide the split display and fall through to the regular billing
+      // rendering below (which uses backend's initialPaymentPeriod and
+      // order.price.amount) so the cart matches what Frisbii will charge.
+      if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = 'none';
     } else {
-      payNowAmount = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
-    }
-    billingPeriod = { start: chargeStart, end: chargeEnd };
-    isCampaignPayNowPending = false;
+      const firstMonthStart = backendPeriodStart || today;
+      const firstMonthEnd = addMonthsClamped(firstMonthStart, 1);
+      const chargeStart = new Date(firstMonthEnd);
+      chargeStart.setDate(chargeStart.getDate() + 1);
+      chargeStart.setHours(0, 0, 0, 0);
+      const chargeEnd = backendPeriodEnd || endOfMonth(chargeStart);
 
-    if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = '';
-    if (DOM.firstMonthAmount) {
-      DOM.firstMonthAmount.textContent = formatCurrencyHalfKrone(0);
-    }
-    const firstMonthPeriodEl = DOM.firstMonthRow?.querySelector('.payment-label-period-first-month');
-    if (firstMonthPeriodEl) {
-      firstMonthPeriodEl.textContent = `(${formatDateDMY(firstMonthStart)} - ${formatDateDMY(firstMonthEnd)})`;
+      // Trust the backend's order total for pay-now when available; only fall
+      // back to the client-side proration before an order has been created.
+      if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
+        const orderPriceAmount = state.fullOrder.price.amount;
+        payNowAmount = typeof orderPriceAmount === 'object'
+          ? orderPriceAmount.amount / 100
+          : orderPriceAmount / 100;
+      } else {
+        payNowAmount = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
+      }
+      billingPeriod = { start: chargeStart, end: chargeEnd };
+      isCampaignPayNowPending = false;
+
+      if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = '';
+      if (DOM.firstMonthAmount) {
+        DOM.firstMonthAmount.textContent = formatCurrencyHalfKrone(0);
+      }
+      const firstMonthPeriodEl = DOM.firstMonthRow?.querySelector('.payment-label-period-first-month');
+      if (firstMonthPeriodEl) {
+        firstMonthPeriodEl.textContent = `(${formatDateDMY(firstMonthStart)} - ${formatDateDMY(firstMonthEnd)})`;
+      }
     }
   } else if (DOM.firstMonthRow) {
     DOM.firstMonthRow.style.display = 'none';
