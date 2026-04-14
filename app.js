@@ -11094,11 +11094,9 @@ function openCheckoutConfirmModal() {
   const modal = document.getElementById('checkoutConfirmModal');
   if (!modal) return;
 
-  // Only relevant for 15-day pass
-  const is15DayPassSelected =
-    document.querySelector('[data-category="15daypass"] .plan-card.selected') ||
-    (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
-  if (!is15DayPassSelected) return;
+  // Only relevant for 15-day pass. Checked via getCartProductVariant() so a
+  // first-month-free campaign product never reaches the trial confirmation.
+  if (getCartProductVariant() !== '15daypass') return;
 
   state.checkoutConfirmAccepted = false;
   state.checkoutConfirmPreviousFocus = document.activeElement;
@@ -11285,6 +11283,9 @@ function handlePlanSelection(selectedCard) {
   const previousPlanId = state.membershipPlanId;
   state.membershipPlanId = planId; // Keep for backward compatibility
   state.selectedProductId = productId; // Store API product ID
+  // Note: 15-day pass plans set selectedProductType to 'membership' here;
+  // downstream 15-day-pass branching is handled by getCartProductVariant()
+  // via product label/name, so the payment-overview gate stays compatible.
   state.selectedProductType = isMembership ? 'membership' : 'punch-card';
   if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
     resetOrderStateForProductChange('plan-selection');
@@ -11967,11 +11968,10 @@ function handleGlobalClick(event) {
     }
     case 'submit-checkout': {
       event.preventDefault();
-      // For 15-day pass: confirm activation choice before proceeding to checkout
-      const is15DayPassSelected =
-        document.querySelector('[data-category="15daypass"] .plan-card.selected') ||
-        (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
-      if (is15DayPassSelected && !state.checkoutConfirmAccepted) {
+      // For 15-day pass: confirm activation choice before proceeding to checkout.
+      // Driven by the product in the cart via getCartProductVariant(), not by URL
+      // or by which landing page the user arrived through.
+      if (getCartProductVariant() === '15daypass' && !state.checkoutConfirmAccepted) {
         openCheckoutConfirmModal();
         break;
       }
@@ -13505,6 +13505,78 @@ function hideCampaignWarning() {
   }
 }
 
+/**
+ * Single source of truth for cart UI branching.
+ * Returns the variant based on what product is in the cart — never on URL/route.
+ *
+ * Precedence: first-month-free campaign wins over 15-day-pass, so a campaign
+ * product whose name/labels accidentally collide with 15-day-pass still routes
+ * to the existing first-month-free cart logic instead of the trial treatment.
+ *
+ * @returns {'firstMonthFree'|'15daypass'|'membership'|'punch-card'|null}
+ */
+function getCartProductVariant() {
+  if (state.selectedProductType === 'punch-card') return 'punch-card';
+
+  const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
+  const productFromOrder = subscriptionItem?.product || null;
+
+  const allSubscriptions = [
+    ...(state.campaignSubscriptions || []),
+    ...(state.subscriptions || []),
+    ...(state.dayPassSubscriptions || [])
+  ];
+  const productIdNum = typeof state.selectedProductId === 'string'
+    ? parseInt(state.selectedProductId, 10)
+    : state.selectedProductId;
+  const catalogProduct = allSubscriptions.find(p =>
+    p.id === state.selectedProductId ||
+    p.id === productIdNum ||
+    String(p.id) === String(state.selectedProductId)
+  ) || null;
+
+  if (!catalogProduct && !productFromOrder && !state.selectedProductId) return null;
+
+  // --- First-month-free: campaign product + free initial period -------------
+  // Checked BEFORE 15-day-pass so a new campaign product can't be misrouted
+  // to the trial treatment by an overlapping name/label.
+  const id = state.selectedProductId;
+  const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
+  const isCampaign = !!id && (state.campaignSubscriptions || []).some(c =>
+    c.id === id || c.id === idNum || String(c.id) === String(id)
+  );
+  if (isCampaign) {
+    const orderAmount = state.fullOrder?.price?.amount;
+    if (orderAmount !== undefined) {
+      const dkk = typeof orderAmount === 'object' ? orderAmount.amount / 100 : orderAmount / 100;
+      if (dkk === 0) return 'firstMonthFree';
+    }
+    const priceInCents = catalogProduct?.priceWithInterval?.price?.amount;
+    if (priceInCents === 0) return 'firstMonthFree';
+    const name = (productFromOrder?.name || catalogProduct?.name || '').toLowerCase();
+    if (/0\s*kr|første\s*måned|first\s*month\s*free/.test(name)) return 'firstMonthFree';
+  }
+
+  // --- 15-day pass: label (preferred), name, catalog membership, or type ---
+  const labels = productFromOrder?.productLabels
+    || catalogProduct?.productLabels
+    || catalogProduct?.labels
+    || [];
+  const has15DayPassLabel = Array.isArray(labels) && labels.some(
+    label => label?.name && label.name.toLowerCase() === '15 day pass'
+  );
+  const name = (productFromOrder?.name || catalogProduct?.name || '').toLowerCase();
+  const nameSays15DayPass = name.includes('15 day pass') || name.includes('15 dages');
+  const inDayPassCatalog = !!id && (state.dayPassSubscriptions || []).some(
+    p => String(p.id) === String(id)
+  );
+  if (state.selectedProductType === '15daypass' || has15DayPassLabel || nameSays15DayPass || inDayPassCatalog) {
+    return '15daypass';
+  }
+
+  return 'membership';
+}
+
 function updateCartSummary() {
   // CRITICAL: Freeze UI during checkout to prevent price changes before redirect
   if (state.checkoutInProgress) {
@@ -14261,36 +14333,12 @@ function updatePaymentOverview() {
   const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
   const hasOrderData = !!subscriptionItem;
   
-  // Check if this is a 15-day pass with shoes (one-time payment product)
-  // Check both order data and product data
-  const allSubscriptions = [
-    ...(state.campaignSubscriptions || []),
-    ...(state.subscriptions || []),
-    ...(state.dayPassSubscriptions || [])
-  ];
-  const productIdNum = typeof state.selectedProductId === 'string' 
-    ? parseInt(state.selectedProductId) 
-    : state.selectedProductId;
-  const currentProduct = allSubscriptions.find(p => 
-    p.id === state.selectedProductId || 
-    p.id === productIdNum ||
-    String(p.id) === String(state.selectedProductId)
-  );
-  
-  // Check product name from order data first, then fall back to product data
-  const productFromOrder = subscriptionItem?.product;
-  const productName = productFromOrder?.name || currentProduct?.name || '';
-  const productLabels = currentProduct?.productLabels || currentProduct?.labels || [];
-  const has15DayPassLabel = Array.isArray(productLabels) && productLabels.some(
-    label => label?.name && label.name.toLowerCase() === '15 day pass'
-  );
-  const is15DayPass =
-    state.selectedProductType === '15daypass' ||
-    has15DayPassLabel ||
-    (productName && (
-      productName.toLowerCase().includes('15 day pass') ||
-      productName.toLowerCase().includes('15 dages')
-    ));
+  // Determine cart variant from the product in cart (never URL). First-month-free
+  // takes precedence over 15-day-pass, so a campaign product with a colliding
+  // name/label still uses the existing first-month-free cart logic.
+  const cartVariant = getCartProductVariant();
+  const is15DayPass = cartVariant === '15daypass';
+  const isFirstMonthFreeVariant = cartVariant === 'firstMonthFree';
   
   // ============================================================================
   // CALCULATE "BETALES NU" (PAY NOW)
@@ -14376,11 +14424,9 @@ function updatePaymentOverview() {
       const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
       const dayOfMonth = today.getDate();
-      const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
-        p => String(p.id) === String(productId)
-      );
-      // First month free campaign: backend sets first payment to 0. Before 16th show 0 kr from API; on/after 16th charge rest of month (normal logic).
-      const isFirstMonthFreeCampaign = isCampaignProduct && orderPriceDKK === 0;
+      // First-month-free campaign detection now comes from getCartProductVariant()
+      // above, which already checks "campaign product + order price 0".
+      const isFirstMonthFreeCampaign = isFirstMonthFreeVariant;
 
       if (isFirstMonthFreeCampaign) {
         if (dayOfMonth < 16) {
@@ -14497,17 +14543,10 @@ function updatePaymentOverview() {
       );
       
       if (membership) {
-        const membershipLabels = membership.productLabels || membership.labels || [];
-        const isMembership15DayPass =
-          state.selectedProductType === '15daypass' ||
-          (Array.isArray(membershipLabels) && membershipLabels.some(
-            label => label?.name && label.name.toLowerCase() === '15 day pass'
-          )) ||
-          (membership.name && (
-            membership.name.toLowerCase().includes('15 day pass') ||
-            membership.name.toLowerCase().includes('15 dages')
-          ));
-        
+        // Use the same product-driven variant helper as the with-order path so
+        // both branches agree on "is this a 15-day pass?" vs "first-month-free?".
+        const isMembership15DayPass = cartVariant === '15daypass';
+
         if (isMembership15DayPass) {
           // For 15-day pass: always use full price (one-time payment)
           const priceInCents = membership.priceWithInterval?.price?.amount || 0;
@@ -14536,13 +14575,10 @@ function updatePaymentOverview() {
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
           const dayOfMonth = today.getDate();
-          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
-            p => String(p.id) === String(membership.id)
-          );
-          const productNameForCampaign = (membership.name || '').toLowerCase();
-          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
-            /0\s*kr|første\s*måned|first\s*month\s*free/.test(productNameForCampaign)
-          );
+          // First-month-free detection now lives in getCartProductVariant(),
+          // which also considers priceWithInterval === 0 for pre-order state —
+          // no longer dependent on the product name alone.
+          const isFirstMonthFreeCampaignNoOrder = isFirstMonthFreeVariant;
 
           if (isFirstMonthFreeCampaignNoOrder && dayOfMonth < 16) {
             payNowAmount = 0;
