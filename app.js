@@ -14623,13 +14623,40 @@ function updatePaymentOverview() {
   if (useSplitCampaignDisplay) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const firstMonthEnd = addMonthsClamped(today, 1);
-    const chargeStart = new Date(firstMonthEnd);
-    chargeStart.setHours(0, 0, 0, 0);
-    const chargeEnd = endOfMonth(chargeStart);
-    const campaignPayNow = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
 
-    payNowAmount = campaignPayNow;
+    // Align free-month + chargeable tail with the backend's authoritative
+    // initialPaymentPeriod when it is available. Previously this block always
+    // computed the period from `today`, which drifted from the backend
+    // (backend typically starts the subscription the day after order
+    // creation) and combined with a different proration convention produced
+    // a cart amount (e.g. 162 kr) that didn't match the payment window
+    // (e.g. 158 kr) and a period label that didn't line up with the amount.
+    const backendPeriodStart = subscriptionItem?.initialPaymentPeriod?.start
+      ? new Date(subscriptionItem.initialPaymentPeriod.start)
+      : null;
+    const backendPeriodEnd = subscriptionItem?.initialPaymentPeriod?.end
+      ? new Date(subscriptionItem.initialPaymentPeriod.end)
+      : null;
+    if (backendPeriodStart) backendPeriodStart.setHours(0, 0, 0, 0);
+    if (backendPeriodEnd) backendPeriodEnd.setHours(0, 0, 0, 0);
+
+    const firstMonthStart = backendPeriodStart || today;
+    const firstMonthEnd = addMonthsClamped(firstMonthStart, 1);
+    const chargeStart = new Date(firstMonthEnd);
+    chargeStart.setDate(chargeStart.getDate() + 1);
+    chargeStart.setHours(0, 0, 0, 0);
+    const chargeEnd = backendPeriodEnd || endOfMonth(chargeStart);
+
+    // Trust the backend's order total for pay-now when available; only fall
+    // back to the client-side proration before an order has been created.
+    if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
+      const orderPriceAmount = state.fullOrder.price.amount;
+      payNowAmount = typeof orderPriceAmount === 'object'
+        ? orderPriceAmount.amount / 100
+        : orderPriceAmount / 100;
+    } else {
+      payNowAmount = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
+    }
     billingPeriod = { start: chargeStart, end: chargeEnd };
     isCampaignPayNowPending = false;
 
@@ -14639,7 +14666,7 @@ function updatePaymentOverview() {
     }
     const firstMonthPeriodEl = DOM.firstMonthRow?.querySelector('.payment-label-period-first-month');
     if (firstMonthPeriodEl) {
-      firstMonthPeriodEl.textContent = `(${formatDateDMY(today)} - ${formatDateDMY(firstMonthEnd)})`;
+      firstMonthPeriodEl.textContent = `(${formatDateDMY(firstMonthStart)} - ${formatDateDMY(firstMonthEnd)})`;
     }
   } else if (DOM.firstMonthRow) {
     DOM.firstMonthRow.style.display = 'none';
