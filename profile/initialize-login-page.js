@@ -1208,6 +1208,11 @@ export function initializeLoginPage(DOM) {
 
   function appendClassCardDurationAvailability(main, startIso, endIso, ctx) {
     if (!main) return;
+    const source =
+      (ctx && typeof ctx === 'object' ? ctx.source : null) ||
+      (ctx && typeof ctx === 'object' ? ctx.booking : null) ||
+      null;
+    if (source && isDropInOnlyClass(source)) return;
 
     const slots = ctx && typeof ctx === 'object' ? ctx.slots : null;
     const leftRaw = slots?.leftToBookIncDropin ?? slots?.leftToBook ?? slots?.available ?? slots?.left;
@@ -1255,6 +1260,12 @@ export function initializeLoginPage(DOM) {
   function savedRecordAvailabilityContext(rec, liveItem = null) {
     if (!rec || typeof rec !== 'object') return null;
     const snap = rec.browseSnapshot && typeof rec.browseSnapshot === 'object' ? rec.browseSnapshot : null;
+    const source =
+      liveItem ||
+      snap?.groupActivity ||
+      snap?.event ||
+      snap ||
+      rec;
     const slots =
       rec.slots ||
       snap?.slots ||
@@ -1272,11 +1283,13 @@ export function initializeLoginPage(DOM) {
       liveItem?.event?.name ||
       snap?.name ||
       '';
+    const sourceWithName =
+      source && typeof source === 'object'
+        ? { ...source, ...(sourceName && !source?.name ? { name: sourceName } : {}) }
+        : { name: sourceName };
     return {
       slots,
-      source: {
-        name: sourceName,
-      },
+      source: sourceWithName,
       booking: {
         name: sourceName,
       },
@@ -4136,6 +4149,39 @@ export function initializeLoginPage(DOM) {
     refreshBrowseRailFades();
   }
 
+  function hydrateBrowseGymFilterFromActivities(items) {
+    const sel = document.getElementById('browseGymFilter');
+    if (!sel || !Array.isArray(items) || !items.length) return;
+    const existingIds = new Set(
+      Array.from(sel.options)
+        .map((opt) => String(opt.value || ''))
+        .filter(Boolean)
+    );
+    let changed = false;
+    items.forEach((item) => {
+      const buId = classCardBusinessUnitId(item);
+      if (!Number.isFinite(buId) || buId <= 0) return;
+      const key = String(buId);
+      if (existingIds.has(key)) return;
+      const label = displayGymTitle(
+        item?.businessUnit?.name ||
+          item?.businessUnit?.displayName ||
+          item?.businessUnitName ||
+          `Gym ${key}`
+      );
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = label;
+      sel.appendChild(opt);
+      existingIds.add(key);
+      changed = true;
+    });
+    if (changed) {
+      sel.dataset.brpPopulated = '1';
+      renderBrowseGymChips();
+    }
+  }
+
   function isGroupedEventSeries(ev) {
     const n = Number(ev?.occasions?.numberOf);
     return Number.isFinite(n) && n > 1;
@@ -4483,6 +4529,8 @@ export function initializeLoginPage(DOM) {
     });
   }
 
+  let browseFiltersLoadToken = 0;
+
   async function applyBrowseClassFilters() {
     const results = document.getElementById('browseResults');
     const gymSel = document.getElementById('browseGymFilter');
@@ -4494,6 +4542,11 @@ export function initializeLoginPage(DOM) {
     const startIn = document.getElementById('browseDateStart');
     const endIn = document.getElementById('browseDateEnd');
     if (!results || !authAPI?.listBusinessUnitGroupActivities) return;
+
+    const token = ++browseFiltersLoadToken;
+    applyBrowseClassFilters._token = (applyBrowseClassFilters._token || 0) + 1;
+    const myToken = applyBrowseClassFilters._token;
+    const isStale = () => applyBrowseClassFilters._token !== myToken;
 
     let periodStart;
     let periodEnd;
@@ -4530,10 +4583,12 @@ export function initializeLoginPage(DOM) {
     } else if (authAPI.listVer3BusinessUnits) {
       try {
         const all = await authAPI.listVer3BusinessUnits();
+        if (token !== browseFiltersLoadToken) return;
         if (Array.isArray(all)) {
           buIds = all.map((u) => u.id).filter((id) => id != null);
         }
       } catch (_) {
+        if (token !== browseFiltersLoadToken) return;
         buIds = homeBu != null ? [homeBu] : [];
       }
     } else if (homeBu != null) {
@@ -4571,25 +4626,33 @@ export function initializeLoginPage(DOM) {
       ? new Date(rangeStartMs - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString()
       : undefined;
 
-    async function listActivitiesForBuRange(buId) {
+    async function listActivitiesForBuRange(buId, onChunk) {
       const base = { customerId: cid || undefined };
+      const emitChunk = (items) => {
+        if (!Array.isArray(items) || !items.length) return;
+        if (isStale()) return;
+        onChunk(items);
+      };
       if (!hasRange) {
         if (browseMode === 'event') {
           const evs = await authAPI.listBusinessUnitEvents(buId, {});
-          return (Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' }));
+          emitChunk((Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' })));
+          return;
         }
         if (browseMode === 'all') {
           const [acts, evs] = await Promise.all([
             authAPI.listBusinessUnitGroupActivities(buId, base).catch(() => []),
             authAPI.listBusinessUnitEvents(buId, {}).catch(() => []),
           ]);
-          return [
+          emitChunk([
             ...(Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' })),
             ...(Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' })),
-          ];
+          ]);
+          return;
         }
         const acts = await authAPI.listBusinessUnitGroupActivities(buId, base);
-        return (Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' }));
+        emitChunk((Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' })));
+        return;
       }
       // BRP schedule endpoints may behave poorly on very wide ranges; chunk long ranges.
       if (rangeDays <= SHOULD_CHUNK_RANGE_DAYS) {
@@ -4598,7 +4661,8 @@ export function initializeLoginPage(DOM) {
             periodStart: eventPeriodStartIso || periodStart,
             periodEnd,
           });
-          return (Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' }));
+          emitChunk((Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' })));
+          return;
         }
         if (browseMode === 'all') {
           const [acts, evs] = await Promise.all([
@@ -4612,50 +4676,63 @@ export function initializeLoginPage(DOM) {
               })
               .catch(() => []),
           ]);
-          return [
+          emitChunk([
             ...(Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' })),
             ...(Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' })),
-          ];
+          ]);
+          return;
         }
         const acts = await authAPI.listBusinessUnitGroupActivities(buId, { ...base, periodStart, periodEnd });
-        return (Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' }));
+        emitChunk((Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' })));
+        return;
       }
-      const out = [];
-      let cur = rangeStartMs;
-      while (cur <= rangeEndMs) {
-        const chunkStart = new Date(cur);
-        const chunkEnd = new Date(Math.min(rangeEndMs, cur + CHUNK_DAYS * 24 * 60 * 60 * 1000 - 1));
-        if (browseMode === 'event') {
-          const evs = await authAPI
+      const chunks = [];
+      for (let cur = rangeStartMs; cur <= rangeEndMs; cur += CHUNK_DAYS * 24 * 60 * 60 * 1000) {
+        chunks.push({
+          chunkStart: new Date(cur),
+          chunkEnd: new Date(Math.min(rangeEndMs, cur + CHUNK_DAYS * 24 * 60 * 60 * 1000 - 1)),
+        });
+      }
+      chunks.sort((a, b) => a.chunkStart.getTime() - b.chunkStart.getTime());
+      await Promise.all(
+        chunks.map(async ({ chunkStart, chunkEnd }) => {
+          if (isStale()) return;
+          if (browseMode === 'event') {
+            const evs = await authAPI
               .listBusinessUnitEvents(buId, {
                 periodStart: new Date(
                   chunkStart.getTime() - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
                 ).toISOString(),
                 periodEnd: chunkEnd.toISOString(),
               })
-            .catch(() => []);
-          if (Array.isArray(evs) && evs.length) out.push(...evs.map((e) => ({ ...e, __kind: 'event' })));
-        } else if (browseMode === 'all') {
-          const [acts, evs] = await Promise.all([
-            authAPI
-              .listBusinessUnitGroupActivities(buId, {
-                ...base,
-                periodStart: chunkStart.toISOString(),
-                periodEnd: chunkEnd.toISOString(),
-              })
-              .catch(() => []),
-            authAPI
-              .listBusinessUnitEvents(buId, {
-                periodStart: new Date(
-                  chunkStart.getTime() - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
-                ).toISOString(),
-                periodEnd: chunkEnd.toISOString(),
-              })
-              .catch(() => []),
-          ]);
-          if (Array.isArray(acts) && acts.length) out.push(...acts.map((a) => ({ ...a, __kind: 'groupActivity' })));
-          if (Array.isArray(evs) && evs.length) out.push(...evs.map((e) => ({ ...e, __kind: 'event' })));
-        } else {
+              .catch(() => []);
+            emitChunk((Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' })));
+            return;
+          }
+          if (browseMode === 'all') {
+            const [acts, evs] = await Promise.all([
+              authAPI
+                .listBusinessUnitGroupActivities(buId, {
+                  ...base,
+                  periodStart: chunkStart.toISOString(),
+                  periodEnd: chunkEnd.toISOString(),
+                })
+                .catch(() => []),
+              authAPI
+                .listBusinessUnitEvents(buId, {
+                  periodStart: new Date(
+                    chunkStart.getTime() - EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+                  ).toISOString(),
+                  periodEnd: chunkEnd.toISOString(),
+                })
+                .catch(() => []),
+            ]);
+            emitChunk([
+              ...(Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' })),
+              ...(Array.isArray(evs) ? evs : []).map((e) => ({ ...e, __buId: buId, __kind: 'event' })),
+            ]);
+            return;
+          }
           const acts = await authAPI
             .listBusinessUnitGroupActivities(buId, {
               ...base,
@@ -4663,144 +4740,128 @@ export function initializeLoginPage(DOM) {
               periodEnd: chunkEnd.toISOString(),
             })
             .catch(() => []);
-          if (Array.isArray(acts) && acts.length) out.push(...acts.map((a) => ({ ...a, __kind: 'groupActivity' })));
-        }
-        cur = cur + CHUNK_DAYS * 24 * 60 * 60 * 1000;
-      }
-      return out.map((a) => ({ ...a, __buId: buId }));
+          emitChunk((Array.isArray(acts) ? acts : []).map((a) => ({ ...a, __buId: buId, __kind: 'groupActivity' })));
+        })
+      );
     }
 
-    try {
-      const chunks = await Promise.all(buIds.map((buId) => listActivitiesForBuRange(buId).catch(() => [])));
-      let flat = chunks.flat();
-      const seen = new Set();
-      flat = flat.filter((a) => {
-        const id = a.id;
-        const kind = a.__kind || 'groupActivity';
-        const key = id == null ? null : `${kind}:${id}`;
-        if (!key) return true;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      if (hasRange) {
-        flat = flat.filter((item) => {
-          const kind = item.__kind || 'groupActivity';
-          const startMs = Date.parse(item?.duration?.start || '');
-          const endMs = Date.parse(item?.duration?.end || '');
-          if (kind === 'event') {
-            if (!Number.isFinite(startMs)) return false;
-            const effectiveEndMs = Number.isFinite(endMs) ? endMs : startMs;
-            return effectiveEndMs >= rangeStartMs && startMs <= rangeEndMs;
-          }
-          return Number.isFinite(startMs) && startMs >= rangeStartMs && startMs <= rangeEndMs;
-        });
+    let pendingRafId = null;
+    const clearPendingRaf = () => {
+      if (pendingRafId != null) {
+        cancelAnimationFrame(pendingRafId);
+        pendingRafId = null;
       }
-      if (q) {
-        flat = flat.filter((a) => String(a.name || '').toLowerCase().includes(q));
+    };
+    const clearLoadMoreState = () => {
+      const staleWrap = results.parentNode?.querySelector('.browse-load-more');
+      if (staleWrap) staleWrap.remove();
+      if (applyBrowseClassFilters._loadMoreObserver) {
+        applyBrowseClassFilters._loadMoreObserver.disconnect();
+        applyBrowseClassFilters._loadMoreObserver = null;
       }
-
-      if (onlyAvailable) {
-        flat = flat.filter((a) => {
-          if (!isIntroholdTitle(a?.name)) return true;
-          return !isBrowseSlotsFullyBooked(a?.slots);
-        });
-      }
-
-      const quickType = (document.getElementById('browseQuickTypeFilter')?.value || 'all').toLowerCase();
-      if (quickType === 'introhold') {
-        flat = flat.filter((a) => isIntroholdTitle(a?.name));
-      } else if (quickType === 'dropin') {
-        flat = flat.filter((a) => isDropInOnlyClass(a));
-      }
-
-      // Fallback guard: when BRP exposes a series session as plain group activity,
-      // proactively resolve product detail and remove that session card from browse.
-      const groupCandidates = flat.filter((item) => (item.__kind || 'groupActivity') === 'groupActivity');
-      if (groupCandidates.length) {
-        await Promise.all(
-          groupCandidates.map(async (item) => {
-            item.__blockDirectSessionBooking = await shouldBlockDirectSessionBooking(item);
-          })
-        );
-        flat = flat.filter((item) => {
-          const kind = item.__kind || 'groupActivity';
-          if (kind !== 'groupActivity') return true;
-          return item.__blockDirectSessionBooking !== true;
-        });
-      }
-
-      // If a grouped event series exists (e.g. Intro course with 3 sessions),
-      // hide the individual group-activity sessions that fall inside the series range
-      // to avoid showing duplicates in "All Types".
-      const seriesEvents = flat.filter((x) => (x.__kind || 'groupActivity') === 'event' && isGroupedEventSeries(x));
-      if (seriesEvents.length) {
-        const normalizeSeriesName = (name) =>
-          String(name || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        const dayStartMs = (ms) => {
-          const d = new Date(ms);
-          d.setHours(0, 0, 0, 0);
-          return d.getTime();
-        };
-        const seriesIndex = seriesEvents
-          .map((ev) => {
-            const buId = classCardBusinessUnitId(ev);
-            const name = normalizeSeriesName(ev?.name);
-            const a = Date.parse(ev?.duration?.start || '');
-            const b = Date.parse(ev?.duration?.end || '');
-            if (!buId || !name || !Number.isFinite(a)) return null;
-            const startDay = dayStartMs(a);
-            const endDay = Number.isFinite(b) ? dayStartMs(b) : startDay;
-            return {
-              buId,
-              name,
-              startDayMs: startDay,
-              endDayMs: endDay >= startDay ? endDay : startDay,
-            };
-          })
-          .filter(Boolean);
-
-        if (seriesIndex.length) {
-          flat = flat.filter((item) => {
-            const kind = item.__kind || 'groupActivity';
-            if (kind !== 'groupActivity') return true;
-            const buId = classCardBusinessUnitId(item);
-            const name = normalizeSeriesName(item?.name);
-            const startMs = Date.parse(item?.duration?.start || '');
-            if (!buId || !name || !Number.isFinite(startMs)) return true;
-            const startDayMs = dayStartMs(startMs);
-            return !seriesIndex.some((ev) => {
-              if (ev.buId !== buId) return false;
-              // Match exact name OR close variant ("introhold" / "intro hold")
-              const sameName = ev.name === name || ev.name.includes(name) || name.includes(ev.name);
-              if (!sameName) return false;
-              return startDayMs >= ev.startDayMs && startDayMs <= ev.endDayMs;
-            });
-          });
+      if (applyBrowseClassFilters._loadMoreScrollHandler) {
+        const scrollRoot = applyBrowseClassFilters._scrollRoot;
+        if (scrollRoot && scrollRoot.addEventListener) {
+          scrollRoot.removeEventListener('scroll', applyBrowseClassFilters._loadMoreScrollHandler);
+        } else {
+          window.removeEventListener('scroll', applyBrowseClassFilters._loadMoreScrollHandler);
         }
+        applyBrowseClassFilters._loadMoreScrollHandler = null;
       }
-      flat.sort((a, b) => {
-        const ta = a.duration?.start ? Date.parse(a.duration.start) : 0;
-        const tb = b.duration?.start ? Date.parse(b.duration.start) : 0;
-        return ta - tb;
-      });
+    };
 
+    try {
+      clearLoadMoreState();
       results.innerHTML = '';
-      if (resultsCountEl) {
-        resultsCountEl.textContent = `${flat.length} class${flat.length === 1 ? '' : 'es'}`;
-      }
-      if (!flat.length) {
-        setProfileHtml(
-          results,
-          '<p class="bookings-empty-msg">No classes match these filters.</p>'
-        );
-        return;
-      }
-      flat.forEach((a) => {
+      const loadingEl = document.createElement('p');
+      loadingEl.className = 'bookings-empty-msg';
+      loadingEl.textContent = 'Loading classes…';
+      results.appendChild(loadingEl);
+      if (resultsCountEl) resultsCountEl.textContent = '0 classes';
+
+      const streamBuffer = [];
+      const renderedKeys = new Set();
+      const cardByKey = new Map();
+      const dayHeaders = new Map();
+      const blockCheckScheduled = new Set();
+      const blockQueue = [];
+      const BLOCK_CHECK_CONCURRENCY = 6;
+      let blockInFlight = 0;
+      let gymsInFlight = buIds.length;
+      let loadMoreObserver = null;
+      let loadMoreScrollRoot = null;
+      let scrollFallbackTicking = false;
+      let sentinel = null;
+      let latestFlat = [];
+      let hasPaintedAny = false;
+      let renderQueued = false;
+
+      const keyOf = (item) => {
+        const id = item?.id;
+        if (id == null) return null;
+        return `${item.__kind || 'groupActivity'}:${id}`;
+      };
+      const dayKeyOf = (iso) => {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      };
+      const dayLabelOf = (iso) => {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        const dayStart = new Date(d);
+        dayStart.setHours(0, 0, 0, 0);
+        if (dayStart.getTime() === today.getTime()) return 'Today';
+        if (dayStart.getTime() === tomorrow.getTime()) return 'Tomorrow';
+        const sameYear = d.getFullYear() === today.getFullYear();
+        return d.toLocaleDateString(undefined, {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          ...(sameYear ? {} : { year: 'numeric' }),
+        });
+      };
+      const ensureDayHeader = (dayKey, dayLabel) => {
+        if (!dayKey || dayHeaders.has(dayKey)) return;
+        const header = document.createElement('div');
+        header.className = 'browse-day-header';
+        header.textContent = dayLabel;
+        Object.assign(header.style, {
+          fontSize: '14px',
+          fontWeight: '600',
+          letterSpacing: '0.02em',
+          textTransform: 'uppercase',
+          opacity: '0.7',
+          padding: '16px 4px 8px',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          marginTop: dayHeaders.size === 0 ? '0' : '8px',
+        });
+        results.appendChild(header);
+        dayHeaders.set(dayKey, { el: header, count: 0 });
+      };
+
+      const removeCardByKey = (key) => {
+        const node = cardByKey.get(key);
+        const dayKey = node?.dataset?.dayKey || '';
+        if (node?.parentNode) node.parentNode.removeChild(node);
+        if (cardByKey.delete(key)) {
+          renderedKeys.delete(key);
+        }
+        if (dayKey && dayHeaders.has(dayKey)) {
+          const info = dayHeaders.get(dayKey);
+          info.count = Math.max(0, info.count - 1);
+          if (info.count === 0) {
+            if (info.el?.parentNode) info.el.parentNode.removeChild(info.el);
+            dayHeaders.delete(dayKey);
+          }
+        }
+      };
+
+      function renderBrowseCard(a, dayKey) {
         const card = document.createElement('div');
         card.className = 'booking-item-card booking-item-card--browse';
         const kind = a.__kind || 'groupActivity';
@@ -4914,10 +4975,327 @@ export function initializeLoginPage(DOM) {
         } else {
           attachBrowseClassCardClick(card, a, gymSel);
         }
+        const key = keyOf(a);
+        if (key) {
+          card.dataset.browseKey = key;
+          cardByKey.set(key, card);
+          renderedKeys.add(key);
+        }
+        if (dayKey) {
+          card.dataset.dayKey = dayKey;
+          const info = dayHeaders.get(dayKey);
+          if (info) info.count += 1;
+        }
         results.appendChild(card);
-      });
+      }
+      const PAGE_SIZE = 6;
+      const loadMoreWrap = document.createElement('div');
+      loadMoreWrap.className = 'browse-load-more';
+      loadMoreWrap.style.display = 'flex';
+      loadMoreWrap.style.justifyContent = 'center';
+      loadMoreWrap.style.marginTop = '12px';
+      const loadMoreBtn = document.createElement('button');
+      loadMoreBtn.type = 'button';
+      loadMoreBtn.className = 'profile-action-btn browse-load-more__btn';
+      loadMoreBtn.textContent = 'Load more';
+      const updateCount = () => {
+        if (isStale()) return;
+        if (resultsCountEl) {
+          resultsCountEl.textContent = `${latestFlat.length} class${latestFlat.length === 1 ? '' : 'es'}`;
+        }
+      };
+      function updateLoadMore() {
+        if (isStale()) return;
+        const left = Math.max(0, latestFlat.length - renderedKeys.size);
+        if (left > 0) {
+          loadMoreWrap.hidden = false;
+          loadMoreBtn.textContent = `Load more (${left} left)`;
+          if (loadMoreObserver && !applyBrowseClassFilters._loadMoreObserver) {
+            applyBrowseClassFilters._loadMoreObserver = loadMoreObserver;
+          }
+        } else {
+          loadMoreWrap.hidden = true;
+          if (loadMoreObserver) {
+            loadMoreObserver.disconnect();
+            if (applyBrowseClassFilters._loadMoreObserver === loadMoreObserver) {
+              applyBrowseClassFilters._loadMoreObserver = null;
+            }
+            loadMoreObserver = null;
+          }
+        }
+      }
+      const runBlockQueue = () => {
+        while (!isStale() && blockInFlight < BLOCK_CHECK_CONCURRENCY && blockQueue.length) {
+          const item = blockQueue.shift();
+          blockInFlight += 1;
+          Promise.resolve(shouldBlockDirectSessionBooking(item))
+            .then((blocked) => {
+              if (isStale()) return;
+              item.__blockDirectSessionBooking = blocked === true;
+              if (item.__blockDirectSessionBooking === true) {
+                const key = keyOf(item);
+                if (key) removeCardByKey(key);
+                scheduleRender();
+              }
+            })
+            .catch(() => {})
+            .finally(() => {
+              blockInFlight = Math.max(0, blockInFlight - 1);
+              if (!isStale()) runBlockQueue();
+            });
+        }
+      };
+      const scheduleBlockChecks = (items) => {
+        items.forEach((item) => {
+          if ((item.__kind || 'groupActivity') !== 'groupActivity') return;
+          const key = keyOf(item);
+          if (!key || blockCheckScheduled.has(key)) return;
+          blockCheckScheduled.add(key);
+          blockQueue.push(item);
+        });
+        runBlockQueue();
+      };
+      const computeFilteredFlat = () => {
+        let flat = streamBuffer.slice();
+        const seen = new Set();
+        flat = flat.filter((a) => {
+          const id = a.id;
+          const kind = a.__kind || 'groupActivity';
+          const key = id == null ? null : `${kind}:${id}`;
+          if (!key) return true;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        if (hasRange) {
+          flat = flat.filter((item) => {
+            const kind = item.__kind || 'groupActivity';
+            const startMs = Date.parse(item?.duration?.start || '');
+            const endMs = Date.parse(item?.duration?.end || '');
+            if (kind === 'event') {
+              if (!Number.isFinite(startMs)) return false;
+              const effectiveEndMs = Number.isFinite(endMs) ? endMs : startMs;
+              return effectiveEndMs >= rangeStartMs && startMs <= rangeEndMs;
+            }
+            return Number.isFinite(startMs) && startMs >= rangeStartMs && startMs <= rangeEndMs;
+          });
+        }
+        if (q) {
+          flat = flat.filter((a) => String(a.name || '').toLowerCase().includes(q));
+        }
+        if (onlyAvailable) {
+          flat = flat.filter((a) => {
+            if (!isIntroholdTitle(a?.name)) return true;
+            return !isBrowseSlotsFullyBooked(a?.slots);
+          });
+        }
+        const quickType = (document.getElementById('browseQuickTypeFilter')?.value || 'all').toLowerCase();
+        if (quickType === 'introhold') {
+          flat = flat.filter((a) => isIntroholdTitle(a?.name));
+        } else if (quickType === 'dropin') {
+          flat = flat.filter((a) => isDropInOnlyClass(a));
+        }
+        flat = flat.filter((item) => {
+          const kind = item.__kind || 'groupActivity';
+          if (kind !== 'groupActivity') return true;
+          return item.__blockDirectSessionBooking !== true;
+        });
+        const seriesEvents = flat.filter((x) => (x.__kind || 'groupActivity') === 'event' && isGroupedEventSeries(x));
+        if (seriesEvents.length) {
+          const normalizeSeriesName = (name) =>
+            String(name || '')
+              .toLowerCase()
+              .replace(/[^a-z0-9\u00c0-\u024f]+/gi, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+          const dayStartMs = (ms) => {
+            const d = new Date(ms);
+            d.setHours(0, 0, 0, 0);
+            return d.getTime();
+          };
+          const seriesIndex = seriesEvents
+            .map((ev) => {
+              const buId = classCardBusinessUnitId(ev);
+              const name = normalizeSeriesName(ev?.name);
+              const a = Date.parse(ev?.duration?.start || '');
+              const b = Date.parse(ev?.duration?.end || '');
+              if (!buId || !name || !Number.isFinite(a)) return null;
+              const startDay = dayStartMs(a);
+              const endDay = Number.isFinite(b) ? dayStartMs(b) : startDay;
+              return {
+                buId,
+                name,
+                startDayMs: startDay,
+                endDayMs: endDay >= startDay ? endDay : startDay,
+              };
+            })
+            .filter(Boolean);
+          if (seriesIndex.length) {
+            flat = flat.filter((item) => {
+              const kind = item.__kind || 'groupActivity';
+              if (kind !== 'groupActivity') return true;
+              const buId = classCardBusinessUnitId(item);
+              const name = normalizeSeriesName(item?.name);
+              const startMs = Date.parse(item?.duration?.start || '');
+              if (!buId || !name || !Number.isFinite(startMs)) return true;
+              const startDayMs = dayStartMs(startMs);
+              return !seriesIndex.some((ev) => {
+                if (ev.buId !== buId) return false;
+                const sameName = ev.name === name || ev.name.includes(name) || name.includes(ev.name);
+                if (!sameName) return false;
+                return startDayMs >= ev.startDayMs && startDayMs <= ev.endDayMs;
+              });
+            });
+          }
+        }
+        flat.sort((a, b) => {
+          const ta = a.duration?.start ? Date.parse(a.duration.start) : 0;
+          const tb = b.duration?.start ? Date.parse(b.duration.start) : 0;
+          return ta - tb;
+        });
+        return flat;
+      };
+      function renderNextPage() {
+        if (isStale()) return;
+        let added = 0;
+        for (const item of latestFlat) {
+          if (added >= PAGE_SIZE) break;
+          const key = keyOf(item);
+          if (key && renderedKeys.has(key)) continue;
+          const startIso = item?.duration?.start || '';
+          const resolvedDayKey = dayKeyOf(startIso) || '__other__';
+          const dayLabel = resolvedDayKey === '__other__' ? 'Other' : dayLabelOf(startIso);
+          ensureDayHeader(resolvedDayKey, dayLabel || 'Other');
+          renderBrowseCard(item, resolvedDayKey);
+          added += 1;
+        }
+        updateLoadMore();
+      }
+      const flushRender = () => {
+        if (isStale()) return;
+        pendingRafId = null;
+        renderQueued = false;
+        latestFlat = computeFilteredFlat();
+        updateCount();
+        if (latestFlat.length) {
+          hasPaintedAny = true;
+          if (loadingEl.parentNode) loadingEl.remove();
+          updateLoadMore();
+          if (!results.querySelector('.booking-item-card--browse')) {
+            renderNextPage();
+          }
+        } else if (gymsInFlight === 0) {
+          if (loadingEl.parentNode) loadingEl.remove();
+          setProfileHtml(results, '<p class="bookings-empty-msg">No classes match these filters.</p>');
+          clearLoadMoreState();
+        } else if (!loadingEl.parentNode) {
+          results.innerHTML = '';
+          results.appendChild(loadingEl);
+        }
+      };
+      function scheduleRender() {
+        if (isStale()) return;
+        if (renderQueued) return;
+        renderQueued = true;
+        pendingRafId = requestAnimationFrame(flushRender);
+      }
+      const handleChunk = (chunkItems) => {
+        if (isStale()) return;
+        streamBuffer.push(...chunkItems);
+        hydrateBrowseGymFilterFromActivities(chunkItems);
+        scheduleBlockChecks(chunkItems);
+        scheduleRender();
+      };
+      loadMoreBtn.addEventListener('click', renderNextPage);
+      sentinel = document.createElement('div');
+      sentinel.className = 'browse-load-more__sentinel';
+      sentinel.style.height = '1px';
+      loadMoreWrap.appendChild(sentinel);
+      loadMoreWrap.appendChild(loadMoreBtn);
+      results.parentNode.insertBefore(loadMoreWrap, results.nextSibling);
+      const findScrollableRoot = () => {
+        let node = results.parentElement;
+        while (node) {
+          const style = window.getComputedStyle(node);
+          if (style && (style.overflowY === 'auto' || style.overflowY === 'scroll')) return node;
+          node = node.parentElement;
+        }
+        return null;
+      };
+      const cachedRoot = applyBrowseClassFilters._scrollRoot;
+      loadMoreScrollRoot =
+        cachedRoot && cachedRoot.isConnected && cachedRoot.contains(results) ? cachedRoot : findScrollableRoot();
+      applyBrowseClassFilters._scrollRoot = loadMoreScrollRoot;
+      const maybeAutoLoadFromScroll = () => {
+        if (isStale() || !sentinel) return;
+        const rect = sentinel.getBoundingClientRect();
+        const viewportHeight =
+          loadMoreScrollRoot && loadMoreScrollRoot.clientHeight ? loadMoreScrollRoot.clientHeight : window.innerHeight;
+        if (rect.top < viewportHeight + 400 && renderedKeys.size < latestFlat.length) {
+          renderNextPage();
+        }
+      };
+      const onScrollFallback = () => {
+        if (scrollFallbackTicking) return;
+        scrollFallbackTicking = true;
+        requestAnimationFrame(() => {
+          scrollFallbackTicking = false;
+          maybeAutoLoadFromScroll();
+        });
+      };
+      applyBrowseClassFilters._loadMoreScrollHandler = onScrollFallback;
+      if (loadMoreScrollRoot && loadMoreScrollRoot.addEventListener) {
+        loadMoreScrollRoot.addEventListener('scroll', onScrollFallback, { passive: true });
+      } else {
+        window.addEventListener('scroll', onScrollFallback, { passive: true });
+      }
+      if (typeof IntersectionObserver === 'function') {
+        loadMoreObserver = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) renderNextPage();
+            });
+          },
+          {
+            root: loadMoreScrollRoot || null,
+            rootMargin: '400px 0px',
+            threshold: 0,
+          }
+        );
+        loadMoreObserver.observe(sentinel);
+        console.debug('[Browse] auto-load observer attached', {
+          root: loadMoreScrollRoot || null,
+          rootMargin: '400px 0px',
+        });
+        applyBrowseClassFilters._loadMoreObserver = loadMoreObserver;
+      }
+      maybeAutoLoadFromScroll();
+      await Promise.all(
+        buIds.map((buId) =>
+          listActivitiesForBuRange(buId, handleChunk)
+            .catch(() => {})
+            .finally(() => {
+              gymsInFlight = Math.max(0, gymsInFlight - 1);
+              if (!isStale()) scheduleRender();
+            })
+        )
+      );
+      if (isStale() || token !== browseFiltersLoadToken) {
+        clearPendingRaf();
+        return;
+      }
+      if (!hasPaintedAny && !latestFlat.length) {
+        clearPendingRaf();
+        clearLoadMoreState();
+        setProfileHtml(results, '<p class="bookings-empty-msg">No classes match these filters.</p>');
+      } else {
+        scheduleRender();
+      }
     } catch (err) {
+      clearPendingRaf();
+      if (isStale() || token !== browseFiltersLoadToken) return;
       console.warn('[Browse] Classes:', err);
+      clearLoadMoreState();
       setProfileHtml(
         results,
         '<p class="bookings-empty-msg">Could not load classes. Try again or pick another gym.</p>'
@@ -5082,8 +5460,17 @@ export function initializeLoginPage(DOM) {
         if (el === gymSel) renderBrowseGymChips();
       });
     });
+    populateBrowseGymFilterOnce();
     bindBrowseChipInteractions();
     renderBrowseGymChips();
+    const browseSection = document.getElementById('browseClasses');
+    const browseTab = document.querySelector('.booking-tab[data-tab="browse"]');
+    const browseVisible =
+      browseSection?.classList.contains('active') ||
+      (browseSection && browseSection.style.display !== 'none' && browseTab?.classList.contains('active'));
+    if (browseVisible) {
+      applyBrowseClassFilters();
+    }
   }
 
   function openClassesBrowseTab() {
