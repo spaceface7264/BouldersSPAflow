@@ -2881,6 +2881,18 @@ function getDisplayableRouteMatchedProducts(products, labelKey, displayOptions =
     .filter((product) => shouldDisplayProductByLabels(product, displayOptions));
 }
 
+function getRequiredLandingLabels(activeLandingRoute) {
+  if (activeLandingRoute?.componentName === 'LandingFirstMonthFree') {
+    return ['landingfirstmonthfree', 'secret'];
+  }
+  return null;
+}
+
+function hasRequiredLabels(product, requiredLabels) {
+  if (!Array.isArray(requiredLabels) || requiredLabels.length === 0) return true;
+  return requiredLabels.every((label) => productHasLabel(product, label));
+}
+
 function getProductPriceCents(product) {
   const amount = product?.priceWithInterval?.price?.amount ?? product?.price?.amount ?? product?.amount;
   if (amount == null) return 0;
@@ -2903,9 +2915,12 @@ async function loadProductsFromAPI() {
 
   const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
   const isFreeTrialLandingRoute = activeLandingRoute?.componentName === 'LandingFreeTrial';
+  const isFirstMonthFreeLandingRoute = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
   const displayLabelOptions = isFreeTrialLandingRoute
     ? { allowedVisibilityLabels: ['secret'] }
-    : {};
+    : isFirstMonthFreeLandingRoute
+      ? { allowedVisibilityLabels: ['secret'] }
+      : {};
 
   // Deduplicate concurrent calls (preload + step transition + showStep)
   if (productsLoadPromise) {
@@ -2939,6 +2954,9 @@ async function loadProductsFromAPI() {
     // Reference: docs/brp-api3-openapi.yaml - SubscriptionProductOut schema (line ~14970)
     // Reference: docs/brp-api3-openapi.yaml - ValueCardProductOut schema (line ~15461)
     
+    const requiredLandingLabels = getRequiredLandingLabels(activeLandingRoute);
+    const landingLabelFilterActive = Array.isArray(requiredLandingLabels) && requiredLandingLabels.length > 0;
+
     // Filter subscription products
     // According to OpenAPI spec (SubscriptionProductOut):
     // - allowedToOrder (boolean): "To determine whether the subscription product is bookable for the subscription user or not"
@@ -3047,8 +3065,8 @@ async function loadProductsFromAPI() {
       }
       
       // Check 3: Label-based filtering
-      // Only display products with "Public" label, exclude products with "Hidden" label
-      if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
+      // Normal flow: apply visibility labels. Landing flows with explicit label filters bypass this gate.
+      if (!landingLabelFilterActive && !shouldDisplayProductByLabels(product, displayLabelOptions)) {
         return false;
       }
       
@@ -3075,14 +3093,22 @@ async function loadProductsFromAPI() {
       }
       
       // Check: Label-based filtering
-      // Only display products with "Public" label, exclude products with "Hidden" label
-      if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
+      // Normal flow: apply visibility labels. Landing flows with explicit label filters bypass this gate.
+      if (!landingLabelFilterActive && !shouldDisplayProductByLabels(product, displayLabelOptions)) {
         return false;
       }
       
       return true;
     });
     
+    if (requiredLandingLabels) {
+      const beforeSubscriptionLandingFilter = subscriptions.length;
+      const beforeValueCardLandingFilter = valueCards.length;
+      subscriptions = subscriptions.filter((product) => hasRequiredLabels(product, requiredLandingLabels));
+      valueCards = valueCards.filter((product) => hasRequiredLabels(product, requiredLandingLabels));
+      console.log('[Products] Landing filter active for path:', window.location.pathname, 'labels:', requiredLandingLabels, 'subscriptions:', `${beforeSubscriptionLandingFilter} -> ${subscriptions.length}`, 'valueCards:', `${beforeValueCardLandingFilter} -> ${valueCards.length}`);
+    }
+
 
     // Separate subscriptions into Campaign, Membership, and 15-Day Trial Pass categories based on labels
     // Priority: PublicCampaign > 15-Day Trial Pass > Public
@@ -3108,7 +3134,11 @@ async function loadProductsFromAPI() {
       });
 
     const campaignSubscriptions = subscriptions.filter(product => {
-      // Check if product has "PublicCampaign" label
+      // For landing routes with explicit label requirements, match only required labels.
+      if (requiredLandingLabels) {
+        return hasRequiredLabels(product, requiredLandingLabels);
+      }
+      // Default behavior: campaign products are identified by "PublicCampaign".
       return hasLabelName(product, 'publiccampaign');
     });
     
@@ -3180,7 +3210,18 @@ async function loadProductsFromAPI() {
         ...campaignValueCards,
         ...regularValueCards,
       ];
-      const matched = getDisplayableRouteMatchedProducts(displayCandidates, activeLandingRoute.labelKey, displayLabelOptions)
+      const uniqueDisplayCandidates = displayCandidates.filter((product, index, arr) => {
+        const productKind = product?.priceWithInterval?.price?.amount !== undefined ? 'subscription' : 'valuecard';
+        const productId = String(product?.id ?? '');
+        const identity = `${productKind}:${productId}`;
+        return arr.findIndex((candidate) => {
+          const candidateKind = candidate?.priceWithInterval?.price?.amount !== undefined ? 'subscription' : 'valuecard';
+          const candidateId = String(candidate?.id ?? '');
+          return `${candidateKind}:${candidateId}` === identity;
+        }) === index;
+      });
+      const matched = getDisplayableRouteMatchedProducts(uniqueDisplayCandidates, activeLandingRoute.labelKey, displayLabelOptions)
+        .filter((product) => hasRequiredLabels(product, requiredLandingLabels))
         .sort(byPriceHighToLow);
       state.landingMatchedProducts = activeLandingRoute.mode === 'single'
         ? matched.slice(0, 1)
@@ -3425,6 +3466,9 @@ function renderProductsFromAPI() {
       const categoryItem = ensureFreeTrialCategoryItem();
       return categoryItem ? categoryItem.querySelector('.plans-list') : null;
     }
+    if (activeLandingRoute?.componentName === 'LandingFirstMonthFree') {
+      return document.querySelector('[data-category="campaign"] .plans-list');
+    }
     return document.querySelector('[data-category="membership"] .plans-list');
   };
   const hideNonLandingCategories = () => {
@@ -3434,17 +3478,43 @@ function renderProductsFromAPI() {
     });
     const targetCategory = activeLandingRoute?.componentName === 'LandingFreeTrial'
       ? ensureFreeTrialCategoryItem()
-      : document.querySelector('[data-category="membership"]');
+      : activeLandingRoute?.componentName === 'LandingFirstMonthFree'
+        ? document.querySelector('[data-category="campaign"]')
+        : document.querySelector('[data-category="membership"]');
     if (targetCategory) {
       targetCategory.style.display = '';
       targetCategory.classList.add('expanded', 'selected');
+    }
+    if (activeLandingRoute?.componentName === 'LandingFirstMonthFree') {
+      const title = targetCategory?.querySelector('.category-title');
+      const subtitle = targetCategory?.querySelector('.category-subtitle');
+      const description = targetCategory?.querySelector('.category-description p');
+      const countdown = document.getElementById('campaignCountdown');
+      if (title) {
+        title.textContent = 'First Month Free';
+        title.removeAttribute('data-i18n-key');
+      }
+      if (subtitle) {
+        subtitle.textContent = '';
+        subtitle.removeAttribute('data-i18n-key');
+      }
+      if (description) {
+        description.textContent = '';
+        description.removeAttribute('data-i18n-key');
+      }
+      if (countdown) countdown.style.display = 'none';
+      stopCampaignCountdown();
     }
   };
   const renderLandingCards = (products) => {
     const plansList = getLandingTargetList();
     if (!plansList) return;
+    const requiredLandingLabels = getRequiredLandingLabels(activeLandingRoute);
+    const strictlyMatchedProducts = Array.isArray(products)
+      ? products.filter((product) => hasRequiredLabels(product, requiredLandingLabels))
+      : [];
     plansList.innerHTML = '';
-    if (!Array.isArray(products) || products.length === 0) {
+    if (strictlyMatchedProducts.length === 0) {
       const emptyEl = document.createElement('div');
       emptyEl.className = 'no-products-message';
       emptyEl.innerHTML = sanitizeHTML(`
@@ -3455,8 +3525,10 @@ function renderProductsFromAPI() {
       plansList.appendChild(emptyEl);
       return;
     }
-    products.forEach((product) => {
-      const category = resolveLandingCategory(product);
+    strictlyMatchedProducts.forEach((product) => {
+      const category = activeLandingRoute?.componentName === 'LandingFirstMonthFree'
+        ? 'campaign'
+        : resolveLandingCategory(product);
       const isSubscriptionProduct = product?.priceWithInterval?.price?.amount !== undefined;
       const card = isSubscriptionProduct
         ? renderSubscriptionCard(product, category)
@@ -3483,24 +3555,7 @@ function renderProductsFromAPI() {
       devWarn('[Landing Route] Unknown component name:', activeLandingRoute.componentName);
     }
 
-    try {
-      setupNewAccessStep();
-      updatePageTranslations();
-    } catch (e) {
-      devWarn('[Step 2] setupNewAccessStep failed (landing route immediate):', e);
-    }
-    requestAnimationFrame(() => {
-      try {
-        const lockedCategory = document.querySelector('.category-item[data-landing-locked="true"]');
-        if (lockedCategory) {
-          lockedCategory.classList.add('expanded', 'selected');
-        }
-        setupNewAccessStep();
-        updatePageTranslations();
-      } catch (e) {
-        devWarn('[Step 2] setupNewAccessStep failed (landing route raf):', e);
-      }
-    });
+    scheduleAccessStepRebind();
     return;
   }
 
@@ -3636,23 +3691,8 @@ function renderProductsFromAPI() {
     }
   }
   
-  // Re-setup event listeners for the new cards
-  // Rebind interactions immediately so users can click right away (e.g. after language switch).
-  // Also schedule a next-frame rebind to handle any late DOM/layout changes.
-  try {
-    setupNewAccessStep();
-    updatePageTranslations();
-  } catch (e) {
-    console.warn('[Step 2] setupNewAccessStep failed (immediate):', e);
-  }
-  requestAnimationFrame(() => {
-    try {
-      setupNewAccessStep();
-      updatePageTranslations();
-    } catch (e) {
-      console.warn('[Step 2] setupNewAccessStep failed (raf):', e);
-    }
-  });
+  // Re-setup event listeners and translations in one batched frame to avoid visible double-render.
+  scheduleAccessStepRebind();
 }
 
 // Step 5: Load add-ons when a membership is selected
@@ -4453,6 +4493,22 @@ let customerSyncCooldownUntil = 0;
 let loginCooldownUntil = 0;
 let campaignCountdownIntervalId = null;
 let campaignGuardCustomerRefreshPromise = null;
+let accessStepRebindRafId = null;
+
+function scheduleAccessStepRebind() {
+  if (accessStepRebindRafId != null) {
+    cancelAnimationFrame(accessStepRebindRafId);
+  }
+  accessStepRebindRafId = requestAnimationFrame(() => {
+    accessStepRebindRafId = null;
+    try {
+      setupNewAccessStep();
+      updatePageTranslations();
+    } catch (e) {
+      console.warn('[Step 2] setupNewAccessStep failed (scheduled):', e);
+    }
+  });
+}
 
 // Campaign countdown end date: set here when API doesn't send Omsætningsperiode. Use ISO string or null for "end of current month".
 const CAMPAIGN_COUNTDOWN_END_DATE_FALLBACK = '2026-02-16'; // e.g. '2026-02-15T23:59:59.999' or '2026-02-15'
