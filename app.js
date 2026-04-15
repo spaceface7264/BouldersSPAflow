@@ -2816,7 +2816,7 @@ async function loadReferenceData() {
     state.referenceData = {};
     state.referenceDataLoaded = false;
   }
-}
+} 
 
 // Helper function to check if product should be displayed based on labels
 // Rules:
@@ -5793,7 +5793,7 @@ const translations = {
     'confirmation.title': 'SUCCES!',
     'confirmation.message': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.membership': 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.15daypass': 'Din 15-dages pas er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.15daypass': 'Din 15-dages prøveperiode er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.orderDetails': 'Ordredetaljer',
@@ -5825,7 +5825,7 @@ const translations = {
     'confirmation.primaryGym': 'Hjemmehal:',
     'confirmation.membershipType': 'Type:',
     'confirmation.monthlyPrice': 'Månedlig pris:',
-    'confirmation.15daypassDetails': '15-dages pas detaljer',
+    'confirmation.15daypassDetails': 'Prøveperiode detaljer',
     'confirmation.passType': 'Pastype:',
     'confirmation.validFrom': 'Gyldig fra:',
     'confirmation.validUntil': 'Gyldig til:',
@@ -5839,12 +5839,13 @@ const translations = {
     'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
     'confirmation.nextStep2.15daypass.future': 'Din 15-Dages Prøveperiode bliver aktivt den {date}',
     'confirmation.nextStep2.freetrial': 'Din prøveperiode er aktiveret og klar til brug.',
-    'confirmation.nextStep2.freetrial.future': 'Din prøveperiode aktiveres automatisk den {date}',
+    'confirmation.nextStep2.freetrial.future': 'Din prøveperiode starter den {date}. Vi aktiverer den automatisk.',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskort i Boulders',
     'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge ditn 15-Dages Prøveperiode',
     'confirmation.nextStep3.freetrial': 'Mød op i hallen og kom i gang når din periode starter og oplys dit telefonnummer',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
+    'confirmation.freetrial.changeActivationCta': 'Har du brug for at ændre aktiveringsdato? Klik her.',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
@@ -6003,7 +6004,7 @@ const translations = {
     'confirmation.title': 'SUCCESS!',
     'confirmation.message': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.15daypass': 'Your 15-Day Trial Pass has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.15daypass': 'Your 15-Day Trial Period has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.orderDetails': 'Order Details',
@@ -6049,12 +6050,13 @@ const translations = {
     'confirmation.nextStep2.15daypass': 'Your pass is active and ready to use',
     'confirmation.nextStep2.15daypass.future': 'Your pass becomes active on {date}',
     'confirmation.nextStep2.freetrial': 'Your trial period is activated and ready to use.',
-    'confirmation.nextStep2.freetrial.future': 'Your trial period activates automatically on {date}',
+    'confirmation.nextStep2.freetrial.future': 'Your trial period starts on {date}. We will activate it automatically.',
     'confirmation.nextStep2.punchcard': 'Your punch card is ready to use',
     'confirmation.nextStep3.membership': 'Pick up your membership card at the gym',
     'confirmation.nextStep3.15daypass': 'Visit the gym to start using your pass',
     'confirmation.nextStep3.freetrial': 'Visit the gym and get started when your period starts, and provide your phone number to staff',
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
+    'confirmation.freetrial.changeActivationCta': 'Need to change activation day? Click here.',
     'confirmation.pending.title': 'Payment Pending',
     'confirmation.pending.message': 'Your payment is being processed. We\'re waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #',
     'confirmation.pending.stillProcessing': 'Payment is still being processed. Please check back in a few minutes or contact support if you\'ve completed payment. Order #',
@@ -6293,6 +6295,7 @@ const translations = {
     'confirmation.nextStep3.membership': 'Holen Sie Ihre Mitgliedskarte in der Halle ab',
     'confirmation.nextStep3.15daypass': 'Besuchen Sie die Halle, um Ihren Pass zu nutzen',
     'confirmation.nextStep3.punchcard': 'Besuchen Sie die Halle, um Ihre Stempel zu nutzen',
+    'confirmation.freetrial.changeActivationCta': 'Müssen Sie den Aktivierungstag ändern? Klicken Sie hier',
     'confirmation.pending.title': 'Zahlung ausstehend',
     'confirmation.pending.message': 'Ihre Zahlung wird bearbeitet. Wir warten auf die Bestätigung des Zahlungsanbieters. Ihre Mitgliedschaft wird nach Bestätigung der Zahlung aktiviert. Bestellung #',
     'confirmation.pending.stillProcessing': 'Die Zahlung wird noch bearbeitet. Bitte schauen Sie in einigen Minuten erneut vorbei oder kontaktieren Sie den Support, wenn Sie die Zahlung abgeschlossen haben. Bestellung #',
@@ -7083,6 +7086,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const testSuccess = urlParams.get('testSuccess') === 'true';
   const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
   const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
+  const testStartDateParam = String(urlParams.get('testStartDate') || '').trim();
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
   const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
@@ -7210,14 +7214,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }]
       };
     } else if (productType === '15daypass') {
+      const validTestStartDate = /^\d{4}-\d{2}-\d{2}$/.test(testStartDateParam) ? testStartDateParam : null;
+      state.subscriptionStartDate = validTestStartDate;
       state.selectedProductType = 'membership';
       state.membershipPlanId = '15daypass-123';
+      const startDateForMock = validTestStartDate ? new Date(`${validTestStartDate}T12:00:00`) : new Date();
+      const endDateForMock = new Date(startDateForMock);
+      endDateForMock.setDate(endDateForMock.getDate() + 15);
       // Mock subscription items with 15-Day Trial Pass label and price
       state.fullOrder = {
         subscriptionItems: [{
           product: {
             name: '15-Day Trial Pass',
             productLabels: [{ name: '15-Day Trial Pass' }]
+          },
+          subscription: {
+            startDate: startDateForMock.toISOString(),
+            endDate: endDateForMock.toISOString()
           },
           price: { amount: 46900 } // 469.00 DKK in cents
         }]
@@ -19458,6 +19471,32 @@ function renderConfirmationView() {
   const nextStep1 = document.getElementById('nextStep1');
   const nextStep2 = document.getElementById('nextStep2');
   const nextStep3 = document.getElementById('nextStep3');
+  const freetrialActivationChangeCta = document.getElementById('freetrialActivationChangeCta');
+  const freetrialActivationChangeLink = document.getElementById('freetrialActivationChangeLink');
+  const isFreeTrialFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
+
+  if (freetrialActivationChangeCta && freetrialActivationChangeLink) {
+    const supportEmail = 'medlem@boulders.dm';
+    const supportSubject = encodeURIComponent('Change of activation date - Free Trial');
+    const supportBody = encodeURIComponent([
+      'Hi Boulders team,',
+      '',
+      'I would like to request a change of activation date for my free trial.',
+      '',
+      `Order number: ${state.order?.number || state.orderId || '[insert order number]'}`,
+      `Current activation date: ${state.subscriptionStartDate || '[insert activation date]'}`,
+      'Requested new activation date: [insert new date]',
+      '',
+      'Name: [insert your full name]',
+      'Phone: [insert your phone number]',
+      '',
+      'Thanks in advance!'
+    ].join('\n'));
+    freetrialActivationChangeLink.href = `mailto:${supportEmail}?subject=${supportSubject}&body=${supportBody}`;
+    freetrialActivationChangeLink.setAttribute('data-i18n-key', 'confirmation.freetrial.changeActivationCta');
+    freetrialActivationChangeLink.textContent = t('confirmation.freetrial.changeActivationCta');
+    freetrialActivationChangeCta.style.display = isFreeTrialFlow ? '' : 'none';
+  }
   
   if (nextStep1) {
     nextStep1.setAttribute('data-i18n-key', 'confirmation.nextStep1');
@@ -19465,7 +19504,6 @@ function renderConfirmationView() {
   }
   
   if (nextStep2 && nextStep3) {
-    const isFreeTrialFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
     const step2Key = productType === 'membership' ? 'confirmation.nextStep2.membership'
       : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep2.freetrial' : 'confirmation.nextStep2.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep2.punchcard'

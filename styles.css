@@ -8872,6 +8872,31 @@ main {
     line-height: 1.5;
 }
 
+.step-change-activation-cta {
+    margin: 12px 0 0 48px;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+.step-change-activation-cta a {
+    color: #f472ff;
+    text-decoration: underline;
+    text-decoration-color: rgba(244, 114, 255, 0.7);
+    text-underline-offset: 2px;
+    transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.step-change-activation-cta a:hover {
+    color: #f9a8ff;
+    text-decoration-color: #f9a8ff;
+}
+
+.step-change-activation-cta a:focus-visible {
+    outline: 2px solid rgba(244, 1, 245, 0.7);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
 /* Hide step indicator on confirmation page */
 .step-indicator.hidden {
     display: none;
