@@ -5153,17 +5153,44 @@ export function initializeLoginPage(DOM) {
       function renderNextPage() {
         if (isStale()) return;
         let added = 0;
+        let skippedRendered = 0;
+        let errored = 0;
         for (const item of latestFlat) {
           if (added >= PAGE_SIZE) break;
           const key = keyOf(item);
-          if (key && renderedKeys.has(key)) continue;
+          if (key && renderedKeys.has(key)) {
+            skippedRendered += 1;
+            continue;
+          }
           const startIso = item?.duration?.start || '';
           const resolvedDayKey = dayKeyOf(startIso) || '__other__';
           const dayLabel = resolvedDayKey === '__other__' ? 'Other' : dayLabelOf(startIso);
-          ensureDayHeader(resolvedDayKey, dayLabel || 'Other');
-          renderBrowseCard(item, resolvedDayKey);
-          added += 1;
+          try {
+            ensureDayHeader(resolvedDayKey, dayLabel || 'Other');
+            renderBrowseCard(item, resolvedDayKey);
+            added += 1;
+          } catch (renderErr) {
+            errored += 1;
+            console.warn('[Browse] renderBrowseCard threw — skipping item', {
+              kind: item?.__kind,
+              id: item?.id,
+              name: item?.name,
+              startIso,
+              err: renderErr,
+            });
+            // Mark the key as "rendered" so we don't keep retrying the same
+            // broken item on every renderNextPage and block all subsequent ones.
+            if (key) renderedKeys.add(key);
+          }
         }
+        console.debug('[Browse] renderNextPage', {
+          PAGE_SIZE,
+          added,
+          skippedRendered,
+          errored,
+          latestFlatLen: latestFlat.length,
+          renderedKeysSize: renderedKeys.size,
+        });
         updateLoadMore();
         // IntersectionObserver only fires on boundary CROSSING, not continuous
         // intersection. On short pages the sentinel can remain visible after a
@@ -5183,6 +5210,13 @@ export function initializeLoginPage(DOM) {
         renderQueued = false;
         latestFlat = computeFilteredFlat();
         updateCount();
+        console.debug('[Browse] flushRender', {
+          streamBufferLen: streamBuffer.length,
+          latestFlatLen: latestFlat.length,
+          renderedKeysSize: renderedKeys.size,
+          gymsInFlight,
+          hasAnyCard: !!results.querySelector('.booking-item-card--browse'),
+        });
         if (latestFlat.length) {
           hasPaintedAny = true;
           if (loadingEl.parentNode) loadingEl.remove();
@@ -5208,6 +5242,10 @@ export function initializeLoginPage(DOM) {
       const handleChunk = (chunkItems) => {
         if (isStale()) return;
         streamBuffer.push(...chunkItems);
+        console.debug('[Browse] handleChunk', {
+          chunkSize: chunkItems?.length || 0,
+          streamBufferSize: streamBuffer.length,
+        });
         hydrateBrowseGymFilterFromActivities(chunkItems);
         scheduleBlockChecks(chunkItems);
         scheduleRender();
@@ -5259,6 +5297,13 @@ export function initializeLoginPage(DOM) {
         loadMoreObserver = new IntersectionObserver(
           (entries) => {
             entries.forEach((entry) => {
+              console.debug('[Browse] observer entry', {
+                isIntersecting: entry.isIntersecting,
+                intersectionRatio: entry.intersectionRatio,
+                boundingTop: entry.boundingClientRect?.top,
+                renderedKeysSize: renderedKeys.size,
+                latestFlatLen: latestFlat.length,
+              });
               if (entry.isIntersecting) renderNextPage();
             });
           },
