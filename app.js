@@ -5843,7 +5843,9 @@ const translations = {
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskort i Boulders',
     'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge ditn 15-Dages Prøveperiode',
-    'confirmation.nextStep3.freetrial': 'Mød op i hallen og kom i gang når din periode starter og oplys dit telefonnummer',
+    'confirmation.nextStep3.freetrial': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
+    'confirmation.nextStep3.freetrial.today': 'Mød op i hallen i dag og kobl dit adgangskort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
+    'confirmation.nextStep3.freetrial.future': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.freetrial.changeActivationCta': 'Har du brug for at ændre aktiveringsdato? Klik her.',
     'confirmation.pending.title': 'Betaling afventer',
@@ -6054,7 +6056,9 @@ const translations = {
     'confirmation.nextStep2.punchcard': 'Your punch card is ready to use',
     'confirmation.nextStep3.membership': 'Pick up your membership card at the gym',
     'confirmation.nextStep3.15daypass': 'Visit the gym to start using your pass',
-    'confirmation.nextStep3.freetrial': 'Visit the gym and get started when your period starts, and provide your phone number to staff',
+    'confirmation.nextStep3.freetrial': 'When your trial starts, visit the gym to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
+    'confirmation.nextStep3.freetrial.today': 'Visit the gym today to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
+    'confirmation.nextStep3.freetrial.future': 'When your trial starts, visit the gym to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
     'confirmation.freetrial.changeActivationCta': 'Need to change activation day? Click here.',
     'confirmation.pending.title': 'Payment Pending',
@@ -6295,6 +6299,8 @@ const translations = {
     'confirmation.nextStep3.membership': 'Holen Sie Ihre Mitgliedskarte in der Halle ab',
     'confirmation.nextStep3.15daypass': 'Besuchen Sie die Halle, um Ihren Pass zu nutzen',
     'confirmation.nextStep3.punchcard': 'Besuchen Sie die Halle, um Ihre Stempel zu nutzen',
+    'confirmation.nextStep3.freetrial.today': 'Besuchen Sie die Halle heute, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
+    'confirmation.nextStep3.freetrial.future': 'Sobald Ihre Probezeit startet, besuchen Sie die Halle, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.freetrial.changeActivationCta': 'Müssen Sie den Aktivierungstag ändern? Klicken Sie hier',
     'confirmation.pending.title': 'Zahlung ausstehend',
     'confirmation.pending.message': 'Ihre Zahlung wird bearbeitet. Wir warten auf die Bestätigung des Zahlungsanbieters. Ihre Mitgliedschaft wird nach Bestätigung der Zahlung aktiviert. Bestellung #',
@@ -19509,7 +19515,7 @@ function renderConfirmationView() {
       : productType === 'punch-card' ? 'confirmation.nextStep2.punchcard'
       : 'confirmation.nextStep2.membership';
     const step3Key = productType === 'membership' ? 'confirmation.nextStep3.membership'
-      : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep3.freetrial' : 'confirmation.nextStep3.15daypass')
+      : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep3.freetrial.today' : 'confirmation.nextStep3.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep3.punchcard'
       : 'confirmation.nextStep3.membership';
     nextStep2.setAttribute('data-i18n-key', step2Key);
@@ -19724,6 +19730,11 @@ function renderConfirmationView() {
         nextStep2.setAttribute('data-i18n-date-iso', dateIso);
         // Render immediately (also allows updatePageTranslations() to re-render on language switch)
         nextStep2.textContent = t(key).replaceAll('{date}', formatLongDate(startDay));
+
+        if (state.landingRouteConfig?.componentName === 'LandingFreeTrial') {
+          nextStep3.setAttribute('data-i18n-key', 'confirmation.nextStep3.freetrial.future');
+          nextStep3.textContent = t('confirmation.nextStep3.freetrial.future');
+        }
       } else {
         // Pass is active now (or today) - restore normal i18n-managed message
         nextStep2.removeAttribute('data-i18n-date-iso');
@@ -19732,6 +19743,11 @@ function renderConfirmationView() {
           : 'confirmation.nextStep2.15daypass';
         nextStep2.setAttribute('data-i18n-key', activeNowKey);
         nextStep2.textContent = t(activeNowKey);
+
+        if (state.landingRouteConfig?.componentName === 'LandingFreeTrial') {
+          nextStep3.setAttribute('data-i18n-key', 'confirmation.nextStep3.freetrial.today');
+          nextStep3.textContent = t('confirmation.nextStep3.freetrial.today');
+        }
       }
     }
   }
