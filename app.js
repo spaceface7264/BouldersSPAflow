@@ -2823,7 +2823,11 @@ async function loadReferenceData() {
 // 1. If product has "Hidden" label (case-insensitive) → exclude (even if it also has "Public" or "PublicCampaign")
 // 2. If product has "Public" or "PublicCampaign" label (case-insensitive) → include
 // 3. Otherwise (no labels or other labels) → exclude (requires explicit "Public" or "PublicCampaign" label)
-function shouldDisplayProductByLabels(product) {
+function shouldDisplayProductByLabels(product, options = {}) {
+  const allowedVisibilityLabels = Array.isArray(options.allowedVisibilityLabels) && options.allowedVisibilityLabels.length > 0
+    ? options.allowedVisibilityLabels.map(normalizeLabelName).filter(Boolean)
+    : ['public', 'publiccampaign'];
+
   if (!product.productLabels || !Array.isArray(product.productLabels) || product.productLabels.length === 0) {
     // No labels → exclude (requires explicit "Public" or "PublicCampaign" label)
     return false;
@@ -2839,16 +2843,16 @@ function shouldDisplayProductByLabels(product) {
     return false;
   }
   
-  // Check for "Public" or "PublicCampaign" label (case-insensitive)
-  const hasPublicLabel = product.productLabels.some(
+  // Check for allowed visibility labels (case-insensitive)
+  const hasVisibilityLabel = product.productLabels.some(
     label => {
-      const labelName = label.name?.toLowerCase();
-      return labelName === 'public' || labelName === 'publiccampaign';
+      const labelName = normalizeLabelName(label?.name);
+      return allowedVisibilityLabels.includes(labelName);
     }
   );
   
-  if (hasPublicLabel) {
-    // Has "Public" or "PublicCampaign" label and no "Hidden" label → include
+  if (hasVisibilityLabel) {
+    // Has allowed visibility label and no "Hidden" label → include
     return true;
   }
   
@@ -2872,9 +2876,9 @@ function getRouteMatchedProducts(products, labelKey) {
   return products.filter((product) => productHasLabel(product, labelKey));
 }
 
-function getDisplayableRouteMatchedProducts(products, labelKey) {
+function getDisplayableRouteMatchedProducts(products, labelKey, displayOptions = {}) {
   return getRouteMatchedProducts(products, labelKey)
-    .filter((product) => shouldDisplayProductByLabels(product));
+    .filter((product) => shouldDisplayProductByLabels(product, displayOptions));
 }
 
 function getProductPriceCents(product) {
@@ -2896,6 +2900,12 @@ async function loadProductsFromAPI() {
     console.warn('Cannot load products: No business unit selected');
     return;
   }
+
+  const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+  const isFreeTrialLandingRoute = activeLandingRoute?.componentName === 'LandingFreeTrial';
+  const displayLabelOptions = isFreeTrialLandingRoute
+    ? { allowedVisibilityLabels: ['secret'] }
+    : {};
 
   // Deduplicate concurrent calls (preload + step transition + showStep)
   if (productsLoadPromise) {
@@ -3038,7 +3048,7 @@ async function loadProductsFromAPI() {
       
       // Check 3: Label-based filtering
       // Only display products with "Public" label, exclude products with "Hidden" label
-      if (!shouldDisplayProductByLabels(product)) {
+      if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
         return false;
       }
       
@@ -3066,7 +3076,7 @@ async function loadProductsFromAPI() {
       
       // Check: Label-based filtering
       // Only display products with "Public" label, exclude products with "Hidden" label
-      if (!shouldDisplayProductByLabels(product)) {
+      if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
         return false;
       }
       
@@ -3162,7 +3172,6 @@ async function loadProductsFromAPI() {
     state.dayPassSubscriptions = dayPassSubscriptions;
     state.valueCards = regularValueCards; // Only non-campaign value cards go to Punch Card category
     
-    const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
     if (activeLandingRoute) {
       const displayCandidates = [
         ...campaignSubscriptions,
@@ -3171,7 +3180,7 @@ async function loadProductsFromAPI() {
         ...campaignValueCards,
         ...regularValueCards,
       ];
-      const matched = getDisplayableRouteMatchedProducts(displayCandidates, activeLandingRoute.labelKey)
+      const matched = getDisplayableRouteMatchedProducts(displayCandidates, activeLandingRoute.labelKey, displayLabelOptions)
         .sort(byPriceHighToLow);
       state.landingMatchedProducts = activeLandingRoute.mode === 'single'
         ? matched.slice(0, 1)
