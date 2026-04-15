@@ -74,6 +74,31 @@ const devWarn = (...args) => {
 };
 const geoLogger = { log: devLog, warn: devWarn };
 
+const LANDING_ROUTE_CONFIG = Object.freeze({
+  '/freetrial': Object.freeze({
+    componentName: 'LandingFreeTrial',
+    labelKey: 'LandingFreeTrial',
+    mode: 'single',
+  }),
+  '/firstmonthfree': Object.freeze({
+    componentName: 'LandingFirstMonthFree',
+    labelKey: 'LandingFirstMonthFree',
+    mode: 'multi',
+  }),
+});
+
+function normalizePathname(pathname) {
+  const raw = String(pathname || '/').trim().toLowerCase();
+  if (!raw || raw === '/') return '/';
+  const withoutTrailingSlash = raw.replace(/\/+$/, '');
+  return withoutTrailingSlash || '/';
+}
+
+function resolveLandingRouteConfig(pathname = window.location.pathname) {
+  const normalizedPath = normalizePathname(pathname);
+  return LANDING_ROUTE_CONFIG[normalizedPath] || null;
+}
+
 const REQUIRED_FIELDS = [
   'firstName',
   'lastName',
@@ -2791,14 +2816,18 @@ async function loadReferenceData() {
     state.referenceData = {};
     state.referenceDataLoaded = false;
   }
-}
+} 
 
 // Helper function to check if product should be displayed based on labels
 // Rules:
 // 1. If product has "Hidden" label (case-insensitive) → exclude (even if it also has "Public" or "PublicCampaign")
 // 2. If product has "Public" or "PublicCampaign" label (case-insensitive) → include
 // 3. Otherwise (no labels or other labels) → exclude (requires explicit "Public" or "PublicCampaign" label)
-function shouldDisplayProductByLabels(product) {
+function shouldDisplayProductByLabels(product, options = {}) {
+  const allowedVisibilityLabels = Array.isArray(options.allowedVisibilityLabels) && options.allowedVisibilityLabels.length > 0
+    ? options.allowedVisibilityLabels.map(normalizeLabelName).filter(Boolean)
+    : ['public', 'publiccampaign'];
+
   if (!product.productLabels || !Array.isArray(product.productLabels) || product.productLabels.length === 0) {
     // No labels → exclude (requires explicit "Public" or "PublicCampaign" label)
     return false;
@@ -2814,21 +2843,48 @@ function shouldDisplayProductByLabels(product) {
     return false;
   }
   
-  // Check for "Public" or "PublicCampaign" label (case-insensitive)
-  const hasPublicLabel = product.productLabels.some(
+  // Check for allowed visibility labels (case-insensitive)
+  const hasVisibilityLabel = product.productLabels.some(
     label => {
-      const labelName = label.name?.toLowerCase();
-      return labelName === 'public' || labelName === 'publiccampaign';
+      const labelName = normalizeLabelName(label?.name);
+      return allowedVisibilityLabels.includes(labelName);
     }
   );
   
-  if (hasPublicLabel) {
-    // Has "Public" or "PublicCampaign" label and no "Hidden" label → include
+  if (hasVisibilityLabel) {
+    // Has allowed visibility label and no "Hidden" label → include
     return true;
   }
   
   // Has labels but neither "Public", "PublicCampaign", nor "Hidden" → exclude (requires explicit display label)
   return false;
+}
+
+function normalizeLabelName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function productHasLabel(product, labelKey) {
+  const normalizedKey = normalizeLabelName(labelKey);
+  if (!normalizedKey) return false;
+  if (!product || !Array.isArray(product.productLabels)) return false;
+  return product.productLabels.some((label) => normalizeLabelName(label?.name) === normalizedKey);
+}
+
+function getRouteMatchedProducts(products, labelKey) {
+  if (!Array.isArray(products) || products.length === 0) return [];
+  return products.filter((product) => productHasLabel(product, labelKey));
+}
+
+function getDisplayableRouteMatchedProducts(products, labelKey, displayOptions = {}) {
+  return getRouteMatchedProducts(products, labelKey)
+    .filter((product) => shouldDisplayProductByLabels(product, displayOptions));
+}
+
+function getProductPriceCents(product) {
+  const amount = product?.priceWithInterval?.price?.amount ?? product?.price?.amount ?? product?.amount;
+  if (amount == null) return 0;
+  return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
 }
 
 // Step 5: Load products (subscriptions and value cards) from API
@@ -2845,6 +2901,18 @@ async function loadProductsFromAPI() {
     return;
   }
 
+  const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+  const isFreeTrialLandingRoute = activeLandingRoute?.componentName === 'LandingFreeTrial';
+  const displayLabelOptions = isFreeTrialLandingRoute
+    ? { allowedVisibilityLabels: ['secret'] }
+    : {};
+
+  // Deduplicate concurrent calls (preload + step transition + showStep)
+  if (productsLoadPromise) {
+    return productsLoadPromise;
+  }
+
+  productsLoadPromise = (async () => {
   try {
     // Fetch subscriptions and value cards in parallel
     // Backend should already filter by businessUnit query param, but we do additional
@@ -2980,7 +3048,7 @@ async function loadProductsFromAPI() {
       
       // Check 3: Label-based filtering
       // Only display products with "Public" label, exclude products with "Hidden" label
-      if (!shouldDisplayProductByLabels(product)) {
+      if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
         return false;
       }
       
@@ -3008,7 +3076,7 @@ async function loadProductsFromAPI() {
       
       // Check: Label-based filtering
       // Only display products with "Public" label, exclude products with "Hidden" label
-      if (!shouldDisplayProductByLabels(product)) {
+      if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
         return false;
       }
       
@@ -3082,11 +3150,6 @@ async function loadProductsFromAPI() {
     });
 
     // Sort all product lists by price high to low (price in cents for consistent comparison)
-    const getProductPriceCents = (product) => {
-      const amount = product.priceWithInterval?.price?.amount ?? product.price?.amount ?? product.amount;
-      if (amount == null) return 0;
-      return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
-    };
     const byPriceHighToLow = (a, b) => getProductPriceCents(b) - getProductPriceCents(a);
     campaignSubscriptions.sort(byPriceHighToLow);
     campaignValueCards.sort(byPriceHighToLow);
@@ -3108,6 +3171,27 @@ async function loadProductsFromAPI() {
     state.subscriptions = membershipSubscriptions;
     state.dayPassSubscriptions = dayPassSubscriptions;
     state.valueCards = regularValueCards; // Only non-campaign value cards go to Punch Card category
+    
+    if (activeLandingRoute) {
+      const displayCandidates = [
+        ...campaignSubscriptions,
+        ...membershipSubscriptions,
+        ...dayPassSubscriptions,
+        ...campaignValueCards,
+        ...regularValueCards,
+      ];
+      const matched = getDisplayableRouteMatchedProducts(displayCandidates, activeLandingRoute.labelKey, displayLabelOptions)
+        .sort(byPriceHighToLow);
+      state.landingMatchedProducts = activeLandingRoute.mode === 'single'
+        ? matched.slice(0, 1)
+        : matched;
+      devLog(`[Landing Route] ${activeLandingRoute.componentName} matched products:`, state.landingMatchedProducts.length);
+      if (state.landingMatchedProducts.length === 0) {
+        devWarn(`[Landing Route] No products matched label '${activeLandingRoute.labelKey}' on path '${normalizePathname(window.location.pathname)}'`);
+      }
+    } else {
+      state.landingMatchedProducts = [];
+    }
 
 
     // Re-render the membership plans with API data
@@ -3120,7 +3204,13 @@ async function loadProductsFromAPI() {
     console.error('Failed to load products from API:', error);
     // Show error message to user
     showToast('Failed to load membership options. Please try again later.', 'error');
+    throw error;
+  } finally {
+    productsLoadPromise = null;
   }
+  })();
+
+  return productsLoadPromise;
 }
 
 // Step 5: Render products from API data into the UI
@@ -3186,6 +3276,8 @@ function renderProductsFromAPI() {
     const campaignIntroPriceDisplay = category === 'campaign' ? resolveCampaignIntroPriceDisplay(product) : null;
     const isFirstMonthCampaignPricing = category === 'campaign' && campaignIntroPriceDisplay !== null;
     const originalPriceDisplay = price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '';
+    const effectiveDisplayPrice = isFirstMonthCampaignPricing ? campaignIntroPriceDisplay : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : 'FREE');
+    const showPriceUnit = isFirstMonthCampaignPricing || price > 0;
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3216,8 +3308,8 @@ function renderProductsFromAPI() {
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
           <div class="plan-price ${isFirstMonthCampaignPricing ? 'plan-price--campaign' : ''}">
-            <span class="price-amount">${isFirstMonthCampaignPricing ? campaignIntroPriceDisplay : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—')}</span>
-            <span class="price-unit">${priceUnit}</span>
+            <span class="price-amount">${effectiveDisplayPrice}</span>
+            ${showPriceUnit ? `<span class="price-unit">${priceUnit}</span>` : ''}
             ${isFirstMonthCampaignPricing && originalPriceDisplay
               ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
               : ''}
@@ -3265,8 +3357,8 @@ function renderProductsFromAPI() {
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Punch Card'}</div>
           <div class="plan-price">
-            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '—'}</span>
-            <span class="price-unit">kr</span>
+            <span class="price-amount">${price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : 'FREE'}</span>
+            ${price > 0 ? '<span class="price-unit">kr</span>' : ''}
           </div>
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
@@ -3287,6 +3379,140 @@ function renderProductsFromAPI() {
     
     return planCard;
   };
+
+  const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+  const landingMatchedProducts = Array.isArray(state.landingMatchedProducts)
+    ? state.landingMatchedProducts
+    : [];
+  const shouldRenderLandingRoute = !!activeLandingRoute;
+  const resolveLandingCategory = (product) => {
+    if (product?.priceWithInterval?.price?.amount !== undefined) {
+      if (hasProductLabel(product, 'publiccampaign')) return 'campaign';
+      if (has15DayPassLabel(product)) return '15daypass';
+      return 'membership';
+    }
+    return hasProductLabel(product, 'publiccampaign') ? 'campaign' : 'punchcard';
+  };
+  const ensureFreeTrialCategoryItem = () => {
+    const categoryList = document.querySelector('.category-list');
+    if (!categoryList) return null;
+    let categoryItem = categoryList.querySelector('[data-category="freetrial"]');
+    if (!categoryItem) {
+      categoryItem = document.createElement('div');
+      categoryItem.className = 'category-item expanded selected';
+      categoryItem.dataset.category = 'freetrial';
+      categoryItem.dataset.landingLocked = 'true';
+      categoryItem.innerHTML = sanitizeHTML(`
+        <div class="category-header">
+          <div class="category-info">
+            <div class="category-title">Free Trial</div>
+          </div>
+          <i data-lucide="chevron-down" class="category-icon"></i>
+        </div>
+        <div class="category-content">
+          <div class="category-description">
+            <p>Prøv Boulders gratis i 15 dage. Fuld adgang + lejesko inkluderet.</p>
+          </div>
+          <div class="plans-list"></div>
+        </div>
+      `);
+      categoryList.prepend(categoryItem);
+    }
+    return categoryItem;
+  };
+  const getLandingTargetList = () => {
+    if (activeLandingRoute?.componentName === 'LandingFreeTrial') {
+      const categoryItem = ensureFreeTrialCategoryItem();
+      return categoryItem ? categoryItem.querySelector('.plans-list') : null;
+    }
+    return document.querySelector('[data-category="membership"] .plans-list');
+  };
+  const hideNonLandingCategories = () => {
+    const categoryItems = document.querySelectorAll('.category-item');
+    categoryItems.forEach((item) => {
+      item.style.display = 'none';
+    });
+    const targetCategory = activeLandingRoute?.componentName === 'LandingFreeTrial'
+      ? ensureFreeTrialCategoryItem()
+      : document.querySelector('[data-category="membership"]');
+    if (targetCategory) {
+      targetCategory.style.display = '';
+      targetCategory.classList.add('expanded', 'selected');
+    }
+  };
+  const renderLandingCards = (products) => {
+    const plansList = getLandingTargetList();
+    if (!plansList) return;
+    plansList.innerHTML = '';
+    if (!Array.isArray(products) || products.length === 0) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'no-products-message';
+      emptyEl.innerHTML = sanitizeHTML(`
+        <div class="no-products-content">
+          <p>No offers are available for this campaign right now.</p>
+        </div>
+      `);
+      plansList.appendChild(emptyEl);
+      return;
+    }
+    products.forEach((product) => {
+      const category = resolveLandingCategory(product);
+      const isSubscriptionProduct = product?.priceWithInterval?.price?.amount !== undefined;
+      const card = isSubscriptionProduct
+        ? renderSubscriptionCard(product, category)
+        : renderValueCard(product, category === 'campaign' ? 'campaign' : 'punchcard');
+      plansList.appendChild(card);
+    });
+  };
+  const LandingFreeTrial = (products) => {
+    hideNonLandingCategories();
+    renderLandingCards((products || []).slice(0, 1));
+    devLog('[Landing Route] Rendering LandingFreeTrial');
+  };
+  const LandingFirstMonthFree = (products) => {
+    hideNonLandingCategories();
+    renderLandingCards(products || []);
+    devLog('[Landing Route] Rendering LandingFirstMonthFree');
+  };
+  if (shouldRenderLandingRoute) {
+    if (activeLandingRoute.componentName === 'LandingFreeTrial') {
+      LandingFreeTrial(landingMatchedProducts);
+    } else if (activeLandingRoute.componentName === 'LandingFirstMonthFree') {
+      LandingFirstMonthFree(landingMatchedProducts);
+    } else {
+      devWarn('[Landing Route] Unknown component name:', activeLandingRoute.componentName);
+    }
+
+    try {
+      setupNewAccessStep();
+      updatePageTranslations();
+    } catch (e) {
+      devWarn('[Step 2] setupNewAccessStep failed (landing route immediate):', e);
+    }
+    requestAnimationFrame(() => {
+      try {
+        const lockedCategory = document.querySelector('.category-item[data-landing-locked="true"]');
+        if (lockedCategory) {
+          lockedCategory.classList.add('expanded', 'selected');
+        }
+        setupNewAccessStep();
+        updatePageTranslations();
+      } catch (e) {
+        devWarn('[Step 2] setupNewAccessStep failed (landing route raf):', e);
+      }
+    });
+    return;
+  }
+
+  const freeTrialCategoryItem = document.querySelector('.category-item[data-category="freetrial"]');
+  if (freeTrialCategoryItem) {
+    freeTrialCategoryItem.remove();
+  }
+  const categoryItems = document.querySelectorAll('.category-item');
+  categoryItems.forEach((item) => {
+    item.style.display = '';
+    item.dataset.landingLocked = '';
+  });
   
   // Render campaign subscriptions and value cards into the campaign category
   const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
@@ -4155,6 +4381,8 @@ const state = {
   selectedGymId: null,
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
+  landingRouteConfig: null, // Active landing route config for path-specific product surfacing
+  landingMatchedProducts: [], // Products matched by active landing route label
   currentAuthMode: null, // Track current auth mode (login/create)
   membershipPlanId: null,
   valueCardQuantities: new Map(),
@@ -4217,6 +4445,7 @@ const state = {
 
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
+let productsLoadPromise = null;
 let tokenValidationCooldownUntil = 0;
 let gymLoadCooldownUntil = 0;
 let gymLoadRetryTimeoutId = null;
@@ -5394,6 +5623,11 @@ function applyConditionalSteps() {
 }
 
 function init() {
+  state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
+  if (state.landingRouteConfig) {
+    devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
+  }
+
   // Initialize email tracking from localStorage
   try {
     const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
@@ -5536,10 +5770,12 @@ const translations = {
     'activationDate.changeFailed': 'Kunne ikke ændre datoen. Gennemfør din køb eller start forfra.',
     'activationConfirm.title': 'Bekræft dit valg',
     'activationConfirm.subtitle': 'Bekræft hvornår din prøveperiode skal starte, før du går til betaling.',
+    'activationConfirm.subtitle.freetrial': 'Bekræft hvornår din prøveperiode skal starte.',
     'activationConfirm.startLabel': 'Starter',
     'activationConfirm.endLabel': 'Gyldig til',
     'activationConfirm.today': 'I dag',
     'activationConfirm.continue': 'Fortsæt til betaling',
+    'activationConfirm.continue.freetrial': 'Aktivér prøveperiode',
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
@@ -5548,7 +5784,7 @@ const translations = {
     'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
     'cart.consent.sms': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="sms-consent" onclick="event.preventDefault();">SMS-beskeder</a>.',
     'consent.sms.explainer': 'SMS<br><br>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
-    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
+    'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.freePeriod': 'Gratis periode', 'cart.activateTrial': 'AKTIVÉR PRØVEPERIODE', 'cart.noCreditCardRequired': 'Intet kreditkort kræves', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
@@ -5557,7 +5793,7 @@ const translations = {
     'confirmation.title': 'SUCCES!',
     'confirmation.message': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.membership': 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.15daypass': 'Din 15-dages pas er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.15daypass': 'Din 15-dages prøveperiode er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.orderDetails': 'Ordredetaljer',
@@ -5589,7 +5825,7 @@ const translations = {
     'confirmation.primaryGym': 'Hjemmehal:',
     'confirmation.membershipType': 'Type:',
     'confirmation.monthlyPrice': 'Månedlig pris:',
-    'confirmation.15daypassDetails': '15-dages pas detaljer',
+    'confirmation.15daypassDetails': 'Prøveperiode detaljer',
     'confirmation.passType': 'Pastype:',
     'confirmation.validFrom': 'Gyldig fra:',
     'confirmation.validUntil': 'Gyldig til:',
@@ -5602,10 +5838,16 @@ const translations = {
     'confirmation.nextStep2.membership': 'Medlemskabsaktivering og automatisk fornyelse',
     'confirmation.nextStep2.15daypass': 'Dit pas er aktivt og klar til brug',
     'confirmation.nextStep2.15daypass.future': 'Din 15-Dages Prøveperiode bliver aktivt den {date}',
+    'confirmation.nextStep2.freetrial': 'Din prøveperiode er aktiveret og klar til brug.',
+    'confirmation.nextStep2.freetrial.future': 'Din prøveperiode starter den {date}. Vi aktiverer den automatisk.',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskort i Boulders',
     'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge ditn 15-Dages Prøveperiode',
+    'confirmation.nextStep3.freetrial': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
+    'confirmation.nextStep3.freetrial.today': 'Mød op i hallen i dag og kobl dit adgangskort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
+    'confirmation.nextStep3.freetrial.future': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
+    'confirmation.freetrial.changeActivationCta': 'Har du brug for at ændre aktiveringsdato? Klik her.',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
@@ -5674,6 +5916,11 @@ const translations = {
     'faq.15daypass.validity.a': '15-dages kortet er gyldigt i 15 dage fra aktiveringsdatoen. Du har ubegrænset adgang til alle haller, samt fri leje af klatresko, i denne periode.',
     'faq.15daypass.access.q': 'Hvilken adgang får jeg med kortet?',
     'faq.15daypass.access.a': 'Med 15-dages kortet får du ubegrænset adgang til alle Boulders haller, alle klatreområder og faciliteter i 15 dage. kortet kan ikke konverteres til et fuldt medlemskab.',
+    'faq.freetrial.changeStartDate.q': 'Kan jeg ændre min startdato?',
+    'faq.freetrial.changeStartDate.a': 'Ja, skriv til os på medlem@boulders.dk, så hjælper vi dig.',
+    'faq.freetrial.changeStartDateCta': 'Vil du ændre startdatoen? Skriv til medlem@boulders.dk',
+    'faq.freetrial.creditCard.q': 'Kræver det et kreditkort?',
+    'faq.freetrial.creditCard.a': 'Nej, prøveperioden er helt gratis og kræver ingen betalingsoplysninger.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
     'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 12 måneder og kan deles med andre.',
     'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
@@ -5708,10 +5955,12 @@ const translations = {
     'activationDate.changeFailed': 'Unable to change date. Please complete your purchase or start over.',
     'activationConfirm.title': 'Confirm your selection',
     'activationConfirm.subtitle': 'Please confirm when your pass should start before continuing to checkout.',
+    'activationConfirm.subtitle.freetrial': 'Confirm when your trial period should start.',
     'activationConfirm.startLabel': 'Starts',
     'activationConfirm.endLabel': 'Valid until',
     'activationConfirm.today': 'Today',
     'activationConfirm.continue': 'Continue to checkout',
+    'activationConfirm.continue.freetrial': 'Activate trial period',
     'header.selectedGym': 'Selected Gym:', 'gym.headsUp': 'Home gym selected:', 'access.headsUp': 'Access type selected:',
     'main.subtitle.step1': 'Choose your home gym', 'main.subtitle.step1.secondary': 'This is where you will primarily train − you will have access to all gyms.',
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
@@ -5757,7 +6006,7 @@ const translations = {
     'confirmation.title': 'SUCCESS!',
     'confirmation.message': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.15daypass': 'Your 15-Day Trial Pass has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.15daypass': 'Your 15-Day Trial Period has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.orderDetails': 'Order Details',
@@ -5802,10 +6051,16 @@ const translations = {
     'confirmation.nextStep2.membership': 'Membership activation & auto-renewal setup',
     'confirmation.nextStep2.15daypass': 'Your pass is active and ready to use',
     'confirmation.nextStep2.15daypass.future': 'Your pass becomes active on {date}',
+    'confirmation.nextStep2.freetrial': 'Your trial period is activated and ready to use.',
+    'confirmation.nextStep2.freetrial.future': 'Your trial period starts on {date}. We will activate it automatically.',
     'confirmation.nextStep2.punchcard': 'Your punch card is ready to use',
     'confirmation.nextStep3.membership': 'Pick up your membership card at the gym',
     'confirmation.nextStep3.15daypass': 'Visit the gym to start using your pass',
+    'confirmation.nextStep3.freetrial': 'When your trial starts, visit the gym to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
+    'confirmation.nextStep3.freetrial.today': 'Visit the gym today to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
+    'confirmation.nextStep3.freetrial.future': 'When your trial starts, visit the gym to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
+    'confirmation.freetrial.changeActivationCta': 'Need to change activation day? Click here.',
     'confirmation.pending.title': 'Payment Pending',
     'confirmation.pending.message': 'Your payment is being processed. We\'re waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #',
     'confirmation.pending.stillProcessing': 'Payment is still being processed. Please check back in a few minutes or contact support if you\'ve completed payment. Order #',
@@ -5873,6 +6128,14 @@ const translations = {
     'faq.15daypass.validity.a': 'The 15-Day Trial Pass is valid for 15 days from the activation date. You have unlimited access to all gyms during this period.',
     'faq.15daypass.access.q': 'What access do I get with the pass?',
     'faq.15daypass.access.a': 'With the 15-Day Trial Pass, you get unlimited access to all Boulders gyms, all climbing areas and facilities for 15 days. The pass cannot be converted to a full membership.',
+    'faq.freetrial.changeStartDate.q': 'Can I change my start date?',
+    'faq.freetrial.changeStartDate.a': 'Yes, write to us at medlem@boulders.dk and we will help you.',
+    'faq.freetrial.changeStartDateCta': 'Want to change your start date? Write to medlem@boulders.dk',
+    'faq.freetrial.creditCard.q': 'Does it require a credit card?',
+    'faq.freetrial.creditCard.a': 'No, the trial period is completely free and requires no payment details.',
+    'cart.freePeriod': 'Free period',
+    'cart.activateTrial': 'ACTIVATE TRIAL PERIOD',
+    'cart.noCreditCardRequired': 'No credit card required',
     'faq.punchcard.howItWorks.q': 'How does the punch card work?',
     'faq.punchcard.howItWorks.a': 'The punch card gives you one (1) entry pr. punch, in all Boulders gyms. Each time you visit a gym, one (1) punch is used. The card is valid for 12 months and can be shared with others.',
     'faq.punchcard.convert.q': 'Can I convert my punch card to a membership?',
@@ -6036,6 +6299,9 @@ const translations = {
     'confirmation.nextStep3.membership': 'Holen Sie Ihre Mitgliedskarte in der Halle ab',
     'confirmation.nextStep3.15daypass': 'Besuchen Sie die Halle, um Ihren Pass zu nutzen',
     'confirmation.nextStep3.punchcard': 'Besuchen Sie die Halle, um Ihre Stempel zu nutzen',
+    'confirmation.nextStep3.freetrial.today': 'Besuchen Sie die Halle heute, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
+    'confirmation.nextStep3.freetrial.future': 'Sobald Ihre Probezeit startet, besuchen Sie die Halle, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
+    'confirmation.freetrial.changeActivationCta': 'Müssen Sie den Aktivierungstag ändern? Klicken Sie hier',
     'confirmation.pending.title': 'Zahlung ausstehend',
     'confirmation.pending.message': 'Ihre Zahlung wird bearbeitet. Wir warten auf die Bestätigung des Zahlungsanbieters. Ihre Mitgliedschaft wird nach Bestätigung der Zahlung aktiviert. Bestellung #',
     'confirmation.pending.stillProcessing': 'Die Zahlung wird noch bearbeitet. Bitte schauen Sie in einigen Minuten erneut vorbei oder kontaktieren Sie den Support, wenn Sie die Zahlung abgeschlossen haben. Bestellung #',
@@ -6410,6 +6676,7 @@ function updateCartTranslations() {
 
   // Payment overview labels are handled by data-i18n-key attributes in HTML
   // Cart labels are updated dynamically in updateCartSummary and updatePaymentOverview
+  applyFreeFlowCartUi();
 }
 
 // Update heads-up displays
@@ -6557,7 +6824,6 @@ async function changeLanguage(languageCode) {
     state.dayPassSubscriptions = [];
     state.valueCards = [];
     await loadProductsFromAPI();
-    renderProductsFromAPI();
     
     // Restore UI state after re-rendering
     if (savedState.selectedProductId) {
@@ -6826,6 +7092,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const testSuccess = urlParams.get('testSuccess') === 'true';
   const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
   const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
+  const testStartDateParam = String(urlParams.get('testStartDate') || '').trim();
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
   const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
@@ -6953,14 +7220,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }]
       };
     } else if (productType === '15daypass') {
+      const validTestStartDate = /^\d{4}-\d{2}-\d{2}$/.test(testStartDateParam) ? testStartDateParam : null;
+      state.subscriptionStartDate = validTestStartDate;
       state.selectedProductType = 'membership';
       state.membershipPlanId = '15daypass-123';
+      const startDateForMock = validTestStartDate ? new Date(`${validTestStartDate}T12:00:00`) : new Date();
+      const endDateForMock = new Date(startDateForMock);
+      endDateForMock.setDate(endDateForMock.getDate() + 15);
       // Mock subscription items with 15-Day Trial Pass label and price
       state.fullOrder = {
         subscriptionItems: [{
           product: {
             name: '15-Day Trial Pass',
             productLabels: [{ name: '15-Day Trial Pass' }]
+          },
+          subscription: {
+            startDate: startDateForMock.toISOString(),
+            endDate: endDateForMock.toISOString()
           },
           price: { amount: 46900 } // 469.00 DKK in cents
         }]
@@ -10683,11 +10959,40 @@ function openCheckoutConfirmModal() {
   const modal = document.getElementById('checkoutConfirmModal');
   if (!modal) return;
 
-  // Only relevant for 15-day pass
+  // Only relevant for 15-day pass style products
   const is15DayPassSelected =
     document.querySelector('[data-category="15daypass"] .plan-card.selected') ||
+    document.querySelector('[data-category="freetrial"] .plan-card.selected') ||
     (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
   if (!is15DayPassSelected) return;
+  
+  const isFreeTrialSelected = Boolean(document.querySelector('[data-category="freetrial"] .plan-card.selected')) ||
+    state.landingRouteConfig?.componentName === 'LandingFreeTrial';
+  const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
+  const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
+  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
+
+  const subtitleEl = modal.querySelector('.checkout-confirm-subtitle');
+  if (subtitleEl) {
+    if (isFreeFlow) {
+      subtitleEl.setAttribute('data-i18n-key', 'activationConfirm.subtitle.freetrial');
+      subtitleEl.textContent = t('activationConfirm.subtitle.freetrial');
+    } else {
+      subtitleEl.setAttribute('data-i18n-key', 'activationConfirm.subtitle');
+      subtitleEl.textContent = t('activationConfirm.subtitle');
+    }
+  }
+
+  const continueBtn = modal.querySelector('[data-action="checkout-confirm-continue"]');
+  if (continueBtn) {
+    if (isFreeFlow) {
+      continueBtn.setAttribute('data-i18n-key', 'activationConfirm.continue.freetrial');
+      continueBtn.textContent = t('activationConfirm.continue.freetrial');
+    } else {
+      continueBtn.setAttribute('data-i18n-key', 'activationConfirm.continue');
+      continueBtn.textContent = t('activationConfirm.continue');
+    }
+  }
 
   state.checkoutConfirmAccepted = false;
   state.checkoutConfirmPreviousFocus = document.activeElement;
@@ -10817,9 +11122,10 @@ function updateActivationDateSection(category) {
 
   if (!section || !pickerWrap || !dateInput) return;
 
-  const is15DayPass = category === '15daypass';
-  const categoryItem = document.querySelector('[data-category="15daypass"]');
-  const hasSelectedPlan = categoryItem?.querySelector('.plan-card.selected');
+  const is15DayPass = category === '15daypass' || category === 'freetrial';
+  const dayPassCategoryItem = document.querySelector('[data-category="15daypass"]');
+  const freeTrialCategoryItem = document.querySelector('[data-category="freetrial"]');
+  const hasSelectedPlan = dayPassCategoryItem?.querySelector('.plan-card.selected') || freeTrialCategoryItem?.querySelector('.plan-card.selected');
 
   if (is15DayPass && hasSelectedPlan) {
     if (!isActivationDateModalOpen()) {
@@ -10868,7 +11174,7 @@ async function handlePlanSelection(selectedCard) {
   // Determine if this is a value card (punch card) by checking if planId starts with "punch-"
   // Value cards can appear in Campaign category too, so we check the planId format, not just category
   const isValueCard = typeof planId === 'string' && planId.startsWith('punch-');
-  const isMembership = !isValueCard && (category === 'campaign' || category === 'membership' || category === '15daypass');
+  const isMembership = !isValueCard && (category === 'campaign' || category === 'membership' || category === '15daypass' || category === 'freetrial');
   if (category === 'campaign' && isMembership) {
     await refreshAuthenticatedCustomerForCampaignGuard();
   }
@@ -11007,6 +11313,7 @@ function setupNewAccessStep() {
 
   // Category expansion/collapse
   categoryItems.forEach(category => {
+    const isLandingLockedCategory = category.dataset.landingLocked === 'true';
     const header = category.querySelector('.category-header');
     
     if (!header) {
@@ -11022,6 +11329,12 @@ function setupNewAccessStep() {
     
     if (!freshHeader) {
       console.error('Failed to get fresh header after clone');
+      return;
+    }
+    
+    if (isLandingLockedCategory) {
+      category.classList.add('expanded', 'selected');
+      freshHeader.style.cursor = 'default';
       return;
     }
     
@@ -11163,7 +11476,7 @@ function setupNewAccessStep() {
       // Determine if this is a value card (punch card) by checking if planId starts with "punch-"
       // Value cards can appear in Campaign category too, so we check the planId format, not just category
       const isValueCardProduct = typeof planId === 'string' && planId.startsWith('punch-');
-      const isMembership = !isValueCardProduct && (category === 'campaign' || category === 'membership' || category === '15daypass');
+      const isMembership = !isValueCardProduct && (category === 'campaign' || category === 'membership' || category === '15daypass' || category === 'freetrial');
       if (category === 'campaign' && isMembership) {
         await refreshAuthenticatedCustomerForCampaignGuard();
       }
@@ -11199,6 +11512,7 @@ function setupNewAccessStep() {
         ],
         membership: state.subscriptions || [],
         '15daypass': state.dayPassSubscriptions || [],
+        freetrial: state.landingMatchedProducts || [],
         punchcard: state.valueCards || []
       };
       const productPool = productPoolByCategory[category] || [];
@@ -11292,10 +11606,10 @@ function setupNewAccessStep() {
           // Update cart to reflect selection
           updateCartSummary();
           
-          // 15-day pass: show activation date section, don't auto-advance
-          if (category === '15daypass') {
+          // 15-day pass style routes: show activation date section, don't auto-advance
+          if (category === '15daypass' || category === 'freetrial') {
             state.subscriptionStartDate = null;
-            updateActivationDateSection('15daypass');
+            updateActivationDateSection(category);
             card.style.transform = 'scale(1)';
             card.style.boxShadow = '';
             return;
@@ -11563,9 +11877,10 @@ function handleGlobalClick(event) {
     }
     case 'submit-checkout': {
       event.preventDefault();
-      // For 15-day pass: confirm activation choice before proceeding to checkout
+      // For 15-day pass style products: confirm activation choice before proceeding to checkout
       const is15DayPassSelected =
         document.querySelector('[data-category="15daypass"] .plan-card.selected') ||
+        document.querySelector('[data-category="freetrial"] .plan-card.selected') ||
         (state.selectedProductId && (state.dayPassSubscriptions || []).some(p => String(p.id) === String(state.selectedProductId)));
       if (is15DayPassSelected && !state.checkoutConfirmAccepted) {
         openCheckoutConfirmModal();
@@ -14708,6 +15023,7 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ℹ️ Order data not available yet - price will be verified when order is created');
     }
   }
+  applyFreeFlowCartUi();
   
   // Update "Månedlig betaling herefter" (Monthly payment thereafter)
   // Hide monthly payment for 15-day pass (one-time payment)
@@ -17402,9 +17718,7 @@ function buildOrderSummary(payload, order = null, customer = null) {
       sub.id === productId || 
       String(sub.id) === numericId
     );
-    if (foundProduct?.productLabels?.some(label => 
-      label.name && label.name.toLowerCase() === '15-Day Trial Pass'
-    )) {
+    if (has15DayPassLabel(foundProduct)) {
       productType = '15daypass';
     }
   }
@@ -18984,7 +19298,13 @@ function determineProductTypeFromOrder() {
       // Check product name for 15-Day Trial Pass
       if (product?.name) {
         const nameLower = product.name.toLowerCase();
-        if (nameLower.includes('15 day') || nameLower.includes('15-day') || nameLower.includes('15 dage')) {
+        if (
+          nameLower.includes('15 day') ||
+          nameLower.includes('15-day') ||
+          nameLower.includes('15 dage') ||
+          nameLower.includes('15 dages') ||
+          nameLower.includes('15dag')
+        ) {
           console.log('[Product Type] Detected 15daypass from product name');
           return '15daypass';
         }
@@ -19006,6 +19326,15 @@ function determineProductTypeFromOrder() {
   if (state.selectedProductType === 'punch-card') {
     console.log('[Product Type] Detected punch-card from selectedProductType');
     return 'punch-card';
+  }
+  
+  // Priority 3b: Use stored order summary product type if available
+  if (state.order?.productType) {
+    const summaryType = String(state.order.productType).toLowerCase();
+    if (summaryType === '15daypass' || summaryType === 'punch-card' || summaryType === 'membership') {
+      console.log('[Product Type] Using product type from state.order.productType:', summaryType);
+      return summaryType;
+    }
   }
   
   // Priority 4: Check membershipPlanId format
@@ -19034,6 +19363,13 @@ function determineProductTypeFromOrder() {
       console.log('[Product Type] Detected 15daypass from cartItems');
       return '15daypass';
     }
+  }
+  
+  // Priority 6: Check order summary naming signals
+  const summaryMembershipType = String(state.order?.membershipType || '').toLowerCase();
+  if (summaryMembershipType.includes('15 day') || summaryMembershipType.includes('15-day') || summaryMembershipType.includes('15 dage') || summaryMembershipType.includes('15 dages')) {
+    console.log('[Product Type] Detected 15daypass from state.order membershipType');
+    return '15daypass';
   }
   
   // Default to membership
@@ -19141,6 +19477,32 @@ function renderConfirmationView() {
   const nextStep1 = document.getElementById('nextStep1');
   const nextStep2 = document.getElementById('nextStep2');
   const nextStep3 = document.getElementById('nextStep3');
+  const freetrialActivationChangeCta = document.getElementById('freetrialActivationChangeCta');
+  const freetrialActivationChangeLink = document.getElementById('freetrialActivationChangeLink');
+  const isFreeTrialFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
+
+  if (freetrialActivationChangeCta && freetrialActivationChangeLink) {
+    const supportEmail = 'medlem@boulders.dm';
+    const supportSubject = encodeURIComponent('Change of activation date - Free Trial');
+    const supportBody = encodeURIComponent([
+      'Hi Boulders team,',
+      '',
+      'I would like to request a change of activation date for my free trial.',
+      '',
+      `Order number: ${state.order?.number || state.orderId || '[insert order number]'}`,
+      `Current activation date: ${state.subscriptionStartDate || '[insert activation date]'}`,
+      'Requested new activation date: [insert new date]',
+      '',
+      'Name: [insert your full name]',
+      'Phone: [insert your phone number]',
+      '',
+      'Thanks in advance!'
+    ].join('\n'));
+    freetrialActivationChangeLink.href = `mailto:${supportEmail}?subject=${supportSubject}&body=${supportBody}`;
+    freetrialActivationChangeLink.setAttribute('data-i18n-key', 'confirmation.freetrial.changeActivationCta');
+    freetrialActivationChangeLink.textContent = t('confirmation.freetrial.changeActivationCta');
+    freetrialActivationChangeCta.style.display = isFreeTrialFlow ? '' : 'none';
+  }
   
   if (nextStep1) {
     nextStep1.setAttribute('data-i18n-key', 'confirmation.nextStep1');
@@ -19149,11 +19511,11 @@ function renderConfirmationView() {
   
   if (nextStep2 && nextStep3) {
     const step2Key = productType === 'membership' ? 'confirmation.nextStep2.membership'
-      : productType === '15daypass' ? 'confirmation.nextStep2.15daypass'
+      : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep2.freetrial' : 'confirmation.nextStep2.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep2.punchcard'
       : 'confirmation.nextStep2.membership';
     const step3Key = productType === 'membership' ? 'confirmation.nextStep3.membership'
-      : productType === '15daypass' ? 'confirmation.nextStep3.15daypass'
+      : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep3.freetrial.today' : 'confirmation.nextStep3.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep3.punchcard'
       : 'confirmation.nextStep3.membership';
     nextStep2.setAttribute('data-i18n-key', step2Key);
@@ -19199,8 +19561,8 @@ function renderConfirmationView() {
   
   const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
-  // Use API data only - no fallbacks to state.order or calculated values
-  const apiOrder = state.fullOrder;
+  // Prefer API order data, but fall back to summary order so success page is never blank.
+  const apiOrder = state.fullOrder || state.order || null;
   
   // Order number - from API only
   if (orderNumber) {
@@ -19210,8 +19572,9 @@ function renderConfirmationView() {
   
   // Order date - from API only
   if (orderDate) {
-    if (apiOrder?.createdAt || apiOrder?.created) {
-      const date = apiOrder.createdAt ? new Date(apiOrder.createdAt) : new Date(apiOrder.created);
+    if (apiOrder?.createdAt || apiOrder?.created || apiOrder?.date) {
+      const rawDate = apiOrder.createdAt || apiOrder.created || apiOrder.date;
+      const date = new Date(rawDate);
       orderDate.textContent = new Intl.DateTimeFormat('en-US', {
         year: 'numeric',
         month: 'long',
@@ -19245,6 +19608,8 @@ function renderConfirmationView() {
             (customer.firstName && customer.lastName ? `${customer.firstName} ${customer.lastName}` : null) ||
             customer.name ||
             '—';
+    } else if (apiOrder?.memberName) {
+      name = apiOrder.memberName;
     }
     memberName.textContent = name;
     // Also update in other sections
@@ -19261,12 +19626,14 @@ function renderConfirmationView() {
       membershipId = apiOrder.subscriptionItems[0].subscription.id.toString();
     } else if (apiOrder?.customer?.id) {
       membershipId = apiOrder.customer.id.toString();
+    } else if (apiOrder?.membershipNumber) {
+      membershipId = String(apiOrder.membershipNumber);
     }
     membershipNumber.textContent = membershipId;
   }
   
   if (membershipType) {
-    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || '—';
+    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || apiOrder?.membershipType || '—';
     membershipType.textContent = type;
   }
   
@@ -19276,6 +19643,8 @@ function renderConfirmationView() {
       gym = resolveGymLabel(apiOrder.customer.primaryGym);
     } else if (apiOrder?.businessUnit?.name) {
       gym = apiOrder.businessUnit.name;
+    } else if (apiOrder?.primaryGym) {
+      gym = apiOrder.primaryGym;
     }
     primaryGym.textContent = gym;
     // Also update in other sections
@@ -19354,16 +19723,31 @@ function renderConfirmationView() {
 
       if (startDay.getTime() > today.getTime()) {
         const dateIso = `${startDay.getFullYear()}-${String(startDay.getMonth() + 1).padStart(2, '0')}-${String(startDay.getDate()).padStart(2, '0')}`;
-        const key = 'confirmation.nextStep2.15daypass.future';
+        const key = state.landingRouteConfig?.componentName === 'LandingFreeTrial'
+          ? 'confirmation.nextStep2.freetrial.future'
+          : 'confirmation.nextStep2.15daypass.future';
         nextStep2.setAttribute('data-i18n-key', key);
         nextStep2.setAttribute('data-i18n-date-iso', dateIso);
         // Render immediately (also allows updatePageTranslations() to re-render on language switch)
         nextStep2.textContent = t(key).replaceAll('{date}', formatLongDate(startDay));
+
+        if (state.landingRouteConfig?.componentName === 'LandingFreeTrial') {
+          nextStep3.setAttribute('data-i18n-key', 'confirmation.nextStep3.freetrial.future');
+          nextStep3.textContent = t('confirmation.nextStep3.freetrial.future');
+        }
       } else {
         // Pass is active now (or today) - restore normal i18n-managed message
         nextStep2.removeAttribute('data-i18n-date-iso');
-        nextStep2.setAttribute('data-i18n-key', 'confirmation.nextStep2.15daypass');
-        nextStep2.textContent = t('confirmation.nextStep2.15daypass');
+        const activeNowKey = state.landingRouteConfig?.componentName === 'LandingFreeTrial'
+          ? 'confirmation.nextStep2.freetrial'
+          : 'confirmation.nextStep2.15daypass';
+        nextStep2.setAttribute('data-i18n-key', activeNowKey);
+        nextStep2.textContent = t(activeNowKey);
+
+        if (state.landingRouteConfig?.componentName === 'LandingFreeTrial') {
+          nextStep3.setAttribute('data-i18n-key', 'confirmation.nextStep3.freetrial.today');
+          nextStep3.textContent = t('confirmation.nextStep3.freetrial.today');
+        }
       }
     }
   }
@@ -20077,6 +20461,47 @@ function clearErrorStates() {
   }
 }
 
+function getFreeFlowCartState() {
+  const isFreeTrialSelected = Boolean(document.querySelector('[data-category="freetrial"] .plan-card.selected')) ||
+    state.landingRouteConfig?.componentName === 'LandingFreeTrial';
+  const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
+  const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
+  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
+  return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
+}
+
+// Single source of truth for free trial cart UI.
+// Do NOT set these labels/states from translation updates or other cart refresh paths.
+function applyFreeFlowCartUi() {
+  const { isFreeTrialSelected, isZeroTotal, isFreeFlow } = getFreeFlowCartState();
+
+  const payNowRow = DOM.payNow ? DOM.payNow.closest('.payment-overview-paynow-row') : null;
+  if (payNowRow) {
+    const payNowLabel = payNowRow.querySelector('.payment-label');
+    if (payNowLabel) {
+      payNowLabel.textContent = isFreeFlow
+        ? `${t('cart.freePeriod') || 'Gratis periode'}:`
+        : `${t('cart.payNow') || 'Pay now'}:`;
+    }
+  }
+
+  if (DOM.checkoutBtn) {
+    DOM.checkoutBtn.textContent = isFreeFlow ? (t('cart.activateTrial') || 'AKTIVÉR PRØVEPERIODE') : t('cart.checkout');
+  }
+
+  const paymentRedirectText = document.querySelector('p[data-i18n-key="cart.paymentRedirect"]');
+  if (paymentRedirectText) {
+    paymentRedirectText.style.display = isFreeFlow ? 'none' : '';
+  }
+
+  const discountSection = document.querySelector('.discount-section');
+  if (discountSection) {
+    discountSection.style.display = isFreeFlow ? 'none' : '';
+  }
+
+  return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
+}
+
 function updateCheckoutButton() {
   if (!DOM.checkoutBtn) return;
   
@@ -20111,6 +20536,46 @@ function updateCheckoutButton() {
   // Payment method no longer required from UI - card is used by default
   const hasProduct = hasMembership || hasPunchCards || hasAddons;
   DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
+  const { isFreeTrialSelected, isZeroTotal, isFreeFlow } = applyFreeFlowCartUi();
+  
+  const consentsSection = document.querySelector('.consents-section');
+  if (consentsSection) {
+    consentsSection.style.marginTop = isFreeFlow ? '16px' : '';
+  }
+
+  const shouldShowFreeTrialHint = isFreeTrialSelected && isZeroTotal;
+  let freeTrialHint = document.getElementById('freeTrialCheckoutHint');
+  if (!freeTrialHint) {
+    freeTrialHint = document.createElement('div');
+    freeTrialHint.id = 'freeTrialCheckoutHint';
+    freeTrialHint.style.display = 'none';
+    freeTrialHint.style.marginTop = '8px';
+    freeTrialHint.style.marginTop = '16px';
+    freeTrialHint.style.textAlign = 'center';
+    freeTrialHint.style.fontSize = '0.8125rem';
+    freeTrialHint.style.color = 'rgba(255, 255, 255, 0.65)';
+    freeTrialHint.style.lineHeight = '1.3';
+    const hintWrap = document.createElement('span');
+    hintWrap.style.display = 'inline-flex';
+    hintWrap.style.alignItems = 'center';
+    hintWrap.style.gap = '6px';
+    const hintIcon = document.createElement('span');
+    hintIcon.setAttribute('aria-hidden', 'true');
+    hintIcon.style.color = '#22c55e';
+    hintIcon.textContent = '✓';
+    const hintText = document.createElement('span');
+    hintText.textContent = t('cart.noCreditCardRequired') || 'Intet kreditkort kræves';
+    hintText.className = 'free-trial-checkout-hint-text';
+    hintWrap.appendChild(hintIcon);
+    hintWrap.appendChild(hintText);
+    freeTrialHint.appendChild(hintWrap);
+    DOM.checkoutBtn.insertAdjacentElement('afterend', freeTrialHint);
+  }
+  const freeTrialHintTextEl = freeTrialHint.querySelector('.free-trial-checkout-hint-text');
+  if (freeTrialHintTextEl) {
+    freeTrialHintTextEl.textContent = t('cart.noCreditCardRequired') || 'Intet kreditkort kræves';
+  }
+  freeTrialHint.style.display = shouldShowFreeTrialHint ? 'block' : 'none';
   
   console.log('[Checkout Button] State:', {
     isAuthenticated,
@@ -20120,6 +20585,10 @@ function updateCheckoutButton() {
     hasPunchCards,
     hasAddons,
     hasProduct,
+    isFreeTrialSelected,
+    isZeroTotal,
+    isFreeFlow,
+    shouldShowFreeTrialHint,
     disabled: DOM.checkoutBtn.disabled,
     privacyConsentElement: DOM.privacyConsent ? 'found' : 'not found',
     termsConsentElement: DOM.termsConsent ? 'found' : 'not found'
@@ -20587,8 +21056,7 @@ function showStep(stepNumber) {
           console.log('[showStep] Step 2 shown - loading products for business unit:', state.selectedBusinessUnit);
           loadProductsFromAPI()
             .then(() => {
-              console.log('[showStep] ✅ Products loaded, rendering...');
-              renderProductsFromAPI();
+              console.log('[showStep] ✅ Products loaded');
             })
             .catch(error => {
               console.error('[showStep] ❌ Failed to load products:', error);
@@ -21864,6 +22332,11 @@ const FAQ_DATA = {
   ]
 };
 
+const FREE_TRIAL_EXTRA_FAQS = [
+  { q: 'faq.freetrial.changeStartDate.q', a: 'faq.freetrial.changeStartDate.a' },
+  { q: 'faq.freetrial.creditCard.q', a: 'faq.freetrial.creditCard.a' },
+];
+
 /**
  * Determine which FAQ categories should be shown based on current step and cart.
  * Step 1: gyms only. Step 2–3: product choice (help choose product). Step 4: contextual to cart.
@@ -21908,6 +22381,7 @@ function renderFAQ() {
   
   // Get active FAQ categories
   const activeCategories = getActiveFAQs();
+  const isFreeTrialFaqFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
   
   // Clear existing FAQ items
   faqList.innerHTML = '';
@@ -21916,8 +22390,12 @@ function renderFAQ() {
   activeCategories.forEach(categoryKey => {
     const categoryFAQs = FAQ_DATA[categoryKey];
     if (!categoryFAQs) return;
-    
-    categoryFAQs.forEach(faq => {
+
+    const faqsToRender = (categoryKey === '15daypass' && isFreeTrialFaqFlow)
+      ? [...categoryFAQs, ...FREE_TRIAL_EXTRA_FAQS]
+      : categoryFAQs;
+
+    faqsToRender.forEach(faq => {
       const faqItem = document.createElement('div');
       faqItem.className = 'faq-item';
       faqItem.setAttribute('aria-expanded', 'false');
