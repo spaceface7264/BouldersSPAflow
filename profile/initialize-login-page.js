@@ -5010,19 +5010,14 @@ export function initializeLoginPage(DOM) {
         if (left > 0) {
           loadMoreWrap.hidden = false;
           loadMoreBtn.textContent = `Load more (${left} left)`;
-          if (loadMoreObserver && !applyBrowseClassFilters._loadMoreObserver) {
-            applyBrowseClassFilters._loadMoreObserver = loadMoreObserver;
-          }
         } else {
           loadMoreWrap.hidden = true;
-          if (loadMoreObserver) {
-            loadMoreObserver.disconnect();
-            if (applyBrowseClassFilters._loadMoreObserver === loadMoreObserver) {
-              applyBrowseClassFilters._loadMoreObserver = null;
-            }
-            loadMoreObserver = null;
-          }
         }
+        // Do NOT disconnect the observer here: it is tied to the lifetime of
+        // this applyBrowseClassFilters() invocation and is torn down at the
+        // top of the next invocation via clearLoadMoreState(). Disconnecting
+        // on transient empty states (e.g. before the first chunk arrives)
+        // permanently kills auto-load.
       }
       const runBlockQueue = () => {
         while (!isStale() && blockInFlight < BLOCK_CHECK_CONCURRENCY && blockQueue.length) {
@@ -5170,6 +5165,17 @@ export function initializeLoginPage(DOM) {
           added += 1;
         }
         updateLoadMore();
+        // IntersectionObserver only fires on boundary CROSSING, not continuous
+        // intersection. On short pages the sentinel can remain visible after a
+        // render without any new event, stalling auto-load. Re-check on next
+        // frame; maybeAutoLoadFromScroll() is a no-op when sentinel is out of
+        // view or everything is already rendered, so this naturally terminates.
+        if (added > 0 && renderedKeys.size < latestFlat.length) {
+          requestAnimationFrame(() => {
+            if (isStale()) return;
+            maybeAutoLoadFromScroll();
+          });
+        }
       }
       const flushRender = () => {
         if (isStale()) return;
