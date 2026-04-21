@@ -17623,6 +17623,23 @@ async function handleCheckout() {
     console.log('[checkout] paymentLink type:', typeof paymentLink);
     console.log('[checkout] paymentLink truthy?', !!paymentLink);
     console.log('[checkout] state.paymentLink:', state.paymentLink);
+    const { isFreeFlow } = getFreeFlowCartState();
+    if (isFreeFlow) {
+      console.log('[checkout] Free flow detected - skipping payment redirect and showing confirmation directly');
+      // Free-trial/zero-total flows do not require external payment confirmation.
+      // Mark as confirmed so success-page guards do not trigger intermediate navigation artifacts.
+      state.paymentConfirmed = true;
+      state.checkoutInProgress = false;
+      updateFAQVisibility();
+      setCheckoutLoadingState(false);
+      state.currentStep = TOTAL_STEPS;
+      showStep(TOTAL_STEPS);
+      updateStepIndicator();
+      updateNavigationButtons();
+      updateMainSubtitle();
+      renderConfirmationView();
+      return;
+    }
     
     const isAssentlyUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
     if (paymentLink && isAssentlyUrl(paymentLink)) {
