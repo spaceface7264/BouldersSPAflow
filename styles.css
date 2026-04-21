@@ -6687,6 +6687,104 @@ body {
     margin: 0;
 }
 
+/* Pay-now calculation tooltip */
+.paynow-info-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    vertical-align: baseline;
+}
+
+.paynow-info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    color: rgba(255, 255, 255, 0.6);
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    transition: color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.paynow-info-icon:hover {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.paynow-info-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.paynow-info-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-width: 250px;
+    max-width: min(340px, calc(100vw - 24px));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+}
+
+.paynow-info-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid rgba(0, 0, 0, 0.95);
+}
+
+.paynow-info-tooltip.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+
+.paynow-info-tooltip .tooltip-content {
+    color: #e4e4e7;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.paynow-info-tooltip .paynow-tooltip-title {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+}
+
+.paynow-info-tooltip .paynow-tooltip-list {
+    margin: 0;
+    padding-left: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.paynow-info-tooltip .paynow-tooltip-list li {
+    margin: 0;
+}
+
 /* Removed duplicate cart-item definition - using the one above */
 
 /* Payment Overview */
@@ -6777,6 +6875,142 @@ body {
     color: var(--color-text-white);
     font-size: var(--font-size-base);
     font-weight: 300;
+}
+
+.payment-tiered-pricing {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+}
+
+.payment-tiered-pricing-row {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) auto;
+    align-items: center;
+    gap: 10px 16px;
+    padding: 20px 0;
+}
+
+.payment-tiered-pricing-row--after {
+    opacity: 0.95;
+    border-top: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.payment-tiered-pricing-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.payment-tiered-pricing-title {
+    color: var(--color-text-white);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.payment-tiered-pricing-row--after .payment-tiered-pricing-title {
+    font-weight: 700;
+}
+
+.payment-tiered-pricing-subtitle {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    line-height: 1.25;
+}
+
+.payment-tiered-pricing-values {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    justify-self: end;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.payment-tiered-pricing-current {
+    color: var(--color-text-white);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.payment-tiered-pricing-row--after .payment-tiered-pricing-current {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.payment-tiered-pricing-old {
+    color: #71717a;
+    font-size: 11px;
+    text-decoration: line-through;
+}
+
+.payment-tiered-pricing-chip {
+    margin-left: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #10b981;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.payment-overview-item--tiered {
+    display: block;
+    align-items: flex-start;
+}
+
+.payment-overview-item--tiered .payment-label {
+    display: none;
+}
+
+.payment-overview-item--tiered .payment-amount[data-summary-field="monthly-payment"] {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+}
+
+.payment-overview--tiered-offer .payment-overview-paynow {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #27272a;
+}
+
+.payment-overview--tiered-offer .payment-overview-paynow-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    align-items: end;
+    column-gap: 10px;
+    row-gap: 2px;
+}
+
+.payment-overview--tiered-offer .payment-overview-paynow-row .payment-label {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.payment-overview--tiered-offer .payment-overview-paynow-row .payment-label-period {
+    grid-column: 1;
+    grid-row: 2;
+    margin-left: 0;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.payment-overview--tiered-offer .payment-overview-paynow-row .payment-amount {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: end;
+    margin-left: 0;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--color-brand-accent);
 }
 
 .payment-overview-total {

@@ -1555,30 +1555,13 @@ class OrderAPI {
       
       const subscriberId = state.customerId ? Number(state.customerId) : null;
       const birthDate = getSubscriberBirthDate();
-      const allSubscriptions = [
-        ...(state.campaignSubscriptions || []),
-        ...(state.subscriptions || []),
-        ...(state.dayPassSubscriptions || []),
-      ];
-      const matchedProduct = allSubscriptions.find((p) =>
-        p.id === subscriptionProductId ||
-        String(p.id) === String(subscriptionProductId)
-      );
-      const isCampaignProduct = Array.isArray(state.campaignSubscriptions) &&
-        state.campaignSubscriptions.some((p) => String(p.id) === String(subscriptionProductId));
-      const isFirstMonthFreeCampaignByName =
-        FIRST_MONTH_FREE_NAME_REGEX.test(String(matchedProduct?.name || '').toLowerCase()) ||
-        FIRST_MONTH_FREE_NAME_REGEX.test(String(state.cartItems?.find((item) => item.type === 'membership')?.name || '').toLowerCase());
-      // Some campaign products can arrive outside campaignSubscriptions; treat clear "0 kr first month" names as campaign behavior.
-      const isFirstMonthFreeCampaignProduct = isCampaignProduct || isFirstMonthFreeCampaignByName;
-      
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
       const hasExplicitStartDate = !!(startDateOverride && /^\d{4}-\d{2}-\d{2}$/.test(startDateOverride));
       const startDate = hasExplicitStartDate
         ? startDateOverride
         : getTodayLocalDateString();
-      const includeStartDate = hasExplicitStartDate || !isFirstMonthFreeCampaignProduct;
+      const includeStartDate = true;
       
       // Pricing calculation: When startDate is on day 16 or later, price includes:
       // - Rest of current month (prorated) + Full next month
@@ -1621,7 +1604,6 @@ class OrderAPI {
         productId,
         startDate,
         includeStartDate,
-        isFirstMonthFreeCampaignProduct,
         hasSubscriber: !!subscriberId,
         subscriberId,
         hasBirthDate: !!birthDate,
@@ -1666,11 +1648,7 @@ class OrderAPI {
         throw new Error(`Add subscription item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
       console.log('[Step 7] Add subscription item response:', data);
-      if (isFirstMonthFreeCampaignProduct) {
-        console.log('[Step 7] ✅ First-month-free campaign product: skipping custom pricing fix flow and trusting backend response');
-        return data;
-      }
-      
+
       // CRITICAL: Check if backend accepted startDate
       const subscriptionItem = data?.subscriptionItems?.[0];
       const responseStartDate = subscriptionItem?.initialPaymentPeriod?.start;
@@ -4497,6 +4475,8 @@ let loginCooldownUntil = 0;
 let campaignCountdownIntervalId = null;
 let campaignGuardCustomerRefreshPromise = null;
 let accessStepRebindRafId = null;
+const subscriptionDetailPromises = new Map();
+const subscriptionDetailHydratedIds = new Set();
 
 function scheduleAccessStepRebind() {
   if (accessStepRebindRafId != null) {
@@ -4657,7 +4637,6 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
 
 const DOM = {};
 const templates = {};
-const FIRST_MONTH_FREE_NAME_REGEX = /0\s*(kr|dkk)|første\s*måned|first\s*month\s*(free|0(\s*dkk)?)/;
 const TOTAL_STEPS = 5;
 const buttonGlareTimeouts = new WeakMap();
 const carouselResizeObservers = new WeakMap();
@@ -5847,6 +5826,8 @@ const translations = {
     'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.freePeriod': 'Gratis periode', 'cart.activateTrial': 'AKTIVÉR PRØVEPERIODE', 'cart.noCreditCardRequired': 'Intet kreditkort kræves', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
+    'cart.tier.firstMonths': 'Første {months} måneder', 'cart.tier.afterMonths': 'Efter {months} måneder', 'cart.tier.introRate': 'Introduktionspris', 'cart.tier.cancelMonthToMonth': 'Opsig måned for måned', 'cart.tier.savings': 'SPAR {amount} KR.',
+    'cart.payNowTooltip.title': 'Sådan beregnes beløbet', 'cart.payNowTooltip.line1': 'Køb d. 1.-15.: Du betaler kun for resten af denne måned.', 'cart.payNowTooltip.line2': 'Køb d. 16. eller senere: Resten af denne måned + hele næste måned.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
@@ -6061,6 +6042,8 @@ const translations = {
     'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'cart.faqHelp': 'Questions? See FAQ', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
+    'cart.tier.firstMonths': 'First {months} months', 'cart.tier.afterMonths': 'After {months} months', 'cart.tier.introRate': 'Introductory rate', 'cart.tier.cancelMonthToMonth': 'Cancel month to month', 'cart.tier.savings': 'SAVE {amount} KR.',
+    'cart.payNowTooltip.title': 'How the amount is calculated', 'cart.payNowTooltip.line1': 'Sign up on the 1st-15th: You only pay for the rest of this month.', 'cart.payNowTooltip.line2': 'Sign up on the 16th or later: Rest of this month + full next month.',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15-Day Trial Pass options available at this time.',
@@ -6275,6 +6258,8 @@ const translations = {
     'cart.cardPayment': 'Kartenzahlung', 'cart.checkout': 'Zur Kasse', 'step4.completePurchase': 'Ihren Kauf abschließen',
     'step4.loginPrompt': 'Melden Sie sich in Ihrem bestehenden Konto an oder erstellen Sie ein neues.',
     'cart.boundUntil': 'gebunden bis', 'cart.billingPeriodConfirmed': 'Abrechnungszeitraum wird nach dem Kauf bestätigt.',
+    'cart.tier.firstMonths': 'Erste {months} Monate', 'cart.tier.afterMonths': 'Nach {months} Monaten', 'cart.tier.introRate': 'Einführungspreis', 'cart.tier.cancelMonthToMonth': 'Monatlich kündbar', 'cart.tier.savings': 'SPARE {amount} KR.',
+    'cart.payNowTooltip.title': 'So wird der Betrag berechnet', 'cart.payNowTooltip.line1': 'Kauf am 1.-15.: Sie zahlen nur für den Rest dieses Monats.', 'cart.payNowTooltip.line2': 'Kauf am 16. oder später: Rest dieses Monats + der gesamte nächste Monat.',
     'message.noProducts.membership': 'Derzeit sind keine Mitgliedschaftsoptionen verfügbar.',
     'message.noProducts.punchcard': 'Derzeit sind keine Stempelkartenoptionen verfügbar.',
     'message.noProducts.15daypass': 'Derzeit sind keine 15-Tage-Pass-Optionen verfügbar.',
@@ -6885,6 +6870,8 @@ async function changeLanguage(languageCode) {
     state.campaignSubscriptions = [];
     state.dayPassSubscriptions = [];
     state.valueCards = [];
+    subscriptionDetailHydratedIds.clear();
+    subscriptionDetailPromises.clear();
     await loadProductsFromAPI();
     
     // Restore UI state after re-rendering
@@ -14501,6 +14488,8 @@ function updatePaymentOverview() {
   // If not available, we'll use product data instead
   const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
   const hasOrderData = !!subscriptionItem;
+  const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+  const isFirstMonthFreeLandingRoute = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
   
   // Check if this is a 15-day pass with shoes (one-time payment product)
   // Check both order data and product data
@@ -14517,6 +14506,15 @@ function updatePaymentOverview() {
     p.id === productIdNum ||
     String(p.id) === String(state.selectedProductId)
   );
+
+  // Lazy-load selected subscription detail (once) to avoid rate limiting from bulk detail fetches.
+  if (currentProduct?.id != null && !subscriptionDetailHydratedIds.has(String(currentProduct.id))) {
+    ensureSubscriptionProductDetail(currentProduct.id).then((wasHydrated) => {
+      if (wasHydrated && !state.checkoutInProgress) {
+        updatePaymentOverview();
+      }
+    });
+  }
   
   // Check product name from order data first, then fall back to product data
   const productFromOrder = subscriptionItem?.product;
@@ -14558,6 +14556,325 @@ function updatePaymentOverview() {
     const daysInMonth = new Date(periodEnd.getFullYear(), periodEnd.getMonth() + 1, 0).getDate();
     const billedDays = Math.max(1, Math.floor((periodEnd.getTime() - periodStart.getTime()) / msPerDay) + 1);
     return (monthlyAmount / daysInMonth) * billedDays;
+  };
+
+  const getNestedValue = (obj, path) => {
+    if (!obj || !path) return undefined;
+    return path.split('.').reduce((acc, key) => (acc == null ? undefined : acc[key]), obj);
+  };
+
+  const collectWarrantyNodes = (obj, maxDepth = 5) => {
+    const matches = [];
+    const visited = new WeakSet();
+    const walk = (value, keyPath = '', depth = 0) => {
+      if (!value || depth > maxDepth) return;
+      if (typeof value !== 'object') return;
+      if (visited.has(value)) return;
+      visited.add(value);
+
+      Object.entries(value).forEach(([key, child]) => {
+        const childPath = keyPath ? `${keyPath}.${key}` : key;
+        const keyLower = key.toLowerCase();
+        const looksWarrantyRelated =
+          keyLower.includes('warranty') ||
+          keyLower.includes('newproduct') ||
+          keyLower.includes('productafter') ||
+          keyLower.includes('nextproduct') ||
+          keyLower.includes('replacement');
+
+        if (looksWarrantyRelated) {
+          matches.push({ path: childPath, value: child });
+        }
+        walk(child, childPath, depth + 1);
+      });
+    };
+
+    walk(obj, '', 0);
+    return matches;
+  };
+
+  const extractWarrantyPriceFromNodeDKK = (nodeValue) => {
+    if (!nodeValue) return 0;
+
+    const directCentsCandidates = [
+      nodeValue?.newPrice?.amount,
+      nodeValue?.price?.amount,
+      nodeValue?.priceWithInterval?.price?.amount,
+      nodeValue?.amount
+    ];
+
+    for (const cents of directCentsCandidates) {
+      const numeric = Number(cents);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return numeric / 100;
+      }
+    }
+
+    return 0;
+  };
+
+  const getStaticPriceWarrantyFallbackDKK = (sourceProduct) => {
+    if (!sourceProduct) return 0;
+    const text = [
+      sourceProduct?.name,
+      sourceProduct?.externalDescription,
+      sourceProduct?.description,
+      sourceProduct?.imageBanner?.text
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    // Frontend fallback mapping (provided by business):
+    // Adult: 469 DKK, Student: 399 DKK, Junior: 279 DKK.
+    if (/(student|studie)/i.test(text)) return 399;
+    if (/(junior|youth|ungdom)/i.test(text)) return 279;
+    if (/(adult|voksen)/i.test(text)) return 469;
+
+    // If this looks like a discounted campaign plan but no segment is present,
+    // default to Adult as baseline fallback for post-warranty pricing.
+    if (/%/.test(text) || /(month|måneder|maaneder|måned|maaned)/i.test(text)) {
+      return 469;
+    }
+
+    return 0;
+  };
+
+  const getIntroOfferDurationMonths = (sourceProduct) => {
+    if (!sourceProduct) return null;
+    const text = [
+      sourceProduct?.name,
+      sourceProduct?.externalDescription,
+      sourceProduct?.description,
+      sourceProduct?.imageBanner?.text
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    const match = text.match(/(\d+)\s*(?:month|months|måned|måneder|maaned|maaneder)/i);
+    if (!match || !match[1]) return null;
+    const parsed = parseInt(match[1], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const looksLikeIntroOfferPlan = (sourceProduct) => {
+    if (!sourceProduct) return false;
+    const text = [
+      sourceProduct?.name,
+      sourceProduct?.externalDescription,
+      sourceProduct?.description,
+      sourceProduct?.imageBanner?.text
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return /(%|off|rabat|intro|introductory|kampagne|campaign)/i.test(text);
+  };
+
+  const resolvePostWarrantyTargetProduct = (sourceProduct) => {
+    if (!sourceProduct) return null;
+
+    const allSubscriptionsForLookup = [
+      ...(state.campaignSubscriptions || []),
+      ...(state.subscriptions || []),
+      ...(state.dayPassSubscriptions || [])
+    ];
+
+    const relationPaths = [
+      'newProductAfterPriceWarranty',
+      'newProductAndPriceAfterPriceWarranty',
+      'productAfterPriceWarranty',
+      'priceWarrantyProduct',
+      'newSubscriptionProduct',
+      'nextProduct',
+      'replacementProduct',
+      'priceWarranty.newProduct'
+    ];
+
+    const idPaths = [
+      'newProductAfterPriceWarrantyId',
+      'newProductAndPriceAfterPriceWarrantyId',
+      'productAfterPriceWarrantyId',
+      'priceWarrantyProductId',
+      'newSubscriptionProductId',
+      'nextProductId',
+      'replacementProductId',
+      'priceWarranty.newProductId'
+    ];
+
+    let referencedProduct = null;
+    for (const relationPath of relationPaths) {
+      const relationValue = getNestedValue(sourceProduct, relationPath);
+      if (!relationValue) continue;
+
+      if (typeof relationValue === 'object') {
+        if (relationValue.priceWithInterval?.price?.amount != null) {
+          referencedProduct = relationValue;
+          break;
+        }
+        if (relationValue.id != null) {
+          const relationId = String(relationValue.id);
+          referencedProduct = allSubscriptionsForLookup.find((candidate) => String(candidate?.id) === relationId) || null;
+          if (referencedProduct) break;
+        }
+      } else {
+        const relationId = String(relationValue);
+        referencedProduct = allSubscriptionsForLookup.find((candidate) => String(candidate?.id) === relationId) || null;
+        if (referencedProduct) break;
+      }
+    }
+
+    if (referencedProduct) return referencedProduct;
+
+    for (const idPath of idPaths) {
+      const relationIdValue = getNestedValue(sourceProduct, idPath);
+      if (relationIdValue == null) continue;
+      const relationId = String(relationIdValue);
+      const matched = allSubscriptionsForLookup.find((candidate) => String(candidate?.id) === relationId);
+      if (matched) return matched;
+    }
+
+    const dynamicNodes = collectWarrantyNodes(sourceProduct);
+    for (const node of dynamicNodes) {
+      const value = node.value;
+      if (!value) continue;
+
+      if (typeof value === 'object' && value.id != null) {
+        const relationId = String(value.id);
+        const matched = allSubscriptionsForLookup.find((candidate) => String(candidate?.id) === relationId);
+        if (matched) return matched;
+      }
+
+      if (typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value.trim()))) {
+        const relationId = String(value).trim();
+        const matched = allSubscriptionsForLookup.find((candidate) => String(candidate?.id) === relationId);
+        if (matched) return matched;
+      }
+    }
+
+    return null;
+  };
+
+  const getPostWarrantyMonthlyPriceDKK = (sourceProduct) => {
+    if (!sourceProduct) return 0;
+
+    const dynamicNodes = collectWarrantyNodes(sourceProduct);
+    for (const node of dynamicNodes) {
+      const dynamicPrice = extractWarrantyPriceFromNodeDKK(node.value);
+      if (dynamicPrice > 0) {
+        return dynamicPrice;
+      }
+    }
+
+    const targetProduct = resolvePostWarrantyTargetProduct(sourceProduct);
+    if (targetProduct) {
+      const cents = getProductPriceCents(targetProduct);
+      const resolvedPrice = Number.isFinite(cents) && cents > 0 ? cents / 100 : 0;
+      if (resolvedPrice > 0) return resolvedPrice;
+    }
+
+    return getStaticPriceWarrantyFallbackDKK(sourceProduct);
+  };
+
+  const getFallbackMonthlyPriceDKK = () => {
+    const postWarrantyPrice =
+      getPostWarrantyMonthlyPriceDKK(currentProduct) ||
+      getPostWarrantyMonthlyPriceDKK(productFromOrder);
+    if (postWarrantyPrice > 0) return postWarrantyPrice;
+
+    const productCents = getProductPriceCents(currentProduct || productFromOrder || {});
+    return Number.isFinite(productCents) && productCents > 0 ? productCents / 100 : 0;
+  };
+
+  const ensurePayNowLogicTooltip = (payNowRow) => {
+    if (!payNowRow) return;
+    const label = payNowRow.querySelector('.payment-label');
+    if (!label) return;
+
+    const tooltipTitle = t('cart.payNowTooltip.title');
+    const tooltipBefore15 = t('cart.payNowTooltip.line1');
+    const tooltipAfter15 = t('cart.payNowTooltip.line2');
+
+    let wrapper = payNowRow.querySelector('.paynow-info-wrapper');
+    let infoIcon;
+    let tooltip;
+    if (!wrapper) {
+      wrapper = document.createElement('span');
+      wrapper.className = 'paynow-info-wrapper';
+
+      infoIcon = document.createElement('button');
+      infoIcon.className = 'paynow-info-icon';
+      infoIcon.setAttribute('type', 'button');
+      infoIcon.setAttribute('aria-label', tooltipTitle);
+      infoIcon.setAttribute('aria-expanded', 'false');
+      infoIcon.innerHTML = sanitizeHTML(`
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+      `);
+
+      tooltip = document.createElement('div');
+      tooltip.className = 'paynow-info-tooltip';
+      wrapper.appendChild(infoIcon);
+      wrapper.appendChild(tooltip);
+      label.appendChild(wrapper);
+
+      const closeAllTooltipsExcept = () => {
+        document.querySelectorAll('.home-gym-tooltip, .product-info-tooltip, .paynow-info-tooltip').forEach((node) => {
+          if (node !== tooltip) node.classList.remove('show');
+        });
+      };
+
+      const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+      if (supportsHover) {
+        wrapper.addEventListener('mouseenter', () => {
+          closeAllTooltipsExcept();
+          tooltip.classList.add('show');
+          infoIcon.setAttribute('aria-expanded', 'true');
+        });
+        wrapper.addEventListener('mouseleave', () => {
+          tooltip.classList.remove('show');
+          infoIcon.setAttribute('aria-expanded', 'false');
+        });
+        wrapper.addEventListener('focusin', () => {
+          closeAllTooltipsExcept();
+          tooltip.classList.add('show');
+          infoIcon.setAttribute('aria-expanded', 'true');
+        });
+        wrapper.addEventListener('focusout', () => {
+          tooltip.classList.remove('show');
+          infoIcon.setAttribute('aria-expanded', 'false');
+        });
+      } else {
+        infoIcon.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeAllTooltipsExcept();
+          const isOpen = tooltip.classList.contains('show');
+          tooltip.classList.toggle('show');
+          infoIcon.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+        });
+      }
+    } else {
+      infoIcon = wrapper.querySelector('.paynow-info-icon');
+      tooltip = wrapper.querySelector('.paynow-info-tooltip');
+      if (!label.contains(wrapper)) {
+        label.appendChild(wrapper);
+      }
+    }
+
+    if (tooltip) {
+      tooltip.innerHTML = sanitizeHTML(`
+        <div class="tooltip-content">
+          <p class="paynow-tooltip-title">${tooltipTitle}</p>
+          <ul class="paynow-tooltip-list">
+            <li>${tooltipBefore15}</li>
+            <li>${tooltipAfter15}</li>
+          </ul>
+        </div>
+      `);
+    }
   };
   
   // ============================================================================
@@ -14650,32 +14967,7 @@ function updatePaymentOverview() {
       const startDateStr = getTodayLocalDateString();
       const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
       const dayOfMonth = today.getDate();
-      const isCampaignProduct = state.campaignSubscriptions && state.campaignSubscriptions.some(
-        p => String(p.id) === String(productId)
-      );
-      const productNameLower = String(subscriptionItem?.product?.name || '').toLowerCase();
-      const isFirstMonthFreeCampaignByName = FIRST_MONTH_FREE_NAME_REGEX.test(productNameLower);
-      const isFirstMonthFreeCampaign = isCampaignProduct && (orderPriceDKK === 0 || isFirstMonthFreeCampaignByName);
-
-      if (isFirstMonthFreeCampaign) {
-        // For first-month-free campaigns, trust backend order total/period as authoritative.
-        // Backend campaign rules can differ from the generic partial-month verification helper.
-        payNowAmount = orderPriceDKK;
-        if (initialPaymentPeriod?.start) {
-          billingPeriod = {
-            start: new Date(initialPaymentPeriod.start),
-            end: new Date(initialPaymentPeriod.end)
-          };
-        } else {
-          const currentMonth = today.getMonth();
-          const currentYear = today.getFullYear();
-          billingPeriod = {
-            start: today,
-            end: new Date(currentYear, currentMonth + 1, 0)
-          };
-        }
-        console.log('[Payment Overview] ✅ First-month-free campaign: using backend order total/period:', payNowAmount, 'DKK');
-      } else if (initialPaymentPeriod?.start) {
+      if (initialPaymentPeriod?.start) {
         const backendStartDate = new Date(initialPaymentPeriod.start);
         const backendEndDate = new Date(initialPaymentPeriod.end);
         
@@ -14797,22 +15089,7 @@ function updatePaymentOverview() {
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
           const dayOfMonth = today.getDate();
-          const isCampaignProductNoOrder = state.campaignSubscriptions && state.campaignSubscriptions.some(
-            p => String(p.id) === String(membership.id)
-          );
-          const productNameForCampaign = (membership.name || '').toLowerCase();
-          const isFirstMonthFreeCampaignNoOrder = isCampaignProductNoOrder && (
-            FIRST_MONTH_FREE_NAME_REGEX.test(productNameForCampaign)
-          );
-
-          if (isFirstMonthFreeCampaignNoOrder) {
-            // Before login/order creation, campaign pay-now cannot be trusted from fallback math.
-            // Show pending state until backend order amount is available.
-            payNowAmount = 0;
-            billingPeriod = null;
-            isCampaignPayNowPending = true;
-            console.log('[Payment Overview] ⏳ First month free campaign (no order): pay-now pending backend order');
-          } else if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
+          if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
             if (expectedPrice) {
@@ -14908,8 +15185,21 @@ function updatePaymentOverview() {
   // ============================================================================
   // Skip monthly payment calculation for 15-day pass (one-time payment)
   let monthlyPaymentAmount = 0;
+  let reducedMonthlyPaymentAmount = 0;
+  const withVars = (key, vars = {}) => {
+    let text = t(key);
+    Object.entries(vars).forEach(([varKey, value]) => {
+      text = String(text).replaceAll(`{${varKey}}`, String(value));
+    });
+    return text;
+  };
   
   if (!is15DayPass) {
+    const reducedMonthlyCents = getProductPriceCents(currentProduct || productFromOrder || {});
+    if (Number.isFinite(reducedMonthlyCents) && reducedMonthlyCents > 0) {
+      reducedMonthlyPaymentAmount = reducedMonthlyCents / 100;
+    }
+
     // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount
     // This is ALWAYS the regular monthly price after any promotional period
     // Even if there's an initialPaymentPeriod, payRecurring shows the price after promotion ends
@@ -14917,12 +15207,25 @@ function updatePaymentOverview() {
     // CRITICAL: Always prioritize API data from order
     // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount is the recurring price AFTER promotional period
     // For products with promotions, this shows the regular price after discount period ends
-    if (hasOrderData && subscriptionItem.payRecurring?.price?.amount !== undefined) {
+    const postWarrantyMonthlyPrice =
+      getPostWarrantyMonthlyPriceDKK(currentProduct) ||
+      getPostWarrantyMonthlyPriceDKK(productFromOrder);
+
+    if (postWarrantyMonthlyPrice > 0) {
+      monthlyPaymentAmount = postWarrantyMonthlyPrice;
+      console.log('[Payment Overview] ✅ Monthly payment from post-warranty target product:', monthlyPaymentAmount, 'DKK');
+    } else if (hasOrderData && subscriptionItem.payRecurring?.price?.amount !== undefined) {
       // Use API price from order - this is the authoritative source
       const recurringPriceAmount = subscriptionItem.payRecurring.price.amount;
       monthlyPaymentAmount = typeof recurringPriceAmount === 'object' 
         ? recurringPriceAmount.amount / 100 
         : recurringPriceAmount / 100;
+      if (!(monthlyPaymentAmount > 0)) {
+        const fallbackMonthly = getFallbackMonthlyPriceDKK();
+        if (fallbackMonthly > 0) {
+          monthlyPaymentAmount = fallbackMonthly;
+        }
+      }
       console.log('[Payment Overview] ✅ Monthly payment from API (payRecurring.price.amount):', monthlyPaymentAmount, 'DKK');
     } else if (hasOrderData && subscriptionItem?.product?.priceWithInterval?.price?.amount !== undefined) {
       // Fallback: Use product price from order if payRecurring not available
@@ -14951,8 +15254,9 @@ function updatePaymentOverview() {
         );
         
         if (membership?.priceWithInterval?.price?.amount !== undefined) {
-          // Use price from API product data
-          monthlyPaymentAmount = membership.priceWithInterval.price.amount / 100;
+          // Use price from API product data (supports both number and {amount})
+          const membershipPriceCents = getProductPriceCents(membership);
+          monthlyPaymentAmount = membershipPriceCents > 0 ? (membershipPriceCents / 100) : 0;
           console.log('[Payment Overview] Monthly payment from API product data (priceWithInterval):', monthlyPaymentAmount, 'DKK');
         } else {
           monthlyPaymentAmount = state.totals.membershipMonthly || 0;
@@ -14967,38 +15271,7 @@ function updatePaymentOverview() {
     console.log('[Payment Overview] ⏭️ Skipping monthly payment calculation (15-day pass - one-time payment)');
   }
 
-  const cartMembershipName = String(state.cartItems?.find((item) => item.type === 'membership')?.name || '').toLowerCase();
-  const firstMonthFreeByName = FIRST_MONTH_FREE_NAME_REGEX.test(productName.toLowerCase()) ||
-    FIRST_MONTH_FREE_NAME_REGEX.test(cartMembershipName);
-  const isCampaignProductDisplay =
-    Array.isArray(state.campaignSubscriptions) &&
-    state.campaignSubscriptions.some((p) => String(p.id) === String(currentProduct?.id || productFromOrder?.id || state.selectedProductId));
-  // Only use client-side split campaign price display before order data exists.
-  // Once backend order exists, keep UI amount aligned with backend order.price.amount (payment window source of truth).
-  const useSplitCampaignDisplay = !hasOrderData && !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
-
-  if (useSplitCampaignDisplay) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const firstMonthEnd = addMonthsClamped(today, 1);
-    const chargeStart = new Date(firstMonthEnd);
-    chargeStart.setHours(0, 0, 0, 0);
-    const chargeEnd = endOfMonth(chargeStart);
-    const campaignPayNow = getProratedAmount(monthlyPaymentAmount, chargeStart, chargeEnd);
-
-    payNowAmount = campaignPayNow;
-    billingPeriod = { start: chargeStart, end: chargeEnd };
-    isCampaignPayNowPending = false;
-
-    if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = '';
-    if (DOM.firstMonthAmount) {
-      DOM.firstMonthAmount.textContent = formatCurrencyHalfKrone(0);
-    }
-    const firstMonthPeriodEl = DOM.firstMonthRow?.querySelector('.payment-label-period-first-month');
-    if (firstMonthPeriodEl) {
-      firstMonthPeriodEl.textContent = `(${formatDateDMY(today)} - ${formatDateDMY(firstMonthEnd)})`;
-    }
-  } else if (DOM.firstMonthRow) {
+  if (DOM.firstMonthRow) {
     DOM.firstMonthRow.style.display = 'none';
   }
   
@@ -15034,6 +15307,16 @@ function updatePaymentOverview() {
   if (!billingPeriodText && state.billingPeriod) {
     billingPeriodText = state.billingPeriod;
   }
+
+  // First month free flow should show a date range for the free period instead of generic fallback copy.
+  if (!billingPeriodText && isFirstMonthFreeLandingRoute) {
+    const freeStartDate = state.subscriptionStartDate
+      ? new Date(state.subscriptionStartDate + 'T12:00:00')
+      : new Date();
+    freeStartDate.setHours(0, 0, 0, 0);
+    const freePeriodEndDate = endOfMonth(addMonthsClamped(freeStartDate, 1));
+    billingPeriodText = `${formatDateDMY(freeStartDate)} - ${formatDateDMY(freePeriodEndDate)}`;
+  }
   
   // If still no billing period, show default message
   if (!billingPeriodText) {
@@ -15062,6 +15345,7 @@ function updatePaymentOverview() {
     
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
+    ensurePayNowLogicTooltip(payNowRow);
     if (!isCampaignPayNowPending && payNowRow && billingPeriodText) {
       let periodElement = payNowRow.querySelector('.payment-label-period');
       if (!periodElement) {
@@ -15123,6 +15407,10 @@ function updatePaymentOverview() {
       const monthlyPaymentItem = DOM.monthlyPayment.closest('.payment-overview-item');
       if (monthlyPaymentItem) {
         monthlyPaymentItem.style.display = 'none';
+        monthlyPaymentItem.classList.remove('payment-overview-item--tiered');
+      }
+      if (DOM.paymentOverview) {
+        DOM.paymentOverview.classList.remove('payment-overview--tiered-offer');
       }
     } else {
       // Show monthly payment for regular memberships
@@ -15132,8 +15420,80 @@ function updatePaymentOverview() {
       }
       if (monthlyPaymentAmount > 0) {
         const roundedMonthly = roundToHalfKrone(monthlyPaymentAmount);
-        DOM.monthlyPayment.textContent = `${formatCurrencyHalfKrone(roundedMonthly)}/md`;
+        const roundedReducedMonthly = roundToHalfKrone(reducedMonthlyPaymentAmount);
+        const shouldShowReducedAndRegular =
+          roundedReducedMonthly > 0 && Math.abs(roundedReducedMonthly - roundedMonthly) > 0.009;
+
+        if (shouldShowReducedAndRegular && looksLikeIntroOfferPlan(currentProduct || productFromOrder)) {
+          const introMonths = getIntroOfferDurationMonths(currentProduct || productFromOrder);
+          const normalizedMonths = introMonths || 1;
+          const introTitle = withVars('cart.tier.firstMonths', { months: normalizedMonths });
+          const afterTitle = withVars('cart.tier.afterMonths', { months: normalizedMonths });
+          const reducedText = formatCurrencyHalfKrone(roundedReducedMonthly);
+          const regularText = formatCurrencyHalfKrone(roundedMonthly);
+          const savingsTotal = introMonths
+            ? Math.max(0, roundToHalfKrone((roundedMonthly - roundedReducedMonthly) * introMonths))
+            : 0;
+          const savingsDisplay = savingsTotal > 0
+            ? withVars('cart.tier.savings', { amount: Math.round(savingsTotal) })
+            : '';
+          if (monthlyPaymentItem) {
+            monthlyPaymentItem.classList.add('payment-overview-item--tiered');
+          }
+          if (DOM.paymentOverview) {
+            DOM.paymentOverview.classList.add('payment-overview--tiered-offer');
+          }
+          DOM.monthlyPayment.innerHTML = sanitizeHTML(
+            `<span class="payment-tiered-pricing">
+              <span class="payment-tiered-pricing-row">
+                <span class="payment-tiered-pricing-left">
+                  <span class="payment-tiered-pricing-title">${introTitle}${savingsDisplay ? `<span class="payment-tiered-pricing-chip">${savingsDisplay}</span>` : ''}</span>
+                  <span class="payment-tiered-pricing-subtitle">${t('cart.tier.introRate')}</span>
+                </span>
+                <span class="payment-tiered-pricing-values">
+                  <span class="payment-tiered-pricing-current">${reducedText}/md</span>
+                  <span class="payment-tiered-pricing-old">${regularText}/md</span>
+                </span>
+              </span>
+              <span class="payment-tiered-pricing-row payment-tiered-pricing-row--after">
+                <span class="payment-tiered-pricing-left">
+                  <span class="payment-tiered-pricing-title">${afterTitle}</span>
+                  <span class="payment-tiered-pricing-subtitle">${t('cart.tier.cancelMonthToMonth')}</span>
+                </span>
+                <span class="payment-tiered-pricing-values">
+                  <span class="payment-tiered-pricing-current">${regularText}/md</span>
+                </span>
+              </span>
+            </span>`
+          );
+        } else if (shouldShowReducedAndRegular) {
+          const reducedText = formatCurrencyHalfKrone(roundedReducedMonthly);
+          const regularText = formatCurrencyHalfKrone(roundedMonthly);
+          if (monthlyPaymentItem) {
+            monthlyPaymentItem.classList.remove('payment-overview-item--tiered');
+          }
+          if (DOM.paymentOverview) {
+            DOM.paymentOverview.classList.remove('payment-overview--tiered-offer');
+          }
+          DOM.monthlyPayment.innerHTML = sanitizeHTML(
+            `<span style="text-decoration: line-through; opacity: 0.65; margin-right: 8px;">${reducedText}/md</span><span>${regularText}/md</span>`
+          );
+        } else {
+          if (monthlyPaymentItem) {
+            monthlyPaymentItem.classList.remove('payment-overview-item--tiered');
+          }
+          if (DOM.paymentOverview) {
+            DOM.paymentOverview.classList.remove('payment-overview--tiered-offer');
+          }
+          DOM.monthlyPayment.textContent = `${formatCurrencyHalfKrone(roundedMonthly)}/md`;
+        }
       } else {
+        if (monthlyPaymentItem) {
+          monthlyPaymentItem.classList.remove('payment-overview-item--tiered');
+        }
+        if (DOM.paymentOverview) {
+          DOM.paymentOverview.classList.remove('payment-overview--tiered-offer');
+        }
         DOM.monthlyPayment.textContent = '—';
       }
     }
@@ -16838,14 +17198,8 @@ async function handleCheckout() {
                   productName.toLowerCase().includes('15 dages')
                 )) ||
                 (state.membershipPlanId && String(state.membershipPlanId).startsWith('15daypass-'));
-              const isFirstMonthFreeCampaignCheckout =
-                hasCampaignInCart() &&
-                FIRST_MONTH_FREE_NAME_REGEX.test(String(productName || '').toLowerCase());
-
               if (is15DayPass) {
                 console.log('[checkout] ✅ Skipping partial-month price verification for 15-Day Trial Pass');
-              } else if (isFirstMonthFreeCampaignCheckout) {
-                console.log('[checkout] ✅ First-month-free campaign: skipping custom price verification/fix and trusting backend order');
               } else {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
@@ -20573,7 +20927,7 @@ function getFreeFlowCartState() {
     state.landingRouteConfig?.componentName === 'LandingFreeTrial';
   const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
   const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
-  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
+  const isFreeFlow = isFreeTrialSelected;
   return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
 }
 
@@ -20586,9 +20940,13 @@ function applyFreeFlowCartUi() {
   if (payNowRow) {
     const payNowLabel = payNowRow.querySelector('.payment-label');
     if (payNowLabel) {
+      const payNowInfoWrapper = payNowLabel.querySelector('.paynow-info-wrapper');
       payNowLabel.textContent = isFreeFlow
         ? `${t('cart.freePeriod') || 'Gratis periode'}:`
         : `${t('cart.payNow') || 'Pay now'}:`;
+      if (payNowInfoWrapper) {
+        payNowLabel.appendChild(payNowInfoWrapper);
+      }
     }
   }
 
@@ -21916,6 +22274,50 @@ async function mergeValueCardProductDetails(cardArrays) {
       }
     })
   );
+}
+
+/**
+ * Fetch and merge subscription detail only for the selected product.
+ * This avoids hammering the API with detail calls for every product in local dev.
+ * @param {string|number} productId
+ * @returns {Promise<boolean>} true when fresh detail was merged
+ */
+async function ensureSubscriptionProductDetail(productId) {
+  if (productId == null) return false;
+  const normalizedId = String(productId);
+  if (subscriptionDetailHydratedIds.has(normalizedId)) return false;
+  if (subscriptionDetailPromises.has(normalizedId)) {
+    return subscriptionDetailPromises.get(normalizedId);
+  }
+
+  const promise = (async () => {
+    try {
+      const detail = await businessUnitsAPI.getSubscriptionById(productId, state.selectedBusinessUnit);
+      if (!detail || typeof detail !== 'object') return false;
+
+      const allSubs = [
+        ...(state.campaignSubscriptions || []),
+        ...(state.subscriptions || []),
+        ...(state.dayPassSubscriptions || [])
+      ];
+      allSubs.forEach((sub) => {
+        if (String(sub?.id) === normalizedId) {
+          Object.assign(sub, detail);
+        }
+      });
+
+      subscriptionDetailHydratedIds.add(normalizedId);
+      return true;
+    } catch (e) {
+      console.warn('[Products] Selected subscription detail fetch failed:', productId, e);
+      return false;
+    } finally {
+      subscriptionDetailPromises.delete(normalizedId);
+    }
+  })();
+
+  subscriptionDetailPromises.set(normalizedId, promise);
+  return promise;
 }
 
 /**
