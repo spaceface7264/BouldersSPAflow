@@ -1566,8 +1566,11 @@ class OrderAPI {
       );
       const isCampaignProduct = Array.isArray(state.campaignSubscriptions) &&
         state.campaignSubscriptions.some((p) => String(p.id) === String(subscriptionProductId));
-      const isFirstMonthFreeCampaignProduct = isCampaignProduct &&
-        FIRST_MONTH_FREE_NAME_REGEX.test(String(matchedProduct?.name || '').toLowerCase());
+      const isFirstMonthFreeCampaignByName =
+        FIRST_MONTH_FREE_NAME_REGEX.test(String(matchedProduct?.name || '').toLowerCase()) ||
+        FIRST_MONTH_FREE_NAME_REGEX.test(String(state.cartItems?.find((item) => item.type === 'membership')?.name || '').toLowerCase());
+      // Some campaign products can arrive outside campaignSubscriptions; treat clear "0 kr first month" names as campaign behavior.
+      const isFirstMonthFreeCampaignProduct = isCampaignProduct || isFirstMonthFreeCampaignByName;
       
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
@@ -5822,6 +5825,7 @@ const translations = {
     'activationDate.later.desc': 'Vælg en fremtidig startdato',
     'activationDate.pickLabel': 'Vælg aktiveringsdato',
     'activationDate.hint': 'Vælg en dato i dag eller i fremtiden.',
+    'activationDate.lastDay': 'Sidste gyldige dag: {date}',
     'activationDate.change': 'Ændre',
     'activationDate.changeFailed': 'Kunne ikke ændre datoen. Gennemfør din køb eller start forfra.',
     'activationConfirm.title': 'Bekræft dit valg',
@@ -6007,6 +6011,7 @@ const translations = {
     'activationDate.later.desc': 'Choose a future start date',
     'activationDate.pickLabel': 'Select activation date',
     'activationDate.hint': 'Select a date today or in the future.',
+    'activationDate.lastDay': 'Last valid day: {date}',
     'activationDate.change': 'Change',
     'activationDate.changeFailed': 'Unable to change date. Please complete your purchase or start over.',
     'activationConfirm.title': 'Confirm your selection',
@@ -6222,6 +6227,7 @@ const translations = {
     'activationDate.later.desc': 'Wählen Sie ein zukünftiges Startdatum',
     'activationDate.pickLabel': 'Aktivierungsdatum auswählen',
     'activationDate.hint': 'Wählen Sie ein Datum heute oder in der Zukunft.',
+    'activationDate.lastDay': 'Letzter gültiger Tag: {date}',
     'activationDate.change': 'Ändern',
     'activationDate.changeFailed': 'Datum konnte nicht geändert werden. Bitte schließen Sie Ihren Kauf ab oder starten Sie neu.',
     'activationConfirm.title': 'Auswahl bestätigen',
@@ -7282,7 +7288,7 @@ document.addEventListener('DOMContentLoaded', () => {
       state.membershipPlanId = '15daypass-123';
       const startDateForMock = validTestStartDate ? new Date(`${validTestStartDate}T12:00:00`) : new Date();
       const endDateForMock = new Date(startDateForMock);
-      endDateForMock.setDate(endDateForMock.getDate() + 15);
+      endDateForMock.setDate(endDateForMock.getDate() + 14);
       // Mock subscription items with 15-Day Trial Pass label and price
       state.fullOrder = {
         subscriptionItems: [{
@@ -10992,6 +10998,27 @@ function isCheckoutConfirmModalOpen() {
   return !!modal && !modal.hidden && modal.classList.contains('checkout-confirm-open');
 }
 
+function updateActivationDatePeriodHint() {
+  const periodEl = document.getElementById('activationDatePeriod');
+  if (!periodEl) return;
+
+  const dateInput = document.getElementById('activationDateInput');
+  const pickRadio = document.getElementById('activationDatePick');
+  const todayStr = getTodayLocalDateString();
+  const startStr = (pickRadio?.checked && dateInput?.value) ? dateInput.value : todayStr;
+  const normalizedStart = startStr < todayStr ? todayStr : startStr;
+
+  const startDate = new Date(`${normalizedStart}T12:00:00`);
+  if (isNaN(startDate.getTime())) {
+    periodEl.textContent = t('activationDate.lastDay').replaceAll('{date}', '—');
+    return;
+  }
+
+  const validUntil = new Date(startDate);
+  validUntil.setDate(validUntil.getDate() + 14);
+  periodEl.textContent = t('activationDate.lastDay').replaceAll('{date}', formatDateDMY(validUntil));
+}
+
 function closeCheckoutConfirmModal({ restoreFocus } = { restoreFocus: true }) {
   const modal = document.getElementById('checkoutConfirmModal');
   if (modal) {
@@ -11061,7 +11088,7 @@ function openCheckoutConfirmModal() {
     : today;
   startDate.setHours(0, 0, 0, 0);
   const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + 15);
+  endDate.setDate(endDate.getDate() + 14);
 
   const startValueEl = document.getElementById('checkoutConfirmStartValue');
   const endValueEl = document.getElementById('checkoutConfirmEndValue');
@@ -11115,6 +11142,7 @@ function openActivationDateModal() {
   section.setAttribute('aria-hidden', 'false');
   section.classList.add('activation-date-modal-open');
   document.body.classList.add('modal-open');
+  updateActivationDatePeriodHint();
 
   // Focus first option for accessibility
   const firstRadio = section.querySelector('input[name="activationDate"]');
@@ -11201,6 +11229,7 @@ function updateActivationDateSection(category) {
         state.subscriptionStartDate = dateInput.value;
       }
     }
+    updateActivationDatePeriodHint();
   } else {
     closeActivationDateModal({ restoreFocus: false });
     state.subscriptionStartDate = null;
@@ -11954,6 +11983,7 @@ function handleGlobalClick(event) {
       state.subscriptionStartDate = null;
       const pickerWrap = document.getElementById('activationDatePickerWrap');
       if (pickerWrap) pickerWrap.hidden = true;
+      updateActivationDatePeriodHint();
       break;
     }
     case 'set-activation-date': {
@@ -11968,6 +11998,7 @@ function handleGlobalClick(event) {
         }
         state.subscriptionStartDate = dateInput.value;
       }
+      updateActivationDatePeriodHint();
       break;
     }
     case 'activation-date-change': {
@@ -11979,6 +12010,7 @@ function handleGlobalClick(event) {
         }
         state.subscriptionStartDate = dateInput.value;
       }
+      updateActivationDatePeriodHint();
       break;
     }
     case 'activation-date-continue': {
@@ -14588,7 +14620,7 @@ function updatePaymentOverview() {
         0;
       payNowAmount = dayPassPriceInCents > 0 ? (dayPassPriceInCents / 100) : orderPriceDKK;
       
-      // Use selected activation date or today; end = start + 15 days
+      // Use selected activation date or today; end = start + 14 days (inclusive 15-day period)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const startDate = state.subscriptionStartDate
@@ -14596,7 +14628,7 @@ function updatePaymentOverview() {
         : today;
       startDate.setHours(0, 0, 0, 0);
       const validUntil = new Date(startDate);
-      validUntil.setDate(validUntil.getDate() + 15);
+      validUntil.setDate(validUntil.getDate() + 14);
       
       billingPeriod = {
         start: startDate,
@@ -14742,7 +14774,7 @@ function updatePaymentOverview() {
           const priceInCents = membership.priceWithInterval?.price?.amount || 0;
           payNowAmount = priceInCents / 100;
           
-          // Use selected activation date or today; end = start + 15 days
+          // Use selected activation date or today; end = start + 14 days (inclusive 15-day period)
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const startDate = state.subscriptionStartDate
@@ -14750,7 +14782,7 @@ function updatePaymentOverview() {
             : today;
           startDate.setHours(0, 0, 0, 0);
           const validUntil = new Date(startDate);
-          validUntil.setDate(validUntil.getDate() + 15);
+          validUntil.setDate(validUntil.getDate() + 14);
           
           billingPeriod = {
             start: startDate,
@@ -14941,7 +14973,9 @@ function updatePaymentOverview() {
   const isCampaignProductDisplay =
     Array.isArray(state.campaignSubscriptions) &&
     state.campaignSubscriptions.some((p) => String(p.id) === String(currentProduct?.id || productFromOrder?.id || state.selectedProductId));
-  const useSplitCampaignDisplay = !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
+  // Only use client-side split campaign price display before order data exists.
+  // Once backend order exists, keep UI amount aligned with backend order.price.amount (payment window source of truth).
+  const useSplitCampaignDisplay = !hasOrderData && !is15DayPass && (isCampaignProductDisplay || firstMonthFreeByName) && firstMonthFreeByName;
 
   if (useSplitCampaignDisplay) {
     const today = new Date();
@@ -19744,9 +19778,9 @@ function renderConfirmationView() {
     const parsedStart = rawStart ? new Date(rawStart) : null;
     let parsedEnd = rawEnd ? new Date(rawEnd) : null;
     if (parsedStart && !parsedEnd) {
-      // Fallback for 15-day pass: end = start + 15 days
+      // Fallback for 15-day pass: end = start + 14 days (inclusive 15-day period)
       const computedEnd = new Date(parsedStart);
-      computedEnd.setDate(computedEnd.getDate() + 15);
+      computedEnd.setDate(computedEnd.getDate() + 14);
       parsedEnd = computedEnd;
     }
 
@@ -20542,7 +20576,7 @@ function applyFreeFlowCartUi() {
   }
 
   if (DOM.checkoutBtn) {
-    DOM.checkoutBtn.textContent = isFreeFlow ? (t('cart.activateTrial') || 'AKTIVÉR PRØVEPERIODE') : t('cart.checkout');
+    DOM.checkoutBtn.textContent = isFreeTrialSelected ? (t('cart.activateTrial') || 'AKTIVÉR PRØVEPERIODE') : t('cart.checkout');
   }
 
   const paymentRedirectText = document.querySelector('p[data-i18n-key="cart.paymentRedirect"]');
