@@ -2707,6 +2707,24 @@ body {
     text-align: center; /* Center the description text */
 }
 
+.category-description a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgba(203, 213, 225, 0.75);
+    text-underline-offset: 2px;
+}
+
+.category-description a:hover {
+    color: #f8fafc;
+    text-decoration-color: rgba(248, 250, 252, 0.95);
+}
+
+.category-description a:focus-visible {
+    outline: 2px solid rgba(248, 250, 252, 0.55);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
 /* Global scrollbar styling - hide scrollbars when not used */
 * {
     scrollbar-width: none; /* Firefox - hide scrollbar */
@@ -6428,6 +6446,30 @@ body {
     border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.payment-overview-addon-items {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.payment-overview-addon-items .cart-item {
+    padding: 14px 0;
+}
+
+.payment-overview-addon-items .cart-item:last-child {
+    padding-bottom: 14px;
+}
+
+.payment-overview-addon-items .item-name {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.payment-overview-addon-items .item-price {
+    font-size: 14px;
+    font-weight: 700;
+}
+
 /* Cart and Purchase Items - Shared Styles */
 .item-name {
     color: var(--color-text-white);
@@ -6855,6 +6897,19 @@ body {
     align-self: baseline;
 }
 
+.payment-paynow-amount-stack {
+    margin-left: auto;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    text-align: right;
+}
+
+.payment-paynow-amount-stack .payment-amount {
+    margin-left: 0;
+}
+
 /* Payment Overview Labels */
 .payment-overview .payment-label {
     color: var(--color-text-white);
@@ -7013,6 +7068,19 @@ body {
     color: var(--color-brand-accent);
 }
 
+.payment-overview--tiered-offer .payment-overview-paynow-row .payment-paynow-amount-stack {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: end;
+    justify-self: end;
+}
+
+.payment-overview--tiered-offer .payment-overview-paynow-row .payment-paynow-amount-stack .payment-amount {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--color-brand-accent);
+}
+
 .payment-overview-total {
     margin-top: 16px;
 }
@@ -7043,6 +7111,13 @@ body {
     margin-top: 4px;
     padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.payment-overview-paynow-includes {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    margin-top: 0;
 }
 
 /* Discount Code */

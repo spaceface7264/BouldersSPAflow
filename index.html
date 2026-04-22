@@ -783,18 +783,21 @@
                                         <span class="payment-label" data-i18n-key="cart.discountAmount">Discount:</span>
                                         <span class="payment-amount" data-summary-field="discount-amount">-0,00 kr.</span>
                                     </div>
+                                    <!-- Addon items (above pay now) -->
+                                    <div class="cart-addon-items payment-overview-addon-items" data-component="cart-addon-items"></div>
+
                                     <div class="payment-overview-item payment-overview-paynow">
                                         <div class="payment-overview-paynow-row">
                                             <span class="payment-label" data-i18n-key="cart.payNow">Pay now:</span>
                                             <span class="payment-label-period"></span>
-                                            <span class="payment-amount" data-summary-field="pay-now">0,00 kr.</span>
+                                            <span class="payment-paynow-amount-stack">
+                                                <span class="payment-amount" data-summary-field="pay-now">0,00 kr.</span>
+                                                <div class="payment-overview-paynow-includes" data-summary-field="pay-now-includes" style="display: none;"></div>
+                                            </span>
                                         </div>
                                         <div class="payment-overview-bound-until" data-summary-field="payment-bound-until" style="display: none;"></div>
                                     </div>
                                 </div>
-                                
-                                <!-- Addon items (below subscription pricing, above total) -->
-                                <div class="cart-addon-items" data-component="cart-addon-items"></div>
                                 
                                 <!-- Cart total (below addons) -->
                                 <div class="payment-overview payment-overview-total-wrap" style="display: none;">

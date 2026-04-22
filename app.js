@@ -80,12 +80,16 @@ const LANDING_ROUTE_CONFIG = Object.freeze({
     labelKey: 'LandingFreeTrial',
     mode: 'single',
   }),
-  '/firstmonthfree': Object.freeze({
+  '/membership-offer': Object.freeze({
     componentName: 'LandingFirstMonthFree',
     labelKey: 'LandingFirstMonthFree',
     mode: 'multi',
   }),
 });
+const NON_INDEXABLE_PATHS = Object.freeze(new Set([
+  '/freetrial',
+  '/membership-offer',
+]));
 
 function normalizePathname(pathname) {
   const raw = String(pathname || '/').trim().toLowerCase();
@@ -97,6 +101,56 @@ function normalizePathname(pathname) {
 function resolveLandingRouteConfig(pathname = window.location.pathname) {
   const normalizedPath = normalizePathname(pathname);
   return LANDING_ROUTE_CONFIG[normalizedPath] || null;
+}
+
+function applyRouteIndexingPolicy(pathname = window.location.pathname) {
+  const normalizedPath = normalizePathname(pathname);
+  const shouldNoIndex = NON_INDEXABLE_PATHS.has(normalizedPath);
+  const managedMetaSelector = 'meta[data-route-indexing="managed"]';
+
+  document.querySelectorAll(managedMetaSelector).forEach((meta) => meta.remove());
+  if (!shouldNoIndex) return;
+
+  [
+    { name: 'robots', content: 'noindex, nofollow' },
+    { name: 'googlebot', content: 'noindex, nofollow' },
+  ].forEach(({ name, content }) => {
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', name);
+    meta.setAttribute('content', content);
+    meta.setAttribute('data-route-indexing', 'managed');
+    document.head.appendChild(meta);
+  });
+}
+
+function applyOfferLandingCategoryCopy() {
+  const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+  if (activeLandingRoute?.componentName !== 'LandingFirstMonthFree') return;
+  const targetCategory = document.querySelector('[data-category="campaign"]');
+  const title = targetCategory?.querySelector('.category-title');
+  const subtitle = targetCategory?.querySelector('.category-subtitle');
+  const description = targetCategory?.querySelector('.category-description p');
+  const countdown = document.getElementById('campaignCountdown');
+
+  if (title) {
+    title.textContent = t('offer.membership.title');
+    title.removeAttribute('data-i18n-key');
+  }
+  if (subtitle) {
+    subtitle.textContent = '';
+    subtitle.removeAttribute('data-i18n-key');
+  }
+  if (description) {
+    const descriptionText = t('offer.membership.description');
+    if (descriptionText.includes('<a') || descriptionText.includes('<span')) {
+      description.innerHTML = sanitizeHTML(descriptionText);
+    } else {
+      description.textContent = descriptionText;
+    }
+    description.removeAttribute('data-i18n-key');
+  }
+  if (countdown) countdown.style.display = 'none';
+  stopCampaignCountdown();
 }
 
 const REQUIRED_FIELDS = [
@@ -3467,24 +3521,7 @@ function renderProductsFromAPI() {
       targetCategory.classList.add('expanded', 'selected');
     }
     if (activeLandingRoute?.componentName === 'LandingFirstMonthFree') {
-      const title = targetCategory?.querySelector('.category-title');
-      const subtitle = targetCategory?.querySelector('.category-subtitle');
-      const description = targetCategory?.querySelector('.category-description p');
-      const countdown = document.getElementById('campaignCountdown');
-      if (title) {
-        title.textContent = 'First Month Free';
-        title.removeAttribute('data-i18n-key');
-      }
-      if (subtitle) {
-        subtitle.textContent = '';
-        subtitle.removeAttribute('data-i18n-key');
-      }
-      if (description) {
-        description.textContent = '';
-        description.removeAttribute('data-i18n-key');
-      }
-      if (countdown) countdown.style.display = 'none';
-      stopCampaignCountdown();
+      applyOfferLandingCategoryCopy();
     }
   };
   const renderLandingCards = (products) => {
@@ -4820,12 +4857,30 @@ function populateAddonsModal() {
   const addons = Array.isArray(state.subscriptionAdditions)
     ? state.subscriptionAdditions
     : [];
-  if (addons.length === 0) {
+
+  // If duplicate add-ons share the same display name (e.g. multiple "Kaffekort"),
+  // only keep the cheapest option in the modal list.
+  const addonsByName = new Map();
+  addons.forEach((addon) => {
+    const displayName = (addon?.addition?.name || addon?.name || '').trim();
+    const key = displayName.toLowerCase();
+    if (!key) return;
+    const price = roundToHalfKrone(getAddonPrice(addon));
+    const existing = addonsByName.get(key);
+    if (!existing || price < existing.price) {
+      addonsByName.set(key, { addon, price });
+    }
+  });
+  const addonsToRender = addonsByName.size > 0
+    ? Array.from(addonsByName.values()).map((entry) => entry.addon)
+    : addons;
+
+  if (addonsToRender.length === 0) {
     return;
   }
   if (!templates.addon) {
     // Fallback simple cards if template missing
-    addons.forEach((addon) => {
+    addonsToRender.forEach((addon) => {
       const card = document.createElement('div');
       card.className = 'plan-card addon-card';
       card.style.cursor = 'pointer';
@@ -4860,7 +4915,7 @@ function populateAddonsModal() {
     return;
   }
   // Use existing add-on template for consistency (list layout: main row + expandable details)
-  addons.forEach((addon, index) => {
+  addonsToRender.forEach((addon, index) => {
     const card = templates.addon.content.firstElementChild.cloneNode(true);
     const addToCartBtn = card.querySelector('[data-action="toggle-addon"]');
     if (addToCartBtn) addToCartBtn.dataset.addonId = addon.id;
@@ -5136,12 +5191,28 @@ function populateBoostModal() {
   
   grid.innerHTML = '';
   
-  // Use products with "boostProduct" label
+  // Use products with "boostProduct" label.
+  // If duplicate products share the same display name (e.g. two "Kaffekort"),
+  // keep only the cheapest one.
   const boostProducts = state.boostProducts || [];
+  const boostProductsByName = new Map();
+  boostProducts.forEach((product) => {
+    const displayName = (product?.name || '').trim();
+    const key = displayName.toLowerCase();
+    if (!key) return;
+    const price = roundToHalfKrone(getAddonPrice(product));
+    const existing = boostProductsByName.get(key);
+    if (!existing || price < existing.price) {
+      boostProductsByName.set(key, { product, price });
+    }
+  });
+  const boostProductsToRender = boostProductsByName.size > 0
+    ? Array.from(boostProductsByName.values()).map((entry) => entry.product)
+    : boostProducts;
   
-  console.log(`[Boost Modal] populateBoostModal: ${boostProducts.length} boost products to render`);
+  console.log(`[Boost Modal] populateBoostModal: ${boostProductsToRender.length} boost products to render`);
   
-  if (boostProducts.length === 0) {
+  if (boostProductsToRender.length === 0) {
     // No boost products available
     console.warn('[Boost Modal] No boost products to display');
     const emptyMsg = document.createElement('div');
@@ -5157,8 +5228,8 @@ function populateBoostModal() {
   }
   
   // Render each boost product
-  boostProducts.forEach((product, index) => {
-    console.log(`[Boost Modal] Rendering boost product ${index + 1}/${boostProducts.length}: ${product.name} (ID: ${product.id})`);
+  boostProductsToRender.forEach((product, index) => {
+    console.log(`[Boost Modal] Rendering boost product ${index + 1}/${boostProductsToRender.length}: ${product.name} (ID: ${product.id})`);
     if (!templates.addon) {
       // Fallback simple card if template missing
       const card = document.createElement('div');
@@ -5421,7 +5492,7 @@ function populateBoostModal() {
     console.log(`[Boost Modal] ✅ Card appended for product: ${product.name}`);
   });
   
-  console.log(`[Boost Modal] ✅ Finished rendering ${boostProducts.length} boost products`);
+  console.log(`[Boost Modal] ✅ Finished rendering ${boostProductsToRender.length} boost products`);
 }
 
 const BOOST_MODAL_OPEN_DELAY_MS = 50;
@@ -5661,6 +5732,7 @@ function applyConditionalSteps() {
 }
 
 function init() {
+  applyRouteIndexingPolicy(window.location.pathname);
   state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
   if (state.landingRouteConfig) {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
@@ -5826,8 +5898,9 @@ const translations = {
     'cart.cardPayment': 'Kortbetaling', 'cart.checkout': 'Til kassen', 'cart.freePeriod': 'Gratis periode', 'cart.activateTrial': 'AKTIVÉR PRØVEPERIODE', 'cart.noCreditCardRequired': 'Intet kreditkort kræves', 'cart.faqHelp': 'Spørgsmål? Se FAQ', 'step4.completePurchase': 'Færdiggør dit køb',
     'step4.loginPrompt': 'Log ind på din eksisterende konto eller opret en ny.',
     'cart.boundUntil': 'bundet indtil', 'cart.billingPeriodConfirmed': 'Faktureringsperiode bekræftes efter køb.',
-    'cart.tier.firstMonths': 'Første {months} måneder', 'cart.tier.afterMonths': 'Efter {months} måneder', 'cart.tier.introRate': 'Introduktionspris', 'cart.tier.cancelMonthToMonth': 'Opsig måned for måned', 'cart.tier.savings': 'SPAR {amount} KR.',
-    'cart.payNowTooltip.title': 'Sådan beregnes beløbet', 'cart.payNowTooltip.line1': 'Køb d. 1.-15.: Du betaler kun for resten af denne måned.', 'cart.payNowTooltip.line2': 'Køb d. 16. eller senere: Resten af denne måned + hele næste måned.',
+    'cart.tier.firstMonths': 'Første {months} måneder', 'cart.tier.afterMonths': 'Efter {months} måneder', 'cart.tier.introRate': 'Introduktionspris', 'cart.tier.commitment3': 'Kun 3 måneders binding', 'cart.tier.cancelMonthToMonth': 'Opsig måned for måned', 'cart.tier.savings': 'SPAR {amount} KR.',
+    'cart.payNowTooltip.title': 'Sådan beregnes beløbet', 'cart.payNowTooltip.line1': 'Køb d. 1.-15.: Du betaler kun for resten af denne måned.', 'cart.payNowTooltip.line2': 'Køb d. 16. eller senere: Resten af denne måned + hele næste måned.', 'cart.payNowIncludesAddons': 'Inkluderer valgte tilvalg (+{amount})',
+    'offer.membership.title': 'Medlemskabskampagne', 'offer.membership.description': 'Start nu og spar stort! Kun 3 måneders binding. Ingen skjulte gebyrer. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og betingelser</a> gælder.',
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
@@ -6042,8 +6115,9 @@ const translations = {
     'cart.cardPayment': 'Card payment', 'cart.checkout': 'Checkout', 'cart.faqHelp': 'Questions? See FAQ', 'step4.completePurchase': 'Complete your purchase',
     'step4.loginPrompt': 'Log in to your existing account or create a new one.',
     'cart.boundUntil': 'bound until', 'cart.billingPeriodConfirmed': 'Billing period confirmed after checkout.',
-    'cart.tier.firstMonths': 'First {months} months', 'cart.tier.afterMonths': 'After {months} months', 'cart.tier.introRate': 'Introductory rate', 'cart.tier.cancelMonthToMonth': 'Cancel month to month', 'cart.tier.savings': 'SAVE {amount} KR.',
-    'cart.payNowTooltip.title': 'How the amount is calculated', 'cart.payNowTooltip.line1': 'Sign up on the 1st-15th: You only pay for the rest of this month.', 'cart.payNowTooltip.line2': 'Sign up on the 16th or later: Rest of this month + full next month.',
+    'cart.tier.firstMonths': 'First {months} months', 'cart.tier.afterMonths': 'After {months} months', 'cart.tier.introRate': 'Introductory rate', 'cart.tier.commitment3': 'Only 3 months commitment', 'cart.tier.cancelMonthToMonth': 'Cancel month to month', 'cart.tier.savings': 'SAVE {amount} KR.',
+    'cart.payNowTooltip.title': 'How the amount is calculated', 'cart.payNowTooltip.line1': 'Sign up on the 1st-15th: You only pay for the rest of this month.', 'cart.payNowTooltip.line2': 'Sign up on the 16th or later: Rest of this month + full next month.', 'cart.payNowIncludesAddons': 'Includes selected add-ons (+{amount})',
+    'offer.membership.title': 'Membership Campaign', 'offer.membership.description': 'Start now and save big! Only 3 months commitment. No hidden fees. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and conditions</a> apply.',
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15-Day Trial Pass options available at this time.',
@@ -6258,8 +6332,9 @@ const translations = {
     'cart.cardPayment': 'Kartenzahlung', 'cart.checkout': 'Zur Kasse', 'step4.completePurchase': 'Ihren Kauf abschließen',
     'step4.loginPrompt': 'Melden Sie sich in Ihrem bestehenden Konto an oder erstellen Sie ein neues.',
     'cart.boundUntil': 'gebunden bis', 'cart.billingPeriodConfirmed': 'Abrechnungszeitraum wird nach dem Kauf bestätigt.',
-    'cart.tier.firstMonths': 'Erste {months} Monate', 'cart.tier.afterMonths': 'Nach {months} Monaten', 'cart.tier.introRate': 'Einführungspreis', 'cart.tier.cancelMonthToMonth': 'Monatlich kündbar', 'cart.tier.savings': 'SPARE {amount} KR.',
-    'cart.payNowTooltip.title': 'So wird der Betrag berechnet', 'cart.payNowTooltip.line1': 'Kauf am 1.-15.: Sie zahlen nur für den Rest dieses Monats.', 'cart.payNowTooltip.line2': 'Kauf am 16. oder später: Rest dieses Monats + der gesamte nächste Monat.',
+    'cart.tier.firstMonths': 'Erste {months} Monate', 'cart.tier.afterMonths': 'Nach {months} Monaten', 'cart.tier.introRate': 'Einführungspreis', 'cart.tier.commitment3': 'Nur 3 Monate Bindung', 'cart.tier.cancelMonthToMonth': 'Monatlich kündbar', 'cart.tier.savings': 'SPARE {amount} KR.',
+    'cart.payNowTooltip.title': 'So wird der Betrag berechnet', 'cart.payNowTooltip.line1': 'Kauf am 1.-15.: Sie zahlen nur für den Rest dieses Monats.', 'cart.payNowTooltip.line2': 'Kauf am 16. oder später: Rest dieses Monats + der gesamte nächste Monat.', 'cart.payNowIncludesAddons': 'Ausgewählte Add-ons enthalten (+{amount})',
+    'offer.membership.title': 'Mitgliedschaftsangebot', 'offer.membership.description': 'Wählen Sie das Mitgliedschaftsangebot, das am besten zu Ihnen passt. Einführungspreise können zeitlich begrenzt sein.',
     'message.noProducts.membership': 'Derzeit sind keine Mitgliedschaftsoptionen verfügbar.',
     'message.noProducts.punchcard': 'Derzeit sind keine Stempelkartenoptionen verfügbar.',
     'message.noProducts.15daypass': 'Derzeit sind keine 15-Tage-Pass-Optionen verfügbar.',
@@ -6370,6 +6445,13 @@ function updatePageTranslations() {
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
     const key = element.getAttribute('data-i18n-key');
     let translation = t(key);
+    const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+    const isOfferLanding = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
+    if (isOfferLanding && key === 'category.campaign') {
+      translation = t('offer.membership.title');
+    } else if (isOfferLanding && key === 'category.campaign.desc') {
+      translation = t('offer.membership.description');
+    }
 
     // Simple placeholder substitution for dynamic translations.
     // Currently supports `{date}` when element provides `data-i18n-date-iso="YYYY-MM-DD"`.
@@ -6445,6 +6527,7 @@ function updatePageTranslations() {
   
   // Update addon modal translations
   updateAddonModalTranslations();
+  applyOfferLandingCategoryCopy();
   
   // Update step labels
   const stepLabels = document.querySelectorAll('.step-label');
@@ -6464,17 +6547,29 @@ function updatePageTranslations() {
   };
   
   Object.entries(categoryTitles).forEach(([category, key]) => {
+    const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
+    const isOfferLanding = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
+    const resolvedTitleKey = (isOfferLanding && category === 'campaign')
+      ? 'offer.membership.title'
+      : key;
+    const resolvedDescKey = (isOfferLanding && category === 'campaign')
+      ? 'offer.membership.description'
+      : `${key}.desc`;
+
     const titleEl = document.querySelector(`[data-category="${category}"] .category-title`);
     if (titleEl) {
-      titleEl.textContent = t(key);
+      titleEl.textContent = t(resolvedTitleKey);
     }
     
     const descEl = document.querySelector(`[data-category="${category}"] .category-description p`);
     if (descEl) {
-      const descKey = `${key}.desc`;
-      const desc = t(descKey);
+      const desc = t(resolvedDescKey);
       if (desc) {
-        descEl.textContent = desc;
+        if (desc.includes('<a') || desc.includes('<span')) {
+          descEl.innerHTML = sanitizeHTML(desc);
+        } else {
+          descEl.textContent = desc;
+        }
       }
     }
   });
@@ -15429,6 +15524,7 @@ function updatePaymentOverview() {
           const normalizedMonths = introMonths || 1;
           const introTitle = withVars('cart.tier.firstMonths', { months: normalizedMonths });
           const afterTitle = withVars('cart.tier.afterMonths', { months: normalizedMonths });
+          const introSubtitleKey = normalizedMonths >= 6 ? 'cart.tier.commitment3' : 'cart.tier.introRate';
           const reducedText = formatCurrencyHalfKrone(roundedReducedMonthly);
           const regularText = formatCurrencyHalfKrone(roundedMonthly);
           const savingsTotal = introMonths
@@ -15448,7 +15544,7 @@ function updatePaymentOverview() {
               <span class="payment-tiered-pricing-row">
                 <span class="payment-tiered-pricing-left">
                   <span class="payment-tiered-pricing-title">${introTitle}${savingsDisplay ? `<span class="payment-tiered-pricing-chip">${savingsDisplay}</span>` : ''}</span>
-                  <span class="payment-tiered-pricing-subtitle">${t('cart.tier.introRate')}</span>
+                  <span class="payment-tiered-pricing-subtitle">${t(introSubtitleKey)}</span>
                 </span>
                 <span class="payment-tiered-pricing-values">
                   <span class="payment-tiered-pricing-current">${reducedText}/md</span>
@@ -15524,9 +15620,10 @@ function updatePaymentOverview() {
     }
   }
   
-  // Calculate and display total (Pay now + Addons)
+  // Calculate final payable amount (single "Pay now", including add-ons)
   const totalEl = document.querySelector('[data-summary-field="total"]');
   const totalContainer = document.querySelector('.payment-overview-total');
+  const payNowIncludesEl = document.querySelector('[data-summary-field="pay-now-includes"]');
   
   if (totalEl && totalContainer) {
     // CRITICAL: Calculate addon total from state.addonIds (source of truth)
@@ -15566,23 +15663,37 @@ function updatePaymentOverview() {
       total = Math.max(0, total - state.totals.discountAmount);
     }
     
-    // Round and format total
+    // Round and use as the single authoritative "Pay now" amount.
     const roundedTotal = roundToHalfKrone(total);
+    if (DOM.payNow) {
+      DOM.payNow.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
+    }
+    state.totals.payNowAmount = roundedTotal;
+
+    // Keep legacy total field updated for compatibility, but hidden in UI.
     totalEl.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
-    
-    // Show/hide total container (and its wrapper) based on whether addons are present
-    const totalWrap = totalContainer.closest('.payment-overview-total-wrap');
-    if (addonTotal > 0) {
-      totalContainer.style.display = 'block';
-      if (totalWrap) totalWrap.style.display = 'block';
-      if (payNowIncludesAddons) {
-        console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now already includes addons:', payNowAmount, ')');
+
+    // Show helper text that clarifies add-ons are included in the single pay-now amount.
+    if (payNowIncludesEl) {
+      if (addonTotal > 0) {
+        const addonAmountText = formatPriceHalfKrone(roundToHalfKrone(addonTotal)) + ' kr.';
+        const template = t('cart.payNowIncludesAddons');
+        payNowIncludesEl.textContent = String(template).replace('{amount}', addonAmountText);
+        payNowIncludesEl.style.display = 'block';
       } else {
-        console.log('[Payment Overview] Total displayed:', roundedTotal, '(Pay now:', payNowAmount, '+ Addons:', addonTotal, ')');
+        payNowIncludesEl.style.display = 'none';
+        payNowIncludesEl.textContent = '';
       }
+    }
+
+    // Hide total container/wrapper to keep one prominent payable price in UI.
+    const totalWrap = totalContainer.closest('.payment-overview-total-wrap');
+    totalContainer.style.display = 'none';
+    if (totalWrap) totalWrap.style.display = 'none';
+    if (payNowIncludesAddons) {
+      console.log('[Payment Overview] Pay now displayed:', roundedTotal, '(already includes addons from backend order)');
     } else {
-      totalContainer.style.display = 'none';
-      if (totalWrap) totalWrap.style.display = 'none';
+      console.log('[Payment Overview] Pay now displayed:', roundedTotal, '(base:', payNowAmount, '+ addons:', addonTotal, ')');
     }
   }
   
