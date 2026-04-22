@@ -3481,7 +3481,7 @@ function renderProductsFromAPI() {
       categoryItem.innerHTML = sanitizeHTML(`
         <div class="category-header">
           <div class="category-info">
-            <div class="category-title">Free Trial</div>
+            <div class="category-title">Aktivér 15 Dages Kort</div>
           </div>
           <i data-lucide="chevron-down" class="category-icon"></i>
         </div>
@@ -4510,6 +4510,7 @@ let gymLoadRetryTimeoutId = null;
 let customerSyncCooldownUntil = 0;
 let loginCooldownUntil = 0;
 let campaignCountdownIntervalId = null;
+let activationDatePeriodHintTimeoutId = null;
 let campaignGuardCustomerRefreshPromise = null;
 let accessStepRebindRafId = null;
 const subscriptionDetailPromises = new Map();
@@ -7729,6 +7730,17 @@ function setupEventListeners() {
 
   document.addEventListener('click', handleGlobalClick);
   document.addEventListener('input', handleGlobalInput);
+  const activationDateInput = document.getElementById('activationDateInput');
+  const syncActivationDateSelection = () => {
+    if (!activationDateInput || !activationDateInput.value) return;
+    const pickRadio = document.getElementById('activationDatePick');
+    if (pickRadio) pickRadio.checked = true;
+    const pickerWrap = document.getElementById('activationDatePickerWrap');
+    if (pickerWrap) pickerWrap.hidden = false;
+    state.subscriptionStartDate = activationDateInput.value;
+    updateActivationDatePeriodHint();
+  };
+  activationDateInput?.addEventListener('change', syncActivationDateSelection);
 
   const cardNumber = document.getElementById('cardNumber');
   const expiryDate = document.getElementById('expiryDate');
@@ -11080,6 +11092,27 @@ function isCheckoutConfirmModalOpen() {
   return !!modal && !modal.hidden && modal.classList.contains('checkout-confirm-open');
 }
 
+function stopActivationDatePeriodHintAutoRefresh() {
+  if (activationDatePeriodHintTimeoutId !== null) {
+    clearTimeout(activationDatePeriodHintTimeoutId);
+    activationDatePeriodHintTimeoutId = null;
+  }
+}
+
+function scheduleActivationDatePeriodHintAutoRefresh() {
+  stopActivationDatePeriodHintAutoRefresh();
+  if (!isActivationDateModalOpen()) return;
+
+  const now = Date.now();
+  const msUntilNextMinuteTick = (60 * 1000) - (now % (60 * 1000)) + 50;
+  activationDatePeriodHintTimeoutId = setTimeout(() => {
+    activationDatePeriodHintTimeoutId = null;
+    if (!isActivationDateModalOpen()) return;
+    updateActivationDatePeriodHint();
+    scheduleActivationDatePeriodHintAutoRefresh();
+  }, msUntilNextMinuteTick);
+}
+
 function updateActivationDatePeriodHint() {
   const periodEl = document.getElementById('activationDatePeriod');
   if (!periodEl) return;
@@ -11092,13 +11125,19 @@ function updateActivationDatePeriodHint() {
 
   const startDate = new Date(`${normalizedStart}T12:00:00`);
   if (isNaN(startDate.getTime())) {
-    periodEl.textContent = t('activationDate.lastDay').replaceAll('{date}', '—');
+    const invalidText = t('activationDate.lastDay').replaceAll('{date}', '—');
+    if (periodEl.textContent !== invalidText) {
+      periodEl.textContent = invalidText;
+    }
     return;
   }
 
   const validUntil = new Date(startDate);
   validUntil.setDate(validUntil.getDate() + 14);
-  periodEl.textContent = t('activationDate.lastDay').replaceAll('{date}', formatDateDMY(validUntil));
+  const nextText = t('activationDate.lastDay').replaceAll('{date}', formatDateDMY(validUntil));
+  if (periodEl.textContent !== nextText) {
+    periodEl.textContent = nextText;
+  }
 }
 
 function closeCheckoutConfirmModal({ restoreFocus } = { restoreFocus: true }) {
@@ -11195,6 +11234,7 @@ function openCheckoutConfirmModal() {
 }
 
 function closeActivationDateModal({ restoreFocus } = { restoreFocus: true }) {
+  stopActivationDatePeriodHintAutoRefresh();
   const section = document.getElementById('activationDateSection');
   const pickerWrap = document.getElementById('activationDatePickerWrap');
   if (section) {
@@ -11225,6 +11265,7 @@ function openActivationDateModal() {
   section.classList.add('activation-date-modal-open');
   document.body.classList.add('modal-open');
   updateActivationDatePeriodHint();
+  scheduleActivationDatePeriodHintAutoRefresh();
 
   // Focus first option for accessibility
   const firstRadio = section.querySelector('input[name="activationDate"]');
@@ -12075,19 +12116,7 @@ function handleGlobalClick(event) {
       if (dateInput) {
         const todayStr = getTodayLocalDateString();
         dateInput.min = todayStr;
-        if (!dateInput.value || dateInput.value < todayStr) {
-          dateInput.value = todayStr;
-        }
-        state.subscriptionStartDate = dateInput.value;
-      }
-      updateActivationDatePeriodHint();
-      break;
-    }
-    case 'activation-date-change': {
-      const dateInput = document.getElementById('activationDateInput');
-      if (dateInput && dateInput.value) {
-        const todayStr = getTodayLocalDateString();
-        if (dateInput.value < todayStr) {
+        if (!dateInput.value) {
           dateInput.value = todayStr;
         }
         state.subscriptionStartDate = dateInput.value;
@@ -12100,10 +12129,6 @@ function handleGlobalClick(event) {
       const dateInput = document.getElementById('activationDateInput');
       const pickRadio = document.getElementById('activationDatePick');
       if (pickRadio?.checked && dateInput?.value) {
-        const todayStr = getTodayLocalDateString();
-        if (dateInput.value < todayStr) {
-          dateInput.value = todayStr;
-        }
         state.subscriptionStartDate = dateInput.value;
       } else {
         state.subscriptionStartDate = null;
@@ -14885,6 +14910,12 @@ function updatePaymentOverview() {
     if (!payNowRow) return;
     const label = payNowRow.querySelector('.payment-label');
     if (!label) return;
+    const { isFreeFlow } = getFreeFlowCartState();
+    if (isFreeFlow) {
+      const existingWrapper = payNowRow.querySelector('.paynow-info-wrapper');
+      if (existingWrapper) existingWrapper.remove();
+      return;
+    }
 
     const tooltipTitle = t('cart.payNowTooltip.title');
     const tooltipBefore15 = t('cart.payNowTooltip.line1');
@@ -21056,7 +21087,11 @@ function applyFreeFlowCartUi() {
         ? `${t('cart.freePeriod') || 'Gratis periode'}:`
         : `${t('cart.payNow') || 'Pay now'}:`;
       if (payNowInfoWrapper) {
-        payNowLabel.appendChild(payNowInfoWrapper);
+        if (isFreeFlow) {
+          payNowInfoWrapper.remove();
+        } else {
+          payNowLabel.appendChild(payNowInfoWrapper);
+        }
       }
     }
   }
