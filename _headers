@@ -53,5 +53,12 @@
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
 
+# SEO: prevent campaign landing routes from being indexed
+/freetrial
+  X-Robots-Tag: noindex, nofollow
+
+/membership-offer
+  X-Robots-Tag: noindex, nofollow
+
 /
   Cache-Control: public, max-age=0, must-revalidate
