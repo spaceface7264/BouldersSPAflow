@@ -3351,7 +3351,15 @@ function renderProductsFromAPI() {
 
     const campaignIntroPriceDisplay = category === 'campaign' ? resolveCampaignIntroPriceDisplay(product) : null;
     const isFirstMonthCampaignPricing = category === 'campaign' && campaignIntroPriceDisplay !== null;
-    const originalPriceDisplay = price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '';
+    const productOriginalPriceDKK = !isFirstMonthCampaignPricing
+      ? getPlanCardOriginalPrice(product, price)
+      : null;
+    const hasDiscountedPlanPrice = !isFirstMonthCampaignPricing
+      && Number.isFinite(productOriginalPriceDKK)
+      && productOriginalPriceDKK > price;
+    const originalPriceDisplay = isFirstMonthCampaignPricing
+      ? (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '')
+      : (hasDiscountedPlanPrice ? formatPriceHalfKrone(roundToHalfKrone(productOriginalPriceDKK)) : '');
     const effectiveDisplayPrice = isFirstMonthCampaignPricing ? campaignIntroPriceDisplay : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : 'FREE');
     const showPriceUnit = isFirstMonthCampaignPricing || price > 0;
     
@@ -3383,10 +3391,10 @@ function renderProductsFromAPI() {
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
-          <div class="plan-price ${isFirstMonthCampaignPricing ? 'plan-price--campaign' : ''}">
+          <div class="plan-price ${(isFirstMonthCampaignPricing || hasDiscountedPlanPrice) ? 'plan-price--campaign' : ''}">
             <span class="price-amount">${effectiveDisplayPrice}</span>
             ${showPriceUnit ? `<span class="price-unit">${priceUnit}</span>` : ''}
-            ${isFirstMonthCampaignPricing && originalPriceDisplay
+            ${originalPriceDisplay
               ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
               : ''}
           </div>
@@ -22799,6 +22807,78 @@ function getBoostProductDiscountPercent(product) {
   }
 
   return null;
+}
+
+function getPlanCardOriginalPrice(product, discountedPriceDKK) {
+  if (!product) return null;
+  const discounted = Number(discountedPriceDKK);
+  if (!Number.isFinite(discounted) || discounted <= 0) return null;
+
+  // Prefer explicit API original-price fields for plan cards.
+  // Campaign/membership payloads often carry discounted value in priceWithInterval
+  // while the standard monthly price remains in price.amount.
+  const centsCandidates = [
+    product.priceWithInterval?.price?.amountBeforeDiscount,
+    product.priceWithInterval?.price?.originalAmount,
+    product.priceWithInterval?.originalPrice?.amount,
+    product.originalAmount,
+    product.originalPrice?.amount,
+    product.price?.originalAmount,
+    product.price?.original?.amount,
+    product.price?.amount,
+  ];
+  for (const cents of centsCandidates) {
+    const value = Number(cents);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    const dkk = value / 100;
+    if (dkk > discounted) return dkk;
+  }
+
+  const dkkCandidates = [
+    product.originalPrice,
+    product.standardPrice,
+    product.listPrice,
+    product.priceBeforeDiscount,
+  ];
+  for (const dkk of dkkCandidates) {
+    const value = Number(dkk);
+    if (Number.isFinite(value) && value > discounted) {
+      return value;
+    }
+  }
+
+  const staticFallback = getPlanCardOriginalPriceFallbackDKK(product);
+  if (staticFallback > discounted) {
+    return staticFallback;
+  }
+
+  const percent = getBoostProductDiscountPercent(product);
+  if (Number.isFinite(percent) && percent > 0 && percent < 100) {
+    const derived = discounted / (1 - (percent / 100));
+    if (Number.isFinite(derived) && derived > discounted) return derived;
+  }
+
+  return null;
+}
+
+function getPlanCardOriginalPriceFallbackDKK(product) {
+  if (!product) return 0;
+  const text = [
+    product?.name,
+    product?.externalDescription,
+    product?.description,
+    product?.imageBanner?.text,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (/(student|studie)/i.test(text)) return 399;
+  if (/(junior|youth|ungdom)/i.test(text)) return 279;
+  if (/(adult|voksen)/i.test(text)) return 469;
+  if (/%/.test(text) || /(month|måneder|maaneder|måned|maaned)/i.test(text)) return 469;
+
+  return 0;
 }
 
 // Addon price in cents (for API payloads that require amount)
