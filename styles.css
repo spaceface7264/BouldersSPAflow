@@ -10521,6 +10521,7 @@ main {
 }
 .invite-share-btn--whatsapp .invite-share-icon { background-color: #25D366; }
 .invite-share-btn--messenger .invite-share-icon { background: linear-gradient(135deg, #00B2FF 0%, #006AFF 50%, #A033FF 100%); }
+.invite-share-btn--instagram .invite-share-icon { background: linear-gradient(135deg, #FCAF45 0%, #DD2A7B 50%, #833AB4 100%); }
 .invite-share-btn--sms .invite-share-icon { background-color: #34C759; }
 .invite-share-btn--email .invite-share-icon { background-color: #4b5563; }
 .invite-share-btn--native .invite-share-icon { background-color: #f472ff; }

@@ -5977,6 +5977,7 @@ const translations = {
     'invite.copied': 'Kopieret!',
     'invite.copiedToast': 'Linket er kopieret – del det med dine venner!',
     'invite.copyFailed': 'Kunne ikke kopiere linket. Kopiér det manuelt.',
+    'invite.instagramToast': 'Linket er kopieret – sæt det ind i din Instagram-DM eller story!',
     'invite.shareVia': 'eller del via',
     'invite.share.sms': 'Beskeder',
     'invite.share.email': 'E-mail',
@@ -6207,6 +6208,7 @@ const translations = {
     'invite.copied': 'Copied!',
     'invite.copiedToast': 'Link copied — share it with your friends!',
     'invite.copyFailed': 'Could not copy link. Please copy it manually.',
+    'invite.instagramToast': 'Link copied — paste it into your Instagram DM or story!',
     'invite.shareVia': 'or share via',
     'invite.share.sms': 'Messages',
     'invite.share.email': 'Email',
@@ -6465,6 +6467,7 @@ const translations = {
     'invite.copied': 'Kopiert!',
     'invite.copiedToast': 'Link kopiert – teile ihn mit deinen Freunden!',
     'invite.copyFailed': 'Link konnte nicht kopiert werden. Bitte kopiere ihn manuell.',
+    'invite.instagramToast': 'Link kopiert – füge ihn in deine Instagram-DM oder Story ein!',
     'invite.shareVia': 'oder teilen über',
     'invite.share.sms': 'Nachrichten',
     'invite.share.email': 'E-Mail',
@@ -12301,6 +12304,11 @@ function handleGlobalClick(event) {
       handleInviteShare('messenger');
       break;
     }
+    case 'invite-share-instagram': {
+      event.preventDefault();
+      handleInviteShare('instagram');
+      break;
+    }
     case 'invite-share-sms': {
       event.preventDefault();
       handleInviteShare('sms');
@@ -12488,6 +12496,28 @@ async function handleInviteShare(method) {
         // Desktop has no public Messenger share dialog without an app_id;
         // fall back to the Facebook share dialog so users can still post the link.
         window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, '_blank', 'noopener,noreferrer');
+      }
+      break;
+    case 'instagram':
+      trackInviteShare('instagram');
+      // Instagram has no public web-share API — we copy the message + URL to
+      // the clipboard so the user can paste it manually, then optimistically
+      // deep-link to their DM inbox. Toast tells them what to do next.
+      //
+      // Mobile: `instagram://direct-inbox` is an undocumented deep link that
+      //   works on current iOS/Android IG builds. If the app isn't installed
+      //   the deep link silently fails, but the link is still on clipboard.
+      // Desktop: web DM inbox works for logged-in users; otherwise IG shows
+      //   the login page and lands the user in DMs after authentication.
+      await copyTextToClipboard(shareText);
+      showToast(
+        t('invite.instagramToast') || 'Link copied — paste it into your Instagram DM or story!',
+        'success'
+      );
+      if (isMobileUserAgent()) {
+        triggerProtocolHandler('instagram://direct-inbox');
+      } else {
+        window.open('https://www.instagram.com/direct/inbox/', '_blank', 'noopener,noreferrer');
       }
       break;
     case 'sms':
