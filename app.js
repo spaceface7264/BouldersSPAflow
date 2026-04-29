@@ -5983,7 +5983,7 @@ const translations = {
     'invite.share.more': 'Mere',
     'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
-    'invite.footnote': 'Dine venner får 2 ugers gratis prøveperiode. Intet kort kræves for at starte.',
+    'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
@@ -6213,7 +6213,7 @@ const translations = {
     'invite.share.more': 'More',
     'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
     'invite.shareSubject': '2 weeks of free climbing at Boulders',
-    'invite.footnote': 'Your friends get 2 weeks free. No card required to start.',
+    'invite.footnote': 'Your friends get 2 weeks free entrance and rental shoes. No credit card required to start. Can only be claimed by people who have not claimed a trial pass previously.',
     'confirmation.pending.title': 'Payment Pending',
     'confirmation.pending.message': 'Your payment is being processed. We\'re waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #',
     'confirmation.pending.stillProcessing': 'Payment is still being processed. Please check back in a few minutes or contact support if you\'ve completed payment. Order #',
@@ -6471,7 +6471,7 @@ const translations = {
     'invite.share.more': 'Mehr',
     'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
     'invite.shareSubject': '2 Wochen gratis Klettern bei Boulders',
-    'invite.footnote': 'Deine Freunde bekommen 2 Wochen gratis. Keine Kreditkarte zum Starten erforderlich.',
+    'invite.footnote': 'Deine Freunde bekommen 2 Wochen freien Eintritt inklusive Leihschuhe. Keine Kreditkarte erforderlich. Das Angebot gilt nur für Personen, die noch nie ein Probepass eingelöst haben.',
     'confirmation.pending.title': 'Zahlung ausstehend',
     'confirmation.pending.message': 'Ihre Zahlung wird bearbeitet. Wir warten auf die Bestätigung des Zahlungsanbieters. Ihre Mitgliedschaft wird nach Bestätigung der Zahlung aktiviert. Bestellung #',
     'confirmation.pending.stillProcessing': 'Die Zahlung wird noch bearbeitet. Bitte schauen Sie in einigen Minuten erneut vorbei oder kontaktieren Sie den Support, wenn Sie die Zahlung abgeschlossen haben. Bestellung #',
@@ -12368,13 +12368,19 @@ function renderInviteFriends(productType) {
   const section = document.getElementById('inviteFriendsSection');
   if (!section) return;
 
+  // Drive a layout-level flag so CSS can reorder mobile siblings only when the
+  // invite card is actually visible (avoids changing layout for other flows).
+  const layout = document.querySelector('#step-5 .confirmation-layout');
+
   // Only show the invite-friends card for full memberships.
   // Hide for 15-day passes, punch cards, or any other product type.
   if (productType !== 'membership') {
     section.style.display = 'none';
+    if (layout) layout.removeAttribute('data-with-invite');
     return;
   }
   section.style.display = '';
+  if (layout) layout.setAttribute('data-with-invite', 'true');
 
   const card = section.querySelector('.invite-friends-card');
   if (!card) return;
@@ -12391,18 +12397,8 @@ function renderInviteFriends(productType) {
     card.removeAttribute('data-native-share');
   }
 
-  const linkDisplay = document.getElementById('inviteLinkDisplay');
-  if (linkDisplay) linkDisplay.textContent = INVITE_SHARE_URL;
-
   const copyBtn = document.getElementById('inviteCopyBtn');
-  if (copyBtn) {
-    copyBtn.classList.remove('is-copied');
-    const label = copyBtn.querySelector('.invite-copy-label');
-    if (label) {
-      label.setAttribute('data-i18n-key', 'invite.copyLink');
-      label.textContent = t('invite.copyLink');
-    }
-  }
+  if (copyBtn) copyBtn.classList.remove('is-copied');
 }
 
 async function handleInviteCopyLink(button) {
@@ -12417,18 +12413,7 @@ async function handleInviteCopyLink(button) {
 
   if (!button) return;
   button.classList.add('is-copied');
-  const label = button.querySelector('.invite-copy-label');
-  if (label) {
-    label.removeAttribute('data-i18n-key');
-    label.textContent = t('invite.copied') || 'Copied!';
-  }
-  setTimeout(() => {
-    button.classList.remove('is-copied');
-    if (label) {
-      label.setAttribute('data-i18n-key', 'invite.copyLink');
-      label.textContent = t('invite.copyLink') || 'Copy link';
-    }
-  }, 2400);
+  setTimeout(() => button.classList.remove('is-copied'), 2400);
 }
 
 async function copyTextToClipboard(text) {

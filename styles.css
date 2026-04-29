@@ -9266,6 +9266,19 @@ main {
         grid-template-columns: 1fr;
         gap: 24px;
     }
+
+    /* When the invite-friends card is shown (membership only), flatten the
+       two columns into a single mobile flow and reorder so the invite sits
+       right after "What's next?" — visible without deep scrolling, but not
+       aggressively ahead of the order summary. */
+    .confirmation-layout[data-with-invite="true"] .confirmation-left,
+    .confirmation-layout[data-with-invite="true"] .confirmation-right {
+        display: contents;
+    }
+    .confirmation-layout[data-with-invite="true"] .confirmation-left > .confirmation-card:first-child { order: 1; }
+    .confirmation-layout[data-with-invite="true"] .next-steps { order: 2; }
+    .confirmation-layout[data-with-invite="true"] .invite-friends-section { order: 3; }
+    .confirmation-layout[data-with-invite="true"] #confirmationMembershipSection { order: 4; }
     
     .step-panel[data-payment-failed="true"] .step-panel-content,
     #step-5.step-panel[data-payment-failed="true"] .step-panel-content,
@@ -10341,20 +10354,50 @@ main {
 
 .invite-friends-card {
     position: relative;
+    /* Layered backgrounds: top radial accent + base gradient (clipped to padding-box),
+       plus a magenta gradient on the border-box. The transparent border reveals the
+       border-box layer, producing a true gradient edge that respects border-radius. */
     background:
-        radial-gradient(circle at 50% -10%, rgba(244, 1, 245, 0.18) 0%, rgba(244, 1, 245, 0) 60%),
-        linear-gradient(180deg, #1d1320 0%, #1a1a1a 100%);
-    border: 1px solid #374151;
+        radial-gradient(circle at 50% -10%, rgba(244, 1, 245, 0.22) 0%, rgba(244, 1, 245, 0) 60%) padding-box,
+        linear-gradient(180deg, #1d1320 0%, #161018 100%) padding-box,
+        linear-gradient(135deg, #F401F5 0%, #ff6cff 35%, #c803c9 65%, #F401F5 100%) border-box;
+    border: 1.5px solid transparent;
     border-radius: 12px;
     padding: 28px 24px 24px;
     text-align: center;
     overflow: hidden;
-    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    box-shadow:
+        0 0 24px rgba(244, 1, 245, 0.28),
+        0 8px 28px rgba(0, 0, 0, 0.45);
+    animation: invite-glow-pulse 3.5s ease-in-out infinite;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .invite-friends-card:hover {
-    border-color: rgba(244, 1, 245, 0.45);
-    box-shadow: 0 6px 24px rgba(244, 1, 245, 0.12);
+    transform: translateY(-2px);
+    box-shadow:
+        0 0 36px rgba(244, 1, 245, 0.45),
+        0 14px 36px rgba(0, 0, 0, 0.5);
+    animation-play-state: paused;
+}
+
+@keyframes invite-glow-pulse {
+    0%, 100% {
+        box-shadow:
+            0 0 22px rgba(244, 1, 245, 0.22),
+            0 8px 28px rgba(0, 0, 0, 0.45);
+    }
+    50% {
+        box-shadow:
+            0 0 34px rgba(244, 1, 245, 0.42),
+            0 8px 28px rgba(0, 0, 0, 0.45);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .invite-friends-card {
+        animation: none;
+    }
 }
 
 .invite-friends-card::before {
@@ -10365,8 +10408,9 @@ main {
     transform: translateX(-50%);
     width: 65%;
     height: 1px;
-    background: linear-gradient(90deg, transparent 0%, #F401F5 50%, transparent 100%);
-    opacity: 0.85;
+    background: linear-gradient(90deg, transparent 0%, #ffffff 50%, transparent 100%);
+    opacity: 0.6;
+    pointer-events: none;
 }
 
 .invite-friends-icon {
@@ -10399,101 +10443,6 @@ main {
     margin: 0 auto 20px;
     max-width: 360px;
     line-height: 1.5;
-}
-
-.invite-link-row {
-    display: flex;
-    gap: 8px;
-    align-items: stretch;
-    margin: 0 0 20px;
-}
-
-.invite-link-display {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    padding: 10px 12px;
-    border-radius: 8px;
-    border: 1px solid #2a2630;
-    background-color: rgba(0, 0, 0, 0.35);
-    color: #e5e7eb;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 13px;
-    text-align: left;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    user-select: all;
-    cursor: text;
-}
-
-.invite-copy-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    background-color: #F401F5;
-    color: #ffffff;
-    border: none;
-    border-radius: 8px;
-    padding: 0 16px;
-    height: 40px;
-    font-weight: 600;
-    font-size: 14px;
-    font-family: inherit;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
-    box-shadow: 0 4px 14px rgba(244, 1, 245, 0.32);
-}
-
-.invite-copy-btn:hover {
-    background-color: #ff1bff;
-    box-shadow: 0 6px 20px rgba(244, 1, 245, 0.45);
-}
-
-.invite-copy-btn:active {
-    transform: scale(0.98);
-}
-
-.invite-copy-btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(244, 1, 245, 0.55);
-}
-
-.invite-copy-btn.is-copied {
-    background-color: #10b981;
-    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.32);
-}
-
-.invite-copy-btn.is-copied:hover {
-    background-color: #059669;
-}
-
-.invite-copy-icon {
-    flex-shrink: 0;
-}
-
-.invite-share-divider {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 0 0 18px;
-}
-
-.invite-share-divider-line {
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, #2a2630, transparent);
-}
-
-.invite-share-divider-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #6b7280;
-    font-weight: 600;
 }
 
 .invite-share-buttons {
@@ -10563,11 +10512,36 @@ main {
     letter-spacing: 0.01em;
 }
 
+.invite-share-btn--copy .invite-share-icon {
+    background-color: #F401F5;
+    box-shadow: 0 2px 8px rgba(244, 1, 245, 0.4);
+}
+.invite-share-btn--copy:hover .invite-share-icon {
+    box-shadow: 0 8px 22px rgba(244, 1, 245, 0.5);
+}
 .invite-share-btn--whatsapp .invite-share-icon { background-color: #25D366; }
 .invite-share-btn--messenger .invite-share-icon { background: linear-gradient(135deg, #00B2FF 0%, #006AFF 50%, #A033FF 100%); }
 .invite-share-btn--sms .invite-share-icon { background-color: #34C759; }
 .invite-share-btn--email .invite-share-icon { background-color: #4b5563; }
-.invite-share-btn--native .invite-share-icon { background-color: #F401F5; }
+.invite-share-btn--native .invite-share-icon { background-color: #f472ff; }
+
+/* Copy button: success-state swap (default icon/label hide; success ones show) */
+.invite-share-btn--copy .invite-share-icon-success,
+.invite-share-btn--copy .invite-share-label-success {
+    display: none;
+}
+.invite-share-btn--copy.is-copied .invite-share-icon {
+    background-color: #10b981;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+.invite-share-btn--copy.is-copied .invite-share-icon-default,
+.invite-share-btn--copy.is-copied .invite-share-label-default {
+    display: none;
+}
+.invite-share-btn--copy.is-copied .invite-share-icon-success,
+.invite-share-btn--copy.is-copied .invite-share-label-success {
+    display: inline;
+}
 
 .invite-friends-footnote {
     font-size: 12px;
