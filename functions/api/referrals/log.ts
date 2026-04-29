@@ -142,32 +142,92 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
     userAgent: clampString(request.headers.get('User-Agent'), 300),
   };
 
-  try {
-    const upstream = await fetch(env.REFERRAL_SHEET_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret: env.REFERRAL_SHEET_WEBHOOK_SECRET, data }),
-      // 5s upper bound — Apps Script is usually < 1s but can spike on cold start.
-      signal: AbortSignal.timeout(5000),
-    });
+  // Apps Script Web Apps return a 302 redirect from /exec to a
+  // googleusercontent.com URL where doPost's result lives. Cloudflare's
+  // fetch() follows redirects automatically, but the body of the original
+  // POST is not preserved across the 3xx — and on top of that, when the
+  // request originates from a non-browser client some redirect chains
+  // dead-end at a Google Drive "file not found" page.
+  //
+  // To work around both issues we follow redirects manually, treating any
+  // 3xx as "doPost ran, now GET the result page". This mirrors what curl's
+  // `-L` does for the doGet smoke test — and matches how every webhook
+  // integration to Apps Script in the wild handles this.
+  const payload = JSON.stringify({ secret: env.REFERRAL_SHEET_WEBHOOK_SECRET, data });
+  const startedAt = Date.now();
+  const traceId = crypto.randomUUID();
 
-    const text = await upstream.text();
+  try {
+    let currentUrl = env.REFERRAL_SHEET_WEBHOOK_URL;
+    let response: Response | null = null;
+    let hops = 0;
+
+    for (hops = 0; hops < 5; hops++) {
+      const init: RequestInit = {
+        method: hops === 0 ? 'POST' : 'GET',
+        headers: hops === 0
+          ? { 'Content-Type': 'application/json' }
+          : { 'Accept': 'application/json' },
+        redirect: 'manual',
+        signal: AbortSignal.timeout(5000),
+      };
+      if (hops === 0) (init as any).body = payload;
+
+      const hopResponse = await fetch(currentUrl, init);
+
+      if (hopResponse.status >= 300 && hopResponse.status < 400) {
+        const location = hopResponse.headers.get('Location');
+        if (!location) {
+          console.error(`[ReferralLog ${traceId}] Redirect with no Location at hop ${hops}, status ${hopResponse.status}`);
+          return jsonResponse({ ok: false, reason: 'redirect-no-location', traceId }, 502, origin);
+        }
+        currentUrl = new URL(location, currentUrl).toString();
+        continue;
+      }
+
+      response = hopResponse;
+      break;
+    }
+
+    if (!response) {
+      console.error(`[ReferralLog ${traceId}] Too many redirects (${hops})`);
+      return jsonResponse({ ok: false, reason: 'too-many-redirects', traceId }, 502, origin);
+    }
+
+    const text = await response.text();
     let parsed: any = null;
     try {
       parsed = JSON.parse(text);
     } catch {
-      /* Apps Script may return non-JSON on certain errors */
+      /* Apps Script may return HTML on internal errors */
     }
 
-    if (!upstream.ok || (parsed && parsed.ok === false)) {
-      console.error('[ReferralLog] Upstream error:', upstream.status, text.slice(0, 500));
-      return jsonResponse({ ok: false, reason: 'upstream-error' }, 502, origin);
+    if (!response.ok) {
+      console.error(
+        `[ReferralLog ${traceId}] Upstream HTTP ${response.status} after ${hops} hop(s) in ${Date.now() - startedAt}ms. Body[0..500]: ${text.slice(0, 500)}`,
+      );
+      return jsonResponse({ ok: false, reason: 'upstream-http-error', upstreamStatus: response.status, traceId }, 502, origin);
     }
 
-    return jsonResponse({ ok: true, deduped: !!parsed?.deduped }, 200, origin);
+    if (parsed && parsed.ok === false) {
+      console.error(`[ReferralLog ${traceId}] Apps Script rejected: ${parsed.error || 'unknown'}`);
+      return jsonResponse({ ok: false, reason: 'upstream-rejected', upstreamError: parsed.error, traceId }, 502, origin);
+    }
+
+    if (!parsed) {
+      // Reached a 200 page that wasn't our JSON — this is Apps Script
+      // returning an HTML page, usually because the deployment isn't
+      // routing POSTs correctly or the script has a syntax error.
+      console.error(
+        `[ReferralLog ${traceId}] Upstream 200 but non-JSON body. Hops: ${hops}. Body[0..500]: ${text.slice(0, 500)}`,
+      );
+      return jsonResponse({ ok: false, reason: 'upstream-non-json', traceId }, 502, origin);
+    }
+
+    console.log(`[ReferralLog ${traceId}] Logged in ${Date.now() - startedAt}ms (${hops} hop(s))${parsed.deduped ? ' [deduped]' : ''}`);
+    return jsonResponse({ ok: true, deduped: !!parsed.deduped, traceId }, 200, origin);
   } catch (err: any) {
-    // Don't leak internals to the client — keep this opaque.
-    console.error('[ReferralLog] Forward failed:', err?.message);
-    return jsonResponse({ ok: false, reason: 'forward-failed' }, 502, origin);
+    console.error(`[ReferralLog ${traceId}] Forward failed:`, err?.name, err?.message);
+    return jsonResponse({ ok: false, reason: 'forward-failed', error: err?.message, traceId }, 502, origin);
   }
 }
