@@ -1695,6 +1695,23 @@ class OrderAPI {
               subscription_product_id: subscriptionProductId,
             });
           } catch (_) { /* GTM optional */ }
+          // Independent ledger mirror so manual reward processing doesn't
+          // depend on BRP exposing `recruitedBy` in the admin UI.
+          const subscriptionItem = data?.subscriptionItems?.[0] || null;
+          const customer = state.authenticatedCustomer || {};
+          const memberName = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim();
+          logReferralAttributionToSheet({
+            recruiterId: payload.recruitedBy,
+            newCustomerId: state.customerId || customer.id || null,
+            newCustomerEmail: state.authenticatedEmail || customer.email || null,
+            newCustomerName: memberName || null,
+            subscriptionId: data?.id ?? null,
+            subscriptionItemId: subscriptionItem?.id ?? null,
+            orderId: data?.id ?? state.orderId ?? null,
+            subscriptionProductId,
+            subscriptionProductName: subscriptionItem?.subscriptionProduct?.name || null,
+            sourceUrl: typeof window !== 'undefined' ? window.location.href : null,
+          });
           devLog('[Referral] ✅ Attributed signup to recruiter:', payload.recruitedBy);
         }
       } catch (error) {
@@ -12466,6 +12483,49 @@ function getRecruitedByForPayload() {
     return null;
   }
   return entry.ref;
+}
+
+// Mirror a successful attribution to our own Google Sheet ledger. This is
+// purely a fallback in case BRP doesn't surface `recruitedBy` in the admin
+// UI — it gives the team a manual reward queue independent of BRP's UX.
+//
+// Strict requirements:
+//   1. Fire-and-forget — must NEVER block, throw, or delay signup.
+//   2. Best-effort — silent failure is acceptable; BRP is the source of truth.
+//   3. `keepalive: true` so the request survives navigation off the page.
+function logReferralAttributionToSheet(data) {
+  if (!REFERRAL_TRACKING_ENABLED) return;
+  try {
+    const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    // Without a token the Pages Function will 401 us anyway, so skip
+    // entirely rather than emit a noisy network error.
+    if (!accessToken) {
+      devLog('[Referral] Skipping sheet log — no access token available');
+      return;
+    }
+    const url = '/api/referrals/log';
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(data),
+      keepalive: true,
+    })
+      .then((resp) => {
+        if (!resp.ok) {
+          devWarn('[Referral] Sheet log responded', resp.status);
+        } else {
+          devLog('[Referral] 📒 Mirrored attribution to sheet ledger');
+        }
+      })
+      .catch((err) => {
+        devWarn('[Referral] Sheet log failed (non-blocking):', err?.message || err);
+      });
+  } catch (err) {
+    devWarn('[Referral] Sheet log threw (suppressed):', err);
+  }
 }
 
 // ===========================
