@@ -5971,6 +5971,20 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.freetrial.changeActivationCta': 'Har du brug for at ændre aktiveringsdato? Klik her.',
+    'invite.title': 'Giv dine venner 2 ugers gratis prøveperiode',
+    'invite.subtitle': 'Del dit link – når dine venner melder sig ind, får de en 2-ugers gratis prøveperiode.',
+    'invite.copyLink': 'Kopiér link',
+    'invite.copied': 'Kopieret!',
+    'invite.copiedToast': 'Linket er kopieret – del det med dine venner!',
+    'invite.copyFailed': 'Kunne ikke kopiere linket. Kopiér det manuelt.',
+    'invite.instagramToast': 'Linket er kopieret – sæt det ind i din Instagram-DM eller story!',
+    'invite.shareVia': 'eller del via',
+    'invite.share.sms': 'Beskeder',
+    'invite.share.email': 'E-mail',
+    'invite.share.more': 'Mere',
+    'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
+    'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
+    'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
@@ -6188,6 +6202,20 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'When your trial starts, visit the gym to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
     'confirmation.freetrial.changeActivationCta': 'Need to change activation day? Click here.',
+    'invite.title': 'Give your friends 2 weeks free',
+    'invite.subtitle': 'Share your link — when your friends sign up, they get a free 2-week trial.',
+    'invite.copyLink': 'Copy link',
+    'invite.copied': 'Copied!',
+    'invite.copiedToast': 'Link copied — share it with your friends!',
+    'invite.copyFailed': 'Could not copy link. Please copy it manually.',
+    'invite.instagramToast': 'Link copied — paste it into your Instagram DM or story!',
+    'invite.shareVia': 'or share via',
+    'invite.share.sms': 'Messages',
+    'invite.share.email': 'Email',
+    'invite.share.more': 'More',
+    'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
+    'invite.shareSubject': '2 weeks of free climbing at Boulders',
+    'invite.footnote': 'Your friends get 2 weeks free entrance and rental shoes. No credit card required to start. Can only be claimed by people who have not claimed a trial pass previously.',
     'confirmation.pending.title': 'Payment Pending',
     'confirmation.pending.message': 'Your payment is being processed. We\'re waiting for confirmation from the payment provider. Your membership will be activated once payment is confirmed. Order #',
     'confirmation.pending.stillProcessing': 'Payment is still being processed. Please check back in a few minutes or contact support if you\'ve completed payment. Order #',
@@ -6433,6 +6461,20 @@ const translations = {
     'confirmation.nextStep3.freetrial.today': 'Besuchen Sie die Halle heute, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.nextStep3.freetrial.future': 'Sobald Ihre Probezeit startet, besuchen Sie die Halle, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.freetrial.changeActivationCta': 'Müssen Sie den Aktivierungstag ändern? Klicken Sie hier',
+    'invite.title': 'Schenk deinen Freunden 2 Wochen gratis',
+    'invite.subtitle': 'Teile deinen Link – wenn sich deine Freunde anmelden, bekommen sie 2 Wochen gratis Probezeit.',
+    'invite.copyLink': 'Link kopieren',
+    'invite.copied': 'Kopiert!',
+    'invite.copiedToast': 'Link kopiert – teile ihn mit deinen Freunden!',
+    'invite.copyFailed': 'Link konnte nicht kopiert werden. Bitte kopiere ihn manuell.',
+    'invite.instagramToast': 'Link kopiert – füge ihn in deine Instagram-DM oder Story ein!',
+    'invite.shareVia': 'oder teilen über',
+    'invite.share.sms': 'Nachrichten',
+    'invite.share.email': 'E-Mail',
+    'invite.share.more': 'Mehr',
+    'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
+    'invite.shareSubject': '2 Wochen gratis Klettern bei Boulders',
+    'invite.footnote': 'Deine Freunde bekommen 2 Wochen freien Eintritt inklusive Leihschuhe. Keine Kreditkarte erforderlich. Das Angebot gilt nur für Personen, die noch nie ein Probepass eingelöst haben.',
     'confirmation.pending.title': 'Zahlung ausstehend',
     'confirmation.pending.message': 'Ihre Zahlung wird bearbeitet. Wir warten auf die Bestätigung des Zahlungsanbieters. Ihre Mitgliedschaft wird nach Bestätigung der Zahlung aktiviert. Bestellung #',
     'confirmation.pending.stillProcessing': 'Die Zahlung wird noch bearbeitet. Bitte schauen Sie in einigen Minuten erneut vorbei oder kontaktieren Sie den Support, wenn Sie die Zahlung abgeschlossen haben. Bestellung #',
@@ -12247,6 +12289,257 @@ function handleGlobalClick(event) {
       scrollToFAQ();
       break;
     }
+    case 'invite-copy-link': {
+      event.preventDefault();
+      handleInviteCopyLink(actionable);
+      break;
+    }
+    case 'invite-share-whatsapp': {
+      event.preventDefault();
+      handleInviteShare('whatsapp');
+      break;
+    }
+    case 'invite-share-messenger': {
+      event.preventDefault();
+      handleInviteShare('messenger');
+      break;
+    }
+    case 'invite-share-instagram': {
+      event.preventDefault();
+      handleInviteShare('instagram');
+      break;
+    }
+    case 'invite-share-sms': {
+      event.preventDefault();
+      handleInviteShare('sms');
+      break;
+    }
+    case 'invite-share-email': {
+      event.preventDefault();
+      handleInviteShare('email');
+      break;
+    }
+    case 'invite-share-native': {
+      event.preventDefault();
+      handleInviteShare('native');
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+// ===========================
+// Invite Friends helpers
+// ===========================
+const INVITE_SHARE_URL = 'https://join.boulders.dk/freetrial';
+
+function getInviteFirstName() {
+  const fullName = String(state?.order?.memberName || '').trim();
+  if (!fullName || fullName === '—') return '';
+  const first = fullName.split(/\s+/)[0];
+  return first && first !== '—' ? first : '';
+}
+
+function getInviteShareMessage() {
+  const firstName = getInviteFirstName();
+  const template = t('invite.shareMessage') || 'Hey! I just joined Boulders. Climb with me and get a free 2-week trial on me:';
+  const withName = firstName
+    ? template.replace('{name}', firstName)
+    : template.replace(/\s*\{name\}/g, '').replace(/\s*—\s*\{name\}\s*/g, ' ');
+  return withName.replace(/\s{2,}/g, ' ').trim();
+}
+
+function getInviteShareText() {
+  return `${getInviteShareMessage()} ${INVITE_SHARE_URL}`;
+}
+
+function trackInviteShare(method) {
+  try {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: 'invite_share',
+      method,
+      share_url: INVITE_SHARE_URL,
+    });
+  } catch (err) {
+    console.warn('[Invite] Failed to push GTM event:', err);
+  }
+}
+
+function isMobileUserAgent() {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+}
+
+function renderInviteFriends(productType) {
+  const section = document.getElementById('inviteFriendsSection');
+  if (!section) return;
+
+  // Drive a layout-level flag so CSS can reorder mobile siblings only when the
+  // invite card is actually visible (avoids changing layout for other flows).
+  const layout = document.querySelector('#step-5 .confirmation-layout');
+
+  // Only show the invite-friends card for full memberships.
+  // Hide for 15-day passes, punch cards, or any other product type.
+  if (productType !== 'membership') {
+    section.style.display = 'none';
+    if (layout) layout.removeAttribute('data-with-invite');
+    return;
+  }
+  section.style.display = '';
+  if (layout) layout.setAttribute('data-with-invite', 'true');
+
+  const card = section.querySelector('.invite-friends-card');
+  if (!card) return;
+
+  if (isMobileUserAgent()) {
+    card.setAttribute('data-mobile', 'true');
+  } else {
+    card.removeAttribute('data-mobile');
+  }
+
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    card.setAttribute('data-native-share', 'true');
+  } else {
+    card.removeAttribute('data-native-share');
+  }
+
+  const copyBtn = document.getElementById('inviteCopyBtn');
+  if (copyBtn) copyBtn.classList.remove('is-copied');
+}
+
+async function handleInviteCopyLink(button) {
+  const success = await copyTextToClipboard(INVITE_SHARE_URL);
+  if (!success) {
+    showToast(t('invite.copyFailed') || 'Could not copy link. Please copy it manually.', 'error');
+    return;
+  }
+
+  trackInviteShare('copy_link');
+  showToast(t('invite.copiedToast') || 'Link copied — share it with your friends!', 'success');
+
+  if (!button) return;
+  button.classList.add('is-copied');
+  setTimeout(() => button.classList.remove('is-copied'), 2400);
+}
+
+function triggerProtocolHandler(url) {
+  // Trigger custom-scheme URLs (mailto:, sms:, fb-messenger:// etc.) via a
+  // programmatic anchor click instead of `window.location.href = url`.
+  //
+  // Browsers treat anchor-click events as direct user-initiated navigation and
+  // are far less likely to silently suppress the OS protocol-handler hand-off.
+  // Setting window.location.href to a protocol URL can be filtered by popup
+  // blockers, especially on Chrome/Edge on Windows, leading to "nothing
+  // happens when I click Email" reports. Anchor clicks bypass that heuristic.
+  //
+  // We deliberately do NOT use target="_blank" here — for protocol URLs some
+  // browsers open and immediately close a blank tab, making it look like the
+  // click was ignored.
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (err) {
+    console.warn('[Invite] Protocol handler failed, falling back to location.href:', err);
+    try { window.location.href = url; } catch (_) { /* give up silently */ }
+  }
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) { /* fall through to fallback */ }
+
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'absolute';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return !!ok;
+  } catch (err) {
+    console.warn('[Invite] Clipboard copy failed:', err);
+    return false;
+  }
+}
+
+async function handleInviteShare(method) {
+  const message = getInviteShareMessage();
+  const shareText = getInviteShareText();
+  const encodedText = encodeURIComponent(shareText);
+  const encodedUrl = encodeURIComponent(INVITE_SHARE_URL);
+  const encodedSubject = encodeURIComponent(t('invite.shareSubject') || '2 weeks of free climbing at Boulders');
+
+  switch (method) {
+    case 'whatsapp':
+      trackInviteShare('whatsapp');
+      window.open(`https://wa.me/?text=${encodedText}`, '_blank', 'noopener,noreferrer');
+      break;
+    case 'messenger':
+      trackInviteShare('messenger');
+      if (isMobileUserAgent()) {
+        triggerProtocolHandler(`fb-messenger://share/?link=${encodedUrl}`);
+      } else {
+        // Desktop has no public Messenger share dialog without an app_id;
+        // fall back to the Facebook share dialog so users can still post the link.
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, '_blank', 'noopener,noreferrer');
+      }
+      break;
+    case 'instagram':
+      trackInviteShare('instagram');
+      // Instagram has no public web-share API — we copy the message + URL to
+      // the clipboard so the user can paste it manually, then optimistically
+      // deep-link to their DM inbox. Toast tells them what to do next.
+      //
+      // Mobile: `instagram://direct-inbox` is an undocumented deep link that
+      //   works on current iOS/Android IG builds. If the app isn't installed
+      //   the deep link silently fails, but the link is still on clipboard.
+      // Desktop: web DM inbox works for logged-in users; otherwise IG shows
+      //   the login page and lands the user in DMs after authentication.
+      await copyTextToClipboard(shareText);
+      showToast(
+        t('invite.instagramToast') || 'Link copied — paste it into your Instagram DM or story!',
+        'success'
+      );
+      if (isMobileUserAgent()) {
+        triggerProtocolHandler('instagram://direct-inbox');
+      } else {
+        window.open('https://www.instagram.com/direct/inbox/', '_blank', 'noopener,noreferrer');
+      }
+      break;
+    case 'sms':
+      trackInviteShare('sms');
+      triggerProtocolHandler(`sms:?&body=${encodedText}`);
+      break;
+    case 'email':
+      trackInviteShare('email');
+      triggerProtocolHandler(`mailto:?subject=${encodedSubject}&body=${encodedText}`);
+      break;
+    case 'native':
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+          await navigator.share({
+            title: t('invite.shareSubject') || '2 weeks of free climbing at Boulders',
+            text: message,
+            url: INVITE_SHARE_URL,
+          });
+          trackInviteShare('native_share');
+        }
+      } catch (_) { /* user cancelled or unsupported */ }
+      break;
     default:
       break;
   }
@@ -20119,6 +20412,9 @@ function renderConfirmationView() {
     nextStep1.setAttribute('data-i18n-key', 'confirmation.nextStep1');
     nextStep1.textContent = t('confirmation.nextStep1');
   }
+
+  // Render the invite-friends section (membership only; UA-aware buttons + copy state reset)
+  renderInviteFriends(productType);
   
   if (nextStep2 && nextStep3) {
     const step2Key = productType === 'membership' ? 'confirmation.nextStep2.membership'
