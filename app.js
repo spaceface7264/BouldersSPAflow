@@ -12416,6 +12416,33 @@ async function handleInviteCopyLink(button) {
   setTimeout(() => button.classList.remove('is-copied'), 2400);
 }
 
+function triggerProtocolHandler(url) {
+  // Trigger custom-scheme URLs (mailto:, sms:, fb-messenger:// etc.) via a
+  // programmatic anchor click instead of `window.location.href = url`.
+  //
+  // Browsers treat anchor-click events as direct user-initiated navigation and
+  // are far less likely to silently suppress the OS protocol-handler hand-off.
+  // Setting window.location.href to a protocol URL can be filtered by popup
+  // blockers, especially on Chrome/Edge on Windows, leading to "nothing
+  // happens when I click Email" reports. Anchor clicks bypass that heuristic.
+  //
+  // We deliberately do NOT use target="_blank" here — for protocol URLs some
+  // browsers open and immediately close a blank tab, making it look like the
+  // click was ignored.
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (err) {
+    console.warn('[Invite] Protocol handler failed, falling back to location.href:', err);
+    try { window.location.href = url; } catch (_) { /* give up silently */ }
+  }
+}
+
 async function copyTextToClipboard(text) {
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -12456,7 +12483,7 @@ async function handleInviteShare(method) {
     case 'messenger':
       trackInviteShare('messenger');
       if (isMobileUserAgent()) {
-        window.location.href = `fb-messenger://share/?link=${encodedUrl}`;
+        triggerProtocolHandler(`fb-messenger://share/?link=${encodedUrl}`);
       } else {
         // Desktop has no public Messenger share dialog without an app_id;
         // fall back to the Facebook share dialog so users can still post the link.
@@ -12465,11 +12492,11 @@ async function handleInviteShare(method) {
       break;
     case 'sms':
       trackInviteShare('sms');
-      window.location.href = `sms:?&body=${encodedText}`;
+      triggerProtocolHandler(`sms:?&body=${encodedText}`);
       break;
     case 'email':
       trackInviteShare('email');
-      window.location.href = `mailto:?subject=${encodedSubject}&body=${encodedText}`;
+      triggerProtocolHandler(`mailto:?subject=${encodedSubject}&body=${encodedText}`);
       break;
     case 'native':
       try {
