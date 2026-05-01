@@ -2638,6 +2638,23 @@ body {
     text-align: center;
 }
 
+.category-subtitle a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: #cbd5e1bf;
+    text-underline-offset: 2px;
+}
+
+.category-subtitle a:hover,
+.category-subtitle a:focus-visible {
+    text-decoration-color: currentColor;
+}
+
+/* Campaign category: subtitle already conveys all the info, so the description is hidden. */
+.category-item[data-category="campaign"] .category-description {
+    display: none;
+}
+
 .category-icon {
     width: 20px;
     height: 20px;

@@ -1623,6 +1623,14 @@ class OrderAPI {
       // - Rest of current month only (prorated)
       // Frontend calculation now matches backend logic to ensure price consistency.
       
+      // Referral attribution (Phase 1): if a friend landed via ?ref=<id> and
+      // signs up here, BRP records the recruiter on the subscription itself
+      // (see SubscriptionOut.recruitedBy in docs/brp-api3-openapi.yaml L14948).
+      // getRecruitedByForPayload() applies a self-referral guard, so we
+      // never send the subscriber's own ID — BRP would 400 with
+      // RECRUITED_BY_CANNOT_BE_SAME_AS_THE_SUBSCRIPTION_USER otherwise.
+      const recruitedBy = getRecruitedByForPayload();
+
       // Build payload according to OpenAPI spec:
       // Required: subscriptionProduct, birthDate
       // Optional: startDate, subscriber, externalMessage, additionTo, recruitedBy, paymentOption
@@ -1632,6 +1640,7 @@ class OrderAPI {
         ...(includeStartDate ? { startDate } : {}),
         ...(subscriberId ? { subscriber: subscriberId } : {}),
         ...(birthDate ? { birthDate } : {}),
+        ...(recruitedBy ? { recruitedBy } : {}),
         // businessUnit is not in OpenAPI spec - backend may infer from order
         // ...(state.selectedBusinessUnit ? { businessUnit: state.selectedBusinessUnit } : {}),
       };
@@ -1672,6 +1681,39 @@ class OrderAPI {
       let data;
       try {
         data = await requestJson({ url, method: 'POST', headers, body: payload });
+        // Phase 1: this is the moment the attribution actually lands at BRP,
+        // so it's the only correct place to clear the local referral entry.
+        // Doing it in the success-page render was too eager — it wiped the
+        // ref before signup, including in `?testSuccess=true` test mode.
+        if (payload.recruitedBy) {
+          clearReferral('signup-attributed');
+          try {
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push({
+              event: 'referral_attributed',
+              referrer_id: payload.recruitedBy,
+              subscription_product_id: subscriptionProductId,
+            });
+          } catch (_) { /* GTM optional */ }
+          // Independent ledger mirror so manual reward processing doesn't
+          // depend on BRP exposing `recruitedBy` in the admin UI.
+          const subscriptionItem = data?.subscriptionItems?.[0] || null;
+          const customer = state.authenticatedCustomer || {};
+          const memberName = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim();
+          logReferralAttributionToSheet({
+            recruiterId: payload.recruitedBy,
+            newCustomerId: state.customerId || customer.id || null,
+            newCustomerEmail: state.authenticatedEmail || customer.email || null,
+            newCustomerName: memberName || null,
+            subscriptionId: data?.id ?? null,
+            subscriptionItemId: subscriptionItem?.id ?? null,
+            orderId: data?.id ?? state.orderId ?? null,
+            subscriptionProductId,
+            subscriptionProductName: subscriptionItem?.subscriptionProduct?.name || null,
+            sourceUrl: typeof window !== 'undefined' ? window.location.href : null,
+          });
+          devLog('[Referral] ✅ Attributed signup to recruiter:', payload.recruitedBy);
+        }
       } catch (error) {
         const errorPayload = error?.payload;
         let errorData = errorPayload;
@@ -1683,6 +1725,28 @@ class OrderAPI {
           }
         }
         const errorCode = errorData?.errorCode || errorData?.code;
+
+        // Defense-in-depth: if BRP rejects the recruiter ID (e.g. self-referral
+        // slipped past our client-side guard, or the ref points to a deleted
+        // customer), drop the referral and retry once without recruitedBy so
+        // the signup itself isn't blocked by a tracking concern.
+        if (errorCode === 'RECRUITED_BY_CANNOT_BE_SAME_AS_THE_SUBSCRIPTION_USER' && payload.recruitedBy) {
+          console.warn('[Step 7] ⚠️ BRP rejected recruitedBy:', payload.recruitedBy, '— retrying without referral attribution');
+          clearReferral('brp-rejected-recruitedBy');
+          try {
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push({
+              event: 'referral_rejected',
+              error_code: errorCode,
+              ref: payload.recruitedBy,
+            });
+          } catch (_) { /* GTM optional */ }
+          delete payload.recruitedBy;
+          data = await requestJson({ url, method: 'POST', headers, body: payload });
+          console.log('[Step 7] ✅ Subscription created on retry without recruitedBy');
+          return data;
+        }
+
         if (errorCode === 'PRODUCT_NOT_ALLOWED') {
           const blockedProductId = errorData?.id || subscriptionProductId;
           console.warn(`[Step 7] ⚠️ Product ${blockedProductId} is not allowed for this customer (campaign eligibility restriction)`);
@@ -5747,6 +5811,11 @@ function init() {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
   }
 
+  // Capture ?ref=<recruiter customer ID> early so it's stored before any
+  // signup steps run. Persists in localStorage with a 30-day TTL; later
+  // reads via getActiveReferral() / getRecruitedByForPayload().
+  captureReferralFromUrl();
+
   // Initialize email tracking from localStorage
   try {
     const storedEmails = JSON.parse(localStorage.getItem('boulders_created_emails') || '[]');
@@ -5846,7 +5915,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Første måned 0 kr', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Begrænset tilbud på medlemskab!', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15-Dages Prøveperiode', 'category.15daypass.subtitle': 'Prøv Boulders med 15 dages ubegrænset klatring inkl. sko. Start når det passer dig.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Medlemskabskampagne', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Start nu og spar stort! Kun 3 måneders binding. Ingen skjulte gebyrer. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og betingelser</a> gælder.', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15-Dages Prøveperiode', 'category.15daypass.subtitle': 'Prøv Boulders med 15 dages ubegrænset klatring inkl. sko. Start når det passer dig.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
     'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
@@ -6077,7 +6146,7 @@ const translations = {
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'First Month 0 DKK', 'category.campaign.desc': 'Limited membership campaign, expires April 8, 2026. Get the offer before it expires. Can only be used by people who have not been members at Boulders within the last 6 months.', 'category.campaign.subtitle': 'Limited time membership offer!', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15-Day Trial Pass', 'category.15daypass.subtitle': 'Try Boulders with 15 days of unlimited climbing incl. shoes. Start whenever it suits you.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
+    'category.campaign': 'Membership Campaign', 'category.campaign.desc': 'Limited membership campaign, expires April 8, 2026. Get the offer before it expires. Can only be used by people who have not been members at Boulders within the last 6 months.', 'category.campaign.subtitle': 'Start now and save big! Only 3 months commitment. No hidden fees. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and conditions</a> apply.', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15-Day Trial Pass', 'category.15daypass.subtitle': 'Try Boulders with 15 days of unlimited climbing incl. shoes. Start whenever it suits you.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
@@ -11598,6 +11667,11 @@ function setupNewAccessStep() {
     
     freshHeader.style.cursor = 'pointer'; // Ensure it's clickable
     freshHeader.addEventListener('click', (e) => {
+      // Allow interactive elements inside the header (e.g. links / data-action triggers)
+      // to handle their own clicks without toggling the category.
+      if (e.target.closest('a, [data-action], button')) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       console.log('Category header clicked:', category.dataset.category, e);
@@ -12330,9 +12404,175 @@ function handleGlobalClick(event) {
 }
 
 // ===========================
+// Referral tracking (Phase 1)
+// ===========================
+// Phase 1 goal: every signup originating from a shared link silently carries
+// `recruitedBy=<recruiter customer ID>` to BRP, so attribution data flows from
+// day one — even before any reward is wired up. See docs/brp-api3-openapi.yaml
+// L7073 for the API field, and the `referralv1` branch context for design.
+const REFERRAL_TRACKING_ENABLED = true;
+const REFERRAL_STORAGE_KEY = 'boulders_referral_v1';
+const REFERRAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFERRAL_QUERY_PARAM = 'ref';
+
+function isValidReferrerId(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0;
+}
+
+function captureReferralFromUrl() {
+  if (!REFERRAL_TRACKING_ENABLED) return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get(REFERRAL_QUERY_PARAM);
+    if (!raw) return;
+    if (!isValidReferrerId(raw)) {
+      devWarn('[Referral] Ignoring invalid ref param:', raw);
+      return;
+    }
+    const ref = Number(raw);
+    const entry = {
+      ref,
+      capturedAt: Date.now(),
+      source: normalizePathname(window.location.pathname),
+    };
+    localStorage.setItem(REFERRAL_STORAGE_KEY, JSON.stringify(entry));
+    devLog('[Referral] Captured ref:', ref, 'on', entry.source);
+    try {
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({
+        event: 'referral_link_visited',
+        ref,
+        landing_path: entry.source,
+      });
+    } catch (_) { /* GTM optional */ }
+  } catch (err) {
+    devWarn('[Referral] captureReferralFromUrl failed:', err);
+  }
+}
+
+function getActiveReferral() {
+  if (!REFERRAL_TRACKING_ENABLED) return null;
+  try {
+    const raw = localStorage.getItem(REFERRAL_STORAGE_KEY);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (!entry || !isValidReferrerId(entry.ref) || !entry.capturedAt) return null;
+    if (Date.now() - entry.capturedAt > REFERRAL_TTL_MS) {
+      localStorage.removeItem(REFERRAL_STORAGE_KEY);
+      return null;
+    }
+    return entry;
+  } catch (err) {
+    devWarn('[Referral] getActiveReferral failed:', err);
+    return null;
+  }
+}
+
+function clearReferral(reason) {
+  try {
+    localStorage.removeItem(REFERRAL_STORAGE_KEY);
+    if (reason) devLog('[Referral] Cleared:', reason);
+  } catch (_) { /* ignore */ }
+}
+
+// Returns the recruiter customer ID to send as `recruitedBy` on a subscription
+// POST, or null if there is none / the referrer is the subscriber themselves.
+function getRecruitedByForPayload() {
+  const entry = getActiveReferral();
+  if (!entry) return null;
+  const subscriberId = state.customerId ? Number(state.customerId) : null;
+  if (subscriberId && subscriberId === entry.ref) {
+    devWarn('[Referral] Self-referral detected, dropping ref:', entry.ref);
+    clearReferral('self-referral');
+    return null;
+  }
+  return entry.ref;
+}
+
+// Mirror a successful attribution to our own Google Sheet ledger. This is
+// purely a fallback in case BRP doesn't surface `recruitedBy` in the admin
+// UI — it gives the team a manual reward queue independent of BRP's UX.
+//
+// Strict requirements:
+//   1. Fire-and-forget — must NEVER block, throw, or delay signup.
+//   2. Best-effort — silent failure is acceptable; BRP is the source of truth.
+//   3. `keepalive: true` so the request survives navigation off the page.
+function logReferralAttributionToSheet(data) {
+  if (!REFERRAL_TRACKING_ENABLED) return;
+  try {
+    const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    // Without a token the Pages Function will 401 us anyway, so skip
+    // entirely rather than emit a noisy network error.
+    if (!accessToken) {
+      devLog('[Referral] Skipping sheet log — no access token available');
+      return;
+    }
+    const url = '/api/referrals/log';
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(data),
+      keepalive: true,
+    })
+      .then((resp) => {
+        if (!resp.ok) {
+          devWarn('[Referral] Sheet log responded', resp.status);
+        } else {
+          devLog('[Referral] 📒 Mirrored attribution to sheet ledger');
+        }
+      })
+      .catch((err) => {
+        devWarn('[Referral] Sheet log failed (non-blocking):', err?.message || err);
+      });
+  } catch (err) {
+    devWarn('[Referral] Sheet log threw (suppressed):', err);
+  }
+}
+
+// ===========================
 // Invite Friends helpers
 // ===========================
-const INVITE_SHARE_URL = 'https://join.boulders.dk/freetrial';
+const INVITE_SHARE_URL_BASE = 'https://join.boulders.dk/freetrial';
+
+// Resolve the current user's customer ID for use as the recruiter ID in the
+// shared link. Reads from multiple sources because `state.customerId` is
+// populated asynchronously after login (and isn't set at all in test mode),
+// so we also consult the authenticated customer profile and the JWT
+// metadata as fallbacks.
+function getCurrentRecruiterId() {
+  const candidates = [
+    state?.customerId,
+    state?.authenticatedCustomer?.id,
+    state?.authenticatedCustomer?.customerId,
+  ];
+  if (typeof getTokenMetadata === 'function') {
+    try {
+      const metadata = getTokenMetadata();
+      if (metadata) {
+        candidates.push(metadata.username, metadata.userName, metadata.customerId);
+      }
+    } catch (_) { /* ignore */ }
+  }
+  for (const candidate of candidates) {
+    const id = candidate ? Number(candidate) : null;
+    if (isValidReferrerId(id)) return id;
+  }
+  return null;
+}
+
+// Personalized share URL: appends ?ref=<recruiter customer ID> when we know
+// who the sharer is. Falls back to the plain base URL for anonymous shares
+// (e.g. logged-out test mode) so existing behavior is preserved.
+function buildInviteShareUrl() {
+  if (!REFERRAL_TRACKING_ENABLED) return INVITE_SHARE_URL_BASE;
+  const recruiterId = getCurrentRecruiterId();
+  if (!recruiterId) return INVITE_SHARE_URL_BASE;
+  return `${INVITE_SHARE_URL_BASE}?${REFERRAL_QUERY_PARAM}=${recruiterId}`;
+}
 
 function getInviteFirstName() {
   const fullName = String(state?.order?.memberName || '').trim();
@@ -12351,7 +12591,7 @@ function getInviteShareMessage() {
 }
 
 function getInviteShareText() {
-  return `${getInviteShareMessage()} ${INVITE_SHARE_URL}`;
+  return `${getInviteShareMessage()} ${buildInviteShareUrl()}`;
 }
 
 function trackInviteShare(method) {
@@ -12360,7 +12600,7 @@ function trackInviteShare(method) {
     window.dataLayer.push({
       event: 'invite_share',
       method,
-      share_url: INVITE_SHARE_URL,
+      share_url: buildInviteShareUrl(),
     });
   } catch (err) {
     console.warn('[Invite] Failed to push GTM event:', err);
@@ -12390,6 +12630,24 @@ function renderInviteFriends(productType) {
   section.style.display = '';
   if (layout) layout.setAttribute('data-with-invite', 'true');
 
+  // Phase 1: fire a one-time funnel event so we know how many membership
+  // signups have a personalized share link to give out. Note: clearing the
+  // inbound referral happens at actual attribution time inside
+  // addSubscriptionItem(), not here — rendering the success page is not the
+  // same as attribution success (see test mode `?testSuccess=true`).
+  if (REFERRAL_TRACKING_ENABLED) {
+    const recruiterId = getCurrentRecruiterId();
+    if (recruiterId) {
+      try {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+          event: 'referral_link_generated',
+          referrer_id: recruiterId,
+        });
+      } catch (_) { /* GTM optional */ }
+    }
+  }
+
   const card = section.querySelector('.invite-friends-card');
   if (!card) return;
 
@@ -12410,7 +12668,7 @@ function renderInviteFriends(productType) {
 }
 
 async function handleInviteCopyLink(button) {
-  const success = await copyTextToClipboard(INVITE_SHARE_URL);
+  const success = await copyTextToClipboard(buildInviteShareUrl());
   if (!success) {
     showToast(t('invite.copyFailed') || 'Could not copy link. Please copy it manually.', 'error');
     return;
@@ -12477,10 +12735,11 @@ async function copyTextToClipboard(text) {
 }
 
 async function handleInviteShare(method) {
+  const shareUrl = buildInviteShareUrl();
   const message = getInviteShareMessage();
   const shareText = getInviteShareText();
   const encodedText = encodeURIComponent(shareText);
-  const encodedUrl = encodeURIComponent(INVITE_SHARE_URL);
+  const encodedUrl = encodeURIComponent(shareUrl);
   const encodedSubject = encodeURIComponent(t('invite.shareSubject') || '2 weeks of free climbing at Boulders');
 
   switch (method) {
@@ -12534,7 +12793,7 @@ async function handleInviteShare(method) {
           await navigator.share({
             title: t('invite.shareSubject') || '2 weeks of free climbing at Boulders',
             text: message,
-            url: INVITE_SHARE_URL,
+            url: shareUrl,
           });
           trackInviteShare('native_share');
         }
