@@ -6003,7 +6003,7 @@ const translations = {
     'confirmation.receipt.payments': 'Betalinger',
     'confirmation.receipt.paymentMethod': 'Betalingsmetode:',
     'confirmation.receipt.amountPaid': 'Betalt beløb:',
-    'confirmation.receipt.transactionId': 'Transaktions-id:',
+    'confirmation.receipt.transactionId': 'Ordrenummer:',
     'confirmation.receipt.sellerInfo': 'Sælgers oplysninger',
     'confirmation.receipt.sellerName': 'Sælgerens navn:',
     'confirmation.receipt.address': 'Adresse:',
@@ -6234,7 +6234,7 @@ const translations = {
     'confirmation.receipt.payments': 'Payments',
     'confirmation.receipt.paymentMethod': 'Payment method:',
     'confirmation.receipt.amountPaid': 'Amount paid:',
-    'confirmation.receipt.transactionId': 'Transaction ID:',
+    'confirmation.receipt.transactionId': 'Order no.:',
     'confirmation.receipt.sellerInfo': 'Seller information',
     'confirmation.receipt.sellerName': 'Seller name:',
     'confirmation.receipt.address': 'Address:',
@@ -6496,7 +6496,7 @@ const translations = {
     'confirmation.receipt.payments': 'Zahlungen',
     'confirmation.receipt.paymentMethod': 'Zahlungsmethode:',
     'confirmation.receipt.amountPaid': 'Bezahlter Betrag:',
-    'confirmation.receipt.transactionId': 'Transaktions-ID:',
+    'confirmation.receipt.transactionId': 'Bestellnummer:',
     'confirmation.receipt.sellerInfo': 'Verkäuferinformationen',
     'confirmation.receipt.sellerName': 'Verkäufername:',
     'confirmation.receipt.address': 'Adresse:',
@@ -21273,10 +21273,14 @@ async function showDetailedReceipt() {
   }
   if (receiptAmountPaid) receiptAmountPaid.textContent = formatCurrencyHalfKrone(totalDKK);
   if (receiptTransactionId) {
-    // Try to get transaction ID from order - check multiple possible fields
-    const transactionId = order.externalId || 
-                         order.transactionId || 
-                         order.payment?.transactionId || 
+    // BRP's OrderOut does not include a payment-processor transaction ID, so
+    // fall back to the order number — that's the same value sent to GA4 as
+    // transaction_id and what customers quote when contacting support.
+    const transactionId = order.number ||
+                         order.id ||
+                         order.externalId ||
+                         order.transactionId ||
+                         order.payment?.transactionId ||
                          order.payment?.id ||
                          order.paymentTransactions?.[0]?.transactionId ||
                          order.paymentTransactions?.[0]?.id ||
