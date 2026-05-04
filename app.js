@@ -21273,10 +21273,14 @@ async function showDetailedReceipt() {
   }
   if (receiptAmountPaid) receiptAmountPaid.textContent = formatCurrencyHalfKrone(totalDKK);
   if (receiptTransactionId) {
-    // Try to get transaction ID from order - check multiple possible fields
-    const transactionId = order.externalId || 
-                         order.transactionId || 
-                         order.payment?.transactionId || 
+    // BRP's OrderOut does not include a payment-processor transaction ID, so
+    // fall back to the order number — that's the same value sent to GA4 as
+    // transaction_id and what customers quote when contacting support.
+    const transactionId = order.number ||
+                         order.id ||
+                         order.externalId ||
+                         order.transactionId ||
+                         order.payment?.transactionId ||
                          order.payment?.id ||
                          order.paymentTransactions?.[0]?.transactionId ||
                          order.paymentTransactions?.[0]?.id ||
