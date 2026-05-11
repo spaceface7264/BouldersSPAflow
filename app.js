@@ -13579,11 +13579,8 @@ async function handleApplyDiscount() {
         console.log('[Discount] Order created:', state.orderId);
         
         // Now add product to order before applying coupon
-        // Check if this is a membership (not a punch card)
-        const isMembership = state.membershipPlanId && 
-          (state.selectedProductType === 'membership' || 
-           (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
-        
+        const isMembership = isCheckoutSubscriptionPlan();
+
         if (isMembership) {
           try {
             await ensureSubscriptionAttached('discount-application');
@@ -13735,9 +13732,7 @@ async function handleApplyDiscount() {
       }
     }
 
-    const isMembership = state.membershipPlanId &&
-      (state.selectedProductType === 'membership' ||
-       (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+    const isMembership = isCheckoutSubscriptionPlan();
 
     if (isMembership) {
       const subscriptionItems = orderSnapshot?.subscriptionItems || [];
@@ -16532,6 +16527,70 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   }
 }
 
+/** True when cart selection is a subscription product (membership, campaign, 15-day pass, free trial), not punch-cards. */
+function isCheckoutSubscriptionPlan() {
+  const planId = state.membershipPlanId;
+  if (!planId) return false;
+  if (state.selectedProductType === 'punch-card') return false;
+  if (typeof planId === 'string' && planId.startsWith('punch-')) return false;
+  return (
+    state.selectedProductType === 'membership' ||
+    state.selectedProductType === '15daypass' ||
+    (typeof planId === 'string' &&
+      (planId.startsWith('membership-') ||
+        planId.startsWith('campaign-') ||
+        planId.startsWith('15daypass-') ||
+        planId.startsWith('freetrial-')))
+  );
+}
+
+/**
+ * BRP creates the membership on the customer profile when the order is no longer preliminary.
+ * Paid flows rely on the payment return handler to clear preliminary; free trial / zero-total flows skip payment,
+ * so we must finalize here or the profile stays empty while the order holds the subscription.
+ */
+async function finalizePreliminaryZeroBalanceOrder(orderId, context = 'checkout-free-flow') {
+  if (!orderId) return null;
+  try {
+    let order = await orderAPI.getOrder(orderId);
+    const leftToPayRaw = order?.leftToPay?.amount ?? order?.leftToPay ?? 0;
+    let leftToPayNum = typeof leftToPayRaw === 'number' ? leftToPayRaw : Number(leftToPayRaw);
+    if (!Number.isFinite(leftToPayNum)) leftToPayNum = 0;
+
+    const isPreliminary = order.preliminary === true;
+    if (!isPreliminary) {
+      state.fullOrder = order;
+      return order;
+    }
+
+    if (leftToPayNum > 0) {
+      console.warn(`[checkout] ${context}: preliminary order still has balance — not finalizing client-side`, {
+        leftToPayNum,
+      });
+      state.fullOrder = order;
+      return order;
+    }
+
+    const updateData = {
+      preliminary: false,
+      businessUnit: state.selectedBusinessUnit || order.businessUnit?.id || order.businessUnit,
+    };
+    console.log(`[checkout] ${context}: finalizing preliminary order (zero balance)`, { orderId, updateData });
+    await orderAPI.updateOrder(orderId, updateData);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    order = await orderAPI.getOrder(orderId);
+    state.fullOrder = order;
+    console.log(`[checkout] ${context}: finalize complete`, {
+      preliminary: order.preliminary,
+      leftToPay: order.leftToPay,
+    });
+    return order;
+  } catch (error) {
+    console.error(`[checkout] ${context}: finalize preliminary order failed`, error);
+    return null;
+  }
+}
+
 async function ensureOrderCreated(context = 'auto') {
   if (state.orderId) {
     console.log(`[checkout] Reusing existing order ${state.orderId} (${context})`);
@@ -16587,15 +16646,12 @@ async function ensureOrderCreated(context = 'auto') {
 }
 
 async function ensureSubscriptionAttached(context = 'auto') {
-  // Check if this is actually a membership (not a punch card)
-  // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
-  const isMembership = state.membershipPlanId && 
-    (state.selectedProductType === 'membership' || 
-     (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
-  
+  // Subscription plans (membership, campaign, 15-day trial, freetrial landing) — not punch cards.
+  const isMembership = isCheckoutSubscriptionPlan();
+
   if (!state.membershipPlanId || !isMembership) {
     if (state.membershipPlanId && !isMembership) {
-      console.log(`[checkout] Skipping subscription attach (${context}) - this is a punch card, not a membership`);
+      console.log(`[checkout] Skipping subscription attach (${context}) - not a subscription plan`);
       console.log(`[checkout] membershipPlanId: ${state.membershipPlanId}, selectedProductType: ${state.selectedProductType}`);
     } else {
       console.warn(`[checkout] Cannot attach subscription (${context}) - no membership selected`);
@@ -16623,7 +16679,9 @@ async function ensureSubscriptionAttached(context = 'auto') {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
     // 15-day pass: use selected activation date; others use today
-    const is15DayPass = typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-');
+    const is15DayPass =
+      typeof state.membershipPlanId === 'string' &&
+      (state.membershipPlanId.startsWith('15daypass-') || state.membershipPlanId.startsWith('freetrial-'));
     const startDate = is15DayPass ? (state.subscriptionStartDate || getTodayLocalDateString()) : undefined;
     
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
@@ -16689,16 +16747,12 @@ async function autoEnsureOrderIfReady(context = 'auto') {
   if (!isUserAuthenticated()) {
     return;
   }
-  
-  // Check if this is actually a membership (not a punch card)
-  // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
-  const isMembership = state.membershipPlanId && 
-    (state.selectedProductType === 'membership' || 
-     (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
-  
+
+  const isMembership = isCheckoutSubscriptionPlan();
+
   if (!state.membershipPlanId || !isMembership) {
     if (state.membershipPlanId && !isMembership) {
-      console.log(`[checkout] Skipping auto ensure order (${context}) - this is a punch card, not a membership`);
+      console.log(`[checkout] Skipping auto ensure order (${context}) - not a subscription plan`);
     }
     return;
   }
@@ -17281,13 +17335,9 @@ async function handleCheckout() {
     
     try {
       console.log('[checkout] Adding items to order...');
-      
-      // Check if this is a membership (not a punch card)
-      // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
-      const isMembership = state.membershipPlanId && 
-        (state.selectedProductType === 'membership' || 
-         (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
-      
+
+      const isMembership = isCheckoutSubscriptionPlan();
+
       // Add membership/subscription FIRST (only if it's actually a membership)
       if (isMembership) {
 	        try {
@@ -18629,8 +18679,8 @@ async function handleCheckout() {
         }
       }
       
-      // Verify payment link was generated
-      if (!paymentLink && state.membershipPlanId) {
+      const { isFreeFlow: checkoutSkipsPaymentRedirect } = getFreeFlowCartState();
+      if (!paymentLink && state.membershipPlanId && !checkoutSkipsPaymentRedirect) {
         throw new Error('Payment link was not generated after adding subscription');
       }
     } catch (error) {
@@ -18682,6 +18732,9 @@ async function handleCheckout() {
     const { isFreeFlow } = getFreeFlowCartState();
     if (isFreeFlow) {
       console.log('[checkout] Free flow detected - skipping payment redirect and showing confirmation directly');
+      if (state.orderId) {
+        await finalizePreliminaryZeroBalanceOrder(state.orderId, 'checkout-free-flow');
+      }
       // Free-trial/zero-total flows do not require external payment confirmation.
       // Mark as confirmed so success-page guards do not trigger intermediate navigation artifacts.
       state.paymentConfirmed = true;
@@ -21632,7 +21685,7 @@ function getFreeFlowCartState() {
     state.landingRouteConfig?.componentName === 'LandingFreeTrial';
   const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
   const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
-  const isFreeFlow = isFreeTrialSelected;
+  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
   return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
 }
 
