@@ -16545,17 +16545,31 @@ function isCheckoutSubscriptionPlan() {
 }
 
 /**
- * BRP creates the membership on the customer profile when the order is no longer preliminary.
- * Paid flows rely on the payment return handler to clear preliminary; free trial / zero-total flows skip payment,
- * so we must finalize here or the profile stays empty while the order holds the subscription.
+ * Best-effort parse of amount still owed on an order (amount/currency shape varies by endpoint).
+ */
+function extractOrderLeftToPayAmount(order) {
+  if (!order) return null;
+  const raw =
+    order.leftToPay?.amount ??
+    order.leftToPay ??
+    order.price?.leftToPay?.amount ??
+    order.price?.leftToPay ??
+    null;
+  if (raw === null || raw === undefined) return null;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * BRP normally creates the membership after payment is registered (leftToPay cleared), often via PSP webhook.
+ * Clearing preliminary alone is not always enough (see docs/backend-issues/archive/MEMBERSHIP_CREATION_ROOT_CAUSE.md).
+ * Free/zero flows should still open the Join payment URL when the API returns one so completion can register.
  */
 async function finalizePreliminaryZeroBalanceOrder(orderId, context = 'checkout-free-flow') {
   if (!orderId) return null;
   try {
     let order = await orderAPI.getOrder(orderId);
-    const leftToPayRaw = order?.leftToPay?.amount ?? order?.leftToPay ?? 0;
-    let leftToPayNum = typeof leftToPayRaw === 'number' ? leftToPayRaw : Number(leftToPayRaw);
-    if (!Number.isFinite(leftToPayNum)) leftToPayNum = 0;
+    const leftAmt = extractOrderLeftToPayAmount(order);
 
     const isPreliminary = order.preliminary === true;
     if (!isPreliminary) {
@@ -16563,9 +16577,9 @@ async function finalizePreliminaryZeroBalanceOrder(orderId, context = 'checkout-
       return order;
     }
 
-    if (leftToPayNum > 0) {
+    if (leftAmt !== null && leftAmt > 0) {
       console.warn(`[checkout] ${context}: preliminary order still has balance — not finalizing client-side`, {
-        leftToPayNum,
+        leftAmt,
       });
       state.fullOrder = order;
       return order;
@@ -16575,7 +16589,11 @@ async function finalizePreliminaryZeroBalanceOrder(orderId, context = 'checkout-
       preliminary: false,
       businessUnit: state.selectedBusinessUnit || order.businessUnit?.id || order.businessUnit,
     };
-    console.log(`[checkout] ${context}: finalizing preliminary order (zero balance)`, { orderId, updateData });
+    console.log(`[checkout] ${context}: finalizing preliminary order (zero or unknown balance)`, {
+      orderId,
+      updateData,
+      leftAmt,
+    });
     await orderAPI.updateOrder(orderId, updateData);
     await new Promise((resolve) => setTimeout(resolve, 500));
     order = await orderAPI.getOrder(orderId);
@@ -18729,13 +18747,41 @@ async function handleCheckout() {
     console.log('[checkout] paymentLink type:', typeof paymentLink);
     console.log('[checkout] paymentLink truthy?', !!paymentLink);
     console.log('[checkout] state.paymentLink:', state.paymentLink);
+
+    const isAssentlyPaymentUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
+    const effectivePaymentLink = paymentLink || state.paymentLink;
+    const hasTrustedPaymentRedirect =
+      !!effectivePaymentLink &&
+      (effectivePaymentLink.startsWith('http://') || effectivePaymentLink.startsWith('https://')) &&
+      !isAssentlyPaymentUrl(effectivePaymentLink);
+
     const { isFreeFlow } = getFreeFlowCartState();
+
+    // Membership in BRP is tied to payment registration (leftToPay cleared), not only preliminary=false.
+    // If Join returns a real PSP URL for a 0 DKK trial, we must open it — skipping redirect leaves leftToPay uncleared.
+    if (isFreeFlow && hasTrustedPaymentRedirect) {
+      console.log(
+        '[checkout] Free/zero flow: redirecting via payment link so backend/PSP can register completion',
+      );
+      showToast('Redirecting to secure payment...', 'info');
+      setTimeout(() => {
+        try {
+          window.location.replace(effectivePaymentLink);
+        } catch (error) {
+          console.error('[checkout] ❌ Free-flow redirect failed:', error);
+          window.location.href = effectivePaymentLink;
+        }
+      }, 500);
+      return;
+    }
+
     if (isFreeFlow) {
-      console.log('[checkout] Free flow detected - skipping payment redirect and showing confirmation directly');
+      console.log(
+        '[checkout] Free flow without payment URL — finalizing preliminary order client-side and showing confirmation',
+      );
       if (state.orderId) {
         await finalizePreliminaryZeroBalanceOrder(state.orderId, 'checkout-free-flow');
       }
-      // Free-trial/zero-total flows do not require external payment confirmation.
       // Mark as confirmed so success-page guards do not trigger intermediate navigation artifacts.
       state.paymentConfirmed = true;
       state.checkoutInProgress = false;
@@ -18749,31 +18795,30 @@ async function handleCheckout() {
       renderConfirmationView();
       return;
     }
-    
-    const isAssentlyUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
-    if (paymentLink && isAssentlyUrl(paymentLink)) {
+
+    if (effectivePaymentLink && isAssentlyPaymentUrl(effectivePaymentLink)) {
       console.error('[checkout] ❌ Refusing to redirect to Assently – API returned signature URL instead of payment link');
       showToast('Unable to open payment. Please try again or contact support.', 'error');
       state.checkoutInProgress = false;
       setCheckoutLoadingState(false);
-    } else if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
+    } else if (hasTrustedPaymentRedirect) {
       // Redirect to payment provider (never to Assently)
       console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
-      console.log('[checkout] Payment link URL:', paymentLink);
+      console.log('[checkout] Payment link URL:', effectivePaymentLink);
       showToast('Redirecting to secure payment...', 'info');
-      
+
       // Use replace instead of href to avoid adding to browser history
       // This prevents the back button from going back to the checkout page
       setTimeout(() => {
         try {
-          console.log('[checkout] Executing window.location.replace with:', paymentLink);
-          window.location.replace(paymentLink);
+          console.log('[checkout] Executing window.location.replace with:', effectivePaymentLink);
+          window.location.replace(effectivePaymentLink);
         } catch (error) {
           console.error('[checkout] ❌ Redirect failed with replace:', error);
           // Fallback to href if replace fails
           try {
             console.log('[checkout] Falling back to window.location.href');
-            window.location.href = paymentLink;
+            window.location.href = effectivePaymentLink;
           } catch (hrefError) {
             console.error('[checkout] ❌ Redirect failed with href:', hrefError);
             showToast('Failed to redirect to payment. Please contact support.', 'error');
@@ -18788,10 +18833,14 @@ async function handleCheckout() {
       console.error('[checkout] paymentLink:', paymentLink);
       console.error('[checkout] This means the API did not return a valid payment URL');
       console.error('[checkout] The payment provider might be embedded or the API response structure changed');
-      
+
       // Check if payment link is in state (maybe it was set elsewhere) – but never use Assently URL
       const stateLink = state.paymentLink;
-      if (stateLink && (stateLink.startsWith('http://') || stateLink.startsWith('https://')) && !/assently\.com/i.test(stateLink)) {
+      if (
+        stateLink &&
+        (stateLink.startsWith('http://') || stateLink.startsWith('https://')) &&
+        !isAssentlyPaymentUrl(stateLink)
+      ) {
         console.log('[checkout] Found payment link in state, using that instead');
         showToast('Redirecting to secure payment...', 'info');
         setTimeout(() => {
