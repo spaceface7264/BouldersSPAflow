@@ -13579,11 +13579,8 @@ async function handleApplyDiscount() {
         console.log('[Discount] Order created:', state.orderId);
         
         // Now add product to order before applying coupon
-        // Check if this is a membership (not a punch card)
-        const isMembership = state.membershipPlanId && 
-          (state.selectedProductType === 'membership' || 
-           (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
-        
+        const isMembership = isCheckoutSubscriptionPlan();
+
         if (isMembership) {
           try {
             await ensureSubscriptionAttached('discount-application');
@@ -13735,9 +13732,7 @@ async function handleApplyDiscount() {
       }
     }
 
-    const isMembership = state.membershipPlanId &&
-      (state.selectedProductType === 'membership' ||
-       (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
+    const isMembership = isCheckoutSubscriptionPlan();
 
     if (isMembership) {
       const subscriptionItems = orderSnapshot?.subscriptionItems || [];
@@ -16532,6 +16527,88 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   }
 }
 
+/** True when cart selection is a subscription product (membership, campaign, 15-day pass, free trial), not punch-cards. */
+function isCheckoutSubscriptionPlan() {
+  const planId = state.membershipPlanId;
+  if (!planId) return false;
+  if (state.selectedProductType === 'punch-card') return false;
+  if (typeof planId === 'string' && planId.startsWith('punch-')) return false;
+  return (
+    state.selectedProductType === 'membership' ||
+    state.selectedProductType === '15daypass' ||
+    (typeof planId === 'string' &&
+      (planId.startsWith('membership-') ||
+        planId.startsWith('campaign-') ||
+        planId.startsWith('15daypass-') ||
+        planId.startsWith('freetrial-')))
+  );
+}
+
+/**
+ * Best-effort parse of amount still owed on an order (amount/currency shape varies by endpoint).
+ */
+function extractOrderLeftToPayAmount(order) {
+  if (!order) return null;
+  const raw =
+    order.leftToPay?.amount ??
+    order.leftToPay ??
+    order.price?.leftToPay?.amount ??
+    order.price?.leftToPay ??
+    null;
+  if (raw === null || raw === undefined) return null;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * BRP normally creates the membership after payment is registered (leftToPay cleared), often via PSP webhook.
+ * Clearing preliminary alone is not always enough (see docs/backend-issues/archive/MEMBERSHIP_CREATION_ROOT_CAUSE.md).
+ * Free/zero flows should still open the Join payment URL when the API returns one so completion can register.
+ */
+async function finalizePreliminaryZeroBalanceOrder(orderId, context = 'checkout-free-flow') {
+  if (!orderId) return null;
+  try {
+    let order = await orderAPI.getOrder(orderId);
+    const leftAmt = extractOrderLeftToPayAmount(order);
+
+    const isPreliminary = order.preliminary === true;
+    if (!isPreliminary) {
+      state.fullOrder = order;
+      return order;
+    }
+
+    if (leftAmt !== null && leftAmt > 0) {
+      console.warn(`[checkout] ${context}: preliminary order still has balance — not finalizing client-side`, {
+        leftAmt,
+      });
+      state.fullOrder = order;
+      return order;
+    }
+
+    const updateData = {
+      preliminary: false,
+      businessUnit: state.selectedBusinessUnit || order.businessUnit?.id || order.businessUnit,
+    };
+    console.log(`[checkout] ${context}: finalizing preliminary order (zero or unknown balance)`, {
+      orderId,
+      updateData,
+      leftAmt,
+    });
+    await orderAPI.updateOrder(orderId, updateData);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    order = await orderAPI.getOrder(orderId);
+    state.fullOrder = order;
+    console.log(`[checkout] ${context}: finalize complete`, {
+      preliminary: order.preliminary,
+      leftToPay: order.leftToPay,
+    });
+    return order;
+  } catch (error) {
+    console.error(`[checkout] ${context}: finalize preliminary order failed`, error);
+    return null;
+  }
+}
+
 async function ensureOrderCreated(context = 'auto') {
   if (state.orderId) {
     console.log(`[checkout] Reusing existing order ${state.orderId} (${context})`);
@@ -16587,15 +16664,12 @@ async function ensureOrderCreated(context = 'auto') {
 }
 
 async function ensureSubscriptionAttached(context = 'auto') {
-  // Check if this is actually a membership (not a punch card)
-  // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
-  const isMembership = state.membershipPlanId && 
-    (state.selectedProductType === 'membership' || 
-     (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
-  
+  // Subscription plans (membership, campaign, 15-day trial, freetrial landing) — not punch cards.
+  const isMembership = isCheckoutSubscriptionPlan();
+
   if (!state.membershipPlanId || !isMembership) {
     if (state.membershipPlanId && !isMembership) {
-      console.log(`[checkout] Skipping subscription attach (${context}) - this is a punch card, not a membership`);
+      console.log(`[checkout] Skipping subscription attach (${context}) - not a subscription plan`);
       console.log(`[checkout] membershipPlanId: ${state.membershipPlanId}, selectedProductType: ${state.selectedProductType}`);
     } else {
       console.warn(`[checkout] Cannot attach subscription (${context}) - no membership selected`);
@@ -16623,7 +16697,9 @@ async function ensureSubscriptionAttached(context = 'auto') {
     console.log(`[checkout] Attaching membership ${state.membershipPlanId} to order ${orderId} (${context})...`);
     
     // 15-day pass: use selected activation date; others use today
-    const is15DayPass = typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('15daypass-');
+    const is15DayPass =
+      typeof state.membershipPlanId === 'string' &&
+      (state.membershipPlanId.startsWith('15daypass-') || state.membershipPlanId.startsWith('freetrial-'));
     const startDate = is15DayPass ? (state.subscriptionStartDate || getTodayLocalDateString()) : undefined;
     
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
@@ -16689,16 +16765,12 @@ async function autoEnsureOrderIfReady(context = 'auto') {
   if (!isUserAuthenticated()) {
     return;
   }
-  
-  // Check if this is actually a membership (not a punch card)
-  // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
-  const isMembership = state.membershipPlanId && 
-    (state.selectedProductType === 'membership' || 
-     (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
-  
+
+  const isMembership = isCheckoutSubscriptionPlan();
+
   if (!state.membershipPlanId || !isMembership) {
     if (state.membershipPlanId && !isMembership) {
-      console.log(`[checkout] Skipping auto ensure order (${context}) - this is a punch card, not a membership`);
+      console.log(`[checkout] Skipping auto ensure order (${context}) - not a subscription plan`);
     }
     return;
   }
@@ -17281,13 +17353,9 @@ async function handleCheckout() {
     
     try {
       console.log('[checkout] Adding items to order...');
-      
-      // Check if this is a membership (not a punch card)
-      // Punch cards have membershipPlanId like "punch-43" but selectedProductType is "punch-card"
-      const isMembership = state.membershipPlanId && 
-        (state.selectedProductType === 'membership' || 
-         (typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('membership-')));
-      
+
+      const isMembership = isCheckoutSubscriptionPlan();
+
       // Add membership/subscription FIRST (only if it's actually a membership)
       if (isMembership) {
 	        try {
@@ -18629,8 +18697,8 @@ async function handleCheckout() {
         }
       }
       
-      // Verify payment link was generated
-      if (!paymentLink && state.membershipPlanId) {
+      const { isFreeFlow: checkoutSkipsPaymentRedirect } = getFreeFlowCartState();
+      if (!paymentLink && state.membershipPlanId && !checkoutSkipsPaymentRedirect) {
         throw new Error('Payment link was not generated after adding subscription');
       }
     } catch (error) {
@@ -18679,10 +18747,41 @@ async function handleCheckout() {
     console.log('[checkout] paymentLink type:', typeof paymentLink);
     console.log('[checkout] paymentLink truthy?', !!paymentLink);
     console.log('[checkout] state.paymentLink:', state.paymentLink);
+
+    const isAssentlyPaymentUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
+    const effectivePaymentLink = paymentLink || state.paymentLink;
+    const hasTrustedPaymentRedirect =
+      !!effectivePaymentLink &&
+      (effectivePaymentLink.startsWith('http://') || effectivePaymentLink.startsWith('https://')) &&
+      !isAssentlyPaymentUrl(effectivePaymentLink);
+
     const { isFreeFlow } = getFreeFlowCartState();
+
+    // Membership in BRP is tied to payment registration (leftToPay cleared), not only preliminary=false.
+    // If Join returns a real PSP URL for a 0 DKK trial, we must open it — skipping redirect leaves leftToPay uncleared.
+    if (isFreeFlow && hasTrustedPaymentRedirect) {
+      console.log(
+        '[checkout] Free/zero flow: redirecting via payment link so backend/PSP can register completion',
+      );
+      showToast('Redirecting to secure payment...', 'info');
+      setTimeout(() => {
+        try {
+          window.location.replace(effectivePaymentLink);
+        } catch (error) {
+          console.error('[checkout] ❌ Free-flow redirect failed:', error);
+          window.location.href = effectivePaymentLink;
+        }
+      }, 500);
+      return;
+    }
+
     if (isFreeFlow) {
-      console.log('[checkout] Free flow detected - skipping payment redirect and showing confirmation directly');
-      // Free-trial/zero-total flows do not require external payment confirmation.
+      console.log(
+        '[checkout] Free flow without payment URL — finalizing preliminary order client-side and showing confirmation',
+      );
+      if (state.orderId) {
+        await finalizePreliminaryZeroBalanceOrder(state.orderId, 'checkout-free-flow');
+      }
       // Mark as confirmed so success-page guards do not trigger intermediate navigation artifacts.
       state.paymentConfirmed = true;
       state.checkoutInProgress = false;
@@ -18696,31 +18795,30 @@ async function handleCheckout() {
       renderConfirmationView();
       return;
     }
-    
-    const isAssentlyUrl = (url) => typeof url === 'string' && /assently\.com/i.test(url);
-    if (paymentLink && isAssentlyUrl(paymentLink)) {
+
+    if (effectivePaymentLink && isAssentlyPaymentUrl(effectivePaymentLink)) {
       console.error('[checkout] ❌ Refusing to redirect to Assently – API returned signature URL instead of payment link');
       showToast('Unable to open payment. Please try again or contact support.', 'error');
       state.checkoutInProgress = false;
       setCheckoutLoadingState(false);
-    } else if (paymentLink && (paymentLink.startsWith('http://') || paymentLink.startsWith('https://'))) {
+    } else if (hasTrustedPaymentRedirect) {
       // Redirect to payment provider (never to Assently)
       console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
-      console.log('[checkout] Payment link URL:', paymentLink);
+      console.log('[checkout] Payment link URL:', effectivePaymentLink);
       showToast('Redirecting to secure payment...', 'info');
-      
+
       // Use replace instead of href to avoid adding to browser history
       // This prevents the back button from going back to the checkout page
       setTimeout(() => {
         try {
-          console.log('[checkout] Executing window.location.replace with:', paymentLink);
-          window.location.replace(paymentLink);
+          console.log('[checkout] Executing window.location.replace with:', effectivePaymentLink);
+          window.location.replace(effectivePaymentLink);
         } catch (error) {
           console.error('[checkout] ❌ Redirect failed with replace:', error);
           // Fallback to href if replace fails
           try {
             console.log('[checkout] Falling back to window.location.href');
-            window.location.href = paymentLink;
+            window.location.href = effectivePaymentLink;
           } catch (hrefError) {
             console.error('[checkout] ❌ Redirect failed with href:', hrefError);
             showToast('Failed to redirect to payment. Please contact support.', 'error');
@@ -18735,10 +18833,14 @@ async function handleCheckout() {
       console.error('[checkout] paymentLink:', paymentLink);
       console.error('[checkout] This means the API did not return a valid payment URL');
       console.error('[checkout] The payment provider might be embedded or the API response structure changed');
-      
+
       // Check if payment link is in state (maybe it was set elsewhere) – but never use Assently URL
       const stateLink = state.paymentLink;
-      if (stateLink && (stateLink.startsWith('http://') || stateLink.startsWith('https://')) && !/assently\.com/i.test(stateLink)) {
+      if (
+        stateLink &&
+        (stateLink.startsWith('http://') || stateLink.startsWith('https://')) &&
+        !isAssentlyPaymentUrl(stateLink)
+      ) {
         console.log('[checkout] Found payment link in state, using that instead');
         showToast('Redirecting to secure payment...', 'info');
         setTimeout(() => {
@@ -21632,7 +21734,7 @@ function getFreeFlowCartState() {
     state.landingRouteConfig?.componentName === 'LandingFreeTrial';
   const payNowAmount = Number(state?.totals?.payNowAmount ?? state?.totals?.cartTotal ?? NaN);
   const isZeroTotal = Number.isFinite(payNowAmount) && Math.abs(payNowAmount) < 0.0001;
-  const isFreeFlow = isFreeTrialSelected;
+  const isFreeFlow = isFreeTrialSelected || isZeroTotal;
   return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
 }
 
