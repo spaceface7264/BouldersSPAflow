@@ -3577,7 +3577,8 @@ function renderProductsFromAPI() {
       if (!currencyObj || currencyObj.amount == null) return null;
       const amt = Number(currencyObj.amount);
       if (!Number.isFinite(amt)) return null;
-      return amt > 1000 ? amt / 100 : amt;
+      // Same as priceWithInterval.price.amount: BRP uses minor units (øre), not major DKK.
+      return amt / 100;
     };
     
     // Extract price from API structure
@@ -3618,7 +3619,16 @@ function renderProductsFromAPI() {
 
       for (const candidate of directCandidates) {
         if (candidate === null || candidate === undefined || candidate === '') continue;
-        const numeric = Number(candidate) > 1000 ? Number(candidate) / 100 : Number(candidate);
+        if (typeof candidate === 'object' && candidate !== null && 'amount' in candidate) {
+          const dkk = minorToDisplayDkk(candidate);
+          if (dkk != null && dkk >= 0) {
+            return formatPriceHalfKrone(roundToHalfKrone(dkk));
+          }
+          continue;
+        }
+        const raw = Number(candidate);
+        if (!Number.isFinite(raw) || raw < 0) continue;
+        const numeric = raw > 1000 ? raw / 100 : raw;
         if (Number.isFinite(numeric) && numeric >= 0) {
           return formatPriceHalfKrone(roundToHalfKrone(numeric));
         }
