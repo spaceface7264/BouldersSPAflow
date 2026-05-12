@@ -4776,6 +4776,15 @@ const state = {
 const SUBSCRIPTION_CAMPAIGN_STORAGE_KEY = 'boulders_subscription_campaign_code';
 
 /**
+ * BRP back-office stores campaign codes as entered (often uppercase, e.g. 1KR). URLs may use ?campaign-code=1kr — normalize so API queries match.
+ */
+function normalizeBrpSubscriptionCampaignCode(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  return s.toUpperCase();
+}
+
+/**
  * Detect BRP subscription campaign invalid / expired responses (URL query: ?campaign-code=).
  * @param {Error & { payload?: unknown }} error
  */
@@ -4820,7 +4829,7 @@ function captureSubscriptionCampaignFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const fromUrl = params.get('campaign-code') || params.get('campaignCode');
     if (fromUrl && String(fromUrl).trim()) {
-      const code = String(fromUrl).trim();
+      const code = normalizeBrpSubscriptionCampaignCode(fromUrl);
       state.subscriptionCampaignCode = code;
       sessionStorage.setItem(SUBSCRIPTION_CAMPAIGN_STORAGE_KEY, code);
       devLog('[Campaign] Captured subscription campaign code from URL');
@@ -4828,7 +4837,7 @@ function captureSubscriptionCampaignFromUrl() {
     }
     const stored = sessionStorage.getItem(SUBSCRIPTION_CAMPAIGN_STORAGE_KEY);
     if (stored && String(stored).trim()) {
-      state.subscriptionCampaignCode = String(stored).trim();
+      state.subscriptionCampaignCode = normalizeBrpSubscriptionCampaignCode(stored);
       devLog('[Campaign] Restored subscription campaign code from session');
     }
   } catch (e) {
@@ -4839,7 +4848,7 @@ function captureSubscriptionCampaignFromUrl() {
 function restoreSubscriptionCampaignFromStoredOrder(storedOrder) {
   const code = storedOrder?.subscriptionCampaignCode;
   if (!code || !String(code).trim()) return;
-  state.subscriptionCampaignCode = String(code).trim();
+  state.subscriptionCampaignCode = normalizeBrpSubscriptionCampaignCode(code);
   try {
     sessionStorage.setItem(SUBSCRIPTION_CAMPAIGN_STORAGE_KEY, state.subscriptionCampaignCode);
   } catch (_) { /* ignore */ }
