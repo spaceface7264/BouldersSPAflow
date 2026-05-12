@@ -2515,6 +2515,14 @@ body {
     padding: 0;
 }
 
+/* Modul row hides the header; cards must stay visible without relying on expand animation */
+.category-item.category-item--campaign-modul.expanded .plan-card,
+.category-item.category-item--campaign-modul .plan-card {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+}
+
 .campaign-countdown {
     margin-top: 8px;
     font-size: var(--font-size-sm);

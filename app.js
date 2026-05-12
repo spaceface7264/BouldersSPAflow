@@ -3102,6 +3102,10 @@ function getProductPriceCents(product) {
   return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
 }
 
+/** Tag subscription SKUs for the campaign join link (`?campaign-code=`). A product may have either or both. */
+const SUBSCRIPTION_CAMPAIGN_PRODUCT_LABEL = 'HiddenCampaign';
+const SUBSCRIPTION_CAMPAIGN_MODUL_LABEL = 'CampaignModul';
+
 /** When `?campaign-code=` is active: every loaded campaign subscription has `CampaignModul` (and no campaign value cards) → no accordion / no step-2 subtitles, only plan cards. */
 function shouldUseCampaignModulLayout() {
   if (!getActiveSubscriptionCampaignCode()) return false;
@@ -3347,13 +3351,16 @@ async function loadProductsFromAPI() {
       }
       
       // Check 3: Label-based filtering
-      // Subscription campaign catalog: only products tagged for this link (HiddenCampaign); still drop explicit "Hidden".
+      // Subscription campaign catalog: HiddenCampaign and/or CampaignModul mark SKUs for this link; still drop explicit "Hidden".
       if (!landingLabelFilterActive) {
         if (subscriptionCampaignCode) {
           if (productHasLabel(product, 'hidden')) {
             return false;
           }
-          if (!productHasLabel(product, SUBSCRIPTION_CAMPAIGN_PRODUCT_LABEL)) {
+          const taggedForCampaign =
+            productHasLabel(product, SUBSCRIPTION_CAMPAIGN_PRODUCT_LABEL) ||
+            productHasLabel(product, SUBSCRIPTION_CAMPAIGN_MODUL_LABEL);
+          if (!taggedForCampaign) {
             return false;
           }
         } else if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
@@ -4878,12 +4885,6 @@ const state = {
 };
 
 const SUBSCRIPTION_CAMPAIGN_STORAGE_KEY = 'boulders_subscription_campaign_code';
-
-/** When `?campaign-code=` is active, only subscription products with this BRP label appear in the campaign catalog. */
-const SUBSCRIPTION_CAMPAIGN_PRODUCT_LABEL = 'HiddenCampaign';
-
-/** When every visible campaign subscription has this label, step 2 hides category accordion chrome and page subtitles (plan cards only). */
-const SUBSCRIPTION_CAMPAIGN_MODUL_LABEL = 'CampaignModul';
 
 /**
  * BRP back-office stores campaign codes as entered (often uppercase, e.g. 1KR).
