@@ -313,6 +313,23 @@ class BusinessUnitsAPI {
     return await requestJson({ url, headers });
   }
 
+  /** GET /api/ver3/customertypes?businessUnit= (no campaign filter; see OpenAPI) */
+  async getCustomerTypes(businessUnitId) {
+    const params = new URLSearchParams();
+    params.set('businessUnit', String(businessUnitId));
+    params.set('_t', String(Date.now()));
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/customertypes?${params.toString()}`,
+    });
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+    };
+    return await requestJson({ url, headers });
+  }
+
   async getSubscriptions(businessUnitId, campaignCode = null) {
     try {
       // Build URL with business unit as query parameter
@@ -3107,7 +3124,30 @@ async function loadProductsFromAPI() {
   }
 
   try {
+    let subscriptionsResponse;
+    let valueCardsResponse;
+
     if (subscriptionCampaignCode) {
+      // Validate campaign for this facility using subscriptions first (BRP may reject customertypes+campaign
+      // while still accepting products/subscriptions+campaign for the same BU).
+      try {
+        [subscriptionsResponse, valueCardsResponse] = await Promise.all([
+          businessUnitsAPI.getSubscriptions(state.selectedBusinessUnit, subscriptionCampaignCode),
+          businessUnitsAPI.getValueCards(),
+        ]);
+      } catch (fetchErr) {
+        if (isSubscriptionCampaignInvalidError(fetchErr)) {
+          showToast(
+            'This promotion link is invalid or has expired. You can continue with our usual offers.',
+            'error'
+          );
+          clearSubscriptionCampaign('subscriptions-invalid');
+          productsLoadPromise = null;
+          return loadProductsFromAPI();
+        }
+        throw fetchErr;
+      }
+
       try {
         const ctResponse = await businessUnitsAPI.getCustomerTypesForSubscriptionCampaign(
           state.selectedBusinessUnit,
@@ -3127,36 +3167,32 @@ async function loadProductsFromAPI() {
         }
       } catch (ctErr) {
         if (isSubscriptionCampaignInvalidError(ctErr)) {
-          showToast(
-            'This promotion link is invalid or has expired. You can continue with our usual offers.',
-            'error'
+          console.warn(
+            '[Campaign] GET /customertypes with campaignCode returned invalid after subscriptions succeeded — falling back to standard customer types for this BU. Check BRP if campaign restricts customer types.',
+            ctErr?.payload || ctErr
           );
-          clearSubscriptionCampaign('customertypes-invalid');
-          productsLoadPromise = null;
-          return loadProductsFromAPI();
+          state.subscriptionFlowCustomerTypeId = null;
+          try {
+            const ctPlain = await businessUnitsAPI.getCustomerTypes(state.selectedBusinessUnit);
+            const types = Array.isArray(ctPlain)
+              ? ctPlain
+              : (ctPlain?.data || ctPlain?.items || []);
+            if (types.length > 0) {
+              const first = types.find((t) => t?.id != null);
+              state.subscriptionFlowCustomerTypeId = first?.id != null ? Number(first.id) : null;
+            }
+          } catch (plainErr) {
+            console.warn('[Campaign] Fallback GET /customertypes without campaign failed:', plainErr);
+          }
+        } else {
+          throw ctErr;
         }
-        throw ctErr;
       }
-    }
-
-    let subscriptionsResponse;
-    let valueCardsResponse;
-    try {
+    } else {
       [subscriptionsResponse, valueCardsResponse] = await Promise.all([
-        businessUnitsAPI.getSubscriptions(state.selectedBusinessUnit, subscriptionCampaignCode),
+        businessUnitsAPI.getSubscriptions(state.selectedBusinessUnit),
         businessUnitsAPI.getValueCards(),
       ]);
-    } catch (fetchErr) {
-      if (subscriptionCampaignCode && isSubscriptionCampaignInvalidError(fetchErr)) {
-        showToast(
-          'This promotion link is invalid or has expired. You can continue with our usual offers.',
-          'error'
-        );
-        clearSubscriptionCampaign('subscriptions-invalid');
-        productsLoadPromise = null;
-        return loadProductsFromAPI();
-      }
-      throw fetchErr;
     }
 
     // Handle different response formats - could be array or object with data property
