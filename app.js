@@ -16779,7 +16779,10 @@ function updatePaymentOverview() {
       (currentProduct || productFromOrder)?.subscriptionCampaignDiscount;
     const fStrings = scdForBanner?.futureDiscountStrings;
     if (Array.isArray(fStrings) && fStrings.length > 0 && !is15DayPass) {
-      cartCampaignBanner.textContent = fStrings.map((s) => String(s).trim()).filter(Boolean).join(' · ');
+      cartCampaignBanner.textContent = fStrings
+        .map((s) => String(s).trim())
+        .filter(Boolean)
+        .join('\u200B · \u200B');
       cartCampaignBanner.style.display = 'block';
     } else {
       cartCampaignBanner.textContent = '';

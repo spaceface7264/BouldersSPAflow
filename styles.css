@@ -3382,10 +3382,18 @@ body {
 }
 
 .plan-campaign-pricing-banner--cart-summary {
-    margin: 0 0 14px 0;
-    border-radius: 10px;
+    margin: 0 0 10px 0;
+    border-radius: 8px;
     width: 100%;
     box-sizing: border-box;
+    /* Compact strip: tighter than plan-card banner; left-aligned reads better on narrow carts */
+    padding: 7px 11px 8px;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    line-height: 1.32;
+    text-align: left;
+    letter-spacing: 0;
+    border-bottom-width: 1px;
 }
 
 .plan-card.plan-card--campaign-pricing-banner .plan-info {
