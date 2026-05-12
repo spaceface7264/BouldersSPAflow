@@ -3349,6 +3349,52 @@ body {
     row-gap: 4px;
 }
 
+/* Campaign future price ladder — whitelabel-style full-width green banner above card body */
+.plan-card.plan-card--campaign-pricing-banner {
+    padding: 0;
+    overflow: hidden;
+}
+
+.plan-campaign-pricing-banner {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 12px 16px 14px;
+    text-align: center;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    line-height: 1.45;
+    color: rgba(236, 253, 245, 0.98);
+    background: linear-gradient(
+        180deg,
+        rgba(34, 197, 94, 0.4) 0%,
+        rgba(22, 163, 74, 0.3) 100%
+    );
+    border-bottom: 1px solid rgba(34, 197, 94, 0.5);
+    letter-spacing: 0.01em;
+}
+
+@media (max-width: 420px) {
+    .plan-campaign-pricing-banner {
+        padding: 10px 12px 12px;
+        font-size: var(--font-size-xs);
+    }
+}
+
+.plan-card.plan-card--campaign-pricing-banner .plan-info {
+    padding: 18px 24px 20px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Select was position:absolute to card top; keep it in the row below the banner */
+.plan-card.plan-card--campaign-pricing-banner .plan-card-actions .select-btn {
+    position: relative;
+    top: auto;
+    right: auto;
+    box-shadow: 0 2px 8px rgba(240, 0, 240, 0.3);
+}
+
 .price-amount {
     font-size: var(--font-size-2xl);
     font-weight: 700;

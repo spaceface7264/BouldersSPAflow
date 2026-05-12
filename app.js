@@ -3671,6 +3671,16 @@ function renderProductsFromAPI() {
       category === 'campaign' && Number.isFinite(saveAmountDkk) && saveAmountDkk > 0
         ? `${t('campaign.saveAmountPrefix', 'You save')} ${formatPriceHalfKrone(roundToHalfKrone(saveAmountDkk))}`
         : '';
+
+    const showCampaignPricingBanner = Boolean(futureDiscountHint);
+    if (showCampaignPricingBanner) {
+      planCard.classList.add('plan-card--campaign-pricing-banner');
+    }
+    const pricingBannerHtml = showCampaignPricingBanner
+      ? `<div class="plan-campaign-pricing-banner">${
+          futureDiscountHint.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        }</div>`
+      : '';
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3697,6 +3707,7 @@ function renderProductsFromAPI() {
       : '';
     
     planCard.innerHTML = sanitizeHTML(`
+      ${pricingBannerHtml}
       <div class="plan-info">
         <div class="plan-content-left">
           <div class="plan-type">${product.name || 'Membership'}</div>
@@ -3707,7 +3718,6 @@ function renderProductsFromAPI() {
               ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
               : ''}
           </div>
-          ${futureDiscountHint ? `<div class="plan-description plan-campaign-future-pricing">${futureDiscountHint.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
           ${saveHint ? `<div class="plan-description plan-campaign-save">${saveHint.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
