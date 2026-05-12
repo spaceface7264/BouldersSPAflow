@@ -273,13 +273,62 @@ class BusinessUnitsAPI {
   // - allowedToOrder field: "To determine whether the subscription product is bookable for the subscription user or not"
   // Note: When no subscriber is provided (anonymous users), allowedToOrder should reflect whether
   // the product can be booked via internet (based on backend checkbox settings)
-  async getSubscriptions(businessUnitId) {
+  /**
+   * GET /api/ver3/businessunits?campaignCode=… — facilities allowed for a subscription campaign.
+   * Intersect results with the app's reference business unit list (see loadGymsFromAPI).
+   */
+  async getBusinessUnitsForSubscriptionCampaign(campaignCode) {
+    const params = new URLSearchParams();
+    params.set('campaignCode', String(campaignCode).trim());
+    params.set('_t', String(Date.now()));
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/businessunits?${params.toString()}`,
+    });
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+    };
+    return await requestJson({ url, headers });
+  }
+
+  /**
+   * GET /api/ver3/customertypes?campaignCode=&businessUnit= (businessUnit required when campaign set).
+   */
+  async getCustomerTypesForSubscriptionCampaign(businessUnitId, campaignCode) {
+    const params = new URLSearchParams();
+    params.set('campaignCode', String(campaignCode).trim());
+    params.set('businessUnit', String(businessUnitId));
+    params.set('_t', String(Date.now()));
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/customertypes?${params.toString()}`,
+    });
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+    };
+    return await requestJson({ url, headers });
+  }
+
+  async getSubscriptions(businessUnitId, campaignCode = null) {
     try {
       // Build URL with business unit as query parameter
       // Note: We don't send subscriber/customer parameters for anonymous users
       // Backend should set allowedToOrder based on "kan bookes via internet" checkbox
-      const cacheBuster = `&_t=${Date.now()}`;
-      const queryParam = businessUnitId ? `?businessUnit=${businessUnitId}${cacheBuster}` : `?_t=${Date.now()}`;
+      const params = new URLSearchParams();
+      if (businessUnitId != null) params.set('businessUnit', String(businessUnitId));
+      if (campaignCode) {
+        params.set('campaignCode', String(campaignCode).trim());
+        if (businessUnitId == null) {
+          console.warn('[Campaign] getSubscriptions: businessUnit should be set when campaignCode is present');
+        }
+      }
+      params.set('_t', String(Date.now()));
+      const querySuffix = params.toString();
+      const queryParam = querySuffix ? `?${querySuffix}` : '';
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
@@ -338,13 +387,20 @@ class BusinessUnitsAPI {
 
   // Step 5: Get subscription additions (add-ons) for a specific membership product
   // Note: The /additions endpoint may not exist yet - this is a placeholder for when it's available
-  async getSubscriptionAdditions(productId) {
+  async getSubscriptionAdditions(productId, businessUnitId = null, campaignCode = null) {
     try {
-      // Try the additions endpoint first (as per guide)
+      const params = new URLSearchParams();
+      if (campaignCode) {
+        params.set('campaignCode', String(campaignCode).trim());
+        if (businessUnitId != null) params.set('businessUnit', String(businessUnitId));
+      }
+      params.set('_t', String(Date.now()));
+      const qs = params.toString();
+      const pathSuffix = qs ? `${productId}/additions?${qs}` : `${productId}/additions`;
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: `/api/products/subscriptions/${productId}/additions`,
+        path: `/api/products/subscriptions/${pathSuffix}`,
       });
       devLog('Fetching subscription additions from:', url);
       
@@ -376,12 +432,18 @@ class BusinessUnitsAPI {
     }
   }
 
-  async getSubscriptionById(productId, businessUnitId = null) {
+  async getSubscriptionById(productId, businessUnitId = null, campaignCode = null) {
     try {
-      const cacheBuster = `_t=${Date.now()}`;
-      const query = businessUnitId != null
-        ? `?businessUnit=${businessUnitId}&${cacheBuster}`
-        : `?${cacheBuster}`;
+      const params = new URLSearchParams();
+      if (businessUnitId != null) params.set('businessUnit', String(businessUnitId));
+      if (campaignCode) {
+        params.set('campaignCode', String(campaignCode).trim());
+        if (businessUnitId == null) {
+          devWarn('[Campaign] getSubscriptionById: businessUnit should be set when campaignCode is present');
+        }
+      }
+      params.set('_t', String(Date.now()));
+      const query = `?${params.toString()}`;
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
@@ -1635,12 +1697,14 @@ class OrderAPI {
       // Required: subscriptionProduct, birthDate
       // Optional: startDate, subscriber, externalMessage, additionTo, recruitedBy, paymentOption
       // Note: businessUnit is not in spec - may be inferred from order context
+      const subscriptionCampaignCode = getActiveSubscriptionCampaignCode();
       const payload = {
         subscriptionProduct: subscriptionProductId,
         ...(includeStartDate ? { startDate } : {}),
         ...(subscriberId ? { subscriber: subscriberId } : {}),
         ...(birthDate ? { birthDate } : {}),
         ...(recruitedBy ? { recruitedBy } : {}),
+        ...(subscriptionCampaignCode ? { campaignCode: subscriptionCampaignCode } : {}),
         // businessUnit is not in OpenAPI spec - backend may infer from order
         // ...(state.selectedBusinessUnit ? { businessUnit: state.selectedBusinessUnit } : {}),
       };
@@ -1744,6 +1808,16 @@ class OrderAPI {
           delete payload.recruitedBy;
           data = await requestJson({ url, method: 'POST', headers, body: payload });
           console.log('[Step 7] ✅ Subscription created on retry without recruitedBy');
+          return data;
+        }
+
+        if (isSubscriptionCampaignInvalidError(error) && payload.campaignCode) {
+          console.warn('[Step 7] ⚠️ BRP rejected campaignCode — retrying add subscription without campaign');
+          clearSubscriptionCampaign('add-subscription-invalid');
+          delete payload.campaignCode;
+          state.subscriptionFlowCustomerTypeId = null;
+          data = await requestJson({ url, method: 'POST', headers, body: payload });
+          console.log('[Step 7] ✅ Subscription added on retry without campaignCode');
           return data;
         }
 
@@ -3027,14 +3101,63 @@ async function loadProductsFromAPI() {
   }
 
   productsLoadPromise = (async () => {
+  const subscriptionCampaignCode = getActiveSubscriptionCampaignCode();
+  if (!subscriptionCampaignCode) {
+    state.subscriptionFlowCustomerTypeId = null;
+  }
+
   try {
-    // Fetch subscriptions and value cards in parallel
-    // Backend should already filter by businessUnit query param, but we do additional
-    // client-side filtering to ensure compliance with OpenAPI spec display rules
-    const [subscriptionsResponse, valueCardsResponse] = await Promise.all([
-      businessUnitsAPI.getSubscriptions(state.selectedBusinessUnit),
-      businessUnitsAPI.getValueCards(),
-    ]);
+    if (subscriptionCampaignCode) {
+      try {
+        const ctResponse = await businessUnitsAPI.getCustomerTypesForSubscriptionCampaign(
+          state.selectedBusinessUnit,
+          subscriptionCampaignCode
+        );
+        const types = Array.isArray(ctResponse)
+          ? ctResponse
+          : (ctResponse?.data || ctResponse?.items || []);
+        if (types.length > 0) {
+          const first = types.find((t) => t?.id != null);
+          state.subscriptionFlowCustomerTypeId = first?.id != null ? Number(first.id) : null;
+          if (types.length > 1) {
+            devWarn('[Campaign] Multiple customer types returned for campaign; using:', state.subscriptionFlowCustomerTypeId);
+          }
+        } else {
+          state.subscriptionFlowCustomerTypeId = null;
+        }
+      } catch (ctErr) {
+        if (isSubscriptionCampaignInvalidError(ctErr)) {
+          showToast(
+            'This promotion link is invalid or has expired. You can continue with our usual offers.',
+            'error'
+          );
+          clearSubscriptionCampaign('customertypes-invalid');
+          productsLoadPromise = null;
+          return loadProductsFromAPI();
+        }
+        throw ctErr;
+      }
+    }
+
+    let subscriptionsResponse;
+    let valueCardsResponse;
+    try {
+      [subscriptionsResponse, valueCardsResponse] = await Promise.all([
+        businessUnitsAPI.getSubscriptions(state.selectedBusinessUnit, subscriptionCampaignCode),
+        businessUnitsAPI.getValueCards(),
+      ]);
+    } catch (fetchErr) {
+      if (subscriptionCampaignCode && isSubscriptionCampaignInvalidError(fetchErr)) {
+        showToast(
+          'This promotion link is invalid or has expired. You can continue with our usual offers.',
+          'error'
+        );
+        clearSubscriptionCampaign('subscriptions-invalid');
+        productsLoadPromise = null;
+        return loadProductsFromAPI();
+      }
+      throw fetchErr;
+    }
 
     // Handle different response formats - could be array or object with data property
     let subscriptions = Array.isArray(subscriptionsResponse) 
@@ -3164,9 +3287,16 @@ async function loadProductsFromAPI() {
       }
       
       // Check 3: Label-based filtering
-      // Normal flow: apply visibility labels. Landing flows with explicit label filters bypass this gate.
-      if (!landingLabelFilterActive && !shouldDisplayProductByLabels(product, displayLabelOptions)) {
-        return false;
+      // Subscription campaign catalog bypasses the normal Web / Public label filter (see BRP campaigns doc section 5.3).
+      // Still hide products explicitly marked "Hidden".
+      if (!landingLabelFilterActive) {
+        if (subscriptionCampaignCode) {
+          if (productHasLabel(product, 'hidden')) {
+            return false;
+          }
+        } else if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
+          return false;
+        }
       }
       
       return true;
@@ -3232,34 +3362,38 @@ async function loadProductsFromAPI() {
           normalized === '15daypassfree';
       });
 
-    const campaignSubscriptions = subscriptions.filter(product => {
-      // For landing routes with explicit label requirements, match only required labels.
-      if (requiredLandingLabels) {
-        return hasRequiredLabels(product, requiredLandingLabels);
-      }
-      // Default behavior: campaign products are identified by "PublicCampaign".
-      return hasLabelName(product, 'publiccampaign');
-    });
-    
-    const dayPassSubscriptions = subscriptions.filter(product => {
-      // Check if product has "15-Day Trial Pass" label (but not "PublicCampaign")
-      const has15DayPassLabel = has15DayPassLikeLabel(product);
-      const hasPublicCampaignLabel = hasLabelName(product, 'publiccampaign');
-      return has15DayPassLabel && !hasPublicCampaignLabel;
-    });
-    
-    const membershipSubscriptions = subscriptions.filter(product => {
-      // Check if product has "PublicCampaign" or "15-Day Trial Pass" label
-      const hasPublicCampaignLabel = hasLabelName(product, 'publiccampaign');
-      const has15DayPassLabel = has15DayPassLikeLabel(product);
-      // If it has "PublicCampaign" or "15-Day Trial Pass" label, exclude from membership
-      if (hasPublicCampaignLabel || has15DayPassLabel) {
-        return false;
-      }
-      // Otherwise, include if it has "Public" label (already filtered by shouldDisplayProductByLabels)
-      return true;
-    });
-    
+    let campaignSubscriptions;
+    let dayPassSubscriptions;
+    let membershipSubscriptions;
+
+    if (subscriptionCampaignCode) {
+      dayPassSubscriptions = subscriptions.filter((product) => has15DayPassLikeLabel(product));
+      const dayPassIds = new Set(dayPassSubscriptions.map((p) => p.id));
+      campaignSubscriptions = subscriptions.filter((product) => !dayPassIds.has(product.id));
+      membershipSubscriptions = [];
+    } else {
+      campaignSubscriptions = subscriptions.filter((product) => {
+        if (requiredLandingLabels) {
+          return hasRequiredLabels(product, requiredLandingLabels);
+        }
+        return hasLabelName(product, 'publiccampaign');
+      });
+
+      dayPassSubscriptions = subscriptions.filter((product) => {
+        const has15DayPassLabel = has15DayPassLikeLabel(product);
+        const hasPublicCampaignLabel = hasLabelName(product, 'publiccampaign');
+        return has15DayPassLabel && !hasPublicCampaignLabel;
+      });
+
+      membershipSubscriptions = subscriptions.filter((product) => {
+        const hasPublicCampaignLabel = hasLabelName(product, 'publiccampaign');
+        const has15DayPassLabel = has15DayPassLikeLabel(product);
+        if (hasPublicCampaignLabel || has15DayPassLabel) {
+          return false;
+        }
+        return true;
+      });
+    }
     // Separate value cards: those with "PublicCampaign" go to Campaign category
     // Value cards with "PublicCampaign" should appear in Campaign, not in Punch Card category
     const campaignValueCards = valueCards.filter(product => {
@@ -3356,13 +3490,20 @@ async function loadProductsFromAPI() {
 // Step 5: Render products from API data into the UI
 function renderProductsFromAPI() {
   // Helper function to render a subscription product card
-  const renderSubscriptionCard = (product, category) => {
+    const renderSubscriptionCard = (product, category) => {
     const planCard = document.createElement('div');
     planCard.className = 'plan-card';
     const productId = product.id;
     planCard.dataset.plan = `${category}-${productId}`;
     planCard.dataset.productId = productId;
     planCard.dataset.category = category;
+
+    const minorToDisplayDkk = (currencyObj) => {
+      if (!currencyObj || currencyObj.amount == null) return null;
+      const amt = Number(currencyObj.amount);
+      if (!Number.isFinite(amt)) return null;
+      return amt > 1000 ? amt / 100 : amt;
+    };
     
     // Extract price from API structure
     const priceInCents = product.priceWithInterval?.price?.amount || 
@@ -3384,6 +3525,12 @@ function renderProductsFromAPI() {
     // Campaign cards can show first-month intro price with original monthly price struck through.
     // Prefer explicit API fields if present; otherwise parse from campaign text.
     const resolveCampaignIntroPriceDisplay = (campaignProduct) => {
+      const scd = campaignProduct?.subscriptionCampaignDiscount;
+      const apiNewDkk = minorToDisplayDkk(scd?.newPrice);
+      if (apiNewDkk != null && apiNewDkk >= 0) {
+        return formatPriceHalfKrone(roundToHalfKrone(apiNewDkk));
+      }
+
       const directCandidates = [
         campaignProduct?.firstCampaignPrice,
         campaignProduct?.firstMonthPrice,
@@ -3414,6 +3561,8 @@ function renderProductsFromAPI() {
     };
 
     const campaignIntroPriceDisplay = category === 'campaign' ? resolveCampaignIntroPriceDisplay(product) : null;
+    const scd = product.subscriptionCampaignDiscount;
+    const apiRegularDkk = minorToDisplayDkk(scd?.regularPrice);
     const isFirstMonthCampaignPricing = category === 'campaign' && campaignIntroPriceDisplay !== null;
     const productOriginalPriceDKK = !isFirstMonthCampaignPricing
       ? getPlanCardOriginalPrice(product, price)
@@ -3422,10 +3571,21 @@ function renderProductsFromAPI() {
       && Number.isFinite(productOriginalPriceDKK)
       && productOriginalPriceDKK > price;
     const originalPriceDisplay = isFirstMonthCampaignPricing
-      ? (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : '')
+      ? ((Number.isFinite(apiRegularDkk) && apiRegularDkk > 0)
+        ? formatPriceHalfKrone(roundToHalfKrone(apiRegularDkk))
+        : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : ''))
       : (hasDiscountedPlanPrice ? formatPriceHalfKrone(roundToHalfKrone(productOriginalPriceDKK)) : '');
     const effectiveDisplayPrice = isFirstMonthCampaignPricing ? campaignIntroPriceDisplay : (price > 0 ? formatPriceHalfKrone(roundToHalfKrone(price)) : 'FREE');
     const showPriceUnit = isFirstMonthCampaignPricing || price > 0;
+    const futureDiscountHint =
+      category === 'campaign' && Array.isArray(scd?.futureDiscountStrings) && scd.futureDiscountStrings.length > 0
+        ? scd.futureDiscountStrings.map((s) => String(s).trim()).filter(Boolean).join(' · ')
+        : '';
+    const saveAmountDkk = minorToDisplayDkk(scd?.campaignDiscount);
+    const saveHint =
+      category === 'campaign' && Number.isFinite(saveAmountDkk) && saveAmountDkk > 0
+        ? `${t('campaign.saveAmountPrefix', 'You save')} ${formatPriceHalfKrone(roundToHalfKrone(saveAmountDkk))}`
+        : '';
     
     // Get description - use externalDescription if available, otherwise fall back to description
     // Do not show product number as fallback
@@ -3462,6 +3622,8 @@ function renderProductsFromAPI() {
               ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
               : ''}
           </div>
+          ${futureDiscountHint ? `<div class="plan-description plan-campaign-future-pricing">${futureDiscountHint.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+          ${saveHint ? `<div class="plan-description plan-campaign-save">${saveHint.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
         <div class="plan-card-actions">
@@ -3793,7 +3955,11 @@ async function loadSubscriptionAdditions(productId) {
   }
 
   try {
-    const response = await businessUnitsAPI.getSubscriptionAdditions(productId);
+    const response = await businessUnitsAPI.getSubscriptionAdditions(
+      productId,
+      state.selectedBusinessUnit,
+      getActiveSubscriptionCampaignCode()
+    );
     
     // Handle different response formats
     const additions = Array.isArray(response)
@@ -3837,7 +4003,37 @@ async function loadGymsFromAPI() {
     const response = await businessUnitsAPI.getBusinessUnits();
     
     // Handle different response formats - could be array or object with data property
-    const gyms = Array.isArray(response) ? response : (response.data || response.items || []);
+    let gyms = Array.isArray(response) ? response : (response.data || response.items || []);
+
+    const subscriptionCampaignCode = getActiveSubscriptionCampaignCode();
+    if (subscriptionCampaignCode) {
+      try {
+        const campaignResponse = await businessUnitsAPI.getBusinessUnitsForSubscriptionCampaign(
+          subscriptionCampaignCode
+        );
+        const campaignUnits = Array.isArray(campaignResponse)
+          ? campaignResponse
+          : (campaignResponse?.data || campaignResponse?.items || []);
+        const allowedIds = new Set(
+          campaignUnits.map((u) => u.id).filter((id) => id != null)
+        );
+        if (allowedIds.size > 0) {
+          const before = gyms.length;
+          gyms = gyms.filter((g) => allowedIds.has(g.id));
+          devLog('[Campaign] Gym list intersected with campaign business units:', before, '->', gyms.length);
+        }
+      } catch (campaignErr) {
+        if (isSubscriptionCampaignInvalidError(campaignErr)) {
+          showToast(
+            'This promotion link is invalid or has expired. You can continue with our usual locations and offers.',
+            'error'
+          );
+          clearSubscriptionCampaign('businessunits-invalid');
+        } else {
+          console.warn('[Campaign] Could not load campaign business units:', campaignErr);
+        }
+      }
+    }
     
     devLog('Loaded gyms from API:', gyms);
     devLog(`Found ${gyms.length} business units`);
@@ -4571,7 +4767,84 @@ const state = {
   // Test mode for success page
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
+  // BRP subscription campaigns: code from ?campaign-code= (see captureSubscriptionCampaignFromUrl)
+  subscriptionCampaignCode: null,
+  /** When a subscription campaign is active, customer type ID from GET /customertypes (or null → default 1) */
+  subscriptionFlowCustomerTypeId: null,
 };
+
+const SUBSCRIPTION_CAMPAIGN_STORAGE_KEY = 'boulders_subscription_campaign_code';
+
+/**
+ * Detect BRP subscription campaign invalid / expired responses (URL query: ?campaign-code=).
+ * @param {Error & { payload?: unknown }} error
+ */
+function isSubscriptionCampaignInvalidError(error) {
+  let payload = error?.payload;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      return false;
+    }
+  }
+  if (!payload || typeof payload !== 'object') return false;
+  if (payload.errorCode === 'SUBSCRIPTION_CAMPAIGN_CODE_INVALID') return true;
+  if (payload.errorCode === 'INVALID_INPUT' && Array.isArray(payload.fieldErrors)) {
+    return payload.fieldErrors.some(
+      (fe) =>
+        fe?.field === 'campaignCode' && fe.errorCode === 'SUBSCRIPTION_CAMPAIGN_CODE_INVALID'
+    );
+  }
+  return false;
+}
+
+function clearSubscriptionCampaign(reason) {
+  state.subscriptionCampaignCode = null;
+  state.subscriptionFlowCustomerTypeId = null;
+  try {
+    sessionStorage.removeItem(SUBSCRIPTION_CAMPAIGN_STORAGE_KEY);
+  } catch (_) { /* ignore */ }
+  devLog('[Campaign] Cleared subscription campaign:', reason);
+}
+
+/**
+ * Read active subscription campaign code (?campaign-code= / persisted session).
+ */
+function getActiveSubscriptionCampaignCode() {
+  return state.subscriptionCampaignCode || null;
+}
+
+function captureSubscriptionCampaignFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('campaign-code') || params.get('campaignCode');
+    if (fromUrl && String(fromUrl).trim()) {
+      const code = String(fromUrl).trim();
+      state.subscriptionCampaignCode = code;
+      sessionStorage.setItem(SUBSCRIPTION_CAMPAIGN_STORAGE_KEY, code);
+      devLog('[Campaign] Captured subscription campaign code from URL');
+      return;
+    }
+    const stored = sessionStorage.getItem(SUBSCRIPTION_CAMPAIGN_STORAGE_KEY);
+    if (stored && String(stored).trim()) {
+      state.subscriptionCampaignCode = String(stored).trim();
+      devLog('[Campaign] Restored subscription campaign code from session');
+    }
+  } catch (e) {
+    devWarn('[Campaign] captureSubscriptionCampaignFromUrl failed:', e);
+  }
+}
+
+function restoreSubscriptionCampaignFromStoredOrder(storedOrder) {
+  const code = storedOrder?.subscriptionCampaignCode;
+  if (!code || !String(code).trim()) return;
+  state.subscriptionCampaignCode = String(code).trim();
+  try {
+    sessionStorage.setItem(SUBSCRIPTION_CAMPAIGN_STORAGE_KEY, state.subscriptionCampaignCode);
+  } catch (_) { /* ignore */ }
+  devLog('[Campaign] Restored subscription campaign code from checkout order snapshot');
+}
 
 let orderCreationPromise = null;
 let subscriptionAttachPromise = null;
@@ -5756,7 +6029,11 @@ async function loadBoostProducts(selectedPlanProduct = null) {
     enrichedBoostProducts = await Promise.all(boostProducts.map(async (product) => {
       const looksLikeSubscription = !!product.priceWithInterval;
       const details = looksLikeSubscription
-        ? await businessUnitsAPI.getSubscriptionById(product.id, state.selectedBusinessUnit)
+        ? await businessUnitsAPI.getSubscriptionById(
+            product.id,
+            state.selectedBusinessUnit,
+            getActiveSubscriptionCampaignCode()
+          )
         : await businessUnitsAPI.getValueCardById(product.id, state.selectedBusinessUnit);
       return details ? { ...product, ...details } : product;
     }));
@@ -5815,6 +6092,7 @@ function init() {
   // signup steps run. Persists in localStorage with a 30-day TTL; later
   // reads via getActiveReferral() / getRecruitedByForPayload().
   captureReferralFromUrl();
+  captureSubscriptionCampaignFromUrl();
 
   // Initialize email tracking from localStorage
   try {
@@ -6083,6 +6361,7 @@ const translations = {
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
+    'campaign.saveAmountPrefix': 'Du sparer',
     'modal.loading': 'Indlæser...',
     'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
     'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes at du har forladt betalingsvinduet uden at gennenmføre, et eksisterende abonnementer eller kampagnebegrænsning. Kontakt support hvis du tror dette er en fejl. Du kan stadig oprette et almindeligt medlemskab.',
@@ -6314,6 +6593,7 @@ const translations = {
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
+    'campaign.saveAmountPrefix': 'You save',
     'modal.loading': 'Loading...',
     'modal.campaignRejection.title': 'Campaign Not Available',
     'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. If you believe this is a mistake, contact support. You can still sign up for a regular membership.',
@@ -6470,6 +6750,7 @@ const translations = {
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
     'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
+    'campaign.saveAmountPrefix': 'Sie sparen',
     'modal.loading': 'Lädt...',
     'modal.campaignRejection.title': 'Kampagne nicht verfügbar',
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
@@ -9980,7 +10261,7 @@ async function handleSaveAccount() {
       country: country, // Always DK
       primaryGym: payload.customer?.primaryGym || state.selectedBusinessUnit,
       password: payload.customer?.password || document.getElementById('password')?.value,
-      customerType: 1, // Required by API
+      customerType: state.subscriptionFlowCustomerTypeId ?? 1, // Campaign flow: from GET /customertypes with campaignCode
       ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
       ...(payload.consent?.sms !== undefined && { allowMassSendSms: payload.consent.sms }),
       // Include registration terms acceptance timestamp (required by API)
@@ -16442,6 +16723,7 @@ function persistOrderSnapshot(orderId) {
       selectedProductType: state.selectedProductType, // Store product type for restoration
       selectedProductId: state.selectedProductId, // Store product ID for restoration
       subscriptionStartDate: state.subscriptionStartDate, // 15-day pass activation date
+      subscriptionCampaignCode: getActiveSubscriptionCampaignCode(),
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -16938,7 +17220,7 @@ async function handleCheckout() {
           country: country, // Country from form or default to Denmark
           primaryGym: payload.customer?.primaryGym,
           password: payload.customer?.password,
-          customerType: 1, // Required by API - numeric ID (typically 1 = Individual customer type)
+          customerType: state.subscriptionFlowCustomerTypeId ?? 1, // Campaign flow: from GET /customertypes with campaignCode
           // Include marketing email consent - API field: allowMassSendEmail
           ...(payload.consent?.marketing !== undefined && { allowMassSendEmail: payload.consent.marketing }),
           // Include SMS consent - API field: allowMassSendSms
@@ -17262,6 +17544,8 @@ async function handleCheckout() {
           selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
           selectedProductType: state.selectedProductType, // Store product type for restoration
           selectedProductId: state.selectedProductId, // Store product ID for restoration
+          subscriptionStartDate: state.subscriptionStartDate,
+          subscriptionCampaignCode: getActiveSubscriptionCampaignCode(),
         }));
       } catch (e) {
         console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -19144,6 +19428,7 @@ async function loadOrderForConfirmation(orderId) {
         if (storedOrder.cartItems) state.cartItems = storedOrder.cartItems;
         if (storedOrder.totals) state.totals = storedOrder.totals;
         if (storedOrder.selectedBusinessUnit) state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+        restoreSubscriptionCampaignFromStoredOrder(storedOrder);
         console.log('[Payment Return] Restored order data from sessionStorage:', storedOrder);
       }
       
@@ -19645,6 +19930,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
     if (orderData) {
       const storedOrder = JSON.parse(orderData);
       console.log('[Payment Failed] Restoring cart and state from sessionStorage:', storedOrder);
+      restoreSubscriptionCampaignFromStoredOrder(storedOrder);
       
       // Restore cart items and state
       if (storedOrder.cartItems) {
@@ -19998,6 +20284,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
             if (orderData) {
               const storedOrder = JSON.parse(orderData);
               console.log('[Payment Retry] Restoring cart and state from sessionStorage:', storedOrder);
+              restoreSubscriptionCampaignFromStoredOrder(storedOrder);
               
               // Always restore cart items (force restore, don't check if empty)
               if (storedOrder.cartItems) {
@@ -22215,6 +22502,7 @@ function showStep(stepNumber) {
               state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
               console.log('[showStep] Step 2 - Restored selectedBusinessUnit from sessionStorage:', state.selectedBusinessUnit);
             }
+            restoreSubscriptionCampaignFromStoredOrder(storedOrder);
           }
         } catch (e) {
           console.warn('[showStep] Could not restore selectedBusinessUnit:', e);
@@ -22258,6 +22546,7 @@ function showStep(stepNumber) {
           const orderData = sessionStorage.getItem('boulders_checkout_order');
           if (orderData) {
             const storedOrder = JSON.parse(orderData);
+            restoreSubscriptionCampaignFromStoredOrder(storedOrder);
             if (storedOrder.cartItems) {
               state.cartItems = storedOrder.cartItems;
               console.log('[showStep] Step 4 - Restored cart items from sessionStorage:', state.cartItems.length, 'items');
@@ -23001,7 +23290,11 @@ async function ensureSubscriptionProductDetail(productId) {
 
   const promise = (async () => {
     try {
-      const detail = await businessUnitsAPI.getSubscriptionById(productId, state.selectedBusinessUnit);
+      const detail = await businessUnitsAPI.getSubscriptionById(
+        productId,
+        state.selectedBusinessUnit,
+        getActiveSubscriptionCampaignCode()
+      );
       if (!detail || typeof detail !== 'object') return false;
 
       const allSubs = [
