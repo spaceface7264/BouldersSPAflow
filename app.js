@@ -2020,8 +2020,15 @@ class OrderAPI {
       return null;
     }
     
-    const monthlyPriceInCents = membership.priceWithInterval.price.amount;
-    const startDateObj = new Date(startDate);
+    const listMonthlyPriceInCents = membership.priceWithInterval.price.amount;
+    const introCentsRaw = membership.subscriptionCampaignDiscount?.newPrice?.amount;
+    const introMonthlyCents =
+      introCentsRaw != null && Number.isFinite(Number(introCentsRaw)) && Number(introCentsRaw) >= 0
+        ? Number(introCentsRaw)
+        : null;
+    const hasCampaignIntroMonthly =
+      introMonthlyCents != null && introMonthlyCents + 5 < listMonthlyPriceInCents;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -2038,16 +2045,25 @@ class OrderAPI {
     let proratedPriceInCents;
     let includesNextMonth = false;
     
-    if (dayOfMonth >= 16) {
+    // Subscription campaign intro (e.g. 1 DKK/mo): rest-of-month preview matches whitelabel flat intro, not prorated list price
+    if (hasCampaignIntroMonthly && dayOfMonth < 16) {
+      proratedPriceInCents = introMonthlyCents;
+      includesNextMonth = false;
+      console.log(
+        `[Price Calculation] Campaign intro: flat pay-now preview ${introMonthlyCents / 100} DKK for rest of month (day ${dayOfMonth} < 16)`
+      );
+    } else if (dayOfMonth >= 16) {
+      const monthlyRateCents = hasCampaignIntroMonthly ? introMonthlyCents : listMonthlyPriceInCents;
       // Calculate: (rest of current month) + (full next month)
-      const partialCurrentMonthPrice = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
-      const fullNextMonthPrice = monthlyPriceInCents;
+      const partialCurrentMonthPrice = Math.round((monthlyRateCents * daysRemainingInMonth) / daysInCurrentMonth);
+      const fullNextMonthPrice = monthlyRateCents;
       proratedPriceInCents = partialCurrentMonthPrice + fullNextMonthPrice;
       includesNextMonth = true;
       console.log(`[Price Calculation] Day ${dayOfMonth} >= 16: Calculating rest of month (${daysRemainingInMonth} days) + full next month`);
     } else {
+      const monthlyRateCents = hasCampaignIntroMonthly ? introMonthlyCents : listMonthlyPriceInCents;
       // Calculate: just rest of current month (prorated)
-      proratedPriceInCents = Math.round((monthlyPriceInCents * daysRemainingInMonth) / daysInCurrentMonth);
+      proratedPriceInCents = Math.round((monthlyRateCents * daysRemainingInMonth) / daysInCurrentMonth);
       console.log(`[Price Calculation] Day ${dayOfMonth} < 16: Calculating prorated price for remaining ${daysRemainingInMonth} days`);
     }
     
@@ -2056,8 +2072,8 @@ class OrderAPI {
       amountInDKK: proratedPriceInCents / 100,
       daysRemaining: daysRemainingInMonth,
       daysInMonth: daysInCurrentMonth,
-      monthlyPriceInCents,
-      monthlyPriceInDKK: monthlyPriceInCents / 100,
+      monthlyPriceInCents: listMonthlyPriceInCents,
+      monthlyPriceInDKK: listMonthlyPriceInCents / 100,
       includesNextMonth // Flag to indicate if next month is included
     };
   }
@@ -16257,8 +16273,15 @@ function updatePaymentOverview() {
               console.log('[Payment Overview] ⚠️ Pay now from product data (full month - fallback):', payNowAmount, 'DKK');
             }
           } else {
-            // Calculate partial month price manually
+            // Calculate partial month price manually (same rules as _calculateExpectedPartialMonthPrice)
             const priceInCents = membership.priceWithInterval?.price?.amount || 0;
+            const introRaw = membership.subscriptionCampaignDiscount?.newPrice?.amount;
+            const introCents =
+              introRaw != null && Number.isFinite(Number(introRaw)) && Number(introRaw) >= 0
+                ? Number(introRaw)
+                : null;
+            const hasCampaignIntroMonthly =
+              introCents != null && introCents + 5 < priceInCents;
             const monthlyPrice = priceInCents / 100;
             
             // Calculate days until end of month
@@ -16266,14 +16289,20 @@ function updatePaymentOverview() {
             const currentYear = today.getFullYear();
             const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
             const daysInMonth = lastDayOfMonth.getDate();
-            const dayOfMonth = today.getDate();
+            const dayOfMonthManual = today.getDate();
             const daysRemaining = lastDayOfMonth.getDate() - today.getDate() + 1;
             
-            // CRITICAL: If today is 16th or later, price should be: rest of current month + full next month
-            if (dayOfMonth >= 16) {
-              // Calculate: (rest of current month) + (full next month)
-              const partialCurrentMonthPrice = (monthlyPrice / daysInMonth) * daysRemaining;
-              payNowAmount = partialCurrentMonthPrice + monthlyPrice;
+            if (hasCampaignIntroMonthly && dayOfMonthManual < 16) {
+              payNowAmount = introCents / 100;
+              billingPeriod = {
+                start: today,
+                end: lastDayOfMonth
+              };
+              console.log('[Payment Overview] ✅ Pay now campaign intro (flat, manual calc):', payNowAmount, 'DKK');
+            } else if (dayOfMonthManual >= 16) {
+              const rate = hasCampaignIntroMonthly ? introCents / 100 : monthlyPrice;
+              const partialCurrentMonthPrice = (rate / daysInMonth) * daysRemaining;
+              payNowAmount = partialCurrentMonthPrice + rate;
               
               // Billing period extends to end of next month
               const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1;
@@ -16287,8 +16316,8 @@ function updatePaymentOverview() {
               
               console.log('[Payment Overview] ✅ Pay now calculated (rest of month + full next month, manual calc):', payNowAmount, 'DKK');
             } else {
-              // Calculate: just rest of current month (prorated)
-              payNowAmount = (monthlyPrice / daysInMonth) * daysRemaining;
+              const rate = hasCampaignIntroMonthly ? introCents / 100 : monthlyPrice;
+              payNowAmount = (rate / daysInMonth) * daysRemaining;
               
               billingPeriod = {
                 start: today,
