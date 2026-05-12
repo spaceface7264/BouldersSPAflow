@@ -15613,17 +15613,11 @@ function updatePaymentOverview() {
   
   // Show payment overview - don't wait for order data, show prices from product data immediately
   DOM.paymentOverview.style.display = 'block';
-  
-  console.log('[Payment Overview] ===== UPDATING PAYMENT OVERVIEW =====');
-  console.log('[Payment Overview] Order data:', {
-    hasFullOrder: !!state.fullOrder,
+  devLog('[Payment Overview] update', {
     orderId: state.fullOrder?.id,
-    orderNumber: state.fullOrder?.number,
     orderPrice: state.fullOrder?.price,
-    hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems && state.fullOrder.subscriptionItems.length > 0),
-    subscriptionItemsCount: state.fullOrder?.subscriptionItems?.length || 0
   });
-  
+
   // Get subscription item from order if available (per OpenAPI: OrderOut.subscriptionItems[0])
   // If not available, we'll use product data instead
   const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
@@ -15810,6 +15804,72 @@ function updatePaymentOverview() {
       .join(' ')
       .toLowerCase();
     return /(%|off|rabat|intro|introductory|kampagne|campaign)/i.test(text);
+  };
+
+  /** Days 1–15 + campaign intro: bump pay-now up to intro monthly for cart display (slim order lines lack SCD; list price from catalog or payRecurring). Hosted payment still uses order.price from BRP. */
+  const resolveCampaignIntroFloorDkk = () => {
+    if (is15DayPass) return null;
+    if (state.addonIds && state.addonIds.size > 0) return null;
+    if (state.discountApplied && (state.totals.discountAmount || 0) > 0) return null;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (today.getDate() >= 16) return null;
+
+    const fromIds = [
+      subscriptionItem?.product?.id,
+      state.selectedProductId,
+      currentProduct?.id,
+      productFromOrder?.id
+    ]
+      .filter((id) => id != null && id !== '')
+      .map((id) => String(id));
+
+    const catalogMatch =
+      fromIds.length > 0
+        ? allSubscriptions.find((p) => fromIds.includes(String(p?.id)))
+        : null;
+
+    const candidates = [
+      currentProduct,
+      catalogMatch,
+      productFromOrder,
+      subscriptionItem?.product
+    ].filter(Boolean);
+
+    let introCents = null;
+    for (const p of candidates) {
+      const raw = p.subscriptionCampaignDiscount?.newPrice?.amount;
+      if (raw != null && Number.isFinite(Number(raw)) && Number(raw) >= 0) {
+        introCents = Number(raw);
+        break;
+      }
+    }
+    if (introCents == null) return null;
+
+    let listCents = 0;
+    for (const p of candidates) {
+      const c = getProductPriceCents(p);
+      if (c > 0) {
+        listCents = c;
+        break;
+      }
+    }
+    if (listCents <= 0 && subscriptionItem?.payRecurring?.price?.amount != null) {
+      const pr = subscriptionItem.payRecurring.price.amount;
+      listCents = typeof pr === 'object' && pr != null && 'amount' in pr ? Number(pr.amount) : Number(pr);
+    }
+    if (!(listCents > 0) || introCents + 5 >= listCents) return null;
+
+    return introCents / 100;
+  };
+
+  const snapCampaignIntroPayNowToIntroMinimum = (dkkAmount) => {
+    if (!(dkkAmount > 0)) return dkkAmount;
+    const introDkk = resolveCampaignIntroFloorDkk();
+    if (introDkk == null) return dkkAmount;
+    if (dkkAmount + 1e-6 < introDkk) return introDkk;
+    return dkkAmount;
   };
 
   const resolvePostWarrantyTargetProduct = (sourceProduct) => {
@@ -16024,18 +16084,10 @@ function updatePaymentOverview() {
     }
   };
   
-  // ============================================================================
-  // CALCULATE "BETALES NU" (PAY NOW)
-  // ============================================================================
-  // CRITICAL: Use the EXACT same price that backend sends to payment window
-  // Payment link API reads order.price.amount from backend, so we must use the same value
-  // This ensures "Betales nu" matches the price shown in payment window
-  // 
-  // Per OpenAPI: OrderOut.price (CurrencyOut) - The total price of the order
-  // If order data is not available, calculate from product data
+  // Pay now: derive from order when possible; intro campaigns may show a higher cart amount than
+  // order.price (Frisbii) after snap — payment total is always whatever BRP puts on the order.
   let payNowAmount = 0;
   let billingPeriod = null;
-  let isCampaignPayNowPending = false;
   
   if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
     // CRITICAL: Use API price from order - this is the authoritative source
@@ -16499,26 +16551,27 @@ function updatePaymentOverview() {
   if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
     const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
     if (adjustedPayNow !== payNowAmount) {
-      console.log('[Payment Overview] Applying discount to pay-now fallback:', {
+      devLog('[Payment Overview] discount adjust pay-now', {
         original: payNowAmount,
         discount: state.totals.discountAmount,
-        adjusted: adjustedPayNow
+        adjusted: adjustedPayNow,
       });
       payNowAmount = adjustedPayNow;
     }
   }
 
+  payNowAmount = snapCampaignIntroPayNowToIntroMinimum(payNowAmount);
+
   // Round payNowAmount to half krone and store in state for use in cart total calculation
   state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
   
   if (DOM.payNow) {
-    const amountText = formatCurrencyHalfKrone(state.totals.payNowAmount);
-    DOM.payNow.textContent = isCampaignPayNowPending ? '—' : amountText;
-    
+    DOM.payNow.textContent = formatCurrencyHalfKrone(state.totals.payNowAmount);
+
     // Add period after "Pay now" label but before amount
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
     ensurePayNowLogicTooltip(payNowRow);
-    if (!isCampaignPayNowPending && payNowRow && billingPeriodText) {
+    if (payNowRow && billingPeriodText) {
       let periodElement = payNowRow.querySelector('.payment-label-period');
       if (!periodElement) {
         // Create period element if it doesn't exist
@@ -16543,30 +16596,6 @@ function updatePaymentOverview() {
       if (periodElement) {
         periodElement.textContent = '';
       }
-    }
-    
-    // Verify this matches payment window price (only if order data is available)
-    if (hasOrderData && state.fullOrder?.price?.amount !== undefined) {
-      const orderPriceForPayment = state.fullOrder.price.amount;
-      const orderPriceDKK = typeof orderPriceForPayment === 'object' 
-        ? orderPriceForPayment.amount / 100 
-        : orderPriceForPayment / 100;
-      const pricesMatch = Math.abs(payNowAmount - orderPriceDKK) < 0.01; // Allow small rounding differences
-      
-      console.log('[Payment Overview] 🔍 "Betales nu" price:', payNowAmount, 'DKK');
-      console.log('[Payment Overview] 🔍 Order price (sent to payment window):', orderPriceDKK, 'DKK');
-      console.log('[Payment Overview] 🔍 Prices match:', pricesMatch ? '✅ YES' : '❌ NO - MISMATCH!');
-      
-      if (!pricesMatch) {
-        const productId = subscriptionItem?.product?.id || state.selectedProductId;
-        console.warn('[Payment Overview] ⚠️ PRICE MISMATCH DETECTED!');
-        console.warn('[Payment Overview] ⚠️ UI shows:', payNowAmount, 'DKK');
-        console.warn('[Payment Overview] ⚠️ Payment window will show:', orderPriceDKK, 'DKK');
-        console.warn('[Payment Overview] ⚠️ Product ID:', productId);
-      }
-    } else {
-      console.log('[Payment Overview] 🔍 "Betales nu" price (from product data):', payNowAmount, 'DKK');
-      console.log('[Payment Overview] ℹ️ Order data not available yet - price will be verified when order is created');
     }
   }
   applyFreeFlowCartUi();
@@ -16739,7 +16768,9 @@ function updatePaymentOverview() {
     if (state.discountApplied && state.totals.discountAmount > 0) {
       total = Math.max(0, total - state.totals.discountAmount);
     }
-    
+
+    total = snapCampaignIntroPayNowToIntroMinimum(total);
+
     // Round and use as the single authoritative "Pay now" amount.
     const roundedTotal = roundToHalfKrone(total);
     if (DOM.payNow) {
