@@ -3616,12 +3616,10 @@ function renderProductsFromAPI() {
 
     // Campaign cards can show first-month intro price with original monthly price struck through.
     // Prefer explicit API fields if present; otherwise parse from campaign text.
-    const resolveCampaignIntroPriceDisplay = (campaignProduct) => {
-      const scd = campaignProduct?.subscriptionCampaignDiscount;
-      const apiNewDkk = minorToDisplayDkk(scd?.newPrice);
-      if (apiNewDkk != null && apiNewDkk >= 0) {
-        return formatPriceHalfKrone(roundToHalfKrone(apiNewDkk));
-      }
+    const resolveCampaignIntroDkkNumeric = (campaignProduct) => {
+      const scdLocal = campaignProduct?.subscriptionCampaignDiscount;
+      const apiNewDkk = minorToDisplayDkk(scdLocal?.newPrice);
+      if (apiNewDkk != null && apiNewDkk >= 0) return apiNewDkk;
 
       const directCandidates = [
         campaignProduct?.firstCampaignPrice,
@@ -3637,17 +3635,13 @@ function renderProductsFromAPI() {
         if (candidate === null || candidate === undefined || candidate === '') continue;
         if (typeof candidate === 'object' && candidate !== null && 'amount' in candidate) {
           const dkk = minorToDisplayDkk(candidate);
-          if (dkk != null && dkk >= 0) {
-            return formatPriceHalfKrone(roundToHalfKrone(dkk));
-          }
+          if (dkk != null && dkk >= 0) return dkk;
           continue;
         }
         const raw = Number(candidate);
         if (!Number.isFinite(raw) || raw < 0) continue;
         const numeric = raw > 1000 ? raw / 100 : raw;
-        if (Number.isFinite(numeric) && numeric >= 0) {
-          return formatPriceHalfKrone(roundToHalfKrone(numeric));
-        }
+        if (Number.isFinite(numeric) && numeric >= 0) return numeric;
       }
 
       const combinedText = `${campaignProduct?.name || ''} ${campaignProduct?.externalDescription || ''} ${campaignProduct?.description || ''}`;
@@ -3658,7 +3652,13 @@ function renderProductsFromAPI() {
 
       const parsed = Number(introMatch[1].replace(',', '.'));
       if (!Number.isFinite(parsed) || parsed < 0) return null;
-      return formatPriceHalfKrone(roundToHalfKrone(parsed));
+      return parsed;
+    };
+
+    const resolveCampaignIntroPriceDisplay = (campaignProduct) => {
+      const n = resolveCampaignIntroDkkNumeric(campaignProduct);
+      if (n == null || n < 0) return null;
+      return formatPriceHalfKrone(roundToHalfKrone(n));
     };
 
     const campaignIntroPriceDisplay = category === 'campaign' ? resolveCampaignIntroPriceDisplay(product) : null;
@@ -3682,11 +3682,56 @@ function renderProductsFromAPI() {
       category === 'campaign' && Array.isArray(scd?.futureDiscountStrings) && scd.futureDiscountStrings.length > 0
         ? scd.futureDiscountStrings.map((s) => String(s).trim()).filter(Boolean).join(' · ')
         : '';
-    const saveAmountDkk = minorToDisplayDkk(scd?.campaignDiscount);
-    const saveHint =
-      category === 'campaign' && Number.isFinite(saveAmountDkk) && saveAmountDkk > 0
-        ? `${t('campaign.saveAmountPrefix', 'You save')} ${formatPriceHalfKrone(roundToHalfKrone(saveAmountDkk))}`
-        : '';
+
+    const introDkkNumeric = category === 'campaign' ? resolveCampaignIntroDkkNumeric(product) : null;
+    const regularDkkForSave =
+      Number.isFinite(apiRegularDkk) && apiRegularDkk > 0
+        ? apiRegularDkk
+        : price > 0
+          ? price
+          : null;
+
+    let derivedSaveDkk = null;
+    if (
+      introDkkNumeric != null &&
+      regularDkkForSave != null &&
+      regularDkkForSave > introDkkNumeric + 1e-6
+    ) {
+      derivedSaveDkk = roundToHalfKrone(regularDkkForSave - introDkkNumeric);
+    }
+
+    const apiSaveDkk = minorToDisplayDkk(scd?.campaignDiscount);
+
+    let saveAmountDkk = null;
+    if (isFirstMonthCampaignPricing && derivedSaveDkk != null && derivedSaveDkk > 0) {
+      saveAmountDkk = derivedSaveDkk;
+      if (Number.isFinite(apiSaveDkk) && apiSaveDkk > 0) {
+        const delta = Math.abs(apiSaveDkk - derivedSaveDkk);
+        if (delta <= 0.05) saveAmountDkk = roundToHalfKrone(apiSaveDkk);
+      }
+    } else if (Number.isFinite(apiSaveDkk) && apiSaveDkk > 0) {
+      saveAmountDkk = apiSaveDkk;
+    }
+
+    let campaignSaveHtml = '';
+    if (category === 'campaign' && Number.isFinite(saveAmountDkk) && saveAmountDkk > 0) {
+      const saveFmt = formatPriceHalfKrone(roundToHalfKrone(saveAmountDkk));
+      if (isFirstMonthCampaignPricing && regularDkkForSave != null) {
+        const fullFmt = formatPriceHalfKrone(roundToHalfKrone(regularDkkForSave));
+        campaignSaveHtml = sanitizeHTML(
+          t(
+            'campaign.saveVsFullMonthly',
+            'You save {save}/mo on the intro rate (full price {full}/mo).'
+          )
+            .replaceAll('{save}', `<strong class="plan-campaign-save-figure">${saveFmt}</strong>`)
+            .replaceAll('{full}', `<span class="plan-campaign-save-reference">${fullFmt}</span>`)
+        );
+      } else {
+        campaignSaveHtml = sanitizeHTML(
+          `${t('campaign.saveAmountPrefix', 'You save')} <strong class="plan-campaign-save-figure">${saveFmt}</strong>`
+        );
+      }
+    }
 
     const showCampaignPricingBanner = Boolean(futureDiscountHint);
     if (showCampaignPricingBanner) {
@@ -3734,7 +3779,7 @@ function renderProductsFromAPI() {
               ? `<span class="price-original">${originalPriceDisplay} ${priceUnit}</span>`
               : ''}
           </div>
-          ${saveHint ? `<div class="plan-description plan-campaign-save">${saveHint.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+          ${campaignSaveHtml ? `<div class="plan-description plan-campaign-save">${campaignSaveHtml}</div>` : ''}
           ${descriptionHtml ? `<div class="plan-description">${descriptionHtml}</div>` : ''}
         </div>
         <div class="plan-card-actions">
@@ -6530,6 +6575,7 @@ const translations = {
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
     'campaign.saveAmountPrefix': 'Du sparer',
+    'campaign.saveVsFullMonthly': 'Du sparer {save}/md på introprisen (fuld pris {full}/md).',
     'modal.loading': 'Indlæser...',
     'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
     'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes at du har forladt betalingsvinduet uden at gennenmføre, et eksisterende abonnementer eller kampagnebegrænsning. Kontakt support hvis du tror dette er en fejl. Du kan stadig oprette et almindeligt medlemskab.',
@@ -6762,6 +6808,7 @@ const translations = {
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
     'campaign.saveAmountPrefix': 'You save',
+    'campaign.saveVsFullMonthly': 'You save {save}/mo on the intro rate (full price {full}/mo).',
     'modal.loading': 'Loading...',
     'modal.campaignRejection.title': 'Campaign Not Available',
     'modal.campaignRejection.message': 'This offer is not available for your account. This may be due to existing subscriptions or campaign eligibility rules. If you believe this is a mistake, contact support. You can still sign up for a regular membership.',
@@ -6919,6 +6966,7 @@ const translations = {
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
     'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
     'campaign.saveAmountPrefix': 'Sie sparen',
+    'campaign.saveVsFullMonthly': 'Sie sparen {save}/Monat im Einführungstarif (Vollpreis {full}/Monat).',
     'modal.loading': 'Lädt...',
     'modal.campaignRejection.title': 'Kampagne nicht verfügbar',
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',

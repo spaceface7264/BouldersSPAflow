@@ -3436,6 +3436,23 @@ body {
     margin-left: 6px;
 }
 
+.plan-campaign-save {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: 6px;
+    line-height: 1.45;
+}
+
+.plan-campaign-save .plan-campaign-save-figure {
+    color: var(--color-primary, #f0f);
+    font-weight: 600;
+}
+
+.plan-campaign-save .plan-campaign-save-reference {
+    color: rgba(255, 255, 255, 0.72);
+    font-weight: 500;
+}
+
 .plan-description {
     font-size: var(--font-size-base);
     color: var(--color-text-muted);
