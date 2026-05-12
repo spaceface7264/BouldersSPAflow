@@ -2479,6 +2479,42 @@ body {
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
 }
 
+/* CampaignModul (BRP label): hide accordion chrome on step 2 — only plan cards */
+.step-2-container--campaign-modul .main-subtitle,
+.step-2-container--campaign-modul .secondary-subtitle {
+    display: none;
+}
+
+.category-item.category-item--campaign-modul {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    cursor: default;
+}
+
+.category-item.category-item--campaign-modul:hover {
+    border: none;
+    box-shadow: none;
+}
+
+.category-item.category-item--campaign-modul.expanded::after {
+    display: none;
+}
+
+.category-item.category-item--campaign-modul .category-header {
+    display: none !important;
+}
+
+.category-item.category-item--campaign-modul .category-content {
+    max-height: none;
+    opacity: 1;
+    transform: none;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
 .campaign-countdown {
     margin-top: 8px;
     font-size: var(--font-size-sm);

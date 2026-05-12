@@ -3102,6 +3102,15 @@ function getProductPriceCents(product) {
   return typeof amount === 'object' && 'amount' in amount ? Number(amount.amount) : Number(amount);
 }
 
+/** When `?campaign-code=` is active: every loaded campaign subscription has `CampaignModul` (and no campaign value cards) → no accordion / no step-2 subtitles, only plan cards. */
+function shouldUseCampaignModulLayout() {
+  if (!getActiveSubscriptionCampaignCode()) return false;
+  const subs = state.campaignSubscriptions;
+  if (!Array.isArray(subs) || subs.length === 0) return false;
+  if (Array.isArray(state.campaignValueCards) && state.campaignValueCards.length > 0) return false;
+  return subs.every((p) => productHasLabel(p, SUBSCRIPTION_CAMPAIGN_MODUL_LABEL));
+}
+
 // Step 5: Load products (subscriptions and value cards) from API
 // API Endpoints (per OpenAPI documentation):
 // - GET /api/ver3/products/subscriptions?businessUnit={id} (line ~8287)
@@ -3881,7 +3890,23 @@ function renderProductsFromAPI() {
   });
 
   const subscriptionCampaignCode = getActiveSubscriptionCampaignCode();
+  const campaignModulLayout = shouldUseCampaignModulLayout();
+  const step2Container = document.querySelector('#step-2 .step-panel-content .container');
+  if (step2Container) {
+    if (campaignModulLayout) {
+      step2Container.classList.add('step-2-container--campaign-modul');
+    } else {
+      step2Container.classList.remove('step-2-container--campaign-modul');
+    }
+  }
   const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
+  if (campaignCategoryItem) {
+    if (campaignModulLayout) {
+      campaignCategoryItem.classList.add('category-item--campaign-modul');
+    } else {
+      campaignCategoryItem.classList.remove('category-item--campaign-modul');
+    }
+  }
   const hasCampaignCatalogProducts =
     (Array.isArray(state.campaignSubscriptions) && state.campaignSubscriptions.length > 0) ||
     (Array.isArray(state.campaignValueCards) && state.campaignValueCards.length > 0);
@@ -3913,7 +3938,11 @@ function renderProductsFromAPI() {
     } else {
       // Show category and render products
       campaignCategoryItem.style.display = '';
-      startCampaignCountdown();
+      if (campaignModulLayout) {
+        stopCampaignCountdown();
+      } else {
+        startCampaignCountdown();
+      }
       if (campaignPlansList) {
         campaignPlansList.innerHTML = '';
         
@@ -4852,6 +4881,9 @@ const SUBSCRIPTION_CAMPAIGN_STORAGE_KEY = 'boulders_subscription_campaign_code';
 
 /** When `?campaign-code=` is active, only subscription products with this BRP label appear in the campaign catalog. */
 const SUBSCRIPTION_CAMPAIGN_PRODUCT_LABEL = 'HiddenCampaign';
+
+/** When every visible campaign subscription has this label, step 2 hides category accordion chrome and page subtitles (plan cards only). */
+const SUBSCRIPTION_CAMPAIGN_MODUL_LABEL = 'CampaignModul';
 
 /**
  * BRP back-office stores campaign codes as entered (often uppercase, e.g. 1KR).
@@ -12040,6 +12072,12 @@ function setupNewAccessStep() {
     }
     
     if (isLandingLockedCategory) {
+      category.classList.add('expanded', 'selected');
+      freshHeader.style.cursor = 'default';
+      return;
+    }
+
+    if (category.classList.contains('category-item--campaign-modul')) {
       category.classList.add('expanded', 'selected');
       freshHeader.style.cursor = 'default';
       return;
