@@ -279,7 +279,7 @@ class BusinessUnitsAPI {
    */
   async getBusinessUnitsForSubscriptionCampaign(campaignCode) {
     const params = new URLSearchParams();
-    params.set('campaignCode', String(campaignCode).trim());
+    params.set('campaignCode', normalizeBrpSubscriptionCampaignCode(campaignCode));
     params.set('_t', String(Date.now()));
     const url = buildApiUrl({
       baseUrl: this.baseUrl,
@@ -298,7 +298,7 @@ class BusinessUnitsAPI {
    */
   async getCustomerTypesForSubscriptionCampaign(businessUnitId, campaignCode) {
     const params = new URLSearchParams();
-    params.set('campaignCode', String(campaignCode).trim());
+    params.set('campaignCode', normalizeBrpSubscriptionCampaignCode(campaignCode));
     params.set('businessUnit', String(businessUnitId));
     params.set('_t', String(Date.now()));
     const url = buildApiUrl({
@@ -338,7 +338,7 @@ class BusinessUnitsAPI {
       const params = new URLSearchParams();
       if (businessUnitId != null) params.set('businessUnit', String(businessUnitId));
       if (campaignCode) {
-        params.set('campaignCode', String(campaignCode).trim());
+        params.set('campaignCode', normalizeBrpSubscriptionCampaignCode(campaignCode));
         if (businessUnitId == null) {
           console.warn('[Campaign] getSubscriptions: businessUnit should be set when campaignCode is present');
         }
@@ -408,7 +408,7 @@ class BusinessUnitsAPI {
     try {
       const params = new URLSearchParams();
       if (campaignCode) {
-        params.set('campaignCode', String(campaignCode).trim());
+        params.set('campaignCode', normalizeBrpSubscriptionCampaignCode(campaignCode));
         if (businessUnitId != null) params.set('businessUnit', String(businessUnitId));
       }
       params.set('_t', String(Date.now()));
@@ -454,7 +454,7 @@ class BusinessUnitsAPI {
       const params = new URLSearchParams();
       if (businessUnitId != null) params.set('businessUnit', String(businessUnitId));
       if (campaignCode) {
-        params.set('campaignCode', String(campaignCode).trim());
+        params.set('campaignCode', normalizeBrpSubscriptionCampaignCode(campaignCode));
         if (businessUnitId == null) {
           devWarn('[Campaign] getSubscriptionById: businessUnit should be set when campaignCode is present');
         }
@@ -4854,10 +4854,21 @@ function clearSubscriptionCampaign(reason) {
 }
 
 /**
- * Read active subscription campaign code (?campaign-code= / persisted session).
+ * Active campaign code for all BRP requests (?campaign-code= / session). Always normalized (uppercase)
+ * so API query strings match back-office even if state or session held legacy lowercase.
  */
 function getActiveSubscriptionCampaignCode() {
-  return state.subscriptionCampaignCode || null;
+  const raw = state.subscriptionCampaignCode;
+  if (!raw) return null;
+  const normalized = normalizeBrpSubscriptionCampaignCode(raw);
+  if (!normalized) return null;
+  if (normalized !== state.subscriptionCampaignCode) {
+    state.subscriptionCampaignCode = normalized;
+    try {
+      sessionStorage.setItem(SUBSCRIPTION_CAMPAIGN_STORAGE_KEY, normalized);
+    } catch (_) { /* ignore */ }
+  }
+  return normalized;
 }
 
 function captureSubscriptionCampaignFromUrl() {
