@@ -15587,6 +15587,11 @@ function updatePaymentOverview() {
     DOM.paymentOverview.style.display = 'none';
     const totalWrap = document.querySelector('.payment-overview-total-wrap');
     if (totalWrap) totalWrap.style.display = 'none';
+    const cartCampaignBannerEarly = document.querySelector('[data-component="cart-campaign-pricing-banner"]');
+    if (cartCampaignBannerEarly) {
+      cartCampaignBannerEarly.style.display = 'none';
+      cartCampaignBannerEarly.textContent = '';
+    }
     return;
   }
   
@@ -15778,6 +15783,7 @@ function updatePaymentOverview() {
 
   const looksLikeIntroOfferPlan = (sourceProduct) => {
     if (!sourceProduct) return false;
+    if (sourceProduct.subscriptionCampaignDiscount?.newPrice?.amount != null) return true;
     const text = [
       sourceProduct?.name,
       sourceProduct?.externalDescription,
@@ -16320,9 +16326,21 @@ function updatePaymentOverview() {
   };
   
   if (!is15DayPass) {
-    const reducedMonthlyCents = getProductPriceCents(currentProduct || productFromOrder || {});
-    if (Number.isFinite(reducedMonthlyCents) && reducedMonthlyCents > 0) {
-      reducedMonthlyPaymentAmount = reducedMonthlyCents / 100;
+    const productForReduced = currentProduct || productFromOrder || {};
+    const campaignScd = productForReduced.subscriptionCampaignDiscount;
+    let reducedFromCampaign = false;
+    if (campaignScd?.newPrice?.amount != null) {
+      const introCents = Number(campaignScd.newPrice.amount);
+      if (Number.isFinite(introCents) && introCents >= 0) {
+        reducedMonthlyPaymentAmount = introCents / 100;
+        reducedFromCampaign = true;
+      }
+    }
+    if (!reducedFromCampaign) {
+      const reducedMonthlyCents = getProductPriceCents(productForReduced);
+      if (Number.isFinite(reducedMonthlyCents) && reducedMonthlyCents > 0) {
+        reducedMonthlyPaymentAmount = reducedMonthlyCents / 100;
+      }
     }
 
     // Per OpenAPI: SubscriptionItemOut.payRecurring.price.amount
@@ -16754,6 +16772,20 @@ function updatePaymentOverview() {
     total: totalEl ? calculatedTotal : 'N/A',
     payNowIncludesAddons: payNowIncludesAddonsForLog
   });
+
+  const cartCampaignBanner = document.querySelector('[data-component="cart-campaign-pricing-banner"]');
+  if (cartCampaignBanner) {
+    const scdForBanner =
+      (currentProduct || productFromOrder)?.subscriptionCampaignDiscount;
+    const fStrings = scdForBanner?.futureDiscountStrings;
+    if (Array.isArray(fStrings) && fStrings.length > 0 && !is15DayPass) {
+      cartCampaignBanner.textContent = fStrings.map((s) => String(s).trim()).filter(Boolean).join(' · ');
+      cartCampaignBanner.style.display = 'block';
+    } else {
+      cartCampaignBanner.textContent = '';
+      cartCampaignBanner.style.display = 'none';
+    }
+  }
 }
 
 function updateDiscountDisplay() {

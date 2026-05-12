@@ -3381,6 +3381,13 @@ body {
     }
 }
 
+.plan-campaign-pricing-banner--cart-summary {
+    margin: 0 0 14px 0;
+    border-radius: 10px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .plan-card.plan-card--campaign-pricing-banner .plan-info {
     padding: 18px 24px 20px;
     width: 100%;
