@@ -3338,11 +3338,13 @@ async function loadProductsFromAPI() {
       }
       
       // Check 3: Label-based filtering
-      // Subscription campaign catalog bypasses the normal Web / Public label filter (see BRP campaigns doc section 5.3).
-      // Still hide products explicitly marked "Hidden".
+      // Subscription campaign catalog: only products tagged for this link (HiddenCampaign); still drop explicit "Hidden".
       if (!landingLabelFilterActive) {
         if (subscriptionCampaignCode) {
           if (productHasLabel(product, 'hidden')) {
+            return false;
+          }
+          if (!productHasLabel(product, SUBSCRIPTION_CAMPAIGN_PRODUCT_LABEL)) {
             return false;
           }
         } else if (!shouldDisplayProductByLabels(product, displayLabelOptions)) {
@@ -4848,8 +4850,12 @@ const state = {
 
 const SUBSCRIPTION_CAMPAIGN_STORAGE_KEY = 'boulders_subscription_campaign_code';
 
+/** When `?campaign-code=` is active, only subscription products with this BRP label appear in the campaign catalog. */
+const SUBSCRIPTION_CAMPAIGN_PRODUCT_LABEL = 'HiddenCampaign';
+
 /**
- * BRP back-office stores campaign codes as entered (often uppercase, e.g. 1KR). URLs may use ?campaign-code=1kr — normalize so API queries match.
+ * BRP back-office stores campaign codes as entered (often uppercase, e.g. 1KR).
+ * URLs may use ?campaign-code=1kr — normalize so API queries match.
  */
 function normalizeBrpSubscriptionCampaignCode(raw) {
   const s = String(raw ?? '').trim();
