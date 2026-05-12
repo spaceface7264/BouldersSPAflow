@@ -335,6 +335,13 @@ class BusinessUnitsAPI {
       // Build URL with business unit as query parameter
       // Note: We don't send subscriber/customer parameters for anonymous users
       // Backend should set allowedToOrder based on "kan bookes via internet" checkbox
+      //
+      // Subscription campaigns (campaignCode) are implemented on BRP API3 / apiserver.
+      // /api/products/subscriptions is routed to api-join.boulders.dk and may reject or not honor
+      // campaignCode — use /api/ver3/products/subscriptions (same host as customertypes/businessunits).
+      const listPath = campaignCode
+        ? '/api/ver3/products/subscriptions'
+        : '/api/products/subscriptions';
       const params = new URLSearchParams();
       if (businessUnitId != null) params.set('businessUnit', String(businessUnitId));
       if (campaignCode) {
@@ -349,7 +356,7 @@ class BusinessUnitsAPI {
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: `/api/products/subscriptions${queryParam}`,
+        path: `${listPath}${queryParam}`,
       });
       devLog('Fetching subscriptions from:', url);
       
@@ -414,10 +421,13 @@ class BusinessUnitsAPI {
       params.set('_t', String(Date.now()));
       const qs = params.toString();
       const pathSuffix = qs ? `${productId}/additions?${qs}` : `${productId}/additions`;
+      const base = campaignCode
+        ? '/api/ver3/products/subscriptions'
+        : '/api/products/subscriptions';
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: `/api/products/subscriptions/${pathSuffix}`,
+        path: `${base}/${pathSuffix}`,
       });
       devLog('Fetching subscription additions from:', url);
       
@@ -461,10 +471,13 @@ class BusinessUnitsAPI {
       }
       params.set('_t', String(Date.now()));
       const query = `?${params.toString()}`;
+      const base = campaignCode
+        ? '/api/ver3/products/subscriptions'
+        : '/api/products/subscriptions';
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: `/api/products/subscriptions/${productId}${query}`,
+        path: `${base}/${productId}${query}`,
       });
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
