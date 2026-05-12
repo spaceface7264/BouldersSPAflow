@@ -3143,11 +3143,13 @@ async function loadProductsFromAPI() {
     if (subscriptionCampaignCode) {
       // Validate campaign for this facility using subscriptions first (BRP may reject customertypes+campaign
       // while still accepting products/subscriptions+campaign for the same BU).
+      // Do not load punch cards here: campaign links are subscription-catalog only (matches whitelabel flow).
       try {
-        [subscriptionsResponse, valueCardsResponse] = await Promise.all([
-          businessUnitsAPI.getSubscriptions(state.selectedBusinessUnit, subscriptionCampaignCode),
-          businessUnitsAPI.getValueCards(),
-        ]);
+        subscriptionsResponse = await businessUnitsAPI.getSubscriptions(
+          state.selectedBusinessUnit,
+          subscriptionCampaignCode
+        );
+        valueCardsResponse = [];
       } catch (fetchErr) {
         if (isSubscriptionCampaignInvalidError(fetchErr)) {
           showToast(
@@ -3416,10 +3418,12 @@ async function loadProductsFromAPI() {
     let membershipSubscriptions;
 
     if (subscriptionCampaignCode) {
-      dayPassSubscriptions = subscriptions.filter((product) => has15DayPassLikeLabel(product));
-      const dayPassIds = new Set(dayPassSubscriptions.map((p) => p.id));
-      campaignSubscriptions = subscriptions.filter((product) => !dayPassIds.has(product.id));
+      // API already returns only campaign-assigned subscriptions; keep every item in the campaign row
+      // (do not strip "15-day" labelled SKUs into a separate category — whitelabel shows one list).
+      campaignSubscriptions = subscriptions;
+      dayPassSubscriptions = [];
       membershipSubscriptions = [];
+      valueCards = [];
     } else {
       campaignSubscriptions = subscriptions.filter((product) => {
         if (requiredLandingLabels) {
@@ -3443,23 +3447,27 @@ async function loadProductsFromAPI() {
         return true;
       });
     }
-    // Separate value cards: those with "PublicCampaign" go to Campaign category
-    // Value cards with "PublicCampaign" should appear in Campaign, not in Punch Card category
-    const campaignValueCards = valueCards.filter(product => {
-      // Check if product has "PublicCampaign" label
-      const hasPublicCampaignLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
-      return hasPublicCampaignLabel;
-    });
-    
-    // Regular value cards (without "PublicCampaign") go to Punch Card category
-    const regularValueCards = valueCards.filter(product => {
-      const hasPublicCampaignLabel = product.productLabels?.some(
-        label => label.name && label.name.toLowerCase() === 'publiccampaign'
-      );
-      return !hasPublicCampaignLabel;
-    });
+    let campaignValueCards;
+    let regularValueCards;
+
+    if (subscriptionCampaignCode) {
+      campaignValueCards = [];
+      regularValueCards = [];
+    } else {
+      campaignValueCards = valueCards.filter((product) => {
+        const hasPublicCampaignLabel = product.productLabels?.some(
+          (label) => label.name && label.name.toLowerCase() === 'publiccampaign'
+        );
+        return hasPublicCampaignLabel;
+      });
+
+      regularValueCards = valueCards.filter((product) => {
+        const hasPublicCampaignLabel = product.productLabels?.some(
+          (label) => label.name && label.name.toLowerCase() === 'publiccampaign'
+        );
+        return !hasPublicCampaignLabel;
+      });
+    }
 
     // Sort all product lists by price high to low (price in cents for consistent comparison)
     const byPriceHighToLow = (a, b) => getProductPriceCents(b) - getProductPriceCents(a);
@@ -3869,9 +3877,25 @@ function renderProductsFromAPI() {
     item.style.display = '';
     item.dataset.landingLocked = '';
   });
+
+  const subscriptionCampaignCode = getActiveSubscriptionCampaignCode();
+  const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
+  const hasCampaignCatalogProducts =
+    (Array.isArray(state.campaignSubscriptions) && state.campaignSubscriptions.length > 0) ||
+    (Array.isArray(state.campaignValueCards) && state.campaignValueCards.length > 0);
+  // Whitelabel / BRP campaign links are subscription-only: hide other access-type accordions
+  // when we successfully loaded campaign catalog rows (avoids showing full gym catalog beside the promo).
+  if (subscriptionCampaignCode && hasCampaignCatalogProducts) {
+    ['membership', '15daypass', 'punchcard'].forEach((cat) => {
+      const el = document.querySelector(`[data-category="${cat}"]`);
+      if (el) el.style.display = 'none';
+    });
+    if (campaignCategoryItem) {
+      campaignCategoryItem.classList.add('expanded', 'selected');
+    }
+  }
   
   // Render campaign subscriptions and value cards into the campaign category
-  const campaignCategoryItem = document.querySelector('[data-category="campaign"]');
   const campaignPlansList = document.querySelector('[data-category="campaign"] .plans-list');
   
   if (campaignCategoryItem) {
