@@ -18755,20 +18755,22 @@ async function handleCheckout() {
       (effectivePaymentLink.startsWith('http://') || effectivePaymentLink.startsWith('https://')) &&
       !isAssentlyPaymentUrl(effectivePaymentLink);
 
-    const { isFreeFlow } = getFreeFlowCartState();
+    const { isFreeFlow, isFreeTrialSelected } = getFreeFlowCartState();
 
-    // Membership in BRP is tied to payment registration (leftToPay cleared), not only preliminary=false.
-    // If Join returns a real PSP URL for a 0 DKK trial, we must open it — skipping redirect leaves leftToPay uncleared.
-    if (isFreeFlow && hasTrustedPaymentRedirect) {
+    // Free-trial subscriptions: BRP gates membership creation on PSP-registered payment (leftToPay cleared),
+    // so a 0 DKK trial must still follow the Join payment URL.
+    // Coupon-driven zero totals are different — the payment link reflects the pre-coupon amount and would
+    // show the user a full-price payment page, so we finalize client-side instead.
+    if (isFreeTrialSelected && hasTrustedPaymentRedirect) {
       console.log(
-        '[checkout] Free/zero flow: redirecting via payment link so backend/PSP can register completion',
+        '[checkout] Free-trial flow: redirecting via payment link so backend/PSP can register completion',
       );
       showToast('Redirecting to secure payment...', 'info');
       setTimeout(() => {
         try {
           window.location.replace(effectivePaymentLink);
         } catch (error) {
-          console.error('[checkout] ❌ Free-flow redirect failed:', error);
+          console.error('[checkout] ❌ Free-trial redirect failed:', error);
           window.location.href = effectivePaymentLink;
         }
       }, 500);
