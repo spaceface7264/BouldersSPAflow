@@ -6003,7 +6003,7 @@ const translations = {
     'confirmation.receipt.payments': 'Betalinger',
     'confirmation.receipt.paymentMethod': 'Betalingsmetode:',
     'confirmation.receipt.amountPaid': 'Betalt beløb:',
-    'confirmation.receipt.transactionId': 'Transaktions-id:',
+    'confirmation.receipt.orderNumber': 'Ordrenummer:',
     'confirmation.receipt.sellerInfo': 'Sælgers oplysninger',
     'confirmation.receipt.sellerName': 'Sælgerens navn:',
     'confirmation.receipt.address': 'Adresse:',
@@ -6234,7 +6234,7 @@ const translations = {
     'confirmation.receipt.payments': 'Payments',
     'confirmation.receipt.paymentMethod': 'Payment method:',
     'confirmation.receipt.amountPaid': 'Amount paid:',
-    'confirmation.receipt.transactionId': 'Transaction ID:',
+    'confirmation.receipt.orderNumber': 'Order Number:',
     'confirmation.receipt.sellerInfo': 'Seller information',
     'confirmation.receipt.sellerName': 'Seller name:',
     'confirmation.receipt.address': 'Address:',
@@ -6496,7 +6496,7 @@ const translations = {
     'confirmation.receipt.payments': 'Zahlungen',
     'confirmation.receipt.paymentMethod': 'Zahlungsmethode:',
     'confirmation.receipt.amountPaid': 'Bezahlter Betrag:',
-    'confirmation.receipt.transactionId': 'Transaktions-ID:',
+    'confirmation.receipt.orderNumber': 'Bestellnummer:',
     'confirmation.receipt.sellerInfo': 'Verkäuferinformationen',
     'confirmation.receipt.sellerName': 'Verkäufername:',
     'confirmation.receipt.address': 'Adresse:',
@@ -21368,24 +21368,15 @@ async function showDetailedReceipt() {
   // Populate payment details
   const receiptPaymentMethod = document.getElementById('receiptPaymentMethod');
   const receiptAmountPaid = document.getElementById('receiptAmountPaid');
-  const receiptTransactionId = document.getElementById('receiptTransactionId');
-  
+  const receiptOrderNumberPayment = document.getElementById('receiptOrderNumberPayment');
+
   if (receiptPaymentMethod) {
-    // Try to get payment method from order
     const paymentMethod = order.paymentMethod || order.payment?.method || 'Kortbetaling';
     receiptPaymentMethod.textContent = paymentMethod;
   }
   if (receiptAmountPaid) receiptAmountPaid.textContent = formatCurrencyHalfKrone(totalDKK);
-  if (receiptTransactionId) {
-    // Try to get transaction ID from order - check multiple possible fields
-    const transactionId = order.externalId || 
-                         order.transactionId || 
-                         order.payment?.transactionId || 
-                         order.payment?.id ||
-                         order.paymentTransactions?.[0]?.transactionId ||
-                         order.paymentTransactions?.[0]?.id ||
-                         '—';
-    receiptTransactionId.textContent = transactionId;
+  if (receiptOrderNumberPayment) {
+    receiptOrderNumberPayment.textContent = order.number || order.id || '—';
   }
   
   // Populate customer information - fetch full customer details if we only have a reference
