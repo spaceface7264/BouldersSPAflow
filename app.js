@@ -6003,7 +6003,7 @@ const translations = {
     'confirmation.receipt.payments': 'Betalinger',
     'confirmation.receipt.paymentMethod': 'Betalingsmetode:',
     'confirmation.receipt.amountPaid': 'Betalt beløb:',
-    'confirmation.receipt.transactionId': 'Transaktions-id:',
+    'confirmation.receipt.orderNumber': 'Ordrenummer:',
     'confirmation.receipt.sellerInfo': 'Sælgers oplysninger',
     'confirmation.receipt.sellerName': 'Sælgerens navn:',
     'confirmation.receipt.address': 'Adresse:',
@@ -6234,7 +6234,7 @@ const translations = {
     'confirmation.receipt.payments': 'Payments',
     'confirmation.receipt.paymentMethod': 'Payment method:',
     'confirmation.receipt.amountPaid': 'Amount paid:',
-    'confirmation.receipt.transactionId': 'Transaction ID:',
+    'confirmation.receipt.orderNumber': 'Order Number:',
     'confirmation.receipt.sellerInfo': 'Seller information',
     'confirmation.receipt.sellerName': 'Seller name:',
     'confirmation.receipt.address': 'Address:',
@@ -6496,7 +6496,7 @@ const translations = {
     'confirmation.receipt.payments': 'Zahlungen',
     'confirmation.receipt.paymentMethod': 'Zahlungsmethode:',
     'confirmation.receipt.amountPaid': 'Bezahlter Betrag:',
-    'confirmation.receipt.transactionId': 'Transaktions-ID:',
+    'confirmation.receipt.orderNumber': 'Bestellnummer:',
     'confirmation.receipt.sellerInfo': 'Verkäuferinformationen',
     'confirmation.receipt.sellerName': 'Verkäufername:',
     'confirmation.receipt.address': 'Adresse:',
@@ -18755,20 +18755,22 @@ async function handleCheckout() {
       (effectivePaymentLink.startsWith('http://') || effectivePaymentLink.startsWith('https://')) &&
       !isAssentlyPaymentUrl(effectivePaymentLink);
 
-    const { isFreeFlow } = getFreeFlowCartState();
+    const { isFreeFlow, isFreeTrialSelected } = getFreeFlowCartState();
 
-    // Membership in BRP is tied to payment registration (leftToPay cleared), not only preliminary=false.
-    // If Join returns a real PSP URL for a 0 DKK trial, we must open it — skipping redirect leaves leftToPay uncleared.
-    if (isFreeFlow && hasTrustedPaymentRedirect) {
+    // Free-trial subscriptions: BRP gates membership creation on PSP-registered payment (leftToPay cleared),
+    // so a 0 DKK trial must still follow the Join payment URL.
+    // Coupon-driven zero totals are different — the payment link reflects the pre-coupon amount and would
+    // show the user a full-price payment page, so we finalize client-side instead.
+    if (isFreeTrialSelected && hasTrustedPaymentRedirect) {
       console.log(
-        '[checkout] Free/zero flow: redirecting via payment link so backend/PSP can register completion',
+        '[checkout] Free-trial flow: redirecting via payment link so backend/PSP can register completion',
       );
       showToast('Redirecting to secure payment...', 'info');
       setTimeout(() => {
         try {
           window.location.replace(effectivePaymentLink);
         } catch (error) {
-          console.error('[checkout] ❌ Free-flow redirect failed:', error);
+          console.error('[checkout] ❌ Free-trial redirect failed:', error);
           window.location.href = effectivePaymentLink;
         }
       }, 500);
@@ -21366,24 +21368,15 @@ async function showDetailedReceipt() {
   // Populate payment details
   const receiptPaymentMethod = document.getElementById('receiptPaymentMethod');
   const receiptAmountPaid = document.getElementById('receiptAmountPaid');
-  const receiptTransactionId = document.getElementById('receiptTransactionId');
-  
+  const receiptOrderNumberPayment = document.getElementById('receiptOrderNumberPayment');
+
   if (receiptPaymentMethod) {
-    // Try to get payment method from order
     const paymentMethod = order.paymentMethod || order.payment?.method || 'Kortbetaling';
     receiptPaymentMethod.textContent = paymentMethod;
   }
   if (receiptAmountPaid) receiptAmountPaid.textContent = formatCurrencyHalfKrone(totalDKK);
-  if (receiptTransactionId) {
-    // Try to get transaction ID from order - check multiple possible fields
-    const transactionId = order.externalId || 
-                         order.transactionId || 
-                         order.payment?.transactionId || 
-                         order.payment?.id ||
-                         order.paymentTransactions?.[0]?.transactionId ||
-                         order.paymentTransactions?.[0]?.id ||
-                         '—';
-    receiptTransactionId.textContent = transactionId;
+  if (receiptOrderNumberPayment) {
+    receiptOrderNumberPayment.textContent = order.number || order.id || '—';
   }
   
   // Populate customer information - fetch full customer details if we only have a reference
