@@ -114,6 +114,100 @@ function isFirstClimbRoute() {
   return active?.componentName === 'LandingFirstClimb';
 }
 
+// firstclimb is for "first-time climbers". We define that as: the customer has
+// never held a Medlem / 15 Dages Kort / Klippekort / Første Gang product.
+// Anything else (e.g. an abandoned-but-empty profile) is fine — they can buy.
+const FIRSTCLIMB_BLOCKING_LABELS = Object.freeze([
+  'medlem',
+  '15 dages kort',
+  'første gang',
+  'klippekort',
+]);
+
+function productHasFirstclimbBlockingLabel(product) {
+  const labels = Array.isArray(product?.productLabels) ? product.productLabels : [];
+  return labels.some((label) => {
+    const name = String(label?.name || '').trim().toLowerCase();
+    return FIRSTCLIMB_BLOCKING_LABELS.includes(name);
+  });
+}
+
+async function _firstclimbAuthFetch(path) {
+  const token = (typeof window.getAccessToken === 'function') ? window.getAccessToken() : null;
+  if (!token) throw new Error('No access token for customer history fetch');
+  const url = buildApiUrl({
+    baseUrl: businessUnitsAPI?.baseUrl || null,
+    useProxy: businessUnitsAPI?.useProxy ?? true,
+    path,
+  });
+  return requestJson({
+    url,
+    method: 'GET',
+    headers: {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+}
+
+// Pull product IDs the customer currently holds or has ever held. Errors on
+// any single endpoint are swallowed — we'd rather fail open per-source than
+// abort the whole check (the caller defaults to "block" if all sources fail).
+async function collectFirstclimbCustomerProductIds(customerId) {
+  if (!customerId) return { ids: new Set(), errors: ['no customer id'] };
+  const ids = new Set();
+  const errors = [];
+  const safeFetch = async (path) => {
+    try { return await _firstclimbAuthFetch(path); }
+    catch (e) { errors.push(`${path}: ${e?.message || e}`); return null; }
+  };
+  const [subs, valueCards, receipts] = await Promise.all([
+    safeFetch(`/api/ver3/customers/${customerId}/subscriptions?includeInactive=true`),
+    safeFetch(`/api/ver3/customers/${customerId}/valuecards`),
+    safeFetch(`/api/ver3/customers/${customerId}/receipts`),
+  ]);
+  const addRef = (ref) => {
+    const id = ref?.id ?? ref?.productId ?? ref?.product?.id;
+    if (id != null) ids.add(String(id));
+  };
+  (Array.isArray(subs) ? subs : []).forEach((s) => addRef(s?.subscriptionProduct || s?.product));
+  (Array.isArray(valueCards) ? valueCards : []).forEach((vc) => addRef(vc?.validCardProduct || vc?.product));
+  (Array.isArray(receipts) ? receipts : []).forEach((r) => {
+    (r?.receiptItems || r?.items || []).forEach((item) => addRef(item?.product || item));
+  });
+  return { ids, errors };
+}
+
+// Resolve a product by id from the already-loaded catalog if possible, else fetch.
+async function resolveProductForFirstclimbCheck(productId) {
+  const id = String(productId);
+  const fromCatalog = (state.allRawProducts || []).find((p) => String(p?.id) === id);
+  if (fromCatalog) return fromCatalog;
+  if (!state.selectedBusinessUnit) return null;
+  // Try subscription first, then value card. Both endpoints 404 if it's the other kind.
+  try { return await businessUnitsAPI.getSubscriptionById(productId, state.selectedBusinessUnit); }
+  catch (_) {}
+  try { return await businessUnitsAPI.getValueCardById(productId, state.selectedBusinessUnit); }
+  catch (_) {}
+  return null;
+}
+
+async function customerHasFirstclimbBlockingHistory(customerId) {
+  const { ids, errors } = await collectFirstclimbCustomerProductIds(customerId);
+  if (errors.length) console.warn('[firstclimb] history fetch had partial errors:', errors);
+  if (ids.size === 0) return false; // clean history
+  for (const id of ids) {
+    let product = null;
+    try { product = await resolveProductForFirstclimbCheck(id); } catch (_) {}
+    if (product && productHasFirstclimbBlockingLabel(product)) {
+      console.log('[firstclimb] blocking product detected in customer history:', { id, name: product?.name });
+      return true;
+    }
+  }
+  return false;
+}
+
 // Static fallback preview rendered before products are fetched, so users
 // landing on /99kr immediately see the offer in step 1. Once products load,
 // renderLandingRoute upgrades this with the live price/description.
@@ -6078,14 +6172,39 @@ function init() {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
   }
 
-  // firstclimb is a one-per-person new-customer offer. If a user with an
-  // existing BRP profile is already logged in, block them at route entry.
+  // firstclimb: if the user arrives already authenticated, kick off an async
+  // history check. Block only if they hold/held one of the disqualifying products.
   if (state.landingRouteConfig?.componentName === 'LandingFirstClimb' && isUserAuthenticated()) {
-    try {
-      showToast('This offer is for new climbers only. You already have an account.', 'error');
-    } catch (_) {}
-    try { window.location.replace('/'); } catch (_) {}
-    return;
+    (async () => {
+      let customerIdForCheck = state.customerId
+        || getTokenMetadata()?.username
+        || getTokenMetadata()?.userName;
+      try {
+        if (!customerIdForCheck) {
+          await syncAuthenticatedCustomerState();
+          customerIdForCheck = state.customerId;
+        }
+      } catch (_) {}
+      let hasBlockingHistory = true;
+      try {
+        hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
+      } catch (historyErr) {
+        console.warn('[init] firstclimb history check failed; blocking by default:', historyErr);
+        hasBlockingHistory = true;
+      }
+      if (hasBlockingHistory) {
+        const blockedEmail = state.authenticatedEmail
+          || state.authenticatedCustomer?.email
+          || getTokenMetadata()?.email
+          || '';
+        try { window.clearTokens && window.clearTokens(); } catch (_) {}
+        state.customerId = null;
+        state.authenticatedCustomer = null;
+        state.authenticatedEmail = null;
+        try { refreshLoginUI(); } catch (_) {}
+        blockFirstClimbExistingCustomer({ email: blockedEmail });
+      }
+    })();
   }
 
   // /99kr: render the product preview on step 1 immediately, before products load.
@@ -8558,16 +8677,36 @@ async function handleLoginSubmit(event) {
     const username = payload?.username || email;
     state.authenticatedEmail = email;
 
-    // /99kr: a successful login means the email has an existing BRP profile,
-    // which disqualifies the user from this new-customer-only offer.
+    // /99kr: a successful login means the email has an existing BRP profile.
+    // Inspect product history — block only if they've held a Medlem / 15 Dages
+    // Kort / Klippekort / Første Gang product. Empty-profile users can buy.
     if (isFirstClimbRoute()) {
-      try { window.clearTokens && window.clearTokens(); } catch (_) {}
-      state.customerId = null;
-      state.authenticatedCustomer = null;
-      state.authenticatedEmail = null;
-      try { refreshLoginUI(); } catch (_) {}
-      blockFirstClimbExistingCustomer({ email });
-      return;
+      let customerIdForCheck = null;
+      try {
+        await syncAuthenticatedCustomerState(username, email);
+        customerIdForCheck = state.customerId
+          || getTokenMetadata()?.username
+          || getTokenMetadata()?.userName;
+      } catch (syncErr) {
+        console.warn('[login] customer state sync failed before firstclimb history check:', syncErr);
+      }
+      let hasBlockingHistory = true;
+      try {
+        hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
+      } catch (historyErr) {
+        console.warn('[login] firstclimb history check failed; blocking by default:', historyErr);
+        hasBlockingHistory = true;
+      }
+      if (hasBlockingHistory) {
+        try { window.clearTokens && window.clearTokens(); } catch (_) {}
+        state.customerId = null;
+        state.authenticatedCustomer = null;
+        state.authenticatedEmail = null;
+        try { refreshLoginUI(); } catch (_) {}
+        blockFirstClimbExistingCustomer({ email });
+        return;
+      }
+      // Clean history → carry on with the normal logged-in flow.
     }
 
     // Sync customer state and fetch profile
@@ -10396,26 +10535,61 @@ async function handleSaveAccount() {
       console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
 
-    // /99kr defensive existing-customer pre-check: BRP doesn't always reject duplicate
-    // emails on the create endpoint. Attempt login with the typed credentials first —
-    // if it succeeds, the email belongs to an existing profile and we must block.
+    // /99kr defensive existing-customer pre-check. BRP doesn't always reject duplicate
+    // emails on the create endpoint, so we attempt login with the typed credentials.
+    // If login succeeds, we inspect the customer's product history — only block if
+    // they've held a Medlem / 15 Dages Kort / Klippekort / Første Gang product.
+    // Otherwise (abandoned-but-empty profile, never-bought-anything customer) we
+    // treat them as eligible: keep the tokens, sync state, skip create-customer.
     if (isFirstClimbRoute()) {
       const candidateEmail = customerData.email;
       const candidatePassword = customerData.password;
       if (candidateEmail && candidatePassword) {
+        let preCheckLoggedIn = false;
         try {
-          await authAPI.login(candidateEmail, candidatePassword, { saveTokens: false });
-          // Login worked → existing customer. Clear any tokens the login set just in case
-          // and surface the blocker modal.
-          try { window.clearTokens && window.clearTokens(); } catch (_) {}
-          state.customerId = null;
-          state.authenticatedCustomer = null;
-          state.authenticatedEmail = null;
-          blockFirstClimbExistingCustomer({ email: candidateEmail });
-          return;
+          await authAPI.login(candidateEmail, candidatePassword, { saveTokens: true });
+          preCheckLoggedIn = true;
         } catch (preCheckErr) {
-          // Expected for new customers (auth fails). Fall through to normal create.
+          // Expected for genuinely new customers. Fall through to normal create.
           console.log('[Save Account] firstclimb pre-check login failed (expected for new customer):', preCheckErr?.message || preCheckErr);
+        }
+        if (preCheckLoggedIn) {
+          let customerIdForCheck = null;
+          try {
+            await syncAuthenticatedCustomerState(undefined, candidateEmail);
+            customerIdForCheck = state.customerId
+              || getTokenMetadata()?.username
+              || getTokenMetadata()?.userName;
+          } catch (syncErr) {
+            console.warn('[Save Account] customer state sync failed before history check:', syncErr);
+          }
+
+          let hasBlockingHistory = true; // fail-safe default
+          try {
+            hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
+          } catch (historyErr) {
+            console.warn('[Save Account] firstclimb history check failed; blocking by default:', historyErr);
+            hasBlockingHistory = true;
+          }
+
+          if (hasBlockingHistory) {
+            try { window.clearTokens && window.clearTokens(); } catch (_) {}
+            state.customerId = null;
+            state.authenticatedCustomer = null;
+            state.authenticatedEmail = null;
+            try { refreshLoginUI(); } catch (_) {}
+            blockFirstClimbExistingCustomer({ email: candidateEmail });
+            return;
+          }
+
+          // Clean history → treat the existing-customer login as the sign-in for
+          // this purchase. No create-customer POST is needed; the user is ready
+          // to proceed to Til Kassen.
+          try { refreshLoginUI(); } catch (_) {}
+          showSaveAccountMessage('Welcome back! You can proceed to checkout.', 'success');
+          showToast('Logged in successfully.', 'success');
+          if (state.currentStep === 4) updatePaymentOverview();
+          return;
         }
       }
     }
@@ -19305,10 +19479,12 @@ async function handleCheckout() {
   } catch (error) {
     // Catch-all for unexpected errors
     console.error('[checkout] Unexpected error:', error);
-    // /99kr: any checkout error from an authenticated customer means BRP rejected
-    // the new-customer-only purchase. Surface the dedicated existing-customer modal
-    // with a CTA instead of the bare "Invalid information provided" toast.
-    if (isFirstClimbRoute() && (isUserAuthenticated() || error?.isDuplicateEmail)) {
+    // /99kr: only surface the existing-customer modal when BRP explicitly
+    // rejects the create as a duplicate. With history-based eligibility,
+    // an authenticated user reaching this point may still be eligible —
+    // unrelated errors should keep their generic message rather than the
+    // misleading "new climbers only" modal.
+    if (isFirstClimbRoute() && error?.isDuplicateEmail) {
       blockFirstClimbExistingCustomer({
         email: state.authenticatedEmail || state.authenticatedCustomer?.email || '',
       });
