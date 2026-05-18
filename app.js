@@ -85,10 +85,16 @@ const LANDING_ROUTE_CONFIG = Object.freeze({
     labelKey: 'LandingFirstMonthFree',
     mode: 'multi',
   }),
+  '/99kr': Object.freeze({
+    componentName: 'LandingFirstClimb',
+    labelKey: 'firstclimb',
+    mode: 'single',
+  }),
 });
 const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
   '/membership-offer',
+  '/99kr',
 ]));
 
 function normalizePathname(pathname) {
@@ -101,6 +107,139 @@ function normalizePathname(pathname) {
 function resolveLandingRouteConfig(pathname = window.location.pathname) {
   const normalizedPath = normalizePathname(pathname);
   return LANDING_ROUTE_CONFIG[normalizedPath] || null;
+}
+
+function isFirstClimbRoute() {
+  const active = (typeof state !== 'undefined' && state?.landingRouteConfig) || resolveLandingRouteConfig();
+  return active?.componentName === 'LandingFirstClimb';
+}
+
+// Static fallback preview rendered before products are fetched, so users
+// landing on /99kr immediately see the offer in step 1. Once products load,
+// renderLandingRoute upgrades this with the live price/description.
+function renderFirstClimbStep1PreviewStatic() {
+  const step1Panel = document.getElementById('step-1');
+  const step1Content = step1Panel?.querySelector('.step-panel-content');
+  if (!step1Content) return;
+  if (step1Content.querySelector('[data-firstclimb-preview]')) return;
+  const preview = document.createElement('div');
+  preview.setAttribute('data-firstclimb-preview', 'true');
+  preview.className = 'firstclimb-preview';
+  const heroTitle = (typeof t === 'function' && t('firstclimb.hero.title')) || 'Your First Climb — 99 kr';
+  const heroSubtitle = (typeof t === 'function' && t('firstclimb.hero.subtitle')) || '';
+  const ctaHint = (typeof t === 'function' && t('main.subtitle.step1')) || 'Choose your home gym';
+  preview.innerHTML = sanitizeHTML(`
+    <div class="firstclimb-preview-card">
+      <div class="firstclimb-preview-title">${heroTitle}</div>
+      <div class="firstclimb-preview-subtitle">${heroSubtitle}</div>
+      <div class="firstclimb-preview-cta-hint">${ctaHint}</div>
+    </div>
+  `);
+  const searchWrapper = step1Content.querySelector('.search-wrapper');
+  if (searchWrapper) {
+    step1Content.insertBefore(preview, searchWrapper);
+  } else {
+    step1Content.prepend(preview);
+  }
+}
+
+// firstclimb is a single-product flow. Once the gym is chosen we have everything
+// we need to skip the product-selection step and drop the user straight into the
+// form/checkout step with the value card already selected (quantity locked to 1).
+async function advanceFirstClimbFromGym() {
+  if (state.selectedBusinessUnit && !productsLoadPromise) {
+    loadProductsFromAPI();
+  }
+  try { await productsLoadPromise; } catch (_) {}
+
+  const product = (state.landingMatchedProducts || [])[0];
+  if (!product) {
+    devWarn('[Landing Route] firstclimb auto-select aborted — no matched product');
+    state.currentStep = 2;
+    showStep(2);
+    updateStepIndicator();
+    updateNavigationButtons();
+    updateMainSubtitle();
+    return;
+  }
+
+  const planId = `punch-${product.id}`;
+  state.membershipPlanId = planId;
+  state.selectedProductId = product.id;
+  state.selectedProductType = 'punch-card';
+  state.valueCardQuantities.set(planId, 1);
+
+  // Form/checkout step (addons step 3 is always skipped in this codebase).
+  state.currentStep = 4;
+  showStep(4);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  try { updateCartSummary(); } catch (_) {}
+  scrollToTop();
+  setTimeout(() => scrollToTop(), 200);
+}
+
+// firstclimb is a new-customer-only product. If BRP recognizes the email
+// (or the user is already logged in), we surface a modal explaining why the
+// purchase can't proceed and direct them to the regular entry options.
+function blockFirstClimbExistingCustomer({ email } = {}) {
+  const emailVal = (email || '').toLowerCase();
+  const title = (typeof t === 'function' && t('firstclimb.existingCustomer.title'))
+    || 'This offer is for new climbers only';
+  const baseBody = (typeof t === 'function' && t('firstclimb.existingCustomer.body'))
+    || 'We already have a profile linked to your email. You can still climb today — buy a regular day ticket at the gym, or use one of your existing products.';
+  const body = emailVal
+    ? `${baseBody} (${emailVal})`
+    : baseBody;
+  const ctaLabel = (typeof t === 'function' && t('firstclimb.existingCustomer.cta'))
+    || 'See regular entry options';
+  const closeLabel = (typeof t === 'function' && t('button.close')) || 'Close';
+
+  // Stop the checkout flow dead — disable the button so the modal isn't fighting
+  // a stale click handler.
+  try {
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState && setCheckoutLoadingState(false);
+  } catch (_) {}
+  try {
+    document.querySelectorAll('[data-action="submit-checkout"]').forEach((btn) => {
+      btn.disabled = true;
+      btn.style.pointerEvents = 'none';
+      btn.style.opacity = '0.5';
+    });
+  } catch (_) {}
+
+  // Build modal once; reuse if already in DOM.
+  let modal = document.getElementById('firstclimbBlockerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'firstclimbBlockerModal';
+    modal.className = 'firstclimb-modal-overlay';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'firstclimbBlockerTitle');
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = sanitizeHTML(`
+    <div class="firstclimb-modal">
+      <button class="firstclimb-modal-close" type="button" aria-label="${closeLabel}" data-firstclimb-modal-close>&times;</button>
+      <div class="firstclimb-modal-title" id="firstclimbBlockerTitle">${title}</div>
+      <p class="firstclimb-modal-body">${body}</p>
+      <div class="firstclimb-modal-actions">
+        <a class="firstclimb-modal-cta" href="/">${ctaLabel}</a>
+      </div>
+    </div>
+  `);
+  modal.style.display = 'flex';
+
+  const close = () => {
+    modal.style.display = 'none';
+  };
+  modal.querySelector('[data-firstclimb-modal-close]')?.addEventListener('click', close);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) close();
+  });
 }
 
 function applyRouteIndexingPolicy(pathname = window.location.pathname) {
@@ -3015,11 +3154,16 @@ async function loadProductsFromAPI() {
   const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
   const isFreeTrialLandingRoute = activeLandingRoute?.componentName === 'LandingFreeTrial';
   const isFirstMonthFreeLandingRoute = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
+  const isFirstClimbLandingRoute = activeLandingRoute?.componentName === 'LandingFirstClimb';
   const displayLabelOptions = isFreeTrialLandingRoute
     ? { allowedVisibilityLabels: ['secret'] }
     : isFirstMonthFreeLandingRoute
       ? { allowedVisibilityLabels: ['secret'] }
-      : {};
+      : isFirstClimbLandingRoute
+        // Accept the firstclimb label itself as a visibility token so a BRP product
+        // carrying only `firstclimb` (no Public/Secret/PublicCampaign) still passes.
+        ? { allowedVisibilityLabels: ['firstclimb', 'secret', 'public', 'publiccampaign'] }
+        : {};
 
   // Deduplicate concurrent calls (preload + step transition + showStep)
   if (productsLoadPromise) {
@@ -3513,12 +3657,13 @@ function renderProductsFromAPI() {
         <div class="plan-card-actions">
           <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
           <div class="quantity-panel">
+            ${isFirstClimbRoute() ? '' : `
             <span class="quantity-panel-label" data-i18n-key="quantity.label">Choose quantity</span>
             <div class="quantity-selector">
               <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
               <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
               <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
-            </div>
+            </div>`}
             <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}" data-i18n-key="button.continue">Continue</button>
           </div>
         </div>
@@ -3568,9 +3713,42 @@ function renderProductsFromAPI() {
     }
     return categoryItem;
   };
+  const ensureFirstClimbCategoryItem = () => {
+    const categoryList = document.querySelector('.category-list');
+    if (!categoryList) return null;
+    let categoryItem = categoryList.querySelector('[data-category="firstclimb"]');
+    if (!categoryItem) {
+      categoryItem = document.createElement('div');
+      categoryItem.className = 'category-item expanded selected';
+      categoryItem.dataset.category = 'firstclimb';
+      categoryItem.dataset.landingLocked = 'true';
+      const title = t('firstclimb.category.title') || 'Din første klatretur';
+      const description = t('firstclimb.category.description') || 'En dagsbillet til 99 kr inkl. lejesko. Kun for nye klatrere.';
+      categoryItem.innerHTML = sanitizeHTML(`
+        <div class="category-header">
+          <div class="category-info">
+            <div class="category-title" data-i18n-key="firstclimb.category.title">${title}</div>
+          </div>
+          <i data-lucide="chevron-down" class="category-icon"></i>
+        </div>
+        <div class="category-content">
+          <div class="category-description">
+            <p data-i18n-key="firstclimb.category.description">${description}</p>
+          </div>
+          <div class="plans-list"></div>
+        </div>
+      `);
+      categoryList.prepend(categoryItem);
+    }
+    return categoryItem;
+  };
   const getLandingTargetList = () => {
     if (activeLandingRoute?.componentName === 'LandingFreeTrial') {
       const categoryItem = ensureFreeTrialCategoryItem();
+      return categoryItem ? categoryItem.querySelector('.plans-list') : null;
+    }
+    if (activeLandingRoute?.componentName === 'LandingFirstClimb') {
+      const categoryItem = ensureFirstClimbCategoryItem();
       return categoryItem ? categoryItem.querySelector('.plans-list') : null;
     }
     if (activeLandingRoute?.componentName === 'LandingFirstMonthFree') {
@@ -3585,9 +3763,11 @@ function renderProductsFromAPI() {
     });
     const targetCategory = activeLandingRoute?.componentName === 'LandingFreeTrial'
       ? ensureFreeTrialCategoryItem()
-      : activeLandingRoute?.componentName === 'LandingFirstMonthFree'
-        ? document.querySelector('[data-category="campaign"]')
-        : document.querySelector('[data-category="membership"]');
+      : activeLandingRoute?.componentName === 'LandingFirstClimb'
+        ? ensureFirstClimbCategoryItem()
+        : activeLandingRoute?.componentName === 'LandingFirstMonthFree'
+          ? document.querySelector('[data-category="campaign"]')
+          : document.querySelector('[data-category="membership"]');
     if (targetCategory) {
       targetCategory.style.display = '';
       targetCategory.classList.add('expanded', 'selected');
@@ -3636,11 +3816,65 @@ function renderProductsFromAPI() {
     renderLandingCards(products || []);
     devLog('[Landing Route] Rendering LandingFirstMonthFree');
   };
+  const renderFirstClimbStep1Preview = (product) => {
+    const step1Panel = document.getElementById('step-1');
+    const step1Content = step1Panel?.querySelector('.step-panel-content');
+    if (!step1Content) return;
+    let preview = step1Content.querySelector('[data-firstclimb-preview]');
+    if (!preview) {
+      preview = document.createElement('div');
+      preview.setAttribute('data-firstclimb-preview', 'true');
+      preview.className = 'firstclimb-preview';
+      const searchWrapper = step1Content.querySelector('.search-wrapper');
+      if (searchWrapper) {
+        step1Content.insertBefore(preview, searchWrapper);
+      } else {
+        step1Content.prepend(preview);
+      }
+    }
+    const priceInCents = product?.price?.amount ?? product?.amount ?? 0;
+    const priceKr = priceInCents / 100;
+    const rawDescription = product?.description || '';
+    const descriptionHtml = rawDescription
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    const heroTitle = t('firstclimb.hero.title') || 'Your First Climb — 99 kr';
+    const heroSubtitle = t('firstclimb.hero.subtitle') || '';
+    const priceBlock = product
+      ? `
+        <div class="firstclimb-preview-price">
+          <span class="price-amount">${priceKr > 0 ? formatPriceHalfKrone(roundToHalfKrone(priceKr)) : 'FREE'}</span>
+          ${priceKr > 0 ? '<span class="price-unit">kr</span>' : ''}
+        </div>`
+      : '';
+    const descriptionBlock = descriptionHtml
+      ? `<div class="firstclimb-preview-description">${descriptionHtml}</div>`
+      : '';
+    preview.innerHTML = sanitizeHTML(`
+      <div class="firstclimb-preview-card">
+        <div class="firstclimb-preview-title">${heroTitle}</div>
+        <div class="firstclimb-preview-subtitle">${heroSubtitle}</div>
+        ${priceBlock}
+        ${descriptionBlock}
+        <div class="firstclimb-preview-cta-hint">${t('main.subtitle.step1') || 'Choose your home gym'}</div>
+      </div>
+    `);
+  };
+  const LandingFirstClimb = (products) => {
+    hideNonLandingCategories();
+    renderLandingCards((products || []).slice(0, 1));
+    renderFirstClimbStep1Preview((products || [])[0] || null);
+    devLog('[Landing Route] Rendering LandingFirstClimb');
+  };
   if (shouldRenderLandingRoute) {
     if (activeLandingRoute.componentName === 'LandingFreeTrial') {
       LandingFreeTrial(landingMatchedProducts);
     } else if (activeLandingRoute.componentName === 'LandingFirstMonthFree') {
       LandingFirstMonthFree(landingMatchedProducts);
+    } else if (activeLandingRoute.componentName === 'LandingFirstClimb') {
+      LandingFirstClimb(landingMatchedProducts);
     } else {
       devWarn('[Landing Route] Unknown component name:', activeLandingRoute.componentName);
     }
@@ -3652,6 +3886,14 @@ function renderProductsFromAPI() {
   const freeTrialCategoryItem = document.querySelector('.category-item[data-category="freetrial"]');
   if (freeTrialCategoryItem) {
     freeTrialCategoryItem.remove();
+  }
+  const firstClimbCategoryItem = document.querySelector('.category-item[data-category="firstclimb"]');
+  if (firstClimbCategoryItem) {
+    firstClimbCategoryItem.remove();
+  }
+  const firstClimbPreview = document.querySelector('[data-firstclimb-preview]');
+  if (firstClimbPreview) {
+    firstClimbPreview.remove();
   }
   const categoryItems = document.querySelectorAll('.category-item');
   categoryItems.forEach((item) => {
@@ -5789,6 +6031,29 @@ function applyConditionalSteps() {
     }
   }
 
+  // 1b) /99kr (firstclimb): the Access step is skipped, so hide it in the indicator too.
+  //     This collapses the indicator to Home Gym → Send.
+  const accessStep = Array.from(document.querySelectorAll('.step .step-label'))
+    .find((label) => {
+      const k = label.getAttribute('data-i18n-key');
+      return k === 'step.access';
+    })?.closest('.step');
+  if (accessStep) {
+    if (isFirstClimbRoute()) {
+      accessStep.classList.add('hidden');
+      const prevConnector = accessStep.previousElementSibling;
+      if (prevConnector && prevConnector.classList.contains('step-connector')) {
+        prevConnector.classList.add('hidden');
+      }
+    } else {
+      accessStep.classList.remove('hidden');
+      const prevConnector = accessStep.previousElementSibling;
+      if (prevConnector && prevConnector.classList.contains('step-connector')) {
+        prevConnector.classList.remove('hidden');
+      }
+    }
+  }
+
   // 2) Always hide Boost/Add-ons page (step 3) - disabled for now
   const boostPanel = document.getElementById('step-3');
   if (boostPanel) {
@@ -5809,6 +6074,21 @@ function init() {
   state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
   if (state.landingRouteConfig) {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
+  }
+
+  // firstclimb is a one-per-person new-customer offer. If a user with an
+  // existing BRP profile is already logged in, block them at route entry.
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb' && isUserAuthenticated()) {
+    try {
+      showToast('This offer is for new climbers only. You already have an account.', 'error');
+    } catch (_) {}
+    try { window.location.replace('/'); } catch (_) {}
+    return;
+  }
+
+  // /99kr: render the product preview on step 1 immediately, before products load.
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
+    try { renderFirstClimbStep1PreviewStatic(); } catch (_) {}
   }
 
   // Capture ?ref=<recruiter customer ID> early so it's stored before any
@@ -6127,6 +6407,25 @@ const translations = {
     'faq.freetrial.changeStartDateCta': 'Vil du ændre startdatoen? Skriv til medlem@boulders.dk',
     'faq.freetrial.creditCard.q': 'Kræver det et kreditkort?',
     'faq.freetrial.creditCard.a': 'Nej, prøveperioden er helt gratis og kræver ingen betalingsoplysninger.',
+    'firstclimb.category.title': 'Din første klatretur',
+    'firstclimb.category.description': 'En dagsbillet til 99 kr inkl. lejesko. Kun for nye klatrere.',
+    'firstclimb.hero.title': 'Din første klatretur — 99 kr',
+    'firstclimb.hero.subtitle': 'Dagsbillet inkl. lejesko. Kun for nye klatrere.',
+    'firstclimb.cta': 'Køb dagsbillet',
+    'firstclimb.existingCustomer.block': 'Dette tilbud er kun for nye klatrere. Du har allerede en konto hos os.',
+    'firstclimb.existingCustomer.title': 'Dette tilbud er kun for nye klatrere',
+    'firstclimb.existingCustomer.body': 'Vi har allerede en profil tilknyttet din email. Du kan stadig klatre i dag — køb en almindelig dagsbillet i hallen, eller brug et af dine eksisterende produkter.',
+    'firstclimb.existingCustomer.cta': 'Se almindelige adgangsmuligheder',
+    'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
+    'faq.firstclimb.included.a': 'Adgang til alle Boulders haller hele dagen + lejesko. Ingen skjulte gebyrer.',
+    'faq.firstclimb.eligibility.q': 'Hvem kan købe dagsbilletten?',
+    'faq.firstclimb.eligibility.a': 'Dagsbilletten på 99 kr er et tilbud til nye klatrere. Hvis du allerede har en profil hos Boulders, kan du i stedet købe en almindelig dagsbillet i hallen.',
+    'faq.firstclimb.validity.q': 'Hvor længe gælder den?',
+    'faq.firstclimb.validity.a': 'Dagsbilletten gælder én (1) dag — den du selv vælger ved køb. Når dagen er omme, udløber den.',
+    'faq.firstclimb.howToUse.q': 'Hvordan bruger jeg den i hallen?',
+    'faq.firstclimb.howToUse.a': 'Mød op i hallen på den dag, du har valgt. Oplys dit telefonnummer eller email til personalet, så aktiverer de din dagsbillet og hjælper dig med lejesko.',
+    'faq.firstclimb.afterDay.q': 'Hvad sker der efter min første dag?',
+    'faq.firstclimb.afterDay.a': 'Bliv hængende! Du kan opgradere til medlemskab, et 15-dages kort eller et klippekort direkte hos personalet — eller online når du er klar.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
     'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 12 måneder og kan deles med andre.',
     'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
@@ -6357,6 +6656,25 @@ const translations = {
     'faq.freetrial.changeStartDateCta': 'Want to change your start date? Write to medlem@boulders.dk',
     'faq.freetrial.creditCard.q': 'Does it require a credit card?',
     'faq.freetrial.creditCard.a': 'No, the trial period is completely free and requires no payment details.',
+    'firstclimb.category.title': 'Your First Climb',
+    'firstclimb.category.description': 'A day ticket for 99 kr including rental shoes. New climbers only.',
+    'firstclimb.hero.title': 'Your First Climb — 99 kr',
+    'firstclimb.hero.subtitle': 'Day ticket including rental shoes. New climbers only.',
+    'firstclimb.cta': 'Buy day ticket',
+    'firstclimb.existingCustomer.block': 'This offer is for new climbers only. You already have an account with us.',
+    'firstclimb.existingCustomer.title': 'This offer is for new climbers only',
+    'firstclimb.existingCustomer.body': 'We already have a profile linked to your email. You can still climb today — buy a regular day ticket at the gym, or use one of your existing products.',
+    'firstclimb.existingCustomer.cta': 'See regular entry options',
+    'faq.firstclimb.included.q': "What's included in the day ticket?",
+    'faq.firstclimb.included.a': 'Full-day access to all Boulders gyms plus rental shoes. No hidden fees.',
+    'faq.firstclimb.eligibility.q': 'Who can buy the day ticket?',
+    'faq.firstclimb.eligibility.a': "The 99 kr day ticket is an offer for new climbers. If you already have a Boulders profile, you can buy a regular day ticket at the gym instead.",
+    'faq.firstclimb.validity.q': 'How long is it valid?',
+    'faq.firstclimb.validity.a': 'The day ticket is valid for one (1) day — the date you pick at checkout. It expires at the end of that day.',
+    'faq.firstclimb.howToUse.q': 'How do I use it at the gym?',
+    'faq.firstclimb.howToUse.a': 'Show up on the day you picked. Give the staff your phone number or email and they will activate your day ticket and hand you rental shoes.',
+    'faq.firstclimb.afterDay.q': 'What happens after my first day?',
+    'faq.firstclimb.afterDay.a': "Stick around! You can upgrade to a membership, a 15-day pass, or a punch card directly with our staff — or online when you're ready.",
     'cart.freePeriod': 'Free period',
     'cart.activateTrial': 'ACTIVATE TRIAL PERIOD',
     'cart.noCreditCardRequired': 'No credit card required',
@@ -6425,6 +6743,25 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
+    'firstclimb.category.title': 'Dein erster Kletterbesuch',
+    'firstclimb.category.description': 'Eine Tageskarte für 99 kr inkl. Leihschuhe. Nur für neue Kletterer.',
+    'firstclimb.hero.title': 'Dein erster Kletterbesuch — 99 kr',
+    'firstclimb.hero.subtitle': 'Tageskarte inkl. Leihschuhe. Nur für neue Kletterer.',
+    'firstclimb.cta': 'Tageskarte kaufen',
+    'firstclimb.existingCustomer.block': 'Dieses Angebot gilt nur für neue Kletterer. Du hast bereits ein Konto bei uns.',
+    'firstclimb.existingCustomer.title': 'Dieses Angebot ist nur für neue Kletterer',
+    'firstclimb.existingCustomer.body': 'Wir haben bereits ein Profil zu dieser E-Mail. Du kannst trotzdem klettern — kauf direkt vor Ort eine reguläre Tageskarte oder nutze eines deiner bestehenden Produkte.',
+    'firstclimb.existingCustomer.cta': 'Reguläre Zugangsoptionen ansehen',
+    'faq.firstclimb.included.q': 'Was ist in der Tageskarte enthalten?',
+    'faq.firstclimb.included.a': 'Ganztägiger Zugang zu allen Boulders-Hallen plus Leihschuhe. Keine versteckten Gebühren.',
+    'faq.firstclimb.eligibility.q': 'Wer kann die Tageskarte kaufen?',
+    'faq.firstclimb.eligibility.a': 'Die Tageskarte für 99 kr ist ein Angebot für neue Kletterer. Wenn du bereits ein Boulders-Profil hast, kannst du stattdessen eine normale Tageskarte direkt in der Halle kaufen.',
+    'faq.firstclimb.validity.q': 'Wie lange ist sie gültig?',
+    'faq.firstclimb.validity.a': 'Die Tageskarte gilt einen (1) Tag — den du beim Kauf auswählst. Am Ende dieses Tages läuft sie ab.',
+    'faq.firstclimb.howToUse.q': 'Wie nutze ich sie in der Halle?',
+    'faq.firstclimb.howToUse.a': 'Komm an deinem ausgewählten Tag vorbei. Gib dem Personal deine Telefonnummer oder E-Mail, dann aktivieren sie deine Tageskarte und händigen dir Leihschuhe aus.',
+    'faq.firstclimb.afterDay.q': 'Was passiert nach meinem ersten Tag?',
+    'faq.firstclimb.afterDay.a': 'Bleib dran! Du kannst direkt vor Ort auf eine Mitgliedschaft, ein 15-Tage-Ticket oder eine Stempelkarte upgraden — oder online, wenn du bereit bist.',
     'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
@@ -8218,7 +8555,19 @@ async function handleLoginSubmit(event) {
     const payload = response?.data ?? response;
     const username = payload?.username || email;
     state.authenticatedEmail = email;
-    
+
+    // /99kr: a successful login means the email has an existing BRP profile,
+    // which disqualifies the user from this new-customer-only offer.
+    if (isFirstClimbRoute()) {
+      try { window.clearTokens && window.clearTokens(); } catch (_) {}
+      state.customerId = null;
+      state.authenticatedCustomer = null;
+      state.authenticatedEmail = null;
+      try { refreshLoginUI(); } catch (_) {}
+      blockFirstClimbExistingCustomer({ email });
+      return;
+    }
+
     // Sync customer state and fetch profile
     await syncAuthenticatedCustomerState(username, email);
     
@@ -10044,7 +10393,31 @@ async function handleSaveAccount() {
 
       console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
-    
+
+    // /99kr defensive existing-customer pre-check: BRP doesn't always reject duplicate
+    // emails on the create endpoint. Attempt login with the typed credentials first —
+    // if it succeeds, the email belongs to an existing profile and we must block.
+    if (isFirstClimbRoute()) {
+      const candidateEmail = customerData.email;
+      const candidatePassword = customerData.password;
+      if (candidateEmail && candidatePassword) {
+        try {
+          await authAPI.login(candidateEmail, candidatePassword, { saveTokens: false });
+          // Login worked → existing customer. Clear any tokens the login set just in case
+          // and surface the blocker modal.
+          try { window.clearTokens && window.clearTokens(); } catch (_) {}
+          state.customerId = null;
+          state.authenticatedCustomer = null;
+          state.authenticatedEmail = null;
+          blockFirstClimbExistingCustomer({ email: candidateEmail });
+          return;
+        } catch (preCheckErr) {
+          // Expected for new customers (auth fails). Fall through to normal create.
+          console.log('[Save Account] firstclimb pre-check login failed (expected for new customer):', preCheckErr?.message || preCheckErr);
+        }
+      }
+    }
+
     console.log('[Save Account] Creating customer account...');
     const customer = await authAPI.createCustomer(customerData);
     
@@ -10211,8 +10584,35 @@ async function handleSaveAccount() {
           updatePaymentOverview();
         }
       } else {
-        showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
-        showToast('Account saved successfully!', 'success');
+        // /99kr: login section is hidden, so "Please log in to continue" is a dead
+        // end. Auto-attempt login with the password the user just typed so they
+        // can proceed straight to checkout. If that login succeeds against an
+        // existing customer (rather than the freshly-created one), the surrounding
+        // logic still works — the auth state ends up populated either way.
+        if (isFirstClimbRoute()) {
+          const autoEmail = customerData.email;
+          const autoPassword = customerData.password;
+          if (autoEmail && autoPassword) {
+            try {
+              await authAPI.login(autoEmail, autoPassword, { saveTokens: true });
+              await syncAuthenticatedCustomerState(undefined, autoEmail);
+              try { refreshLoginUI(); } catch (_) {}
+              showSaveAccountMessage('Account saved successfully! You are now logged in. You can proceed to checkout.', 'success');
+              showToast('Account saved and logged in successfully!', 'success');
+              if (state.currentStep === 4) updatePaymentOverview();
+            } catch (autoLoginErr) {
+              console.warn('[Save Account] firstclimb auto-login after tokenless create failed:', autoLoginErr);
+              showSaveAccountMessage('Account saved, but we could not sign you in automatically. Please try again or contact support.', 'error');
+              showToast('Account saved, but auto-login failed.', 'error');
+            }
+          } else {
+            showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
+            showToast('Account saved successfully!', 'success');
+          }
+        } else {
+          showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
+          showToast('Account saved successfully!', 'success');
+        }
       }
     } else {
       throw new Error('Customer ID not found in response');
@@ -10227,6 +10627,10 @@ async function handleSaveAccount() {
       highlightFieldError('email', true);
     } else if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
       const emailVal = document.getElementById('email')?.value?.trim()?.toLowerCase() || '';
+      if (isFirstClimbRoute()) {
+        blockFirstClimbExistingCustomer({ email: emailVal });
+        return;
+      }
       const password = customerData?.password || document.getElementById('password')?.value;
       if (emailVal && password) {
         try {
@@ -12003,26 +12407,39 @@ function initAuthModeToggle() {
   // Set initial state - if user is logged in, select login tab, otherwise create account
   const isAuthenticated = isUserAuthenticated();
   
-  // Hide toggle buttons if user is already authenticated
+  // Hide toggle buttons if user is already authenticated, or on /99kr
+  // (new-customer-only offer — log-in path is a contradiction).
+  const hideForFirstClimb = isFirstClimbRoute();
   const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
   switchBtns.forEach(btn => {
-    btn.style.display = isAuthenticated ? 'none' : '';
+    btn.style.display = (isAuthenticated || hideForFirstClimb) ? 'none' : '';
   });
   
   // On desktop, default to login form; on mobile, also show login form by default
   const isDesktop = window.innerWidth >= 768;
   
   if (!isAuthenticated) {
-    // Always show login form by default (both desktop and mobile)
-    switchAuthMode('login');
-    if (loginSection) {
-      loginSection.style.display = 'block';
-      // Ensure it's visible
-      loginSection.style.visibility = 'visible';
-      loginSection.style.opacity = '1';
-    }
-    if (createSection) {
-      createSection.style.display = 'none';
+    if (hideForFirstClimb) {
+      // /99kr: new customers only — default straight to the create-profile form.
+      switchAuthMode('create');
+      if (loginSection) loginSection.style.display = 'none';
+      if (createSection) {
+        createSection.style.display = 'block';
+        createSection.style.visibility = 'visible';
+        createSection.style.opacity = '1';
+      }
+    } else {
+      // Always show login form by default (both desktop and mobile)
+      switchAuthMode('login');
+      if (loginSection) {
+        loginSection.style.display = 'block';
+        // Ensure it's visible
+        loginSection.style.visibility = 'visible';
+        loginSection.style.opacity = '1';
+      }
+      if (createSection) {
+        createSection.style.display = 'none';
+      }
     }
   } else {
     // Authenticated: show login section with status
@@ -12073,10 +12490,12 @@ function switchAuthMode(mode, email = null) {
     }
   });
   
-  // Hide buttons if user is authenticated
+  // Hide buttons if user is authenticated, or on /99kr (single-purchase new-customer
+  // offer: log-in is a contradiction since existing customers are blocked anyway).
   const isAuthenticated = isUserAuthenticated();
+  const hideForFirstClimb = isFirstClimbRoute();
   switchBtns.forEach(btn => {
-    btn.style.display = isAuthenticated ? 'none' : '';
+    btn.style.display = (isAuthenticated || hideForFirstClimb) ? 'none' : '';
   });
   
   // Show/hide sections with fade
@@ -14921,7 +15340,17 @@ function renderCartItems() {
       totalRow.className = 'cart-item-total-row';
       const labelSpan = document.createElement('span');
       const punches = item.totalPunches != null && item.totalPunches > 0 ? item.totalPunches : 0;
-      labelSpan.textContent = punches === 1 ? `Total (${t('cart.punch.one')})` : `Total (${punches} ${t('cart.punch.label')})`;
+      // firstclimb is a single-day ticket — use the product name instead of the
+      // "Total (X Klip)" punch-card label. Same fallback for any value card BRP
+      // returns without a clip count.
+      if (isFirstClimbRoute() || punches === 0) {
+        const productName = String(item.name || item.product?.name || '').trim();
+        labelSpan.textContent = productName || (t('cart.total') || 'Total');
+      } else if (punches === 1) {
+        labelSpan.textContent = `Total (${t('cart.punch.one')})`;
+      } else {
+        labelSpan.textContent = `Total (${punches} ${t('cart.punch.label')})`;
+      }
       labelSpan.className = 'cart-total-label';
       totalRow.appendChild(labelSpan);
       const priceSpan = document.createElement('span');
@@ -17250,6 +17679,12 @@ async function handleCheckout() {
         // Handle duplicate email error: try login with provided credentials and continue on success
         if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
           const emailVal = (payload.customer?.email?.trim() || '').toLowerCase();
+          if (isFirstClimbRoute()) {
+            blockFirstClimbExistingCustomer({ email: emailVal });
+            setCheckoutLoadingState(false);
+            state.checkoutInProgress = false;
+            return;
+          }
           const password = payload.customer?.password || customerData?.password;
           if (emailVal && password) {
             try {
@@ -18868,6 +19303,18 @@ async function handleCheckout() {
   } catch (error) {
     // Catch-all for unexpected errors
     console.error('[checkout] Unexpected error:', error);
+    // /99kr: any checkout error from an authenticated customer means BRP rejected
+    // the new-customer-only purchase. Surface the dedicated existing-customer modal
+    // with a CTA instead of the bare "Invalid information provided" toast.
+    if (isFirstClimbRoute() && (isUserAuthenticated() || error?.isDuplicateEmail)) {
+      blockFirstClimbExistingCustomer({
+        email: state.authenticatedEmail || state.authenticatedCustomer?.email || '',
+      });
+      state.checkoutInProgress = false;
+      updateFAQVisibility();
+      setCheckoutLoadingState(false);
+      return;
+    }
     showToast(getErrorMessage(error, 'Checkout'), 'error');
     state.checkoutInProgress = false; // Reset on error
     updateFAQVisibility(); // Show FAQ again if checkout fails
@@ -21898,17 +22345,23 @@ function nextStep(fromStep) {
   // CRITICAL: When going from step 1 (gym selection), always go to step 2 (membership selection)
   // Never skip to any other step - this prevents navigation bugs
   if (currentStep === 1) {
+    // /99kr (LandingFirstClimb): single-product flow. Skip step 2 entirely —
+    // auto-select the firstclimb value card and jump straight to the form/checkout step.
+    if (isFirstClimbRoute()) {
+      advanceFirstClimbFromGym();
+      return;
+    }
     state.currentStep = 2;
     showStep(2);
     updateStepIndicator();
     updateNavigationButtons();
     updateMainSubtitle();
-    
+
     // Step 5: Load products when step 2 (access type selection) is shown
     if (state.selectedBusinessUnit) {
       // Only load if we don't already have products loaded
-      const hasAnyProducts = (state.subscriptions?.length || 0) > 0 || 
-                             (state.dayPassSubscriptions?.length || 0) > 0 || 
+      const hasAnyProducts = (state.subscriptions?.length || 0) > 0 ||
+                             (state.dayPassSubscriptions?.length || 0) > 0 ||
                              (state.valueCards?.length || 0) > 0;
       if (!hasAnyProducts) {
         loadProductsFromAPI();
@@ -21918,13 +22371,13 @@ function nextStep(fromStep) {
         updateSelectedGymDisplay();
       }, 100);
     }
-    
+
     // Scroll to top when navigating steps
     scrollToTop();
     setTimeout(() => {
       scrollToTop();
     }, 200);
-    
+
     return; // Early return - don't continue with normal navigation logic
   }
   
@@ -22474,10 +22927,12 @@ function showStep(stepNumber) {
   if (stepNumber === 4 && isUserAuthenticated()) {
     switchAuthMode('login');
   } else if (stepNumber === 4 && !isUserAuthenticated()) {
-    // Update switch button visibility when showing step 4
+    // Update switch button visibility when showing step 4. On /99kr the
+    // log-in toggle stays hidden — existing customers can't use the offer.
+    const hideForFirstClimb = isFirstClimbRoute();
     const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
     switchBtns.forEach(btn => {
-      btn.style.display = '';
+      btn.style.display = hideForFirstClimb ? 'none' : '';
     });
   }
   
@@ -22540,18 +22995,17 @@ function updateStepIndicator() {
   }
 
   // Map state.currentStep to indicator step index
-  // Step 1 → indicator 0 (Home Gym)
-  // Step 2 → indicator 1 (Access)
-  // Step 3 → skipped (Boost is hidden)
-  // Step 4 → indicator 2 (Send)
-  // Step 5 → hide indicator (handled above)
+  // Default flow: Step 1 → 0 (Home Gym), Step 2 → 1 (Access), Step 4 → 2 (Send)
+  // /99kr flow: Access is hidden, so Step 1 → 0 (Home Gym), Step 4 → 1 (Send)
+  // Step 3 is always skipped (Boost is hidden); Step 5 hides the indicator (handled above).
+  const firstClimbFlow = isFirstClimbRoute();
   let visibleCurrentIndex = -1;
   if (state.currentStep === 1) {
     visibleCurrentIndex = 0;
-  } else if (state.currentStep === 2) {
+  } else if (state.currentStep === 2 && !firstClimbFlow) {
     visibleCurrentIndex = 1;
   } else if (state.currentStep === 4) {
-    visibleCurrentIndex = 2;
+    visibleCurrentIndex = firstClimbFlow ? 1 : 2;
   } else {
     // For step 5 or any other step, hide indicator (already handled above)
     return;
@@ -23714,6 +24168,13 @@ const FAQ_DATA = {
     { q: 'faq.punchcard.convert.q', a: 'faq.punchcard.convert.a' },
     { q: 'faq.punchcard.remainingClips.q', a: 'faq.punchcard.remainingClips.a' },
     { q: 'faq.punchcard.multiple.q', a: 'faq.punchcard.multiple.a' }
+  ],
+  firstclimb: [
+    { q: 'faq.firstclimb.included.q', a: 'faq.firstclimb.included.a' },
+    { q: 'faq.firstclimb.eligibility.q', a: 'faq.firstclimb.eligibility.a' },
+    { q: 'faq.firstclimb.validity.q', a: 'faq.firstclimb.validity.a' },
+    { q: 'faq.firstclimb.howToUse.q', a: 'faq.firstclimb.howToUse.a' },
+    { q: 'faq.firstclimb.afterDay.q', a: 'faq.firstclimb.afterDay.a' }
   ]
 };
 
@@ -23729,6 +24190,11 @@ const FREE_TRIAL_EXTRA_FAQS = [
  */
 function getActiveFAQs() {
   const step = state.currentStep;
+
+  // firstclimb landing route: dedicated FAQ on every visible step.
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
+    return ['firstclimb'];
+  }
 
   // Step 1: gym info only
   if (step === 1) {

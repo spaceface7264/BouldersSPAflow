@@ -10595,3 +10595,135 @@ main {
         gap: 16px;
     }
 }
+
+/* /99kr first-climb preview shown on step 1 */
+.firstclimb-preview {
+    margin: 0 0 20px;
+}
+
+.firstclimb-preview-card {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 20px 22px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.firstclimb-preview-title {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 6px;
+}
+
+.firstclimb-preview-subtitle {
+    font-size: 14px;
+    opacity: 0.8;
+    margin-bottom: 14px;
+}
+
+.firstclimb-preview-price {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.firstclimb-preview-price .price-amount {
+    font-size: 28px;
+}
+
+.firstclimb-preview-price .price-unit {
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.firstclimb-preview-description {
+    font-size: 14px;
+    line-height: 1.5;
+    opacity: 0.85;
+    margin-bottom: 12px;
+    white-space: normal;
+}
+
+.firstclimb-preview-cta-hint {
+    font-size: 13px;
+    opacity: 0.7;
+    margin-top: 4px;
+}
+
+.firstclimb-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+}
+
+.firstclimb-modal {
+    position: relative;
+    background: #181820;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 32px 28px 28px;
+    max-width: 480px;
+    width: 100%;
+    color: #fff;
+    text-align: center;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+
+.firstclimb-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 4px 8px;
+}
+
+.firstclimb-modal-close:hover {
+    opacity: 1;
+}
+
+.firstclimb-modal-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    line-height: 1.25;
+}
+
+.firstclimb-modal-body {
+    font-size: 15px;
+    line-height: 1.55;
+    opacity: 0.88;
+    margin-bottom: 22px;
+}
+
+.firstclimb-modal-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.firstclimb-modal-cta {
+    display: inline-block;
+    padding: 12px 24px;
+    border-radius: 999px;
+    background: #ff00d4;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+}
+
+.firstclimb-modal-cta:hover {
+    opacity: 0.9;
+}
