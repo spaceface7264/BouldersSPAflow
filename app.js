@@ -188,10 +188,12 @@ function blockFirstClimbExistingCustomer({ email } = {}) {
   const title = (typeof t === 'function' && t('firstclimb.existingCustomer.title'))
     || 'This offer is for new climbers only';
   const baseBody = (typeof t === 'function' && t('firstclimb.existingCustomer.body'))
-    || 'We already have a profile linked to your email. You can still climb today — buy a regular day ticket at the gym, or use one of your existing products.';
+    || 'We already have a profile linked to your email {email}. You can still climb today — buy a regular day ticket at the gym, or use one of your existing products.';
+  // Inline the email next to "your email" so it reads naturally. If we don't
+  // have an email, strip the placeholder and the leading space before it.
   const body = emailVal
-    ? `${baseBody} (${emailVal})`
-    : baseBody;
+    ? baseBody.replace('{email}', emailVal)
+    : baseBody.replace(/\s*\{email\}/g, '');
   const ctaLabel = (typeof t === 'function' && t('firstclimb.existingCustomer.cta'))
     || 'See regular entry options';
   const closeLabel = (typeof t === 'function' && t('button.close')) || 'Close';
@@ -6414,7 +6416,7 @@ const translations = {
     'firstclimb.cta': 'Køb dagsbillet',
     'firstclimb.existingCustomer.block': 'Dette tilbud er kun for nye klatrere. Du har allerede en konto hos os.',
     'firstclimb.existingCustomer.title': 'Dette tilbud er kun for nye klatrere',
-    'firstclimb.existingCustomer.body': 'Vi har allerede en profil tilknyttet din email. Du kan stadig klatre i dag — køb en almindelig dagsbillet i hallen, eller brug et af dine eksisterende produkter.',
+    'firstclimb.existingCustomer.body': 'Vi har allerede en profil tilknyttet din email {email}. Du kan stadig klatre i dag — køb en almindelig dagsbillet i hallen, eller brug et af dine eksisterende produkter.',
     'firstclimb.existingCustomer.cta': 'Se almindelige adgangsmuligheder',
     'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
     'faq.firstclimb.included.a': 'Adgang til alle Boulders haller hele dagen + lejesko. Ingen skjulte gebyrer.',
@@ -6663,7 +6665,7 @@ const translations = {
     'firstclimb.cta': 'Buy day ticket',
     'firstclimb.existingCustomer.block': 'This offer is for new climbers only. You already have an account with us.',
     'firstclimb.existingCustomer.title': 'This offer is for new climbers only',
-    'firstclimb.existingCustomer.body': 'We already have a profile linked to your email. You can still climb today — buy a regular day ticket at the gym, or use one of your existing products.',
+    'firstclimb.existingCustomer.body': 'We already have a profile linked to your email {email}. You can still climb today — buy a regular day ticket at the gym, or use one of your existing products.',
     'firstclimb.existingCustomer.cta': 'See regular entry options',
     'faq.firstclimb.included.q': "What's included in the day ticket?",
     'faq.firstclimb.included.a': 'Full-day access to all Boulders gyms plus rental shoes. No hidden fees.',
@@ -6750,7 +6752,7 @@ const translations = {
     'firstclimb.cta': 'Tageskarte kaufen',
     'firstclimb.existingCustomer.block': 'Dieses Angebot gilt nur für neue Kletterer. Du hast bereits ein Konto bei uns.',
     'firstclimb.existingCustomer.title': 'Dieses Angebot ist nur für neue Kletterer',
-    'firstclimb.existingCustomer.body': 'Wir haben bereits ein Profil zu dieser E-Mail. Du kannst trotzdem klettern — kauf direkt vor Ort eine reguläre Tageskarte oder nutze eines deiner bestehenden Produkte.',
+    'firstclimb.existingCustomer.body': 'Wir haben bereits ein Profil zu deiner E-Mail {email}. Du kannst trotzdem klettern — kauf direkt vor Ort eine reguläre Tageskarte oder nutze eines deiner bestehenden Produkte.',
     'firstclimb.existingCustomer.cta': 'Reguläre Zugangsoptionen ansehen',
     'faq.firstclimb.included.q': 'Was ist in der Tageskarte enthalten?',
     'faq.firstclimb.included.a': 'Ganztägiger Zugang zu allen Boulders-Hallen plus Leihschuhe. Keine versteckten Gebühren.',
