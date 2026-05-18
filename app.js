@@ -114,15 +114,12 @@ function isFirstClimbRoute() {
   return active?.componentName === 'LandingFirstClimb';
 }
 
-// firstclimb is for "first-time climbers". We define that as: the customer has
-// never held a product carrying one of these BRP labels. Anything else (e.g. an
-// abandoned-but-empty profile, only past free trials) is fine — they can buy.
+// firstclimb is a one-per-customer offer. Every user — new or existing — can
+// buy it exactly once. The only disqualifier is having already held a product
+// carrying the `firstclimb` label.
 // Stored lowercase + whitespace-collapsed; matched with the same normalization.
 const FIRSTCLIMB_BLOCKING_LABELS = Object.freeze([
-  'medlem',
-  '15 dages kort / medlem',
-  '15 day pass',
-  'klippekort',
+  'firstclimb',
 ]);
 
 function normalizeFirstclimbLabelName(value) {
@@ -6538,10 +6535,10 @@ const translations = {
     'firstclimb.hero.title': 'Din første klatretur — 99 kr',
     'firstclimb.hero.subtitle': 'Dagsbillet inkl. lejesko. Kun for nye klatrere.',
     'firstclimb.cta': 'Køb dagsbillet',
-    'firstclimb.existingCustomer.block': 'Dette tilbud er kun for nye klatrere. Du har allerede en konto hos os.',
-    'firstclimb.existingCustomer.title': 'Dette tilbud er kun for nye klatrere',
-    'firstclimb.existingCustomer.body': 'Vi har allerede en profil tilknyttet din email {email}. Du kan stadig klatre i dag — køb en almindelig dagsbillet i hallen, eller brug et af dine eksisterende produkter.',
-    'firstclimb.existingCustomer.cta': 'Se almindelige adgangsmuligheder',
+    'firstclimb.existingCustomer.block': 'Du har allerede brugt dette tilbud.',
+    'firstclimb.existingCustomer.title': 'Du har allerede brugt dette tilbud',
+    'firstclimb.existingCustomer.body': 'Vores 99 kr dagsbillet kan kun købes én gang pr. konto, og du har allerede brugt din {email}. Du er stadig velkommen til at klatre — køb en almindelig dagsbillet i hallen eller vælg et af vores andre produkter.',
+    'firstclimb.existingCustomer.cta': 'Se andre adgangsmuligheder',
     'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
     'faq.firstclimb.included.a': 'Adgang til alle Boulders haller hele dagen + lejesko. Ingen skjulte gebyrer.',
     'faq.firstclimb.eligibility.q': 'Hvem kan købe dagsbilletten?',
@@ -6787,10 +6784,10 @@ const translations = {
     'firstclimb.hero.title': 'Your First Climb — 99 kr',
     'firstclimb.hero.subtitle': 'Day ticket including rental shoes. New climbers only.',
     'firstclimb.cta': 'Buy day ticket',
-    'firstclimb.existingCustomer.block': 'This offer is for new climbers only. You already have an account with us.',
-    'firstclimb.existingCustomer.title': 'This offer is for new climbers only',
-    'firstclimb.existingCustomer.body': 'We already have a profile linked to your email {email}. You can still climb today — buy a regular day ticket at the gym, or use one of your existing products.',
-    'firstclimb.existingCustomer.cta': 'See regular entry options',
+    'firstclimb.existingCustomer.block': "You've already used this offer.",
+    'firstclimb.existingCustomer.title': "You've already used this offer",
+    'firstclimb.existingCustomer.body': "Our 99 kr day ticket is a one-per-customer offer, and {email} has already redeemed it. You're still welcome to climb — buy a regular day ticket at the gym or pick one of our other products.",
+    'firstclimb.existingCustomer.cta': 'See other entry options',
     'faq.firstclimb.included.q': "What's included in the day ticket?",
     'faq.firstclimb.included.a': 'Full-day access to all Boulders gyms plus rental shoes. No hidden fees.',
     'faq.firstclimb.eligibility.q': 'Who can buy the day ticket?',
@@ -6874,10 +6871,10 @@ const translations = {
     'firstclimb.hero.title': 'Dein erster Kletterbesuch — 99 kr',
     'firstclimb.hero.subtitle': 'Tageskarte inkl. Leihschuhe. Nur für neue Kletterer.',
     'firstclimb.cta': 'Tageskarte kaufen',
-    'firstclimb.existingCustomer.block': 'Dieses Angebot gilt nur für neue Kletterer. Du hast bereits ein Konto bei uns.',
-    'firstclimb.existingCustomer.title': 'Dieses Angebot ist nur für neue Kletterer',
-    'firstclimb.existingCustomer.body': 'Wir haben bereits ein Profil zu deiner E-Mail {email}. Du kannst trotzdem klettern — kauf direkt vor Ort eine reguläre Tageskarte oder nutze eines deiner bestehenden Produkte.',
-    'firstclimb.existingCustomer.cta': 'Reguläre Zugangsoptionen ansehen',
+    'firstclimb.existingCustomer.block': 'Du hast dieses Angebot bereits genutzt.',
+    'firstclimb.existingCustomer.title': 'Du hast dieses Angebot bereits genutzt',
+    'firstclimb.existingCustomer.body': 'Unsere 99 kr Tageskarte gibt es einmal pro Konto, und {email} hat sie schon eingelöst. Du kannst trotzdem klettern — kauf direkt vor Ort eine reguläre Tageskarte oder wähle eines unserer anderen Produkte.',
+    'firstclimb.existingCustomer.cta': 'Andere Zugangsoptionen ansehen',
     'faq.firstclimb.included.q': 'Was ist in der Tageskarte enthalten?',
     'faq.firstclimb.included.a': 'Ganztägiger Zugang zu allen Boulders-Hallen plus Leihschuhe. Keine versteckten Gebühren.',
     'faq.firstclimb.eligibility.q': 'Wer kann die Tageskarte kaufen?',
@@ -10808,10 +10805,6 @@ async function handleSaveAccount() {
       highlightFieldError('email', true);
     } else if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
       const emailVal = document.getElementById('email')?.value?.trim()?.toLowerCase() || '';
-      if (isFirstClimbRoute()) {
-        blockFirstClimbExistingCustomer({ email: emailVal });
-        return;
-      }
       const password = customerData?.password || document.getElementById('password')?.value;
       if (emailVal && password) {
         try {
@@ -12588,39 +12581,26 @@ function initAuthModeToggle() {
   // Set initial state - if user is logged in, select login tab, otherwise create account
   const isAuthenticated = isUserAuthenticated();
   
-  // Hide toggle buttons if user is already authenticated, or on /99kr
-  // (new-customer-only offer — log-in path is a contradiction).
-  const hideForFirstClimb = isFirstClimbRoute();
+  // Hide toggle buttons if user is already authenticated.
   const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
   switchBtns.forEach(btn => {
-    btn.style.display = (isAuthenticated || hideForFirstClimb) ? 'none' : '';
+    btn.style.display = isAuthenticated ? 'none' : '';
   });
   
   // On desktop, default to login form; on mobile, also show login form by default
   const isDesktop = window.innerWidth >= 768;
   
   if (!isAuthenticated) {
-    if (hideForFirstClimb) {
-      // /99kr: new customers only — default straight to the create-profile form.
-      switchAuthMode('create');
-      if (loginSection) loginSection.style.display = 'none';
-      if (createSection) {
-        createSection.style.display = 'block';
-        createSection.style.visibility = 'visible';
-        createSection.style.opacity = '1';
-      }
-    } else {
-      // Always show login form by default (both desktop and mobile)
-      switchAuthMode('login');
-      if (loginSection) {
-        loginSection.style.display = 'block';
-        // Ensure it's visible
-        loginSection.style.visibility = 'visible';
-        loginSection.style.opacity = '1';
-      }
-      if (createSection) {
-        createSection.style.display = 'none';
-      }
+    // Always show login form by default (both desktop and mobile)
+    switchAuthMode('login');
+    if (loginSection) {
+      loginSection.style.display = 'block';
+      // Ensure it's visible
+      loginSection.style.visibility = 'visible';
+      loginSection.style.opacity = '1';
+    }
+    if (createSection) {
+      createSection.style.display = 'none';
     }
   } else {
     // Authenticated: show login section with status
@@ -12671,12 +12651,10 @@ function switchAuthMode(mode, email = null) {
     }
   });
   
-  // Hide buttons if user is authenticated, or on /99kr (single-purchase new-customer
-  // offer: log-in is a contradiction since existing customers are blocked anyway).
+  // Hide buttons if user is authenticated.
   const isAuthenticated = isUserAuthenticated();
-  const hideForFirstClimb = isFirstClimbRoute();
   switchBtns.forEach(btn => {
-    btn.style.display = (isAuthenticated || hideForFirstClimb) ? 'none' : '';
+    btn.style.display = isAuthenticated ? 'none' : '';
   });
   
   // Show/hide sections with fade
@@ -17860,12 +17838,6 @@ async function handleCheckout() {
         // Handle duplicate email error: try login with provided credentials and continue on success
         if (error.isDuplicateEmail || (error.message && error.message.includes('already exists'))) {
           const emailVal = (payload.customer?.email?.trim() || '').toLowerCase();
-          if (isFirstClimbRoute()) {
-            blockFirstClimbExistingCustomer({ email: emailVal });
-            setCheckoutLoadingState(false);
-            state.checkoutInProgress = false;
-            return;
-          }
           const password = payload.customer?.password || customerData?.password;
           if (emailVal && password) {
             try {
@@ -19484,20 +19456,6 @@ async function handleCheckout() {
   } catch (error) {
     // Catch-all for unexpected errors
     console.error('[checkout] Unexpected error:', error);
-    // /99kr: only surface the existing-customer modal when BRP explicitly
-    // rejects the create as a duplicate. With history-based eligibility,
-    // an authenticated user reaching this point may still be eligible —
-    // unrelated errors should keep their generic message rather than the
-    // misleading "new climbers only" modal.
-    if (isFirstClimbRoute() && error?.isDuplicateEmail) {
-      blockFirstClimbExistingCustomer({
-        email: state.authenticatedEmail || state.authenticatedCustomer?.email || '',
-      });
-      state.checkoutInProgress = false;
-      updateFAQVisibility();
-      setCheckoutLoadingState(false);
-      return;
-    }
     showToast(getErrorMessage(error, 'Checkout'), 'error');
     state.checkoutInProgress = false; // Reset on error
     updateFAQVisibility(); // Show FAQ again if checkout fails
@@ -23110,12 +23068,10 @@ function showStep(stepNumber) {
   if (stepNumber === 4 && isUserAuthenticated()) {
     switchAuthMode('login');
   } else if (stepNumber === 4 && !isUserAuthenticated()) {
-    // Update switch button visibility when showing step 4. On /99kr the
-    // log-in toggle stays hidden — existing customers can't use the offer.
-    const hideForFirstClimb = isFirstClimbRoute();
+    // Update switch button visibility when showing step 4
     const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
     switchBtns.forEach(btn => {
-      btn.style.display = hideForFirstClimb ? 'none' : '';
+      btn.style.display = '';
     });
   }
   
