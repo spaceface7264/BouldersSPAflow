@@ -6390,6 +6390,9 @@ const translations = {
     'confirmation.message.membership': 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.15daypass': 'Din 15-dages prøveperiode er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.firstclimb': 'Din første klatretur er booket! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.nextStep2.firstclimb': 'Din dagsbillet er klar — kom forbi hallen på den valgte dag.',
+    'confirmation.nextStep3.firstclimb': 'Ved skranken: oplys dit telefonnummer eller email, så aktiverer vi din billet og finder lejesko til dig.',
     'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.orderDetails': 'Ordredetaljer',
     'confirmation.orderNumber': 'Ordrenummer:',
@@ -6457,6 +6460,10 @@ const translations = {
     'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
     'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
+    'invite.firstclimb.title': 'Del dette med dine venner',
+    'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko er for alle, der ikke har prøvet det før. Send linket til dine venner.',
+    'invite.firstclimb.footnote': 'Tilbuddet kan kun bruges én gang pr. person.',
+    'invite.firstclimb.shareMessage': 'Klatre med mig hos Boulders! Få din første dag for 99 kr inkl. lejesko:',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
@@ -6640,6 +6647,9 @@ const translations = {
     'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.15daypass': 'Your 15-Day Trial Period has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.firstclimb': 'Your first climb is booked! You\'ll receive an email with all the details shortly.',
+    'confirmation.nextStep2.firstclimb': 'Your day ticket is ready — show up at the gym on the day you picked.',
+    'confirmation.nextStep3.firstclimb': 'At the desk: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes.',
     'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.orderDetails': 'Order Details',
     'confirmation.orderNumber': 'Order Number:',
@@ -6705,6 +6715,10 @@ const translations = {
     'invite.share.email': 'Email',
     'invite.share.more': 'More',
     'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
+    'invite.firstclimb.title': 'Share this with your friends',
+    'invite.firstclimb.subtitle': 'Our 99 kr day ticket including rental shoes is open to anyone who hasn’t tried it yet. Send the link to your friends.',
+    'invite.firstclimb.footnote': 'The offer can only be used once per person.',
+    'invite.firstclimb.shareMessage': 'Come climb with me at Boulders! Get your first day for 99 kr including rental shoes:',
     'invite.shareSubject': '2 weeks of free climbing at Boulders',
     'invite.footnote': 'Your friends get 2 weeks free entrance and rental shoes. No credit card required to start. Can only be claimed by people who have not claimed a trial pass previously.',
     'confirmation.pending.title': 'Payment Pending',
@@ -6940,6 +6954,9 @@ const translations = {
     'confirmation.message.membership': 'Ihre Mitgliedschaft wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
     'confirmation.message.15daypass': 'Ihr 15-Tage-Pass wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
     'confirmation.message.punchcard': 'Ihre Stempelkarte wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.firstclimb': 'Dein erster Kletterbesuch ist gebucht! Du erhältst in Kürze eine E-Mail mit allen Details.',
+    'confirmation.nextStep2.firstclimb': 'Deine Tageskarte ist bereit — komm an deinem ausgewählten Tag vorbei.',
+    'confirmation.nextStep3.firstclimb': 'An der Rezeption: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe aus.',
     'confirmation.message.generic': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
     'confirmation.orderDetails': 'Bestelldetails',
     'confirmation.orderNumber': 'Bestellnummer:',
@@ -7002,6 +7019,10 @@ const translations = {
     'invite.share.email': 'E-Mail',
     'invite.share.more': 'Mehr',
     'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
+    'invite.firstclimb.title': 'Teile das mit deinen Freunden',
+    'invite.firstclimb.subtitle': 'Unsere Tageskarte für 99 kr inkl. Leihschuhe ist für alle, die sie noch nicht ausprobiert haben. Schick deinen Freunden den Link.',
+    'invite.firstclimb.footnote': 'Das Angebot kann pro Person nur einmal eingelöst werden.',
+    'invite.firstclimb.shareMessage': 'Klettere mit mir bei Boulders! Hol dir deinen ersten Tag für 99 kr inkl. Leihschuhe:',
     'invite.shareSubject': '2 Wochen gratis Klettern bei Boulders',
     'invite.footnote': 'Deine Freunde bekommen 2 Wochen freien Eintritt inklusive Leihschuhe. Keine Kreditkarte erforderlich. Das Angebot gilt nur für Personen, die noch nie ein Probepass eingelöst haben.',
     'confirmation.pending.title': 'Zahlung ausstehend',
@@ -13146,6 +13167,15 @@ function getCurrentRecruiterId() {
 // who the sharer is. Falls back to the plain base URL for anonymous shares
 // (e.g. logged-out test mode) so existing behavior is preserved.
 function buildInviteShareUrl() {
+  // /99kr invites point at the offer landing page itself, with no referral
+  // query param — this is an offer share, not a recruiter link.
+  if (isFirstClimbRoute()) {
+    try {
+      return new URL('/99kr', INVITE_SHARE_URL_BASE).toString();
+    } catch (_) {
+      return `${INVITE_SHARE_URL_BASE.replace(/\/+$/, '')}/99kr`;
+    }
+  }
   if (!REFERRAL_TRACKING_ENABLED) return INVITE_SHARE_URL_BASE;
   const recruiterId = getCurrentRecruiterId();
   if (!recruiterId) return INVITE_SHARE_URL_BASE;
@@ -13161,7 +13191,8 @@ function getInviteFirstName() {
 
 function getInviteShareMessage() {
   const firstName = getInviteFirstName();
-  const template = t('invite.shareMessage') || 'Hey! I just joined Boulders. Climb with me and get a free 2-week trial on me:';
+  const templateKey = isFirstClimbRoute() ? 'invite.firstclimb.shareMessage' : 'invite.shareMessage';
+  const template = t(templateKey) || 'Hey! Climb with me at Boulders:';
   const withName = firstName
     ? template.replace('{name}', firstName)
     : template.replace(/\s*\{name\}/g, '').replace(/\s*—\s*\{name\}\s*/g, ' ');
@@ -13198,15 +13229,53 @@ function renderInviteFriends(productType) {
   // invite card is actually visible (avoids changing layout for other flows).
   const layout = document.querySelector('#step-5 .confirmation-layout');
 
-  // Only show the invite-friends card for full memberships.
-  // Hide for 15-day passes, punch cards, or any other product type.
-  if (productType !== 'membership') {
+  const firstclimbVariant = isFirstClimbRoute();
+  // Show the invite-friends card for full memberships and for the firstclimb
+  // success page. Other product types stay hidden.
+  if (productType !== 'membership' && !firstclimbVariant) {
     section.style.display = 'none';
+    section.removeAttribute('data-variant');
     if (layout) layout.removeAttribute('data-with-invite');
     return;
   }
   section.style.display = '';
   if (layout) layout.setAttribute('data-with-invite', 'true');
+
+  // Swap the localized copy on the card for the firstclimb success page.
+  // Membership flow keeps its existing keys via data-i18n-key. We override the
+  // DOM text and the keys so a later language switch picks the right variant.
+  const titleEl = section.querySelector('.invite-friends-title');
+  const subtitleEl = section.querySelector('.invite-friends-subtitle');
+  const footnoteEl = section.querySelector('.invite-friends-footnote');
+  if (firstclimbVariant) {
+    section.setAttribute('data-variant', 'firstclimb');
+    if (titleEl) {
+      titleEl.setAttribute('data-i18n-key', 'invite.firstclimb.title');
+      titleEl.textContent = t('invite.firstclimb.title');
+    }
+    if (subtitleEl) {
+      subtitleEl.setAttribute('data-i18n-key', 'invite.firstclimb.subtitle');
+      subtitleEl.textContent = t('invite.firstclimb.subtitle');
+    }
+    if (footnoteEl) {
+      footnoteEl.setAttribute('data-i18n-key', 'invite.firstclimb.footnote');
+      footnoteEl.textContent = t('invite.firstclimb.footnote');
+    }
+  } else {
+    section.removeAttribute('data-variant');
+    if (titleEl) {
+      titleEl.setAttribute('data-i18n-key', 'invite.title');
+      titleEl.textContent = t('invite.title');
+    }
+    if (subtitleEl) {
+      subtitleEl.setAttribute('data-i18n-key', 'invite.subtitle');
+      subtitleEl.textContent = t('invite.subtitle');
+    }
+    if (footnoteEl) {
+      footnoteEl.setAttribute('data-i18n-key', 'invite.footnote');
+      footnoteEl.textContent = t('invite.footnote');
+    }
+  }
 
   // Phase 1: fire a one-time funnel event so we know how many membership
   // signups have a personalized share link to give out. Note: clearing the
@@ -21318,9 +21387,11 @@ function renderConfirmationView() {
   });
 
   // Update success message based on product type (use translation keys so language switch works)
+  const isFirstClimbFlow = isFirstClimbRoute();
   const successMessage = document.querySelector('.success-message');
   if (successMessage) {
-    const messageKey = productType === 'membership' ? 'confirmation.message.membership'
+    const messageKey = isFirstClimbFlow ? 'confirmation.message.firstclimb'
+      : productType === 'membership' ? 'confirmation.message.membership'
       : productType === '15daypass' ? 'confirmation.message.15daypass'
       : productType === 'punch-card' ? 'confirmation.message.punchcard'
       : 'confirmation.message.generic';
@@ -21368,11 +21439,13 @@ function renderConfirmationView() {
   renderInviteFriends(productType);
   
   if (nextStep2 && nextStep3) {
-    const step2Key = productType === 'membership' ? 'confirmation.nextStep2.membership'
+    const step2Key = isFirstClimbFlow ? 'confirmation.nextStep2.firstclimb'
+      : productType === 'membership' ? 'confirmation.nextStep2.membership'
       : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep2.freetrial' : 'confirmation.nextStep2.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep2.punchcard'
       : 'confirmation.nextStep2.membership';
-    const step3Key = productType === 'membership' ? 'confirmation.nextStep3.membership'
+    const step3Key = isFirstClimbFlow ? 'confirmation.nextStep3.firstclimb'
+      : productType === 'membership' ? 'confirmation.nextStep3.membership'
       : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep3.freetrial.today' : 'confirmation.nextStep3.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep3.punchcard'
       : 'confirmation.nextStep3.membership';
