@@ -115,19 +115,24 @@ function isFirstClimbRoute() {
 }
 
 // firstclimb is for "first-time climbers". We define that as: the customer has
-// never held a Medlem / 15 Dages Kort / Klippekort / Første Gang product.
-// Anything else (e.g. an abandoned-but-empty profile) is fine — they can buy.
+// never held a product carrying one of these BRP labels. Anything else (e.g. an
+// abandoned-but-empty profile, only past free trials) is fine — they can buy.
+// Stored lowercase + whitespace-collapsed; matched with the same normalization.
 const FIRSTCLIMB_BLOCKING_LABELS = Object.freeze([
   'medlem',
-  '15 dages kort',
-  'første gang',
+  '15 dages kort / medlem',
+  '15 day pass',
   'klippekort',
 ]);
+
+function normalizeFirstclimbLabelName(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 function productHasFirstclimbBlockingLabel(product) {
   const labels = Array.isArray(product?.productLabels) ? product.productLabels : [];
   return labels.some((label) => {
-    const name = String(label?.name || '').trim().toLowerCase();
+    const name = normalizeFirstclimbLabelName(label?.name);
     return FIRSTCLIMB_BLOCKING_LABELS.includes(name);
   });
 }
