@@ -126,15 +126,36 @@ const FIRSTCLIMB_BLOCKING_LABELS = Object.freeze([
 ]);
 
 function normalizeFirstclimbLabelName(value) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  // NFC-normalize so single-codepoint "ø" (U+00F8) and decomposed
+  // "o + combining stroke" (U+006F U+0338) compare equal — BRP sometimes
+  // returns the decomposed form.
+  return String(value || '').normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function productHasFirstclimbBlockingLabel(product) {
   const labels = Array.isArray(product?.productLabels) ? product.productLabels : [];
-  return labels.some((label) => {
+  const matched = labels.find((label) => {
     const name = normalizeFirstclimbLabelName(label?.name);
     return FIRSTCLIMB_BLOCKING_LABELS.includes(name);
   });
+  if (matched) {
+    console.log('[firstclimb] product label matched blocking list:', {
+      productId: product?.id,
+      productName: product?.name,
+      matchedLabel: matched?.name,
+      allLabels: labels.map((l) => l?.name),
+    });
+  } else if (labels.length > 0) {
+    // Help diagnose mismatches when a product *does* carry labels but none
+    // are recognised — e.g. encoding drift, unexpected spelling, etc.
+    console.log('[firstclimb] product carries labels but none are blocking:', {
+      productId: product?.id,
+      productName: product?.name,
+      labels: labels.map((l) => ({ name: l?.name, normalized: normalizeFirstclimbLabelName(l?.name) })),
+      blockingList: FIRSTCLIMB_BLOCKING_LABELS,
+    });
+  }
+  return Boolean(matched);
 }
 
 async function _firstclimbAuthFetch(path) {
@@ -177,9 +198,19 @@ async function collectFirstclimbCustomerProductIds(customerId) {
     if (id != null) ids.add(String(id));
   };
   (Array.isArray(subs) ? subs : []).forEach((s) => addRef(s?.subscriptionProduct || s?.product));
-  (Array.isArray(valueCards) ? valueCards : []).forEach((vc) => addRef(vc?.validCardProduct || vc?.product));
+  (Array.isArray(valueCards) ? valueCards : []).forEach((vc) => addRef(vc?.valueCardProduct || vc?.validCardProduct || vc?.product));
   (Array.isArray(receipts) ? receipts : []).forEach((r) => {
     (r?.receiptItems || r?.items || []).forEach((item) => addRef(item?.product || item));
+  });
+  console.log('[firstclimb] customer history product IDs collected:', {
+    customerId,
+    ids: Array.from(ids),
+    counts: {
+      subscriptions: Array.isArray(subs) ? subs.length : 0,
+      valueCards: Array.isArray(valueCards) ? valueCards.length : 0,
+      receipts: Array.isArray(receipts) ? receipts.length : 0,
+    },
+    errors,
   });
   return { ids, errors };
 }
