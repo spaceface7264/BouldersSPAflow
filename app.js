@@ -114,10 +114,14 @@ function isFirstClimbRoute() {
 }
 
 // firstclimb is a one-per-customer offer. Every user — new or existing — can
-// buy it exactly once. The only disqualifier is having already held a product
-// carrying the `firstclimb` label.
+// buy it exactly once. A customer is disqualified if they have ever held a
+// product carrying the dedicated `Første Gang` label (the canonical blocking
+// signal, assigned in BRP admin to this product and any future products that
+// should consume the same allowance). The legacy `firstclimb` label is kept
+// in the list defensively in case it lingers on historical product records.
 // Stored lowercase + whitespace-collapsed; matched with the same normalization.
 const FIRSTCLIMB_BLOCKING_LABELS = Object.freeze([
+  'første gang',
   'firstclimb',
 ]);
 
@@ -8653,8 +8657,9 @@ async function handleLoginSubmit(event) {
     state.authenticatedEmail = email;
 
     // /99kr: a successful login means the email has an existing BRP profile.
-    // Inspect product history — block only if they've held a Medlem / 15 Dages
-    // Kort / Klippekort / Første Gang product. Empty-profile users can buy.
+    // Inspect product history — block only if they've held a product carrying
+    // the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS). Empty-profile
+    // and never-bought-anything customers can still buy.
     if (isFirstClimbRoute()) {
       let customerIdForCheck = null;
       try {
@@ -10562,7 +10567,7 @@ async function handleSaveAccount() {
     // /99kr defensive existing-customer pre-check. BRP doesn't always reject duplicate
     // emails on the create endpoint, so we attempt login with the typed credentials.
     // If login succeeds, we inspect the customer's product history — only block if
-    // they've held a Medlem / 15 Dages Kort / Klippekort / Første Gang product.
+    // they've held a product carrying the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS).
     // Otherwise (abandoned-but-empty profile, never-bought-anything customer) we
     // treat them as eligible: keep the tokens, sync state, skip create-customer.
     if (isFirstClimbRoute()) {
