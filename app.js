@@ -210,35 +210,6 @@ async function customerHasFirstclimbBlockingHistory(customerId) {
   return false;
 }
 
-// Static fallback preview rendered before products are fetched, so users
-// landing on /99kr immediately see the offer in step 1. Once products load,
-// renderLandingRoute upgrades this with the live price/description.
-function renderFirstClimbStep1PreviewStatic() {
-  const step1Panel = document.getElementById('step-1');
-  const step1Content = step1Panel?.querySelector('.step-panel-content');
-  if (!step1Content) return;
-  if (step1Content.querySelector('[data-firstclimb-preview]')) return;
-  const preview = document.createElement('div');
-  preview.setAttribute('data-firstclimb-preview', 'true');
-  preview.className = 'firstclimb-preview';
-  const heroTitle = (typeof t === 'function' && t('firstclimb.hero.title')) || 'Your First Climb — 99 kr';
-  const heroSubtitle = (typeof t === 'function' && t('firstclimb.hero.subtitle')) || '';
-  const ctaHint = (typeof t === 'function' && t('main.subtitle.step1')) || 'Choose your home gym';
-  preview.innerHTML = sanitizeHTML(`
-    <div class="firstclimb-preview-card">
-      <div class="firstclimb-preview-title">${heroTitle}</div>
-      <div class="firstclimb-preview-subtitle">${heroSubtitle}</div>
-      <div class="firstclimb-preview-cta-hint">${ctaHint}</div>
-    </div>
-  `);
-  const searchWrapper = step1Content.querySelector('.search-wrapper');
-  if (searchWrapper) {
-    step1Content.insertBefore(preview, searchWrapper);
-  } else {
-    step1Content.prepend(preview);
-  }
-}
-
 // firstclimb is a single-product flow. Once the gym is chosen we have everything
 // we need to skip the product-selection step and drop the user straight into the
 // form/checkout step with the value card already selected (quantity locked to 1).
@@ -3821,7 +3792,7 @@ function renderProductsFromAPI() {
       categoryItem.dataset.category = 'firstclimb';
       categoryItem.dataset.landingLocked = 'true';
       const title = t('firstclimb.category.title') || 'Din første klatretur';
-      const description = t('firstclimb.category.description') || 'En dagsbillet til 99 kr inkl. lejesko og kridt. Kun for nye klatrere.';
+      const description = t('firstclimb.category.description') || 'En dagsbillet til 99 kr inkl. lejesko og kalk. Kun for nye klatrere.';
       categoryItem.innerHTML = sanitizeHTML(`
         <div class="category-header">
           <div class="category-info">
@@ -3914,56 +3885,9 @@ function renderProductsFromAPI() {
     renderLandingCards(products || []);
     devLog('[Landing Route] Rendering LandingFirstMonthFree');
   };
-  const renderFirstClimbStep1Preview = (product) => {
-    const step1Panel = document.getElementById('step-1');
-    const step1Content = step1Panel?.querySelector('.step-panel-content');
-    if (!step1Content) return;
-    let preview = step1Content.querySelector('[data-firstclimb-preview]');
-    if (!preview) {
-      preview = document.createElement('div');
-      preview.setAttribute('data-firstclimb-preview', 'true');
-      preview.className = 'firstclimb-preview';
-      const searchWrapper = step1Content.querySelector('.search-wrapper');
-      if (searchWrapper) {
-        step1Content.insertBefore(preview, searchWrapper);
-      } else {
-        step1Content.prepend(preview);
-      }
-    }
-    const priceInCents = product?.price?.amount ?? product?.amount ?? 0;
-    const priceKr = priceInCents / 100;
-    const rawDescription = product?.description || '';
-    const descriptionHtml = rawDescription
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>');
-    const heroTitle = t('firstclimb.hero.title') || 'Your First Climb — 99 kr';
-    const heroSubtitle = t('firstclimb.hero.subtitle') || '';
-    const priceBlock = product
-      ? `
-        <div class="firstclimb-preview-price">
-          <span class="price-amount">${priceKr > 0 ? formatPriceHalfKrone(roundToHalfKrone(priceKr)) : 'FREE'}</span>
-          ${priceKr > 0 ? '<span class="price-unit">kr</span>' : ''}
-        </div>`
-      : '';
-    const descriptionBlock = descriptionHtml
-      ? `<div class="firstclimb-preview-description">${descriptionHtml}</div>`
-      : '';
-    preview.innerHTML = sanitizeHTML(`
-      <div class="firstclimb-preview-card">
-        <div class="firstclimb-preview-title">${heroTitle}</div>
-        <div class="firstclimb-preview-subtitle">${heroSubtitle}</div>
-        ${priceBlock}
-        ${descriptionBlock}
-        <div class="firstclimb-preview-cta-hint">${t('main.subtitle.step1') || 'Choose your home gym'}</div>
-      </div>
-    `);
-  };
   const LandingFirstClimb = (products) => {
     hideNonLandingCategories();
     renderLandingCards((products || []).slice(0, 1));
-    renderFirstClimbStep1Preview((products || [])[0] || null);
     devLog('[Landing Route] Rendering LandingFirstClimb');
   };
   if (shouldRenderLandingRoute) {
@@ -3988,10 +3912,6 @@ function renderProductsFromAPI() {
   const firstClimbCategoryItem = document.querySelector('.category-item[data-category="firstclimb"]');
   if (firstClimbCategoryItem) {
     firstClimbCategoryItem.remove();
-  }
-  const firstClimbPreview = document.querySelector('[data-firstclimb-preview]');
-  if (firstClimbPreview) {
-    firstClimbPreview.remove();
   }
   const categoryItems = document.querySelectorAll('.category-item');
   categoryItems.forEach((item) => {
@@ -6209,10 +6129,9 @@ function init() {
     })();
   }
 
-  // /99kr: render the product preview on step 1 immediately, before products load.
+  // /99kr: tag the body so route-scoped CSS rules can target this flow.
   if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
     try { document.body.classList.add('firstclimb-flow'); } catch (_) {}
-    try { renderFirstClimbStep1PreviewStatic(); } catch (_) {}
   }
 
   // Capture ?ref=<recruiter customer ID> early so it's stored before any
@@ -6395,7 +6314,7 @@ const translations = {
     'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.firstclimb': 'Din første klatretur er klar! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.nextStep2.firstclimb': 'Din dagsbillet er klar — kig forbi hallen, når det passer dig (inden for en måned).',
-    'confirmation.nextStep3.firstclimb': 'Ved skranken: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kridt.',
+    'confirmation.nextStep3.firstclimb': 'Ved skranken: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk.',
     'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.orderDetails': 'Ordredetaljer',
     'confirmation.orderNumber': 'Ordrenummer:',
@@ -6464,9 +6383,9 @@ const translations = {
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
     'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
     'invite.firstclimb.title': 'Del dette med dine venner',
-    'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko og kridt er for alle, der ikke har prøvet det før. Send linket til dine venner.',
+    'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko og kalk er for alle, der ikke har prøvet det før. Send linket til dine venner.',
     'invite.firstclimb.footnote': 'Tilbuddet kan kun bruges én gang pr. person.',
-    'invite.firstclimb.shareMessage': 'Klatre med mig hos Boulders! Få din første dag for 99 kr inkl. lejesko og kridt:',
+    'invite.firstclimb.shareMessage': 'Klatre med mig hos Boulders! Få din første dag for 99 kr inkl. lejesko og kalk:',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
@@ -6542,22 +6461,22 @@ const translations = {
     'faq.freetrial.creditCard.q': 'Kræver det et kreditkort?',
     'faq.freetrial.creditCard.a': 'Nej, prøveperioden er helt gratis og kræver ingen betalingsoplysninger.',
     'firstclimb.category.title': 'Din første klatretur',
-    'firstclimb.category.description': 'En dagsbillet til 99 kr inkl. lejesko og kridt. Kun for nye klatrere.',
-    'firstclimb.hero.title': 'Din første klatretur — 99 kr',
-    'firstclimb.hero.subtitle': 'Dagsbillet inkl. lejesko og kridt. Kun for nye klatrere.',
+    'firstclimb.category.description': 'En dagsbillet til 99 kr inkl. lejesko og kalk. Kun for nye klatrere.',
     'firstclimb.cta': 'Køb dagsbillet',
+    'firstclimb.banner.title': 'Din første klatretur · 99 kr',
+    'firstclimb.banner.perks': 'Lejesko og kalk inkl. · Alle Boulders haller · Gyldig 1 måned',
     'firstclimb.existingCustomer.block': 'Du har allerede brugt dette tilbud.',
     'firstclimb.existingCustomer.title': 'Du har allerede brugt dette tilbud',
     'firstclimb.existingCustomer.body': 'Vores 99 kr dagsbillet kan kun købes én gang pr. konto, og du har allerede brugt din {email}. Du er stadig velkommen til at klatre — vælg et af vores andre produkter.',
     'firstclimb.existingCustomer.cta': 'Se andre adgangsmuligheder',
     'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
-    'faq.firstclimb.included.a': 'Bliv så længe du vil i alle Boulders haller, plus lejesko og kridt. Ingen skjulte gebyrer.',
+    'faq.firstclimb.included.a': 'Bliv så længe du vil i alle Boulders haller, plus lejesko og kalk. Ingen skjulte gebyrer.',
     'faq.firstclimb.eligibility.q': 'Hvem kan købe dagsbilletten?',
     'faq.firstclimb.eligibility.a': 'Alle kan købe den — men kun én gang pr. person.',
     'faq.firstclimb.validity.q': 'Hvor længe gælder den?',
     'faq.firstclimb.validity.a': 'Din billet skal bruges inden for 1 måned efter køb. Mød op hvilken som helst dag i den periode — du behøver ikke vælge en dato på forhånd.',
     'faq.firstclimb.howToUse.q': 'Hvordan bruger jeg den i hallen?',
-    'faq.firstclimb.howToUse.a': 'Mød op i hallen, når det passer dig (inden for en måned). Oplys dit telefonnummer eller email til personalet, så aktiverer de din dagsbillet og udleverer lejesko og kridt.',
+    'faq.firstclimb.howToUse.a': 'Mød op i hallen, når det passer dig (inden for en måned). Oplys dit telefonnummer eller email til personalet, så aktiverer de din dagsbillet og udleverer lejesko og kalk.',
     'faq.firstclimb.afterDay.q': 'Hvad sker der efter min første dag?',
     'faq.firstclimb.afterDay.a': 'Bliv hængende! Du kan opgradere til medlemskab, et 15-dages kort eller et klippekort direkte hos personalet — eller online når du er klar.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
@@ -6802,8 +6721,8 @@ const translations = {
     'faq.freetrial.creditCard.a': 'No, the trial period is completely free and requires no payment details.',
     'firstclimb.category.title': 'Your First Climb',
     'firstclimb.category.description': 'A day ticket for 99 kr including rental shoes and chalk. New climbers only.',
-    'firstclimb.hero.title': 'Your First Climb — 99 kr',
-    'firstclimb.hero.subtitle': 'Day ticket including rental shoes and chalk. New climbers only.',
+    'firstclimb.banner.title': 'Your First Climb · 99 kr',
+    'firstclimb.banner.perks': 'Shoes & chalk included · Any Boulders gym · Valid 1 month',
     'firstclimb.cta': 'Buy day ticket',
     'firstclimb.existingCustomer.block': "You've already used this offer.",
     'firstclimb.existingCustomer.title': "You've already used this offer",
@@ -6889,8 +6808,8 @@ const translations = {
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
     'firstclimb.category.title': 'Dein erster Kletterbesuch',
     'firstclimb.category.description': 'Eine Tageskarte für 99 kr inkl. Leihschuhe und Chalk. Nur für neue Kletterer.',
-    'firstclimb.hero.title': 'Dein erster Kletterbesuch — 99 kr',
-    'firstclimb.hero.subtitle': 'Tageskarte inkl. Leihschuhe und Chalk. Nur für neue Kletterer.',
+    'firstclimb.banner.title': 'Dein erster Kletterbesuch · 99 kr',
+    'firstclimb.banner.perks': 'Leihschuhe & Chalk inkl. · Alle Boulders-Hallen · 1 Monat gültig',
     'firstclimb.cta': 'Tageskarte kaufen',
     'firstclimb.existingCustomer.block': 'Du hast dieses Angebot bereits genutzt.',
     'firstclimb.existingCustomer.title': 'Du hast dieses Angebot bereits genutzt',
