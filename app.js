@@ -20084,18 +20084,33 @@ async function loadOrderForConfirmation(orderId) {
       // Try to finalize the order if it's preliminary and payment was successful
       // Note: We're returning from payment, so payment should be successful
       // The order needs to be finalized (preliminary: false) for membership to be created in BRP
-      if (isPreliminary) {
+      //
+      // Idempotency guard: setting `preliminary: false` is suspected to trigger
+      // a BRP-side order-confirmation email on every successful call, so if the
+      // user reloads the return URL (or it's opened twice) we don't want to
+      // attempt the finalize a second time. Track the attempt in sessionStorage
+      // keyed on orderId — survives reloads but clears with the tab.
+      const finalizeGuardKey = `boulders_finalize_attempted_${orderId}`;
+      let alreadyAttemptedFinalize = false;
+      try { alreadyAttemptedFinalize = sessionStorage.getItem(finalizeGuardKey) === '1'; } catch (_) {}
+
+      if (isPreliminary && alreadyAttemptedFinalize) {
+        console.log('[Payment Return] Skipping client-side finalize — already attempted in this session for order', orderId);
+      } else if (isPreliminary) {
         console.log('[Payment Return] ⚠️ Order is preliminary - attempting to finalize...');
         console.log('[Payment Return] This is required for membership to be created in BRP');
-        
+
         try {
+          // Mark the attempt BEFORE calling so a mid-flight reload can't double-fire.
+          try { sessionStorage.setItem(finalizeGuardKey, '1'); } catch (_) {}
+
           // Option 1: Try to set preliminary to false
           // The API might require additional fields or a specific endpoint
           const updateData = {
             preliminary: false, // Finalize the order
             businessUnit: state.selectedBusinessUnit || order.businessUnit?.id,
           };
-          
+
           console.log('[Payment Return] Updating order with:', JSON.stringify(updateData, null, 2));
           const updatedOrder = await orderAPI.updateOrder(orderId, updateData);
           console.log('[Payment Return] Order update response:', updatedOrder);
