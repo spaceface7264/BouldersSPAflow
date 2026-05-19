@@ -6388,6 +6388,7 @@ const translations = {
     'confirmation.passType': 'Pastype:',
     'confirmation.validFrom': 'Gyldig fra:',
     'confirmation.validUntil': 'Gyldig til:',
+    'confirmation.validity': 'Gyldighed',
     'confirmation.punchCardDetails': 'Klippekort detaljer',
     'confirmation.name': 'Navn:',
     'confirmation.cardType': 'Korttype:',
@@ -6652,6 +6653,7 @@ const translations = {
     'confirmation.passType': 'Pass Type:',
     'confirmation.validFrom': 'Valid From:',
     'confirmation.validUntil': 'Valid Until:',
+    'confirmation.validity': 'Valid',
     'confirmation.punchCardDetails': 'Punch Card Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Card Type:',
@@ -6967,6 +6969,7 @@ const translations = {
     'confirmation.passType': 'Passtyp:',
     'confirmation.validFrom': 'Gültig von:',
     'confirmation.validUntil': 'Gültig bis:',
+    'confirmation.validity': 'Gültig',
     'confirmation.punchCardDetails': 'Stempelkarten-Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Kartentyp:',
@@ -21739,6 +21742,11 @@ function renderConfirmationView() {
     }
   }
   
+  // Hide the validity pill by default; the 15-day-pass branch below will
+  // re-enable it when valid dates are available.
+  const defaultValidityPill = document.getElementById('successValidityPill');
+  if (defaultValidityPill) defaultValidityPill.style.display = 'none';
+
   // 15-Day Trial Pass specific fields - from API only
   if (productType === '15daypass') {
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
@@ -21782,6 +21790,20 @@ function renderConfirmationView() {
         ? formatLongDate(parsedEnd)
         : '—';
     }
+
+    // Surface the validity window in the success header — the most time-sensitive
+    // fact for a 15-day pass deserves to be visible above the receipt.
+    const validityPill = document.getElementById('successValidityPill');
+    const headerPassStart = document.querySelector('[data-summary-field="header-pass-start-date"]');
+    const headerPassEnd = document.querySelector('[data-summary-field="header-pass-end-date"]');
+    const hasValidDates =
+      parsedStart && !isNaN(parsedStart.getTime()) &&
+      parsedEnd && !isNaN(parsedEnd.getTime());
+    if (validityPill) {
+      validityPill.style.display = hasValidDates ? 'inline-flex' : 'none';
+    }
+    if (headerPassStart && hasValidDates) headerPassStart.textContent = formatLongDate(parsedStart);
+    if (headerPassEnd && hasValidDates) headerPassEnd.textContent = formatLongDate(parsedEnd);
 
     // Update "what happens next" step 2 to reflect future activation
     if (nextStep2 && parsedStart && !isNaN(parsedStart.getTime())) {

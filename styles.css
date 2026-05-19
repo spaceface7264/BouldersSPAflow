@@ -7970,6 +7970,63 @@ main {
     line-height: 1.55;
 }
 
+/* Time-sensitive validity pill — shown for 15-day pass (and any other product
+   with a critical activity window). Sits under the success message so the
+   first thing users see after the celebration is "from when to when." */
+.success-validity-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 18px;
+    margin: 20px auto 0;
+    background: rgba(16, 185, 129, 0.10);
+    border: 1px solid rgba(16, 185, 129, 0.32);
+    border-radius: 999px;
+    color: #fff;
+    font-size: var(--font-size-sm);
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.04);
+}
+
+.success-validity-icon {
+    color: #10B981;
+    flex-shrink: 0;
+}
+
+.success-validity-label {
+    color: rgba(255, 255, 255, 0.55);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.success-validity-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.success-validity-from,
+.success-validity-to {
+    color: #fff;
+    font-weight: 500;
+}
+
+.success-validity-separator {
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 400;
+}
+
+@media (max-width: 480px) {
+    .success-validity-pill {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px 12px;
+        padding: 10px 16px;
+    }
+}
+
 /* ── Success Page v2 — animated badge, ring, check, and copy ─────────── */
 
 .success-badge__svg {
@@ -9300,7 +9357,27 @@ main {
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 18px;
+    position: relative;
+}
+
+/* Vertical thread connecting the three step chips. The chips have a solid bg
+   matching the card surface, so they occlude the line where they sit and the
+   line peeks through between them, giving a clean "step-1 → step-2 → step-3"
+   reading order without extra DOM. */
+.steps-list::before {
+    content: '';
+    position: absolute;
+    top: 18px;
+    bottom: 18px;
+    left: 17px;
+    width: 1px;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.16) 0%,
+        rgba(255, 255, 255, 0.06) 100%
+    );
+    pointer-events: none;
 }
 
 .step-item {
@@ -9309,33 +9386,37 @@ main {
     gap: 14px;
     margin: 0;
     color: var(--color-text-secondary);
+    position: relative;
 }
 
 .step-icon {
-    width: 32px;
-    height: 32px;
-    background-color: rgba(255, 255, 255, 0.04);
+    width: 36px;
+    height: 36px;
+    background-color: #282828;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0;
     flex-shrink: 0;
     color: rgba(255, 255, 255, 0.75);
-    transition: color 200ms ease, border-color 200ms ease, background-color 200ms ease;
+    position: relative;
+    z-index: 1;
+    transition: color 200ms ease, border-color 200ms ease, background-color 200ms ease, transform 200ms ease;
 }
 
 .step-item:hover .step-icon {
-    background-color: rgba(244, 1, 245, 0.08);
+    background-color: #2e1f30;
     border-color: rgba(244, 1, 245, 0.35);
     color: #F401F5;
+    transform: translateY(-1px);
 }
 
 .step-item span {
     font-size: var(--font-size-sm);
     line-height: 1.55;
-    padding-top: 6px;
+    padding-top: 8px;
     color: var(--color-text-secondary);
 }
 

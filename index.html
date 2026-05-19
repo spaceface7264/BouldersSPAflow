@@ -915,6 +915,20 @@
                         </div>
                         <h1 class="success-title" data-i18n-key="confirmation.title">SUCCESS!</h1>
                         <p class="success-message" data-i18n-key="confirmation.message">Your membership has been confirmed! You'll receive an email with all the details shortly.</p>
+                        <div class="success-validity-pill" id="successValidityPill" style="display: none;" role="status" aria-live="polite">
+                            <svg class="success-validity-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                <path d="M16 2v4"/>
+                                <path d="M8 2v4"/>
+                                <path d="M3 10h18"/>
+                            </svg>
+                            <span class="success-validity-label" data-i18n-key="confirmation.validity">Valid</span>
+                            <span class="success-validity-range">
+                                <span class="success-validity-from" data-summary-field="header-pass-start-date">—</span>
+                                <span class="success-validity-separator" aria-hidden="true">→</span>
+                                <span class="success-validity-to" data-summary-field="header-pass-end-date">—</span>
+                            </span>
+                        </div>
                         </div>
                         
                     <!-- Main Content Layout -->
@@ -1139,29 +1153,30 @@
                                 <h3 class="steps-title" data-i18n-key="confirmation.nextStepsTitle">What happens next?</h3>
                                 <ul class="steps-list">
                                     <li class="step-item">
-                                        <div class="step-icon">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                                                <path d="M22 6L12 13 2 6"/>
+                                        <div class="step-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="3" y="5" width="18" height="14" rx="2"/>
+                                                <path d="m3 7 9 6 9-6"/>
                                             </svg>
                                         </div>
                                         <span id="nextStep1" data-i18n-key="confirmation.nextStep1">Email confirmation sent to your inbox</span>
                                     </li>
                                     <li class="step-item">
-                                        <div class="step-icon">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                                <path d="M22 4L12 14.01l-3-3"/>
+                                        <div class="step-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="8" cy="15" r="4"/>
+                                                <path d="M10.85 12.15 21 2"/>
+                                                <path d="m18 5 3 3"/>
+                                                <path d="m15 8 2 2"/>
                                             </svg>
                                         </div>
                                         <span id="nextStep2" data-i18n-key="confirmation.nextStep2.membership">Membership activation & auto-renewal setup</span>
                                     </li>
                                     <li class="step-item">
-                                        <div class="step-icon">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                                                <path d="M3.27 6.96L12 12.01l8.73-5.05"/>
-                                                <path d="M12 22.08V12"/>
+                                        <div class="step-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                                                <circle cx="12" cy="10" r="3"/>
                                             </svg>
                                         </div>
                                         <span id="nextStep3" data-i18n-key="confirmation.nextStep3.membership">Pick up your membership card at the gym</span>
