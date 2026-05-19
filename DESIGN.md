@@ -55,7 +55,8 @@ BRP doesn't model "this is a membership" vs. "this is a punch card" — everythi
 | `Public`               | Regular membership shown on the main step.                             |
 | `PublicCampaign`       | Time-bound campaign card; lives in `state.campaignSubscriptions`/`campaignValueCards` with a countdown driven by `state.campaignEndDate`. |
 | `15-Day Trial Pass`    | Day-pass product surfaced separately so it can have its own activation-date picker (`state.subscriptionStartDate`). |
-| `firstclimb`           | The 99 kr "Your First Climb" offer. One-per-customer rule: customers who have ever held a `firstclimb`-labeled product are blocked. |
+| `firstclimb`           | Routing signal for `/99kr` "Your First Climb"; the landing route filters BRP's catalog to products carrying this label. Kept in the blocking list defensively against historical product records. |
+| `Første Gang`          | One-per-customer blocking signal for `/99kr`. Customers who have ever held a product carrying this label are blocked from the offer. Decoupled from `firstclimb` so the blocking allowance can extend to other future products without changing routing. |
 | `boostProduct`         | Surfaced in a separate boost modal, not the main flow.                 |
 | `availableFor: PUBLIC` | BRP-native field used as a fallback signal when labels are absent.     |
 
