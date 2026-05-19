@@ -915,20 +915,6 @@
                         </div>
                         <h1 class="success-title" data-i18n-key="confirmation.title">You’re in!</h1>
                         <p class="success-message" data-i18n-key="confirmation.message">Welcome to the Boulders community. Visit any gym to start climbing!</p>
-                        <div class="success-validity-pill" id="successValidityPill" style="display: none;" role="status" aria-live="polite">
-                            <svg class="success-validity-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <rect x="3" y="4" width="18" height="18" rx="2"/>
-                                <path d="M16 2v4"/>
-                                <path d="M8 2v4"/>
-                                <path d="M3 10h18"/>
-                            </svg>
-                            <span class="success-validity-label" data-i18n-key="confirmation.validity">Valid</span>
-                            <span class="success-validity-range">
-                                <span class="success-validity-from" data-summary-field="header-pass-start-date">—</span>
-                                <span class="success-validity-separator" aria-hidden="true">→</span>
-                                <span class="success-validity-to" data-summary-field="header-pass-end-date">—</span>
-                            </span>
-                        </div>
                         </div>
                         
                     <!-- Main Content Layout -->
@@ -957,7 +943,22 @@
                                 </template>
 
                                 <div class="purchase-items" data-component="confirmation-items"></div>
-                                
+
+                                <div class="success-validity-pill" id="successValidityPill" style="display: none;" role="status" aria-live="polite">
+                                    <svg class="success-validity-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                        <path d="M16 2v4"/>
+                                        <path d="M8 2v4"/>
+                                        <path d="M3 10h18"/>
+                                    </svg>
+                                    <span class="success-validity-label" data-i18n-key="confirmation.validity">Valid</span>
+                                    <span class="success-validity-range">
+                                        <span class="success-validity-from" data-summary-field="header-pass-start-date">—</span>
+                                        <span class="success-validity-separator" aria-hidden="true">→</span>
+                                        <span class="success-validity-to" data-summary-field="header-pass-end-date">—</span>
+                                    </span>
+                                </div>
+
                                 <div class="order-total">
                                     <span class="total-label" data-i18n-key="confirmation.total">Total:</span>
                                     <span class="total-amount" data-summary-field="order-total">0,00 kr</span>
@@ -971,6 +972,13 @@
                             <!-- Detailed Receipt Modal -->
                             <div class="receipt-modal" id="detailedReceiptModal" style="display: none;">
                                 <div class="receipt-modal-content">
+                                    <div class="receipt-drawer-handle" aria-hidden="true"></div>
+                                    <button type="button" class="receipt-modal-close" data-action="close-detailed-receipt" aria-label="Close receipt">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                            <line x1="18" y1="6" x2="6" y2="18"/>
+                                            <line x1="6" y1="6" x2="18" y2="18"/>
+                                        </svg>
+                                    </button>
                                     <div class="receipt-header">
                                         <div class="receipt-header-left">
                                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

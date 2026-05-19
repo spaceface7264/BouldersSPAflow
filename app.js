@@ -8651,6 +8651,9 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Mobile drawer: enable swipe-down-to-dismiss on the receipt modal.
+  attachReceiptDrawerSwipe();
 }
 
 function setLoginLoadingState(isLoading) {
@@ -22393,28 +22396,90 @@ async function showDetailedReceipt() {
   document.body.style.top = `-${scrollY}px`;
   document.body.style.width = '100%';
   document.body.style.overflow = 'hidden';
-  
-  // Show modal
+
+  // Show the modal: set display first, then add the open class on the next
+  // frame so the transition runs (fade+scale on desktop, slide-up on mobile).
   modal.style.display = 'flex';
+  requestAnimationFrame(() => {
+    modal.classList.add('is-open');
+  });
 }
 
 function closeDetailedReceipt() {
   const modal = document.getElementById('detailedReceiptModal');
-  if (modal) {
+  if (!modal) return;
+
+  modal.classList.remove('is-open');
+
+  // After the slide/fade transition completes, hide entirely. Also clear any
+  // transform/transition the swipe-to-dismiss handler may have left behind.
+  const finalize = () => {
     modal.style.display = 'none';
-    
-    // Restore background scrolling - restore scroll position
-    const scrollY = document.body.style.top;
-    document.body.style.position = '';
-    document.body.style.top = '';
-    document.body.style.width = '';
-    document.body.style.overflow = '';
-    
-    // Restore scroll position
-    if (scrollY) {
-      window.scrollTo(0, parseInt(scrollY || '0') * -1);
+    const content = modal.querySelector('.receipt-modal-content');
+    if (content) {
+      content.style.transform = '';
+      content.style.transition = '';
     }
+  };
+  // 360ms covers the longest transition (mobile slide = 320ms) with headroom.
+  setTimeout(finalize, 360);
+
+  // Restore background scrolling - restore scroll position
+  const scrollY = document.body.style.top;
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.width = '';
+  document.body.style.overflow = '';
+
+  if (scrollY) {
+    window.scrollTo(0, parseInt(scrollY || '0') * -1);
   }
+}
+
+// Mobile drawer: drag down on the content to dismiss. The handler is no-op on
+// desktop (>768px) and when the content is scrolled past the top, so it never
+// fights normal scrolling.
+function attachReceiptDrawerSwipe() {
+  const modal = document.getElementById('detailedReceiptModal');
+  if (!modal) return;
+  const content = modal.querySelector('.receipt-modal-content');
+  if (!content) return;
+
+  let startY = null;
+  let dy = 0;
+  let tracking = false;
+
+  content.addEventListener('touchstart', (e) => {
+    if (window.innerWidth > 768) return;
+    if (content.scrollTop > 0) return;
+    if (e.touches.length !== 1) return;
+    startY = e.touches[0].clientY;
+    dy = 0;
+    tracking = true;
+    content.style.transition = 'none';
+  }, { passive: true });
+
+  content.addEventListener('touchmove', (e) => {
+    if (!tracking || startY === null) return;
+    dy = e.touches[0].clientY - startY;
+    content.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+  }, { passive: true });
+
+  const release = () => {
+    if (!tracking) return;
+    tracking = false;
+    content.style.transition = '';
+    if (dy > 90) {
+      closeDetailedReceipt();
+    } else {
+      content.style.transform = '';
+    }
+    startY = null;
+    dy = 0;
+  };
+
+  content.addEventListener('touchend', release, { passive: true });
+  content.addEventListener('touchcancel', release, { passive: true });
 }
 
 
