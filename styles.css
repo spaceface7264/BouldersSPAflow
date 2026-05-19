@@ -6099,11 +6099,18 @@ body {
     .order-summary .item-name,
     .order-summary .item-price,
     .order-summary .payment-label,
-    .order-summary .consent-text,
     .order-summary .payment-description {
         word-wrap: break-word;
         overflow-wrap: break-word;
         hyphens: auto;
+    }
+
+    /* Consent text: never hyphenate or break words mid-syllable —
+       "redeeming" becoming "re-deeming" reads as a typo. */
+    .order-summary .consent-text {
+        word-wrap: normal;
+        overflow-wrap: normal;
+        hyphens: manual;
     }
     
     /* Ensure discount code input doesn't overflow */
@@ -6391,6 +6398,12 @@ body {
 .summary-edit-btn:hover {
     background: rgba(255, 255, 255, 0.14);
     transform: translateY(-1px);
+}
+
+/* /99kr (firstclimb) is a single-product flow: cart contents are fixed,
+   so editing makes no sense. Hide the edit button on this route. */
+body.firstclimb-flow .summary-edit-btn {
+    display: none;
 }
 
 /* Cart Items */
@@ -7385,9 +7398,9 @@ body {
     flex: 1;
     min-width: 0;
     font-size: var(--font-size-sm);
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
+    word-wrap: normal;
+    overflow-wrap: normal;
+    hyphens: manual;
     line-height: 1.5;
     font-weight: 400;
     pointer-events: none;

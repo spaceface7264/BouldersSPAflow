@@ -6211,6 +6211,7 @@ function init() {
 
   // /99kr: render the product preview on step 1 immediately, before products load.
   if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
+    try { document.body.classList.add('firstclimb-flow'); } catch (_) {}
     try { renderFirstClimbStep1PreviewStatic(); } catch (_) {}
   }
 
@@ -6371,6 +6372,8 @@ const translations = {
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
+    'cart.consent.terms.firstclimb': 'Jeg forstår, at jeg skal underskrive <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">ansvarsfraskrivelsen</a> ved indløsning af billetten.*',
+    'liability.waiver.title': 'Ansvarsfraskrivelse',
     'cart.consent.privacy': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Persondatapolitik</a>.*',
     'cart.consent.marketing': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">marketing-e-mails</a>.',
     'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
@@ -6491,6 +6494,7 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Fortsæt uden',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
+    'homeGym.tooltip.title.firstclimb': 'Din billet gælder i alle Boulders.',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
     'modal.loading': 'Indlæser...',
@@ -6628,6 +6632,8 @@ const translations = {
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
+    'cart.consent.terms.firstclimb': 'I understand that I will sign the <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">liability waiver</a> when redeeming the ticket.*',
+    'liability.waiver.title': 'Liability Disclaimer',
     'cart.consent.privacy': 'I accept the <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Privacy Policy</a>*.',
     'cart.consent.marketing': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Marketing Emails</a>.',
     'consent.email.explainer': 'E-mail<br><br>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.',
@@ -6748,6 +6754,7 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Continue without',
     'terms.tab.membership': 'Membership/Trial', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
+    'homeGym.tooltip.title.firstclimb': 'Your ticket is valid at any Boulders.',
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
     'modal.loading': 'Loading...',
@@ -6904,6 +6911,8 @@ const translations = {
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
+    'cart.consent.terms.firstclimb': 'Ich verstehe, dass ich beim Einlösen des Tickets den <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">Haftungsausschluss</a> unterschreiben werde.*',
+    'liability.waiver.title': 'Haftungsausschluss',
     'cart.consent.privacy': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datenschutzrichtlinie</a>.*',
     'cart.consent.marketing': 'Ich möchte <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Marketing-E-Mails</a> erhalten.',
     'consent.email.explainer': 'E-Mail<br><br>Ich gebe meine Einwilligung, dass Boulders mir E-Mails senden und mich über Veranstaltungen und Initiativen, Trainingsinspiration, Angebote und andere Dienstleistungen auf dem Laufenden halten darf.',
@@ -6942,6 +6951,7 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Ohne fortfahren',
     'terms.tab.membership': 'Mitgliedschaft / 15 Tage', 'terms.tab.punchcard': 'Stempelkarte',
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
+    'homeGym.tooltip.title.firstclimb': 'Dein Ticket gilt in allen Boulders.',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
     'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
     'modal.loading': 'Lädt...',
@@ -7397,8 +7407,10 @@ function updateCartTranslations() {
 
   const termsConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.terms"]');
   if (termsConsent) {
-    // Handle HTML content with links
-    const termsHtml = t('cart.consent.terms');
+    // firstclimb (/99kr) requires a liability-waiver acknowledgement instead of
+    // the standard T&C consent — the ticket is redeemed in person at the gym.
+    const termsKey = isFirstClimbRoute() ? 'cart.consent.terms.firstclimb' : 'cart.consent.terms';
+    const termsHtml = t(termsKey);
     termsConsent.innerHTML = sanitizeHTML(termsHtml);
   }
 
@@ -9340,6 +9352,54 @@ boulders.dk</p>
     da: `<p>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.</p>`,
     en: `<p>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.</p>`
   },
+  'liability-waiver': {
+    da: `<p><strong>Dette er kun en forhåndsvisning — du accepterer ikke ansvarsfraskrivelsen her.</strong> Den endelige underskrift indsamles, når du ankommer til Boulders og indløser din billet. Her kan du i ro og mag læse, hvad du skal underskrive på dagen.</p>
+<p>Før du begynder at klatre, har vi brug for nogle oplysninger om dig samt din digitale underskrift på vores ansvarsfraskrivelse.</p>
+<p>Det følgende er en ansvarsfraskrivelse og generel introduktion om adfærd og sikkerhed, som skal underskrives, før du begynder at klatre i Boulders. Vi opbevarer din underskrift, navn, e-mail og telefonnummer i 12 måneder i henhold til gældende GDPR-lovgivning. Det er dit eget ansvar at forny den. Er du i tvivl om status på din underskrift, så kontakt personalet.</p>
+<p>Læs venligst alt på de følgende sider, før du accepterer. For at modtage din bekræftelsesmail skal du acceptere at modtage e-mails fra os. Du vil modtage en bekræftelsesmail kort efter, du har underskrevet. Tjek din spam-mappe, hvis du ikke finder mailen i din indbakke. Hvis du stadig ikke modtager bekræftelsesmailen, bedes du udfylde formularen igen og sikre, at den angivne e-mailadresse er korrekt.</p>
+<p>Bemærk venligst, at mindreårige/børn under 16 år skal have en forælders eller værges underskrift for at klatre i Boulders. Underskriv med navnet på forælder/værge.</p>
+<h2>Helbredstilstand og personskade</h2>
+<p>Alle aktiviteter og klatring i Boulders sker på eget ansvar. Boulders er ikke ansvarlig for din brug af faciliteterne eller udendørsområderne. Som bruger er du selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter i Boulders.</p>
+<p>Klatring er en sportsaktivitet, hvor skader og uheld kan forventes. Kunden accepterer derfor, at brugen af Boulders' faciliteter, herunder klatrefaciliteterne, sker på kundens eget ansvar, og at kunden ikke kan holde Boulders erstatningsansvarlig på nogen måde. Kunden accepterer dermed, at eventuelle skader på kunden eller tredjepart ikke erstattes af Boulders.</p>
+<p>Det er dit personlige ansvar at inspicere din landingszone, før du klatrer. Er du i tvivl, så rådfør dig med personalet, før du begynder at klatre. Derudover følges dansk erstatningsret på dette område. Hvis du er ansvarlig for en gruppe børn under 16 år og/eller mindreårige, som klatrer, betragtes din underskrift som en gyldig ansvarsfraskrivelse for alle deltagende personer.</p>
+<h2>Vær venligst opmærksom på følgende</h2>
+<ol>
+<li>Klatreelementer, klatresko og klatrevægge kan være glatte.</li>
+<li>Måtterne har forskellige fastheder afhængigt af deres alder.</li>
+<li>Fald kan være uventede og pludselige.</li>
+<li>Fald fra store højder kan være farlige.</li>
+<li>Fald fra lave højder kan også være farlige.</li>
+<li>At din landingszone er fri for genstande og/eller personer.</li>
+<li>Klatr ned i stedet for at hoppe ned for at undgå at lande forkert.</li>
+<li>Orienter dig, før du begynder at klatre, og når du bevæger dig rundt i hallen.</li>
+<li>Hold personlige ejendele væk fra måtterne.</li>
+<li>Du skal bære klatresko, mens du klatrer. Ingen bare fødder, sokker eller andre typer indendørssko!</li>
+<li>Pas på dig selv og kend dine grænser.</li>
+</ol>`,
+    en: `<p><strong>This is a preview only — you are not accepting the liability waiver here.</strong> The signature is collected when you arrive at Boulders and redeem your ticket. This page lets you read what you'll be signing, ahead of time.</p>
+<p>Before you start climbing, we need some information about you and your digital signature on our liability disclaimer.</p>
+<p>The following is a liability disclaimer and general orientation about conduct and safety, which must be signed before you start climbing in Boulders. We store your signature, name, email, and phone number for 12 months, under applicable GDPR legislation. It is your own responsibility to renew it. If you're in doubt about the status of your signature, then contact the staff.</p>
+<p>Please read everything on the following pages before you accept. To receive your confirmation email, you must accept receiving emails from us. You will receive a confirmation email shortly after you have signed. Check your spam folder if you do not find the email in your inbox. If you still do not receive the confirmation email, please fill out the form again and ensure that the email address provided is correct.</p>
+<p>Please note that minors/children under 16 years old, must have a parent or guardian's signature to climb at Boulders. Sign with name of parent/guardian.</p>
+<h2>Health Condition and Personal Injury</h2>
+<p>All activities and climbing in Boulders are done at your own risk. Boulders is not responsible for your use of the facilities or outdoor areas. As a user, you are responsible for being in a health condition that allows participation in activities at Boulders.</p>
+<p>Climbing is a sporting activity where injuries and accidents can be expected. The customer, therefore, agrees that the use of Boulders' facilities, including climbing facilities, is at the customer's own risk and that the customer cannot hold Boulders liable for compensation in any way. The customer thus agrees that any injuries to the customer or third parties will not be compensated by Boulders.</p>
+<p>It is your personal responsibility to inspect your landing zone before climbing. If in doubt, consult with staff before you start climbing. Additionally, Danish liability law is followed in this area. If you are responsible for a group of children under 16 years of age and/or minors who are climbing, your signature will be considered a valid liability waiver applicable to all participating individuals.</p>
+<h2>Please be aware of the following</h2>
+<ol>
+<li>Climbing elements, climbing shoes, and climbing walls can be slippery.</li>
+<li>The mats have different firmness levels depending on their age.</li>
+<li>Falls can be unexpected and sudden.</li>
+<li>Falls from great heights can be dangerous.</li>
+<li>Falls from low heights can also be dangerous.</li>
+<li>That your landing zone is free from objects and/or people.</li>
+<li>Climb down instead of jumping down to avoid landing incorrectly.</li>
+<li>Orient yourself before you start climbing and as you move around the gym.</li>
+<li>Keep personal belongings off the mats.</li>
+<li>You must wear climbing shoes while climbing. No bare feet, socks, or other types of indoor shoes!</li>
+<li>Take care of yourself and know your limits.</li>
+</ol>`
+  },
   privacy: {
     da: `<h2>Generelt</h2>
 <p>Denne politik for behandling af personoplysninger ("Persondatapolitik") gælder, når du interagerer med Boulders ("vi", "os", "vores"). Den beskriver, hvordan vi indsamler og behandler dine oplysninger, når du bruger vores hjemmeside boulders.goactivebooking.com ("Hjemmesiden"), benytter vores app ("Appen"), eller i forbindelse med dit kundeforhold og din træning hos os.</p>
@@ -9484,6 +9544,7 @@ function openTermsModal(termsType) {
     cookie: t('footer.policies.cookie'),
     'email-consent': 'E-mail',
     'sms-consent': 'SMS',
+    'liability-waiver': t('liability.waiver.title'),
   };
 
   const isShortConsentModal = termsType === 'sms-consent' || termsType === 'email-consent';
@@ -15215,13 +15276,17 @@ function renderCartItems() {
     const infoWrapper = document.createElement('span');
     infoWrapper.className = 'home-gym-info-wrapper';
     
-    // Create tooltip
+    // Create tooltip — firstclimb (/99kr) is a single-day ticket valid at any
+    // Boulders, so only the headline is needed; skip the supporting paragraph.
+    const isFirstClimb = isFirstClimbRoute();
+    const tooltipTitle = t(isFirstClimb ? 'homeGym.tooltip.title.firstclimb' : 'homeGym.tooltip.title');
+    const tooltipDesc = isFirstClimb ? '' : `<p>${t('homeGym.tooltip.desc')}</p>`;
     const tooltip = document.createElement('div');
     tooltip.className = 'home-gym-tooltip';
     tooltip.innerHTML = sanitizeHTML(`
       <div class="tooltip-content">
-        <p><strong>${t('homeGym.tooltip.title')}</strong></p>
-        <p>${t('homeGym.tooltip.desc')}</p>
+        <p><strong>${tooltipTitle}</strong></p>
+        ${tooltipDesc}
       </div>
     `);
     
@@ -15568,12 +15633,11 @@ function renderCartItems() {
       totalRow.className = 'cart-item-total-row';
       const labelSpan = document.createElement('span');
       const punches = item.totalPunches != null && item.totalPunches > 0 ? item.totalPunches : 0;
-      // firstclimb is a single-day ticket — use the product name instead of the
+      // firstclimb is a single-day ticket — just say "Total" instead of the
       // "Total (X Klip)" punch-card label. Same fallback for any value card BRP
       // returns without a clip count.
       if (isFirstClimbRoute() || punches === 0) {
-        const productName = String(item.name || item.product?.name || '').trim();
-        labelSpan.textContent = productName || (t('cart.total') || 'Total');
+        labelSpan.textContent = t('cart.total') || 'Total';
       } else if (punches === 1) {
         labelSpan.textContent = `Total (${t('cart.punch.one')})`;
       } else {
