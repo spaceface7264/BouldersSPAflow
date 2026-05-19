@@ -30,7 +30,6 @@ import {
   formatExpiryDate,
   stripNonDigits,
 } from './utils/input.js';
-import { stripEmailPlusTag } from './utils/string.js';
 import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
 import { getErrorMessage, extractErrorFields } from './utils/errors.js';
@@ -2876,20 +2875,23 @@ class PaymentAPI {
       
       const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) || businessUnit : businessUnit;
 
-      const resolvedReceiptEmailRaw = receiptEmail
-        || state?.authenticatedEmail
-        || state?.forms?.customer?.email
-        || getTokenMetadata()?.email
-        || null;
-      const resolvedReceiptEmail = resolvedReceiptEmailRaw
-        ? stripEmailPlusTag(resolvedReceiptEmailRaw)
-        : null;
+      // receiptEmail is intentionally NOT sent in the payload.
+      //
+      // Empirical finding: paying customers received two identical "Kvittering"
+      // emails, while 100%-discount flows (which skip this endpoint entirely)
+      // received only one. The most plausible cause is that BRP's payment-link
+      // backend emits its own receipt to receiptEmail when present, *and* the
+      // post-finalization flow also emits a receipt to the customer record's
+      // email — yielding two copies for the same purchase.
+      //
+      // Dropping the explicit receiptEmail leaves the customer-record email as
+      // the single source of truth. If we ever need to override the recipient
+      // for a specific flow, gate it behind an explicit opt-in.
 
       const payload = {
         orderId, // Required: ID of the order
         paymentMethodId, // Required: Payment method ID (numeric)
         returnUrl, // Required: Absolute URL to return to after payment
-        ...(resolvedReceiptEmail ? { receiptEmail: resolvedReceiptEmail } : {}),
         ...(businessUnitId ? { businessUnit: businessUnitId } : {}),
       };
       
