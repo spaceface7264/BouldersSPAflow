@@ -6099,11 +6099,18 @@ body {
     .order-summary .item-name,
     .order-summary .item-price,
     .order-summary .payment-label,
-    .order-summary .consent-text,
     .order-summary .payment-description {
         word-wrap: break-word;
         overflow-wrap: break-word;
         hyphens: auto;
+    }
+
+    /* Consent text: never hyphenate or break words mid-syllable —
+       "redeeming" becoming "re-deeming" reads as a typo. */
+    .order-summary .consent-text {
+        word-wrap: normal;
+        overflow-wrap: normal;
+        hyphens: manual;
     }
     
     /* Ensure discount code input doesn't overflow */
@@ -6391,6 +6398,12 @@ body {
 .summary-edit-btn:hover {
     background: rgba(255, 255, 255, 0.14);
     transform: translateY(-1px);
+}
+
+/* /99kr (firstclimb) is a single-product flow: cart contents are fixed,
+   so editing makes no sense. Hide the edit button on this route. */
+body.firstclimb-flow .summary-edit-btn {
+    display: none;
 }
 
 /* Cart Items */
@@ -7385,9 +7398,9 @@ body {
     flex: 1;
     min-width: 0;
     font-size: var(--font-size-sm);
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    hyphens: auto;
+    word-wrap: normal;
+    overflow-wrap: normal;
+    hyphens: manual;
     line-height: 1.5;
     font-weight: 400;
     pointer-events: none;
@@ -10594,4 +10607,169 @@ main {
     .invite-share-buttons {
         gap: 16px;
     }
+}
+
+.firstclimb-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+}
+
+.firstclimb-modal {
+    position: relative;
+    background: #181820;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 32px 28px 28px;
+    max-width: 480px;
+    width: 100%;
+    color: #fff;
+    text-align: center;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+
+.firstclimb-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 4px 8px;
+}
+
+.firstclimb-modal-close:hover {
+    opacity: 1;
+}
+
+.firstclimb-modal-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 14px;
+    line-height: 1.25;
+}
+
+.firstclimb-modal-body {
+    font-size: 15px;
+    line-height: 1.55;
+    opacity: 0.88;
+    margin-bottom: 22px;
+}
+
+.firstclimb-modal-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.firstclimb-modal-cta {
+    display: inline-block;
+    padding: 12px 24px;
+    border-radius: 999px;
+    background: #ff00d4;
+    color: #fff;
+    font-weight: 700;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+}
+
+.firstclimb-modal-cta:hover {
+    opacity: 0.9;
+}
+
+/* /99kr offer banner — fixed strip directly below the site header.
+   Hidden by default; only revealed by the firstclimb-flow body class.
+   Body class also bumps the header offsets so content doesn't sit
+   under the banner. */
+.firstclimb-banner {
+    display: none;
+}
+
+body.firstclimb-flow .firstclimb-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    z-index: 99;
+    padding: 8px 16px;
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.95), rgba(5, 150, 105, 0.95));
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.5);
+}
+
+.firstclimb-banner-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.3;
+    max-width: 1200px;
+}
+
+.firstclimb-banner-title {
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.firstclimb-banner-perks {
+    font-weight: 500;
+    opacity: 0.92;
+}
+
+.firstclimb-banner-sep {
+    opacity: 0.55;
+}
+
+/* Push the step indicator and main content down by the banner height
+   when the banner is active. Each breakpoint already has its own header
+   offset, so we just add the banner's ~38px on top. */
+body.firstclimb-flow .step-indicator {
+    margin-top: calc(56px + 40px);
+}
+
+@media (max-width: 768px) {
+    body.firstclimb-flow .firstclimb-banner {
+        top: 48px;
+        padding: 12px 12px;
+    }
+    body.firstclimb-flow .firstclimb-banner-inner {
+        font-size: 12px;
+        gap: 6px;
+    }
+    body.firstclimb-flow .step-indicator {
+        margin-top: calc(48px + 44px);
+    }
+    body.firstclimb-flow .selected-gym-display {
+        margin-top: calc(48px + 44px + 8px);
+    }
+}
+
+@media (max-width: 480px) {
+    body.firstclimb-flow .firstclimb-banner {
+        top: 44px;
+    }
+    body.firstclimb-flow .step-indicator {
+        margin-top: calc(44px + 56px);
+    }
+}
+
+/* Success page (step 5): the order is already placed, so the offer banner
+   has nothing left to sell. Hide it. */
+body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
+    display: none;
 }

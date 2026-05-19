@@ -30,7 +30,6 @@ import {
   formatExpiryDate,
   stripNonDigits,
 } from './utils/input.js';
-import { stripEmailPlusTag } from './utils/string.js';
 import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
 import { getErrorMessage, extractErrorFields } from './utils/errors.js';
@@ -85,10 +84,16 @@ const LANDING_ROUTE_CONFIG = Object.freeze({
     labelKey: 'LandingFirstMonthFree',
     mode: 'multi',
   }),
+  '/99kr': Object.freeze({
+    componentName: 'LandingFirstClimb',
+    labelKey: 'firstclimb',
+    mode: 'single',
+  }),
 });
 const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
   '/membership-offer',
+  '/99kr',
 ]));
 
 function normalizePathname(pathname) {
@@ -101,6 +106,243 @@ function normalizePathname(pathname) {
 function resolveLandingRouteConfig(pathname = window.location.pathname) {
   const normalizedPath = normalizePathname(pathname);
   return LANDING_ROUTE_CONFIG[normalizedPath] || null;
+}
+
+function isFirstClimbRoute() {
+  const active = (typeof state !== 'undefined' && state?.landingRouteConfig) || resolveLandingRouteConfig();
+  return active?.componentName === 'LandingFirstClimb';
+}
+
+// firstclimb is a one-per-customer offer. Every user — new or existing — can
+// buy it exactly once. A customer is disqualified if they have ever held a
+// product carrying the dedicated `Første Gang` label (the canonical blocking
+// signal, assigned in BRP admin to this product and any future products that
+// should consume the same allowance). The legacy `firstclimb` label is kept
+// in the list defensively in case it lingers on historical product records.
+// Stored lowercase + whitespace-collapsed; matched with the same normalization.
+const FIRSTCLIMB_BLOCKING_LABELS = Object.freeze([
+  'første gang',
+  'firstclimb',
+]);
+
+function normalizeFirstclimbLabelName(value) {
+  // NFC-normalize so single-codepoint "ø" (U+00F8) and decomposed
+  // "o + combining stroke" (U+006F U+0338) compare equal — BRP sometimes
+  // returns the decomposed form.
+  return String(value || '').normalize('NFC').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function productHasFirstclimbBlockingLabel(product) {
+  const labels = Array.isArray(product?.productLabels) ? product.productLabels : [];
+  const matched = labels.find((label) => {
+    const name = normalizeFirstclimbLabelName(label?.name);
+    return FIRSTCLIMB_BLOCKING_LABELS.includes(name);
+  });
+  if (matched) {
+    console.log('[firstclimb] product label matched blocking list:', {
+      productId: product?.id,
+      productName: product?.name,
+      matchedLabel: matched?.name,
+      allLabels: labels.map((l) => l?.name),
+    });
+  } else if (labels.length > 0) {
+    // Help diagnose mismatches when a product *does* carry labels but none
+    // are recognised — e.g. encoding drift, unexpected spelling, etc.
+    console.log('[firstclimb] product carries labels but none are blocking:', {
+      productId: product?.id,
+      productName: product?.name,
+      labels: labels.map((l) => ({ name: l?.name, normalized: normalizeFirstclimbLabelName(l?.name) })),
+      blockingList: FIRSTCLIMB_BLOCKING_LABELS,
+    });
+  }
+  return Boolean(matched);
+}
+
+async function _firstclimbAuthFetch(path) {
+  const token = (typeof window.getAccessToken === 'function') ? window.getAccessToken() : null;
+  if (!token) throw new Error('No access token for customer history fetch');
+  const url = buildApiUrl({
+    baseUrl: businessUnitsAPI?.baseUrl || null,
+    useProxy: businessUnitsAPI?.useProxy ?? true,
+    path,
+  });
+  return requestJson({
+    url,
+    method: 'GET',
+    headers: {
+      'Accept-Language': getAcceptLanguageHeader(),
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+}
+
+// Pull product IDs the customer currently holds or has ever held. Errors on
+// any single endpoint are swallowed — we'd rather fail open per-source than
+// abort the whole check (the caller defaults to "block" if all sources fail).
+async function collectFirstclimbCustomerProductIds(customerId) {
+  if (!customerId) return { ids: new Set(), errors: ['no customer id'] };
+  const ids = new Set();
+  const errors = [];
+  const safeFetch = async (path) => {
+    try { return await _firstclimbAuthFetch(path); }
+    catch (e) { errors.push(`${path}: ${e?.message || e}`); return null; }
+  };
+  const [subs, valueCards, receipts] = await Promise.all([
+    safeFetch(`/api/ver3/customers/${customerId}/subscriptions?includeInactive=true`),
+    safeFetch(`/api/ver3/customers/${customerId}/valuecards`),
+    safeFetch(`/api/ver3/customers/${customerId}/receipts`),
+  ]);
+  const addRef = (ref) => {
+    const id = ref?.id ?? ref?.productId ?? ref?.product?.id;
+    if (id != null) ids.add(String(id));
+  };
+  (Array.isArray(subs) ? subs : []).forEach((s) => addRef(s?.subscriptionProduct || s?.product));
+  (Array.isArray(valueCards) ? valueCards : []).forEach((vc) => addRef(vc?.valueCardProduct || vc?.validCardProduct || vc?.product));
+  (Array.isArray(receipts) ? receipts : []).forEach((r) => {
+    (r?.receiptItems || r?.items || []).forEach((item) => addRef(item?.product || item));
+  });
+  console.log('[firstclimb] customer history product IDs collected:', {
+    customerId,
+    ids: Array.from(ids),
+    counts: {
+      subscriptions: Array.isArray(subs) ? subs.length : 0,
+      valueCards: Array.isArray(valueCards) ? valueCards.length : 0,
+      receipts: Array.isArray(receipts) ? receipts.length : 0,
+    },
+    errors,
+  });
+  return { ids, errors };
+}
+
+// Resolve a product by id from the already-loaded catalog if possible, else fetch.
+async function resolveProductForFirstclimbCheck(productId) {
+  const id = String(productId);
+  const fromCatalog = (state.allRawProducts || []).find((p) => String(p?.id) === id);
+  if (fromCatalog) return fromCatalog;
+  if (!state.selectedBusinessUnit) return null;
+  // Try subscription first, then value card. Both endpoints 404 if it's the other kind.
+  try { return await businessUnitsAPI.getSubscriptionById(productId, state.selectedBusinessUnit); }
+  catch (_) {}
+  try { return await businessUnitsAPI.getValueCardById(productId, state.selectedBusinessUnit); }
+  catch (_) {}
+  return null;
+}
+
+async function customerHasFirstclimbBlockingHistory(customerId) {
+  const { ids, errors } = await collectFirstclimbCustomerProductIds(customerId);
+  if (errors.length) console.warn('[firstclimb] history fetch had partial errors:', errors);
+  if (ids.size === 0) return false; // clean history
+  for (const id of ids) {
+    let product = null;
+    try { product = await resolveProductForFirstclimbCheck(id); } catch (_) {}
+    if (product && productHasFirstclimbBlockingLabel(product)) {
+      console.log('[firstclimb] blocking product detected in customer history:', { id, name: product?.name });
+      return true;
+    }
+  }
+  return false;
+}
+
+// firstclimb is a single-product flow. Once the gym is chosen we have everything
+// we need to skip the product-selection step and drop the user straight into the
+// form/checkout step with the value card already selected (quantity locked to 1).
+async function advanceFirstClimbFromGym() {
+  if (state.selectedBusinessUnit && !productsLoadPromise) {
+    loadProductsFromAPI();
+  }
+  try { await productsLoadPromise; } catch (_) {}
+
+  const product = (state.landingMatchedProducts || [])[0];
+  if (!product) {
+    devWarn('[Landing Route] firstclimb auto-select aborted — no matched product');
+    state.currentStep = 2;
+    showStep(2);
+    updateStepIndicator();
+    updateNavigationButtons();
+    updateMainSubtitle();
+    return;
+  }
+
+  const planId = `punch-${product.id}`;
+  state.membershipPlanId = planId;
+  state.selectedProductId = product.id;
+  state.selectedProductType = 'punch-card';
+  state.valueCardQuantities.set(planId, 1);
+
+  // Form/checkout step (addons step 3 is always skipped in this codebase).
+  state.currentStep = 4;
+  showStep(4);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+  try { updateCartSummary(); } catch (_) {}
+  scrollToTop();
+  setTimeout(() => scrollToTop(), 200);
+}
+
+// firstclimb is a new-customer-only product. If BRP recognizes the email
+// (or the user is already logged in), we surface a modal explaining why the
+// purchase can't proceed and direct them to the regular entry options.
+function blockFirstClimbExistingCustomer({ email } = {}) {
+  const emailVal = (email || '').toLowerCase();
+  const title = (typeof t === 'function' && t('firstclimb.existingCustomer.title'))
+    || 'This offer is for new climbers only';
+  const baseBody = (typeof t === 'function' && t('firstclimb.existingCustomer.body'))
+    || 'We already have a profile linked to your email {email}. You can still climb — pick one of our other products.';
+  // Inline the email next to "your email" so it reads naturally. If we don't
+  // have an email, strip the placeholder and the leading space before it.
+  const body = emailVal
+    ? baseBody.replace('{email}', emailVal)
+    : baseBody.replace(/\s*\{email\}/g, '');
+  const ctaLabel = (typeof t === 'function' && t('firstclimb.existingCustomer.cta'))
+    || 'See other entry options';
+  const closeLabel = (typeof t === 'function' && t('button.close')) || 'Close';
+
+  // Stop the checkout flow dead — disable the button so the modal isn't fighting
+  // a stale click handler.
+  try {
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState && setCheckoutLoadingState(false);
+  } catch (_) {}
+  try {
+    document.querySelectorAll('[data-action="submit-checkout"]').forEach((btn) => {
+      btn.disabled = true;
+      btn.style.pointerEvents = 'none';
+      btn.style.opacity = '0.5';
+    });
+  } catch (_) {}
+
+  // Build modal once; reuse if already in DOM.
+  let modal = document.getElementById('firstclimbBlockerModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'firstclimbBlockerModal';
+    modal.className = 'firstclimb-modal-overlay';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'firstclimbBlockerTitle');
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = sanitizeHTML(`
+    <div class="firstclimb-modal">
+      <button class="firstclimb-modal-close" type="button" aria-label="${closeLabel}" data-firstclimb-modal-close>&times;</button>
+      <div class="firstclimb-modal-title" id="firstclimbBlockerTitle">${title}</div>
+      <p class="firstclimb-modal-body">${body}</p>
+      <div class="firstclimb-modal-actions">
+        <a class="firstclimb-modal-cta" href="/">${ctaLabel}</a>
+      </div>
+    </div>
+  `);
+  modal.style.display = 'flex';
+
+  const close = () => {
+    modal.style.display = 'none';
+  };
+  modal.querySelector('[data-firstclimb-modal-close]')?.addEventListener('click', close);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) close();
+  });
 }
 
 function applyRouteIndexingPolicy(pathname = window.location.pathname) {
@@ -2668,20 +2910,23 @@ class PaymentAPI {
       
       const businessUnitId = typeof businessUnit === 'string' ? parseInt(businessUnit, 10) || businessUnit : businessUnit;
 
-      const resolvedReceiptEmailRaw = receiptEmail
-        || state?.authenticatedEmail
-        || state?.forms?.customer?.email
-        || getTokenMetadata()?.email
-        || null;
-      const resolvedReceiptEmail = resolvedReceiptEmailRaw
-        ? stripEmailPlusTag(resolvedReceiptEmailRaw)
-        : null;
+      // receiptEmail is intentionally NOT sent in the payload.
+      //
+      // Empirical finding: paying customers received two identical "Kvittering"
+      // emails, while 100%-discount flows (which skip this endpoint entirely)
+      // received only one. The most plausible cause is that BRP's payment-link
+      // backend emits its own receipt to receiptEmail when present, *and* the
+      // post-finalization flow also emits a receipt to the customer record's
+      // email — yielding two copies for the same purchase.
+      //
+      // Dropping the explicit receiptEmail leaves the customer-record email as
+      // the single source of truth. If we ever need to override the recipient
+      // for a specific flow, gate it behind an explicit opt-in.
 
       const payload = {
         orderId, // Required: ID of the order
         paymentMethodId, // Required: Payment method ID (numeric)
         returnUrl, // Required: Absolute URL to return to after payment
-        ...(resolvedReceiptEmail ? { receiptEmail: resolvedReceiptEmail } : {}),
         ...(businessUnitId ? { businessUnit: businessUnitId } : {}),
       };
       
@@ -3015,11 +3260,16 @@ async function loadProductsFromAPI() {
   const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
   const isFreeTrialLandingRoute = activeLandingRoute?.componentName === 'LandingFreeTrial';
   const isFirstMonthFreeLandingRoute = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
+  const isFirstClimbLandingRoute = activeLandingRoute?.componentName === 'LandingFirstClimb';
   const displayLabelOptions = isFreeTrialLandingRoute
     ? { allowedVisibilityLabels: ['secret'] }
     : isFirstMonthFreeLandingRoute
       ? { allowedVisibilityLabels: ['secret'] }
-      : {};
+      : isFirstClimbLandingRoute
+        // Accept the firstclimb label itself as a visibility token so a BRP product
+        // carrying only `firstclimb` (no Public/Secret/PublicCampaign) still passes.
+        ? { allowedVisibilityLabels: ['firstclimb', 'secret', 'public', 'publiccampaign'] }
+        : {};
 
   // Deduplicate concurrent calls (preload + step transition + showStep)
   if (productsLoadPromise) {
@@ -3513,12 +3763,13 @@ function renderProductsFromAPI() {
         <div class="plan-card-actions">
           <button class="select-btn" data-action="select-plan" data-plan-id="punch-${productId}" data-i18n-key="button.select">Select</button>
           <div class="quantity-panel">
+            ${isFirstClimbRoute() ? '' : `
             <span class="quantity-panel-label" data-i18n-key="quantity.label">Choose quantity</span>
             <div class="quantity-selector">
               <button class="quantity-btn minus" data-action="decrement-quantity" data-plan-id="punch-${productId}" disabled>−</button>
               <span class="quantity-value" data-plan-id="punch-${productId}">1</span>
               <button class="quantity-btn plus" data-action="increment-quantity" data-plan-id="punch-${productId}">+</button>
-            </div>
+            </div>`}
             <button class="continue-btn" data-action="continue-value-cards" data-plan-id="punch-${productId}" data-i18n-key="button.continue">Continue</button>
           </div>
         </div>
@@ -3568,9 +3819,42 @@ function renderProductsFromAPI() {
     }
     return categoryItem;
   };
+  const ensureFirstClimbCategoryItem = () => {
+    const categoryList = document.querySelector('.category-list');
+    if (!categoryList) return null;
+    let categoryItem = categoryList.querySelector('[data-category="firstclimb"]');
+    if (!categoryItem) {
+      categoryItem = document.createElement('div');
+      categoryItem.className = 'category-item expanded selected';
+      categoryItem.dataset.category = 'firstclimb';
+      categoryItem.dataset.landingLocked = 'true';
+      const title = t('firstclimb.category.title') || 'Din første klatretur';
+      const description = t('firstclimb.category.description') || 'En dagsbillet til 99 kr inkl. lejesko og kalk. Kun for nye klatrere.';
+      categoryItem.innerHTML = sanitizeHTML(`
+        <div class="category-header">
+          <div class="category-info">
+            <div class="category-title" data-i18n-key="firstclimb.category.title">${title}</div>
+          </div>
+          <i data-lucide="chevron-down" class="category-icon"></i>
+        </div>
+        <div class="category-content">
+          <div class="category-description">
+            <p data-i18n-key="firstclimb.category.description">${description}</p>
+          </div>
+          <div class="plans-list"></div>
+        </div>
+      `);
+      categoryList.prepend(categoryItem);
+    }
+    return categoryItem;
+  };
   const getLandingTargetList = () => {
     if (activeLandingRoute?.componentName === 'LandingFreeTrial') {
       const categoryItem = ensureFreeTrialCategoryItem();
+      return categoryItem ? categoryItem.querySelector('.plans-list') : null;
+    }
+    if (activeLandingRoute?.componentName === 'LandingFirstClimb') {
+      const categoryItem = ensureFirstClimbCategoryItem();
       return categoryItem ? categoryItem.querySelector('.plans-list') : null;
     }
     if (activeLandingRoute?.componentName === 'LandingFirstMonthFree') {
@@ -3585,9 +3869,11 @@ function renderProductsFromAPI() {
     });
     const targetCategory = activeLandingRoute?.componentName === 'LandingFreeTrial'
       ? ensureFreeTrialCategoryItem()
-      : activeLandingRoute?.componentName === 'LandingFirstMonthFree'
-        ? document.querySelector('[data-category="campaign"]')
-        : document.querySelector('[data-category="membership"]');
+      : activeLandingRoute?.componentName === 'LandingFirstClimb'
+        ? ensureFirstClimbCategoryItem()
+        : activeLandingRoute?.componentName === 'LandingFirstMonthFree'
+          ? document.querySelector('[data-category="campaign"]')
+          : document.querySelector('[data-category="membership"]');
     if (targetCategory) {
       targetCategory.style.display = '';
       targetCategory.classList.add('expanded', 'selected');
@@ -3636,11 +3922,18 @@ function renderProductsFromAPI() {
     renderLandingCards(products || []);
     devLog('[Landing Route] Rendering LandingFirstMonthFree');
   };
+  const LandingFirstClimb = (products) => {
+    hideNonLandingCategories();
+    renderLandingCards((products || []).slice(0, 1));
+    devLog('[Landing Route] Rendering LandingFirstClimb');
+  };
   if (shouldRenderLandingRoute) {
     if (activeLandingRoute.componentName === 'LandingFreeTrial') {
       LandingFreeTrial(landingMatchedProducts);
     } else if (activeLandingRoute.componentName === 'LandingFirstMonthFree') {
       LandingFirstMonthFree(landingMatchedProducts);
+    } else if (activeLandingRoute.componentName === 'LandingFirstClimb') {
+      LandingFirstClimb(landingMatchedProducts);
     } else {
       devWarn('[Landing Route] Unknown component name:', activeLandingRoute.componentName);
     }
@@ -3652,6 +3945,10 @@ function renderProductsFromAPI() {
   const freeTrialCategoryItem = document.querySelector('.category-item[data-category="freetrial"]');
   if (freeTrialCategoryItem) {
     freeTrialCategoryItem.remove();
+  }
+  const firstClimbCategoryItem = document.querySelector('.category-item[data-category="firstclimb"]');
+  if (firstClimbCategoryItem) {
+    firstClimbCategoryItem.remove();
   }
   const categoryItems = document.querySelectorAll('.category-item');
   categoryItems.forEach((item) => {
@@ -5789,6 +6086,29 @@ function applyConditionalSteps() {
     }
   }
 
+  // 1b) /99kr (firstclimb): the Access step is skipped, so hide it in the indicator too.
+  //     This collapses the indicator to Home Gym → Send.
+  const accessStep = Array.from(document.querySelectorAll('.step .step-label'))
+    .find((label) => {
+      const k = label.getAttribute('data-i18n-key');
+      return k === 'step.access';
+    })?.closest('.step');
+  if (accessStep) {
+    if (isFirstClimbRoute()) {
+      accessStep.classList.add('hidden');
+      const prevConnector = accessStep.previousElementSibling;
+      if (prevConnector && prevConnector.classList.contains('step-connector')) {
+        prevConnector.classList.add('hidden');
+      }
+    } else {
+      accessStep.classList.remove('hidden');
+      const prevConnector = accessStep.previousElementSibling;
+      if (prevConnector && prevConnector.classList.contains('step-connector')) {
+        prevConnector.classList.remove('hidden');
+      }
+    }
+  }
+
   // 2) Always hide Boost/Add-ons page (step 3) - disabled for now
   const boostPanel = document.getElementById('step-3');
   if (boostPanel) {
@@ -5809,6 +6129,46 @@ function init() {
   state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
   if (state.landingRouteConfig) {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
+  }
+
+  // firstclimb: if the user arrives already authenticated, kick off an async
+  // history check. Block only if they hold/held one of the disqualifying products.
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb' && isUserAuthenticated()) {
+    (async () => {
+      let customerIdForCheck = state.customerId
+        || getTokenMetadata()?.username
+        || getTokenMetadata()?.userName;
+      try {
+        if (!customerIdForCheck) {
+          await syncAuthenticatedCustomerState();
+          customerIdForCheck = state.customerId;
+        }
+      } catch (_) {}
+      let hasBlockingHistory = true;
+      try {
+        hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
+      } catch (historyErr) {
+        console.warn('[init] firstclimb history check failed; blocking by default:', historyErr);
+        hasBlockingHistory = true;
+      }
+      if (hasBlockingHistory) {
+        const blockedEmail = state.authenticatedEmail
+          || state.authenticatedCustomer?.email
+          || getTokenMetadata()?.email
+          || '';
+        try { window.clearTokens && window.clearTokens(); } catch (_) {}
+        state.customerId = null;
+        state.authenticatedCustomer = null;
+        state.authenticatedEmail = null;
+        try { refreshLoginUI(); } catch (_) {}
+        blockFirstClimbExistingCustomer({ email: blockedEmail });
+      }
+    })();
+  }
+
+  // /99kr: tag the body so route-scoped CSS rules can target this flow.
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
+    try { document.body.classList.add('firstclimb-flow'); } catch (_) {}
   }
 
   // Capture ?ref=<recruiter customer ID> early so it's stored before any
@@ -5968,6 +6328,8 @@ const translations = {
     'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
+    'cart.consent.terms.firstclimb': 'Jeg forstår, at jeg skal underskrive <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">ansvarsfraskrivelsen</a> ved indløsning af billetten.*',
+    'liability.waiver.title': 'Ansvarsfraskrivelse',
     'cart.consent.privacy': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Persondatapolitik</a>.*',
     'cart.consent.marketing': 'Jeg vil gerne modtage <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">marketing-e-mails</a>.',
     'consent.email.explainer': 'E-mail<br><br>Jeg giver samtykke til, at Boulders må sende mig e-mails og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.',
@@ -5987,6 +6349,9 @@ const translations = {
     'confirmation.message.membership': 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.15daypass': 'Din 15-dages prøveperiode er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.firstclimb': 'Din første klatretur er klar! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.nextStep2.firstclimb': 'Din dagsbillet er klar — kig forbi hallen, når det passer dig (inden for en måned).',
+    'confirmation.nextStep3.firstclimb': 'Når du kommer: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk. Husk at du skal underskrive ansvarsfraskrivelsen.',
     'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.orderDetails': 'Ordredetaljer',
     'confirmation.orderNumber': 'Ordrenummer:',
@@ -6054,6 +6419,10 @@ const translations = {
     'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
     'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
+    'invite.firstclimb.title': 'Del dette med dine venner',
+    'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko og kalk er for alle, der ikke har prøvet det før. Send linket til dine venner.',
+    'invite.firstclimb.footnote': 'Tilbuddet kan kun bruges én gang pr. person.',
+    'invite.firstclimb.shareMessage': 'Klatre med mig hos Boulders! Få din første dag for 99 kr inkl. lejesko og kalk:',
     'confirmation.pending.title': 'Betaling afventer',
     'confirmation.pending.message': 'Din betaling behandles. Vi afventer bekræftelse fra betalingsudbyderen. Dit medlemskab aktiveres, når betalingen er bekræftet. Ordre #',
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
@@ -6081,6 +6450,7 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Fortsæt uden',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
+    'homeGym.tooltip.title.firstclimb': 'Din billet gælder i alle Boulders.',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
     'modal.loading': 'Indlæser...',
@@ -6127,6 +6497,25 @@ const translations = {
     'faq.freetrial.changeStartDateCta': 'Vil du ændre startdatoen? Skriv til medlem@boulders.dk',
     'faq.freetrial.creditCard.q': 'Kræver det et kreditkort?',
     'faq.freetrial.creditCard.a': 'Nej, prøveperioden er helt gratis og kræver ingen betalingsoplysninger.',
+    'firstclimb.category.title': 'Din første klatretur',
+    'firstclimb.category.description': 'En dagsbillet til 99 kr inkl. lejesko og kalk. Kun for nye klatrere.',
+    'firstclimb.cta': 'Køb dagsbillet',
+    'firstclimb.banner.title': 'Din første klatretur · 99 kr',
+    'firstclimb.banner.perks': 'Lejesko og kalk inkl. · Alle Boulders haller · Gyldig 1 måned',
+    'firstclimb.existingCustomer.block': 'Du har allerede brugt dette tilbud.',
+    'firstclimb.existingCustomer.title': 'Du har allerede brugt dette tilbud',
+    'firstclimb.existingCustomer.body': 'Vores 99 kr dagsbillet kan kun købes én gang pr. konto, og du har allerede brugt din {email}. Du er stadig velkommen til at klatre — vælg et af vores andre produkter.',
+    'firstclimb.existingCustomer.cta': 'Se andre adgangsmuligheder',
+    'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
+    'faq.firstclimb.included.a': 'Bliv så længe du vil i alle Boulders haller, plus lejesko og kalk. Ingen skjulte gebyrer.',
+    'faq.firstclimb.eligibility.q': 'Hvem kan købe dagsbilletten?',
+    'faq.firstclimb.eligibility.a': 'Alle kan købe den — men kun én gang pr. person.',
+    'faq.firstclimb.validity.q': 'Hvor længe gælder den?',
+    'faq.firstclimb.validity.a': 'Din billet skal bruges inden for 1 måned efter køb. Mød op hvilken som helst dag i den periode — du behøver ikke vælge en dato på forhånd.',
+    'faq.firstclimb.howToUse.q': 'Hvordan bruger jeg den i hallen?',
+    'faq.firstclimb.howToUse.a': 'Mød op i hallen, når det passer dig (inden for en måned). Oplys dit telefonnummer eller email til personalet, så aktiverer de din dagsbillet og udleverer lejesko og kalk.',
+    'faq.firstclimb.afterDay.q': 'Hvad sker der efter min første dag?',
+    'faq.firstclimb.afterDay.a': 'Bliv hængende! Du kan opgradere til medlemskab, et 15-dages kort eller et klippekort direkte hos personalet — eller online når du er klar.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
     'faq.punchcard.howItWorks.a': 'Klippekortet giver dig én (1) indgang pr klip, i alle Boulders haller. Hver gang du besøger en hal, scanner du kortet og bruger ét (1) klip pr. person. Kortet er gyldigt i 12 måneder og kan deles med andre.',
     'faq.punchcard.convert.q': 'Kan jeg konvertere mit klippekort til et medlemskab?',
@@ -6199,6 +6588,8 @@ const translations = {
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
+    'cart.consent.terms.firstclimb': 'I understand that I will sign the <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">liability waiver</a> when redeeming the ticket.*',
+    'liability.waiver.title': 'Liability Disclaimer',
     'cart.consent.privacy': 'I accept the <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Privacy Policy</a>*.',
     'cart.consent.marketing': 'I want to receive <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Marketing Emails</a>.',
     'consent.email.explainer': 'E-mail<br><br>I give consent for Boulders to send me emails and keep me updated with events and initiatives, training inspiration, offers and other services.',
@@ -6218,6 +6609,9 @@ const translations = {
     'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.15daypass': 'Your 15-Day Trial Period has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.firstclimb': 'Your first climb is ready! You\'ll receive an email with all the details shortly.',
+    'confirmation.nextStep2.firstclimb': 'Your day ticket is ready — drop by the gym whenever it suits you (within one month).',
+    'confirmation.nextStep3.firstclimb': 'When you arrive: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes and chalk. Remember you\'ll need to sign the liability waiver.',
     'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.orderDetails': 'Order Details',
     'confirmation.orderNumber': 'Order Number:',
@@ -6283,6 +6677,10 @@ const translations = {
     'invite.share.email': 'Email',
     'invite.share.more': 'More',
     'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
+    'invite.firstclimb.title': 'Share this with your friends',
+    'invite.firstclimb.subtitle': 'Our 99 kr day ticket including rental shoes and chalk is open to anyone who hasn’t tried it yet. Send the link to your friends.',
+    'invite.firstclimb.footnote': 'The offer can only be used once per person.',
+    'invite.firstclimb.shareMessage': 'Come climb with me at Boulders! Get your first day for 99 kr including rental shoes and chalk:',
     'invite.shareSubject': '2 weeks of free climbing at Boulders',
     'invite.footnote': 'Your friends get 2 weeks free entrance and rental shoes. No credit card required to start. Can only be claimed by people who have not claimed a trial pass previously.',
     'confirmation.pending.title': 'Payment Pending',
@@ -6312,6 +6710,7 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Continue without',
     'terms.tab.membership': 'Membership/Trial', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
+    'homeGym.tooltip.title.firstclimb': 'Your ticket is valid at any Boulders.',
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
     'modal.loading': 'Loading...',
@@ -6357,6 +6756,25 @@ const translations = {
     'faq.freetrial.changeStartDateCta': 'Want to change your start date? Write to medlem@boulders.dk',
     'faq.freetrial.creditCard.q': 'Does it require a credit card?',
     'faq.freetrial.creditCard.a': 'No, the trial period is completely free and requires no payment details.',
+    'firstclimb.category.title': 'Your First Climb',
+    'firstclimb.category.description': 'A day ticket for 99 kr including rental shoes and chalk. New climbers only.',
+    'firstclimb.banner.title': 'Your First Climb · 99 kr',
+    'firstclimb.banner.perks': 'Shoes & chalk included · Any Boulders gym · Valid 1 month',
+    'firstclimb.cta': 'Buy day ticket',
+    'firstclimb.existingCustomer.block': "You've already used this offer.",
+    'firstclimb.existingCustomer.title': "You've already used this offer",
+    'firstclimb.existingCustomer.body': "Our 99 kr day ticket is a one-per-customer offer, and {email} has already redeemed it. You're still welcome to climb — pick one of our other products.",
+    'firstclimb.existingCustomer.cta': 'See other entry options',
+    'faq.firstclimb.included.q': "What's included in the day ticket?",
+    'faq.firstclimb.included.a': 'Stay as long as you like at any Boulders gym, plus rental shoes and chalk. No hidden fees.',
+    'faq.firstclimb.eligibility.q': 'Who can buy the day ticket?',
+    'faq.firstclimb.eligibility.a': 'Anyone can buy it — but only once per person.',
+    'faq.firstclimb.validity.q': 'How long is it valid?',
+    'faq.firstclimb.validity.a': 'Your ticket must be used within 1 month of purchase. Show up any day within that window — no need to pick a date in advance.',
+    'faq.firstclimb.howToUse.q': 'How do I use it at the gym?',
+    'faq.firstclimb.howToUse.a': 'Drop by whenever it suits you (within one month). Give the staff your phone number or email and they will activate your day ticket and hand you rental shoes and chalk.',
+    'faq.firstclimb.afterDay.q': 'What happens after my first day?',
+    'faq.firstclimb.afterDay.a': "Stick around! You can upgrade to a membership, a 15-day pass, or a punch card directly with our staff — or online when you're ready.",
     'cart.freePeriod': 'Free period',
     'cart.activateTrial': 'ACTIVATE TRIAL PERIOD',
     'cart.noCreditCardRequired': 'No credit card required',
@@ -6425,11 +6843,32 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
+    'firstclimb.category.title': 'Dein erster Kletterbesuch',
+    'firstclimb.category.description': 'Eine Tageskarte für 99 kr inkl. Leihschuhe und Chalk. Nur für neue Kletterer.',
+    'firstclimb.banner.title': 'Dein erster Kletterbesuch · 99 kr',
+    'firstclimb.banner.perks': 'Leihschuhe & Chalk inkl. · Alle Boulders-Hallen · 1 Monat gültig',
+    'firstclimb.cta': 'Tageskarte kaufen',
+    'firstclimb.existingCustomer.block': 'Du hast dieses Angebot bereits genutzt.',
+    'firstclimb.existingCustomer.title': 'Du hast dieses Angebot bereits genutzt',
+    'firstclimb.existingCustomer.body': 'Unsere 99 kr Tageskarte gibt es einmal pro Konto, und {email} hat sie schon eingelöst. Du kannst trotzdem klettern — wähle eines unserer anderen Produkte.',
+    'firstclimb.existingCustomer.cta': 'Andere Zugangsoptionen ansehen',
+    'faq.firstclimb.included.q': 'Was ist in der Tageskarte enthalten?',
+    'faq.firstclimb.included.a': 'Bleib so lange du willst in allen Boulders-Hallen, dazu Leihschuhe und Chalk. Keine versteckten Gebühren.',
+    'faq.firstclimb.eligibility.q': 'Wer kann die Tageskarte kaufen?',
+    'faq.firstclimb.eligibility.a': 'Jeder kann sie kaufen — aber nur einmal pro Person.',
+    'faq.firstclimb.validity.q': 'Wie lange ist sie gültig?',
+    'faq.firstclimb.validity.a': 'Deine Karte muss innerhalb von 1 Monat nach dem Kauf eingelöst werden. Komm an einem beliebigen Tag in diesem Zeitraum vorbei — du musst kein Datum vorab wählen.',
+    'faq.firstclimb.howToUse.q': 'Wie nutze ich sie in der Halle?',
+    'faq.firstclimb.howToUse.a': 'Komm einfach innerhalb des Monats vorbei. Gib dem Personal deine Telefonnummer oder E-Mail, dann aktivieren sie deine Tageskarte und händigen dir Leihschuhe und Chalk aus.',
+    'faq.firstclimb.afterDay.q': 'Was passiert nach meinem ersten Tag?',
+    'faq.firstclimb.afterDay.a': 'Bleib dran! Du kannst direkt vor Ort auf eine Mitgliedschaft, ein 15-Tage-Ticket oder eine Stempelkarte upgraden — oder online, wenn du bereit bist.',
     'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
+    'cart.consent.terms.firstclimb': 'Ich verstehe, dass ich beim Einlösen des Tickets den <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">Haftungsausschluss</a> unterschreiben werde.*',
+    'liability.waiver.title': 'Haftungsausschluss',
     'cart.consent.privacy': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="privacy" onclick="event.preventDefault();">Datenschutzrichtlinie</a>.*',
     'cart.consent.marketing': 'Ich möchte <a href="#" data-action="open-terms" data-terms-type="email-consent" onclick="event.preventDefault();">Marketing-E-Mails</a> erhalten.',
     'consent.email.explainer': 'E-Mail<br><br>Ich gebe meine Einwilligung, dass Boulders mir E-Mails senden und mich über Veranstaltungen und Initiativen, Trainingsinspiration, Angebote und andere Dienstleistungen auf dem Laufenden halten darf.',
@@ -6468,6 +6907,7 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Ohne fortfahren',
     'terms.tab.membership': 'Mitgliedschaft / 15 Tage', 'terms.tab.punchcard': 'Stempelkarte',
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
+    'homeGym.tooltip.title.firstclimb': 'Dein Ticket gilt in allen Boulders.',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
     'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
     'modal.loading': 'Lädt...',
@@ -6480,6 +6920,9 @@ const translations = {
     'confirmation.message.membership': 'Ihre Mitgliedschaft wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
     'confirmation.message.15daypass': 'Ihr 15-Tage-Pass wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
     'confirmation.message.punchcard': 'Ihre Stempelkarte wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.firstclimb': 'Dein erster Kletterbesuch ist bereit! Du erhältst in Kürze eine E-Mail mit allen Details.',
+    'confirmation.nextStep2.firstclimb': 'Deine Tageskarte ist bereit — komm vorbei, wann es dir passt (innerhalb eines Monats).',
+    'confirmation.nextStep3.firstclimb': 'Wenn du ankommst: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe und Chalk aus. Denk daran, dass du den Haftungsausschluss unterschreiben musst.',
     'confirmation.message.generic': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
     'confirmation.orderDetails': 'Bestelldetails',
     'confirmation.orderNumber': 'Bestellnummer:',
@@ -6542,6 +6985,10 @@ const translations = {
     'invite.share.email': 'E-Mail',
     'invite.share.more': 'Mehr',
     'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
+    'invite.firstclimb.title': 'Teile das mit deinen Freunden',
+    'invite.firstclimb.subtitle': 'Unsere Tageskarte für 99 kr inkl. Leihschuhe und Chalk ist für alle, die sie noch nicht ausprobiert haben. Schick deinen Freunden den Link.',
+    'invite.firstclimb.footnote': 'Das Angebot kann pro Person nur einmal eingelöst werden.',
+    'invite.firstclimb.shareMessage': 'Klettere mit mir bei Boulders! Hol dir deinen ersten Tag für 99 kr inkl. Leihschuhe und Chalk:',
     'invite.shareSubject': '2 Wochen gratis Klettern bei Boulders',
     'invite.footnote': 'Deine Freunde bekommen 2 Wochen freien Eintritt inklusive Leihschuhe. Keine Kreditkarte erforderlich. Das Angebot gilt nur für Personen, die noch nie ein Probepass eingelöst haben.',
     'confirmation.pending.title': 'Zahlung ausstehend',
@@ -6916,8 +7363,10 @@ function updateCartTranslations() {
 
   const termsConsent = document.querySelector('.consent-checkbox .consent-text[data-i18n-key="cart.consent.terms"]');
   if (termsConsent) {
-    // Handle HTML content with links
-    const termsHtml = t('cart.consent.terms');
+    // firstclimb (/99kr) requires a liability-waiver acknowledgement instead of
+    // the standard T&C consent — the ticket is redeemed in person at the gym.
+    const termsKey = isFirstClimbRoute() ? 'cart.consent.terms.firstclimb' : 'cart.consent.terms';
+    const termsHtml = t(termsKey);
     termsConsent.innerHTML = sanitizeHTML(termsHtml);
   }
 
@@ -7474,15 +7923,34 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set product type for test mode
     if (productType === 'punch-card') {
       state.selectedProductType = 'punch-card';
-      // Mock value card items with price
-      state.fullOrder = {
-        valueCardItems: [{
-          quantity: 2,
-          product: { name: 'Klippekort', productLabels: [] },
-          valueCard: { number: '12345', numberOfPassages: 10 },
-          price: { amount: 46900 } // 469.00 DKK in cents
-        }]
-      };
+      // /99kr (firstclimb) is a value-card too — mock the realistic
+      // single-use day ticket data rather than a multi-punch klippekort.
+      const onFirstClimb = isFirstClimbRoute();
+      if (onFirstClimb) {
+        // Mirror the real BRP product name so the test URL matches what
+        // production renders. Update this string if the BRP product is renamed.
+        const firstclimbProductName = 'Velkomstbillet inkl. lejesko og kalk';
+        state.order.total = 99;
+        state.order.membershipPrice = 99;
+        state.order.items = [{ name: firstclimbProductName, amount: 99 }];
+        state.fullOrder = {
+          valueCardItems: [{
+            quantity: 1,
+            product: { name: firstclimbProductName, productLabels: [{ name: 'firstclimb' }] },
+            valueCard: { number: 'TEST-12345' },
+            price: { amount: 9900 } // 99.00 DKK in cents
+          }]
+        };
+      } else {
+        state.fullOrder = {
+          valueCardItems: [{
+            quantity: 2,
+            product: { name: 'Klippekort', productLabels: [] },
+            valueCard: { number: '12345', numberOfPassages: 10 },
+            price: { amount: 46900 } // 469.00 DKK in cents
+          }]
+        };
+      }
     } else if (productType === '15daypass') {
       const validTestStartDate = /^\d{4}-\d{2}-\d{2}$/.test(testStartDateParam) ? testStartDateParam : null;
       state.subscriptionStartDate = validTestStartDate;
@@ -8218,7 +8686,40 @@ async function handleLoginSubmit(event) {
     const payload = response?.data ?? response;
     const username = payload?.username || email;
     state.authenticatedEmail = email;
-    
+
+    // /99kr: a successful login means the email has an existing BRP profile.
+    // Inspect product history — block only if they've held a product carrying
+    // the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS). Empty-profile
+    // and never-bought-anything customers can still buy.
+    if (isFirstClimbRoute()) {
+      let customerIdForCheck = null;
+      try {
+        await syncAuthenticatedCustomerState(username, email);
+        customerIdForCheck = state.customerId
+          || getTokenMetadata()?.username
+          || getTokenMetadata()?.userName;
+      } catch (syncErr) {
+        console.warn('[login] customer state sync failed before firstclimb history check:', syncErr);
+      }
+      let hasBlockingHistory = true;
+      try {
+        hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
+      } catch (historyErr) {
+        console.warn('[login] firstclimb history check failed; blocking by default:', historyErr);
+        hasBlockingHistory = true;
+      }
+      if (hasBlockingHistory) {
+        try { window.clearTokens && window.clearTokens(); } catch (_) {}
+        state.customerId = null;
+        state.authenticatedCustomer = null;
+        state.authenticatedEmail = null;
+        try { refreshLoginUI(); } catch (_) {}
+        blockFirstClimbExistingCustomer({ email });
+        return;
+      }
+      // Clean history → carry on with the normal logged-in flow.
+    }
+
     // Sync customer state and fetch profile
     await syncAuthenticatedCustomerState(username, email);
     
@@ -8827,6 +9328,54 @@ boulders.dk</p>
     da: `<p>Jeg giver samtykke til, at Boulders må sende mig SMS-beskeder og holde mig opdateret med begivenheder og tiltag, inspiration til træningen, tilbud og andre tjenester.</p>`,
     en: `<p>I give consent for Boulders to send me SMS messages and keep me updated with events and initiatives, training inspiration, offers and other services.</p>`
   },
+  'liability-waiver': {
+    da: `<p><strong>Dette er kun en forhåndsvisning — du accepterer ikke ansvarsfraskrivelsen her.</strong> Den endelige underskrift indsamles, når du ankommer til Boulders og indløser din billet. Her kan du i ro og mag læse, hvad du skal underskrive på dagen.</p>
+<p>Før du begynder at klatre, har vi brug for nogle oplysninger om dig samt din digitale underskrift på vores ansvarsfraskrivelse.</p>
+<p>Det følgende er en ansvarsfraskrivelse og generel introduktion om adfærd og sikkerhed, som skal underskrives, før du begynder at klatre i Boulders. Vi opbevarer din underskrift, navn, e-mail og telefonnummer i 12 måneder i henhold til gældende GDPR-lovgivning. Det er dit eget ansvar at forny den. Er du i tvivl om status på din underskrift, så kontakt personalet.</p>
+<p>Læs venligst alt på de følgende sider, før du accepterer. For at modtage din bekræftelsesmail skal du acceptere at modtage e-mails fra os. Du vil modtage en bekræftelsesmail kort efter, du har underskrevet. Tjek din spam-mappe, hvis du ikke finder mailen i din indbakke. Hvis du stadig ikke modtager bekræftelsesmailen, bedes du udfylde formularen igen og sikre, at den angivne e-mailadresse er korrekt.</p>
+<p>Bemærk venligst, at mindreårige/børn under 16 år skal have en forælders eller værges underskrift for at klatre i Boulders. Underskriv med navnet på forælder/værge.</p>
+<h2>Helbredstilstand og personskade</h2>
+<p>Alle aktiviteter og klatring i Boulders sker på eget ansvar. Boulders er ikke ansvarlig for din brug af faciliteterne eller udendørsområderne. Som bruger er du selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter i Boulders.</p>
+<p>Klatring er en sportsaktivitet, hvor skader og uheld kan forventes. Kunden accepterer derfor, at brugen af Boulders' faciliteter, herunder klatrefaciliteterne, sker på kundens eget ansvar, og at kunden ikke kan holde Boulders erstatningsansvarlig på nogen måde. Kunden accepterer dermed, at eventuelle skader på kunden eller tredjepart ikke erstattes af Boulders.</p>
+<p>Det er dit personlige ansvar at inspicere din landingszone, før du klatrer. Er du i tvivl, så rådfør dig med personalet, før du begynder at klatre. Derudover følges dansk erstatningsret på dette område. Hvis du er ansvarlig for en gruppe børn under 16 år og/eller mindreårige, som klatrer, betragtes din underskrift som en gyldig ansvarsfraskrivelse for alle deltagende personer.</p>
+<h2>Vær venligst opmærksom på følgende</h2>
+<ol>
+<li>Klatreelementer, klatresko og klatrevægge kan være glatte.</li>
+<li>Måtterne har forskellige fastheder afhængigt af deres alder.</li>
+<li>Fald kan være uventede og pludselige.</li>
+<li>Fald fra store højder kan være farlige.</li>
+<li>Fald fra lave højder kan også være farlige.</li>
+<li>At din landingszone er fri for genstande og/eller personer.</li>
+<li>Klatr ned i stedet for at hoppe ned for at undgå at lande forkert.</li>
+<li>Orienter dig, før du begynder at klatre, og når du bevæger dig rundt i hallen.</li>
+<li>Hold personlige ejendele væk fra måtterne.</li>
+<li>Du skal bære klatresko, mens du klatrer. Ingen bare fødder, sokker eller andre typer indendørssko!</li>
+<li>Pas på dig selv og kend dine grænser.</li>
+</ol>`,
+    en: `<p><strong>This is a preview only — you are not accepting the liability waiver here.</strong> The signature is collected when you arrive at Boulders and redeem your ticket. This page lets you read what you'll be signing, ahead of time.</p>
+<p>Before you start climbing, we need some information about you and your digital signature on our liability disclaimer.</p>
+<p>The following is a liability disclaimer and general orientation about conduct and safety, which must be signed before you start climbing in Boulders. We store your signature, name, email, and phone number for 12 months, under applicable GDPR legislation. It is your own responsibility to renew it. If you're in doubt about the status of your signature, then contact the staff.</p>
+<p>Please read everything on the following pages before you accept. To receive your confirmation email, you must accept receiving emails from us. You will receive a confirmation email shortly after you have signed. Check your spam folder if you do not find the email in your inbox. If you still do not receive the confirmation email, please fill out the form again and ensure that the email address provided is correct.</p>
+<p>Please note that minors/children under 16 years old, must have a parent or guardian's signature to climb at Boulders. Sign with name of parent/guardian.</p>
+<h2>Health Condition and Personal Injury</h2>
+<p>All activities and climbing in Boulders are done at your own risk. Boulders is not responsible for your use of the facilities or outdoor areas. As a user, you are responsible for being in a health condition that allows participation in activities at Boulders.</p>
+<p>Climbing is a sporting activity where injuries and accidents can be expected. The customer, therefore, agrees that the use of Boulders' facilities, including climbing facilities, is at the customer's own risk and that the customer cannot hold Boulders liable for compensation in any way. The customer thus agrees that any injuries to the customer or third parties will not be compensated by Boulders.</p>
+<p>It is your personal responsibility to inspect your landing zone before climbing. If in doubt, consult with staff before you start climbing. Additionally, Danish liability law is followed in this area. If you are responsible for a group of children under 16 years of age and/or minors who are climbing, your signature will be considered a valid liability waiver applicable to all participating individuals.</p>
+<h2>Please be aware of the following</h2>
+<ol>
+<li>Climbing elements, climbing shoes, and climbing walls can be slippery.</li>
+<li>The mats have different firmness levels depending on their age.</li>
+<li>Falls can be unexpected and sudden.</li>
+<li>Falls from great heights can be dangerous.</li>
+<li>Falls from low heights can also be dangerous.</li>
+<li>That your landing zone is free from objects and/or people.</li>
+<li>Climb down instead of jumping down to avoid landing incorrectly.</li>
+<li>Orient yourself before you start climbing and as you move around the gym.</li>
+<li>Keep personal belongings off the mats.</li>
+<li>You must wear climbing shoes while climbing. No bare feet, socks, or other types of indoor shoes!</li>
+<li>Take care of yourself and know your limits.</li>
+</ol>`
+  },
   privacy: {
     da: `<h2>Generelt</h2>
 <p>Denne politik for behandling af personoplysninger ("Persondatapolitik") gælder, når du interagerer med Boulders ("vi", "os", "vores"). Den beskriver, hvordan vi indsamler og behandler dine oplysninger, når du bruger vores hjemmeside boulders.goactivebooking.com ("Hjemmesiden"), benytter vores app ("Appen"), eller i forbindelse med dit kundeforhold og din træning hos os.</p>
@@ -8971,6 +9520,7 @@ function openTermsModal(termsType) {
     cookie: t('footer.policies.cookie'),
     'email-consent': 'E-mail',
     'sms-consent': 'SMS',
+    'liability-waiver': t('liability.waiver.title'),
   };
 
   const isShortConsentModal = termsType === 'sms-consent' || termsType === 'email-consent';
@@ -10044,7 +10594,66 @@ async function handleSaveAccount() {
 
       console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
-    
+
+    // /99kr defensive existing-customer pre-check. BRP doesn't always reject duplicate
+    // emails on the create endpoint, so we attempt login with the typed credentials.
+    // If login succeeds, we inspect the customer's product history — only block if
+    // they've held a product carrying the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS).
+    // Otherwise (abandoned-but-empty profile, never-bought-anything customer) we
+    // treat them as eligible: keep the tokens, sync state, skip create-customer.
+    if (isFirstClimbRoute()) {
+      const candidateEmail = customerData.email;
+      const candidatePassword = customerData.password;
+      if (candidateEmail && candidatePassword) {
+        let preCheckLoggedIn = false;
+        try {
+          await authAPI.login(candidateEmail, candidatePassword, { saveTokens: true });
+          preCheckLoggedIn = true;
+        } catch (preCheckErr) {
+          // Expected for genuinely new customers. Fall through to normal create.
+          console.log('[Save Account] firstclimb pre-check login failed (expected for new customer):', preCheckErr?.message || preCheckErr);
+        }
+        if (preCheckLoggedIn) {
+          let customerIdForCheck = null;
+          try {
+            await syncAuthenticatedCustomerState(undefined, candidateEmail);
+            customerIdForCheck = state.customerId
+              || getTokenMetadata()?.username
+              || getTokenMetadata()?.userName;
+          } catch (syncErr) {
+            console.warn('[Save Account] customer state sync failed before history check:', syncErr);
+          }
+
+          let hasBlockingHistory = true; // fail-safe default
+          try {
+            hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
+          } catch (historyErr) {
+            console.warn('[Save Account] firstclimb history check failed; blocking by default:', historyErr);
+            hasBlockingHistory = true;
+          }
+
+          if (hasBlockingHistory) {
+            try { window.clearTokens && window.clearTokens(); } catch (_) {}
+            state.customerId = null;
+            state.authenticatedCustomer = null;
+            state.authenticatedEmail = null;
+            try { refreshLoginUI(); } catch (_) {}
+            blockFirstClimbExistingCustomer({ email: candidateEmail });
+            return;
+          }
+
+          // Clean history → treat the existing-customer login as the sign-in for
+          // this purchase. No create-customer POST is needed; the user is ready
+          // to proceed to Til Kassen.
+          try { refreshLoginUI(); } catch (_) {}
+          showSaveAccountMessage('Welcome back! You can proceed to checkout.', 'success');
+          showToast('Logged in successfully.', 'success');
+          if (state.currentStep === 4) updatePaymentOverview();
+          return;
+        }
+      }
+    }
+
     console.log('[Save Account] Creating customer account...');
     const customer = await authAPI.createCustomer(customerData);
     
@@ -10211,8 +10820,35 @@ async function handleSaveAccount() {
           updatePaymentOverview();
         }
       } else {
-        showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
-        showToast('Account saved successfully!', 'success');
+        // /99kr: login section is hidden, so "Please log in to continue" is a dead
+        // end. Auto-attempt login with the password the user just typed so they
+        // can proceed straight to checkout. If that login succeeds against an
+        // existing customer (rather than the freshly-created one), the surrounding
+        // logic still works — the auth state ends up populated either way.
+        if (isFirstClimbRoute()) {
+          const autoEmail = customerData.email;
+          const autoPassword = customerData.password;
+          if (autoEmail && autoPassword) {
+            try {
+              await authAPI.login(autoEmail, autoPassword, { saveTokens: true });
+              await syncAuthenticatedCustomerState(undefined, autoEmail);
+              try { refreshLoginUI(); } catch (_) {}
+              showSaveAccountMessage('Account saved successfully! You are now logged in. You can proceed to checkout.', 'success');
+              showToast('Account saved and logged in successfully!', 'success');
+              if (state.currentStep === 4) updatePaymentOverview();
+            } catch (autoLoginErr) {
+              console.warn('[Save Account] firstclimb auto-login after tokenless create failed:', autoLoginErr);
+              showSaveAccountMessage('Account saved, but we could not sign you in automatically. Please try again or contact support.', 'error');
+              showToast('Account saved, but auto-login failed.', 'error');
+            }
+          } else {
+            showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
+            showToast('Account saved successfully!', 'success');
+          }
+        } else {
+          showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
+          showToast('Account saved successfully!', 'success');
+        }
       }
     } else {
       throw new Error('Customer ID not found in response');
@@ -12003,7 +12639,7 @@ function initAuthModeToggle() {
   // Set initial state - if user is logged in, select login tab, otherwise create account
   const isAuthenticated = isUserAuthenticated();
   
-  // Hide toggle buttons if user is already authenticated
+  // Hide toggle buttons if user is already authenticated.
   const switchBtns = document.querySelectorAll('.auth-mode-switch-btn');
   switchBtns.forEach(btn => {
     btn.style.display = isAuthenticated ? 'none' : '';
@@ -12073,7 +12709,7 @@ function switchAuthMode(mode, email = null) {
     }
   });
   
-  // Hide buttons if user is authenticated
+  // Hide buttons if user is authenticated.
   const isAuthenticated = isUserAuthenticated();
   switchBtns.forEach(btn => {
     btn.style.display = isAuthenticated ? 'none' : '';
@@ -12568,6 +13204,15 @@ function getCurrentRecruiterId() {
 // who the sharer is. Falls back to the plain base URL for anonymous shares
 // (e.g. logged-out test mode) so existing behavior is preserved.
 function buildInviteShareUrl() {
+  // /99kr invites point at the offer landing page itself, with no referral
+  // query param — this is an offer share, not a recruiter link.
+  if (isFirstClimbRoute()) {
+    try {
+      return new URL('/99kr', INVITE_SHARE_URL_BASE).toString();
+    } catch (_) {
+      return `${INVITE_SHARE_URL_BASE.replace(/\/+$/, '')}/99kr`;
+    }
+  }
   if (!REFERRAL_TRACKING_ENABLED) return INVITE_SHARE_URL_BASE;
   const recruiterId = getCurrentRecruiterId();
   if (!recruiterId) return INVITE_SHARE_URL_BASE;
@@ -12583,7 +13228,8 @@ function getInviteFirstName() {
 
 function getInviteShareMessage() {
   const firstName = getInviteFirstName();
-  const template = t('invite.shareMessage') || 'Hey! I just joined Boulders. Climb with me and get a free 2-week trial on me:';
+  const templateKey = isFirstClimbRoute() ? 'invite.firstclimb.shareMessage' : 'invite.shareMessage';
+  const template = t(templateKey) || 'Hey! Climb with me at Boulders:';
   const withName = firstName
     ? template.replace('{name}', firstName)
     : template.replace(/\s*\{name\}/g, '').replace(/\s*—\s*\{name\}\s*/g, ' ');
@@ -12620,15 +13266,53 @@ function renderInviteFriends(productType) {
   // invite card is actually visible (avoids changing layout for other flows).
   const layout = document.querySelector('#step-5 .confirmation-layout');
 
-  // Only show the invite-friends card for full memberships.
-  // Hide for 15-day passes, punch cards, or any other product type.
-  if (productType !== 'membership') {
+  const firstclimbVariant = isFirstClimbRoute();
+  // Show the invite-friends card for full memberships and for the firstclimb
+  // success page. Other product types stay hidden.
+  if (productType !== 'membership' && !firstclimbVariant) {
     section.style.display = 'none';
+    section.removeAttribute('data-variant');
     if (layout) layout.removeAttribute('data-with-invite');
     return;
   }
   section.style.display = '';
   if (layout) layout.setAttribute('data-with-invite', 'true');
+
+  // Swap the localized copy on the card for the firstclimb success page.
+  // Membership flow keeps its existing keys via data-i18n-key. We override the
+  // DOM text and the keys so a later language switch picks the right variant.
+  const titleEl = section.querySelector('.invite-friends-title');
+  const subtitleEl = section.querySelector('.invite-friends-subtitle');
+  const footnoteEl = section.querySelector('.invite-friends-footnote');
+  if (firstclimbVariant) {
+    section.setAttribute('data-variant', 'firstclimb');
+    if (titleEl) {
+      titleEl.setAttribute('data-i18n-key', 'invite.firstclimb.title');
+      titleEl.textContent = t('invite.firstclimb.title');
+    }
+    if (subtitleEl) {
+      subtitleEl.setAttribute('data-i18n-key', 'invite.firstclimb.subtitle');
+      subtitleEl.textContent = t('invite.firstclimb.subtitle');
+    }
+    if (footnoteEl) {
+      footnoteEl.setAttribute('data-i18n-key', 'invite.firstclimb.footnote');
+      footnoteEl.textContent = t('invite.firstclimb.footnote');
+    }
+  } else {
+    section.removeAttribute('data-variant');
+    if (titleEl) {
+      titleEl.setAttribute('data-i18n-key', 'invite.title');
+      titleEl.textContent = t('invite.title');
+    }
+    if (subtitleEl) {
+      subtitleEl.setAttribute('data-i18n-key', 'invite.subtitle');
+      subtitleEl.textContent = t('invite.subtitle');
+    }
+    if (footnoteEl) {
+      footnoteEl.setAttribute('data-i18n-key', 'invite.footnote');
+      footnoteEl.textContent = t('invite.footnote');
+    }
+  }
 
   // Phase 1: fire a one-time funnel event so we know how many membership
   // signups have a personalized share link to give out. Note: clearing the
@@ -14568,13 +15252,17 @@ function renderCartItems() {
     const infoWrapper = document.createElement('span');
     infoWrapper.className = 'home-gym-info-wrapper';
     
-    // Create tooltip
+    // Create tooltip — firstclimb (/99kr) is a single-day ticket valid at any
+    // Boulders, so only the headline is needed; skip the supporting paragraph.
+    const isFirstClimb = isFirstClimbRoute();
+    const tooltipTitle = t(isFirstClimb ? 'homeGym.tooltip.title.firstclimb' : 'homeGym.tooltip.title');
+    const tooltipDesc = isFirstClimb ? '' : `<p>${t('homeGym.tooltip.desc')}</p>`;
     const tooltip = document.createElement('div');
     tooltip.className = 'home-gym-tooltip';
     tooltip.innerHTML = sanitizeHTML(`
       <div class="tooltip-content">
-        <p><strong>${t('homeGym.tooltip.title')}</strong></p>
-        <p>${t('homeGym.tooltip.desc')}</p>
+        <p><strong>${tooltipTitle}</strong></p>
+        ${tooltipDesc}
       </div>
     `);
     
@@ -14921,7 +15609,16 @@ function renderCartItems() {
       totalRow.className = 'cart-item-total-row';
       const labelSpan = document.createElement('span');
       const punches = item.totalPunches != null && item.totalPunches > 0 ? item.totalPunches : 0;
-      labelSpan.textContent = punches === 1 ? `Total (${t('cart.punch.one')})` : `Total (${punches} ${t('cart.punch.label')})`;
+      // firstclimb is a single-day ticket — just say "Total" instead of the
+      // "Total (X Klip)" punch-card label. Same fallback for any value card BRP
+      // returns without a clip count.
+      if (isFirstClimbRoute() || punches === 0) {
+        labelSpan.textContent = t('cart.total') || 'Total';
+      } else if (punches === 1) {
+        labelSpan.textContent = `Total (${t('cart.punch.one')})`;
+      } else {
+        labelSpan.textContent = `Total (${punches} ${t('cart.punch.label')})`;
+      }
       labelSpan.className = 'cart-total-label';
       totalRow.appendChild(labelSpan);
       const priceSpan = document.createElement('span');
@@ -19425,18 +20122,33 @@ async function loadOrderForConfirmation(orderId) {
       // Try to finalize the order if it's preliminary and payment was successful
       // Note: We're returning from payment, so payment should be successful
       // The order needs to be finalized (preliminary: false) for membership to be created in BRP
-      if (isPreliminary) {
+      //
+      // Idempotency guard: setting `preliminary: false` is suspected to trigger
+      // a BRP-side order-confirmation email on every successful call, so if the
+      // user reloads the return URL (or it's opened twice) we don't want to
+      // attempt the finalize a second time. Track the attempt in sessionStorage
+      // keyed on orderId — survives reloads but clears with the tab.
+      const finalizeGuardKey = `boulders_finalize_attempted_${orderId}`;
+      let alreadyAttemptedFinalize = false;
+      try { alreadyAttemptedFinalize = sessionStorage.getItem(finalizeGuardKey) === '1'; } catch (_) {}
+
+      if (isPreliminary && alreadyAttemptedFinalize) {
+        console.log('[Payment Return] Skipping client-side finalize — already attempted in this session for order', orderId);
+      } else if (isPreliminary) {
         console.log('[Payment Return] ⚠️ Order is preliminary - attempting to finalize...');
         console.log('[Payment Return] This is required for membership to be created in BRP');
-        
+
         try {
+          // Mark the attempt BEFORE calling so a mid-flight reload can't double-fire.
+          try { sessionStorage.setItem(finalizeGuardKey, '1'); } catch (_) {}
+
           // Option 1: Try to set preliminary to false
           // The API might require additional fields or a specific endpoint
           const updateData = {
             preliminary: false, // Finalize the order
             businessUnit: state.selectedBusinessUnit || order.businessUnit?.id,
           };
-          
+
           console.log('[Payment Return] Updating order with:', JSON.stringify(updateData, null, 2));
           const updatedOrder = await orderAPI.updateOrder(orderId, updateData);
           console.log('[Payment Return] Order update response:', updatedOrder);
@@ -20730,9 +21442,11 @@ function renderConfirmationView() {
   });
 
   // Update success message based on product type (use translation keys so language switch works)
+  const isFirstClimbFlow = isFirstClimbRoute();
   const successMessage = document.querySelector('.success-message');
   if (successMessage) {
-    const messageKey = productType === 'membership' ? 'confirmation.message.membership'
+    const messageKey = isFirstClimbFlow ? 'confirmation.message.firstclimb'
+      : productType === 'membership' ? 'confirmation.message.membership'
       : productType === '15daypass' ? 'confirmation.message.15daypass'
       : productType === 'punch-card' ? 'confirmation.message.punchcard'
       : 'confirmation.message.generic';
@@ -20780,11 +21494,13 @@ function renderConfirmationView() {
   renderInviteFriends(productType);
   
   if (nextStep2 && nextStep3) {
-    const step2Key = productType === 'membership' ? 'confirmation.nextStep2.membership'
+    const step2Key = isFirstClimbFlow ? 'confirmation.nextStep2.firstclimb'
+      : productType === 'membership' ? 'confirmation.nextStep2.membership'
       : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep2.freetrial' : 'confirmation.nextStep2.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep2.punchcard'
       : 'confirmation.nextStep2.membership';
-    const step3Key = productType === 'membership' ? 'confirmation.nextStep3.membership'
+    const step3Key = isFirstClimbFlow ? 'confirmation.nextStep3.firstclimb'
+      : productType === 'membership' ? 'confirmation.nextStep3.membership'
       : productType === '15daypass' ? (isFreeTrialFlow ? 'confirmation.nextStep3.freetrial.today' : 'confirmation.nextStep3.15daypass')
       : productType === 'punch-card' ? 'confirmation.nextStep3.punchcard'
       : 'confirmation.nextStep3.membership';
@@ -20822,9 +21538,17 @@ function renderConfirmationView() {
     dayPassSection.style.display = 'block';
     dayPassSection.style.setProperty('display', 'block', 'important');
   } else if (productType === 'punch-card' && punchCardSection) {
-    console.log('[Confirmation] Showing punch card section');
-    punchCardSection.style.display = 'block';
-    punchCardSection.style.setProperty('display', 'block', 'important');
+    // /99kr is technically a value-card/punch-card under the hood, but the
+    // "Punch Card Details" panel (name / card type / quantity / valid until)
+    // doesn't carry any user-meaningful info for a single-use day ticket —
+    // the "What happens next?" block already covers everything. Hide it.
+    if (isFirstClimbFlow) {
+      console.log('[Confirmation] firstclimb flow — hiding punch card details section');
+    } else {
+      console.log('[Confirmation] Showing punch card section');
+      punchCardSection.style.display = 'block';
+      punchCardSection.style.setProperty('display', 'block', 'important');
+    }
   } else {
     console.warn('[Confirmation] Unknown product type or section not found:', productType);
   }
@@ -21142,12 +21866,12 @@ function createPurchaseItemElement() {
       // Add value card items (punch cards)
       if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
         state.fullOrder.valueCardItems.forEach(item => {
-          const node = templates.confirmationItem 
+          const node = templates.confirmationItem
             ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
             : createPurchaseItemElement();
           const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
           const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
-          
+
           if (nameEl) {
             let productName = item.product?.name || 'Klippekort';
             // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
@@ -21898,17 +22622,23 @@ function nextStep(fromStep) {
   // CRITICAL: When going from step 1 (gym selection), always go to step 2 (membership selection)
   // Never skip to any other step - this prevents navigation bugs
   if (currentStep === 1) {
+    // /99kr (LandingFirstClimb): single-product flow. Skip step 2 entirely —
+    // auto-select the firstclimb value card and jump straight to the form/checkout step.
+    if (isFirstClimbRoute()) {
+      advanceFirstClimbFromGym();
+      return;
+    }
     state.currentStep = 2;
     showStep(2);
     updateStepIndicator();
     updateNavigationButtons();
     updateMainSubtitle();
-    
+
     // Step 5: Load products when step 2 (access type selection) is shown
     if (state.selectedBusinessUnit) {
       // Only load if we don't already have products loaded
-      const hasAnyProducts = (state.subscriptions?.length || 0) > 0 || 
-                             (state.dayPassSubscriptions?.length || 0) > 0 || 
+      const hasAnyProducts = (state.subscriptions?.length || 0) > 0 ||
+                             (state.dayPassSubscriptions?.length || 0) > 0 ||
                              (state.valueCards?.length || 0) > 0;
       if (!hasAnyProducts) {
         loadProductsFromAPI();
@@ -21918,13 +22648,13 @@ function nextStep(fromStep) {
         updateSelectedGymDisplay();
       }, 100);
     }
-    
+
     // Scroll to top when navigating steps
     scrollToTop();
     setTimeout(() => {
       scrollToTop();
     }, 200);
-    
+
     return; // Early return - don't continue with normal navigation logic
   }
   
@@ -22540,18 +23270,17 @@ function updateStepIndicator() {
   }
 
   // Map state.currentStep to indicator step index
-  // Step 1 → indicator 0 (Home Gym)
-  // Step 2 → indicator 1 (Access)
-  // Step 3 → skipped (Boost is hidden)
-  // Step 4 → indicator 2 (Send)
-  // Step 5 → hide indicator (handled above)
+  // Default flow: Step 1 → 0 (Home Gym), Step 2 → 1 (Access), Step 4 → 2 (Send)
+  // /99kr flow: Access is hidden, so Step 1 → 0 (Home Gym), Step 4 → 1 (Send)
+  // Step 3 is always skipped (Boost is hidden); Step 5 hides the indicator (handled above).
+  const firstClimbFlow = isFirstClimbRoute();
   let visibleCurrentIndex = -1;
   if (state.currentStep === 1) {
     visibleCurrentIndex = 0;
-  } else if (state.currentStep === 2) {
+  } else if (state.currentStep === 2 && !firstClimbFlow) {
     visibleCurrentIndex = 1;
   } else if (state.currentStep === 4) {
-    visibleCurrentIndex = 2;
+    visibleCurrentIndex = firstClimbFlow ? 1 : 2;
   } else {
     // For step 5 or any other step, hide indicator (already handled above)
     return;
@@ -23714,6 +24443,13 @@ const FAQ_DATA = {
     { q: 'faq.punchcard.convert.q', a: 'faq.punchcard.convert.a' },
     { q: 'faq.punchcard.remainingClips.q', a: 'faq.punchcard.remainingClips.a' },
     { q: 'faq.punchcard.multiple.q', a: 'faq.punchcard.multiple.a' }
+  ],
+  firstclimb: [
+    { q: 'faq.firstclimb.included.q', a: 'faq.firstclimb.included.a' },
+    { q: 'faq.firstclimb.eligibility.q', a: 'faq.firstclimb.eligibility.a' },
+    { q: 'faq.firstclimb.validity.q', a: 'faq.firstclimb.validity.a' },
+    { q: 'faq.firstclimb.howToUse.q', a: 'faq.firstclimb.howToUse.a' },
+    { q: 'faq.firstclimb.afterDay.q', a: 'faq.firstclimb.afterDay.a' }
   ]
 };
 
@@ -23729,6 +24465,11 @@ const FREE_TRIAL_EXTRA_FAQS = [
  */
 function getActiveFAQs() {
   const step = state.currentStep;
+
+  // firstclimb landing route: dedicated FAQ on every visible step.
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
+    return ['firstclimb'];
+  }
 
   // Step 1: gym info only
   if (step === 1) {
