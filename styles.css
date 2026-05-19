@@ -7936,37 +7936,38 @@ main {
 /* Confirmation Page Styles */
 .confirmation-header {
     text-align: center;
-    margin-bottom: 196px;
+    margin-bottom: 64px;
     padding-top: 12px;
 }
 
 .success-badge {
-    width: 80px;
-    height: 80px;
+    width: 72px;
+    height: 72px;
     background-color: #10B981;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 20px;
+    margin: 0 auto 24px;
     color: white;
+    box-shadow: 0 10px 32px -8px rgba(16, 185, 129, 0.45);
 }
 
 .success-title {
-    font-size: var(--font-size-5xl);
-    font-weight: bold;
-    color: #10B981;
-    margin-bottom: 16px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
 }
 
 .success-message {
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-md);
     color: var(--color-text-secondary);
-    max-width: 600px;
+    max-width: 480px;
     margin: 0 auto;
-    line-height: 1.6;
+    line-height: 1.55;
 }
 
 /* ── Success Page v2 — animated badge, ring, check, and copy ─────────── */
@@ -8002,6 +8003,29 @@ main {
     animation: success-rise 320ms ease-out 600ms both;
 }
 
+/* Supporting content reveal cascade — receipt + next-steps fade-rise after header lands */
+#step-5.is-revealing .confirmation-left > .confirmation-card,
+#step-5.is-revealing .next-steps,
+#step-5.is-revealing .invite-friends-section {
+    animation: success-rise 360ms ease-out both;
+    animation-delay: 720ms;
+}
+#step-5.is-revealing .confirmation-left > .confirmation-card:nth-child(2) {
+    animation-delay: 800ms;
+}
+#step-5.is-revealing .next-steps {
+    animation-delay: 780ms;
+}
+#step-5.is-revealing .invite-friends-section {
+    animation-delay: 880ms;
+}
+#step-5.is-revealing .step-item {
+    animation: success-rise 280ms ease-out both;
+}
+#step-5.is-revealing .step-item:nth-child(1) { animation-delay: 880ms; }
+#step-5.is-revealing .step-item:nth-child(2) { animation-delay: 950ms; }
+#step-5.is-revealing .step-item:nth-child(3) { animation-delay: 1020ms; }
+
 @keyframes success-badge-pop {
     0%   { transform: scale(0.3); opacity: 0; }
     55%  { transform: scale(1.1); opacity: 1; }
@@ -8024,7 +8048,11 @@ main {
     .success-badge.is-animating .success-badge__ring,
     .success-badge.is-animating .success-badge__check,
     .confirmation-header.is-animating .success-title,
-    .confirmation-header.is-animating .success-message {
+    .confirmation-header.is-animating .success-message,
+    #step-5.is-revealing .confirmation-left > .confirmation-card,
+    #step-5.is-revealing .next-steps,
+    #step-5.is-revealing .invite-friends-section,
+    #step-5.is-revealing .step-item {
         animation: none !important;
     }
     .success-badge__ring,
@@ -8173,7 +8201,7 @@ main {
 .step-content.success-page-active .confirmation-header,
 #step-5.step-panel.active:not([data-payment-failed="true"]):not([data-payment-pending="true"]) .confirmation-header,
 .step-content:has(#step-5.active:not([data-payment-failed="true"])) .confirmation-header {
-  margin-bottom: 40px !important; /* Reduced from 196px to prevent pushing content down */
+  margin-bottom: 56px !important;
   margin-top: 0 !important;
   width: 100%;
   max-width: 800px;
@@ -8459,87 +8487,102 @@ main {
 .confirmation-layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 40px;
-    margin-top: 40px;
+    gap: 32px;
+    margin-top: 8px;
+    align-items: start;
+    /* Stretch to fill the panel; parent uses `align-items: center` on a flex
+       column, which would otherwise let the grid shrink to its content and
+       produce different widths per product (longer product names → wider). */
+    width: 100%;
 }
 
 .confirmation-left {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 20px;
 }
 
 .confirmation-right {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 20px;
 }
 
 .confirmation-card {
-    background-color: #1a1a1a;
-    border: 1px solid #374151;
-    border-radius: 12px;
+    background-color: #1F1F1F;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
     padding: 24px;
 }
 
 .card-title {
-    font-size: var(--font-size-xl);
-    font-weight: bold;
-    color: white;
-    margin-bottom: 20px;
-    border-bottom: 1px solid #374151;
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding-bottom: 12px;
+    letter-spacing: -0.005em;
 }
 
 /* Order Details */
 .order-info {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .order-item {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 8px;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 10px;
 }
 
 .order-label {
     color: #9CA3AF;
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-sm);
 }
 
 .order-value {
-    color: white;
+    color: #fff;
     font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
 }
 
 .purchase-items {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     padding-top: 16px;
-    border-top: 1px solid #374151;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .purchase-item {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 12px;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
 }
 
 .order-total {
     display: flex;
     justify-content: space-between;
+    align-items: baseline;
     padding-top: 16px;
-    border-top: 2px solid #374151;
-    font-size: var(--font-size-lg);
-    font-weight: bold;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: var(--font-size-md);
+    font-weight: 700;
+    letter-spacing: -0.005em;
 }
 
-/* Order Total (Confirmation Page) */
 .order-total .total-label {
-    color: white;
+    color: #fff;
 }
 
 .order-total .total-amount {
-    color: #F401F5;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Membership Details */
@@ -9235,52 +9278,65 @@ main {
 
 /* Next Steps */
 .next-steps {
-    background-color: #1a1a1a;
-    border: 1px solid #374151;
-    border-radius: 12px;
+    background-color: #1F1F1F;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
     padding: 24px;
 }
 
 .steps-title {
-    font-size: var(--font-size-xl);
-    font-weight: bold;
-    color: white;
-    margin-bottom: 20px;
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 16px;
+    letter-spacing: -0.005em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 12px;
 }
 
 .steps-list {
     list-style: none;
     padding: 0;
     margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
 
 .step-item {
     display: flex;
-    align-items: center;
-    margin-bottom: 16px;
+    align-items: flex-start;
+    gap: 14px;
+    margin: 0;
     color: var(--color-text-secondary);
-}
-
-.step-item:last-child {
-    margin-bottom: 0;
 }
 
 .step-icon {
     width: 32px;
     height: 32px;
-    background-color: #F401F5;
-    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-right: 16px;
+    margin: 0;
     flex-shrink: 0;
-    color: white;
+    color: rgba(255, 255, 255, 0.75);
+    transition: color 200ms ease, border-color 200ms ease, background-color 200ms ease;
+}
+
+.step-item:hover .step-icon {
+    background-color: rgba(244, 1, 245, 0.08);
+    border-color: rgba(244, 1, 245, 0.35);
+    color: #F401F5;
 }
 
 .step-item span {
-    font-size: var(--font-size-base);
-    line-height: 1.5;
+    font-size: var(--font-size-sm);
+    line-height: 1.55;
+    padding-top: 6px;
+    color: var(--color-text-secondary);
 }
 
 .step-change-activation-cta {
@@ -9373,7 +9429,9 @@ main {
     .confirmation-layout[data-with-invite="true"] .confirmation-left > .confirmation-card:first-child { order: 1; }
     .confirmation-layout[data-with-invite="true"] .next-steps { order: 2; }
     .confirmation-layout[data-with-invite="true"] .invite-friends-section { order: 3; }
-    .confirmation-layout[data-with-invite="true"] #confirmationMembershipSection { order: 4; }
+    .confirmation-layout[data-with-invite="true"] #confirmationMembershipSection,
+    .confirmation-layout[data-with-invite="true"] #confirmation15DayPassSection,
+    .confirmation-layout[data-with-invite="true"] #confirmationPunchCardSection { order: 4; }
     
     .step-panel[data-payment-failed="true"] .step-panel-content,
     #step-5.step-panel[data-payment-failed="true"] .step-panel-content,
@@ -9388,31 +9446,35 @@ main {
     }
 
     .success-title {
-        font-size: var(--font-size-4xl);
+        font-size: var(--font-size-2xl);
     }
 
     .success-message {
-        font-size: var(--font-size-md);
+        font-size: var(--font-size-base);
     }
 }
 
 @media (max-width: 768px) {
     .confirmation-header {
-        margin-bottom: 30px;
+        margin-bottom: 32px;
     }
-    
+
     .step-panel[data-payment-failed="true"] .confirmation-header {
         margin-bottom: 0 !important;
         margin-top: 50px;
     }
-    
+
     .step-panel[data-payment-failed="true"] .step-panel-content {
         padding-top: 30px;
     }
 
     .success-badge {
-        width: 60px;
-        height: 60px;
+        width: 64px;
+        height: 64px;
+    }
+    .success-badge svg {
+        width: 40px;
+        height: 40px;
     }
 
     .success-title {
@@ -9421,10 +9483,17 @@ main {
 
     .confirmation-card {
         padding: 20px;
+        border-radius: 12px;
     }
 
     .next-steps {
         padding: 20px;
+        border-radius: 12px;
+    }
+
+    .confirmation-left,
+    .confirmation-right {
+        gap: 16px;
     }
 }
 
@@ -9629,64 +9698,6 @@ main {
     font-weight: bold;
     font-size: var(--font-size-lg);
     color: #f0f;
-}
-
-/* Success Page */
-.success-content {
-    text-align: center;
-    max-width: 600px;
-    margin: 0 auto;
-}
-
-.success-icon {
-    color: #f0f;
-    margin-bottom: 24px;
-}
-
-.success-content h3 {
-    font-size: var(--font-size-2xl);
-    font-weight: bold;
-    margin-bottom: 16px;
-}
-
-.success-content p {
-    font-size: var(--font-size-lg);
-    color: var(--color-text-secondary);
-    margin-bottom: 32px;
-}
-
-.next-steps {
-    background-color: #2a2a2a;
-    border-radius: 12px;
-    padding: 24px;
-    margin: 0;
-    text-align: left;
-}
-
-.next-steps h4 {
-    font-size: var(--font-size-xl);
-    font-weight: bold;
-    margin-bottom: 16px;
-    text-align: center;
-}
-
-.next-steps ul {
-    list-style: none;
-}
-
-.next-steps li {
-    padding: 8px 0;
-    color: var(--color-text-secondary);
-    position: relative;
-    padding-left: 24px;
-}
-
-.next-steps li::before {
-    content: "→";
-    position: absolute;
-    left: 0;
-    color: #f0f;
-    font-weight: bold;
 }
 
 .cta-button {
@@ -10447,15 +10458,31 @@ main {
     width: 100%;
 }
 
+@property --invite-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}
+
 .invite-friends-card {
+    --invite-angle: 0deg;
     position: relative;
-    /* Layered backgrounds: top radial accent + base gradient (clipped to padding-box),
-       plus a magenta gradient on the border-box. The transparent border reveals the
-       border-box layer, producing a true gradient edge that respects border-radius. */
+    /* Layered backgrounds: inner radial accent + base gradient (padding-box),
+       plus a rotating conic gradient on the border-box. The transparent border
+       reveals the conic layer, producing a true animated gradient edge that
+       respects border-radius. */
     background:
         radial-gradient(circle at 50% -10%, rgba(244, 1, 245, 0.22) 0%, rgba(244, 1, 245, 0) 60%) padding-box,
         linear-gradient(180deg, #1d1320 0%, #161018 100%) padding-box,
-        linear-gradient(135deg, #F401F5 0%, #ff6cff 35%, #c803c9 65%, #F401F5 100%) border-box;
+        conic-gradient(
+            from var(--invite-angle),
+            #F401F5 0deg,
+            #ff6cff 60deg,
+            #ffffff 120deg,
+            #c803c9 200deg,
+            #F401F5 300deg,
+            #F401F5 360deg
+        ) border-box;
     border: 1.5px solid transparent;
     border-radius: 12px;
     padding: 28px 24px 24px;
@@ -10464,7 +10491,9 @@ main {
     box-shadow:
         0 0 24px rgba(244, 1, 245, 0.28),
         0 8px 28px rgba(0, 0, 0, 0.45);
-    animation: invite-glow-pulse 3.5s ease-in-out infinite;
+    animation:
+        invite-glow-pulse 3.5s ease-in-out infinite,
+        invite-border-spin 6s linear infinite;
     transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
@@ -10473,7 +10502,8 @@ main {
     box-shadow:
         0 0 36px rgba(244, 1, 245, 0.45),
         0 14px 36px rgba(0, 0, 0, 0.5);
-    animation-play-state: paused;
+    /* Pulse pauses on hover; the rotation keeps drifting so the card stays alive */
+    animation-play-state: paused, running;
 }
 
 @keyframes invite-glow-pulse {
@@ -10487,6 +10517,10 @@ main {
             0 0 34px rgba(244, 1, 245, 0.42),
             0 8px 28px rgba(0, 0, 0, 0.45);
     }
+}
+
+@keyframes invite-border-spin {
+    to { --invite-angle: 360deg; }
 }
 
 @media (prefers-reduced-motion: reduce) {

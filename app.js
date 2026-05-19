@@ -6407,8 +6407,12 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.freetrial.changeActivationCta': 'Har du brug for at ændre aktiveringsdato? Klik her.',
-    'invite.title': 'Giv dine venner 2 ugers gratis prøveperiode',
+    'invite.title': 'Invitér dine venner!',
     'invite.subtitle': 'Del dit link – når dine venner melder sig ind, får de en 2-ugers gratis prøveperiode.',
+    'invite.15daypass.subtitle': 'Klatring er sjovere sammen. Del linket, så en ven også kan prøve det.',
+    'invite.15daypass.shareMessage': 'Hej! {name} her – jeg har lige købt et 15-dages prøvepas hos Boulders. Kom og klatre med mig:',
+    'invite.punchcard.subtitle': 'Klippekortet er perfekt at dele. Inviter en ven til en klatretur næste gang.',
+    'invite.punchcard.shareMessage': 'Hej! {name} her – jeg har lige købt et klippekort hos Boulders. Kom og klatre med mig:',
     'invite.copyLink': 'Kopiér link',
     'invite.copied': 'Kopieret!',
     'invite.copiedToast': 'Linket er kopieret – del det med dine venner!',
@@ -6421,7 +6425,7 @@ const translations = {
     'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
     'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
-    'invite.firstclimb.title': 'Del dette med dine venner',
+    'invite.firstclimb.title': 'Invitér dine venner!',
     'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko og kalk er for alle, der ikke har prøvet det før. Send linket til dine venner.',
     'invite.firstclimb.footnote': 'Tilbuddet kan kun bruges én gang pr. person.',
     'invite.firstclimb.shareMessage': 'Klatre med mig hos Boulders! Få din første dag for 99 kr inkl. lejesko og kalk:',
@@ -6667,8 +6671,12 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'When your trial starts, visit the gym to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
     'confirmation.freetrial.changeActivationCta': 'Need to change activation day? Click here.',
-    'invite.title': 'Give your friends 2 weeks free',
+    'invite.title': 'Invite your friends!',
     'invite.subtitle': 'Share your link — when your friends sign up, they get a free 2-week trial.',
+    'invite.15daypass.subtitle': 'Climbing is more fun together. Share the link so a friend can give it a try too.',
+    'invite.15daypass.shareMessage': 'Hey! {name} here — I just grabbed a 15-day trial pass at Boulders. Come climb with me:',
+    'invite.punchcard.subtitle': 'Punch cards are made for sharing. Bring a friend along for your next climb.',
+    'invite.punchcard.shareMessage': 'Hey! {name} here — I just picked up a punch card at Boulders. Come climb with me:',
     'invite.copyLink': 'Copy link',
     'invite.copied': 'Copied!',
     'invite.copiedToast': 'Link copied — share it with your friends!',
@@ -6679,7 +6687,7 @@ const translations = {
     'invite.share.email': 'Email',
     'invite.share.more': 'More',
     'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
-    'invite.firstclimb.title': 'Share this with your friends',
+    'invite.firstclimb.title': 'Invite your friends!',
     'invite.firstclimb.subtitle': 'Our 99 kr day ticket including rental shoes and chalk is open to anyone who hasn’t tried it yet. Send the link to your friends.',
     'invite.firstclimb.footnote': 'The offer can only be used once per person.',
     'invite.firstclimb.shareMessage': 'Come climb with me at Boulders! Get your first day for 99 kr including rental shoes and chalk:',
@@ -6975,8 +6983,12 @@ const translations = {
     'confirmation.nextStep3.freetrial.today': 'Besuchen Sie die Halle heute, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.nextStep3.freetrial.future': 'Sobald Ihre Probezeit startet, besuchen Sie die Halle, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.freetrial.changeActivationCta': 'Müssen Sie den Aktivierungstag ändern? Klicken Sie hier',
-    'invite.title': 'Schenk deinen Freunden 2 Wochen gratis',
+    'invite.title': 'Lade deine Freunde ein!',
     'invite.subtitle': 'Teile deinen Link – wenn sich deine Freunde anmelden, bekommen sie 2 Wochen gratis Probezeit.',
+    'invite.15daypass.subtitle': 'Klettern macht gemeinsam mehr Spaß. Teile den Link, damit ein Freund es auch ausprobieren kann.',
+    'invite.15daypass.shareMessage': 'Hey! Hier ist {name} – ich habe gerade einen 15-Tage-Probepass bei Boulders gekauft. Komm und klettere mit mir:',
+    'invite.punchcard.subtitle': 'Die Stempelkarte ist perfekt zum Teilen. Bring einen Freund mit zum nächsten Klettertag.',
+    'invite.punchcard.shareMessage': 'Hey! Hier ist {name} – ich habe gerade eine Stempelkarte bei Boulders gekauft. Komm und klettere mit mir:',
     'invite.copyLink': 'Link kopieren',
     'invite.copied': 'Kopiert!',
     'invite.copiedToast': 'Link kopiert – teile ihn mit deinen Freunden!',
@@ -6987,7 +6999,7 @@ const translations = {
     'invite.share.email': 'E-Mail',
     'invite.share.more': 'Mehr',
     'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
-    'invite.firstclimb.title': 'Teile das mit deinen Freunden',
+    'invite.firstclimb.title': 'Lade deine Freunde ein!',
     'invite.firstclimb.subtitle': 'Unsere Tageskarte für 99 kr inkl. Leihschuhe und Chalk ist für alle, die sie noch nicht ausprobiert haben. Schick deinen Freunden den Link.',
     'invite.firstclimb.footnote': 'Das Angebot kann pro Person nur einmal eingelöst werden.',
     'invite.firstclimb.shareMessage': 'Klettere mit mir bei Boulders! Hol dir deinen ersten Tag für 99 kr inkl. Leihschuhe und Chalk:',
@@ -13231,7 +13243,11 @@ function getInviteFirstName() {
 
 function getInviteShareMessage() {
   const firstName = getInviteFirstName();
-  const templateKey = isFirstClimbRoute() ? 'invite.firstclimb.shareMessage' : 'invite.shareMessage';
+  const productType = state?.order?.productType || '';
+  let templateKey = 'invite.shareMessage';
+  if (isFirstClimbRoute()) templateKey = 'invite.firstclimb.shareMessage';
+  else if (productType === '15daypass') templateKey = 'invite.15daypass.shareMessage';
+  else if (productType === 'punch-card') templateKey = 'invite.punchcard.shareMessage';
   const template = t(templateKey) || 'Hey! Climb with me at Boulders:';
   const withName = firstName
     ? template.replace('{name}', firstName)
@@ -13265,55 +13281,53 @@ function renderInviteFriends(productType) {
   const section = document.getElementById('inviteFriendsSection');
   if (!section) return;
 
-  // Drive a layout-level flag so CSS can reorder mobile siblings only when the
-  // invite card is actually visible (avoids changing layout for other flows).
+  // Drive a layout-level flag so CSS can reorder mobile siblings consistently
+  // now that the invite card is shown for every product flow.
   const layout = document.querySelector('#step-5 .confirmation-layout');
 
-  const firstclimbVariant = isFirstClimbRoute();
-  // Show the invite-friends card for full memberships and for the firstclimb
-  // success page. Other product types stay hidden.
-  if (productType !== 'membership' && !firstclimbVariant) {
-    section.style.display = 'none';
-    section.removeAttribute('data-variant');
-    if (layout) layout.removeAttribute('data-with-invite');
-    return;
-  }
+  // Pick the variant: firstclimb wins over productType because the 99kr flow
+  // uses its own offer-specific copy and footnote.
+  let variant = 'membership';
+  if (isFirstClimbRoute()) variant = 'firstclimb';
+  else if (productType === '15daypass') variant = '15daypass';
+  else if (productType === 'punch-card') variant = 'punchcard';
+
   section.style.display = '';
+  section.setAttribute('data-variant', variant);
   if (layout) layout.setAttribute('data-with-invite', 'true');
 
-  // Swap the localized copy on the card for the firstclimb success page.
-  // Membership flow keeps its existing keys via data-i18n-key. We override the
-  // DOM text and the keys so a later language switch picks the right variant.
+  // Per-variant i18n keys. Title is unified across variants; subtitle and
+  // footnote differ. Variants without a referral reward (15daypass, punchcard)
+  // hide the footnote since there's nothing structural to disclose.
+  const titleKey = variant === 'firstclimb' ? 'invite.firstclimb.title' : 'invite.title';
+  const subtitleKey = variant === 'firstclimb' ? 'invite.firstclimb.subtitle'
+    : variant === '15daypass' ? 'invite.15daypass.subtitle'
+    : variant === 'punchcard' ? 'invite.punchcard.subtitle'
+    : 'invite.subtitle';
+  const footnoteKey = variant === 'firstclimb' ? 'invite.firstclimb.footnote'
+    : variant === 'membership' ? 'invite.footnote'
+    : null;
+
   const titleEl = section.querySelector('.invite-friends-title');
   const subtitleEl = section.querySelector('.invite-friends-subtitle');
   const footnoteEl = section.querySelector('.invite-friends-footnote');
-  if (firstclimbVariant) {
-    section.setAttribute('data-variant', 'firstclimb');
-    if (titleEl) {
-      titleEl.setAttribute('data-i18n-key', 'invite.firstclimb.title');
-      titleEl.textContent = t('invite.firstclimb.title');
-    }
-    if (subtitleEl) {
-      subtitleEl.setAttribute('data-i18n-key', 'invite.firstclimb.subtitle');
-      subtitleEl.textContent = t('invite.firstclimb.subtitle');
-    }
-    if (footnoteEl) {
-      footnoteEl.setAttribute('data-i18n-key', 'invite.firstclimb.footnote');
-      footnoteEl.textContent = t('invite.firstclimb.footnote');
-    }
-  } else {
-    section.removeAttribute('data-variant');
-    if (titleEl) {
-      titleEl.setAttribute('data-i18n-key', 'invite.title');
-      titleEl.textContent = t('invite.title');
-    }
-    if (subtitleEl) {
-      subtitleEl.setAttribute('data-i18n-key', 'invite.subtitle');
-      subtitleEl.textContent = t('invite.subtitle');
-    }
-    if (footnoteEl) {
-      footnoteEl.setAttribute('data-i18n-key', 'invite.footnote');
-      footnoteEl.textContent = t('invite.footnote');
+  if (titleEl) {
+    titleEl.setAttribute('data-i18n-key', titleKey);
+    titleEl.textContent = t(titleKey);
+  }
+  if (subtitleEl) {
+    subtitleEl.setAttribute('data-i18n-key', subtitleKey);
+    subtitleEl.textContent = t(subtitleKey);
+  }
+  if (footnoteEl) {
+    if (footnoteKey) {
+      footnoteEl.style.display = '';
+      footnoteEl.setAttribute('data-i18n-key', footnoteKey);
+      footnoteEl.textContent = t(footnoteKey);
+    } else {
+      footnoteEl.style.display = 'none';
+      footnoteEl.removeAttribute('data-i18n-key');
+      footnoteEl.textContent = '';
     }
   }
 
@@ -21363,21 +21377,23 @@ function playSuccessAnimation() {
   if (state.successAnimationPlayed) return;
   const badge = document.querySelector('#step-5 .success-badge');
   const header = document.querySelector('#step-5 .confirmation-header');
-  if (!badge || !header) return;
-
   const panel = document.getElementById('step-5');
-  if (panel?.getAttribute('data-payment-failed') === 'true') return;
-  if (panel?.getAttribute('data-payment-pending') === 'true') return;
+  if (!badge || !header || !panel) return;
+
+  if (panel.getAttribute('data-payment-failed') === 'true') return;
+  if (panel.getAttribute('data-payment-pending') === 'true') return;
 
   state.successAnimationPlayed = true;
 
   // Restart the CSS animations even if classes are already present (safe re-entry guard)
   badge.classList.remove('is-animating');
   header.classList.remove('is-animating');
+  panel.classList.remove('is-revealing');
   // Force reflow so re-adding the class restarts the animation
   void badge.offsetWidth;
   badge.classList.add('is-animating');
   header.classList.add('is-animating');
+  panel.classList.add('is-revealing');
 
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   if (reducedMotion) return;
@@ -21387,7 +21403,8 @@ function playSuccessAnimation() {
     x: (rect.left + rect.width / 2) / window.innerWidth,
     y: (rect.top + rect.height / 2) / window.innerHeight,
   };
-  const colors = ['#10B981', '#F8FAFC', '#FACC15', '#34D399'];
+  // Brand-coded palette: success greens + off-white + brand magenta accent.
+  const colors = ['#10B981', '#34D399', '#059669', '#F8FAFC', '#F0F'];
 
   const fire = (delay, opts) => {
     setTimeout(() => {
@@ -21395,11 +21412,11 @@ function playSuccessAnimation() {
         confetti({
           origin,
           colors,
-          particleCount: 80,
-          spread: 70,
-          startVelocity: 35,
+          particleCount: 70,
+          spread: 65,
+          startVelocity: 34,
           scalar: 0.9,
-          ticks: 200,
+          ticks: 220,
           disableForReducedMotion: true,
           ...opts,
         });
@@ -21411,7 +21428,7 @@ function playSuccessAnimation() {
   };
 
   fire(220, {});
-  fire(380, { particleCount: 50, spread: 100, startVelocity: 28, scalar: 0.8 });
+  fire(360, { particleCount: 40, spread: 100, startVelocity: 26, scalar: 0.8 });
 }
 
 function renderConfirmationView() {
