@@ -44,6 +44,7 @@ import {
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
+import confetti from 'canvas-confetti';
 
 /**
  * Gets today's date in YYYY-MM-DD format using local time (not UTC).
@@ -4830,6 +4831,7 @@ const state = {
   paymentFailed: false, // Flag to track if payment failed (prevents success page from showing)
   paymentPending: false, // Flag to track if payment is pending (prevents success page from showing)
   paymentConfirmed: false, // Flag to track if payment is confirmed (allows success page to show)
+  successAnimationPlayed: false, // Guard so the confetti+checkmark only fires once per success visit
   authenticatedEmail: null,
   authenticatedCustomer: null, // Full customer profile data from API
   checkoutInProgress: false, // Flag to prevent duplicate checkout attempts
@@ -11112,6 +11114,7 @@ function handleLogout() {
   state.paymentFailed = false;
   state.paymentPending = false;
   state.paymentConfirmed = false;
+  state.successAnimationPlayed = false;
 
   // IMPORTANT: Reset checkout/order context so a new user never reuses
   // a previous user's order/customer snapshot after logout.
@@ -21356,6 +21359,61 @@ function determineProductTypeFromOrder() {
   return 'membership';
 }
 
+function playSuccessAnimation() {
+  if (state.successAnimationPlayed) return;
+  const badge = document.querySelector('#step-5 .success-badge');
+  const header = document.querySelector('#step-5 .confirmation-header');
+  if (!badge || !header) return;
+
+  const panel = document.getElementById('step-5');
+  if (panel?.getAttribute('data-payment-failed') === 'true') return;
+  if (panel?.getAttribute('data-payment-pending') === 'true') return;
+
+  state.successAnimationPlayed = true;
+
+  // Restart the CSS animations even if classes are already present (safe re-entry guard)
+  badge.classList.remove('is-animating');
+  header.classList.remove('is-animating');
+  // Force reflow so re-adding the class restarts the animation
+  void badge.offsetWidth;
+  badge.classList.add('is-animating');
+  header.classList.add('is-animating');
+
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (reducedMotion) return;
+
+  const rect = badge.getBoundingClientRect();
+  const origin = {
+    x: (rect.left + rect.width / 2) / window.innerWidth,
+    y: (rect.top + rect.height / 2) / window.innerHeight,
+  };
+  const colors = ['#10B981', '#F8FAFC', '#FACC15', '#34D399'];
+
+  const fire = (delay, opts) => {
+    setTimeout(() => {
+      try {
+        confetti({
+          origin,
+          colors,
+          particleCount: 80,
+          spread: 70,
+          startVelocity: 35,
+          scalar: 0.9,
+          ticks: 200,
+          disableForReducedMotion: true,
+          ...opts,
+        });
+      } catch (err) {
+        // Confetti is non-critical; never let it break the success page
+        if (window.DEBUG_LOGS === true) console.warn('[confetti] failed', err);
+      }
+    }, delay);
+  };
+
+  fire(220, {});
+  fire(380, { particleCount: 50, spread: 100, startVelocity: 28, scalar: 0.8 });
+}
+
 function renderConfirmationView() {
   // CRITICAL: Don't render success page if payment failed or is pending (unless in test mode)
   if (!state.testMode && state.paymentFailed === true) {
@@ -21745,7 +21803,11 @@ function renderConfirmationView() {
       }
     }
   }
-  
+
+  // Play the celebratory animation on the transition into the success view.
+  // The function guards against re-runs (modal opens, language switches, etc.).
+  requestAnimationFrame(() => playSuccessAnimation());
+
 // Helper function to create purchase item element if template not available
 function createPurchaseItemElement() {
   const item = document.createElement('div');

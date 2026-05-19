@@ -7937,6 +7937,7 @@ main {
 .confirmation-header {
     text-align: center;
     margin-bottom: 196px;
+    padding-top: 12px;
 }
 
 .success-badge {
@@ -7966,6 +7967,70 @@ main {
     max-width: 600px;
     margin: 0 auto;
     line-height: 1.6;
+}
+
+/* ── Success Page v2 — animated badge, ring, check, and copy ─────────── */
+
+.success-badge__svg {
+    overflow: visible;
+}
+
+.success-badge__ring,
+.success-badge__check {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+}
+
+.success-badge.is-animating {
+    transform-origin: 50% 50%;
+    animation: success-badge-pop 520ms ease-out both;
+}
+
+.success-badge.is-animating .success-badge__ring {
+    animation: success-stroke-draw 360ms ease-out 220ms both;
+}
+
+.success-badge.is-animating .success-badge__check {
+    animation: success-stroke-draw 280ms ease-out 520ms both;
+}
+
+.confirmation-header.is-animating .success-title {
+    animation: success-rise 320ms ease-out 480ms both;
+}
+
+.confirmation-header.is-animating .success-message {
+    animation: success-rise 320ms ease-out 600ms both;
+}
+
+@keyframes success-badge-pop {
+    0%   { transform: scale(0.3); opacity: 0; }
+    55%  { transform: scale(1.1); opacity: 1; }
+    75%  { transform: scale(0.96); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes success-stroke-draw {
+    from { stroke-dashoffset: 1; }
+    to   { stroke-dashoffset: 0; }
+}
+
+@keyframes success-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .success-badge.is-animating,
+    .success-badge.is-animating .success-badge__ring,
+    .success-badge.is-animating .success-badge__check,
+    .confirmation-header.is-animating .success-title,
+    .confirmation-header.is-animating .success-message {
+        animation: none !important;
+    }
+    .success-badge__ring,
+    .success-badge__check {
+        stroke-dashoffset: 0;
+    }
 }
 
 /* Hide confirmation sections when payment fails or is pending */
