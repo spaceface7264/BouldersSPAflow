@@ -10767,3 +10767,9 @@ body.firstclimb-flow .step-indicator {
         margin-top: calc(44px + 56px);
     }
 }
+
+/* Success page (step 5): the order is already placed, so the offer banner
+   has nothing left to sell. Hide it. */
+body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
+    display: none;
+}

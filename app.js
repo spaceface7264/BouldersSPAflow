@@ -6314,7 +6314,7 @@ const translations = {
     'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.message.firstclimb': 'Din første klatretur er klar! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.nextStep2.firstclimb': 'Din dagsbillet er klar — kig forbi hallen, når det passer dig (inden for en måned).',
-    'confirmation.nextStep3.firstclimb': 'Ved skranken: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk.',
+    'confirmation.nextStep3.firstclimb': 'Når du kommer: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk. Husk at du skal underskrive ansvarsfraskrivelsen.',
     'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
     'confirmation.orderDetails': 'Ordredetaljer',
     'confirmation.orderNumber': 'Ordrenummer:',
@@ -6574,7 +6574,7 @@ const translations = {
     'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.message.firstclimb': 'Your first climb is ready! You\'ll receive an email with all the details shortly.',
     'confirmation.nextStep2.firstclimb': 'Your day ticket is ready — drop by the gym whenever it suits you (within one month).',
-    'confirmation.nextStep3.firstclimb': 'At the desk: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes and chalk.',
+    'confirmation.nextStep3.firstclimb': 'When you arrive: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes and chalk. Remember you\'ll need to sign the liability waiver.',
     'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
     'confirmation.orderDetails': 'Order Details',
     'confirmation.orderNumber': 'Order Number:',
@@ -6885,7 +6885,7 @@ const translations = {
     'confirmation.message.punchcard': 'Ihre Stempelkarte wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
     'confirmation.message.firstclimb': 'Dein erster Kletterbesuch ist bereit! Du erhältst in Kürze eine E-Mail mit allen Details.',
     'confirmation.nextStep2.firstclimb': 'Deine Tageskarte ist bereit — komm vorbei, wann es dir passt (innerhalb eines Monats).',
-    'confirmation.nextStep3.firstclimb': 'An der Rezeption: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe und Chalk aus.',
+    'confirmation.nextStep3.firstclimb': 'Wenn du ankommst: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe und Chalk aus. Denk daran, dass du den Haftungsausschluss unterschreiben musst.',
     'confirmation.message.generic': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
     'confirmation.orderDetails': 'Bestelldetails',
     'confirmation.orderNumber': 'Bestellnummer:',
@@ -7886,15 +7886,34 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set product type for test mode
     if (productType === 'punch-card') {
       state.selectedProductType = 'punch-card';
-      // Mock value card items with price
-      state.fullOrder = {
-        valueCardItems: [{
-          quantity: 2,
-          product: { name: 'Klippekort', productLabels: [] },
-          valueCard: { number: '12345', numberOfPassages: 10 },
-          price: { amount: 46900 } // 469.00 DKK in cents
-        }]
-      };
+      // /99kr (firstclimb) is a value-card too — mock the realistic
+      // single-use day ticket data rather than a multi-punch klippekort.
+      const onFirstClimb = isFirstClimbRoute();
+      if (onFirstClimb) {
+        // Mirror the real BRP product name so the test URL matches what
+        // production renders. Update this string if the BRP product is renamed.
+        const firstclimbProductName = 'Velkomstbillet inkl. lejesko og kalk';
+        state.order.total = 99;
+        state.order.membershipPrice = 99;
+        state.order.items = [{ name: firstclimbProductName, amount: 99 }];
+        state.fullOrder = {
+          valueCardItems: [{
+            quantity: 1,
+            product: { name: firstclimbProductName, productLabels: [{ name: 'firstclimb' }] },
+            valueCard: { number: 'TEST-12345' },
+            price: { amount: 9900 } // 99.00 DKK in cents
+          }]
+        };
+      } else {
+        state.fullOrder = {
+          valueCardItems: [{
+            quantity: 2,
+            product: { name: 'Klippekort', productLabels: [] },
+            valueCard: { number: '12345', numberOfPassages: 10 },
+            price: { amount: 46900 } // 469.00 DKK in cents
+          }]
+        };
+      }
     } else if (productType === '15daypass') {
       const validTestStartDate = /^\d{4}-\d{2}-\d{2}$/.test(testStartDateParam) ? testStartDateParam : null;
       state.subscriptionStartDate = validTestStartDate;
@@ -21466,9 +21485,17 @@ function renderConfirmationView() {
     dayPassSection.style.display = 'block';
     dayPassSection.style.setProperty('display', 'block', 'important');
   } else if (productType === 'punch-card' && punchCardSection) {
-    console.log('[Confirmation] Showing punch card section');
-    punchCardSection.style.display = 'block';
-    punchCardSection.style.setProperty('display', 'block', 'important');
+    // /99kr is technically a value-card/punch-card under the hood, but the
+    // "Punch Card Details" panel (name / card type / quantity / valid until)
+    // doesn't carry any user-meaningful info for a single-use day ticket —
+    // the "What happens next?" block already covers everything. Hide it.
+    if (isFirstClimbFlow) {
+      console.log('[Confirmation] firstclimb flow — hiding punch card details section');
+    } else {
+      console.log('[Confirmation] Showing punch card section');
+      punchCardSection.style.display = 'block';
+      punchCardSection.style.setProperty('display', 'block', 'important');
+    }
   } else {
     console.warn('[Confirmation] Unknown product type or section not found:', productType);
   }
@@ -21786,12 +21813,12 @@ function createPurchaseItemElement() {
       // Add value card items (punch cards)
       if (state.fullOrder.valueCardItems && state.fullOrder.valueCardItems.length > 0) {
         state.fullOrder.valueCardItems.forEach(item => {
-          const node = templates.confirmationItem 
+          const node = templates.confirmationItem
             ? templates.confirmationItem.content.firstElementChild.cloneNode(true)
             : createPurchaseItemElement();
           const nameEl = node.querySelector('[data-element="name"]') || node.querySelector('.item-name');
           const priceEl = node.querySelector('[data-element="price"]') || node.querySelector('.item-price');
-          
+
           if (nameEl) {
             let productName = item.product?.name || 'Klippekort';
             // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
