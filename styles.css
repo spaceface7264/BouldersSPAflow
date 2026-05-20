@@ -11058,6 +11058,18 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
     display: none;
 }
 
+/* /99kr profile form: only collect name/lastname/email/password. The rest of
+   the BRP customer profile (DOB, address, phone) is captured later at the gym
+   when the day ticket is redeemed. Scoped to .firstclimb-flow so the standard
+   signup flow is untouched. */
+body.firstclimb-flow .registration-form .form-group:has(> #dateOfBirth),
+body.firstclimb-flow .registration-form .form-group:has(> .date-input-container > #dateOfBirth),
+body.firstclimb-flow .registration-form .form-group:has(> #streetAddress),
+body.firstclimb-flow .registration-form .form-row:has(#postalCode),
+body.firstclimb-flow .registration-form .form-row:has(#phoneNumber) {
+    display: none !important;
+}
+
 /* In-page payment popup backdrop (paymentv2). The actual payment UI runs in
    a separate browser window opened via window.open(); this overlay just
    dims the parent and tells the user where to look. */

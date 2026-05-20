@@ -10375,17 +10375,26 @@ async function handleSaveAccount() {
     return;
   }
   
-  // Validate required fields
-  const requiredFields = [
-    { id: 'firstName', name: 'First name' },
-    { id: 'lastName', name: 'Last name' },
-    { id: 'dateOfBirth', name: 'Date of birth' },
-    { id: 'streetAddress', name: 'Street address' },
-    { id: 'postalCode', name: 'Postal code' },
-    { id: 'email', name: 'Email' },
-    { id: 'phoneNumber', name: 'Phone number' },
-    { id: 'password', name: 'Password' },
-  ];
+  // /99kr collects only name/lastname/email/password — the rest of the BRP
+  // customer profile (DOB, address, phone) is filled in later at the gym when
+  // the day ticket is redeemed.
+  const requiredFields = isFirstClimbRoute()
+    ? [
+        { id: 'firstName', name: 'First name' },
+        { id: 'lastName', name: 'Last name' },
+        { id: 'email', name: 'Email' },
+        { id: 'password', name: 'Password' },
+      ]
+    : [
+        { id: 'firstName', name: 'First name' },
+        { id: 'lastName', name: 'Last name' },
+        { id: 'dateOfBirth', name: 'Date of birth' },
+        { id: 'streetAddress', name: 'Street address' },
+        { id: 'postalCode', name: 'Postal code' },
+        { id: 'email', name: 'Email' },
+        { id: 'phoneNumber', name: 'Phone number' },
+        { id: 'password', name: 'Password' },
+      ];
   
   const missingFields = [];
   requiredFields.forEach(field => {
