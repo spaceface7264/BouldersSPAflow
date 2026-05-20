@@ -11058,75 +11058,93 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
     display: none;
 }
 
-/* In-page payment modal (paymentv2). Chromeless: the embedded Reepay page
-   ships with its own header, cancel control, and totals — wrapping chrome
-   would duplicate them. We surface only a small close affordance. */
-.payment-iframe-overlay {
+/* In-page payment popup backdrop (paymentv2). The actual payment UI runs in
+   a separate browser window opened via window.open(); this overlay just
+   dims the parent and tells the user where to look. */
+.payment-popup-overlay {
     position: fixed;
     inset: 0;
     z-index: 10000;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.65);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 16px;
-    animation: payment-iframe-fade-in 160ms ease-out;
+    animation: payment-popup-fade-in 160ms ease-out;
 }
 
-@keyframes payment-iframe-fade-in {
+@keyframes payment-popup-fade-in {
     from { opacity: 0; }
     to   { opacity: 1; }
 }
 
-.payment-iframe-sheet {
-    position: relative;
-    background: #fff;
+.payment-popup-card {
+    background: #181820;
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 16px;
-    width: min(560px, 100%);
-    height: min(760px, 92vh);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-.payment-iframe-close {
-    position: absolute;
-    top: 8px;
-    right: 10px;
-    z-index: 2;
-    width: 32px;
-    height: 32px;
-    border: 0;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.06);
-    color: #111;
-    font-size: 22px;
-    line-height: 1;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.payment-iframe-close:hover {
-    background: rgba(0, 0, 0, 0.12);
-}
-
-.payment-iframe-frame {
-    flex: 1;
+    padding: 32px 28px 24px;
     width: 100%;
-    border: 0;
-    display: block;
-    background: #fff;
+    max-width: 360px;
+    color: #fff;
+    text-align: center;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
 
-@media (max-width: 480px) {
-    .payment-iframe-overlay { padding: 0; }
-    .payment-iframe-sheet {
-        width: 100%;
-        height: 100%;
-        max-height: 100vh;
-        border-radius: 0;
-    }
+.payment-popup-spinner {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 18px;
+    border: 3px solid rgba(255, 255, 255, 0.12);
+    border-top-color: #ec4899;
+    border-radius: 50%;
+    animation: payment-popup-spin 800ms linear infinite;
+}
+
+@keyframes payment-popup-spin {
+    to { transform: rotate(360deg); }
+}
+
+.payment-popup-title {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.payment-popup-text {
+    margin: 0 0 22px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+.payment-popup-focus-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #ec4899;
+    color: #fff;
+    border: 0;
+    border-radius: 10px;
+    font: 600 14px system-ui, -apple-system, sans-serif;
+    cursor: pointer;
+}
+
+.payment-popup-focus-btn:hover {
+    background: #db2777;
+}
+
+.payment-popup-cancel-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    border: 0;
+    font: 500 13px system-ui, -apple-system, sans-serif;
+    cursor: pointer;
+}
+
+.payment-popup-cancel-btn:hover {
+    color: rgba(255, 255, 255, 0.9);
 }

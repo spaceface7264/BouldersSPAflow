@@ -17548,6 +17548,14 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
 }
 
 function handleCheckoutClick() {
+  // In-page payment popup MUST be opened synchronously inside the click
+  // handler — browsers block popups opened after `await`s further down the
+  // chain. We pre-open a blank loader page now and navigate it to the real
+  // payment URL once handleCheckout finishes its async work. A watchdog
+  // closes the popup if it's never used (e.g. validation failed).
+  if (isPaymentIframeSpikeEnabled() && !state.checkoutInProgress) {
+    preOpenPaymentPopup();
+  }
   handleCheckout();
 }
 
@@ -17561,6 +17569,7 @@ async function handleCheckout() {
   // Validation (existing)
   const validationResult = validateForm(true);
   if (!validationResult.isValid) {
+    closePendingPaymentPopup('validation failed');
     console.log('[checkout] Validation failed:', validationResult);
     showToast(validationResult.message || 'Please review the highlighted fields.', 'error');
     // Animate checkout button with red flash
@@ -19483,8 +19492,8 @@ async function handleCheckout() {
     // show the user a full-price payment page, so we finalize client-side instead.
     if (isFreeTrialSelected && hasTrustedPaymentRedirect) {
       if (isPaymentIframeSpikeEnabled()) {
-        console.log('[paymentSpike] Free-trial path → opening iframe modal instead of redirect');
-        openPaymentIframeSpike(effectivePaymentLink);
+        console.log('[inPagePayment] Free-trial path → opening payment popup');
+        openInPagePayment(effectivePaymentLink);
         return;
       }
       console.log(
@@ -19530,8 +19539,8 @@ async function handleCheckout() {
       setCheckoutLoadingState(false);
     } else if (hasTrustedPaymentRedirect) {
       if (isPaymentIframeSpikeEnabled()) {
-        console.log('[paymentSpike] Main path → opening iframe modal instead of redirect');
-        openPaymentIframeSpike(effectivePaymentLink);
+        console.log('[inPagePayment] Main path → opening payment popup');
+        openInPagePayment(effectivePaymentLink);
         return;
       }
       // Redirect to payment provider (never to Assently)
@@ -19597,6 +19606,7 @@ async function handleCheckout() {
 
   } catch (error) {
     // Catch-all for unexpected errors
+    closePendingPaymentPopup('checkout error');
     console.error('[checkout] Unexpected error:', error);
     showToast(getErrorMessage(error, 'Checkout'), 'error');
     state.checkoutInProgress = false; // Reset on error
@@ -19606,16 +19616,26 @@ async function handleCheckout() {
 }
 
 // ---------------------------------------------------------------------------
-// In-page payment (paymentv2)
+// In-page payment via popup (paymentv2)
 // ---------------------------------------------------------------------------
-// Embeds the BRP/Reepay payment link inside a modal iframe instead of doing
-// `window.location.replace(paymentLink)`. When the iframe navigates back to
-// our own origin (returnUrl: `?payment=return&orderId=…`), we promote that
-// URL to the top window, which hands off to the existing return-handler in
-// init() and renders confirmation/failed-payment as usual.
+// BRP's payment page sends `X-Frame-Options: DENY`, so iframe embedding is
+// impossible. Instead we open the payment URL in a popup window, dim the
+// parent page with a backdrop, and watch for either (a) the popup landing on
+// our same-origin returnUrl (payment complete → close popup, promote URL to
+// top window so the existing init() return-handler renders confirmation), or
+// (b) the popup being closed by the user (cancel).
 //
-// Currently gated on ?paymentIframeSpike=1 (also honored via sessionStorage)
-// so it can be toggled per-session while testing.
+// Crucial: browsers block popups opened outside a direct user gesture. After
+// awaits, the gesture is gone. So we open a blank popup synchronously in the
+// click handler (pointing at /payment-loader.html — a tiny loading shell) and
+// only navigate it to the real payment URL once handleCheckout has finished
+// its async work. A watchdog auto-closes the popup if it's never navigated
+// (e.g. validation failed and we early-returned).
+//
+// Currently gated on ?paymentIframeSpike=1 (also honored via sessionStorage).
+let pendingPaymentPopup = null;
+let pendingPaymentPopupWatchdog = null;
+
 function isPaymentIframeSpikeEnabled() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -19628,21 +19648,168 @@ function isPaymentIframeSpikeEnabled() {
   return false;
 }
 
-// Dev-only end-to-end simulator. With ?devPaymentSimulator=1 we auto-open the
-// iframe modal pointed at /dev-payment-mock.html — a synthetic PSP page that
-// mimics Reepay's return-URL handoff. Lets us validate the entire iframe →
-// return-URL → confirmation pipeline without depending on the real backend.
+function preOpenPaymentPopup() {
+  const w = 560;
+  const h = 760;
+  const left = Math.round((window.screen.availWidth || window.outerWidth || w) / 2 - w / 2);
+  const top = Math.round((window.screen.availHeight || window.outerHeight || h) / 2 - h / 2);
+  const popup = window.open(
+    '/payment-loader.html',
+    'boulders-payment',
+    `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`,
+  );
+  if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+    console.warn('[inPagePayment] window.open returned null/closed — popup blocked');
+    return null;
+  }
+  pendingPaymentPopup = popup;
+  if (pendingPaymentPopupWatchdog) clearTimeout(pendingPaymentPopupWatchdog);
+  pendingPaymentPopupWatchdog = setTimeout(() => {
+    if (pendingPaymentPopup === popup && !popup.closed) {
+      console.warn('[inPagePayment] Popup watchdog: not navigated within 30s, closing');
+      try { popup.close(); } catch (_) {}
+      pendingPaymentPopup = null;
+    }
+  }, 30000);
+  return popup;
+}
+
+function closePendingPaymentPopup(reason) {
+  if (pendingPaymentPopupWatchdog) {
+    clearTimeout(pendingPaymentPopupWatchdog);
+    pendingPaymentPopupWatchdog = null;
+  }
+  if (pendingPaymentPopup && !pendingPaymentPopup.closed) {
+    console.log('[inPagePayment] Closing unused popup:', reason);
+    try { pendingPaymentPopup.close(); } catch (_) {}
+  }
+  pendingPaymentPopup = null;
+}
+
+function openInPagePayment(paymentLink) {
+  let popup = pendingPaymentPopup;
+  pendingPaymentPopup = null;
+  if (pendingPaymentPopupWatchdog) {
+    clearTimeout(pendingPaymentPopupWatchdog);
+    pendingPaymentPopupWatchdog = null;
+  }
+
+  // If the pre-opened popup is gone (blocked, or user closed the loader),
+  // try once more synchronously — works in browsers with a generous gesture
+  // window. If that also fails, fall back to the full-page redirect so
+  // checkout still completes.
+  if (!popup || popup.closed) {
+    popup = window.open(paymentLink, 'boulders-payment', 'width=560,height=760,resizable=yes,scrollbars=yes');
+  }
+  if (!popup || popup.closed) {
+    console.warn('[inPagePayment] No popup available, falling back to full-page redirect');
+    window.location.replace(paymentLink);
+    return;
+  }
+
+  try {
+    popup.location.replace(paymentLink);
+  } catch (e) {
+    console.error('[inPagePayment] Failed to navigate popup, falling back', e);
+    try { popup.close(); } catch (_) {}
+    window.location.replace(paymentLink);
+    return;
+  }
+
+  try { popup.focus(); } catch (_) {}
+
+  showPaymentPopupBackdrop(popup);
+}
+
+function showPaymentPopupBackdrop(popup) {
+  document.getElementById('paymentPopupOverlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'paymentPopupOverlay';
+  overlay.className = 'payment-popup-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Payment in progress');
+  overlay.innerHTML = sanitizeHTML(`
+    <div class="payment-popup-card">
+      <div class="payment-popup-spinner" aria-hidden="true"></div>
+      <h3 class="payment-popup-title">Færdiggør betaling</h3>
+      <p class="payment-popup-text">Vi har åbnet et sikkert betalingsvindue. Vend tilbage hertil, når du er færdig.</p>
+      <button type="button" class="payment-popup-focus-btn" data-action="focus">Vis betalingsvindue</button>
+      <button type="button" class="payment-popup-cancel-btn" data-action="cancel">Annuller betaling</button>
+    </div>
+  `);
+  document.body.appendChild(overlay);
+
+  const cleanup = () => {
+    clearInterval(pollId);
+    overlay.remove();
+  };
+
+  const cancel = () => {
+    try { popup.close(); } catch (_) {}
+    cleanup();
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState(false);
+  };
+
+  overlay.querySelector('[data-action="focus"]').addEventListener('click', () => {
+    try { popup.focus(); } catch (_) {}
+  });
+  overlay.querySelector('[data-action="cancel"]').addEventListener('click', cancel);
+
+  const pollId = setInterval(() => {
+    if (popup.closed) {
+      console.log('[inPagePayment] Popup closed by user');
+      cleanup();
+      state.checkoutInProgress = false;
+      setCheckoutLoadingState(false);
+      return;
+    }
+
+    // Throws when cross-origin (still on PSP); succeeds once the popup lands
+    // on our own origin (returnUrl after Reepay finishes).
+    let href = null;
+    try { href = popup.location.href; } catch (_) { return; }
+    if (!href || href === 'about:blank') return;
+
+    let url;
+    try { url = new URL(href); } catch (_) { return; }
+    if (url.origin !== window.location.origin) return;
+    if (url.searchParams.get('payment') !== 'return') return;
+
+    console.log('[inPagePayment] Popup landed on returnUrl, handing off to top window:', href);
+    cleanup();
+    try { popup.close(); } catch (_) {}
+    window.location.replace(href);
+  }, 250);
+}
+
+// Dev simulator. ?devPaymentSimulator=1 injects a button that runs the full
+// popup flow against /dev-payment-mock.html — a synthetic PSP page that
+// mimics Reepay's return handoff. Lets us validate popup → return-URL →
+// confirmation locally without the real backend. Uses a button because
+// popups need a user gesture.
 function maybeRunDevPaymentSimulator() {
   try {
     const params = new URLSearchParams(window.location.search);
     if (params.get('devPaymentSimulator') !== '1') return;
-    if (params.get('payment') === 'return') return; // we're on the return leg, don't reopen
+    if (params.get('payment') === 'return') return;
     const orderId = params.get('devOrderId') || '999999';
     const mockUrl = `/dev-payment-mock.html?orderId=${encodeURIComponent(orderId)}&returnTo=${encodeURIComponent(window.location.pathname)}`;
-    console.log('[paymentSpike] Dev simulator active — opening modal with mock PSP:', mockUrl);
-    setTimeout(() => openPaymentIframeSpike(mockUrl), 100);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Dev: Open payment popup';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:99999;padding:12px 18px;background:#ec4899;color:#fff;border:0;border-radius:10px;font:600 13px system-ui;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,0.3)';
+    btn.addEventListener('click', () => {
+      preOpenPaymentPopup();
+      setTimeout(() => openInPagePayment(mockUrl), 50);
+    });
+    document.body.appendChild(btn);
+    console.log('[inPagePayment] Dev simulator button injected. Click to test.');
   } catch (e) {
-    console.warn('[paymentSpike] Dev simulator failed to start', e);
+    console.warn('[inPagePayment] Dev simulator failed to start', e);
   }
 }
 
@@ -19650,80 +19817,6 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', maybeRunDevPaymentSimulator);
 } else {
   maybeRunDevPaymentSimulator();
-}
-
-function openPaymentIframeSpike(paymentLink) {
-  document.getElementById('paymentIframeModal')?.remove();
-
-  const overlay = document.createElement('div');
-  overlay.id = 'paymentIframeModal';
-  overlay.className = 'payment-iframe-overlay';
-  overlay.setAttribute('role', 'dialog');
-  overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-label', 'Payment');
-
-  const sheet = document.createElement('div');
-  sheet.className = 'payment-iframe-sheet';
-
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.className = 'payment-iframe-close';
-  closeBtn.setAttribute('aria-label', 'Close payment');
-  closeBtn.innerHTML = '&times;';
-
-  const iframe = document.createElement('iframe');
-  iframe.className = 'payment-iframe-frame';
-  iframe.setAttribute('allow', 'payment *; publickey-credentials-get *');
-  iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
-  iframe.src = paymentLink;
-
-  const cleanup = () => {
-    document.removeEventListener('keydown', onKeydown);
-    overlay.remove();
-  };
-
-  const dismiss = () => {
-    cleanup();
-    state.checkoutInProgress = false;
-    setCheckoutLoadingState(false);
-  };
-
-  const onKeydown = (e) => {
-    if (e.key === 'Escape') dismiss();
-  };
-
-  closeBtn.addEventListener('click', dismiss);
-  document.addEventListener('keydown', onKeydown);
-
-  // On every iframe navigation, check whether it has landed back on our own
-  // origin (the returnUrl). If so, promote that URL to the top window so the
-  // existing init() return-handler picks it up and renders confirmation.
-  iframe.addEventListener('load', () => {
-    let innerHref = null;
-    try {
-      innerHref = iframe.contentWindow && iframe.contentWindow.location.href;
-    } catch (_) {
-      // Cross-origin (still on PSP) — nothing to do.
-      return;
-    }
-    if (!innerHref) return;
-    try {
-      const url = new URL(innerHref);
-      if (url.origin !== window.location.origin) return;
-      if (url.searchParams.get('payment') !== 'return') return;
-    } catch (_) {
-      return;
-    }
-    cleanup();
-    // Replace, not assign, so the back button doesn't bring the user into the
-    // iframe-internal step they just completed.
-    window.location.replace(innerHref);
-  });
-
-  sheet.appendChild(closeBtn);
-  sheet.appendChild(iframe);
-  overlay.appendChild(sheet);
-  document.body.appendChild(overlay);
 }
 
 function buildCheckoutPayload() {
