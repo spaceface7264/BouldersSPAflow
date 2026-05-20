@@ -44,6 +44,7 @@ import {
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
+import confetti from 'canvas-confetti';
 
 /**
  * Gets today's date in YYYY-MM-DD format using local time (not UTC).
@@ -4830,6 +4831,7 @@ const state = {
   paymentFailed: false, // Flag to track if payment failed (prevents success page from showing)
   paymentPending: false, // Flag to track if payment is pending (prevents success page from showing)
   paymentConfirmed: false, // Flag to track if payment is confirmed (allows success page to show)
+  successAnimationPlayed: false, // Guard so the confetti+checkmark only fires once per success visit
   authenticatedEmail: null,
   authenticatedCustomer: null, // Full customer profile data from API
   checkoutInProgress: false, // Flag to prevent duplicate checkout attempts
@@ -6344,15 +6346,15 @@ const translations = {
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
-    'confirmation.title': 'SUCCES!',
-    'confirmation.message': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.membership': 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.15daypass': 'Din 15-dages prøveperiode er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.firstclimb': 'Din første klatretur er klar! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.title': 'You’re in!',
+    'confirmation.message': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.message.membership': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.message.15daypass': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.message.punchcard': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.message.firstclimb': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.nextStep2.firstclimb': 'Din dagsbillet er klar — kig forbi hallen, når det passer dig (inden for en måned).',
     'confirmation.nextStep3.firstclimb': 'Når du kommer: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk. Husk at du skal underskrive ansvarsfraskrivelsen.',
-    'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.generic': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.orderDetails': 'Ordredetaljer',
     'confirmation.orderNumber': 'Ordrenummer:',
     'confirmation.date': 'Dato:',
@@ -6386,6 +6388,7 @@ const translations = {
     'confirmation.passType': 'Pastype:',
     'confirmation.validFrom': 'Gyldig fra:',
     'confirmation.validUntil': 'Gyldig til:',
+    'confirmation.validity': 'Gyldighed',
     'confirmation.punchCardDetails': 'Klippekort detaljer',
     'confirmation.name': 'Navn:',
     'confirmation.cardType': 'Korttype:',
@@ -6405,8 +6408,12 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.freetrial.changeActivationCta': 'Har du brug for at ændre aktiveringsdato? Klik her.',
-    'invite.title': 'Giv dine venner 2 ugers gratis prøveperiode',
+    'invite.title': 'Invitér dine venner!',
     'invite.subtitle': 'Del dit link – når dine venner melder sig ind, får de en 2-ugers gratis prøveperiode.',
+    'invite.15daypass.subtitle': 'Klatring er sjovere sammen. Del linket, så en ven også kan prøve det.',
+    'invite.15daypass.shareMessage': 'Hej! {name} her – jeg har lige købt et 15-dages prøvepas hos Boulders. Kom og klatre med mig:',
+    'invite.punchcard.subtitle': 'Klippekortet er perfekt at dele. Inviter en ven til en klatretur næste gang.',
+    'invite.punchcard.shareMessage': 'Hej! {name} her – jeg har lige købt et klippekort hos Boulders. Kom og klatre med mig:',
     'invite.copyLink': 'Kopiér link',
     'invite.copied': 'Kopieret!',
     'invite.copiedToast': 'Linket er kopieret – del det med dine venner!',
@@ -6419,7 +6426,7 @@ const translations = {
     'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
     'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
-    'invite.firstclimb.title': 'Del dette med dine venner',
+    'invite.firstclimb.title': 'Invitér dine venner!',
     'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko og kalk er for alle, der ikke har prøvet det før. Send linket til dine venner.',
     'invite.firstclimb.footnote': 'Tilbuddet kan kun bruges én gang pr. person.',
     'invite.firstclimb.shareMessage': 'Klatre med mig hos Boulders! Få din første dag for 99 kr inkl. lejesko og kalk:',
@@ -6604,15 +6611,15 @@ const translations = {
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15-Day Trial Pass options available at this time.',
-    'confirmation.title': 'SUCCESS!',
-    'confirmation.message': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.15daypass': 'Your 15-Day Trial Period has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.firstclimb': 'Your first climb is ready! You\'ll receive an email with all the details shortly.',
+    'confirmation.title': 'You’re in!',
+    'confirmation.message': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.message.membership': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.message.15daypass': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.message.punchcard': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.message.firstclimb': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.nextStep2.firstclimb': 'Your day ticket is ready — drop by the gym whenever it suits you (within one month).',
     'confirmation.nextStep3.firstclimb': 'When you arrive: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes and chalk. Remember you\'ll need to sign the liability waiver.',
-    'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.generic': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.orderDetails': 'Order Details',
     'confirmation.orderNumber': 'Order Number:',
     'confirmation.date': 'Date:',
@@ -6646,6 +6653,7 @@ const translations = {
     'confirmation.passType': 'Pass Type:',
     'confirmation.validFrom': 'Valid From:',
     'confirmation.validUntil': 'Valid Until:',
+    'confirmation.validity': 'Valid',
     'confirmation.punchCardDetails': 'Punch Card Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Card Type:',
@@ -6665,8 +6673,12 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'When your trial starts, visit the gym to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
     'confirmation.freetrial.changeActivationCta': 'Need to change activation day? Click here.',
-    'invite.title': 'Give your friends 2 weeks free',
+    'invite.title': 'Invite your friends!',
     'invite.subtitle': 'Share your link — when your friends sign up, they get a free 2-week trial.',
+    'invite.15daypass.subtitle': 'Climbing is more fun together. Share the link so a friend can give it a try too.',
+    'invite.15daypass.shareMessage': 'Hey! {name} here — I just grabbed a 15-day trial pass at Boulders. Come climb with me:',
+    'invite.punchcard.subtitle': 'Punch cards are made for sharing. Bring a friend along for your next climb.',
+    'invite.punchcard.shareMessage': 'Hey! {name} here — I just picked up a punch card at Boulders. Come climb with me:',
     'invite.copyLink': 'Copy link',
     'invite.copied': 'Copied!',
     'invite.copiedToast': 'Link copied — share it with your friends!',
@@ -6677,7 +6689,7 @@ const translations = {
     'invite.share.email': 'Email',
     'invite.share.more': 'More',
     'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
-    'invite.firstclimb.title': 'Share this with your friends',
+    'invite.firstclimb.title': 'Invite your friends!',
     'invite.firstclimb.subtitle': 'Our 99 kr day ticket including rental shoes and chalk is open to anyone who hasn’t tried it yet. Send the link to your friends.',
     'invite.firstclimb.footnote': 'The offer can only be used once per person.',
     'invite.firstclimb.shareMessage': 'Come climb with me at Boulders! Get your first day for 99 kr including rental shoes and chalk:',
@@ -6915,15 +6927,15 @@ const translations = {
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
-    'confirmation.title': 'ERFOLG!',
-    'confirmation.message': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
-    'confirmation.message.membership': 'Ihre Mitgliedschaft wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
-    'confirmation.message.15daypass': 'Ihr 15-Tage-Pass wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
-    'confirmation.message.punchcard': 'Ihre Stempelkarte wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
-    'confirmation.message.firstclimb': 'Dein erster Kletterbesuch ist bereit! Du erhältst in Kürze eine E-Mail mit allen Details.',
+    'confirmation.title': 'You’re in!',
+    'confirmation.message': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.message.membership': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.message.15daypass': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.message.punchcard': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.message.firstclimb': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.nextStep2.firstclimb': 'Deine Tageskarte ist bereit — komm vorbei, wann es dir passt (innerhalb eines Monats).',
     'confirmation.nextStep3.firstclimb': 'Wenn du ankommst: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe und Chalk aus. Denk daran, dass du den Haftungsausschluss unterschreiben musst.',
-    'confirmation.message.generic': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.generic': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.orderDetails': 'Bestelldetails',
     'confirmation.orderNumber': 'Bestellnummer:',
     'confirmation.date': 'Datum:',
@@ -6957,6 +6969,7 @@ const translations = {
     'confirmation.passType': 'Passtyp:',
     'confirmation.validFrom': 'Gültig von:',
     'confirmation.validUntil': 'Gültig bis:',
+    'confirmation.validity': 'Gültig',
     'confirmation.punchCardDetails': 'Stempelkarten-Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Kartentyp:',
@@ -6973,8 +6986,12 @@ const translations = {
     'confirmation.nextStep3.freetrial.today': 'Besuchen Sie die Halle heute, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.nextStep3.freetrial.future': 'Sobald Ihre Probezeit startet, besuchen Sie die Halle, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.freetrial.changeActivationCta': 'Müssen Sie den Aktivierungstag ändern? Klicken Sie hier',
-    'invite.title': 'Schenk deinen Freunden 2 Wochen gratis',
+    'invite.title': 'Lade deine Freunde ein!',
     'invite.subtitle': 'Teile deinen Link – wenn sich deine Freunde anmelden, bekommen sie 2 Wochen gratis Probezeit.',
+    'invite.15daypass.subtitle': 'Klettern macht gemeinsam mehr Spaß. Teile den Link, damit ein Freund es auch ausprobieren kann.',
+    'invite.15daypass.shareMessage': 'Hey! Hier ist {name} – ich habe gerade einen 15-Tage-Probepass bei Boulders gekauft. Komm und klettere mit mir:',
+    'invite.punchcard.subtitle': 'Die Stempelkarte ist perfekt zum Teilen. Bring einen Freund mit zum nächsten Klettertag.',
+    'invite.punchcard.shareMessage': 'Hey! Hier ist {name} – ich habe gerade eine Stempelkarte bei Boulders gekauft. Komm und klettere mit mir:',
     'invite.copyLink': 'Link kopieren',
     'invite.copied': 'Kopiert!',
     'invite.copiedToast': 'Link kopiert – teile ihn mit deinen Freunden!',
@@ -6985,7 +7002,7 @@ const translations = {
     'invite.share.email': 'E-Mail',
     'invite.share.more': 'Mehr',
     'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
-    'invite.firstclimb.title': 'Teile das mit deinen Freunden',
+    'invite.firstclimb.title': 'Lade deine Freunde ein!',
     'invite.firstclimb.subtitle': 'Unsere Tageskarte für 99 kr inkl. Leihschuhe und Chalk ist für alle, die sie noch nicht ausprobiert haben. Schick deinen Freunden den Link.',
     'invite.firstclimb.footnote': 'Das Angebot kann pro Person nur einmal eingelöst werden.',
     'invite.firstclimb.shareMessage': 'Klettere mit mir bei Boulders! Hol dir deinen ersten Tag für 99 kr inkl. Leihschuhe und Chalk:',
@@ -8634,6 +8651,9 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Mobile drawer: enable swipe-down-to-dismiss on the receipt modal.
+  attachReceiptDrawerSwipe();
 }
 
 function setLoginLoadingState(isLoading) {
@@ -10355,17 +10375,26 @@ async function handleSaveAccount() {
     return;
   }
   
-  // Validate required fields
-  const requiredFields = [
-    { id: 'firstName', name: 'First name' },
-    { id: 'lastName', name: 'Last name' },
-    { id: 'dateOfBirth', name: 'Date of birth' },
-    { id: 'streetAddress', name: 'Street address' },
-    { id: 'postalCode', name: 'Postal code' },
-    { id: 'email', name: 'Email' },
-    { id: 'phoneNumber', name: 'Phone number' },
-    { id: 'password', name: 'Password' },
-  ];
+  // /99kr collects only name/lastname/email/password — the rest of the BRP
+  // customer profile (DOB, address, phone) is filled in later at the gym when
+  // the day ticket is redeemed.
+  const requiredFields = isFirstClimbRoute()
+    ? [
+        { id: 'firstName', name: 'First name' },
+        { id: 'lastName', name: 'Last name' },
+        { id: 'email', name: 'Email' },
+        { id: 'password', name: 'Password' },
+      ]
+    : [
+        { id: 'firstName', name: 'First name' },
+        { id: 'lastName', name: 'Last name' },
+        { id: 'dateOfBirth', name: 'Date of birth' },
+        { id: 'streetAddress', name: 'Street address' },
+        { id: 'postalCode', name: 'Postal code' },
+        { id: 'email', name: 'Email' },
+        { id: 'phoneNumber', name: 'Phone number' },
+        { id: 'password', name: 'Password' },
+      ];
   
   const missingFields = [];
   requiredFields.forEach(field => {
@@ -11112,6 +11141,7 @@ function handleLogout() {
   state.paymentFailed = false;
   state.paymentPending = false;
   state.paymentConfirmed = false;
+  state.successAnimationPlayed = false;
 
   // IMPORTANT: Reset checkout/order context so a new user never reuses
   // a previous user's order/customer snapshot after logout.
@@ -13228,7 +13258,11 @@ function getInviteFirstName() {
 
 function getInviteShareMessage() {
   const firstName = getInviteFirstName();
-  const templateKey = isFirstClimbRoute() ? 'invite.firstclimb.shareMessage' : 'invite.shareMessage';
+  const productType = state?.order?.productType || '';
+  let templateKey = 'invite.shareMessage';
+  if (isFirstClimbRoute()) templateKey = 'invite.firstclimb.shareMessage';
+  else if (productType === '15daypass') templateKey = 'invite.15daypass.shareMessage';
+  else if (productType === 'punch-card') templateKey = 'invite.punchcard.shareMessage';
   const template = t(templateKey) || 'Hey! Climb with me at Boulders:';
   const withName = firstName
     ? template.replace('{name}', firstName)
@@ -13262,55 +13296,53 @@ function renderInviteFriends(productType) {
   const section = document.getElementById('inviteFriendsSection');
   if (!section) return;
 
-  // Drive a layout-level flag so CSS can reorder mobile siblings only when the
-  // invite card is actually visible (avoids changing layout for other flows).
+  // Drive a layout-level flag so CSS can reorder mobile siblings consistently
+  // now that the invite card is shown for every product flow.
   const layout = document.querySelector('#step-5 .confirmation-layout');
 
-  const firstclimbVariant = isFirstClimbRoute();
-  // Show the invite-friends card for full memberships and for the firstclimb
-  // success page. Other product types stay hidden.
-  if (productType !== 'membership' && !firstclimbVariant) {
-    section.style.display = 'none';
-    section.removeAttribute('data-variant');
-    if (layout) layout.removeAttribute('data-with-invite');
-    return;
-  }
+  // Pick the variant: firstclimb wins over productType because the 99kr flow
+  // uses its own offer-specific copy and footnote.
+  let variant = 'membership';
+  if (isFirstClimbRoute()) variant = 'firstclimb';
+  else if (productType === '15daypass') variant = '15daypass';
+  else if (productType === 'punch-card') variant = 'punchcard';
+
   section.style.display = '';
+  section.setAttribute('data-variant', variant);
   if (layout) layout.setAttribute('data-with-invite', 'true');
 
-  // Swap the localized copy on the card for the firstclimb success page.
-  // Membership flow keeps its existing keys via data-i18n-key. We override the
-  // DOM text and the keys so a later language switch picks the right variant.
+  // Per-variant i18n keys. Title is unified across variants; subtitle and
+  // footnote differ. Variants without a referral reward (15daypass, punchcard)
+  // hide the footnote since there's nothing structural to disclose.
+  const titleKey = variant === 'firstclimb' ? 'invite.firstclimb.title' : 'invite.title';
+  const subtitleKey = variant === 'firstclimb' ? 'invite.firstclimb.subtitle'
+    : variant === '15daypass' ? 'invite.15daypass.subtitle'
+    : variant === 'punchcard' ? 'invite.punchcard.subtitle'
+    : 'invite.subtitle';
+  const footnoteKey = variant === 'firstclimb' ? 'invite.firstclimb.footnote'
+    : variant === 'membership' ? 'invite.footnote'
+    : null;
+
   const titleEl = section.querySelector('.invite-friends-title');
   const subtitleEl = section.querySelector('.invite-friends-subtitle');
   const footnoteEl = section.querySelector('.invite-friends-footnote');
-  if (firstclimbVariant) {
-    section.setAttribute('data-variant', 'firstclimb');
-    if (titleEl) {
-      titleEl.setAttribute('data-i18n-key', 'invite.firstclimb.title');
-      titleEl.textContent = t('invite.firstclimb.title');
-    }
-    if (subtitleEl) {
-      subtitleEl.setAttribute('data-i18n-key', 'invite.firstclimb.subtitle');
-      subtitleEl.textContent = t('invite.firstclimb.subtitle');
-    }
-    if (footnoteEl) {
-      footnoteEl.setAttribute('data-i18n-key', 'invite.firstclimb.footnote');
-      footnoteEl.textContent = t('invite.firstclimb.footnote');
-    }
-  } else {
-    section.removeAttribute('data-variant');
-    if (titleEl) {
-      titleEl.setAttribute('data-i18n-key', 'invite.title');
-      titleEl.textContent = t('invite.title');
-    }
-    if (subtitleEl) {
-      subtitleEl.setAttribute('data-i18n-key', 'invite.subtitle');
-      subtitleEl.textContent = t('invite.subtitle');
-    }
-    if (footnoteEl) {
-      footnoteEl.setAttribute('data-i18n-key', 'invite.footnote');
-      footnoteEl.textContent = t('invite.footnote');
+  if (titleEl) {
+    titleEl.setAttribute('data-i18n-key', titleKey);
+    titleEl.textContent = t(titleKey);
+  }
+  if (subtitleEl) {
+    subtitleEl.setAttribute('data-i18n-key', subtitleKey);
+    subtitleEl.textContent = t(subtitleKey);
+  }
+  if (footnoteEl) {
+    if (footnoteKey) {
+      footnoteEl.style.display = '';
+      footnoteEl.setAttribute('data-i18n-key', footnoteKey);
+      footnoteEl.textContent = t(footnoteKey);
+    } else {
+      footnoteEl.style.display = 'none';
+      footnoteEl.removeAttribute('data-i18n-key');
+      footnoteEl.textContent = '';
     }
   }
 
@@ -17525,6 +17557,14 @@ function getRetryDelayFromError(error, defaultMs = 120000) {
 }
 
 function handleCheckoutClick() {
+  // In-page payment popup MUST be opened synchronously inside the click
+  // handler — browsers block popups opened after `await`s further down the
+  // chain. We pre-open a blank loader page now and navigate it to the real
+  // payment URL once handleCheckout finishes its async work. A watchdog
+  // closes the popup if it's never used (e.g. validation failed).
+  if (isPaymentIframeSpikeEnabled() && !state.checkoutInProgress) {
+    preOpenPaymentPopup();
+  }
   handleCheckout();
 }
 
@@ -17538,6 +17578,7 @@ async function handleCheckout() {
   // Validation (existing)
   const validationResult = validateForm(true);
   if (!validationResult.isValid) {
+    closePendingPaymentPopup('validation failed');
     console.log('[checkout] Validation failed:', validationResult);
     showToast(validationResult.message || 'Please review the highlighted fields.', 'error');
     // Animate checkout button with red flash
@@ -19459,6 +19500,11 @@ async function handleCheckout() {
     // Coupon-driven zero totals are different — the payment link reflects the pre-coupon amount and would
     // show the user a full-price payment page, so we finalize client-side instead.
     if (isFreeTrialSelected && hasTrustedPaymentRedirect) {
+      if (isPaymentIframeSpikeEnabled()) {
+        console.log('[inPagePayment] Free-trial path → opening payment popup');
+        openInPagePayment(effectivePaymentLink);
+        return;
+      }
       console.log(
         '[checkout] Free-trial flow: redirecting via payment link so backend/PSP can register completion',
       );
@@ -19501,6 +19547,11 @@ async function handleCheckout() {
       state.checkoutInProgress = false;
       setCheckoutLoadingState(false);
     } else if (hasTrustedPaymentRedirect) {
+      if (isPaymentIframeSpikeEnabled()) {
+        console.log('[inPagePayment] Main path → opening payment popup');
+        openInPagePayment(effectivePaymentLink);
+        return;
+      }
       // Redirect to payment provider (never to Assently)
       console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
       console.log('[checkout] Payment link URL:', effectivePaymentLink);
@@ -19564,12 +19615,217 @@ async function handleCheckout() {
 
   } catch (error) {
     // Catch-all for unexpected errors
+    closePendingPaymentPopup('checkout error');
     console.error('[checkout] Unexpected error:', error);
     showToast(getErrorMessage(error, 'Checkout'), 'error');
     state.checkoutInProgress = false; // Reset on error
     updateFAQVisibility(); // Show FAQ again if checkout fails
     setCheckoutLoadingState(false);
   }
+}
+
+// ---------------------------------------------------------------------------
+// In-page payment via popup (paymentv2)
+// ---------------------------------------------------------------------------
+// BRP's payment page sends `X-Frame-Options: DENY`, so iframe embedding is
+// impossible. Instead we open the payment URL in a popup window, dim the
+// parent page with a backdrop, and watch for either (a) the popup landing on
+// our same-origin returnUrl (payment complete → close popup, promote URL to
+// top window so the existing init() return-handler renders confirmation), or
+// (b) the popup being closed by the user (cancel).
+//
+// Crucial: browsers block popups opened outside a direct user gesture. After
+// awaits, the gesture is gone. So we open a blank popup synchronously in the
+// click handler (pointing at /payment-loader.html — a tiny loading shell) and
+// only navigate it to the real payment URL once handleCheckout has finished
+// its async work. A watchdog auto-closes the popup if it's never navigated
+// (e.g. validation failed and we early-returned).
+//
+// Currently gated on ?paymentIframeSpike=1 (also honored via sessionStorage).
+let pendingPaymentPopup = null;
+let pendingPaymentPopupWatchdog = null;
+
+function isPaymentIframeSpikeEnabled() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('paymentIframeSpike') === '1') {
+      try { sessionStorage.setItem('paymentIframeSpike', '1'); } catch (_) {}
+      return true;
+    }
+    if (sessionStorage.getItem('paymentIframeSpike') === '1') return true;
+  } catch (_) {}
+  return false;
+}
+
+function preOpenPaymentPopup() {
+  const w = 560;
+  const h = 760;
+  const left = Math.round((window.screen.availWidth || window.outerWidth || w) / 2 - w / 2);
+  const top = Math.round((window.screen.availHeight || window.outerHeight || h) / 2 - h / 2);
+  const popup = window.open(
+    '/payment-loader.html',
+    'boulders-payment',
+    `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`,
+  );
+  if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+    console.warn('[inPagePayment] window.open returned null/closed — popup blocked');
+    return null;
+  }
+  pendingPaymentPopup = popup;
+  if (pendingPaymentPopupWatchdog) clearTimeout(pendingPaymentPopupWatchdog);
+  pendingPaymentPopupWatchdog = setTimeout(() => {
+    if (pendingPaymentPopup === popup && !popup.closed) {
+      console.warn('[inPagePayment] Popup watchdog: not navigated within 30s, closing');
+      try { popup.close(); } catch (_) {}
+      pendingPaymentPopup = null;
+    }
+  }, 30000);
+  return popup;
+}
+
+function closePendingPaymentPopup(reason) {
+  if (pendingPaymentPopupWatchdog) {
+    clearTimeout(pendingPaymentPopupWatchdog);
+    pendingPaymentPopupWatchdog = null;
+  }
+  if (pendingPaymentPopup && !pendingPaymentPopup.closed) {
+    console.log('[inPagePayment] Closing unused popup:', reason);
+    try { pendingPaymentPopup.close(); } catch (_) {}
+  }
+  pendingPaymentPopup = null;
+}
+
+function openInPagePayment(paymentLink) {
+  let popup = pendingPaymentPopup;
+  pendingPaymentPopup = null;
+  if (pendingPaymentPopupWatchdog) {
+    clearTimeout(pendingPaymentPopupWatchdog);
+    pendingPaymentPopupWatchdog = null;
+  }
+
+  // If the pre-opened popup is gone (blocked, or user closed the loader),
+  // try once more synchronously — works in browsers with a generous gesture
+  // window. If that also fails, fall back to the full-page redirect so
+  // checkout still completes.
+  if (!popup || popup.closed) {
+    popup = window.open(paymentLink, 'boulders-payment', 'width=560,height=760,resizable=yes,scrollbars=yes');
+  }
+  if (!popup || popup.closed) {
+    console.warn('[inPagePayment] No popup available, falling back to full-page redirect');
+    window.location.replace(paymentLink);
+    return;
+  }
+
+  try {
+    popup.location.replace(paymentLink);
+  } catch (e) {
+    console.error('[inPagePayment] Failed to navigate popup, falling back', e);
+    try { popup.close(); } catch (_) {}
+    window.location.replace(paymentLink);
+    return;
+  }
+
+  try { popup.focus(); } catch (_) {}
+
+  showPaymentPopupBackdrop(popup);
+}
+
+function showPaymentPopupBackdrop(popup) {
+  document.getElementById('paymentPopupOverlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'paymentPopupOverlay';
+  overlay.className = 'payment-popup-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Payment in progress');
+  overlay.innerHTML = sanitizeHTML(`
+    <div class="payment-popup-card">
+      <div class="payment-popup-spinner" aria-hidden="true"></div>
+      <h3 class="payment-popup-title">Færdiggør betaling</h3>
+      <p class="payment-popup-text">Vi har åbnet et sikkert betalingsvindue. Vend tilbage hertil, når du er færdig.</p>
+      <button type="button" class="payment-popup-focus-btn" data-action="focus">Vis betalingsvindue</button>
+      <button type="button" class="payment-popup-cancel-btn" data-action="cancel">Annuller betaling</button>
+    </div>
+  `);
+  document.body.appendChild(overlay);
+
+  const cleanup = () => {
+    clearInterval(pollId);
+    overlay.remove();
+  };
+
+  const cancel = () => {
+    try { popup.close(); } catch (_) {}
+    cleanup();
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState(false);
+  };
+
+  overlay.querySelector('[data-action="focus"]').addEventListener('click', () => {
+    try { popup.focus(); } catch (_) {}
+  });
+  overlay.querySelector('[data-action="cancel"]').addEventListener('click', cancel);
+
+  const pollId = setInterval(() => {
+    if (popup.closed) {
+      console.log('[inPagePayment] Popup closed by user');
+      cleanup();
+      state.checkoutInProgress = false;
+      setCheckoutLoadingState(false);
+      return;
+    }
+
+    // Throws when cross-origin (still on PSP); succeeds once the popup lands
+    // on our own origin (returnUrl after Reepay finishes).
+    let href = null;
+    try { href = popup.location.href; } catch (_) { return; }
+    if (!href || href === 'about:blank') return;
+
+    let url;
+    try { url = new URL(href); } catch (_) { return; }
+    if (url.origin !== window.location.origin) return;
+    if (url.searchParams.get('payment') !== 'return') return;
+
+    console.log('[inPagePayment] Popup landed on returnUrl, handing off to top window:', href);
+    cleanup();
+    try { popup.close(); } catch (_) {}
+    window.location.replace(href);
+  }, 250);
+}
+
+// Dev simulator. ?devPaymentSimulator=1 injects a button that runs the full
+// popup flow against /dev-payment-mock.html — a synthetic PSP page that
+// mimics Reepay's return handoff. Lets us validate popup → return-URL →
+// confirmation locally without the real backend. Uses a button because
+// popups need a user gesture.
+function maybeRunDevPaymentSimulator() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('devPaymentSimulator') !== '1') return;
+    if (params.get('payment') === 'return') return;
+    const orderId = params.get('devOrderId') || '999999';
+    const mockUrl = `/dev-payment-mock.html?orderId=${encodeURIComponent(orderId)}&returnTo=${encodeURIComponent(window.location.pathname)}`;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Dev: Open payment popup';
+    btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:99999;padding:12px 18px;background:#ec4899;color:#fff;border:0;border-radius:10px;font:600 13px system-ui;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,0.3)';
+    btn.addEventListener('click', () => {
+      preOpenPaymentPopup();
+      setTimeout(() => openInPagePayment(mockUrl), 50);
+    });
+    document.body.appendChild(btn);
+    console.log('[inPagePayment] Dev simulator button injected. Click to test.');
+  } catch (e) {
+    console.warn('[inPagePayment] Dev simulator failed to start', e);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', maybeRunDevPaymentSimulator);
+} else {
+  maybeRunDevPaymentSimulator();
 }
 
 function buildCheckoutPayload() {
@@ -21356,6 +21612,64 @@ function determineProductTypeFromOrder() {
   return 'membership';
 }
 
+function playSuccessAnimation() {
+  if (state.successAnimationPlayed) return;
+  const badge = document.querySelector('#step-5 .success-badge');
+  const header = document.querySelector('#step-5 .confirmation-header');
+  const panel = document.getElementById('step-5');
+  if (!badge || !header || !panel) return;
+
+  if (panel.getAttribute('data-payment-failed') === 'true') return;
+  if (panel.getAttribute('data-payment-pending') === 'true') return;
+
+  state.successAnimationPlayed = true;
+
+  // Restart the CSS animations even if classes are already present (safe re-entry guard)
+  badge.classList.remove('is-animating');
+  header.classList.remove('is-animating');
+  panel.classList.remove('is-revealing');
+  // Force reflow so re-adding the class restarts the animation
+  void badge.offsetWidth;
+  badge.classList.add('is-animating');
+  header.classList.add('is-animating');
+  panel.classList.add('is-revealing');
+
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (reducedMotion) return;
+
+  const rect = badge.getBoundingClientRect();
+  const origin = {
+    x: (rect.left + rect.width / 2) / window.innerWidth,
+    y: (rect.top + rect.height / 2) / window.innerHeight,
+  };
+  // Brand-coded palette: success greens + off-white + brand magenta accent.
+  const colors = ['#10B981', '#34D399', '#059669', '#F8FAFC', '#F0F'];
+
+  const fire = (delay, opts) => {
+    setTimeout(() => {
+      try {
+        confetti({
+          origin,
+          colors,
+          particleCount: 70,
+          spread: 65,
+          startVelocity: 34,
+          scalar: 0.9,
+          ticks: 220,
+          disableForReducedMotion: true,
+          ...opts,
+        });
+      } catch (err) {
+        // Confetti is non-critical; never let it break the success page
+        if (window.DEBUG_LOGS === true) console.warn('[confetti] failed', err);
+      }
+    }, delay);
+  };
+
+  fire(220, {});
+  fire(360, { particleCount: 40, spread: 100, startVelocity: 26, scalar: 0.8 });
+}
+
 function renderConfirmationView() {
   // CRITICAL: Don't render success page if payment failed or is pending (unless in test mode)
   if (!state.testMode && state.paymentFailed === true) {
@@ -21664,6 +21978,11 @@ function renderConfirmationView() {
     }
   }
   
+  // Hide the validity pill by default; the 15-day-pass branch below will
+  // re-enable it when valid dates are available.
+  const defaultValidityPill = document.getElementById('successValidityPill');
+  if (defaultValidityPill) defaultValidityPill.style.display = 'none';
+
   // 15-Day Trial Pass specific fields - from API only
   if (productType === '15daypass') {
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
@@ -21708,6 +22027,20 @@ function renderConfirmationView() {
         : '—';
     }
 
+    // Surface the validity window in the success header — the most time-sensitive
+    // fact for a 15-day pass deserves to be visible above the receipt.
+    const validityPill = document.getElementById('successValidityPill');
+    const headerPassStart = document.querySelector('[data-summary-field="header-pass-start-date"]');
+    const headerPassEnd = document.querySelector('[data-summary-field="header-pass-end-date"]');
+    const hasValidDates =
+      parsedStart && !isNaN(parsedStart.getTime()) &&
+      parsedEnd && !isNaN(parsedEnd.getTime());
+    if (validityPill) {
+      validityPill.style.display = hasValidDates ? 'inline-flex' : 'none';
+    }
+    if (headerPassStart && hasValidDates) headerPassStart.textContent = formatLongDate(parsedStart);
+    if (headerPassEnd && hasValidDates) headerPassEnd.textContent = formatLongDate(parsedEnd);
+
     // Update "what happens next" step 2 to reflect future activation
     if (nextStep2 && parsedStart && !isNaN(parsedStart.getTime())) {
       const today = new Date();
@@ -21745,7 +22078,11 @@ function renderConfirmationView() {
       }
     }
   }
-  
+
+  // Play the celebratory animation on the transition into the success view.
+  // The function guards against re-runs (modal opens, language switches, etc.).
+  requestAnimationFrame(() => playSuccessAnimation());
+
 // Helper function to create purchase item element if template not available
 function createPurchaseItemElement() {
   const item = document.createElement('div');
@@ -22292,28 +22629,90 @@ async function showDetailedReceipt() {
   document.body.style.top = `-${scrollY}px`;
   document.body.style.width = '100%';
   document.body.style.overflow = 'hidden';
-  
-  // Show modal
+
+  // Show the modal: set display first, then add the open class on the next
+  // frame so the transition runs (fade+scale on desktop, slide-up on mobile).
   modal.style.display = 'flex';
+  requestAnimationFrame(() => {
+    modal.classList.add('is-open');
+  });
 }
 
 function closeDetailedReceipt() {
   const modal = document.getElementById('detailedReceiptModal');
-  if (modal) {
+  if (!modal) return;
+
+  modal.classList.remove('is-open');
+
+  // After the slide/fade transition completes, hide entirely. Also clear any
+  // transform/transition the swipe-to-dismiss handler may have left behind.
+  const finalize = () => {
     modal.style.display = 'none';
-    
-    // Restore background scrolling - restore scroll position
-    const scrollY = document.body.style.top;
-    document.body.style.position = '';
-    document.body.style.top = '';
-    document.body.style.width = '';
-    document.body.style.overflow = '';
-    
-    // Restore scroll position
-    if (scrollY) {
-      window.scrollTo(0, parseInt(scrollY || '0') * -1);
+    const content = modal.querySelector('.receipt-modal-content');
+    if (content) {
+      content.style.transform = '';
+      content.style.transition = '';
     }
+  };
+  // 360ms covers the longest transition (mobile slide = 320ms) with headroom.
+  setTimeout(finalize, 360);
+
+  // Restore background scrolling - restore scroll position
+  const scrollY = document.body.style.top;
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.width = '';
+  document.body.style.overflow = '';
+
+  if (scrollY) {
+    window.scrollTo(0, parseInt(scrollY || '0') * -1);
   }
+}
+
+// Mobile drawer: drag down on the content to dismiss. The handler is no-op on
+// desktop (>768px) and when the content is scrolled past the top, so it never
+// fights normal scrolling.
+function attachReceiptDrawerSwipe() {
+  const modal = document.getElementById('detailedReceiptModal');
+  if (!modal) return;
+  const content = modal.querySelector('.receipt-modal-content');
+  if (!content) return;
+
+  let startY = null;
+  let dy = 0;
+  let tracking = false;
+
+  content.addEventListener('touchstart', (e) => {
+    if (window.innerWidth > 768) return;
+    if (content.scrollTop > 0) return;
+    if (e.touches.length !== 1) return;
+    startY = e.touches[0].clientY;
+    dy = 0;
+    tracking = true;
+    content.style.transition = 'none';
+  }, { passive: true });
+
+  content.addEventListener('touchmove', (e) => {
+    if (!tracking || startY === null) return;
+    dy = e.touches[0].clientY - startY;
+    content.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+  }, { passive: true });
+
+  const release = () => {
+    if (!tracking) return;
+    tracking = false;
+    content.style.transition = '';
+    if (dy > 90) {
+      closeDetailedReceipt();
+    } else {
+      content.style.transform = '';
+    }
+    startY = null;
+    dy = 0;
+  };
+
+  content.addEventListener('touchend', release, { passive: true });
+  content.addEventListener('touchcancel', release, { passive: true });
 }
 
 
