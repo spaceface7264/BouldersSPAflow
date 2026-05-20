@@ -19482,6 +19482,11 @@ async function handleCheckout() {
     // Coupon-driven zero totals are different — the payment link reflects the pre-coupon amount and would
     // show the user a full-price payment page, so we finalize client-side instead.
     if (isFreeTrialSelected && hasTrustedPaymentRedirect) {
+      if (isPaymentIframeSpikeEnabled()) {
+        console.log('[paymentSpike] Free-trial path → opening iframe modal instead of redirect');
+        openPaymentIframeSpike(effectivePaymentLink);
+        return;
+      }
       console.log(
         '[checkout] Free-trial flow: redirecting via payment link so backend/PSP can register completion',
       );
@@ -19524,6 +19529,11 @@ async function handleCheckout() {
       state.checkoutInProgress = false;
       setCheckoutLoadingState(false);
     } else if (hasTrustedPaymentRedirect) {
+      if (isPaymentIframeSpikeEnabled()) {
+        console.log('[paymentSpike] Main path → opening iframe modal instead of redirect');
+        openPaymentIframeSpike(effectivePaymentLink);
+        return;
+      }
       // Redirect to payment provider (never to Assently)
       console.log('[checkout] ✅ Valid payment link found, redirecting to payment provider...');
       console.log('[checkout] Payment link URL:', effectivePaymentLink);
@@ -19593,6 +19603,127 @@ async function handleCheckout() {
     updateFAQVisibility(); // Show FAQ again if checkout fails
     setCheckoutLoadingState(false);
   }
+}
+
+// ---------------------------------------------------------------------------
+// In-page payment (paymentv2)
+// ---------------------------------------------------------------------------
+// Embeds the BRP/Reepay payment link inside a modal iframe instead of doing
+// `window.location.replace(paymentLink)`. When the iframe navigates back to
+// our own origin (returnUrl: `?payment=return&orderId=…`), we promote that
+// URL to the top window, which hands off to the existing return-handler in
+// init() and renders confirmation/failed-payment as usual.
+//
+// Currently gated on ?paymentIframeSpike=1 (also honored via sessionStorage)
+// so it can be toggled per-session while testing.
+function isPaymentIframeSpikeEnabled() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('paymentIframeSpike') === '1') {
+      try { sessionStorage.setItem('paymentIframeSpike', '1'); } catch (_) {}
+      return true;
+    }
+    if (sessionStorage.getItem('paymentIframeSpike') === '1') return true;
+  } catch (_) {}
+  return false;
+}
+
+// Dev-only end-to-end simulator. With ?devPaymentSimulator=1 we auto-open the
+// iframe modal pointed at /dev-payment-mock.html — a synthetic PSP page that
+// mimics Reepay's return-URL handoff. Lets us validate the entire iframe →
+// return-URL → confirmation pipeline without depending on the real backend.
+function maybeRunDevPaymentSimulator() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('devPaymentSimulator') !== '1') return;
+    if (params.get('payment') === 'return') return; // we're on the return leg, don't reopen
+    const orderId = params.get('devOrderId') || '999999';
+    const mockUrl = `/dev-payment-mock.html?orderId=${encodeURIComponent(orderId)}&returnTo=${encodeURIComponent(window.location.pathname)}`;
+    console.log('[paymentSpike] Dev simulator active — opening modal with mock PSP:', mockUrl);
+    setTimeout(() => openPaymentIframeSpike(mockUrl), 100);
+  } catch (e) {
+    console.warn('[paymentSpike] Dev simulator failed to start', e);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', maybeRunDevPaymentSimulator);
+} else {
+  maybeRunDevPaymentSimulator();
+}
+
+function openPaymentIframeSpike(paymentLink) {
+  document.getElementById('paymentIframeModal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'paymentIframeModal';
+  overlay.className = 'payment-iframe-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Payment');
+
+  const sheet = document.createElement('div');
+  sheet.className = 'payment-iframe-sheet';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'payment-iframe-close';
+  closeBtn.setAttribute('aria-label', 'Close payment');
+  closeBtn.innerHTML = '&times;';
+
+  const iframe = document.createElement('iframe');
+  iframe.className = 'payment-iframe-frame';
+  iframe.setAttribute('allow', 'payment *; publickey-credentials-get *');
+  iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+  iframe.src = paymentLink;
+
+  const cleanup = () => {
+    document.removeEventListener('keydown', onKeydown);
+    overlay.remove();
+  };
+
+  const dismiss = () => {
+    cleanup();
+    state.checkoutInProgress = false;
+    setCheckoutLoadingState(false);
+  };
+
+  const onKeydown = (e) => {
+    if (e.key === 'Escape') dismiss();
+  };
+
+  closeBtn.addEventListener('click', dismiss);
+  document.addEventListener('keydown', onKeydown);
+
+  // On every iframe navigation, check whether it has landed back on our own
+  // origin (the returnUrl). If so, promote that URL to the top window so the
+  // existing init() return-handler picks it up and renders confirmation.
+  iframe.addEventListener('load', () => {
+    let innerHref = null;
+    try {
+      innerHref = iframe.contentWindow && iframe.contentWindow.location.href;
+    } catch (_) {
+      // Cross-origin (still on PSP) — nothing to do.
+      return;
+    }
+    if (!innerHref) return;
+    try {
+      const url = new URL(innerHref);
+      if (url.origin !== window.location.origin) return;
+      if (url.searchParams.get('payment') !== 'return') return;
+    } catch (_) {
+      return;
+    }
+    cleanup();
+    // Replace, not assign, so the back button doesn't bring the user into the
+    // iframe-internal step they just completed.
+    window.location.replace(innerHref);
+  });
+
+  sheet.appendChild(closeBtn);
+  sheet.appendChild(iframe);
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
 }
 
 function buildCheckoutPayload() {
