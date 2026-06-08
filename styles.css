@@ -7661,6 +7661,56 @@ main {
     text-decoration: underline;
 }
 
+/* =================================
+   Cookiebot consent banner (uc.js) overrides
+   The banner DOM is injected by Cookiebot into our page, so our global styles
+   leak into it and Cookiebot's own sizing renders oversized on mobile (giant
+   "Samtykke" title and full-height "Tillad alle" buttons). Cookiebot styles
+   via ID selectors, so we override with matching ID specificity + !important.
+   This only constrains sizing/spacing — layout and colors stay as configured
+   in the Cookiebot dashboard.
+   ================================= */
+#CybotCookiebotDialog {
+    font-size: var(--font-size-base);
+    box-sizing: border-box;
+}
+
+#CybotCookiebotDialog #CybotCookiebotDialogBodyContentTitle {
+    font-size: var(--font-size-xl) !important;   /* 24px */
+    line-height: 1.25 !important;
+    margin: 0 0 8px !important;
+}
+
+#CybotCookiebotDialog #CybotCookiebotDialogBodyContentText {
+    font-size: var(--font-size-sm) !important;   /* 14px */
+    line-height: 1.5 !important;
+}
+
+#CybotCookiebotDialog .CybotCookiebotDialogBodyButton,
+#CybotCookiebotDialog #CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll,
+#CybotCookiebotDialog #CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection,
+#CybotCookiebotDialog #CybotCookiebotDialogBodyButtonDecline {
+    font-size: var(--font-size-base) !important;  /* 16px */
+    line-height: 1.3 !important;
+    padding: 12px 18px !important;
+    min-height: 0 !important;
+    height: auto !important;
+}
+
+@media (max-width: 768px) {
+    #CybotCookiebotDialog #CybotCookiebotDialogBodyContentTitle {
+        font-size: var(--font-size-lg) !important;   /* 20px */
+    }
+
+    #CybotCookiebotDialog .CybotCookiebotDialogBodyButton,
+    #CybotCookiebotDialog #CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll,
+    #CybotCookiebotDialog #CybotCookiebotDialogBodyLevelButtonLevelOptinAllowallSelection,
+    #CybotCookiebotDialog #CybotCookiebotDialogBodyButtonDecline {
+        font-size: var(--font-size-sm) !important;   /* 14px */
+        padding: 11px 14px !important;
+    }
+}
+
 /* Footer Bottom */
 .footer-bottom {
     max-width: 1200px;
@@ -9254,7 +9304,8 @@ main {
         margin-bottom: 16px;
     }
 
-    h1 {
+    /* :not(...) keeps this from leaking into the injected Cookiebot banner. */
+    h1:not([id^="Cybot"]) {
         font-size: var(--font-size-2xl);
     }
 
