@@ -58,6 +58,175 @@ function getTodayLocalDateString() {
   return `${year}-${month}-${day}`;
 }
 
+/** BRP API3 CurrencyOut.amount is always in minor units (øre). */
+function extractCurrencyOutKr(currencyOut) {
+  if (currencyOut == null) return 0;
+  if (typeof currencyOut === 'number') {
+    return roundToHalfKrone(currencyOut > 10000 ? currencyOut / 100 : currencyOut);
+  }
+  if (typeof currencyOut === 'object') {
+    if (typeof currencyOut.amount === 'number') {
+      return roundToHalfKrone(currencyOut.amount / 100);
+    }
+    const nested = currencyOut.value ?? currencyOut.discount;
+    if (nested != null) return extractCurrencyOutKr(nested);
+  }
+  return 0;
+}
+
+/** Parse coupon discount from CurrencyOut, item.coupon, or order response. */
+function extractCouponDiscountKr(source) {
+  if (source == null) return 0;
+  if (typeof source === 'number') return extractCurrencyOutKr(source);
+  if (typeof source === 'object') {
+    if (source.couponDiscount != null || source.price?.couponDiscount != null) {
+      return extractCurrencyOutKr(source.couponDiscount ?? source.price?.couponDiscount);
+    }
+    if (source.discount != null && source.name != null) {
+      return extractCurrencyOutKr(source.discount);
+    }
+    return extractCurrencyOutKr(source);
+  }
+  return 0;
+}
+
+function calculateOrderCouponDiscountKr(order, subtotalForFallback = 0) {
+  const fromCouponField = extractCouponDiscountKr(
+    order?.couponDiscount ?? order?.price?.couponDiscount
+  );
+  if (fromCouponField > 0) return fromCouponField;
+
+  const price = order?.price;
+  if (price && subtotalForFallback > 0) {
+    const orderTotalKr = extractCurrencyOutKr(price.amount ?? price.total ?? price.leftToPay);
+    if (orderTotalKr > 0 && orderTotalKr < subtotalForFallback) {
+      return roundToHalfKrone(subtotalForFallback - orderTotalKr);
+    }
+  }
+  return 0;
+}
+
+function capCouponDiscountKr(discountAmount, subtotal) {
+  if (discountAmount > subtotal && subtotal > 0) {
+    console.warn('[Discount] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
+    return subtotal;
+  }
+  return discountAmount;
+}
+
+function normalizeCartProductId(id) {
+  if (id == null) return null;
+  if (typeof id === 'string' && id.startsWith('punch-')) {
+    return parseInt(id.replace('punch-', ''), 10);
+  }
+  return id;
+}
+
+function findOrderItemForCartItem(item) {
+  const order = state.fullOrder;
+  if (!order || !item) return null;
+
+  const productId = normalizeCartProductId(item.productId ?? item.id);
+  const matchProduct = (orderItem) => {
+    const pid = orderItem?.product?.id;
+    return pid === productId || String(pid) === String(productId);
+  };
+
+  if (item.type === 'membership') {
+    return order.subscriptionItems?.find(matchProduct) ?? null;
+  }
+  if (item.type === 'value-card') {
+    return order.valueCardItems?.find(matchProduct) ?? null;
+  }
+  if (item.type === 'addon') {
+    return order.articleItems?.find(matchProduct) ?? null;
+  }
+  return null;
+}
+
+/** Per-item coupon from BRP order line (product-specific); 0 when coupon does not apply. */
+function getCartItemCouponDiscountKr(item) {
+  if (!state.discountApplied) return 0;
+  const orderItem = findOrderItemForCartItem(item);
+  if (!orderItem?.coupon?.discount) return 0;
+  return extractCurrencyOutKr(orderItem.coupon.discount);
+}
+
+function getCartItemDisplayPrices(item) {
+  const originalPrice = item.amount;
+  const itemDiscount = getCartItemCouponDiscountKr(item);
+  const displayPrice = itemDiscount > 0
+    ? Math.max(0, roundToHalfKrone(originalPrice - itemDiscount))
+    : originalPrice;
+  return { originalPrice, displayPrice, itemDiscount };
+}
+
+function renderCartItemPriceElement(priceEl, item) {
+  if (!priceEl) return;
+  const { originalPrice, displayPrice, itemDiscount } = getCartItemDisplayPrices(item);
+  const roundedOriginal = roundToHalfKrone(originalPrice);
+  const roundedDisplay = roundToHalfKrone(displayPrice);
+
+  if (itemDiscount > 0 && roundedDisplay !== roundedOriginal) {
+    priceEl.classList.add('cart-price-discounted');
+    priceEl.innerHTML = sanitizeHTML(
+      `<span class="cart-price-old">${formatPriceHalfKrone(roundedOriginal)} kr.</span><span class="cart-price-new">${formatPriceHalfKrone(roundedDisplay)} kr.</span>`
+    );
+    return;
+  }
+  priceEl.classList.remove('cart-price-discounted');
+  priceEl.textContent = formatPriceHalfKrone(roundedDisplay) + ' kr.';
+}
+
+function updateDiscountFormControls() {
+  const entry = DOM.discountFormEntry || DOM.discountForm?.querySelector('.discount-form-entry');
+  const chip = DOM.discountAppliedChip || DOM.discountForm?.querySelector('.discount-applied-chip');
+  const codeEl = DOM.discountAppliedCode || chip?.querySelector('.discount-applied-code');
+  const removeLink = DOM.removeDiscountBtn || chip?.querySelector('.discount-remove-link');
+
+  if (state.discountApplied && state.discountCode) {
+    if (entry) entry.hidden = true;
+    if (chip) {
+      chip.hidden = false;
+      if (codeEl) codeEl.textContent = state.discountCode;
+    }
+    if (removeLink) {
+      removeLink.disabled = false;
+      removeLink.textContent = t('button.removeCoupon');
+    }
+    if (DOM.applyDiscountBtn) {
+      DOM.applyDiscountBtn.disabled = false;
+      DOM.applyDiscountBtn.textContent = t('button.apply');
+    }
+    return;
+  }
+
+  if (entry) entry.hidden = false;
+  if (chip) chip.hidden = true;
+  if (DOM.applyDiscountBtn) {
+    DOM.applyDiscountBtn.disabled = false;
+    DOM.applyDiscountBtn.textContent = t('button.apply');
+  }
+  if (removeLink) {
+    removeLink.disabled = false;
+    removeLink.textContent = t('button.removeCoupon');
+  }
+}
+
+function resetLocalDiscountState() {
+  state.discountCode = null;
+  state.discountApplied = false;
+  state.totals.discountAmount = 0;
+  if (DOM.discountInput) {
+    DOM.discountInput.disabled = false;
+    DOM.discountInput.value = '';
+    DOM.discountInput.style.opacity = '';
+    DOM.discountInput.style.borderColor = '';
+    DOM.discountInput.style.backgroundColor = '';
+  }
+  updateDiscountFormControls();
+}
+
 const debugEnabled = window.DEBUG_LOGS === true;
 const originalConsoleLog = console.log.bind(console);
 const originalConsoleWarn = console.warn.bind(console);
@@ -2378,6 +2547,16 @@ class OrderAPI {
     const orderPriceAmount = orderData?.price?.amount || 0;
     const orderPriceInCents = typeof orderPriceAmount === 'object' ? orderPriceAmount.amount : orderPriceAmount;
     
+    // The order price from BRP already has any coupon discount deducted, while
+    // expectedPrice is calculated coupon-free. Add the discount back before
+    // comparing, otherwise applying a coupon makes verification fail and the
+    // UI overrides the (correct) discounted backend price.
+    const rawCouponDiscount = orderData?.couponDiscount;
+    const couponDiscountInCents = typeof rawCouponDiscount === 'object'
+      ? (rawCouponDiscount?.amount || 0)
+      : (rawCouponDiscount || 0);
+    const effectiveOrderPriceInCents = orderPriceInCents + couponDiscountInCents;
+    
     // Check if start date is correct (should be today or tomorrow at most)
     let daysUntilStart = 0;
     if (initialPaymentPeriod?.start) {
@@ -2390,7 +2569,7 @@ class OrderAPI {
     // Check if price is correct
     let priceCorrect = false;
     const priceDifference = expectedPrice
-      ? Math.abs(orderPriceInCents - expectedPrice.amountInCents)
+      ? Math.abs(effectiveOrderPriceInCents - expectedPrice.amountInCents)
       : null;
     if (expectedPrice) {
       // Allow up to 1 DKK difference to account for backend rounding
@@ -2740,79 +2919,56 @@ class OrderAPI {
         }
       }
       console.log('[Discount] Apply coupon response:', data);
-      
-      // Extract couponDiscount from response
-      // Response is an Order object with couponDiscount field
-      const couponDiscount = data?.couponDiscount || data?.price?.couponDiscount || null;
-      let discountAmount = 0;
-      
-      console.log('[Discount] Full API response structure:', {
-        hasCouponDiscount: !!data?.couponDiscount,
-        hasPriceCouponDiscount: !!data?.price?.couponDiscount,
-        couponDiscountType: typeof couponDiscount,
-        couponDiscountValue: couponDiscount,
-        priceObject: data?.price ? Object.keys(data.price) : null,
-        orderTotal: data?.price?.total,
-        orderLeftToPay: data?.price?.leftToPay,
-      });
-      
-      if (couponDiscount) {
-        console.log('[Discount] Raw coupon discount:', couponDiscount);
-        
-        if (typeof couponDiscount === 'object') {
-          // Try different possible fields - avoid 'total' as it might be order total, not discount
-          discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-          
-          // If amount is in cents (common in APIs), convert to DKK
-          if (discountAmount > 10000) {
-            console.log('[Discount] Large amount detected, might be in cents:', discountAmount);
-            discountAmount = discountAmount / 100;
-            console.log('[Discount] Converted from cents:', discountAmount);
-          }
-          // Round to half krone
-          discountAmount = roundToHalfKrone(discountAmount);
-        } else if (typeof couponDiscount === 'number') {
-          discountAmount = couponDiscount;
-          
-          // If amount is in cents, convert to DKK
-          if (discountAmount > 10000) {
-            console.log('[Discount] Large number detected, might be in cents:', discountAmount);
-            discountAmount = discountAmount / 100;
-            console.log('[Discount] Converted from cents:', discountAmount);
-          }
-          // Round to half krone
-          discountAmount = roundToHalfKrone(discountAmount);
-        }
-      }
-      
-      // Fallback: Calculate discount from price difference if couponDiscount extraction failed
-      if (!discountAmount || discountAmount === 0) {
-        console.log('[Discount] Attempting to calculate discount from price difference...');
-        const orderPrice = data?.price;
-        if (orderPrice) {
-          // Get subtotal from current state
-          const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-          const newTotal = orderPrice.total || orderPrice.leftToPay || 0;
-          
-          // Convert to DKK if in cents
-          const newTotalDKK = newTotal > 10000 ? newTotal / 100 : newTotal;
-          
-          if (newTotalDKK < subtotal && subtotal > 0) {
-            discountAmount = roundToHalfKrone(subtotal - newTotalDKK);
-            console.log('[Discount] Calculated from price difference:', discountAmount, '(subtotal:', subtotal, 'new total:', newTotalDKK, ')');
-          }
-        }
-      }
-      
+
+      const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+      const discountAmount = calculateOrderCouponDiscountKr(data, subtotal);
       console.log('[Discount] Final extracted discountAmount:', discountAmount);
-      
+
       return {
         ...data,
-        discountAmount: discountAmount,
+        discountAmount,
       };
     } catch (error) {
       console.error('[Discount] Apply coupon error:', error);
       throw error;
+    }
+  }
+
+  // Remove coupon from order - DELETE /api/ver3/orders/{order}/coupons/{couponName}
+  async removeDiscountCode(orderId, discountCode) {
+    const encodedCoupon = encodeURIComponent(discountCode);
+    let url;
+    if (this.useProxy) {
+      url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/ver3/orders/${orderId}/coupons/${encodedCoupon}`,
+      });
+    } else if (this.isDevelopment) {
+      url = `/api/ver3/orders/${orderId}/coupons/${encodedCoupon}`;
+    } else {
+      url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons/${encodedCoupon}`;
+    }
+
+    console.log('[Discount] Removing coupon:', discountCode, 'from order:', orderId);
+
+    const accessToken = typeof window.getAccessToken === 'function'
+      ? window.getAccessToken()
+      : null;
+
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    };
+
+    try {
+      return await requestJson({ url, method: 'DELETE', headers });
+    } catch (error) {
+      const payloadText = typeof error.payload === 'string'
+        ? error.payload
+        : JSON.stringify(error.payload);
+      console.error(`[Discount] Remove coupon error (${error.status || 'unknown'}):`, payloadText || error);
+      throw new Error(`Remove coupon failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
     }
   }
 }
@@ -6284,7 +6440,7 @@ const translations = {
     'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen.',
     'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
     'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger', 'button.select': 'Vælg', 'button.addToCart': 'Tilføj til kurv', 'button.added': 'Tilføjet!',
-    'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
+    'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'button.removeCoupon': 'Fjern', 'gym.nearest': 'Nærmeste',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
     'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
@@ -6305,7 +6461,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.discount.removed': 'Rabatkode fjernet.', 'cart.discount.removeFailed': 'Kunne ikke fjerne rabatkoden. Prøv igen.', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
@@ -6562,7 +6718,7 @@ const translations = {
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
     'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
     'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit', 'button.select': 'Select', 'button.addToCart': 'Add to cart', 'button.added': 'Added!',
-    'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
+    'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'button.removeCoupon': 'Remove', 'gym.nearest': 'Nearest',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
     'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
@@ -6583,7 +6739,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
@@ -6822,7 +6978,7 @@ const translations = {
     'main.subtitle.step2': 'Wählen Sie Ihren Zugangstyp', 'main.subtitle.step2.secondary': 'Wählen Sie Mitgliedschaft, wenn Sie mindestens einmal im Monat klettern.',
     'main.subtitle.step3': 'Möchten Sie Pommes dazu?', 'main.subtitle.step4': 'Senden',
     'button.next': 'Weiter', 'button.back': 'Zurück', 'button.continue': 'Fortsetzen', 'button.skip': 'Überspringen', 'button.complete': 'Fertig', 'button.edit': 'Bearbeiten', 'button.select': 'Auswählen', 'button.addToCart': 'In den Warenkorb', 'button.added': 'Hinzugefügt!',
-    'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'gym.nearest': 'Nächste',
+    'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'button.removeCoupon': 'Entfernen', 'gym.nearest': 'Nächste',
     'form.email': 'E-Mail*', 'form.email.placeholder': 'E-Mail', 'form.password': 'Passwort*', 'form.password.placeholder': 'Passwort',
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
     'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
@@ -6862,7 +7018,7 @@ const translations = {
     'faq.firstclimb.howToUse.a': 'Komm einfach innerhalb des Monats vorbei. Gib dem Personal deine Telefonnummer oder E-Mail, dann aktivieren sie deine Tageskarte und händigen dir Leihschuhe und Chalk aus.',
     'faq.firstclimb.afterDay.q': 'Was passiert nach meinem ersten Tag?',
     'faq.firstclimb.afterDay.a': 'Bleib dran! Du kannst direkt vor Ort auf eine Mitgliedschaft, ein 15-Tage-Ticket oder eine Stempelkarte upgraden — oder online, wenn du bereit bist.',
-    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.discount.removed': 'Rabattcode entfernt.', 'cart.discount.removeFailed': 'Rabattcode konnte nicht entfernt werden. Bitte versuchen Sie es erneut.', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
@@ -7289,6 +7445,10 @@ function updateFormTranslations() {
   if (applyDiscountBtn && applyDiscountBtn.hasAttribute('data-i18n-key')) {
     applyDiscountBtn.textContent = t('button.apply');
   }
+  const removeDiscountBtn = document.querySelector('.discount-remove-link');
+  if (removeDiscountBtn && removeDiscountBtn.hasAttribute('data-i18n-key')) {
+    removeDiscountBtn.textContent = t('button.removeCoupon');
+  }
   
   // Forgot password modal
   const resetPasswordTitle = document.querySelector('#forgotPasswordModal .info-section-title[data-i18n-key="form.resetPassword"]');
@@ -7331,10 +7491,6 @@ function updateCartTranslations() {
   }
   
   // Discount section
-  const discountToggle = document.querySelector('.discount-toggle span[data-i18n-key="cart.discount"]');
-  if (discountToggle) {
-    discountToggle.textContent = t('cart.discount');
-  }
   
   const discountInput = document.querySelector('.discount-input[data-i18n-placeholder]');
   if (discountInput) {
@@ -8129,10 +8285,13 @@ function cacheDom() {
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
   DOM.privacyConsent = document.getElementById('privacyConsent');
   DOM.termsConsent = document.getElementById('termsConsent');
-  DOM.discountToggle = document.querySelector('.discount-toggle');
   DOM.discountForm = document.querySelector('.discount-form');
+  DOM.discountFormEntry = document.querySelector('.discount-form-entry');
+  DOM.discountAppliedChip = document.querySelector('.discount-applied-chip');
+  DOM.discountAppliedCode = document.querySelector('.discount-applied-code');
   DOM.discountInput = document.querySelector('.discount-input');
   DOM.applyDiscountBtn = document.querySelector('.apply-discount-btn');
+  DOM.removeDiscountBtn = document.querySelector('.discount-remove-link');
   DOM.discountDisplay = document.querySelector('[data-discount-display]');
   DOM.skipAddonsBtn = document.getElementById('skipAddons');
   DOM.backFromAddonsBtn = document.getElementById('backFromAddons');
@@ -8228,8 +8387,9 @@ function cacheTemplates() {
 function setupEventListeners() {
   DOM.nextBtn?.addEventListener('click', nextStep);
   DOM.prevBtn?.addEventListener('click', prevStep);
-  DOM.discountToggle?.addEventListener('click', toggleDiscountForm);
   DOM.applyDiscountBtn?.addEventListener('click', handleApplyDiscount);
+  DOM.removeDiscountBtn?.addEventListener('click', handleRemoveDiscount);
+  updateDiscountFormControls();
   DOM.discountInput?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       handleApplyDiscount();
@@ -13897,21 +14057,6 @@ function handlePaymentChange(event) {
   }
 }
 
-function toggleDiscountForm() {
-  if (!DOM.discountForm) return;
-  const isVisible = DOM.discountForm.style.display !== 'none';
-  DOM.discountForm.style.display = isVisible ? 'none' : 'flex';
-  DOM.discountToggle?.classList.toggle('active', !isVisible);
-  
-  // Focus on input field when form is shown
-  if (!isVisible && DOM.discountInput) {
-    // Use setTimeout to ensure the form is visible before focusing
-    setTimeout(() => {
-      DOM.discountInput.focus();
-    }, 0);
-  }
-}
-
 // Postal code auto-fill functionality
 let postalCodeLookupTimers = {
   customer: null,
@@ -14446,78 +14591,15 @@ async function handleApplyDiscount() {
     console.log('[Discount] Applying discount code:', discountCode, 'to order:', orderIdToUse);
     const response = await orderAPI.applyDiscountCode(orderIdToUse, discountCode);
     console.log('[Discount] API response received:', response);
-    
-    // Extract discount information from response
-    // API returns Order object with couponDiscount field
-    // couponDiscount can be an object { amount, currency } or a number
-    const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
-    let discountAmount = 0;
-    
-    console.log('[Discount] Extracting discount from response:', {
-      couponDiscount,
-      couponDiscountType: typeof couponDiscount,
-      responseKeys: Object.keys(response || {}),
-    });
-    
-    if (couponDiscount) {
-      if (typeof couponDiscount === 'object') {
-        // Avoid 'total' field as it might be order total, not discount
-        discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-        
-        // If amount is in cents, convert to DKK
-        if (discountAmount > 10000) {
-          console.log('[Discount] Large discountAmount detected, converting from cents:', discountAmount);
-          discountAmount = discountAmount / 100;
-        }
-      } else if (typeof couponDiscount === 'number') {
-        discountAmount = couponDiscount;
-        
-        // If amount is in cents, convert to DKK
-        if (discountAmount > 10000) {
-          console.log('[Discount] Large discountAmount detected, converting from cents:', discountAmount);
-          discountAmount = discountAmount / 100;
-        }
-      }
-    }
-    
-    // Also check if discountAmount was already extracted by the API method
-    if (!discountAmount && response?.discountAmount) {
-      discountAmount = response.discountAmount;
-      
-      // If amount is in cents, convert to DKK
-      if (discountAmount > 10000) {
-        console.log('[Discount] Large discountAmount from response, converting from cents:', discountAmount);
-        discountAmount = discountAmount / 100;
-      }
-    }
-    
-    // Calculate discount from price difference if needed
-    if (!discountAmount && response?.price) {
-      const originalTotal = state.totals.subtotal || state.totals.cartTotal || 0;
-      let newTotal = response.price.total || response.price.leftToPay || 0;
-      
-      // Convert to DKK if in cents
-      if (newTotal > 10000) {
-        newTotal = newTotal / 100;
-      }
-      
-      if (newTotal < originalTotal && originalTotal > 0) {
-        discountAmount = originalTotal - newTotal;
-        console.log('[Discount] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-      }
-    }
-    
-    // Ensure subtotal is calculated before validating discount
+
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
-      updateCartSummary(); // This will calculate subtotal using API data
+      updateCartSummary();
     }
-    
-    // Validate discount amount - ensure it doesn't exceed subtotal
+
     const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-    if (discountAmount > subtotal && subtotal > 0) {
-      console.warn('[Discount] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
-      discountAmount = subtotal;
-    }
+    let discountAmount = response?.discountAmount ?? calculateOrderCouponDiscountKr(response, subtotal);
+    discountAmount = capCouponDiscountKr(discountAmount, subtotal);
+    const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
     
     if (discountAmount > 0) {
       // Success - apply discount
@@ -14533,8 +14615,14 @@ async function handleApplyDiscount() {
         // Merge updated price data into existing fullOrder
         state.fullOrder.price = response.price || state.fullOrder.price;
         state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
-        if (response.subscriptionItems && response.subscriptionItems.length > 0) {
+        if (response.subscriptionItems?.length) {
           state.fullOrder.subscriptionItems = response.subscriptionItems;
+        }
+        if (response.valueCardItems?.length) {
+          state.fullOrder.valueCardItems = response.valueCardItems;
+        }
+        if (response.articleItems?.length) {
+          state.fullOrder.articleItems = response.articleItems;
         }
       }
       
@@ -14616,11 +14704,7 @@ async function handleApplyDiscount() {
         DOM.cartTotal.offsetHeight; // Trigger reflow
       }
       
-      // Disable input and button after successful application
-      DOM.discountInput.disabled = true;
-      DOM.discountInput.style.opacity = '0.6';
-      DOM.discountInput.style.borderColor = '#10B981';
-      DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
+      updateDiscountFormControls();
     } else {
       // Check if coupon was actually applied to the order (even if discountAmount is 0)
       // The API might return success but with 0 discount (e.g., for future use coupons)
@@ -14654,10 +14738,7 @@ async function handleApplyDiscount() {
           }, 2000);
         });
         
-        DOM.discountInput.disabled = true;
-        DOM.discountInput.style.opacity = '0.6';
-        DOM.discountInput.style.borderColor = '#10B981';
-        DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
+        updateDiscountFormControls();
       } else {
         throw new Error('Invalid coupon code or no discount applied');
       }
@@ -14677,12 +14758,9 @@ async function handleApplyDiscount() {
       return; // Exit early to avoid resetting state
     }
     
-    // Reset discount state on actual error
-    state.discountCode = null;
-    state.discountApplied = false;
-    state.totals.discountAmount = 0;
-    updateCartSummary(); // Update cart using API-based function
-    updateDiscountDisplay(); // Clear discount display
+    resetLocalDiscountState();
+    updateCartSummary();
+    updateDiscountDisplay();
     
     // Parse error message to extract error code
     let errorMessageText = 'Failed to apply coupon. Please try again.';
@@ -14722,35 +14800,76 @@ async function handleApplyDiscount() {
       }
     }, 5000);
   } finally {
-    // Reset button state
-    DOM.applyDiscountBtn.disabled = false;
-    DOM.applyDiscountBtn.textContent = 'Apply';
+    updateDiscountFormControls();
   }
 }
 
+async function handleRemoveDiscount() {
+  if (!state.discountApplied || !state.discountCode) return;
+  if (DOM.removeDiscountBtn?.disabled) return;
+
+  const discountCode = state.discountCode;
+  const orderId = state.orderId || state.fullOrder?.id;
+
+  if (DOM.removeDiscountBtn) {
+    DOM.removeDiscountBtn.disabled = true;
+    DOM.removeDiscountBtn.textContent = '...';
+  }
+
+  try {
+    if (orderId) {
+      const updatedOrder = await orderAPI.removeDiscountCode(orderId, discountCode);
+      state.fullOrder = updatedOrder;
+    }
+    resetLocalDiscountState();
+    clearDiscountMessage();
+    updateCartSummary();
+    updateDiscountDisplay();
+    updatePaymentOverview();
+    showDiscountMessage(t('cart.discount.removed', 'Discount code removed.'), 'info');
+  } catch (error) {
+    console.error('[Discount] Error removing coupon:', error);
+    showDiscountMessage(t('cart.discount.removeFailed'), 'error');
+  } finally {
+    updateDiscountFormControls();
+  }
+}
+
+let discountMessageDismissTimer = null;
+
+function dismissDiscountMessage(messageEl) {
+  if (!messageEl?.isConnected) return;
+  messageEl.classList.add('discount-message-dismiss');
+  discountMessageDismissTimer = window.setTimeout(() => {
+    messageEl.remove();
+    discountMessageDismissTimer = null;
+  }, 300);
+}
+
 function showDiscountMessage(message, type = 'info') {
-  // Remove existing message if any
   clearDiscountMessage();
-  
-  // Create message element
+
   const messageEl = document.createElement('div');
   messageEl.className = `discount-message discount-message-${type}`;
   messageEl.textContent = message;
-  
-  // Insert after discount form
+
   if (DOM.discountForm) {
     DOM.discountForm.insertAdjacentElement('afterend', messageEl);
   }
-  
-  // Auto-remove success messages after 5 seconds
-  if (type === 'success') {
-    setTimeout(() => {
-      messageEl.remove();
+
+  // Auto-dismiss transient feedback (applied + removed) after 5 seconds
+  if (type === 'success' || type === 'info') {
+    discountMessageDismissTimer = window.setTimeout(() => {
+      dismissDiscountMessage(messageEl);
     }, 5000);
   }
 }
 
 function clearDiscountMessage() {
+  if (discountMessageDismissTimer) {
+    window.clearTimeout(discountMessageDismissTimer);
+    discountMessageDismissTimer = null;
+  }
   const existingMessage = document.querySelector('.discount-message');
   if (existingMessage) {
     existingMessage.remove();
@@ -15561,34 +15680,7 @@ function renderCartItems() {
       if (item.type === 'membership') {
         priceEl.style.display = 'none';
       } else if (item.type !== 'value-card') {
-        // Calculate discounted price for this item
-        let displayPrice = item.amount;
-        let originalPrice = item.amount;
-        
-        // If discount is applied, calculate discounted price proportionally
-        if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
-          // Calculate discount ratio
-          const discountRatio = state.totals.discountAmount / state.totals.subtotal;
-          // Apply discount proportionally to this item
-          const itemDiscount = item.amount * discountRatio;
-          displayPrice = Math.max(0, item.amount - itemDiscount);
-          
-          // If discount is 100% or more, show 0
-          if (state.totals.discountAmount >= state.totals.subtotal) {
-            displayPrice = 0;
-          }
-        }
-        
-        // Display price - show discounted price if different from original
-        if (displayPrice !== originalPrice && state.discountApplied) {
-          // Show original price with strikethrough and discounted price
-          const originalText = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
-          const discountedText = formatPriceHalfKrone(roundToHalfKrone(displayPrice));
-          priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`);
-        } else {
-          // Always show price, including "0 kr." for free items
-          priceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
-        }
+        renderCartItemPriceElement(priceEl, item);
       }
     }
 
@@ -15622,15 +15714,8 @@ function renderCartItems() {
       labelSpan.className = 'cart-total-label';
       totalRow.appendChild(labelSpan);
       const priceSpan = document.createElement('span');
-      let displayPrice = item.amount;
-      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
-        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
-        const itemDiscount = item.amount * discountRatio;
-        displayPrice = Math.max(0, item.amount - itemDiscount);
-        if (state.totals.discountAmount >= state.totals.subtotal) displayPrice = 0;
-      }
-      priceSpan.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
       priceSpan.className = 'cart-item-total-price';
+      renderCartItemPriceElement(priceSpan, item);
       totalRow.appendChild(priceSpan);
       DOM.cartItems.appendChild(totalRow);
     }
@@ -15701,36 +15786,7 @@ function renderCartAddons() {
     }
     
     if (priceEl) {
-      // Calculate discounted price for this item
-      let displayPrice = item.amount;
-      let originalPrice = item.amount;
-      
-      // If discount is applied, calculate discounted price proportionally
-      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
-        // Calculate discount ratio
-        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
-        // Apply discount proportionally to this item
-        const itemDiscount = item.amount * discountRatio;
-        displayPrice = Math.max(0, item.amount - itemDiscount);
-        
-        // If discount is 100% or more, show 0
-        if (state.totals.discountAmount >= state.totals.subtotal) {
-          displayPrice = 0;
-        }
-      }
-      
-      // Round prices to half krone
-      const roundedOriginalPrice = roundToHalfKrone(originalPrice);
-      const roundedDisplayPrice = roundToHalfKrone(displayPrice);
-      
-      // Display price - show discounted price if different from original
-      if (roundedDisplayPrice !== roundedOriginalPrice && state.discountApplied) {
-        // Show original price with strikethrough and discounted price
-        priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr.</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr.</span>`);
-      } else {
-        // Always show price, including "0 kr." for free items
-        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr.';
-      }
+      renderCartItemPriceElement(priceEl, item);
     }
 
     DOM.cartAddons.appendChild(cartItem);
@@ -16941,8 +16997,10 @@ function updatePaymentOverview() {
     // - Otherwise, add addonTotal to payNowAmount (order doesn't have addons yet, or no order data)
     let total = payNowIncludesAddons ? payNowAmount : payNowAmount + addonTotal;
     
-    // Apply discount if applicable
-    if (state.discountApplied && state.totals.discountAmount > 0) {
+    // Only subtract discount when pay-now is client-calculated (order price already includes coupon)
+    const orderPriceAlreadyDiscounted = hasOrderData
+      && extractCouponDiscountKr(state.fullOrder?.couponDiscount) > 0;
+    if (state.discountApplied && state.totals.discountAmount > 0 && !orderPriceAlreadyDiscounted) {
       total = Math.max(0, total - state.totals.discountAmount);
     }
     
@@ -17024,7 +17082,15 @@ function updateDiscountDisplay() {
   const isApplyingDiscount = DOM.applyDiscountBtn && DOM.applyDiscountBtn.disabled && DOM.applyDiscountBtn.textContent.includes('Applying');
   const shouldShowPending = state.discountCode && !state.discountApplied && !isApplyingDiscount;
   
-  if (state.discountApplied || shouldShowPending) {
+  updateDiscountFormControls();
+
+  // Payment overview already shows Rabat + Betal nu — skip the duplicate breakdown box.
+  if (state.discountApplied) {
+    if (discountDisplay) discountDisplay.style.display = 'none';
+    return;
+  }
+
+  if (shouldShowPending) {
     // Ensure subtotal is calculated - but don't call updateCartTotals() to avoid recursion
     // Instead, just recalculate subtotal if needed
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
@@ -17073,33 +17139,7 @@ function updateDiscountDisplay() {
       DOM.discountDisplay = discountDisplay;
     }
     
-    // Build discount display HTML - show subtotal, discount, and final total
-    if (state.discountApplied) {
-      // Discount is applied - show actual discount amount
-      const discountValue = state.totals.discountAmount > 0
-        ? `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`
-        : formatCurrencyHalfKrone(0);
-      const discountPercent = (state.totals.subtotal > 0 && state.totals.discountAmount > 0)
-        ? (state.totals.discountAmount / state.totals.subtotal) * 100
-        : null;
-      const discountPercentText = (typeof discountPercent === 'number' && Number.isFinite(discountPercent))
-        ? `, ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(discountPercent)}%`
-        : '';
-      discountDisplay.innerHTML = sanitizeHTML(`
-        <div class="discount-row">
-          <span class="discount-label">Subtotal:</span>
-          <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
-        </div>
-        <div class="discount-row discount-applied">
-          <span class="discount-label">Discount (${state.discountCode}${discountPercentText}):</span>
-          <span class="discount-value">${discountValue}</span>
-        </div>
-        <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
-          <span class="discount-label" style="font-weight: bold;">Total:</span>
-          <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
-        </div>
-      `);
-    } else if (state.discountCode && !state.discountApplied) {
+    if (state.discountCode && !state.discountApplied) {
       // Discount code entered but not yet applied (pending) - show subtotal only
       discountDisplay.innerHTML = sanitizeHTML(`
         <div class="discount-row">
@@ -17199,21 +17239,12 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   state.paymentLinkGenerated = false;
   state.checkoutInProgress = false;
   state.billingPeriod = '';
-  state.totals.discountAmount = 0;
+  resetLocalDiscountState();
   state.totals.payNowAmount = 0;
-  state.discountApplied = false;
-  state.discountCode = null;
 
   // Re-enable logout button and reset checkout button if they were disabled during checkout
   setCheckoutLoadingState(false);
 
-  if (DOM.discountInput) {
-    DOM.discountInput.disabled = false;
-    DOM.discountInput.value = '';
-    DOM.discountInput.style.opacity = '';
-    DOM.discountInput.style.borderColor = '';
-    DOM.discountInput.style.backgroundColor = '';
-  }
   clearDiscountMessage();
   updateDiscountDisplay();
 
@@ -18094,25 +18125,14 @@ async function handleCheckout() {
                 const existingCouponDiscount = orderCheck?.couponDiscount || orderCheck?.price?.couponDiscount;
                 if (existingCouponDiscount) {
                   console.log('[checkout] ✅ Discount already exists on order, verifying amount...');
-                  // Discount already exists, verify it matches our expected amount
-                  let existingDiscountAmount = 0;
-                  if (typeof existingCouponDiscount === 'object') {
-                    existingDiscountAmount = existingCouponDiscount.amount || existingCouponDiscount.value || existingCouponDiscount.discount || 0;
-                    if (existingDiscountAmount > 10000) existingDiscountAmount = existingDiscountAmount / 100;
-                  } else if (typeof existingCouponDiscount === 'number') {
-                    existingDiscountAmount = existingCouponDiscount;
-                    if (existingDiscountAmount > 10000) existingDiscountAmount = existingDiscountAmount / 100;
-                  }
-                  
-                  // Use the discount amount from the order if it exists
-                  // Also get the actual order total to ensure we have the correct price
-                  let orderTotalFromAPI = 0;
-                  const orderPrice = orderCheck?.price;
-                  if (orderPrice) {
-                    orderTotalFromAPI = orderPrice.total?.amount || orderPrice.total || orderPrice.leftToPay?.amount || orderPrice.leftToPay || 0;
-                    if (orderTotalFromAPI > 10000) orderTotalFromAPI = orderTotalFromAPI / 100;
-                  }
-                  
+                  const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+                  const existingDiscountAmount = roundToHalfKrone(
+                    calculateOrderCouponDiscountKr(orderCheck, subtotal)
+                  );
+                  const orderTotalFromAPI = extractCurrencyOutKr(
+                    orderCheck?.price?.amount ?? orderCheck?.price?.total ?? orderCheck?.price?.leftToPay
+                  );
+
                   if (existingDiscountAmount > 0 || orderTotalFromAPI > 0) {
                     console.log('[checkout] Using existing discount amount from order:', existingDiscountAmount);
                     console.log('[checkout] Order total from API:', orderTotalFromAPI);
@@ -18139,42 +18159,12 @@ async function handleCheckout() {
                 console.log('[checkout] Discount not found on order, applying now...');
                 const discountResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
                 console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
-              
-                // Extract discount from couponDiscount field
-                const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
-                let discountAmount = 0;
-              
-              if (couponDiscount) {
-                if (typeof couponDiscount === 'object') {
-                  discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
-                } else if (typeof couponDiscount === 'number') {
-                  discountAmount = couponDiscount;
-                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
-                }
-              }
-              
-              if (!discountAmount && discountResponse?.discountAmount) {
-                discountAmount = discountResponse.discountAmount;
-                if (discountAmount > 10000) discountAmount = discountAmount / 100;
-              }
-              
-              // Calculate from price difference if needed
-              if (!discountAmount && discountResponse?.price) {
-                const originalTotal = state.totals.subtotal || state.totals.cartTotal || 0;
-                let newTotal = discountResponse.price.total || discountResponse.price.leftToPay || 0;
-                if (newTotal > 10000) newTotal = newTotal / 100;
-                if (newTotal < originalTotal && originalTotal > 0) {
-                  discountAmount = originalTotal - newTotal;
-                }
-              }
-              
-              // Cap discount at subtotal
-              const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-              if (discountAmount > subtotal && subtotal > 0) {
-                discountAmount = subtotal;
-              }
-              
+
+                const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+                let discountAmount = discountResponse?.discountAmount
+                  ?? calculateOrderCouponDiscountKr(discountResponse, subtotal);
+                discountAmount = roundToHalfKrone(capCouponDiscountKr(discountAmount, subtotal));
+
               if (discountAmount > 0) {
                 state.discountCode = discountCodeToApply;
                 state.discountApplied = true;
@@ -19227,109 +19217,23 @@ async function handleCheckout() {
             
             console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
             
-            // Extract discount from couponDiscount field
-            // API returns Order object with couponDiscount field
-            const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
-            let discountAmount = 0;
-            
-            console.log('[checkout] Raw couponDiscount:', couponDiscount);
-            console.log('[checkout] couponDiscount type:', typeof couponDiscount);
-            
-            if (couponDiscount) {
-              if (typeof couponDiscount === 'object') {
-                // Avoid 'total' field as it might be order total, not discount
-                discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-                
-                // If amount is in cents, convert to DKK
-                if (discountAmount > 10000) {
-                  console.log('[checkout] Large discountAmount detected, converting from cents:', discountAmount);
-                  discountAmount = discountAmount / 100;
-                }
-                
-                console.log('[checkout] Extracted discountAmount from object:', discountAmount);
-              } else if (typeof couponDiscount === 'number') {
-                discountAmount = couponDiscount;
-                
-                // If amount is in cents, convert to DKK
-                if (discountAmount > 10000) {
-                  console.log('[checkout] Large discountAmount detected, converting from cents:', discountAmount);
-                  discountAmount = discountAmount / 100;
-                }
-                
-                console.log('[checkout] Extracted discountAmount from number:', discountAmount);
-              }
-            }
-            
-            // Also check if discountAmount was already extracted by the API method
-            if (!discountAmount && discountResponse?.discountAmount) {
-              discountAmount = discountResponse.discountAmount;
-              
-              // If amount is in cents, convert to DKK
-              if (discountAmount > 10000) {
-                console.log('[checkout] Large discountAmount from response, converting from cents:', discountAmount);
-                discountAmount = discountAmount / 100;
-              }
-              
-              console.log('[checkout] Using discountAmount from response:', discountAmount);
-            }
-            
-            // Check price.leftToPay or price.total as fallback
-            if (!discountAmount && discountResponse?.price) {
-              const originalTotal = state.totals.subtotal || state.totals.cartTotal;
-              let newTotal = discountResponse.price.total || discountResponse.price.leftToPay || 0;
-              
-              // Convert to DKK if in cents
-              if (newTotal > 10000) {
-                newTotal = newTotal / 100;
-              }
-              
-              if (newTotal < originalTotal && originalTotal > 0) {
-                discountAmount = originalTotal - newTotal;
-                console.log('[checkout] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-              }
-            }
-            
-            // Validate discount amount - ensure it doesn't exceed subtotal
             const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-            if (discountAmount > subtotal && subtotal > 0) {
-              console.warn('[checkout] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
-              discountAmount = subtotal;
-            }
-            
-            console.log('[checkout] Final discountAmount:', discountAmount, '(subtotal:', subtotal, ')');
-            
-            // If we couldn't extract discount amount, try fetching the order to get updated totals
-            if (!discountAmount || discountAmount === 0) {
-              console.log('[checkout] Attempting to fetch updated order to calculate discount...');
+            let discountAmount = discountResponse?.discountAmount
+              ?? calculateOrderCouponDiscountKr(discountResponse, subtotal);
+
+            if (!discountAmount) {
               try {
                 const updatedOrder = await orderAPI.getOrder(state.orderId);
-                console.log('[checkout] Updated order:', JSON.stringify(updatedOrder, null, 2));
-                
-                // Try to extract discount from updated order
-                const updatedCouponDiscount = updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount;
-                if (updatedCouponDiscount) {
-                  if (typeof updatedCouponDiscount === 'object') {
-                    discountAmount = updatedCouponDiscount.amount || updatedCouponDiscount.value || updatedCouponDiscount.total || 0;
-                  } else if (typeof updatedCouponDiscount === 'number') {
-                    discountAmount = updatedCouponDiscount;
-                  }
-                  console.log('[checkout] Extracted discount from updated order:', discountAmount);
-                }
-                
-                // Calculate discount from price difference if still not found
-                if (!discountAmount || discountAmount === 0) {
-                  const originalTotal = state.totals.subtotal || state.totals.cartTotal;
-                  const newTotal = updatedOrder?.price?.total || updatedOrder?.price?.leftToPay || updatedOrder?.total || 0;
-                  if (newTotal < originalTotal && newTotal > 0) {
-                    discountAmount = originalTotal - newTotal;
-                    console.log('[checkout] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-                  }
-                }
+                state.fullOrder = updatedOrder;
+                discountAmount = calculateOrderCouponDiscountKr(updatedOrder, subtotal);
               } catch (fetchError) {
                 console.warn('[checkout] Could not fetch updated order:', fetchError);
               }
             }
-            
+
+            discountAmount = roundToHalfKrone(capCouponDiscountKr(discountAmount, subtotal));
+            console.log('[checkout] Final discountAmount:', discountAmount, '(subtotal:', subtotal, ')');
+
             if (discountAmount > 0) {
               // Success - apply discount
               state.discountCode = discountCodeToApply;
@@ -19343,11 +19247,9 @@ async function handleCheckout() {
               // Update UI to show coupon is applied
               if (DOM.discountInput) {
                 DOM.discountInput.value = discountCodeToApply;
-                DOM.discountInput.disabled = true;
-                DOM.discountInput.style.opacity = '0.6';
-                DOM.discountInput.style.borderColor = '#10B981';
               }
-              
+              updateDiscountFormControls();
+
               // Show success message
               showDiscountMessage(`Coupon "${discountCodeToApply}" applied! Discount: ${formatCurrencyHalfKrone(discountAmount)}`, 'success');
               
@@ -22076,7 +21978,7 @@ async function showDetailedReceipt() {
   }
   
   const subtotal = totalDKK - vatAmount;
-  const discount = order.couponDiscount?.amount ? (typeof order.couponDiscount.amount === 'object' ? order.couponDiscount.amount.amount / 100 : order.couponDiscount.amount / 100) : 0;
+  const discount = extractCouponDiscountKr(order.couponDiscount);
   
   // Populate order overview
   const receiptSubtotal = document.getElementById('receiptSubtotal');
@@ -22465,11 +22367,11 @@ function applyFreeFlowCartUi() {
     const payNowLabel = payNowRow.querySelector('.payment-label');
     if (payNowLabel) {
       const payNowInfoWrapper = payNowLabel.querySelector('.paynow-info-wrapper');
-      payNowLabel.textContent = isFreeFlow
+      payNowLabel.textContent = isFreeTrialSelected
         ? `${t('cart.freePeriod') || 'Gratis periode'}:`
         : `${t('cart.payNow') || 'Pay now'}:`;
       if (payNowInfoWrapper) {
-        if (isFreeFlow) {
+        if (isFreeTrialSelected) {
           payNowInfoWrapper.remove();
         } else {
           payNowLabel.appendChild(payNowInfoWrapper);
@@ -22489,7 +22391,7 @@ function applyFreeFlowCartUi() {
 
   const discountSection = document.querySelector('.discount-section');
   if (discountSection) {
-    discountSection.style.display = isFreeFlow ? 'none' : '';
+    discountSection.style.display = isFreeTrialSelected ? 'none' : '';
   }
 
   return { isFreeTrialSelected, isZeroTotal, isFreeFlow };

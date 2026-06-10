@@ -6572,6 +6572,23 @@ body.firstclimb-flow .summary-edit-btn {
     white-space: nowrap;
 }
 
+.cart-price-discounted {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cart-price-old {
+    text-decoration: line-through;
+    opacity: 0.6;
+    font-weight: 500;
+}
+
+.cart-price-new {
+    color: #10B981;
+    font-weight: 600;
+}
+
 /* Home Gym Info */
 .home-gym-info {
     display: flex;
@@ -7156,41 +7173,64 @@ body.firstclimb-flow .summary-edit-btn {
     margin-bottom: 20px;
 }
 
-.discount-toggle {
-    width: 100%;
-    background: none;
-    border: 1px solid #374151;
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: all 0.3s ease;
-}
-
-.discount-toggle:hover {
-    border-color: #F401F5;
-    color: white;
-}
-
-.toggle-icon {
-    font-size: var(--font-size-lg);
-    transition: transform 0.3s ease;
-}
-
-.discount-toggle.active .toggle-icon {
-    transform: rotate(45deg);
-}
-
 .discount-form {
-    margin-top: 12px;
-    display: flex;
-    gap: 8px;
-    min-width: 0; /* Allow flex shrinking */
+    min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
+}
+
+.discount-form-entry {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+}
+
+.discount-form-entry[hidden] {
+    display: none !important;
+}
+
+.discount-applied-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-radius: 6px;
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.discount-applied-chip[hidden] {
+    display: none !important;
+}
+
+.discount-applied-code {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: #10B981;
+    letter-spacing: 0.02em;
+}
+
+.discount-remove-link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: #9CA3AF;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+}
+
+.discount-remove-link:hover {
+    color: #F87171;
+}
+
+.discount-remove-link:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .discount-input {
@@ -7285,6 +7325,17 @@ body.firstclimb-flow .summary-edit-btn {
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+.discount-message-dismiss {
+    animation: discountMessageFadeOut 0.3s ease-out forwards;
+}
+
+@keyframes discountMessageFadeOut {
+    to {
+        opacity: 0;
+        transform: translateY(-5px);
     }
 }
 
