@@ -117,14 +117,14 @@ function capCouponDiscountKr(discountAmount, subtotal) {
 /** Original / discount / pay-now breakdown for payment overview when a coupon is applied. */
 function resolvePayNowDiscountBreakdown(basePayNowKr) {
   const base = roundToHalfKrone(basePayNowKr);
+  const catalogSubtotal = roundToHalfKrone(state.totals.subtotal || 0);
   const stateDiscountKr = state.discountApplied
     ? roundToHalfKrone(state.totals.discountAmount || 0)
     : 0;
   const orderCouponKr = getOrderCouponDiscountKr();
-  // Prefer BRP order/line coupon over client state (response.discountAmount can disagree)
-  const discountKr = orderCouponKr > 0 ? orderCouponKr : stateDiscountKr;
+  const orderCouponKrForLogic = orderCouponKr > 0 ? orderCouponKr : stateDiscountKr;
 
-  if (discountKr <= 0) {
+  if (orderCouponKrForLogic <= 0 && stateDiscountKr <= 0) {
     return { beforeDiscount: base, discountKr: 0, afterDiscount: base, hasDiscount: false };
   }
 
@@ -134,13 +134,20 @@ function resolvePayNowDiscountBreakdown(basePayNowKr) {
 
   let afterDiscount = base;
   let beforeDiscount = base;
+  let discountKr = orderCouponKrForLogic;
 
   if (orderPriceKr !== null && (orderCouponKr > 0 || (stateDiscountKr > 0 && orderPriceKr < base))) {
     afterDiscount = orderPriceKr;
-    beforeDiscount = roundToHalfKrone(afterDiscount + discountKr);
+    const orderDerivedBefore = roundToHalfKrone(afterDiscount + orderCouponKrForLogic);
+    // Keep the catalog/cart price the user saw before applying the coupon. BRP's
+    // order-derived pre-discount total can differ by half-krone (e.g. 99,50 vs 99,00).
+    const anchorBefore = catalogSubtotal > afterDiscount ? catalogSubtotal : orderDerivedBefore;
+    beforeDiscount = anchorBefore > afterDiscount ? anchorBefore : orderDerivedBefore;
+    discountKr = roundToHalfKrone(Math.max(0, beforeDiscount - afterDiscount));
   } else {
-    beforeDiscount = base;
-    afterDiscount = roundToHalfKrone(Math.max(0, beforeDiscount - discountKr));
+    beforeDiscount = catalogSubtotal > 0 ? catalogSubtotal : base;
+    afterDiscount = roundToHalfKrone(Math.max(0, beforeDiscount - orderCouponKrForLogic));
+    discountKr = roundToHalfKrone(Math.max(0, beforeDiscount - afterDiscount));
   }
 
   const hasDiscount = discountKr > 0 && beforeDiscount > afterDiscount;
