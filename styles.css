@@ -7747,6 +7747,12 @@ main {
     text-decoration: underline;
 }
 
+/* Cookiebot consent dialog — block site font-size from cascading into the widget */
+#CybotCookiebotDialog *,
+#CybotCookiebotDialogBodyUnderlay * {
+    font-size: var(--font-size-base) !important;
+}
+
 /* Footer Bottom */
 .footer-bottom {
     max-width: 1200px;

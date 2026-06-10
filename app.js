@@ -8627,7 +8627,6 @@ function cacheDom() {
     orderDate: document.querySelector('[data-summary-field="order-date"]'),
     orderTotal: document.querySelector('[data-summary-field="order-total"]'),
     memberName: document.querySelector('[data-summary-field="member-name"]'),
-    membershipNumber: document.querySelector('[data-summary-field="membership-number"]'),
     membershipType: document.querySelector('[data-summary-field="membership-type"]'),
     primaryGym: document.querySelector('[data-summary-field="primary-gym"]'),
     membershipPrice: document.querySelector('[data-summary-field="membership-price"]'),
@@ -21610,7 +21609,7 @@ function renderConfirmationView() {
     console.warn('[Confirmation] Unknown product type or section not found:', productType);
   }
   
-  const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
+  const { orderNumber, orderDate, orderTotal, memberName, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
 
   // Prefer API order data, but fall back to summary order so success page is never blank.
   const apiOrder = state.fullOrder || state.order || null;
@@ -21668,19 +21667,6 @@ function renderConfirmationView() {
     const punchCardMemberName = document.querySelector('#confirmationPunchCardSection [data-summary-field="member-name"]');
     if (dayPassMemberName) dayPassMemberName.textContent = name;
     if (punchCardMemberName) punchCardMemberName.textContent = name;
-  }
-  
-  // Membership-specific fields - from API only
-  if (membershipNumber) {
-    let membershipId = '—';
-    if (apiOrder?.subscriptionItems?.[0]?.subscription?.id) {
-      membershipId = apiOrder.subscriptionItems[0].subscription.id.toString();
-    } else if (apiOrder?.customer?.id) {
-      membershipId = apiOrder.customer.id.toString();
-    } else if (apiOrder?.membershipNumber) {
-      membershipId = String(apiOrder.membershipNumber);
-    }
-    membershipNumber.textContent = membershipId;
   }
   
   if (membershipType) {
