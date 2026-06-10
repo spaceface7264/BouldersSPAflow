@@ -7136,6 +7136,18 @@ body.firstclimb-flow .summary-edit-btn {
     font-weight: 700;
 }
 
+.payment-overview-original .payment-label {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.payment-overview-original .payment-amount {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    text-decoration: line-through;
+    text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+
 .payment-overview-discount .payment-label,
 .payment-overview-discount .payment-amount {
     color: #10B981;
@@ -7251,6 +7263,17 @@ body.firstclimb-flow .summary-edit-btn {
     border-color: #F401F5;
 }
 
+.discount-input--error {
+    border-color: #F87171 !important;
+    background-color: rgba(127, 29, 29, 0.35) !important;
+    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25);
+}
+
+.discount-input--error:focus {
+    border-color: #FCA5A5 !important;
+    box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.2);
+}
+
 .apply-discount-btn {
     padding: 8px 16px;
     background-color: #F401F5;
@@ -7309,11 +7332,15 @@ body.firstclimb-flow .summary-edit-btn {
 
 /* Discount Messages */
 .discount-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
     margin-top: 8px;
     padding: 10px 14px;
     border-radius: 6px;
     font-size: var(--font-size-sm);
     font-weight: 500;
+    line-height: 1.45;
     animation: slideIn 0.3s ease-out;
 }
 
@@ -7347,10 +7374,18 @@ body.firstclimb-flow .summary-edit-btn {
 }
 
 .discount-message-error {
-    background-color: rgba(239, 68, 68, 0.15);
-    color: #EF4444;
-    border: 1px solid rgba(239, 68, 68, 0.4);
-    font-weight: 600;
+    background-color: rgba(127, 29, 29, 0.4);
+    color: #FECACA;
+    border: 1px solid rgba(248, 113, 113, 0.45);
+    font-weight: 500;
+}
+
+.discount-message-error::before {
+    content: '✕';
+    flex-shrink: 0;
+    font-weight: 700;
+    color: #F87171;
+    line-height: 1.45;
 }
 
 .discount-message-info {

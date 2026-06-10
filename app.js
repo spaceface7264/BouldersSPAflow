@@ -114,6 +114,132 @@ function capCouponDiscountKr(discountAmount, subtotal) {
   return discountAmount;
 }
 
+/** Original / discount / pay-now breakdown for payment overview when a coupon is applied. */
+function resolvePayNowDiscountBreakdown(basePayNowKr) {
+  const base = roundToHalfKrone(basePayNowKr);
+  const stateDiscountKr = state.discountApplied
+    ? roundToHalfKrone(state.totals.discountAmount || 0)
+    : 0;
+  const orderCouponKr = roundToHalfKrone(extractCouponDiscountKr(state.fullOrder?.couponDiscount));
+  const discountKr = stateDiscountKr > 0 ? stateDiscountKr : orderCouponKr;
+
+  if (discountKr <= 0) {
+    return { beforeDiscount: base, discountKr: 0, afterDiscount: base, hasDiscount: false };
+  }
+
+  const orderPriceKr = state.fullOrder?.price?.amount !== undefined
+    ? roundToHalfKrone(extractCurrencyOutKr(state.fullOrder.price.amount))
+    : null;
+
+  let afterDiscount = base;
+  let beforeDiscount = base;
+
+  if (orderPriceKr !== null && (orderCouponKr > 0 || (stateDiscountKr > 0 && orderPriceKr < base))) {
+    afterDiscount = orderPriceKr;
+    beforeDiscount = roundToHalfKrone(afterDiscount + discountKr);
+  } else {
+    beforeDiscount = base;
+    afterDiscount = roundToHalfKrone(Math.max(0, beforeDiscount - discountKr));
+  }
+
+  const hasDiscount = discountKr > 0 && beforeDiscount > afterDiscount;
+  return { beforeDiscount, discountKr, afterDiscount, hasDiscount };
+}
+
+function formatCouponPercent(percent) {
+  if (!Number.isFinite(percent) || percent <= 0) return null;
+  const rounded = Math.abs(percent - Math.round(percent)) < 0.05
+    ? Math.round(percent)
+    : Math.round(percent * 10) / 10;
+  return `${rounded}%`;
+}
+
+function getDiscountAmountLabel() {
+  const percentText = formatCouponPercent(getAppliedCouponDiscountPercent());
+  if (!percentText) return t('cart.discountAmount');
+  return t('cart.discountAmountWithPercent').replace('{percent}', percentText);
+}
+
+function scoreCouponPercentCandidate(percent) {
+  if (!Number.isFinite(percent) || percent <= 0 || percent > 100) return -1;
+  const nearest = Math.round(percent);
+  if (nearest <= 0 || nearest > 100) return -1;
+  return 100 - Math.abs(percent - nearest);
+}
+
+function pickBestCouponPercent(candidates) {
+  let best = null;
+  let bestScore = -1;
+  for (const percent of candidates) {
+    const score = scoreCouponPercentCandidate(percent);
+    if (score > bestScore) {
+      bestScore = score;
+      best = percent;
+    }
+  }
+  return best;
+}
+
+function getCouponPercentFromOrderItem(item) {
+  const coupon = item?.coupon;
+  if (!coupon?.discount) return null;
+
+  const lineDiscount = extractCurrencyOutKr(coupon.discount);
+  if (lineDiscount <= 0) return null;
+
+  if (coupon.name && state.discountCode
+    && coupon.name.toUpperCase() !== state.discountCode.toUpperCase()) {
+    return null;
+  }
+
+  const candidates = [];
+  const linePrice = extractCurrencyOutKr(item.price);
+  const preDiscountBase = linePrice + lineDiscount;
+  if (preDiscountBase > 0) {
+    candidates.push((lineDiscount / preDiscountBase) * 100);
+  }
+
+  const recurringPrice = extractCurrencyOutKr(item.payRecurring?.price);
+  if (recurringPrice > 0) {
+    candidates.push((lineDiscount / recurringPrice) * 100);
+  }
+
+  return pickBestCouponPercent(candidates);
+}
+
+/** Effective coupon % from BRP line items (prefers whole-number rates like 21% / 50%). */
+function getAppliedCouponDiscountPercent() {
+  if (!state.discountApplied) return null;
+
+  const order = state.fullOrder;
+  const itemGroups = [
+    order?.subscriptionItems,
+    order?.valueCardItems,
+    order?.articleItems,
+    order?.entryItems,
+  ].filter(Array.isArray);
+
+  const candidates = [];
+  for (const items of itemGroups) {
+    for (const item of items) {
+      const percent = getCouponPercentFromOrderItem(item);
+      if (percent != null) candidates.push(percent);
+    }
+  }
+
+  const fromItems = pickBestCouponPercent(candidates);
+  if (fromItems != null) return fromItems;
+
+  const discountKr = state.totals.discountAmount;
+  const payNow = state.totals.payNowAmount;
+  if (discountKr > 0) {
+    const base = payNow + discountKr;
+    if (base > 0) return (discountKr / base) * 100;
+  }
+
+  return null;
+}
+
 function normalizeCartProductId(id) {
   if (id == null) return null;
   if (typeof id === 'string' && id.startsWith('punch-')) {
@@ -178,6 +304,96 @@ function renderCartItemPriceElement(priceEl, item) {
   priceEl.textContent = formatPriceHalfKrone(roundedDisplay) + ' kr.';
 }
 
+let discountApplyInFlight = false;
+
+function beginApplyDiscountLoading(label) {
+  discountApplyInFlight = true;
+  if (!DOM.applyDiscountBtn) return;
+  DOM.applyDiscountBtn.disabled = true;
+  DOM.applyDiscountBtn.textContent = label;
+}
+
+function endApplyDiscountLoading() {
+  discountApplyInFlight = false;
+  syncApplyDiscountButtonState();
+}
+
+function isApplyDiscountButtonLoading() {
+  return discountApplyInFlight;
+}
+
+function syncApplyDiscountButtonState() {
+  if (!DOM.applyDiscountBtn || !DOM.discountInput || state.discountApplied) return;
+  if (discountApplyInFlight) return;
+  DOM.applyDiscountBtn.textContent = t('button.apply');
+  DOM.applyDiscountBtn.disabled = DOM.discountInput.value.trim().length === 0;
+}
+
+let discountInputErrorTimer = null;
+
+function clearDiscountInputError() {
+  if (discountInputErrorTimer) {
+    window.clearTimeout(discountInputErrorTimer);
+    discountInputErrorTimer = null;
+  }
+  DOM.discountInput?.classList.remove('discount-input--error');
+}
+
+function setDiscountInputError() {
+  clearDiscountInputError();
+  DOM.discountInput?.classList.add('discount-input--error');
+  discountInputErrorTimer = window.setTimeout(() => {
+    if (!state.discountApplied) clearDiscountInputError();
+  }, 5000);
+}
+
+function resolveDiscountApplyErrorMessage(errorText) {
+  const text = String(errorText || '').toLowerCase();
+
+  if (text.includes('log in') || text.includes('account') || text.includes('log ind') || text.includes('konto')) {
+    return t('cart.discount.loginRequired');
+  }
+  if (text.includes('gym location') || text.includes('business unit')) {
+    return t('cart.discount.locationRequired');
+  }
+  if (text.includes('coupon_not_applicable') || text.includes('not applicable')) {
+    return t('cart.discount.notApplicable');
+  }
+  if (text.includes('coupon_not_found') || text.includes('not found') || text.includes('404')) {
+    return t('cart.discount.notFound');
+  }
+  if (text.includes('coupon_expired') || text.includes('expired') || text.includes('udløb')) {
+    return t('cart.discount.expired');
+  }
+  if (text.includes('coupon_already_used') || text.includes('already used')) {
+    return t('cart.discount.alreadyUsed');
+  }
+  if (text.includes('403') || text.includes('forbidden')) {
+    return t('cart.discount.forbidden');
+  }
+  if (text.includes('405')) {
+    return t('cart.discount.methodNotSupported');
+  }
+  if (text.includes('400') || text.includes('invalid') || text.includes('no discount applied')) {
+    return t('cart.discount.invalid');
+  }
+
+  return t('cart.discount.genericFailed');
+}
+
+function showDiscountError(message) {
+  showDiscountMessage(message, 'error');
+  setDiscountInputError();
+  DOM.discountInput?.focus();
+}
+
+function handleDiscountInputChange() {
+  clearDiscountInputError();
+  const existingError = document.querySelector('.discount-message-error');
+  if (existingError) clearDiscountMessage();
+  syncApplyDiscountButtonState();
+}
+
 function updateDiscountFormControls() {
   const entry = DOM.discountFormEntry || DOM.discountForm?.querySelector('.discount-form-entry');
   const chip = DOM.discountAppliedChip || DOM.discountForm?.querySelector('.discount-applied-chip');
@@ -194,35 +410,31 @@ function updateDiscountFormControls() {
       removeLink.disabled = false;
       removeLink.textContent = t('button.removeCoupon');
     }
-    if (DOM.applyDiscountBtn) {
-      DOM.applyDiscountBtn.disabled = false;
-      DOM.applyDiscountBtn.textContent = t('button.apply');
-    }
     return;
   }
 
   if (entry) entry.hidden = false;
   if (chip) chip.hidden = true;
-  if (DOM.applyDiscountBtn) {
-    DOM.applyDiscountBtn.disabled = false;
-    DOM.applyDiscountBtn.textContent = t('button.apply');
-  }
   if (removeLink) {
     removeLink.disabled = false;
     removeLink.textContent = t('button.removeCoupon');
   }
+  syncApplyDiscountButtonState();
 }
 
-function resetLocalDiscountState() {
+function resetLocalDiscountState({ preserveInput = false } = {}) {
   state.discountCode = null;
   state.discountApplied = false;
   state.totals.discountAmount = 0;
   if (DOM.discountInput) {
     DOM.discountInput.disabled = false;
-    DOM.discountInput.value = '';
+    if (!preserveInput) {
+      DOM.discountInput.value = '';
+    }
     DOM.discountInput.style.opacity = '';
-    DOM.discountInput.style.borderColor = '';
-    DOM.discountInput.style.backgroundColor = '';
+    if (!preserveInput) {
+      clearDiscountInputError();
+    }
   }
   updateDiscountFormControls();
 }
@@ -6461,7 +6673,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.discount.removed': 'Rabatkode fjernet.', 'cart.discount.removeFailed': 'Kunne ikke fjerne rabatkoden. Prøv igen.', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discountAmountWithPercent': 'Rabat ({percent})', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.discount.removed': 'Rabatkode fjernet.', 'cart.discount.removeFailed': 'Kunne ikke fjerne rabatkoden. Prøv igen.', 'cart.discount.empty': 'Indtast en rabatkode', 'cart.discount.loginRequired': 'Log ind eller opret en konto for at bruge en rabatkode', 'cart.discount.locationRequired': 'Vælg en hal først', 'cart.discount.selectProduct': 'Vælg et medlemskab eller klippekort først', 'cart.discount.notFound': 'Rabatkoden blev ikke fundet. Tjek koden og prøv igen.', 'cart.discount.invalid': 'Ugyldig rabatkode. Tjek koden og prøv igen.', 'cart.discount.expired': 'Denne rabatkode er udløbet.', 'cart.discount.alreadyUsed': 'Denne rabatkode er allerede brugt.', 'cart.discount.notApplicable': 'Rabatkoden gælder ikke for denne ordre.', 'cart.discount.forbidden': 'Rabatkoden kan ikke bruges på denne ordre.', 'cart.discount.genericFailed': 'Kunne ikke anvende rabatkoden. Prøv igen.', 'cart.discount.noOrder': 'Ingen ordre fundet. Genindlæs siden og prøv igen.', 'cart.discount.methodNotSupported': 'Rabatkode kunne ikke anvendes. Kontakt support.', 'cart.discount.applying': 'Anvender…', 'cart.discount.creatingOrder': 'Opretter ordre…', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
@@ -6739,7 +6951,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discountAmountWithPercent': 'Discount ({percent})', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.discount.empty': 'Enter a discount code', 'cart.discount.loginRequired': 'Log in or create an account to use a discount code', 'cart.discount.locationRequired': 'Select a gym first', 'cart.discount.selectProduct': 'Select a membership or punch card first', 'cart.discount.notFound': 'Discount code not found. Check the code and try again.', 'cart.discount.invalid': 'Invalid discount code. Check the code and try again.', 'cart.discount.expired': 'This discount code has expired.', 'cart.discount.alreadyUsed': 'This discount code has already been used.', 'cart.discount.notApplicable': 'This discount code does not apply to your order.', 'cart.discount.forbidden': 'This discount code cannot be used on this order.', 'cart.discount.genericFailed': 'Could not apply the discount code. Please try again.', 'cart.discount.noOrder': 'No order found. Refresh the page and try again.', 'cart.discount.methodNotSupported': 'Discount code could not be applied. Please contact support.', 'cart.discount.applying': 'Applying…', 'cart.discount.creatingOrder': 'Creating order…', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
@@ -7018,7 +7230,7 @@ const translations = {
     'faq.firstclimb.howToUse.a': 'Komm einfach innerhalb des Monats vorbei. Gib dem Personal deine Telefonnummer oder E-Mail, dann aktivieren sie deine Tageskarte und händigen dir Leihschuhe und Chalk aus.',
     'faq.firstclimb.afterDay.q': 'Was passiert nach meinem ersten Tag?',
     'faq.firstclimb.afterDay.a': 'Bleib dran! Du kannst direkt vor Ort auf eine Mitgliedschaft, ein 15-Tage-Ticket oder eine Stempelkarte upgraden — oder online, wenn du bereit bist.',
-    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.discount.removed': 'Rabattcode entfernt.', 'cart.discount.removeFailed': 'Rabattcode konnte nicht entfernt werden. Bitte versuchen Sie es erneut.', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discountAmountWithPercent': 'Rabatt ({percent})', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.discount.removed': 'Rabattcode entfernt.', 'cart.discount.removeFailed': 'Rabattcode konnte nicht entfernt werden. Bitte versuchen Sie es erneut.', 'cart.discount.empty': 'Geben Sie einen Rabattcode ein', 'cart.discount.loginRequired': 'Melden Sie sich an oder erstellen Sie ein Konto, um einen Rabattcode zu verwenden', 'cart.discount.locationRequired': 'Wählen Sie zuerst eine Halle', 'cart.discount.selectProduct': 'Wählen Sie zuerst eine Mitgliedschaft oder eine Stempelkarte', 'cart.discount.notFound': 'Rabattcode nicht gefunden. Überprüfen Sie den Code und versuchen Sie es erneut.', 'cart.discount.invalid': 'Ungültiger Rabattcode. Überprüfen Sie den Code und versuchen Sie es erneut.', 'cart.discount.expired': 'Dieser Rabattcode ist abgelaufen.', 'cart.discount.alreadyUsed': 'Dieser Rabattcode wurde bereits verwendet.', 'cart.discount.notApplicable': 'Dieser Rabattcode gilt nicht für diese Bestellung.', 'cart.discount.forbidden': 'Dieser Rabattcode kann für diese Bestellung nicht verwendet werden.', 'cart.discount.genericFailed': 'Rabattcode konnte nicht angewendet werden. Bitte versuchen Sie es erneut.', 'cart.discount.noOrder': 'Keine Bestellung gefunden. Laden Sie die Seite neu und versuchen Sie es erneut.', 'cart.discount.methodNotSupported': 'Rabattcode konnte nicht angewendet werden. Bitte kontaktieren Sie den Support.', 'cart.discount.applying': 'Wird angewendet…', 'cart.discount.creatingOrder': 'Bestellung wird erstellt…', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
@@ -8278,6 +8490,7 @@ function cacheDom() {
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
   DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
+  DOM.paymentPayNowOriginal = document.querySelector('[data-summary-field="pay-now-original"]');
   DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
   DOM.faqSection = document.getElementById('faqSection');
@@ -8390,8 +8603,9 @@ function setupEventListeners() {
   DOM.applyDiscountBtn?.addEventListener('click', handleApplyDiscount);
   DOM.removeDiscountBtn?.addEventListener('click', handleRemoveDiscount);
   updateDiscountFormControls();
+  DOM.discountInput?.addEventListener('input', handleDiscountInputChange);
   DOM.discountInput?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !DOM.applyDiscountBtn?.disabled) {
       handleApplyDiscount();
     }
   });
@@ -14360,7 +14574,7 @@ async function handleApplyDiscount() {
   const discountCode = DOM.discountInput.value.trim().toUpperCase();
   
   if (!discountCode) {
-    showDiscountMessage('Please enter a coupon code', 'error');
+    showDiscountError(t('cart.discount.empty'));
     return;
   }
   
@@ -14379,8 +14593,7 @@ async function handleApplyDiscount() {
     if (hasItems) {
       // User has items - create order first, then apply coupon
       console.log('[Discount] No order exists, creating order to apply coupon...');
-      DOM.applyDiscountBtn.disabled = true;
-      DOM.applyDiscountBtn.textContent = 'Creating order...';
+      beginApplyDiscountLoading(t('cart.discount.creatingOrder'));
       clearDiscountMessage();
       
       try {
@@ -14462,48 +14675,18 @@ async function handleApplyDiscount() {
         }
         
         // Continue to apply coupon below (don't return)
-        DOM.applyDiscountBtn.textContent = 'Applying...';
+        beginApplyDiscountLoading(t('cart.discount.applying'));
       } catch (orderError) {
         console.error('[Discount] Failed to create order for coupon:', orderError);
         // Show specific error message
         const errorMsg = orderError.message || 'Failed to create order. Please try again.';
         
-        // Check if it's a prerequisite issue
-        let displayMsg = errorMsg;
-        if (errorMsg.includes('log in') || errorMsg.includes('account')) {
-          displayMsg = '✗ Please log in or create an account to apply a discount code';
-        } else if (errorMsg.includes('gym location') || errorMsg.includes('business unit')) {
-          displayMsg = '✗ Please select a gym location first';
-        } else {
-          displayMsg = `✗ ${errorMsg}`;
-        }
-        
-        showDiscountMessage(displayMsg, 'error');
-        DOM.discountInput.style.borderColor = '#EF4444';
-        DOM.discountInput.style.backgroundColor = '#FEF2F2';
-        DOM.applyDiscountBtn.disabled = false;
-        DOM.applyDiscountBtn.textContent = 'Apply';
-        
-        // Clear error styling after delay
-        setTimeout(() => {
-          if (DOM.discountInput && !state.discountApplied) {
-            DOM.discountInput.style.borderColor = '';
-            DOM.discountInput.style.backgroundColor = '';
-          }
-        }, 5000);
+        showDiscountError(resolveDiscountApplyErrorMessage(errorMsg));
+        endApplyDiscountLoading();
         return;
       }
     } else {
-      // No items selected - show error message
-      showDiscountMessage('✗ Please select a membership or punch card first', 'error');
-      DOM.discountInput.style.borderColor = '#EF4444';
-      DOM.discountInput.style.backgroundColor = '#FEF2F2';
-      setTimeout(() => {
-        if (DOM.discountInput && !state.discountApplied) {
-          DOM.discountInput.style.borderColor = '';
-          DOM.discountInput.style.backgroundColor = '';
-        }
-      }, 5000);
+      showDiscountError(t('cart.discount.selectProduct'));
       return;
     }
   }
@@ -14514,15 +14697,12 @@ async function handleApplyDiscount() {
   
   if (!orderIdToUse) {
     console.error('[Discount] No order ID available for discount application');
-    showDiscountMessage('✗ No order found. Please refresh the page and try again.', 'error');
-    DOM.applyDiscountBtn.disabled = false;
-    DOM.applyDiscountBtn.textContent = 'Apply';
+    showDiscountError(t('cart.discount.noOrder'));
+    endApplyDiscountLoading();
     return;
   }
   
-  // Set loading state
-  DOM.applyDiscountBtn.disabled = true;
-  DOM.applyDiscountBtn.textContent = 'Applying...';
+  beginApplyDiscountLoading(t('cart.discount.applying'));
   clearDiscountMessage();
   
   // Ensure state.orderId is set for consistency
@@ -14753,53 +14933,17 @@ async function handleApplyDiscount() {
       // Don't reset discount state - coupon might have been applied
       // Just show a generic error
       showDiscountMessage('An error occurred while applying the coupon. Please refresh the page.', 'error');
-      DOM.applyDiscountBtn.disabled = false;
-      DOM.applyDiscountBtn.textContent = 'Apply';
+      endApplyDiscountLoading();
       return; // Exit early to avoid resetting state
     }
     
-    resetLocalDiscountState();
+    resetLocalDiscountState({ preserveInput: true });
     updateCartSummary();
     updateDiscountDisplay();
     
-    // Parse error message to extract error code
-    let errorMessageText = 'Failed to apply coupon. Please try again.';
-    const errorText = errorMessage;
-    
-    // Check for specific error codes in the response
-    if (errorText.includes('COUPON_NOT_APPLICABLE')) {
-      errorMessageText = '✗ This coupon is not applicable to your current order. It may have restrictions on products, minimum order amount, or other conditions.';
-    } else if (errorText.includes('COUPON_NOT_FOUND') || errorText.includes('404')) {
-      errorMessageText = '✗ Coupon code not found. Please check the code and try again.';
-    } else if (errorText.includes('COUPON_EXPIRED') || errorText.includes('expired')) {
-      errorMessageText = '✗ This coupon has expired and is no longer valid.';
-    } else if (errorText.includes('COUPON_ALREADY_USED')) {
-      errorMessageText = '✗ This coupon has already been used and cannot be applied again.';
-    } else if (errorText.includes('403') || errorText.includes('Forbidden')) {
-      errorMessageText = '✗ This coupon cannot be applied. It may have restrictions or is not valid for your order.';
-    } else if (errorText.includes('400') || errorText.includes('invalid')) {
-      errorMessageText = '✗ Invalid coupon code. Please check the code and try again.';
-    } else if (errorText.includes('405')) {
-      errorMessageText = '✗ Coupon application method not supported. Please contact support.';
-    } else {
-      errorMessageText = '✗ ' + errorMessageText;
-    }
-    
-    showDiscountMessage(errorMessageText, 'error');
-    
-    // Reset input styling on error
-    DOM.discountInput.style.borderColor = '#EF4444'; // Red border on error
-    DOM.discountInput.style.backgroundColor = '#FEF2F2'; // Light red background
-    DOM.discountInput.focus(); // Focus input so user can try again
-    
-    // Clear error styling after a delay
-    setTimeout(() => {
-      if (DOM.discountInput && !state.discountApplied) {
-        DOM.discountInput.style.borderColor = '';
-        DOM.discountInput.style.backgroundColor = '';
-      }
-    }, 5000);
+    showDiscountError(resolveDiscountApplyErrorMessage(errorMessage));
   } finally {
+    endApplyDiscountLoading();
     updateDiscountFormControls();
   }
 }
@@ -14852,13 +14996,17 @@ function showDiscountMessage(message, type = 'info') {
   const messageEl = document.createElement('div');
   messageEl.className = `discount-message discount-message-${type}`;
   messageEl.textContent = message;
+  if (type === 'error') {
+    messageEl.setAttribute('role', 'alert');
+    messageEl.setAttribute('aria-live', 'polite');
+  }
 
   if (DOM.discountForm) {
     DOM.discountForm.insertAdjacentElement('afterend', messageEl);
   }
 
-  // Auto-dismiss transient feedback (applied + removed) after 5 seconds
-  if (type === 'success' || type === 'info') {
+  // Auto-dismiss transient feedback after 5 seconds
+  if (type === 'success' || type === 'info' || type === 'error') {
     discountMessageDismissTimer = window.setTimeout(() => {
       dismissDiscountMessage(messageEl);
     }, 5000);
@@ -16363,13 +16511,17 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
       
       if (is15DayPass) {
-      // For 15-day pass: always use product list price (one-time payment), not prorated order math
+      // For 15-day pass: use list price unless the order already has a coupon-adjusted price
       const dayPassPriceInCents =
         currentProduct?.priceWithInterval?.price?.amount ??
         productFromOrder?.priceWithInterval?.price?.amount ??
         currentProduct?.price?.amount ??
         0;
-      payNowAmount = dayPassPriceInCents > 0 ? (dayPassPriceInCents / 100) : orderPriceDKK;
+      const orderHasCoupon = extractCouponDiscountKr(state.fullOrder?.couponDiscount) > 0
+        || (state.discountApplied && state.totals.discountAmount > 0);
+      payNowAmount = orderHasCoupon
+        ? orderPriceDKK
+        : (dayPassPriceInCents > 0 ? (dayPassPriceInCents / 100) : orderPriceDKK);
       
       // Use selected activation date or today; end = start + 14 days (inclusive 15-day period)
       const today = new Date();
@@ -16757,18 +16909,8 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
-  // If discount is applied but order price isn't available yet, reflect discount in pay-now
-  if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
-    const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
-    if (adjustedPayNow !== payNowAmount) {
-      console.log('[Payment Overview] Applying discount to pay-now fallback:', {
-        original: payNowAmount,
-        discount: state.totals.discountAmount,
-        adjusted: adjustedPayNow
-      });
-      payNowAmount = adjustedPayNow;
-    }
-  }
+  const payNowBreakdown = resolvePayNowDiscountBreakdown(payNowAmount);
+  payNowAmount = payNowBreakdown.afterDiscount;
 
   // Round payNowAmount to half krone and store in state for use in cart total calculation
   state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
@@ -16934,16 +17076,28 @@ function updatePaymentOverview() {
     }
   }
 
-  // Show discount row in payment overview when discount is applied
-  if (DOM.paymentDiscount) {
-    const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
-    if (state.discountApplied && state.totals.discountAmount > 0) {
-      DOM.paymentDiscount.textContent = `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`;
+  // Original price, discount, and pay-now total rows
+  const originalRow = DOM.paymentPayNowOriginal?.closest('.payment-overview-original')
+    || document.querySelector('.payment-overview-original');
+  if (payNowBreakdown.hasDiscount) {
+    if (originalRow) originalRow.style.display = 'flex';
+    if (DOM.paymentPayNowOriginal) {
+      DOM.paymentPayNowOriginal.textContent = formatCurrencyHalfKrone(payNowBreakdown.beforeDiscount);
+    }
+    if (DOM.paymentDiscount) {
+      DOM.paymentDiscount.textContent = `-${formatCurrencyHalfKrone(payNowBreakdown.discountKr)}`;
+      const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
       if (discountRow) {
         discountRow.style.display = 'flex';
+        const discountLabel = discountRow.querySelector('.payment-label');
+        if (discountLabel) discountLabel.textContent = getDiscountAmountLabel();
       }
-    } else if (discountRow) {
-      discountRow.style.display = 'none';
+    }
+  } else {
+    if (originalRow) originalRow.style.display = 'none';
+    if (DOM.paymentDiscount) {
+      const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
+      if (discountRow) discountRow.style.display = 'none';
     }
   }
   
@@ -16995,16 +17149,9 @@ function updatePaymentOverview() {
     // Total calculation:
     // - If payNowAmount already includes addons (from backend order that has addons), use it as-is
     // - Otherwise, add addonTotal to payNowAmount (order doesn't have addons yet, or no order data)
+    // payNowAmount already reflects coupon via resolvePayNowDiscountBreakdown
     let total = payNowIncludesAddons ? payNowAmount : payNowAmount + addonTotal;
-    
-    // Only subtract discount when pay-now is client-calculated (order price already includes coupon)
-    const orderPriceAlreadyDiscounted = hasOrderData
-      && extractCouponDiscountKr(state.fullOrder?.couponDiscount) > 0;
-    if (state.discountApplied && state.totals.discountAmount > 0 && !orderPriceAlreadyDiscounted) {
-      total = Math.max(0, total - state.totals.discountAmount);
-    }
-    
-    // Round and use as the single authoritative "Pay now" amount.
+
     const roundedTotal = roundToHalfKrone(total);
     if (DOM.payNow) {
       DOM.payNow.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
@@ -17079,7 +17226,7 @@ function updateDiscountDisplay() {
   
   // Show discount display if discount is applied OR if discount code is stored (pending application)
   // BUT: Don't show pending message if we're currently applying a discount (button is disabled)
-  const isApplyingDiscount = DOM.applyDiscountBtn && DOM.applyDiscountBtn.disabled && DOM.applyDiscountBtn.textContent.includes('Applying');
+  const isApplyingDiscount = isApplyDiscountButtonLoading();
   const shouldShowPending = state.discountCode && !state.discountApplied && !isApplyingDiscount;
   
   updateDiscountFormControls();
