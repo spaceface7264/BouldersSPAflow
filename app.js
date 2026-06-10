@@ -8238,6 +8238,9 @@ document.addEventListener('DOMContentLoaded', () => {
     state.testMode = true;
   }
   let orderId = urlParams.get('orderId');
+  const receiptId = urlParams.get('receiptid') || urlParams.get('receiptId');
+  const receiptUuid = urlParams.get('receiptuuid') || urlParams.get('receiptUuid');
+  const hasReceiptParam = Boolean(receiptId || receiptUuid);
   let isPaymentReturnFlow = false;
   
   // Fix: Payment provider may append /confirmation to orderId
@@ -8252,7 +8255,7 @@ document.addEventListener('DOMContentLoaded', () => {
       orderId = null;
     } else {
       orderId = numericOrderId.toString();
-      isPaymentReturnFlow = paymentReturn === 'return' && !!orderId;
+      isPaymentReturnFlow = true;
     }
   }
   
@@ -8261,7 +8264,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // CRITICAL: Check for payment errors BEFORE init() to prevent step 1 from showing
-  if (paymentReturn === 'return' && orderId) {
+  if (orderId && (paymentReturn === 'return' || hasReceiptParam)) {
     // We're returning from payment - check for errors first
     console.log('[Payment Return] Detected payment return for order:', orderId);
     
@@ -8427,7 +8430,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // If returning from payment, fetch order data and show confirmation view
-  if (paymentReturn === 'return' && orderId) {
+  if (orderId && (paymentReturn === 'return' || hasReceiptParam)) {
     // TEST MODE: Force failure for testing (add ?test=fail to URL)
     const testMode = urlParams.get('test');
     if (testMode === 'fail') {
@@ -17324,6 +17327,7 @@ function persistOrderSnapshot(orderId) {
       selectedProductType: state.selectedProductType, // Store product type for restoration
       selectedProductId: state.selectedProductId, // Store product ID for restoration
       subscriptionStartDate: state.subscriptionStartDate, // 15-day pass activation date
+      paymentMethod: state.paymentMethod,
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -18202,20 +18206,7 @@ async function handleCheckout() {
       }
       state.orderId = ensuredOrderId;
       
-      // Store order and cart data in sessionStorage for payment return
-      try {
-        sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
-          orderId: state.orderId,
-          membershipPlanId: state.membershipPlanId,
-          cartItems: state.cartItems || [],
-          totals: state.totals,
-          selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
-          selectedProductType: state.selectedProductType, // Store product type for restoration
-          selectedProductId: state.selectedProductId, // Store product ID for restoration
-        }));
-      } catch (e) {
-        console.warn('[checkout] Could not save order to sessionStorage:', e);
-      }
+      persistOrderSnapshot(state.orderId);
     } catch (error) {
       console.error('[checkout] Order creation failed:', error);
       showToast(getErrorMessage(error, 'Order creation'), 'error');
@@ -19566,6 +19557,7 @@ async function handleCheckout() {
       // This prevents the back button from going back to the checkout page
       setTimeout(() => {
         try {
+          persistOrderSnapshot(state.orderId);
           console.log('[checkout] Executing window.location.replace with:', effectivePaymentLink);
           window.location.replace(effectivePaymentLink);
         } catch (error) {
@@ -19599,6 +19591,7 @@ async function handleCheckout() {
         console.log('[checkout] Found payment link in state, using that instead');
         showToast('Redirecting to secure payment...', 'info');
         setTimeout(() => {
+          persistOrderSnapshot(state.orderId);
           window.location.replace(stateLink);
         }, 500);
       } else {
@@ -19949,6 +19942,204 @@ window.getOrderDiagnostics = async function(orderId) {
   }
 };
 
+const PURCHASE_TRACKED_KEY_PREFIX = 'boulders_purchase_tracked_';
+
+function getPurchaseTrackedStorageKey(orderId) {
+  return `${PURCHASE_TRACKED_KEY_PREFIX}${orderId}`;
+}
+
+function isPurchaseAlreadyTracked(orderId) {
+  try {
+    return sessionStorage.getItem(getPurchaseTrackedStorageKey(orderId)) === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function markPurchaseTracked(orderId) {
+  try {
+    sessionStorage.setItem(getPurchaseTrackedStorageKey(orderId), '1');
+  } catch (_) { /* ignore */ }
+}
+
+function getOrderTotalKrForTracking(order, storedOrder = null) {
+  const fromOrderPrice = extractCurrencyOutKr(order?.price?.amount ?? order?.price);
+  if (fromOrderPrice > 0) return fromOrderPrice;
+
+  const storedTotal = storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal;
+  if (storedTotal > 0) return roundToHalfKrone(storedTotal);
+
+  const legacy = order?.total ?? order?.totalAmount ?? order?.data?.total;
+  if (typeof legacy === 'number' && legacy > 0) {
+    return legacy > 10000 ? roundToHalfKrone(legacy / 100) : roundToHalfKrone(legacy);
+  }
+
+  return 0;
+}
+
+function buildPurchaseItemsFromOrder(order) {
+  if (!order) return [];
+  const items = [];
+
+  const pushItem = ({ id, name, amountKr, type, quantity = 1 }) => {
+    if (!id && !name) return;
+    items.push({
+      id: id || name,
+      productId: id,
+      name: name || 'Product',
+      amount: roundToHalfKrone(amountKr),
+      type,
+      quantity,
+    });
+  };
+
+  for (const item of order.subscriptionItems || []) {
+    const product = item.product || {};
+    const qty = item.quantity || 1;
+    const lineKr = extractCurrencyOutKr(item.price?.amount ?? item.price);
+    pushItem({
+      id: product.id || item.id,
+      name: product.name || 'Membership',
+      amountKr: lineKr,
+      type: 'membership',
+      quantity: qty,
+    });
+  }
+
+  for (const item of order.valueCardItems || []) {
+    const product = item.product || {};
+    const qty = item.quantity || 1;
+    const lineKr = extractCurrencyOutKr(item.price?.amount ?? item.price);
+    pushItem({
+      id: product.id || item.id,
+      name: product.name || 'Punch Card',
+      amountKr: lineKr,
+      type: 'value-card',
+      quantity: qty,
+    });
+  }
+
+  for (const item of order.articleItems || []) {
+    const product = item.product || {};
+    const qty = item.quantity || 1;
+    const lineKr = extractCurrencyOutKr(item.price?.amount ?? item.price);
+    pushItem({
+      id: product.id || item.id,
+      name: product.name || 'Add-on',
+      amountKr: lineKr,
+      type: 'addon',
+      quantity: qty,
+    });
+  }
+
+  for (const item of order.entryItems || []) {
+    const product = item.product || {};
+    const qty = item.quantity || 1;
+    const lineKr = extractCurrencyOutKr(item.price?.amount ?? item.price);
+    pushItem({
+      id: product.id || item.id,
+      name: product.name || 'Day ticket',
+      amountKr: lineKr,
+      type: 'entry',
+      quantity: qty,
+    });
+  }
+
+  return items;
+}
+
+function resolvePurchaseItems(order, storedOrder = null) {
+  const fromCart = (state.cartItems && state.cartItems.length > 0)
+    ? state.cartItems
+    : (storedOrder?.cartItems || []);
+  if (fromCart.length > 0) return fromCart;
+  return buildPurchaseItemsFromOrder(order);
+}
+
+function sumPurchaseItemsKr(items) {
+  return roundToHalfKrone(
+    items.reduce((sum, item) => {
+      const unit = typeof item.amount === 'number'
+        ? item.amount
+        : (typeof item.price === 'number' ? item.price : 0);
+      return sum + unit * (item.quantity || 1);
+    }, 0)
+  );
+}
+
+function resolvePurchaseTrackingMetadata(order, storedOrder = null) {
+  const businessUnit = order?.businessUnit || {};
+  const gymId = businessUnit.id || storedOrder?.selectedBusinessUnit || state.selectedBusinessUnit || null;
+  const gymName = businessUnit.name || businessUnit.label || null;
+  const paymentType = storedOrder?.paymentMethod || state.paymentMethod || null;
+  const landingPath = normalizePathname(window.location.pathname);
+
+  const metadata = {};
+  if (gymId != null) metadata.gym_id = String(gymId);
+  if (gymName) metadata.gym_name = gymName;
+  if (paymentType) metadata.payment_type = String(paymentType);
+  if (landingPath) metadata.landing_path = landingPath;
+  return metadata;
+}
+
+function trackConfirmedPurchase({ order, orderId, storedOrder = null } = {}) {
+  if (!orderId) {
+    devWarn('[GTM] purchase not tracked: missing orderId');
+    return false;
+  }
+
+  if (isPurchaseAlreadyTracked(orderId)) {
+    devLog('[GTM] purchase already tracked for order', orderId);
+    return false;
+  }
+
+  if (!window.GTM?.trackPurchase) {
+    devWarn('[GTM] purchase not tracked: GTM utilities not loaded');
+    return false;
+  }
+
+  const purchaseItems = resolvePurchaseItems(order, storedOrder);
+  if (!purchaseItems.length) {
+    devWarn('[GTM] purchase not tracked: no items for order', orderId);
+    return false;
+  }
+
+  let purchaseValue = getOrderTotalKrForTracking(order, storedOrder);
+  if (purchaseValue <= 0) {
+    purchaseValue = sumPurchaseItemsKr(purchaseItems);
+  }
+
+  const transactionId = order?.number ?? order?.id ?? orderId;
+  const metadata = resolvePurchaseTrackingMetadata(order, storedOrder);
+
+  try {
+    window.GTM.trackPurchase(
+      transactionId,
+      purchaseItems,
+      purchaseValue,
+      0,
+      0,
+      'DKK',
+      metadata
+    );
+    markPurchaseTracked(orderId);
+    devLog('[GTM] purchase tracked:', { transactionId, purchaseValue, itemCount: purchaseItems.length });
+    return true;
+  } catch (error) {
+    devWarn('[GTM] Error tracking purchase:', error);
+    return false;
+  }
+}
+
+function readStoredCheckoutOrder() {
+  try {
+    const orderData = sessionStorage.getItem('boulders_checkout_order');
+    return orderData ? JSON.parse(orderData) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Load order data when returning from payment
 async function loadOrderForConfirmation(orderId) {
   // CRITICAL: Check for URL error parameters FIRST (before resetting flags)
@@ -20069,6 +20260,7 @@ async function loadOrderForConfirmation(orderId) {
           updateStepIndicator();
           updateNavigationButtons();
           updateMainSubtitle();
+          trackConfirmedPurchase({ order: summaryOrder, orderId, storedOrder });
           renderConfirmationView();
           return;
         }
@@ -20355,8 +20547,7 @@ async function loadOrderForConfirmation(orderId) {
       customer.primaryGym = primaryGym || customer.primaryGym || customer.primary_gym;
     }
     
-    // Use order total if available, otherwise use stored total
-    const orderTotal = order?.total || order?.totalAmount || order?.data?.total || storedOrder?.totals?.cartTotal || 0;
+    const orderTotal = getOrderTotalKrForTracking(order, storedOrder);
     
     // Store diagnostic data for easy access (after customer is extracted)
     window.lastPaymentDiagnostics = {
@@ -20421,36 +20612,8 @@ async function loadOrderForConfirmation(orderId) {
     // Update payment overview with order data
     updatePaymentOverview();
     
-    // GTM: Track purchase event when payment is confirmed
-    const purchaseItems = (state.cartItems && state.cartItems.length > 0)
-      ? state.cartItems
-      : (storedOrder?.cartItems || []);
-    if (window.GTM && window.GTM.trackPurchase && purchaseItems.length > 0) {
-      try {
-        // Get order total - prefer from order object, fallback to cart total
-        const purchaseValue = orderTotal || 
-                             (order?.price?.total?.amount ? order.price.total.amount / 100 : 0) ||
-                             (order?.price?.total ? order.price.total / 100 : 0) ||
-                             state.totals.cartTotal || 0;
-        
-        // Get transaction ID
-        const transactionId = order?.number || order?.id || orderId;
-        
-        window.GTM.trackPurchase(
-          transactionId,
-          purchaseItems,
-          purchaseValue,
-          0, // tax
-          0, // shipping
-          'DKK'
-        );
-      } catch (error) {
-        console.warn('[GTM] Error tracking purchase:', error);
-      }
-    } else if (window.GTM && window.GTM.trackPurchase) {
-      console.warn('[GTM] purchase not tracked: missing cart items after payment return');
-    }
-    
+    trackConfirmedPurchase({ order, orderId, storedOrder });
+
     // Only render confirmation view if payment is confirmed
     renderConfirmationView();
   } catch (error) {
@@ -21287,6 +21450,8 @@ function showPaymentPendingMessage(order, orderId) {
       if (isPaymentConfirmed || isOrderPaid) {
         console.log('[Payment Pending] ✅ Payment confirmed! Reloading page to show success...');
         clearInterval(pollInterval);
+        const storedOrder = readStoredCheckoutOrder();
+        trackConfirmedPurchase({ order: updatedOrder, orderId, storedOrder });
         // Reload the page to show the success message
         window.location.reload();
       } else if (pollCount >= maxPolls) {
