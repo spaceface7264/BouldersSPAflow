@@ -62,7 +62,7 @@ function getTodayLocalDateString() {
 function extractCurrencyOutKr(currencyOut) {
   if (currencyOut == null) return 0;
   if (typeof currencyOut === 'number') {
-    return roundToHalfKrone(currencyOut > 10000 ? currencyOut / 100 : currencyOut);
+    return roundToHalfKrone(currencyOut / 100);
   }
   if (typeof currencyOut === 'object') {
     if (typeof currencyOut.amount === 'number') {
@@ -120,8 +120,9 @@ function resolvePayNowDiscountBreakdown(basePayNowKr) {
   const stateDiscountKr = state.discountApplied
     ? roundToHalfKrone(state.totals.discountAmount || 0)
     : 0;
-  const orderCouponKr = roundToHalfKrone(extractCouponDiscountKr(state.fullOrder?.couponDiscount));
-  const discountKr = stateDiscountKr > 0 ? stateDiscountKr : orderCouponKr;
+  const orderCouponKr = getOrderCouponDiscountKr();
+  // Prefer BRP order/line coupon over client state (response.discountAmount can disagree)
+  const discountKr = orderCouponKr > 0 ? orderCouponKr : stateDiscountKr;
 
   if (discountKr <= 0) {
     return { beforeDiscount: base, discountKr: 0, afterDiscount: base, hasDiscount: false };
@@ -146,70 +147,9 @@ function resolvePayNowDiscountBreakdown(basePayNowKr) {
   return { beforeDiscount, discountKr, afterDiscount, hasDiscount };
 }
 
-function formatCouponPercent(percent) {
-  if (!Number.isFinite(percent) || percent <= 0) return null;
-  const rounded = Math.abs(percent - Math.round(percent)) < 0.05
-    ? Math.round(percent)
-    : Math.round(percent * 10) / 10;
-  return `${rounded}%`;
-}
-
-function getDiscountAmountLabel() {
-  const percentText = formatCouponPercent(getAppliedCouponDiscountPercent());
-  if (!percentText) return t('cart.discountAmount');
-  return t('cart.discountAmountWithPercent').replace('{percent}', percentText);
-}
-
-function scoreCouponPercentCandidate(percent) {
-  if (!Number.isFinite(percent) || percent <= 0 || percent > 100) return -1;
-  const nearest = Math.round(percent);
-  if (nearest <= 0 || nearest > 100) return -1;
-  return 100 - Math.abs(percent - nearest);
-}
-
-function pickBestCouponPercent(candidates) {
-  let best = null;
-  let bestScore = -1;
-  for (const percent of candidates) {
-    const score = scoreCouponPercentCandidate(percent);
-    if (score > bestScore) {
-      bestScore = score;
-      best = percent;
-    }
-  }
-  return best;
-}
-
-function getCouponPercentFromOrderItem(item) {
-  const coupon = item?.coupon;
-  if (!coupon?.discount) return null;
-
-  const lineDiscount = extractCurrencyOutKr(coupon.discount);
-  if (lineDiscount <= 0) return null;
-
-  if (coupon.name && state.discountCode
-    && coupon.name.toUpperCase() !== state.discountCode.toUpperCase()) {
-    return null;
-  }
-
-  const candidates = [];
-  const linePrice = extractCurrencyOutKr(item.price);
-  const preDiscountBase = linePrice + lineDiscount;
-  if (preDiscountBase > 0) {
-    candidates.push((lineDiscount / preDiscountBase) * 100);
-  }
-
-  const recurringPrice = extractCurrencyOutKr(item.payRecurring?.price);
-  if (recurringPrice > 0) {
-    candidates.push((lineDiscount / recurringPrice) * 100);
-  }
-
-  return pickBestCouponPercent(candidates);
-}
-
-/** Effective coupon % from BRP line items (prefers whole-number rates like 21% / 50%). */
-function getAppliedCouponDiscountPercent() {
-  if (!state.discountApplied) return null;
+function getOrderCouponDiscountKr() {
+  const fromOrder = roundToHalfKrone(extractCouponDiscountKr(state.fullOrder?.couponDiscount));
+  if (fromOrder > 0) return fromOrder;
 
   const order = state.fullOrder;
   const itemGroups = [
@@ -219,25 +159,125 @@ function getAppliedCouponDiscountPercent() {
     order?.entryItems,
   ].filter(Array.isArray);
 
-  const candidates = [];
+  let lineSum = 0;
   for (const items of itemGroups) {
     for (const item of items) {
-      const percent = getCouponPercentFromOrderItem(item);
-      if (percent != null) candidates.push(percent);
+      if (item?.coupon?.discount) {
+        lineSum += extractCurrencyOutKr(item.coupon.discount);
+      }
     }
   }
+  return roundToHalfKrone(lineSum);
+}
 
-  const fromItems = pickBestCouponPercent(candidates);
-  if (fromItems != null) return fromItems;
+function isPunchCardCheckout() {
+  return state.selectedProductType === 'punch-card' && Boolean(state.selectedProductId);
+}
 
-  const discountKr = state.totals.discountAmount;
-  const payNow = state.totals.payNowAmount;
-  if (discountKr > 0) {
-    const base = payNow + discountKr;
-    if (base > 0) return (discountKr / base) * 100;
+function ensurePaymentOverviewDomRefs() {
+  if (!DOM.paymentOverview) {
+    DOM.paymentOverview = document.querySelector('.payment-overview:not(.payment-overview-total-wrap)')
+      || document.querySelector('.payment-overview');
+  }
+  if (!DOM.payNow) DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
+  if (!DOM.monthlyPayment) DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
+  if (!DOM.paymentDiscount) DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
+  if (!DOM.paymentPayNowOriginal) DOM.paymentPayNowOriginal = document.querySelector('[data-summary-field="pay-now-original"]');
+  if (!DOM.firstMonthRow) DOM.firstMonthRow = document.querySelector('.payment-overview-first-month');
+  if (!DOM.paymentBoundUntil) DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
+}
+
+function applyPaymentOverviewDiscountRows(payNowBreakdown) {
+  const originalRow = DOM.paymentPayNowOriginal?.closest('.payment-overview-original')
+    || document.querySelector('.payment-overview-original');
+  if (payNowBreakdown.hasDiscount) {
+    if (originalRow) originalRow.style.display = 'flex';
+    if (DOM.paymentPayNowOriginal) {
+      DOM.paymentPayNowOriginal.textContent = formatCurrencyHalfKrone(payNowBreakdown.beforeDiscount);
+    }
+    if (DOM.paymentDiscount) {
+      DOM.paymentDiscount.textContent = `-${formatCurrencyHalfKrone(payNowBreakdown.discountKr)}`;
+      const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
+      if (discountRow) {
+        discountRow.style.display = 'flex';
+        const discountLabel = discountRow.querySelector('.payment-label');
+        if (discountLabel) discountLabel.textContent = getDiscountAmountLabel(payNowBreakdown);
+      }
+    }
+  } else {
+    if (originalRow) originalRow.style.display = 'none';
+    if (DOM.paymentDiscount) {
+      const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
+      if (discountRow) discountRow.style.display = 'none';
+    }
+  }
+}
+
+function getPunchCardPayNowBaseKr() {
+  const subtotal = state.totals.subtotal || 0;
+  if (state.fullOrder?.price?.amount === undefined) return subtotal;
+
+  const orderKr = roundToHalfKrone(extractCurrencyOutKr(state.fullOrder.price.amount));
+  const couponKr = getOrderCouponDiscountKr();
+  if (couponKr > 0) return roundToHalfKrone(orderKr + couponKr);
+  if (state.discountApplied && state.totals.discountAmount > 0) {
+    return roundToHalfKrone(orderKr + state.totals.discountAmount);
+  }
+  return orderKr > 0 ? orderKr : subtotal;
+}
+
+function updatePunchCardPaymentOverview() {
+  DOM.paymentOverview.style.display = 'block';
+  const totalWrap = document.querySelector('.payment-overview-total-wrap');
+  if (totalWrap) totalWrap.style.display = 'none';
+
+  const monthlyPaymentItem = DOM.monthlyPayment?.closest('.payment-overview-item');
+  if (monthlyPaymentItem) monthlyPaymentItem.style.display = 'none';
+  if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = 'none';
+  if (DOM.paymentBoundUntil) DOM.paymentBoundUntil.style.display = 'none';
+  if (DOM.paymentOverview) DOM.paymentOverview.classList.remove('payment-overview--tiered-offer');
+
+  const payNowBreakdown = resolvePayNowDiscountBreakdown(getPunchCardPayNowBaseKr());
+  const payNowAmount = roundToHalfKrone(payNowBreakdown.afterDiscount);
+
+  state.totals.payNowAmount = payNowAmount;
+  state.totals.cartTotal = payNowAmount;
+
+  applyPaymentOverviewDiscountRows(payNowBreakdown);
+
+  if (DOM.payNow) {
+    DOM.payNow.textContent = formatCurrencyHalfKrone(payNowAmount);
+    const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
+    const periodElement = payNowRow?.querySelector('.payment-label-period');
+    if (periodElement) periodElement.textContent = '';
   }
 
-  return null;
+  const payNowIncludesEl = document.querySelector('[data-summary-field="pay-now-includes"]');
+  if (payNowIncludesEl) {
+    payNowIncludesEl.style.display = 'none';
+    payNowIncludesEl.textContent = '';
+  }
+
+  applyFreeFlowCartUi();
+}
+
+function formatCouponPercent(percent) {
+  if (!Number.isFinite(percent) || percent <= 0) return null;
+  // Half-krone rounding on amounts can yield 25.125% etc. for a 25% coupon — snap to integer when close.
+  const rounded = Math.abs(percent - Math.round(percent)) < 0.2
+    ? Math.round(percent)
+    : Math.round(percent * 10) / 10;
+  return `${rounded}%`;
+}
+
+function getDiscountAmountLabel(payNowBreakdown) {
+  if (!payNowBreakdown?.hasDiscount || payNowBreakdown.beforeDiscount <= 0) {
+    return t('cart.discountAmount');
+  }
+  const percent = (payNowBreakdown.discountKr / payNowBreakdown.beforeDiscount) * 100;
+  const percentText = formatCouponPercent(percent);
+  if (!percentText) return t('cart.discountAmount');
+  return t('cart.discountAmountWithPercent').replace('{percent}', percentText);
 }
 
 function normalizeCartProductId(id) {
@@ -14777,7 +14817,10 @@ async function handleApplyDiscount() {
     }
 
     const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-    let discountAmount = response?.discountAmount ?? calculateOrderCouponDiscountKr(response, subtotal);
+    let discountAmount = calculateOrderCouponDiscountKr(response, subtotal);
+    if (discountAmount <= 0 && response?.discountAmount != null) {
+      discountAmount = extractCurrencyOutKr(response.discountAmount);
+    }
     discountAmount = capCouponDiscountKr(discountAmount, subtotal);
     const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
     
@@ -14804,6 +14847,11 @@ async function handleApplyDiscount() {
         if (response.articleItems?.length) {
           state.fullOrder.articleItems = response.articleItems;
         }
+      }
+
+      const syncedDiscount = getOrderCouponDiscountKr();
+      if (syncedDiscount > 0) {
+        state.totals.discountAmount = syncedDiscount;
       }
       
       console.log('[Discount] Applying discount:', {
@@ -15843,30 +15891,7 @@ function renderCartItems() {
   subscriptionItems.forEach((item, index) => {
     const cartItem = renderCartItem(item, index === 0);
     DOM.cartItems.appendChild(cartItem);
-    // Value-card: add Total (X klip) + price in a row below the cart-item
-    if (item.type === 'value-card') {
-      const totalRow = document.createElement('div');
-      totalRow.className = 'cart-item-total-row';
-      const labelSpan = document.createElement('span');
-      const punches = item.totalPunches != null && item.totalPunches > 0 ? item.totalPunches : 0;
-      // firstclimb is a single-day ticket — just say "Total" instead of the
-      // "Total (X Klip)" punch-card label. Same fallback for any value card BRP
-      // returns without a clip count.
-      if (isFirstClimbRoute() || punches === 0) {
-        labelSpan.textContent = t('cart.total') || 'Total';
-      } else if (punches === 1) {
-        labelSpan.textContent = `Total (${t('cart.punch.one')})`;
-      } else {
-        labelSpan.textContent = `Total (${punches} ${t('cart.punch.label')})`;
-      }
-      labelSpan.className = 'cart-total-label';
-      totalRow.appendChild(labelSpan);
-      const priceSpan = document.createElement('span');
-      priceSpan.className = 'cart-item-total-price';
-      renderCartItemPriceElement(priceSpan, item);
-      totalRow.appendChild(priceSpan);
-      DOM.cartItems.appendChild(totalRow);
-    }
+    // Punch-card totals live in payment overview (same breakdown as membership checkout).
   });
 
   // Render addon items in separate container (below payment overview, above total)
@@ -15972,10 +15997,11 @@ function renderCartTotal() {
   
   // Show/hide cart total container based on whether there are items
   if (cartTotalContainer) {
-    const hasItems = state.cartItems && state.cartItems.length > 0;
-    // Only show if there are non-membership items (membership price is shown in payment overview)
-    const hasNonMembershipItems = state.cartItems && state.cartItems.some(item => item.type !== 'membership');
-    cartTotalContainer.style.display = hasNonMembershipItems ? 'block' : 'none';
+    // Prices for membership and punch-card flows are shown in payment overview
+    const showLegacyCartTotal = state.cartItems?.some(
+      (item) => item.type !== 'membership' && item.type !== 'value-card'
+    );
+    cartTotalContainer.style.display = showLegacyCartTotal ? 'block' : 'none';
   }
   
   // Update discount display if discount is applied
@@ -16009,44 +16035,38 @@ function updatePaymentOverview() {
     return;
   }
   
-  // Only show payment overview if there's a membership (subscription) in the cart
   const hasMembership = state.selectedProductType === 'membership' && state.selectedProductId;
-  
-  // Initialize DOM references
-  if (!DOM.paymentOverview) {
-    DOM.paymentOverview = document.querySelector('.payment-overview');
-  }
-  if (!DOM.payNow) {
-    DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
-  }
-  if (!DOM.monthlyPayment) {
-    DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
-  }
+  const hasPunchCardCheckout = isPunchCardCheckout();
+
+  ensurePaymentOverviewDomRefs();
+
   if (!DOM.paymentBillingPeriod) {
     DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
-  }
-  if (!DOM.paymentBoundUntil) {
-    DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
   }
   if (!DOM.firstMonthAmount) {
     DOM.firstMonthAmount = document.querySelector('[data-summary-field="first-month"]');
   }
-  if (!DOM.firstMonthRow) {
-    DOM.firstMonthRow = document.querySelector('.payment-overview-first-month');
-  }
-  
-  if (!DOM.paymentOverview || !DOM.payNow || !DOM.monthlyPayment) {
+
+  if (!DOM.paymentOverview || !DOM.payNow) {
     return;
   }
-  
-  if (!hasMembership) {
-    // Hide payment overview and total wrapper if no membership
+
+  if (!hasMembership && !hasPunchCardCheckout) {
     DOM.paymentOverview.style.display = 'none';
     const totalWrap = document.querySelector('.payment-overview-total-wrap');
     if (totalWrap) totalWrap.style.display = 'none';
     return;
   }
-  
+
+  if (hasPunchCardCheckout && !hasMembership) {
+    updatePunchCardPaymentOverview();
+    return;
+  }
+
+  if (!DOM.monthlyPayment) {
+    return;
+  }
+
   // Show payment overview - don't wait for order data, show prices from product data immediately
   DOM.paymentOverview.style.display = 'block';
   
@@ -17076,30 +17096,7 @@ function updatePaymentOverview() {
     }
   }
 
-  // Original price, discount, and pay-now total rows
-  const originalRow = DOM.paymentPayNowOriginal?.closest('.payment-overview-original')
-    || document.querySelector('.payment-overview-original');
-  if (payNowBreakdown.hasDiscount) {
-    if (originalRow) originalRow.style.display = 'flex';
-    if (DOM.paymentPayNowOriginal) {
-      DOM.paymentPayNowOriginal.textContent = formatCurrencyHalfKrone(payNowBreakdown.beforeDiscount);
-    }
-    if (DOM.paymentDiscount) {
-      DOM.paymentDiscount.textContent = `-${formatCurrencyHalfKrone(payNowBreakdown.discountKr)}`;
-      const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
-      if (discountRow) {
-        discountRow.style.display = 'flex';
-        const discountLabel = discountRow.querySelector('.payment-label');
-        if (discountLabel) discountLabel.textContent = getDiscountAmountLabel();
-      }
-    }
-  } else {
-    if (originalRow) originalRow.style.display = 'none';
-    if (DOM.paymentDiscount) {
-      const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
-      if (discountRow) discountRow.style.display = 'none';
-    }
-  }
+  applyPaymentOverviewDiscountRows(payNowBreakdown);
   
   // Display boundUntil date separately if available (for memberships with promotional periods)
   if (DOM.paymentBoundUntil) {
@@ -18308,8 +18305,10 @@ async function handleCheckout() {
                 console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
 
                 const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-                let discountAmount = discountResponse?.discountAmount
-                  ?? calculateOrderCouponDiscountKr(discountResponse, subtotal);
+                let discountAmount = calculateOrderCouponDiscountKr(discountResponse, subtotal);
+                if (discountAmount <= 0 && discountResponse?.discountAmount != null) {
+                  discountAmount = extractCurrencyOutKr(discountResponse.discountAmount);
+                }
                 discountAmount = roundToHalfKrone(capCouponDiscountKr(discountAmount, subtotal));
 
               if (discountAmount > 0) {
@@ -19365,8 +19364,10 @@ async function handleCheckout() {
             console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
             
             const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-            let discountAmount = discountResponse?.discountAmount
-              ?? calculateOrderCouponDiscountKr(discountResponse, subtotal);
+            let discountAmount = calculateOrderCouponDiscountKr(discountResponse, subtotal);
+            if (discountAmount <= 0 && discountResponse?.discountAmount != null) {
+              discountAmount = extractCurrencyOutKr(discountResponse.discountAmount);
+            }
 
             if (!discountAmount) {
               try {
