@@ -789,6 +789,10 @@
                                             <span class="payment-amount" data-summary-field="first-month">0,00 kr.</span>
                                         </div>
                                     </div>
+                                    <div class="payment-overview-item payment-overview-original" style="display: none;">
+                                        <span class="payment-label" data-i18n-key="cart.subtotal">Subtotal:</span>
+                                        <span class="payment-amount" data-summary-field="pay-now-original">0,00 kr.</span>
+                                    </div>
                                     <div class="payment-overview-item payment-overview-discount" style="display: none;">
                                         <span class="payment-label" data-i18n-key="cart.discountAmount">Discount:</span>
                                         <span class="payment-amount" data-summary-field="discount-amount">-0,00 kr.</span>
@@ -821,13 +825,15 @@
                                 
                                 <!-- Discount Code -->
                                 <div class="discount-section">
-                                    <button class="discount-toggle" type="button">
-                                        <span data-i18n-key="cart.discount">Discount code</span>
-                                        <span class="toggle-icon">+</span>
-                                    </button>
-                                    <div class="discount-form" style="display: none;">
-                                        <input type="text" placeholder="" class="discount-input" data-i18n-placeholder="cart.discount.placeholder">
-                                        <button type="button" class="apply-discount-btn" data-i18n-key="button.apply">Apply</button>
+                                    <div class="discount-form">
+                                        <div class="discount-form-entry">
+                                            <input type="text" placeholder="" class="discount-input" data-i18n-placeholder="cart.discount.placeholder">
+                                            <button type="button" class="apply-discount-btn" data-i18n-key="button.apply">Apply</button>
+                                        </div>
+                                        <div class="discount-applied-chip" hidden>
+                                            <span class="discount-applied-code" aria-live="polite"></span>
+                                            <button type="button" class="discount-remove-link" data-i18n-key="button.removeCoupon">Remove</button>
+                                        </div>
                                     </div>
                                     <div class="discount-display" data-discount-display style="display: none;"></div>
                                 </div>
