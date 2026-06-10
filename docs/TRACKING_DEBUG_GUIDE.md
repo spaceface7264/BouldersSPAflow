@@ -151,7 +151,39 @@ console.log('GTM Available:', window.GTM && window.GTM.trackPurchase);
 
 **If `state.paymentConfirmed` is false:** Payment confirmation logic might not be working.
 
-**If `state.cartItems` is empty:** Cart might be cleared before purchase event fires.
+**If `state.cartItems` is empty:** Cart might be cleared before purchase event fires. After the tracking fix, items are also rebuilt from `order.subscriptionItems` / `valueCardItems` when sessionStorage is missing.
+
+### Issue: Purchase fires but revenue is 0
+
+**Check the dataLayer payload:**
+```javascript
+window.DEBUG_LOGS = true; // re-run checkout to see [GTM] logs
+const purchases = window.dataLayer.filter(e => e.event === 'purchase');
+console.log(purchases[purchases.length - 1]?.ecommerce);
+```
+
+**Expected:** `value` matches order total in DKK (from `order.price.amount` via BRP API), `transaction_id` matches `order.number`, and `items` is non-empty.
+
+**If value is still 0:** Confirm the order API returns `price.amount` and that analytics consent is granted (Consent Mode blocks GA4, not the dataLayer push).
+
+## Manual test matrix (join.boulders)
+
+Enable **Preserve log** in DevTools Console and Network before starting each test.
+
+| Dimension | Minimum cases |
+|-----------|----------------|
+| Product | membership, 15-day pass, punch card |
+| Location | 2+ business units |
+| Payment | card; MobilePay if available in test |
+| Consent | Accept all; reject analytics (dataLayer should still push; GA4 should not record) |
+
+**Pass criteria per completed checkout:**
+
+1. `window.dataLayer` contains `event: 'purchase'` with `ecommerce.value > 0`
+2. `ecommerce.transaction_id` equals backend order number
+3. GTM Preview: `GA4 - Purchase` tag fires (when consented)
+4. GA4 DebugView shows purchase with revenue (when consented)
+5. Repeat visit / reload does not duplicate purchase (idempotency key `boulders_purchase_tracked_<orderId>`)
 
 ## Testing Checklist
 

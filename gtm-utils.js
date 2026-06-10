@@ -7,6 +7,18 @@
 // Initialize DataLayer if it doesn't exist
 window.dataLayer = window.dataLayer || [];
 
+function gtmLog(...args) {
+  if (window.DEBUG_LOGS === true) {
+    console.log(...args);
+  }
+}
+
+function gtmWarn(...args) {
+  if (window.DEBUG_LOGS === true) {
+    console.warn(...args);
+  }
+}
+
 /**
  * Push an event to the DataLayer
  * @param {string} eventName - The name of the event
@@ -14,8 +26,12 @@ window.dataLayer = window.dataLayer || [];
  */
 function pushToDataLayer(eventName, eventData = {}) {
   if (!eventName) {
-    console.warn('[GTM] Event name is required');
+    gtmWarn('[GTM] Event name is required');
     return;
+  }
+
+  if (eventData.ecommerce) {
+    window.dataLayer.push({ ecommerce: null });
   }
 
   const event = {
@@ -24,7 +40,7 @@ function pushToDataLayer(eventName, eventData = {}) {
   };
 
   window.dataLayer.push(event);
-  console.log('[GTM] Pushed event:', eventName, eventData);
+  gtmLog('[GTM] Pushed event:', eventName, eventData);
 }
 
 /**
@@ -43,16 +59,23 @@ function formatPrice(priceInDKK) {
 /**
  * Format product data for GA4 ecommerce events
  * @param {object} product - Product object from cart/state
+ * @param {object} itemMetadata - Optional per-item enrichment (e.g. item_category2)
  * @returns {object} Formatted product data
  */
-function formatProductForGA4(product) {
-  return {
+function formatProductForGA4(product, itemMetadata = {}) {
+  const formatted = {
     item_id: String(product.id || product.productId || ''),
     item_name: product.name || '',
     price: formatPrice(product.amount || product.price || 0),
     quantity: product.quantity || 1,
-    item_category: product.type || 'membership', // membership, punch-card, addon
+    item_category: product.type || 'membership', // membership, value-card, addon
   };
+
+  if (itemMetadata.item_category2) {
+    formatted.item_category2 = itemMetadata.item_category2;
+  }
+
+  return formatted;
 }
 
 /**
@@ -64,7 +87,7 @@ function formatProductForGA4(product) {
  */
 function trackSelectItem(product, itemListId = null, itemListName = null) {
   if (!product) {
-    console.warn('[GTM] select_item: Product is required');
+    gtmWarn('[GTM] select_item: Product is required');
     return;
   }
 
@@ -93,7 +116,7 @@ function trackSelectItem(product, itemListId = null, itemListName = null) {
  */
 function trackAddToCart(items = [], value = 0, currency = 'DKK') {
   if (!Array.isArray(items) || items.length === 0) {
-    console.warn('[GTM] add_to_cart: Items array is required');
+    gtmWarn('[GTM] add_to_cart: Items array is required');
     return;
   }
 
@@ -117,7 +140,7 @@ function trackAddToCart(items = [], value = 0, currency = 'DKK') {
  */
 function trackBeginCheckout(items = [], value = 0, currency = 'DKK') {
   if (!Array.isArray(items) || items.length === 0) {
-    console.warn('[GTM] begin_checkout: Items array is required');
+    gtmWarn('[GTM] begin_checkout: Items array is required');
     return;
   }
 
@@ -141,21 +164,24 @@ function trackBeginCheckout(items = [], value = 0, currency = 'DKK') {
  * @param {number} tax - Tax amount (optional)
  * @param {number} shipping - Shipping amount (optional)
  * @param {string} currency - Currency code (default: 'DKK')
+ * @param {object} metadata - Optional top-level event parameters (gym_id, payment_type, etc.)
  */
-function trackPurchase(transactionId, items = [], value = 0, tax = 0, shipping = 0, currency = 'DKK') {
+function trackPurchase(transactionId, items = [], value = 0, tax = 0, shipping = 0, currency = 'DKK', metadata = {}) {
   if (!transactionId) {
-    console.warn('[GTM] purchase: Transaction ID is required');
+    gtmWarn('[GTM] purchase: Transaction ID is required');
     return;
   }
 
   if (!Array.isArray(items) || items.length === 0) {
-    console.warn('[GTM] purchase: Items array is required');
+    gtmWarn('[GTM] purchase: Items array is required');
     return;
   }
 
-  const formattedItems = items.map(item => formatProductForGA4(item));
+  const gymName = metadata.gym_name || null;
+  const itemMetadata = gymName ? { item_category2: gymName } : {};
+  const formattedItems = items.map(item => formatProductForGA4(item, itemMetadata));
 
-  pushToDataLayer('purchase', {
+  const eventData = {
     ecommerce: {
       transaction_id: String(transactionId),
       value: formatPrice(value),
@@ -164,7 +190,12 @@ function trackPurchase(transactionId, items = [], value = 0, tax = 0, shipping =
       currency: currency,
       items: formattedItems
     }
-  });
+  };
+
+  const { gym_name: _gymName, ...topLevelMetadata } = metadata || {};
+  Object.assign(eventData, topLevelMetadata);
+
+  pushToDataLayer('purchase', eventData);
 }
 
 // Export functions for use in other scripts
