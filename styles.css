@@ -7943,18 +7943,22 @@ main {
 .success-badge {
     --success-badge-size: 96px;
     position: relative;
+    isolation: isolate;
     width: var(--success-badge-size);
     height: var(--success-badge-size);
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 28px;
+    border-radius: 50%;
+    background: #1a1a1a;
 }
 
 .success-badge::before {
     content: '';
     position: absolute;
-    inset: 8px;
+    inset: 0;
+    z-index: 1;
     border-radius: 50%;
     background: linear-gradient(155deg, #2c2c2c 0%, #1e1e1e 48%, #141414 100%);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -7967,15 +7971,17 @@ main {
 
 .success-badge__halo {
     position: absolute;
-    inset: -18px;
+    inset: -22px;
+    z-index: 0;
     border-radius: 50%;
     background: radial-gradient(
         circle,
-        rgba(244, 1, 245, 0.5) 0%,
-        rgba(255, 108, 255, 0.22) 28%,
-        rgba(52, 211, 153, 0.12) 52%,
-        transparent 72%
+        rgba(244, 1, 245, 0.34) 0%,
+        rgba(255, 108, 255, 0.14) 32%,
+        rgba(52, 211, 153, 0.05) 62%,
+        transparent 82%
     );
+    filter: blur(14px);
     opacity: 0;
     pointer-events: none;
 }
@@ -7983,6 +7989,7 @@ main {
 .success-badge__orbit {
     position: absolute;
     inset: 2px;
+    z-index: 2;
     border-radius: 50%;
     border: 1px dashed rgba(244, 1, 245, 0.42);
     opacity: 0;
@@ -8042,7 +8049,7 @@ main {
 
 .success-badge__svg {
     position: relative;
-    z-index: 1;
+    z-index: 3;
     width: 60px;
     height: 60px;
     overflow: visible;
@@ -8155,7 +8162,7 @@ main {
 }
 
 .success-badge:not(.is-animating) .success-badge__halo {
-    opacity: 0.88;
+    opacity: 0.62;
 }
 
 .success-badge:not(.is-animating) .success-badge__orbit {
@@ -8236,12 +8243,16 @@ main {
 #step-5.is-revealing .confirmation-left > .confirmation-card,
 #step-5.is-revealing .next-steps,
 #step-5.is-revealing .member-onboarding-section,
+#step-5.is-revealing .first-session-video-section,
 #step-5.is-revealing .invite-friends-section {
     animation: success-rise 360ms ease-out both;
     animation-delay: 720ms;
 }
 #step-5.is-revealing .confirmation-left > .confirmation-card:nth-child(2) {
     animation-delay: 800ms;
+}
+#step-5.is-revealing .first-session-video-section {
+    animation-delay: 750ms;
 }
 #step-5.is-revealing .next-steps {
     animation-delay: 780ms;
@@ -8263,11 +8274,15 @@ main {
 #step-5.is-revealing.has-header-pill .confirmation-left > .confirmation-card,
 #step-5.is-revealing.has-header-pill .next-steps,
 #step-5.is-revealing.has-header-pill .member-onboarding-section,
+#step-5.is-revealing.has-header-pill .first-session-video-section,
 #step-5.is-revealing.has-header-pill .invite-friends-section {
     animation-delay: 1060ms;
 }
 #step-5.is-revealing.has-header-pill .confirmation-left > .confirmation-card:nth-child(2) {
     animation-delay: 1140ms;
+}
+#step-5.is-revealing.has-header-pill .first-session-video-section {
+    animation-delay: 1090ms;
 }
 #step-5.is-revealing.has-header-pill .next-steps {
     animation-delay: 1120ms;
@@ -8283,19 +8298,19 @@ main {
 #step-5.is-revealing.has-header-pill .step-item:nth-child(3) { animation-delay: 1480ms; }
 
 @keyframes success-badge-pop {
-    0%   { transform: scale(0.84); opacity: 0; }
-    55%  { transform: scale(1.06); opacity: 1; }
-    100% { transform: scale(1); opacity: 1; }
+    0%   { transform: scale(0.84); }
+    55%  { transform: scale(1.06); }
+    100% { transform: scale(1); }
 }
 
 @keyframes success-badge-halo-in {
     0%   { opacity: 0; transform: scale(0.78); }
-    100% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0.62; transform: scale(1); }
 }
 
 @keyframes success-badge-halo-breathe {
-    0%, 100% { opacity: 0.7; transform: scale(0.96); }
-    50%      { opacity: 1; transform: scale(1.14); }
+    0%, 100% { opacity: 0.5; transform: scale(0.98); }
+    50%      { opacity: 0.68; transform: scale(1.05); }
 }
 
 @keyframes success-badge-idle-pulse {
@@ -8316,8 +8331,7 @@ main {
             inset 0 1px 0 rgba(255, 255, 255, 0.15),
             inset 0 -2px 8px rgba(0, 0, 0, 0.35),
             0 16px 44px rgba(0, 0, 0, 0.42),
-            0 0 32px rgba(244, 1, 245, 0.38),
-            0 0 12px rgba(52, 211, 153, 0.2),
+            0 0 28px rgba(244, 1, 245, 0.28),
             0 0 0 1px rgba(244, 1, 245, 0.32);
     }
 }
@@ -8377,6 +8391,7 @@ main {
     #step-5.is-revealing .confirmation-left > .confirmation-card,
     #step-5.is-revealing .next-steps,
     #step-5.is-revealing .member-onboarding-section,
+    #step-5.is-revealing .first-session-video-section,
     #step-5.is-revealing .invite-friends-section,
     #step-5.is-revealing .step-item {
         animation: none !important;
@@ -8385,7 +8400,7 @@ main {
         opacity: 1;
     }
     .success-badge__halo {
-        opacity: 0.88;
+        opacity: 0.62;
     }
     .success-badge__orbit {
         opacity: 0.55;
@@ -8406,7 +8421,9 @@ main {
 .step-panel[data-payment-failed="true"] .invite-friends-section,
 .step-panel[data-payment-pending="true"] .invite-friends-section,
 .step-panel[data-payment-failed="true"] .member-onboarding-section,
-.step-panel[data-payment-pending="true"] .member-onboarding-section {
+.step-panel[data-payment-pending="true"] .member-onboarding-section,
+.step-panel[data-payment-failed="true"] .first-session-video-section,
+.step-panel[data-payment-pending="true"] .first-session-video-section {
   display: none !important;
   visibility: hidden !important;
 }
@@ -9711,6 +9728,290 @@ main {
     }
 }
 
+/* First session video — thumbnail card above "What happens next?" */
+.first-session-video-section {
+    width: 100%;
+}
+
+.first-session-video-card {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    background:
+        radial-gradient(ellipse 90% 70% at 100% 0%, rgba(244, 1, 245, 0.14) 0%, transparent 58%),
+        linear-gradient(155deg, #232323 0%, #1a1a1a 52%, #161616 100%);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 10px 32px rgba(0, 0, 0, 0.32);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.first-session-video-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    z-index: 2;
+    transform: translateX(-50%);
+    width: 52%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.42) 50%, transparent 100%);
+    pointer-events: none;
+}
+
+.first-session-video-card:hover {
+    border-color: rgba(244, 1, 245, 0.34);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 0 1px rgba(244, 1, 245, 0.12),
+        0 14px 40px rgba(0, 0, 0, 0.4),
+        0 0 28px rgba(244, 1, 245, 0.14);
+    transform: translateY(-2px);
+}
+
+.first-session-video-link {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    color: inherit;
+    text-decoration: none;
+}
+
+.first-session-video-thumb {
+    position: relative;
+    flex: 0 0 44%;
+    min-height: 124px;
+    background: #101010;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.first-session-video-thumb::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    pointer-events: none;
+}
+
+.first-session-video-thumb-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scale(1.02);
+    transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), filter 0.35s ease;
+}
+
+.first-session-video-thumb-shade {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(180deg, rgba(8, 8, 8, 0.05) 0%, rgba(8, 8, 8, 0.55) 100%),
+        linear-gradient(90deg, transparent 55%, rgba(22, 22, 22, 0.85) 100%);
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.first-session-video-card:hover .first-session-video-thumb-img {
+    transform: scale(1.07);
+    filter: saturate(1.08);
+}
+
+.first-session-video-card:hover .first-session-video-thumb-shade {
+    opacity: 0.88;
+}
+
+.first-session-video-play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 1;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #ff4dff 0%, #F401F5 55%, #c803c9 100%);
+    color: #fff;
+    box-shadow:
+        0 4px 18px rgba(244, 1, 245, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+
+.first-session-video-play-ring {
+    position: absolute;
+    inset: -7px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 108, 255, 0.45);
+    opacity: 0.75;
+    animation: first-session-play-ring 2.4s ease-out infinite;
+}
+
+.first-session-video-play svg {
+    position: relative;
+    left: 1px;
+}
+
+.first-session-video-card:hover .first-session-video-play {
+    transform: translate(-50%, -50%) scale(1.08);
+    box-shadow:
+        0 8px 28px rgba(244, 1, 245, 0.62),
+        inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+@keyframes first-session-play-ring {
+    0%   { transform: scale(0.92); opacity: 0.7; }
+    70%  { transform: scale(1.22); opacity: 0; }
+    100% { transform: scale(1.22); opacity: 0; }
+}
+
+.first-session-video-duration {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 1;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(10, 10, 10, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(6px);
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+}
+
+.first-session-video-copy {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+    padding: 20px 22px 20px 20px;
+    text-align: left;
+}
+
+.first-session-video-eyebrow {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #ff6cff;
+}
+
+.first-session-video-title {
+    margin: 0;
+    font-size: var(--font-size-md);
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+    color: #fff;
+}
+
+.first-session-video-desc {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.62);
+}
+
+.first-session-video-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    align-self: flex-start;
+    margin-top: 6px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(244, 1, 245, 0.1);
+    border: 1px solid rgba(244, 1, 245, 0.22);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: #ff8fff;
+    transition:
+        color 0.2s ease,
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.first-session-video-cta-icon {
+    flex-shrink: 0;
+    opacity: 0.85;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.first-session-video-card:hover .first-session-video-cta {
+    color: #fff;
+    background: rgba(244, 1, 245, 0.22);
+    border-color: rgba(244, 1, 245, 0.42);
+}
+
+.first-session-video-card:hover .first-session-video-cta-icon {
+    opacity: 1;
+    transform: translate(1px, -1px);
+}
+
+.first-session-video-link:focus-visible {
+    outline: none;
+}
+
+.first-session-video-card:has(.first-session-video-link:focus-visible) {
+    outline: 2px solid rgba(244, 1, 245, 0.65);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .first-session-video-play-ring {
+        animation: none;
+        opacity: 0.45;
+    }
+
+    .first-session-video-thumb-img,
+    .first-session-video-play,
+    .first-session-video-cta,
+    .first-session-video-cta-icon,
+    .first-session-video-card {
+        transition: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .first-session-video-link {
+        flex-direction: column;
+    }
+
+    .first-session-video-thumb {
+        flex: none;
+        aspect-ratio: 16 / 9;
+        width: 100%;
+        min-height: 0;
+    }
+
+    .first-session-video-thumb::after {
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .first-session-video-thumb-shade {
+        background:
+            linear-gradient(180deg, rgba(8, 8, 8, 0.05) 0%, rgba(8, 8, 8, 0.62) 100%),
+            linear-gradient(0deg, rgba(22, 22, 22, 0.75) 0%, transparent 42%);
+    }
+
+    .first-session-video-copy {
+        padding: 18px 18px 20px;
+    }
+}
+
 /* Next Steps */
 .next-steps {
     background-color: #1F1F1F;
@@ -10065,20 +10366,22 @@ main {
         display: contents;
     }
     .confirmation-layout[data-with-invite="true"] .confirmation-left > .confirmation-card:first-child { order: 1; }
-    .confirmation-layout[data-with-invite="true"] .next-steps { order: 2; }
-    .confirmation-layout[data-with-invite="true"] .invite-friends-section { order: 3; }
+    .confirmation-layout[data-with-invite="true"] .first-session-video-section { order: 2; }
+    .confirmation-layout[data-with-invite="true"] .next-steps { order: 3; }
+    .confirmation-layout[data-with-invite="true"] .invite-friends-section { order: 4; }
     .confirmation-layout[data-with-invite="true"] #confirmationMembershipSection,
     .confirmation-layout[data-with-invite="true"] #confirmation15DayPassSection,
-    .confirmation-layout[data-with-invite="true"] #confirmationPunchCardSection { order: 4; }
+    .confirmation-layout[data-with-invite="true"] #confirmationPunchCardSection { order: 5; }
 
     /* Membership: surface perks immediately after the success header */
     .confirmation-layout[data-with-onboarding="true"] #memberOnboardingSection { order: 1; }
     .confirmation-layout[data-with-onboarding="true"] .confirmation-left > .confirmation-card:first-child { order: 2; }
-    .confirmation-layout[data-with-onboarding="true"] .next-steps { order: 3; }
-    .confirmation-layout[data-with-onboarding="true"] .invite-friends-section { order: 4; }
+    .confirmation-layout[data-with-onboarding="true"] .first-session-video-section { order: 3; }
+    .confirmation-layout[data-with-onboarding="true"] .next-steps { order: 4; }
+    .confirmation-layout[data-with-onboarding="true"] .invite-friends-section { order: 5; }
     .confirmation-layout[data-with-onboarding="true"] #confirmationMembershipSection,
     .confirmation-layout[data-with-onboarding="true"] #confirmation15DayPassSection,
-    .confirmation-layout[data-with-onboarding="true"] #confirmationPunchCardSection { order: 5; }
+    .confirmation-layout[data-with-onboarding="true"] #confirmationPunchCardSection { order: 6; }
     
     .step-panel[data-payment-failed="true"] .step-panel-content,
     #step-5.step-panel[data-payment-failed="true"] .step-panel-content,
@@ -10120,7 +10423,7 @@ main {
         margin-bottom: 24px;
     }
     .success-badge::before {
-        inset: 7px;
+        inset: 0;
     }
     .success-badge__halo {
         inset: -14px;

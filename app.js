@@ -114,6 +114,9 @@ function isFirstClimbRoute() {
   return active?.componentName === 'LandingFirstClimb';
 }
 
+const FIRST_SESSION_VIDEO_ID = 'W-4skXhGWM0';
+const FIRST_SESSION_VIDEO_URL = `https://www.youtube.com/watch?v=${FIRST_SESSION_VIDEO_ID}&t=1s`;
+
 // firstclimb is a one-per-customer offer. Every user — new or existing — can
 // buy it exactly once. A customer is disqualified if they have ever held a
 // product carrying the dedicated `Første Gang` label (the canonical blocking
@@ -6402,6 +6405,12 @@ const translations = {
     'confirmation.onboarding.communities.title': 'Sociale sessions',
     'confirmation.onboarding.communities.desc': 'Temaaftener. Mød bare op, når det passer dig.',
     'confirmation.onboarding.communities.aria': 'Se sociale sessions (åbner i nyt vindue)',
+    'confirmation.firstSession.eyebrow': 'Godt at vide',
+    'confirmation.firstSession.title': 'Din første session',
+    'confirmation.firstSession.desc': 'Kort guide til, hvad du skal vide, inden du klatrer i hallen.',
+    'confirmation.firstSession.cta': 'Se videoen',
+    'confirmation.firstSession.duration': '4 min',
+    'confirmation.firstSession.aria': 'Se video om din første session hos Boulders (åbner YouTube i nyt vindue)',
     'confirmation.punchCardDetails': 'Klippekort detaljer',
     'confirmation.name': 'Navn:',
     'confirmation.cardType': 'Korttype:',
@@ -6680,6 +6689,12 @@ const translations = {
     'confirmation.onboarding.communities.title': 'Join a community',
     'confirmation.onboarding.communities.desc': 'Social Sessions. Themed nights, drop in anytime.',
     'confirmation.onboarding.communities.aria': 'View Social Sessions schedule (opens in a new tab)',
+    'confirmation.firstSession.eyebrow': 'Good to know',
+    'confirmation.firstSession.title': 'Your first visit',
+    'confirmation.firstSession.desc': 'A quick guide to what to know before you climb at the gym.',
+    'confirmation.firstSession.cta': 'Watch video',
+    'confirmation.firstSession.duration': '4 min',
+    'confirmation.firstSession.aria': 'Watch the first-session guide (opens YouTube in a new tab)',
     'confirmation.punchCardDetails': 'Punch Card Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Card Type:',
@@ -7009,6 +7024,12 @@ const translations = {
     'confirmation.onboarding.communities.title': 'Community beitreten',
     'confirmation.onboarding.communities.desc': 'Social Sessions. Themenabende, einfach vorbeikommen.',
     'confirmation.onboarding.communities.aria': 'Social Sessions ansehen (öffnet in neuem Tab)',
+    'confirmation.firstSession.eyebrow': 'Gut zu wissen',
+    'confirmation.firstSession.title': 'Dein erster Besuch',
+    'confirmation.firstSession.desc': 'Kurzer Guide: Was du vor dem Klettern in der Halle wissen solltest.',
+    'confirmation.firstSession.cta': 'Video ansehen',
+    'confirmation.firstSession.duration': '4 Min.',
+    'confirmation.firstSession.aria': 'Video zum ersten Besuch ansehen (öffnet YouTube in neuem Tab)',
     'confirmation.punchCardDetails': 'Stempelkarten-Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Kartentyp:',
@@ -13059,6 +13080,16 @@ function handleGlobalClick(event) {
       scrollToFAQ();
       break;
     }
+    case 'first-session-video': {
+      try {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+          event: 'first_session_video_click',
+          product_type: determineProductTypeFromOrder(),
+        });
+      } catch (_) { /* GTM optional */ }
+      break;
+    }
     case 'invite-copy-link': {
       event.preventDefault();
       handleInviteCopyLink(actionable);
@@ -13320,6 +13351,34 @@ function trackInviteShare(method) {
 function isMobileUserAgent() {
   if (typeof navigator === 'undefined') return false;
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+}
+
+function renderFirstSessionVideo(productType) {
+  const section = document.getElementById('firstSessionVideoSection');
+  if (!section) return;
+
+  section.style.display = '';
+
+  const link = document.getElementById('firstSessionVideoLink');
+  if (link) link.href = FIRST_SESSION_VIDEO_URL;
+
+  const thumbImg = section.querySelector('.first-session-video-thumb-img');
+  if (thumbImg && !thumbImg.dataset.fallbackBound) {
+    thumbImg.dataset.fallbackBound = 'true';
+    thumbImg.addEventListener('error', () => {
+      thumbImg.src = `https://i.ytimg.com/vi/${FIRST_SESSION_VIDEO_ID}/hqdefault.jpg`;
+    }, { once: true });
+  }
+
+  section.querySelectorAll('[data-i18n-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-key');
+    if (key) el.textContent = t(key);
+  });
+
+  section.querySelectorAll('[data-i18n-aria-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-aria-key');
+    if (key) el.setAttribute('aria-label', t(key));
+  });
 }
 
 function renderMemberOnboarding(productType) {
@@ -21464,50 +21523,33 @@ function playSuccessPing(delayMs = 520) {
       }
 
       const t0 = ctx.currentTime;
+      const C5 = 523.25;
+      const C6 = 1046.5;
+
       const master = ctx.createGain();
       master.gain.setValueAtTime(0.0001, t0);
-      master.gain.exponentialRampToValueAtTime(0.32, t0 + 0.012);
-      master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.62);
+      master.gain.exponentialRampToValueAtTime(0.38, t0 + 0.006);
+      master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
       master.connect(ctx.destination);
 
-      // Leading tick — ring finishing
-      const tick = ctx.createOscillator();
-      tick.type = 'triangle';
-      tick.frequency.setValueAtTime(784, t0); // G5
-      const tickGain = ctx.createGain();
-      tickGain.gain.setValueAtTime(0.75, t0);
-      tickGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
-      tick.connect(tickGain);
-      tickGain.connect(master);
-      tick.start(t0);
-      tick.stop(t0 + 0.13);
+      const playNote = (freq, start, peakGain, attackSec, decaySec) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(peakGain, start + attackSec);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + decaySec);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(start);
+        osc.stop(start + decaySec + 0.02);
+      };
 
-      // Resolve — checkmark lands
-      const pingAt = t0 + 0.07;
-      const ping = ctx.createOscillator();
-      ping.type = 'triangle';
-      ping.frequency.setValueAtTime(1174.7, pingAt); // D6
-      const pingGain = ctx.createGain();
-      pingGain.gain.setValueAtTime(0.0001, pingAt);
-      pingGain.gain.exponentialRampToValueAtTime(1, pingAt + 0.018);
-      pingGain.gain.exponentialRampToValueAtTime(0.0001, pingAt + 0.55);
-      ping.connect(pingGain);
-      pingGain.connect(master);
-      ping.start(pingAt);
-      ping.stop(pingAt + 0.58);
-
-      // Overtone — adds chime presence without harshness
-      const shimmer = ctx.createOscillator();
-      shimmer.type = 'sine';
-      shimmer.frequency.setValueAtTime(1174.7 * 2, pingAt);
-      const shimmerGain = ctx.createGain();
-      shimmerGain.gain.setValueAtTime(0.0001, pingAt);
-      shimmerGain.gain.exponentialRampToValueAtTime(0.42, pingAt + 0.02);
-      shimmerGain.gain.exponentialRampToValueAtTime(0.0001, pingAt + 0.38);
-      shimmer.connect(shimmerGain);
-      shimmerGain.connect(master);
-      shimmer.start(pingAt);
-      shimmer.stop(pingAt + 0.4);
+      // C5 punch — tight lead
+      playNote(C5, t0, 0.9, 0.004, 0.09);
+      // C6 resolve — bright octave pop on checkmark land
+      playNote(C6, t0 + 0.048, 1, 0.003, 0.32);
     } catch (err) {
       if (window.DEBUG_LOGS === true) console.warn('[success-ping] failed', err);
     }
@@ -21711,7 +21753,8 @@ function renderConfirmationView() {
     nextStep1.textContent = t('confirmation.nextStep1');
   }
 
-  // Membership onboarding highlights + invite-friends (membership-centric flows)
+  // First-session video + membership onboarding + invite-friends
+  renderFirstSessionVideo(productType);
   renderMemberOnboarding(productType);
   renderInviteFriends(productType);
   
