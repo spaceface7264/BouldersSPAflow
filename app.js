@@ -6389,6 +6389,7 @@ const translations = {
     'confirmation.validFrom': 'Gyldig fra:',
     'confirmation.validUntil': 'Gyldig til:',
     'confirmation.validity': 'Gyldighed',
+    'confirmation.validityIntro.15daypass': 'Dit pas er gyldigt fra',
     'confirmation.punchCardDetails': 'Klippekort detaljer',
     'confirmation.name': 'Navn:',
     'confirmation.cardType': 'Korttype:',
@@ -6654,6 +6655,7 @@ const translations = {
     'confirmation.validFrom': 'Valid From:',
     'confirmation.validUntil': 'Valid Until:',
     'confirmation.validity': 'Valid',
+    'confirmation.validityIntro.15daypass': 'Your pass is valid from',
     'confirmation.punchCardDetails': 'Punch Card Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Card Type:',
@@ -6970,6 +6972,7 @@ const translations = {
     'confirmation.validFrom': 'Gültig von:',
     'confirmation.validUntil': 'Gültig bis:',
     'confirmation.validity': 'Gültig',
+    'confirmation.validityIntro.15daypass': 'Ihr Pass ist gültig ab',
     'confirmation.punchCardDetails': 'Stempelkarten-Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Kartentyp:',
@@ -21749,6 +21752,7 @@ function renderConfirmationView() {
   // re-enable it when valid dates are available.
   const defaultValidityPill = document.getElementById('successValidityPill');
   if (defaultValidityPill) defaultValidityPill.style.display = 'none';
+  step5Panel?.classList.remove('has-validity-dates');
 
   // 15-Day Trial Pass specific fields - from API only
   if (productType === '15daypass') {
@@ -21794,8 +21798,7 @@ function renderConfirmationView() {
         : '—';
     }
 
-    // Surface the validity window in the success header — the most time-sensitive
-    // fact for a 15-day pass deserves to be visible above the receipt.
+    // Surface the validity window directly under the success subheading.
     const validityPill = document.getElementById('successValidityPill');
     const headerPassStart = document.querySelector('[data-summary-field="header-pass-start-date"]');
     const headerPassEnd = document.querySelector('[data-summary-field="header-pass-end-date"]');
@@ -21803,8 +21806,9 @@ function renderConfirmationView() {
       parsedStart && !isNaN(parsedStart.getTime()) &&
       parsedEnd && !isNaN(parsedEnd.getTime());
     if (validityPill) {
-      validityPill.style.display = hasValidDates ? 'inline-flex' : 'none';
+      validityPill.style.display = hasValidDates ? 'block' : 'none';
     }
+    step5Panel?.classList.toggle('has-validity-dates', !!hasValidDates);
     if (headerPassStart && hasValidDates) headerPassStart.textContent = formatLongDate(parsedStart);
     if (headerPassEnd && hasValidDates) headerPassEnd.textContent = formatLongDate(parsedEnd);
 
