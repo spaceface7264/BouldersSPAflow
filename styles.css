@@ -8081,6 +8081,7 @@ main {
 /* Supporting content reveal cascade — receipt + next-steps fade-rise after header lands */
 #step-5.is-revealing .confirmation-left > .confirmation-card,
 #step-5.is-revealing .next-steps,
+#step-5.is-revealing .member-onboarding-section,
 #step-5.is-revealing .invite-friends-section {
     animation: success-rise 360ms ease-out both;
     animation-delay: 720ms;
@@ -8103,24 +8104,11 @@ main {
 #step-5.is-revealing .step-item:nth-child(1) { animation-delay: 1000ms; }
 #step-5.is-revealing .step-item:nth-child(2) { animation-delay: 1070ms; }
 #step-5.is-revealing .step-item:nth-child(3) { animation-delay: 1140ms; }
-#step-5.is-revealing .member-onboarding-title {
-    animation: success-rise 280ms ease-out both;
-    animation-delay: 720ms;
-}
-#step-5.is-revealing .member-onboarding-lead {
-    animation: success-rise 280ms ease-out both;
-    animation-delay: 760ms;
-}
-#step-5.is-revealing .member-onboarding-item {
-    animation: success-rise 280ms ease-out both;
-}
-#step-5.is-revealing .member-onboarding-item:nth-child(1) { animation-delay: 800ms; }
-#step-5.is-revealing .member-onboarding-item:nth-child(2) { animation-delay: 870ms; }
-#step-5.is-revealing .member-onboarding-item:nth-child(3) { animation-delay: 940ms; }
 
 /* When a header pill is shown, push the receipt / next-steps cascade back */
 #step-5.is-revealing.has-header-pill .confirmation-left > .confirmation-card,
 #step-5.is-revealing.has-header-pill .next-steps,
+#step-5.is-revealing.has-header-pill .member-onboarding-section,
 #step-5.is-revealing.has-header-pill .invite-friends-section {
     animation-delay: 1060ms;
 }
@@ -8136,18 +8124,9 @@ main {
 #step-5.is-revealing.has-header-pill .confirmation-layout[data-with-onboarding="true"] .invite-friends-section {
     animation-delay: 1520ms;
 }
-#step-5.is-revealing.has-header-pill .member-onboarding-title {
-    animation-delay: 1060ms;
-}
-#step-5.is-revealing.has-header-pill .member-onboarding-lead {
-    animation-delay: 1100ms;
-}
 #step-5.is-revealing.has-header-pill .step-item:nth-child(1) { animation-delay: 1340ms; }
 #step-5.is-revealing.has-header-pill .step-item:nth-child(2) { animation-delay: 1410ms; }
 #step-5.is-revealing.has-header-pill .step-item:nth-child(3) { animation-delay: 1480ms; }
-#step-5.is-revealing.has-header-pill .member-onboarding-item:nth-child(1) { animation-delay: 1140ms; }
-#step-5.is-revealing.has-header-pill .member-onboarding-item:nth-child(2) { animation-delay: 1210ms; }
-#step-5.is-revealing.has-header-pill .member-onboarding-item:nth-child(3) { animation-delay: 1280ms; }
 
 @keyframes success-badge-pop {
     0%   { transform: scale(0.3); opacity: 0; }
@@ -8175,11 +8154,9 @@ main {
     .confirmation-header.is-animating .success-header-pill,
     #step-5.is-revealing .confirmation-left > .confirmation-card,
     #step-5.is-revealing .next-steps,
+    #step-5.is-revealing .member-onboarding-section,
     #step-5.is-revealing .invite-friends-section,
-    #step-5.is-revealing .step-item,
-    #step-5.is-revealing .member-onboarding-title,
-    #step-5.is-revealing .member-onboarding-lead,
-    #step-5.is-revealing .member-onboarding-item {
+    #step-5.is-revealing .step-item {
         animation: none !important;
     }
     #step-5.has-header-pill .success-header-pill {
@@ -8200,8 +8177,8 @@ main {
 .step-panel[data-payment-pending="true"] .confirmation-right,
 .step-panel[data-payment-failed="true"] .invite-friends-section,
 .step-panel[data-payment-pending="true"] .invite-friends-section,
-.step-panel[data-payment-failed="true"] .member-onboarding-panel,
-.step-panel[data-payment-pending="true"] .member-onboarding-panel {
+.step-panel[data-payment-failed="true"] .member-onboarding-section,
+.step-panel[data-payment-pending="true"] .member-onboarding-section {
   display: none !important;
   visibility: hidden !important;
 }
@@ -9600,6 +9577,10 @@ main {
 }
 
 /* Membership onboarding — own card above "What happens next?" */
+.member-onboarding-section {
+    width: 100%;
+}
+
 .member-onboarding-panel {
     --invite-angle: 0deg;
     position: relative;
