@@ -964,37 +964,125 @@
                     <div class="confirmation-layout">
                         <!-- Left Column - Order & Membership Summary -->
                         <div class="confirmation-left">
-                            <!-- Order Details Card -->
-                            <div class="confirmation-card" id="confirmationOrderSection">
-                                <h3 class="card-title" data-i18n-key="confirmation.orderDetails">Order Details</h3>
-                                <div class="order-info">
-                                    <div class="order-item">
-                                        <span class="order-label" data-i18n-key="confirmation.orderNumber">Order Number:</span>
-                                        <span class="order-value" data-summary-field="order-number">—</span>
+                            <!-- Order confirmation card (5 zones) -->
+                            <div class="confirmation-order-card-v2" id="confirmationOrderSection" role="region" aria-labelledby="confirmationOrderTitle">
+                                <h2 class="visually-hidden" id="confirmationOrderTitle" data-i18n-key="confirmation.yourOrder">Your order</h2>
+
+                                <!-- Zone 1: Product -->
+                                <div class="confirmation-order-zone confirmation-order-zone--product">
+                                    <p class="confirmation-order-eyebrow" data-product-eyebrow="membership" data-i18n-key="confirmation.eyebrow.membership">Dit medlemskab</p>
+                                    <p class="confirmation-order-eyebrow" data-product-eyebrow="15daypass" data-i18n-key="confirmation.eyebrow.15daypass" hidden>Dit prøvepas</p>
+                                    <p class="confirmation-order-eyebrow" data-product-eyebrow="punch-card" data-i18n-key="confirmation.eyebrow.punchcard" hidden>Dit klippekort</p>
+                                    <p class="confirmation-order-eyebrow" data-product-eyebrow="firstclimb" data-i18n-key="confirmation.eyebrow.firstclimb" hidden>Din billet</p>
+
+                                    <div class="confirmation-order-product-panel" id="confirmationMembershipSection" hidden>
+                                        <div class="confirmation-order-product-row">
+                                            <span class="confirmation-order-product-name" data-summary-field="membership-type"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></span>
+                                            <span class="confirmation-order-product-price-wrap">
+                                                <span class="confirmation-order-product-price" data-summary-field="membership-price"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></span>
+                                                <span class="confirmation-order-price-suffix" data-suffix-monthly data-i18n-key="confirmation.perMonthShort">/md.</span>
+                                            </span>
+                                        </div>
+                                        <p class="confirmation-order-gym-line membership-item--in-header" data-header-pill-field="primary-gym">
+                                            <span class="confirmation-order-gym-label" data-i18n-key="confirmation.primaryGymInline">Primary gym:</span>
+                                            <span class="confirmation-order-gym-value" data-summary-field="primary-gym"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></span>
+                                        </p>
                                     </div>
-                                    <div class="order-item">
-                                        <span class="order-label" data-i18n-key="confirmation.date">Date:</span>
-                                        <span class="order-value" data-summary-field="order-date">—</span>
+
+                                    <div class="confirmation-order-product-panel" id="confirmation15DayPassSection" hidden>
+                                        <div class="confirmation-order-product-row">
+                                            <span class="confirmation-order-product-name" data-summary-field="pass-type"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></span>
+                                            <span class="confirmation-order-product-price-wrap">
+                                                <span class="confirmation-order-product-price" data-summary-field="membership-price"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></span>
+                                            </span>
+                                        </div>
+                                        <p class="confirmation-order-gym-line">
+                                            <span class="confirmation-order-gym-label" data-i18n-key="confirmation.primaryGymInline">Primary gym:</span>
+                                            <span class="confirmation-order-gym-value" data-summary-field="primary-gym"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></span>
+                                        </p>
+                                        <span class="visually-hidden membership-item--in-header" data-header-pill-field="pass-validity">
+                                            <span data-summary-field="pass-start-date"><span class="confirmation-skeleton confirmation-skeleton--sm" aria-hidden="true"></span></span>
+                                            <span data-summary-field="pass-end-date"><span class="confirmation-skeleton confirmation-skeleton--sm" aria-hidden="true"></span></span>
+                                        </span>
+                                    </div>
+
+                                    <div class="confirmation-order-product-panel" id="confirmationPunchCardSection" hidden>
+                                        <div class="confirmation-order-product-row">
+                                            <span class="confirmation-order-product-name" data-summary-field="punch-card-type"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></span>
+                                            <span class="confirmation-order-product-price-wrap">
+                                                <span class="confirmation-order-product-price" data-summary-field="product-line-price"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></span>
+                                            </span>
+                                        </div>
+                                        <span class="visually-hidden" data-summary-field="punch-card-expiry"><span class="confirmation-skeleton confirmation-skeleton--sm" aria-hidden="true"></span></span>
+                                    </div>
+
+                                    <div class="confirmation-order-product-panel" id="confirmationFirstClimbSection" hidden>
+                                        <div class="confirmation-order-product-row">
+                                            <span class="confirmation-order-product-name" data-summary-field="firstclimb-product-name"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></span>
+                                            <span class="confirmation-order-product-price-wrap">
+                                                <span class="confirmation-order-product-price" data-summary-field="firstclimb-product-price"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></span>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                                
+
+                                <!-- Zone 2: Member -->
+                                <div class="confirmation-order-zone confirmation-order-zone--member" id="confirmationMemberZone">
+                                    <div class="confirmation-order-field">
+                                        <span class="confirmation-order-field-label" data-i18n-key="cart.memberName">Name</span>
+                                        <span class="confirmation-order-field-value" data-summary-field="member-name"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></span>
+                                    </div>
+                                    <div class="confirmation-order-field" data-member-field="phone">
+                                        <span class="confirmation-order-field-label" data-i18n-key="confirmation.phoneNumber">Phone no.</span>
+                                        <span class="confirmation-order-field-value" data-summary-field="member-phone"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></span>
+                                    </div>
+                                    <div class="confirmation-order-field" data-member-field="punch-card" hidden>
+                                        <span class="confirmation-order-field-label" data-i18n-key="confirmation.quantity">Quantity</span>
+                                        <span class="confirmation-order-field-value" data-summary-field="punch-card-quantity"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></span>
+                                    </div>
+                                    <div class="confirmation-order-field" data-member-field="15daypass" hidden>
+                                        <span class="confirmation-order-field-label" data-i18n-key="confirmation.validUntil">Valid until</span>
+                                        <span class="confirmation-order-field-value" data-summary-field="pass-end-date-display"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></span>
+                                    </div>
+                                </div>
+
+                                <!-- Zone 3: Total -->
+                                <div class="confirmation-order-zone confirmation-order-zone--total">
+                                    <div class="confirmation-order-total-copy">
+                                        <p class="confirmation-order-total-label" data-i18n-key="confirmation.totalToday">Total today</p>
+                                        <p class="confirmation-order-recurring-note" data-recurring-note data-membership-only hidden>
+                                            <span data-i18n-key="confirmation.thenPerMonthPrefix">Then</span>
+                                            <span data-summary-field="order-recurring-price"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></span>
+                                            <span data-i18n-key="confirmation.perMonth">per month</span>
+                                        </p>
+                                    </div>
+                                    <p class="confirmation-order-total-amount" data-summary-field="order-total"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></p>
+                                </div>
+
+                                <!-- Zone 4: Actions -->
+                                <div class="confirmation-order-zone confirmation-order-zone--actions">
+                                    <button type="button" class="receipt-btn" id="showDetailedReceiptBtn" data-action="show-detailed-receipt" data-i18n-key="confirmation.showReceipt">
+                                        Vis detaljeret kvittering
+                                    </button>
+                                </div>
+
+                                <!-- Zone 5: Meta -->
+                                <footer class="confirmation-order-zone confirmation-order-zone--meta">
+                                    <span class="confirmation-order-meta-line">
+                                        <span data-i18n-key="confirmation.orderMetaOrder">Order</span>
+                                        <span aria-hidden="true">#</span><span data-summary-field="order-number"><span class="confirmation-skeleton confirmation-skeleton--sm" aria-hidden="true"></span></span>
+                                        <span class="confirmation-order-meta-sep" aria-hidden="true">·</span>
+                                        <span data-summary-field="order-date"><span class="confirmation-skeleton confirmation-skeleton--sm" aria-hidden="true"></span></span>
+                                    </span>
+                                </footer>
+
                                 <template id="confirmation-item-template">
                                     <div class="purchase-item" data-confirmation-item>
                                         <span class="item-name" data-element="name"></span>
                                         <span class="item-price" data-element="price"></span>
                                     </div>
                                 </template>
-
-                                <div class="purchase-items" data-component="confirmation-items"></div>
-
-                                <div class="order-total">
-                                    <span class="total-label" data-i18n-key="confirmation.total">Total:</span>
-                                    <span class="total-amount" data-summary-field="order-total">0,00 kr</span>
-                                </div>
-                                
-                                <button class="receipt-btn" id="showDetailedReceiptBtn" data-action="show-detailed-receipt" data-i18n-key="confirmation.showReceipt" style="margin-top: 20px;">
-                                    Vis detaljeret kvittering
-                                </button>
+                                <div class="visually-hidden" data-component="confirmation-items" hidden></div>
                             </div>
                             
                             <!-- Detailed Receipt Modal -->
@@ -1099,84 +1187,6 @@
                                     
                                     <div class="receipt-footer">
                                         <button class="receipt-close-btn" id="closeReceiptBtn" data-action="close-detailed-receipt" data-i18n-key="confirmation.receipt.close">LUK</button>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Membership Details Card (for regular memberships) -->
-                            <div class="confirmation-card" id="confirmationMembershipSection" style="display: none;">
-                                <h3 class="card-title" data-i18n-key="cart.membershipDetails">Membership Details</h3>
-                                
-                                <div class="membership-info">
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
-                                        <span class="membership-value" data-summary-field="member-name">—</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="cart.membershipNumber">Membership Number:</span>
-                                        <span class="membership-value" data-summary-field="membership-number">—</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.membershipType">Type:</span>
-                                        <span class="membership-value" data-summary-field="membership-type">—</span>
-                                    </div>
-                                    <div class="membership-item membership-item--in-header" data-header-pill-field="primary-gym">
-                                        <span class="membership-label" data-i18n-key="confirmation.primaryGym">Primary Gym:</span>
-                                        <span class="membership-value" data-summary-field="primary-gym">—</span>
-                                    </div>
-                                    <div class="membership-item membership-item--in-header" data-header-pill-field="membership-price">
-                                        <span class="membership-label" data-i18n-key="confirmation.monthlyPrice">Monthly Price:</span>
-                                        <span class="membership-value" data-summary-field="membership-price">0,00 kr</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- 15 Day Pass Details Card -->
-                            <div class="confirmation-card" id="confirmation15DayPassSection" style="display: none;">
-                                <h3 class="card-title" data-i18n-key="confirmation.15daypassDetails">15 Day Pass Details</h3>
-                                <div class="membership-info">
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="cart.memberName">Member Name:</span>
-                                        <span class="membership-value" data-summary-field="member-name">—</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.passType">Pass Type:</span>
-                                        <span class="membership-value" data-summary-field="pass-type">15 Day Pass</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.primaryGym">Primary Gym:</span>
-                                        <span class="membership-value" data-summary-field="primary-gym">—</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.validFrom">Valid From:</span>
-                                        <span class="membership-value" data-summary-field="pass-start-date">—</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.validUntil">Valid Until:</span>
-                                        <span class="membership-value" data-summary-field="pass-end-date">—</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Punch Card Details Card -->
-                            <div class="confirmation-card" id="confirmationPunchCardSection" style="display: none;">
-                                <h3 class="card-title" data-i18n-key="confirmation.punchCardDetails">Punch Card Details</h3>
-                                <div class="membership-info">
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.name">Navn:</span>
-                                        <span class="membership-value" data-summary-field="member-name">—</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.cardType">Card Type:</span>
-                                        <span class="membership-value" data-summary-field="punch-card-type">—</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.quantity">Quantity:</span>
-                                        <span class="membership-value" data-summary-field="punch-card-quantity">—</span>
-                                    </div>
-                                    <div class="membership-item">
-                                        <span class="membership-label" data-i18n-key="confirmation.validUntil">Valid Until:</span>
-                                        <span class="membership-value" data-summary-field="punch-card-expiry">—</span>
                                     </div>
                                 </div>
                             </div>

@@ -6330,7 +6330,7 @@ const translations = {
     'activationConfirm.today': 'I dag',
     'activationConfirm.continue': 'Fortsæt til betaling',
     'activationConfirm.continue.freetrial': 'Aktivér prøveperiode',
-    'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
+    'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Navn',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
     'cart.consent.terms.firstclimb': 'Jeg forstår, at jeg skal underskrive <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">ansvarsfraskrivelsen</a> ved indløsning af billetten.*',
@@ -6359,6 +6359,18 @@ const translations = {
     'confirmation.nextStep3.firstclimb': 'Når du kommer: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk. Husk at du skal underskrive ansvarsfraskrivelsen.',
     'confirmation.message.generic': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.orderDetails': 'Ordredetaljer',
+    'confirmation.yourOrder': 'Din ordre',
+    'confirmation.eyebrow.membership': 'Dit medlemskab',
+    'confirmation.eyebrow.15daypass': 'Dit prøvepas',
+    'confirmation.eyebrow.punchcard': 'Dit klippekort',
+    'confirmation.eyebrow.firstclimb': 'Din billet',
+    'confirmation.perMonthShort': '/md.',
+    'confirmation.totalToday': 'Total i dag',
+    'confirmation.thenPerMonthPrefix': 'Derefter',
+    'confirmation.perMonth': 'pr. måned',
+    'confirmation.primaryGymInline': 'Primær hal:',
+    'confirmation.phoneNumber': 'Telefonnr.',
+    'confirmation.orderMetaOrder': 'Ordre',
     'confirmation.orderNumber': 'Ordrenummer:',
     'confirmation.date': 'Dato:',
     'confirmation.total': 'Total:',
@@ -6614,7 +6626,7 @@ const translations = {
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
-    'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
+    'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Name',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
     'cart.consent.terms.firstclimb': 'I understand that I will sign the <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">liability waiver</a> when redeeming the ticket.*',
@@ -6643,6 +6655,18 @@ const translations = {
     'confirmation.nextStep3.firstclimb': 'When you arrive: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes and chalk. Remember you\'ll need to sign the liability waiver.',
     'confirmation.message.generic': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.orderDetails': 'Order Details',
+    'confirmation.yourOrder': 'Your order',
+    'confirmation.eyebrow.membership': 'Your membership',
+    'confirmation.eyebrow.15daypass': 'Your trial pass',
+    'confirmation.eyebrow.punchcard': 'Your punch card',
+    'confirmation.eyebrow.firstclimb': 'Your ticket',
+    'confirmation.perMonthShort': '/mo.',
+    'confirmation.totalToday': 'Total today',
+    'confirmation.thenPerMonthPrefix': 'Then',
+    'confirmation.perMonth': 'per month',
+    'confirmation.primaryGymInline': 'Primary gym:',
+    'confirmation.phoneNumber': 'Phone no.',
+    'confirmation.orderMetaOrder': 'Order',
     'confirmation.orderNumber': 'Order Number:',
     'confirmation.date': 'Date:',
     'confirmation.total': 'Total:',
@@ -6917,7 +6941,7 @@ const translations = {
     'faq.firstclimb.afterDay.a': 'Bleib dran! Du kannst direkt vor Ort auf eine Mitgliedschaft, ein 15-Tage-Ticket oder eine Stempelkarte upgraden — oder online, wenn du bereit bist.',
     'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
-    'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
+    'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Name',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
     'cart.consent.terms.firstclimb': 'Ich verstehe, dass ich beim Einlösen des Tickets den <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">Haftungsausschluss</a> unterschreiben werde.*',
@@ -6978,6 +7002,18 @@ const translations = {
     'confirmation.nextStep3.firstclimb': 'Wenn du ankommst: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe und Chalk aus. Denk daran, dass du den Haftungsausschluss unterschreiben musst.',
     'confirmation.message.generic': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.orderDetails': 'Bestelldetails',
+    'confirmation.yourOrder': 'Deine Bestellung',
+    'confirmation.eyebrow.membership': 'Deine Mitgliedschaft',
+    'confirmation.eyebrow.15daypass': 'Dein Testpass',
+    'confirmation.eyebrow.punchcard': 'Deine Stempelkarte',
+    'confirmation.eyebrow.firstclimb': 'Dein Ticket',
+    'confirmation.perMonthShort': '/Mon.',
+    'confirmation.totalToday': 'Heute gesamt',
+    'confirmation.thenPerMonthPrefix': 'Danach',
+    'confirmation.perMonth': 'pro Monat',
+    'confirmation.primaryGymInline': 'Heimhalle:',
+    'confirmation.phoneNumber': 'Telefon-Nr.',
+    'confirmation.orderMetaOrder': 'Bestellung',
     'confirmation.orderNumber': 'Bestellnummer:',
     'confirmation.date': 'Datum:',
     'confirmation.total': 'Gesamt:',
@@ -8281,14 +8317,14 @@ function cacheDom() {
   DOM.parentPostalCode = document.getElementById('parentPostalCode');
   DOM.parentCity = document.getElementById('parentCity');
   DOM.confirmationFields = {
-    orderNumber: document.querySelector('[data-summary-field="order-number"]'),
-    orderDate: document.querySelector('[data-summary-field="order-date"]'),
-    orderTotal: document.querySelector('[data-summary-field="order-total"]'),
-    memberName: document.querySelector('[data-summary-field="member-name"]'),
-    membershipNumber: document.querySelector('[data-summary-field="membership-number"]'),
-    membershipType: document.querySelector('[data-summary-field="membership-type"]'),
-    primaryGym: document.querySelector('[data-summary-field="primary-gym"]'),
-    membershipPrice: document.querySelector('[data-summary-field="membership-price"]'),
+    orderNumber: document.querySelector('#confirmationOrderSection [data-summary-field="order-number"]'),
+    orderDate: document.querySelector('#confirmationOrderSection [data-summary-field="order-date"]'),
+    orderTotal: document.querySelector('#confirmationOrderSection [data-summary-field="order-total"]'),
+    memberName: document.querySelector('#confirmationOrderSection [data-summary-field="member-name"]'),
+    memberPhone: document.querySelector('#confirmationOrderSection [data-summary-field="member-phone"]'),
+    membershipType: document.querySelector('#confirmationMembershipSection [data-summary-field="membership-type"]'),
+    primaryGym: document.querySelector('#confirmationOrderSection [data-summary-field="primary-gym"]'),
+    membershipPrice: document.querySelector('#confirmationMembershipSection [data-summary-field="membership-price"]'),
   };
 
   refreshLoginUI();
@@ -21619,6 +21655,62 @@ function playSuccessAnimation() {
   fire(560, { particleCount: 38, spread: 58, startVelocity: 24, scalar: 0.75, ticks: 190 });
 }
 
+const CONFIRMATION_SKELETON_HTML = {
+  sm: '<span class="confirmation-skeleton confirmation-skeleton--sm" aria-hidden="true"></span>',
+  number: '<span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span>',
+  name: '<span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span>',
+};
+
+function setConfirmationSummaryField(el, value, skeletonKind = 'number') {
+  if (!el) return;
+  const isEmpty = value == null || value === '' || value === '—';
+  if (isEmpty) {
+    if (!el.querySelector('.confirmation-skeleton')) {
+      el.innerHTML = CONFIRMATION_SKELETON_HTML[skeletonKind] || CONFIRMATION_SKELETON_HTML.number;
+    }
+    return;
+  }
+  el.textContent = value;
+}
+
+function resolveConfirmationPhone(customer, apiOrder) {
+  let formCustomer = null;
+  try {
+    formCustomer = buildCheckoutPayload()?.customer;
+  } catch {
+    // Form may not be ready on success page
+  }
+
+  const phoneSource =
+    customer?.mobilePhone ||
+    customer?.phone ||
+    customer?.phoneNumber ||
+    apiOrder?.customer?.mobilePhone ||
+    apiOrder?.customer?.phone ||
+    apiOrder?.customer?.phoneNumber ||
+    formCustomer?.phone;
+  const phoneCountryCodeSource =
+    customer?.phoneCountryCode ||
+    customer?.phoneCountry ||
+    apiOrder?.customer?.phoneCountryCode ||
+    apiOrder?.customer?.phoneCountry ||
+    formCustomer?.phone?.countryCode;
+
+  if (phoneSource) {
+    if (typeof phoneSource === 'string') {
+      return phoneSource;
+    }
+    if (phoneSource.number) {
+      const countryCode = phoneSource.countryCode || phoneCountryCodeSource || '';
+      return countryCode ? `${countryCode} ${phoneSource.number}` : phoneSource.number;
+    }
+  }
+  if (formCustomer?.phoneNumber && formCustomer?.countryCode) {
+    return `${formCustomer.countryCode} ${formCustomer.phoneNumber}`;
+  }
+  return null;
+}
+
 function renderConfirmationView() {
   // CRITICAL: Don't render success page if payment failed or is pending (unless in test mode)
   if (!state.testMode && state.paymentFailed === true) {
@@ -21775,129 +21867,111 @@ function renderConfirmationView() {
     nextStep3.textContent = t(step3Key);
   }
 
-  // Hide all sections first - use !important to override any CSS
+  const orderSection = document.getElementById('confirmationOrderSection');
   const membershipSection = document.getElementById('confirmationMembershipSection');
   const dayPassSection = document.getElementById('confirmation15DayPassSection');
   const punchCardSection = document.getElementById('confirmationPunchCardSection');
-  
-  if (membershipSection) {
-    membershipSection.style.display = 'none';
-    membershipSection.style.setProperty('display', 'none', 'important');
-  }
-  if (dayPassSection) {
-    dayPassSection.style.display = 'none';
-    dayPassSection.style.setProperty('display', 'none', 'important');
-  }
-  if (punchCardSection) {
-    punchCardSection.style.display = 'none';
-    punchCardSection.style.setProperty('display', 'none', 'important');
+  const firstClimbSection = document.getElementById('confirmationFirstClimbSection');
+  const memberZone = document.getElementById('confirmationMemberZone');
+  const recurringNote = orderSection?.querySelector('[data-recurring-note]');
+  const effectiveProductType = isFirstClimbFlow ? 'firstclimb' : productType;
+
+  if (orderSection) {
+    orderSection.dataset.productType = effectiveProductType;
   }
 
-  // Show appropriate section based on product type - only ONE section should be visible
-  if (productType === 'membership' && membershipSection) {
-    console.log('[Confirmation] Showing membership section');
-    membershipSection.style.display = 'block';
-    membershipSection.style.setProperty('display', 'block', 'important');
-  } else if (productType === '15daypass' && dayPassSection) {
-    console.log('[Confirmation] Showing 15-Day Trial Pass section');
-    dayPassSection.style.display = 'block';
-    dayPassSection.style.setProperty('display', 'block', 'important');
-  } else if (productType === 'punch-card' && punchCardSection) {
-    // /99kr is technically a value-card/punch-card under the hood, but the
-    // "Punch Card Details" panel (name / card type / quantity / valid until)
-    // doesn't carry any user-meaningful info for a single-use day ticket —
-    // the "What happens next?" block already covers everything. Hide it.
-    if (isFirstClimbFlow) {
-      console.log('[Confirmation] firstclimb flow — hiding punch card details section');
-    } else {
-      console.log('[Confirmation] Showing punch card section');
-      punchCardSection.style.display = 'block';
-      punchCardSection.style.setProperty('display', 'block', 'important');
-    }
-  } else {
-    console.warn('[Confirmation] Unknown product type or section not found:', productType);
+  orderSection?.querySelectorAll('[data-product-eyebrow]').forEach((el) => {
+    el.hidden = el.getAttribute('data-product-eyebrow') !== effectiveProductType;
+  });
+
+  if (membershipSection) membershipSection.hidden = productType !== 'membership';
+  if (dayPassSection) dayPassSection.hidden = productType !== '15daypass';
+  if (punchCardSection) punchCardSection.hidden = !(productType === 'punch-card' && !isFirstClimbFlow);
+  if (firstClimbSection) firstClimbSection.hidden = !isFirstClimbFlow;
+
+  if (memberZone) {
+    memberZone.hidden = isFirstClimbFlow;
+    memberZone.querySelector('[data-member-field="phone"]')?.toggleAttribute('hidden', false);
+    memberZone.querySelector('[data-member-field="punch-card"]')?.toggleAttribute('hidden', productType !== 'punch-card' || isFirstClimbFlow);
+    memberZone.querySelector('[data-member-field="15daypass"]')?.toggleAttribute('hidden', true);
+  }
+
+  if (recurringNote) {
+    recurringNote.hidden = productType !== 'membership';
   }
   
-  const { orderNumber, orderDate, orderTotal, memberName, membershipNumber, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
+  const { orderNumber, orderDate, orderTotal, memberName, memberPhone, membershipType } = DOM.confirmationFields;
 
   // Prefer API order data, but fall back to summary order so success page is never blank.
   const apiOrder = state.fullOrder || state.order || null;
   
+  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  const confirmationDateLocale = langCode === 'en' ? 'en-US' : langCode === 'de' ? 'de-DE' : 'da-DK';
+
   // Order number - from API only
   if (orderNumber) {
-    const number = apiOrder?.number || apiOrder?.id || '—';
-    orderNumber.textContent = number;
+    const number = apiOrder?.number || apiOrder?.id || null;
+    setConfirmationSummaryField(orderNumber, number, 'sm');
   }
-  
-  // Order date - from API only
+
+  // Order date - from API only (meta footer)
   if (orderDate) {
+    let formattedDate = null;
     if (apiOrder?.createdAt || apiOrder?.created || apiOrder?.date) {
       const rawDate = apiOrder.createdAt || apiOrder.created || apiOrder.date;
       const date = new Date(rawDate);
-      orderDate.textContent = new Intl.DateTimeFormat('en-US', {
+      formattedDate = new Intl.DateTimeFormat(confirmationDateLocale, {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       }).format(date);
-    } else {
-      orderDate.textContent = '—';
     }
+    setConfirmationSummaryField(orderDate, formattedDate, 'sm');
   }
-  
-  // Order total - from API only
+
+  // Order total - from API only (today's charge)
   if (orderTotal) {
+    let totalValue = null;
     if (apiOrder?.price?.amount !== undefined && apiOrder?.price?.amount !== null) {
       const amount = apiOrder.price.amount;
-      const total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
-      orderTotal.textContent = formatCurrencyHalfKrone(total);
+      totalValue = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
     } else if (apiOrder?.total !== undefined && apiOrder?.total !== null) {
-      const total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
-      orderTotal.textContent = formatCurrencyHalfKrone(total);
-    } else {
-      orderTotal.textContent = '—';
+      totalValue = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
     }
+    setConfirmationSummaryField(
+      orderTotal,
+      totalValue != null ? formatCurrencyHalfKrone(totalValue) : null,
+      'number',
+    );
   }
-  
+
   // Member name - from API only
   if (memberName) {
-    let name = '—';
+    let name = null;
     if (apiOrder?.customer) {
       const customer = apiOrder.customer;
-      name = customer.fullName || 
+      name = customer.fullName ||
             (customer.firstName && customer.lastName ? `${customer.firstName} ${customer.lastName}` : null) ||
             customer.name ||
-            '—';
+            null;
     } else if (apiOrder?.memberName) {
       name = apiOrder.memberName;
     }
-    memberName.textContent = name;
-    // Also update in other sections
-    const dayPassMemberName = document.querySelector('#confirmation15DayPassSection [data-summary-field="member-name"]');
-    const punchCardMemberName = document.querySelector('#confirmationPunchCardSection [data-summary-field="member-name"]');
-    if (dayPassMemberName) dayPassMemberName.textContent = name;
-    if (punchCardMemberName) punchCardMemberName.textContent = name;
+    setConfirmationSummaryField(memberName, name, 'name');
   }
-  
-  // Membership-specific fields - from API only
-  if (membershipNumber) {
-    let membershipId = '—';
-    if (apiOrder?.subscriptionItems?.[0]?.subscription?.id) {
-      membershipId = apiOrder.subscriptionItems[0].subscription.id.toString();
-    } else if (apiOrder?.customer?.id) {
-      membershipId = apiOrder.customer.id.toString();
-    } else if (apiOrder?.membershipNumber) {
-      membershipId = String(apiOrder.membershipNumber);
-    }
-    membershipNumber.textContent = membershipId;
+
+  if (memberPhone) {
+    const customer = apiOrder?.customer || state.authenticatedCustomer || null;
+    setConfirmationSummaryField(memberPhone, resolveConfirmationPhone(customer, apiOrder), 'number');
   }
-  
+
   if (membershipType) {
-    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || apiOrder?.membershipType || '—';
-    membershipType.textContent = type;
+    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || apiOrder?.membershipType || null;
+    setConfirmationSummaryField(membershipType, type, 'name');
   }
-  
-  if (primaryGym) {
-    let gym = '—';
+
+  {
+    let gym = null;
     if (apiOrder?.customer?.primaryGym) {
       gym = resolveGymLabel(apiOrder.customer.primaryGym);
     } else if (apiOrder?.businessUnit?.name) {
@@ -21905,27 +21979,52 @@ function renderConfirmationView() {
     } else if (apiOrder?.primaryGym) {
       gym = apiOrder.primaryGym;
     }
-    primaryGym.textContent = gym;
-    // Also update in other sections
-    const dayPassGym = document.querySelector('#confirmation15DayPassSection [data-summary-field="primary-gym"]');
-    if (dayPassGym) dayPassGym.textContent = gym;
+    orderSection?.querySelectorAll('[data-summary-field="primary-gym"]').forEach((el) => {
+      setConfirmationSummaryField(el, gym, 'name');
+    });
   }
-  
-  if (membershipPrice) {
-    let price = null;
+
+  if (productType === 'membership') {
+    let recurringPrice = null;
     if (apiOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount) {
       const amount = apiOrder.subscriptionItems[0].payRecurring.price.amount;
-      price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      recurringPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
     } else if (apiOrder?.subscriptionItems?.[0]?.price?.amount) {
       const amount = apiOrder.subscriptionItems[0].price.amount;
-      price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      recurringPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
     }
-    
-    if (price !== null) {
-      const formatted = formatCurrencyHalfKrone(roundToHalfKrone(price));
-      membershipPrice.textContent = productType === '15daypass' ? formatted : `${formatted}/month`;
-    } else {
-      membershipPrice.textContent = '—';
+
+    const formattedRecurring = recurringPrice != null
+      ? formatCurrencyHalfKrone(roundToHalfKrone(recurringPrice))
+      : null;
+
+    membershipSection?.querySelectorAll('[data-summary-field="membership-price"]').forEach((el) => {
+      setConfirmationSummaryField(el, formattedRecurring, 'number');
+    });
+    orderSection?.querySelectorAll('[data-summary-field="order-recurring-price"]').forEach((el) => {
+      setConfirmationSummaryField(el, formattedRecurring, 'number');
+    });
+    if (recurringNote) {
+      recurringNote.hidden = !formattedRecurring;
+    }
+  } else {
+    membershipSection?.querySelectorAll('[data-summary-field="membership-price"]').forEach((el) => {
+      setConfirmationSummaryField(el, null, 'number');
+    });
+    orderSection?.querySelectorAll('[data-summary-field="order-recurring-price"]').forEach((el) => {
+      setConfirmationSummaryField(el, null, 'number');
+    });
+    if (recurringNote) {
+      recurringNote.hidden = true;
+    }
+
+    if (productType === '15daypass' && apiOrder?.subscriptionItems?.[0]?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].price.amount;
+      const passPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      const formattedPassPrice = formatCurrencyHalfKrone(roundToHalfKrone(passPrice));
+      dayPassSection?.querySelectorAll('[data-summary-field="membership-price"]').forEach((el) => {
+        setConfirmationSummaryField(el, formattedPassPrice, 'number');
+      });
     }
   }
   
@@ -21983,6 +22082,12 @@ function renderConfirmationView() {
 
   // 15-Day Trial Pass specific fields - from API only
   if (productType === '15daypass') {
+    const passTypeField = dayPassSection?.querySelector('[data-summary-field="pass-type"]');
+    if (passTypeField) {
+      const passName = apiOrder?.subscriptionItems?.[0]?.product?.name || null;
+      setConfirmationSummaryField(passTypeField, passName, 'name');
+    }
+
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
     const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
     
@@ -22005,24 +22110,25 @@ function renderConfirmationView() {
       parsedEnd = computedEnd;
     }
 
-    const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
-    const locale = langCode === 'en' ? 'en-US' : 'da-DK';
-    const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
+    const formatLongDate = (date) => new Intl.DateTimeFormat(confirmationDateLocale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     }).format(date);
 
     if (passStartDate) {
-      passStartDate.textContent = (parsedStart && !isNaN(parsedStart.getTime()))
-        ? formatLongDate(parsedStart)
-        : '—';
+      setConfirmationSummaryField(
+        passStartDate,
+        (parsedStart && !isNaN(parsedStart.getTime())) ? formatLongDate(parsedStart) : null,
+        'sm',
+      );
     }
 
     if (passEndDate) {
-      passEndDate.textContent = (parsedEnd && !isNaN(parsedEnd.getTime()))
-        ? formatLongDate(parsedEnd)
-        : '—';
+      const endLabel = (parsedEnd && !isNaN(parsedEnd.getTime())) ? formatLongDate(parsedEnd) : null;
+      setConfirmationSummaryField(passEndDate, endLabel, 'sm');
+      const passEndDisplay = document.querySelector('[data-summary-field="pass-end-date-display"]');
+      setConfirmationSummaryField(passEndDisplay, endLabel, 'name');
     }
 
     // Surface the validity window directly under the success subheading.
@@ -22115,18 +22221,34 @@ function createPurchaseItemElement() {
         firstCardName = firstCardName.replace(/\s*\(\d+\)\s*$/, '');
         
         if (valueCardItems.length === 1) {
-          punchCardType.textContent = firstCardName;
+          setConfirmationSummaryField(punchCardType, firstCardName, 'name');
         } else {
-          // Multiple cards - show first card name with count
-          punchCardType.textContent = `${firstCardName} (${valueCardItems.length} kort)`;
+          setConfirmationSummaryField(punchCardType, `${firstCardName} (${valueCardItems.length} kort)`, 'name');
         }
       } else {
-        punchCardType.textContent = '—';
+        setConfirmationSummaryField(punchCardType, null, 'name');
       }
     }
-    
+
+    const productLinePrice = document.querySelector('#confirmationOrderSection [data-summary-field="product-line-price"]');
+    if (productLinePrice && valueCardItems.length > 0) {
+      const firstItem = valueCardItems[0];
+      const itemTotal = firstItem.price?.amount
+        ? (typeof firstItem.price.amount === 'object' ? firstItem.price.amount.amount / 100 : firstItem.price.amount / 100)
+        : null;
+      setConfirmationSummaryField(
+        productLinePrice,
+        itemTotal != null ? formatCurrencyHalfKrone(roundToHalfKrone(itemTotal)) : null,
+        'number',
+      );
+    }
+
     if (punchCardQuantity) {
-      punchCardQuantity.textContent = totalQuantity > 0 ? totalQuantity.toString() : '—';
+      setConfirmationSummaryField(
+        punchCardQuantity,
+        totalQuantity > 0 ? totalQuantity.toString() : null,
+        'number',
+      );
     }
     
     if (punchCardExpiry) {
@@ -22146,13 +22268,17 @@ function createPurchaseItemElement() {
       
       // Display expiry date from API, or show '—' if not available
       if (expiryDate && !isNaN(expiryDate.getTime())) {
-        punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }).format(expiryDate);
+        setConfirmationSummaryField(
+          punchCardExpiry,
+          new Intl.DateTimeFormat(confirmationDateLocale, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }).format(expiryDate),
+          'sm',
+        );
       } else {
-        punchCardExpiry.textContent = '—';
+        setConfirmationSummaryField(punchCardExpiry, null, 'sm');
       }
     }
   }
@@ -22339,6 +22465,22 @@ function createPurchaseItemElement() {
         selectedProductId: state.selectedProductId,
         membershipPlanId: state.membershipPlanId
       });
+    }
+
+    if (isFirstClimbFlow) {
+      const firstItem = DOM.confirmationItems?.querySelector('[data-confirmation-item]');
+      const firstName = firstItem?.querySelector('[data-element="name"]')?.textContent?.trim();
+      const firstPrice = firstItem?.querySelector('[data-element="price"]')?.textContent?.trim();
+      setConfirmationSummaryField(
+        document.querySelector('[data-summary-field="firstclimb-product-name"]'),
+        firstName || null,
+        'name',
+      );
+      setConfirmationSummaryField(
+        document.querySelector('[data-summary-field="firstclimb-product-price"]'),
+        firstPrice || null,
+        'number',
+      );
     }
   }
 }

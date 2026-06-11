@@ -8240,6 +8240,7 @@ main {
 }
 
 /* Supporting content reveal cascade — receipt + next-steps fade-rise after header lands */
+#step-5.is-revealing .confirmation-order-card-v2,
 #step-5.is-revealing .confirmation-left > .confirmation-card,
 #step-5.is-revealing .next-steps,
 #step-5.is-revealing .member-onboarding-section,
@@ -8250,11 +8251,6 @@ main {
 }
 #step-5.is-revealing #confirmationOrderSection {
     animation-delay: 920ms;
-}
-#step-5.is-revealing #confirmationMembershipSection,
-#step-5.is-revealing #confirmation15DayPassSection,
-#step-5.is-revealing #confirmationPunchCardSection {
-    animation-delay: 980ms;
 }
 #step-5.is-revealing .first-session-video-section {
     animation-delay: 750ms;
@@ -8285,11 +8281,6 @@ main {
 }
 #step-5.is-revealing.has-header-pill #confirmationOrderSection {
     animation-delay: 1560ms;
-}
-#step-5.is-revealing.has-header-pill #confirmationMembershipSection,
-#step-5.is-revealing.has-header-pill #confirmation15DayPassSection,
-#step-5.is-revealing.has-header-pill #confirmationPunchCardSection {
-    animation-delay: 1620ms;
 }
 #step-5.is-revealing.has-header-pill .first-session-video-section {
     animation-delay: 1090ms;
@@ -8398,7 +8389,8 @@ main {
     .confirmation-header.is-animating .success-title,
     .confirmation-header.is-animating .success-message,
     .confirmation-header.is-animating .success-header-pill,
-    #step-5.is-revealing .confirmation-left > .confirmation-card,
+    #step-5.is-revealing .confirmation-order-card-v2,
+#step-5.is-revealing .confirmation-left > .confirmation-card,
     #step-5.is-revealing .next-steps,
     #step-5.is-revealing .member-onboarding-section,
     #step-5.is-revealing .first-session-video-section,
@@ -8889,7 +8881,7 @@ main {
     letter-spacing: -0.005em;
 }
 
-/* Order Details */
+/* Order Details (legacy selectors kept for receipt modal / other steps) */
 .order-info {
     margin-bottom: 16px;
 }
@@ -8947,6 +8939,244 @@ main {
 .order-total .total-amount {
     color: #fff;
     font-variant-numeric: tabular-nums;
+}
+
+/* Success page — order confirmation card (5 zones) */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.confirmation-order-card-v2 {
+    background-color: #18181b;
+    border: 1px solid #2c2c31;
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.confirmation-order-zone--product {
+    background-color: #1f1f23;
+    padding: 28px;
+}
+
+.confirmation-order-eyebrow {
+    margin: 0 0 14px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #F401F5;
+    line-height: 1.2;
+}
+
+.confirmation-order-product-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.confirmation-order-product-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: #fafafa;
+    word-break: break-word;
+}
+
+.confirmation-order-product-price-wrap {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.confirmation-order-product-price {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #fafafa;
+}
+
+.confirmation-order-price-suffix {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+#confirmationOrderSection [data-suffix-monthly] {
+    display: none;
+}
+
+#confirmationOrderSection[data-product-type="membership"] [data-suffix-monthly] {
+    display: inline;
+}
+
+#confirmationOrderSection:not([data-product-type="membership"]) [data-recurring-note] {
+    display: none !important;
+}
+
+#confirmationOrderSection[data-product-type="membership"] .confirmation-order-recurring-note:not([hidden]) {
+    display: flex;
+}
+
+.confirmation-order-gym-line {
+    margin: 14px 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.confirmation-order-gym-label {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.confirmation-order-gym-value {
+    color: #fafafa;
+    font-weight: 600;
+}
+
+.confirmation-order-zone--member {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 24px;
+    padding: 20px 28px;
+    border-top: 1px solid #2c2c31;
+}
+
+.confirmation-order-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.confirmation-order-field-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.45);
+    line-height: 1.3;
+}
+
+.confirmation-order-field-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fafafa;
+    line-height: 1.35;
+    word-break: break-word;
+    font-variant-numeric: tabular-nums;
+}
+
+.confirmation-order-zone--total {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 20px 28px;
+    border-top: 1px solid #2c2c31;
+}
+
+.confirmation-order-total-copy {
+    min-width: 0;
+}
+
+.confirmation-order-total-label {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fafafa;
+    line-height: 1.3;
+}
+
+.confirmation-order-recurring-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.3em;
+    margin: 6px 0 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.45);
+    line-height: 1.4;
+}
+
+.confirmation-order-total-amount {
+    margin: 0;
+    flex-shrink: 0;
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: #fafafa;
+    font-variant-numeric: tabular-nums;
+}
+
+.confirmation-order-zone--actions {
+    padding: 0 28px 20px;
+}
+
+.confirmation-order-zone--actions .receipt-btn {
+    margin-top: 0;
+}
+
+.confirmation-order-zone--meta {
+    padding: 14px 28px 20px;
+    border-top: 1px solid #2c2c31;
+    text-align: center;
+}
+
+.confirmation-order-meta-line {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.45);
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+}
+
+.confirmation-order-meta-sep {
+    margin: 0 0.35em;
+}
+
+@keyframes confirmation-skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.confirmation-skeleton {
+    display: inline-block;
+    height: 1em;
+    border-radius: 4px;
+    vertical-align: middle;
+    background: linear-gradient(90deg, #2c2c31 0%, #3a3a40 50%, #2c2c31 100%);
+    background-size: 200% 100%;
+    animation: confirmation-skeleton-shimmer 1.4s linear infinite;
+}
+
+.confirmation-skeleton--sm { width: 64px; }
+.confirmation-skeleton--number { width: 110px; }
+.confirmation-skeleton--name { width: 140px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .confirmation-skeleton {
+        animation: none;
+        background: #2c2c31;
+    }
+}
+
+@media (max-width: 440px) {
+    .confirmation-order-zone--member {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Membership Details */
@@ -9007,6 +9237,11 @@ main {
 .receipt-btn:hover {
     background-color: #F401F5;
     color: white;
+}
+
+.receipt-btn:focus-visible {
+    outline: 2px solid rgba(244, 1, 245, 0.75);
+    outline-offset: 3px;
 }
 
 /* Detailed Receipt Modal — fade+scale on desktop, bottom-sheet drawer on mobile.
@@ -10272,8 +10507,8 @@ main {
     color: #F401F5;
 }
 
-/* Gym + price live in the header pill on membership success; skip in details card */
-#step-5.has-header-pill #confirmationMembershipSection .membership-item--in-header {
+/* Gym (membership) lives in the header pill; hide the duplicate gym line in the card */
+#step-5.has-header-pill #confirmationOrderSection .membership-item--in-header[data-header-pill-field="primary-gym"] {
     display: none;
 }
 
@@ -10362,9 +10597,6 @@ main {
     .confirmation-layout[data-with-invite="true"] .next-steps { order: 2; }
     .confirmation-layout[data-with-invite="true"] .invite-friends-section { order: 3; }
     .confirmation-layout[data-with-invite="true"] #confirmationOrderSection { order: 4; }
-    .confirmation-layout[data-with-invite="true"] #confirmationMembershipSection,
-    .confirmation-layout[data-with-invite="true"] #confirmation15DayPassSection,
-    .confirmation-layout[data-with-invite="true"] #confirmationPunchCardSection { order: 5; }
 
     /* Membership: surface perks immediately after the success header */
     .confirmation-layout[data-with-onboarding="true"] #memberOnboardingSection { order: 1; }
@@ -10372,9 +10604,6 @@ main {
     .confirmation-layout[data-with-onboarding="true"] .next-steps { order: 3; }
     .confirmation-layout[data-with-onboarding="true"] .invite-friends-section { order: 4; }
     .confirmation-layout[data-with-onboarding="true"] #confirmationOrderSection { order: 5; }
-    .confirmation-layout[data-with-onboarding="true"] #confirmationMembershipSection,
-    .confirmation-layout[data-with-onboarding="true"] #confirmation15DayPassSection,
-    .confirmation-layout[data-with-onboarding="true"] #confirmationPunchCardSection { order: 6; }
     
     .step-panel[data-payment-failed="true"] .step-panel-content,
     #step-5.step-panel[data-payment-failed="true"] .step-panel-content,
@@ -10433,6 +10662,31 @@ main {
     .confirmation-card {
         padding: 20px;
         border-radius: 12px;
+    }
+
+    .confirmation-order-zone--product {
+        padding: 22px 20px;
+    }
+
+    .confirmation-order-zone--member,
+    .confirmation-order-zone--total {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .confirmation-order-zone--actions {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .confirmation-order-zone--meta {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .confirmation-order-product-name,
+    .confirmation-order-product-price {
+        font-size: 20px;
     }
 
     .next-steps {
