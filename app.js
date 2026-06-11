@@ -6350,6 +6350,7 @@ const translations = {
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
     'confirmation.title': 'You’re in!',
+    'confirmation.title.withName': 'Du er med, {name}!',
     'confirmation.message': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.message.membership': 'Bekræftelsesmail er på vej. Udforsk fordelene nedenfor, eller mød op i hallen, når det passer dig.',
     'confirmation.message.15daypass': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
@@ -6359,6 +6360,9 @@ const translations = {
     'confirmation.nextStep3.firstclimb': 'Når du kommer: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk. Husk at du skal underskrive ansvarsfraskrivelsen.',
     'confirmation.message.generic': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.orderDetails': 'Ordredetaljer',
+    'confirmation.orderSummary': 'Ordreoversigt',
+    'confirmation.viewOrderDetails': 'Se ordredetaljer',
+    'confirmation.orderDetailsFull': 'Ordredetaljer',
     'confirmation.yourOrder': 'Din ordre',
     'confirmation.eyebrow.membership': 'Dit medlemskab',
     'confirmation.eyebrow.15daypass': 'Dit prøvepas',
@@ -6646,6 +6650,7 @@ const translations = {
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15-Day Trial Pass options available at this time.',
     'confirmation.title': 'You’re in!',
+    'confirmation.title.withName': 'You’re in, {name}!',
     'confirmation.message': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.message.membership': 'Confirmation email on its way. Explore your perks below, or visit the gym whenever you\'re ready.',
     'confirmation.message.15daypass': 'Welcome to the Boulders community. Visit any gym to start climbing!',
@@ -6655,6 +6660,9 @@ const translations = {
     'confirmation.nextStep3.firstclimb': 'When you arrive: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes and chalk. Remember you\'ll need to sign the liability waiver.',
     'confirmation.message.generic': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.orderDetails': 'Order Details',
+    'confirmation.orderSummary': 'Order summary',
+    'confirmation.viewOrderDetails': 'View order details',
+    'confirmation.orderDetailsFull': 'Order details',
     'confirmation.yourOrder': 'Your order',
     'confirmation.eyebrow.membership': 'Your membership',
     'confirmation.eyebrow.15daypass': 'Your trial pass',
@@ -6993,6 +7001,7 @@ const translations = {
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
     'confirmation.title': 'You’re in!',
+    'confirmation.title.withName': 'Du bist dabei, {name}!',
     'confirmation.message': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.message.membership': 'Die Bestätigungs-E-Mail ist unterwegs. Entdecke unten deine Vorteile oder komm vorbei, wann es dir passt.',
     'confirmation.message.15daypass': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
@@ -7002,6 +7011,9 @@ const translations = {
     'confirmation.nextStep3.firstclimb': 'Wenn du ankommst: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe und Chalk aus. Denk daran, dass du den Haftungsausschluss unterschreiben musst.',
     'confirmation.message.generic': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.orderDetails': 'Bestelldetails',
+    'confirmation.orderSummary': 'Bestellübersicht',
+    'confirmation.viewOrderDetails': 'Bestelldetails anzeigen',
+    'confirmation.orderDetailsFull': 'Bestelldetails',
     'confirmation.yourOrder': 'Deine Bestellung',
     'confirmation.eyebrow.membership': 'Deine Mitgliedschaft',
     'confirmation.eyebrow.15daypass': 'Dein Testpass',
@@ -7134,7 +7146,13 @@ function updatePageTranslations() {
     }
 
     // Simple placeholder substitution for dynamic translations.
-    // Currently supports `{date}` when element provides `data-i18n-date-iso="YYYY-MM-DD"`.
+    if (translation && translation.includes('{name}')) {
+      const name = element.getAttribute('data-i18n-name');
+      if (name) {
+        translation = translation.replaceAll('{name}', name);
+      }
+    }
+    // Supports `{date}` when element provides `data-i18n-date-iso="YYYY-MM-DD"`.
     if (translation && translation.includes('{date}')) {
       const dateIso = element.getAttribute('data-i18n-date-iso');
       if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
@@ -13116,6 +13134,15 @@ function handleGlobalClick(event) {
       scrollToFAQ();
       break;
     }
+    case 'scroll-to-order-details': {
+      event.preventDefault();
+      const orderDetails = document.getElementById('confirmationOrderDetails');
+      if (orderDetails) {
+        orderDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        orderDetails.focus({ preventScroll: true });
+      }
+      break;
+    }
     case 'first-session-video': {
       try {
         window.dataLayer = window.dataLayer || [];
@@ -13346,11 +13373,32 @@ function buildInviteShareUrl() {
   return `${INVITE_SHARE_URL_BASE}?${REFERRAL_QUERY_PARAM}=${recruiterId}`;
 }
 
-function getInviteFirstName() {
-  const fullName = String(state?.order?.memberName || '').trim();
+function resolveConfirmationFirstName(apiOrder = null) {
+  const order = apiOrder || state.fullOrder || state.order || null;
+  const customer = order?.customer || state.authenticatedCustomer || null;
+  const formCustomer = state.formCustomer || null;
+
+  if (customer?.firstName) {
+    return String(customer.firstName).trim();
+  }
+  if (formCustomer?.firstName) {
+    return String(formCustomer.firstName).trim();
+  }
+
+  const fullName = String(
+    order?.memberName
+    || customer?.fullName
+    || (customer?.firstName && customer?.lastName ? `${customer.firstName} ${customer.lastName}` : null)
+    || customer?.name
+    || '',
+  ).trim();
   if (!fullName || fullName === '—') return '';
   const first = fullName.split(/\s+/)[0];
   return first && first !== '—' ? first : '';
+}
+
+function getInviteFirstName() {
+  return resolveConfirmationFirstName();
 }
 
 function getInviteShareMessage() {
@@ -13419,15 +13467,10 @@ function renderFirstSessionVideo(productType) {
 
 function renderMemberOnboarding(productType) {
   const section = document.getElementById('memberOnboardingSection');
-  const layout = document.querySelector('#step-5 .confirmation-layout');
   if (!section) return;
 
   const show = productType === 'membership';
   section.style.display = show ? '' : 'none';
-  if (layout) {
-    if (show) layout.setAttribute('data-with-onboarding', 'true');
-    else layout.removeAttribute('data-with-onboarding');
-  }
 
   if (!show) return;
 
@@ -13446,10 +13489,6 @@ function renderInviteFriends(productType) {
   const section = document.getElementById('inviteFriendsSection');
   if (!section) return;
 
-  // Drive a layout-level flag so CSS can reorder mobile siblings consistently
-  // now that the invite card is shown for every product flow.
-  const layout = document.querySelector('#step-5 .confirmation-layout');
-
   // Pick the variant: firstclimb wins over productType because the 99kr flow
   // uses its own offer-specific copy and footnote.
   let variant = 'membership';
@@ -13459,7 +13498,6 @@ function renderInviteFriends(productType) {
 
   section.style.display = '';
   section.setAttribute('data-variant', variant);
-  if (layout) layout.setAttribute('data-with-invite', 'true');
 
   // Per-variant i18n keys. Title is unified across variants; subtitle and
   // footnote differ. Variants without a referral reward (15daypass, punchcard)
@@ -21241,8 +21279,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
     // These should only be shown when payment is successful
     // Use multiple methods to ensure they stay hidden
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
-    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
-    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    const confirmationFlow = step5Panel.querySelector('.confirmation-flow');
     
     const hideConfirmationSections = () => {
       if (confirmationLayout) {
@@ -21250,15 +21287,10 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
         confirmationLayout.style.visibility = 'hidden';
         confirmationLayout.setAttribute('data-payment-failed', 'true');
       }
-      if (confirmationLeft) {
-        confirmationLeft.style.display = 'none';
-        confirmationLeft.style.visibility = 'hidden';
-        confirmationLeft.setAttribute('data-payment-failed', 'true');
-      }
-      if (confirmationRight) {
-        confirmationRight.style.display = 'none';
-        confirmationRight.style.visibility = 'hidden';
-        confirmationRight.setAttribute('data-payment-failed', 'true');
+      if (confirmationFlow) {
+        confirmationFlow.style.display = 'none';
+        confirmationFlow.style.visibility = 'hidden';
+        confirmationFlow.setAttribute('data-payment-failed', 'true');
       }
     };
     
@@ -21287,7 +21319,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
         });
       });
       
-      [confirmationLayout, confirmationLeft, confirmationRight].forEach((el) => {
+      [confirmationLayout, confirmationFlow].forEach((el) => {
         if (el) {
           observer.observe(el, { attributes: true, attributeFilter: ['style'] });
         }
@@ -21356,8 +21388,7 @@ function showPaymentPendingMessage(order, orderId) {
     // Mark step 5 panel as payment pending for CSS targeting
     step5Panel.setAttribute('data-payment-pending', 'true');
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
-    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
-    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    const confirmationFlow = step5Panel.querySelector('.confirmation-flow');
     
     const hideConfirmationSections = () => {
       if (confirmationLayout) {
@@ -21365,15 +21396,10 @@ function showPaymentPendingMessage(order, orderId) {
         confirmationLayout.style.visibility = 'hidden';
         confirmationLayout.setAttribute('data-payment-pending', 'true');
       }
-      if (confirmationLeft) {
-        confirmationLeft.style.display = 'none';
-        confirmationLeft.style.visibility = 'hidden';
-        confirmationLeft.setAttribute('data-payment-pending', 'true');
-      }
-      if (confirmationRight) {
-        confirmationRight.style.display = 'none';
-        confirmationRight.style.visibility = 'hidden';
-        confirmationRight.setAttribute('data-payment-pending', 'true');
+      if (confirmationFlow) {
+        confirmationFlow.style.display = 'none';
+        confirmationFlow.style.visibility = 'hidden';
+        confirmationFlow.setAttribute('data-payment-pending', 'true');
       }
     };
     
@@ -21661,6 +21687,80 @@ const CONFIRMATION_SKELETON_HTML = {
   name: '<span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span>',
 };
 
+function syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder) {
+  const summaryRoot = document.getElementById('confirmationOrderSummary');
+  if (!summaryRoot) return;
+
+  const productEl = summaryRoot.querySelector('[data-summary-field="summary-product-name"]');
+  const totalEl = summaryRoot.querySelector('[data-summary-field="summary-order-total"]');
+  const metaEl = summaryRoot.querySelector('[data-summary-field="summary-meta"]');
+  const ctaEl = summaryRoot.querySelector('.confirmation-order-summary-cta');
+
+  let productName = null;
+  if (isFirstClimbFlow) {
+    productName = document.querySelector('[data-summary-field="firstclimb-product-name"]')?.textContent?.trim() || null;
+  } else if (productType === 'membership') {
+    productName = apiOrder?.subscriptionItems?.[0]?.product?.name
+      || document.querySelector('#confirmationMembershipSection [data-summary-field="membership-type"]')?.textContent?.trim()
+      || null;
+  } else if (productType === '15daypass') {
+    productName = apiOrder?.subscriptionItems?.[0]?.product?.name
+      || document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-type"]')?.textContent?.trim()
+      || null;
+  } else if (productType === 'punch-card') {
+    productName = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]')?.textContent?.trim() || null;
+  }
+
+  let totalLabel = document.querySelector('#confirmationOrderSection [data-summary-field="order-total"]')?.textContent?.trim() || null;
+  if (!totalLabel || totalLabel === '—' || totalLabel.includes('confirmation-skeleton')) {
+    let totalValue = null;
+    if (apiOrder?.price?.amount !== undefined && apiOrder?.price?.amount !== null) {
+      const amount = apiOrder.price.amount;
+      totalValue = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.total !== undefined && apiOrder?.total !== null) {
+      totalValue = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
+    } else if (state.order?.total != null) {
+      totalValue = Number(state.order.total);
+    }
+    if (totalValue != null) {
+      totalLabel = formatCurrencyHalfKrone(totalValue);
+    }
+  }
+
+  const orderNumber = apiOrder?.number || apiOrder?.id || null;
+  let formattedDate = null;
+  if (apiOrder?.createdAt || apiOrder?.created || apiOrder?.date) {
+    const rawDate = apiOrder.createdAt || apiOrder.created || apiOrder.date;
+    const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+    const confirmationDateLocale = langCode === 'en' ? 'en-US' : langCode === 'de' ? 'de-DE' : 'da-DK';
+    formattedDate = new Intl.DateTimeFormat(confirmationDateLocale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(rawDate));
+  }
+
+  if (productEl) setConfirmationSummaryField(productEl, productName, 'name');
+  if (totalEl) setConfirmationSummaryField(totalEl, totalLabel, 'number');
+
+  if (metaEl) {
+    const metaParts = [];
+    if (orderNumber) metaParts.push(`${t('confirmation.orderMetaOrder')} #${orderNumber}`);
+    if (formattedDate) metaParts.push(formattedDate);
+    if (metaParts.length > 0) {
+      metaEl.textContent = metaParts.join(' · ');
+      metaEl.hidden = false;
+    } else {
+      metaEl.textContent = '';
+      metaEl.hidden = true;
+    }
+  }
+
+  if (ctaEl) {
+    ctaEl.textContent = t('confirmation.viewOrderDetails');
+  }
+}
+
 function setConfirmationSummaryField(el, value, skeletonKind = 'number') {
   if (!el) return;
   const isEmpty = value == null || value === '' || value === '—';
@@ -21755,8 +21855,7 @@ function renderConfirmationView() {
     }
     
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
-    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
-    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    const confirmationFlow = step5Panel.querySelector('.confirmation-flow');
     
     // Remove data attributes and show sections
     const showConfirmationSections = () => {
@@ -21766,17 +21865,11 @@ function renderConfirmationView() {
         confirmationLayout.removeAttribute('data-payment-failed');
         confirmationLayout.removeAttribute('data-payment-pending');
       }
-      if (confirmationLeft) {
-        confirmationLeft.style.display = '';
-        confirmationLeft.style.visibility = '';
-        confirmationLeft.removeAttribute('data-payment-failed');
-        confirmationLeft.removeAttribute('data-payment-pending');
-      }
-      if (confirmationRight) {
-        confirmationRight.style.display = '';
-        confirmationRight.style.visibility = '';
-        confirmationRight.removeAttribute('data-payment-failed');
-        confirmationRight.removeAttribute('data-payment-pending');
+      if (confirmationFlow) {
+        confirmationFlow.style.display = '';
+        confirmationFlow.style.visibility = '';
+        confirmationFlow.removeAttribute('data-payment-failed');
+        confirmationFlow.removeAttribute('data-payment-pending');
       }
     };
     
@@ -21796,8 +21889,25 @@ function renderConfirmationView() {
     productLabels: state.fullOrder?.subscriptionItems?.[0]?.product?.productLabels
   });
 
-  // Update success message based on product type (use translation keys so language switch works)
   const isFirstClimbFlow = isFirstClimbRoute();
+  const apiOrder = state.fullOrder || state.order || null;
+
+  const successTitle = document.querySelector('.success-title');
+  if (successTitle) {
+    const firstName = resolveConfirmationFirstName(apiOrder);
+    if (firstName) {
+      const titleKey = 'confirmation.title.withName';
+      successTitle.setAttribute('data-i18n-key', titleKey);
+      successTitle.setAttribute('data-i18n-name', firstName);
+      successTitle.textContent = t(titleKey).replaceAll('{name}', firstName);
+    } else {
+      successTitle.setAttribute('data-i18n-key', 'confirmation.title');
+      successTitle.removeAttribute('data-i18n-name');
+      successTitle.textContent = t('confirmation.title');
+    }
+  }
+
+  // Update success message based on product type (use translation keys so language switch works)
   const successMessage = document.querySelector('.success-message');
   if (successMessage) {
     const messageKey = isFirstClimbFlow ? 'confirmation.message.firstclimb'
@@ -21902,9 +22012,6 @@ function renderConfirmationView() {
   
   const { orderNumber, orderDate, orderTotal, memberName, memberPhone, membershipType } = DOM.confirmationFields;
 
-  // Prefer API order data, but fall back to summary order so success page is never blank.
-  const apiOrder = state.fullOrder || state.order || null;
-  
   const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
   const confirmationDateLocale = langCode === 'en' ? 'en-US' : langCode === 'de' ? 'de-DE' : 'da-DK';
 
@@ -22483,6 +22590,8 @@ function createPurchaseItemElement() {
       );
     }
   }
+
+  syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder);
 }
 
 async function showDetailedReceipt() {

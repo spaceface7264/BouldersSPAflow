@@ -8239,30 +8239,33 @@ main {
     animation: success-rise 320ms ease-out 720ms both;
 }
 
-/* Supporting content reveal cascade — receipt + next-steps fade-rise after header lands */
+/* Supporting content reveal cascade — single-column flow after header lands */
+#step-5.is-revealing .confirmation-order-summary,
+#step-5.is-revealing .confirmation-order-details,
 #step-5.is-revealing .confirmation-order-card-v2,
-#step-5.is-revealing .confirmation-left > .confirmation-card,
 #step-5.is-revealing .next-steps,
 #step-5.is-revealing .member-onboarding-section,
 #step-5.is-revealing .first-session-video-section,
 #step-5.is-revealing .invite-friends-section {
     animation: success-rise 360ms ease-out both;
+}
+#step-5.is-revealing .confirmation-order-summary {
     animation-delay: 720ms;
 }
-#step-5.is-revealing #confirmationOrderSection {
-    animation-delay: 920ms;
-}
-#step-5.is-revealing .first-session-video-section {
-    animation-delay: 750ms;
-}
-#step-5.is-revealing .next-steps {
+#step-5.is-revealing .member-onboarding-section {
     animation-delay: 780ms;
 }
-#step-5.is-revealing .invite-friends-section {
-    animation-delay: 880ms;
+#step-5.is-revealing .first-session-video-section {
+    animation-delay: 840ms;
 }
-#step-5.is-revealing .confirmation-layout[data-with-onboarding="true"] .invite-friends-section {
-    animation-delay: 1260ms;
+#step-5.is-revealing .next-steps {
+    animation-delay: 900ms;
+}
+#step-5.is-revealing .invite-friends-section {
+    animation-delay: 960ms;
+}
+#step-5.is-revealing .confirmation-order-details {
+    animation-delay: 1020ms;
 }
 #step-5.is-revealing .step-item {
     animation: success-rise 280ms ease-out both;
@@ -8271,32 +8274,28 @@ main {
 #step-5.is-revealing .step-item:nth-child(2) { animation-delay: 1070ms; }
 #step-5.is-revealing .step-item:nth-child(3) { animation-delay: 1140ms; }
 
-/* When a header pill is shown, push the receipt / next-steps cascade back */
-#step-5.is-revealing.has-header-pill .confirmation-left > .confirmation-card,
-#step-5.is-revealing.has-header-pill .next-steps,
-#step-5.is-revealing.has-header-pill .member-onboarding-section,
-#step-5.is-revealing.has-header-pill .first-session-video-section,
-#step-5.is-revealing.has-header-pill .invite-friends-section {
+/* When a header pill is shown, push the flow cascade back */
+#step-5.is-revealing.has-header-pill .confirmation-order-summary {
     animation-delay: 1060ms;
 }
-#step-5.is-revealing.has-header-pill #confirmationOrderSection {
-    animation-delay: 1560ms;
-}
-#step-5.is-revealing.has-header-pill .first-session-video-section {
-    animation-delay: 1090ms;
-}
-#step-5.is-revealing.has-header-pill .next-steps {
+#step-5.is-revealing.has-header-pill .member-onboarding-section {
     animation-delay: 1120ms;
 }
+#step-5.is-revealing.has-header-pill .first-session-video-section {
+    animation-delay: 1180ms;
+}
+#step-5.is-revealing.has-header-pill .next-steps {
+    animation-delay: 1240ms;
+}
 #step-5.is-revealing.has-header-pill .invite-friends-section {
-    animation-delay: 1520ms;
+    animation-delay: 1300ms;
 }
-#step-5.is-revealing.has-header-pill .confirmation-layout[data-with-onboarding="true"] .invite-friends-section {
-    animation-delay: 1520ms;
+#step-5.is-revealing.has-header-pill .confirmation-order-details {
+    animation-delay: 1360ms;
 }
-#step-5.is-revealing.has-header-pill .step-item:nth-child(1) { animation-delay: 1340ms; }
-#step-5.is-revealing.has-header-pill .step-item:nth-child(2) { animation-delay: 1410ms; }
-#step-5.is-revealing.has-header-pill .step-item:nth-child(3) { animation-delay: 1480ms; }
+#step-5.is-revealing.has-header-pill .step-item:nth-child(1) { animation-delay: 1320ms; }
+#step-5.is-revealing.has-header-pill .step-item:nth-child(2) { animation-delay: 1380ms; }
+#step-5.is-revealing.has-header-pill .step-item:nth-child(3) { animation-delay: 1440ms; }
 
 @keyframes success-badge-pop {
     0%   { transform: scale(0.84); }
@@ -8389,8 +8388,9 @@ main {
     .confirmation-header.is-animating .success-title,
     .confirmation-header.is-animating .success-message,
     .confirmation-header.is-animating .success-header-pill,
+    #step-5.is-revealing .confirmation-order-summary,
+    #step-5.is-revealing .confirmation-order-details,
     #step-5.is-revealing .confirmation-order-card-v2,
-#step-5.is-revealing .confirmation-left > .confirmation-card,
     #step-5.is-revealing .next-steps,
     #step-5.is-revealing .member-onboarding-section,
     #step-5.is-revealing .first-session-video-section,
@@ -8416,10 +8416,8 @@ main {
 /* Hide confirmation sections when payment fails or is pending */
 .step-panel[data-payment-failed="true"] .confirmation-layout,
 .step-panel[data-payment-pending="true"] .confirmation-layout,
-.step-panel[data-payment-failed="true"] .confirmation-left,
-.step-panel[data-payment-pending="true"] .confirmation-left,
-.step-panel[data-payment-failed="true"] .confirmation-right,
-.step-panel[data-payment-pending="true"] .confirmation-right,
+.step-panel[data-payment-failed="true"] .confirmation-flow,
+.step-panel[data-payment-pending="true"] .confirmation-flow,
 .step-panel[data-payment-failed="true"] .invite-friends-section,
 .step-panel[data-payment-pending="true"] .invite-friends-section,
 .step-panel[data-payment-failed="true"] .member-onboarding-section,
@@ -8841,27 +8839,99 @@ main {
 }
 
 .confirmation-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 32px;
+    display: flex;
+    justify-content: center;
     margin-top: 8px;
-    align-items: start;
-    /* Stretch to fill the panel; parent uses `align-items: center` on a flex
-       column, which would otherwise let the grid shrink to its content and
-       produce different widths per product (longer product names → wider). */
     width: 100%;
 }
 
-.confirmation-left {
+.confirmation-flow {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    width: 100%;
+    max-width: 560px;
 }
 
-.confirmation-right {
+/* Quick order summary — scannable headline facts above the full flow */
+.confirmation-order-summary-card {
+    background: #18181b;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 20px 22px;
+}
+
+.confirmation-order-summary-main {
     display: flex;
-    flex-direction: column;
-    gap: 20px;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.confirmation-order-summary-product {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: #fff;
+    letter-spacing: -0.01em;
+}
+
+.confirmation-order-summary-total {
+    margin: 0;
+    flex-shrink: 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.confirmation-order-summary-meta {
+    margin: 8px 0 0;
+    font-size: var(--font-size-sm);
+    color: #9CA3AF;
+    font-variant-numeric: tabular-nums;
+}
+
+.confirmation-order-summary-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-top: 16px;
+    padding: 11px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: transparent;
+    color: #e5e7eb;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.confirmation-order-summary-cta:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.confirmation-order-summary-cta:focus-visible {
+    outline: 2px solid rgba(244, 1, 245, 0.55);
+    outline-offset: 2px;
+}
+
+.confirmation-order-details {
+    scroll-margin-top: 24px;
+}
+
+.confirmation-order-details-title {
+    margin: 8px 0 12px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9CA3AF;
 }
 
 .confirmation-card {
@@ -10580,31 +10650,11 @@ main {
 
 /* Mobile Responsive */
 @media (max-width: 1024px) {
-    .confirmation-layout {
-        grid-template-columns: 1fr;
-        gap: 24px;
+    .confirmation-flow {
+        gap: 16px;
+        max-width: none;
     }
 
-    /* When the invite-friends card is shown (membership only), flatten the
-       two columns into a single mobile flow and reorder so the invite sits
-       right after "What's next?" — visible without deep scrolling, but not
-       aggressively ahead of the order summary. */
-    .confirmation-layout[data-with-invite="true"] .confirmation-left,
-    .confirmation-layout[data-with-invite="true"] .confirmation-right {
-        display: contents;
-    }
-    .confirmation-layout[data-with-invite="true"] .first-session-video-section { order: 1; }
-    .confirmation-layout[data-with-invite="true"] .next-steps { order: 2; }
-    .confirmation-layout[data-with-invite="true"] .invite-friends-section { order: 3; }
-    .confirmation-layout[data-with-invite="true"] #confirmationOrderSection { order: 4; }
-
-    /* Membership: surface perks immediately after the success header */
-    .confirmation-layout[data-with-onboarding="true"] #memberOnboardingSection { order: 1; }
-    .confirmation-layout[data-with-onboarding="true"] .first-session-video-section { order: 2; }
-    .confirmation-layout[data-with-onboarding="true"] .next-steps { order: 3; }
-    .confirmation-layout[data-with-onboarding="true"] .invite-friends-section { order: 4; }
-    .confirmation-layout[data-with-onboarding="true"] #confirmationOrderSection { order: 5; }
-    
     .step-panel[data-payment-failed="true"] .step-panel-content,
     #step-5.step-panel[data-payment-failed="true"] .step-panel-content,
     #step-5[data-payment-failed="true"] .step-panel-content {
@@ -10694,9 +10744,14 @@ main {
         border-radius: 12px;
     }
 
-    .confirmation-left,
-    .confirmation-right {
-        gap: 16px;
+    .confirmation-order-summary-card {
+        padding: 18px 20px;
+        border-radius: 14px;
+    }
+
+    .confirmation-order-summary-product,
+    .confirmation-order-summary-total {
+        font-size: 16px;
     }
 }
 
@@ -11655,7 +11710,7 @@ main {
 
 /* ===========================
    Invite Friends Section
-   (rendered as a card inside .confirmation-right column)
+   (rendered in the success-page flow column)
    =========================== */
 .invite-friends-section {
     width: 100%;

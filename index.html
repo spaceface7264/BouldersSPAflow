@@ -960,11 +960,226 @@
                         </div>
                         </div>
                         
-                    <!-- Main Content Layout -->
+                    <!-- Main Content Layout — single intentional column -->
                     <div class="confirmation-layout">
-                        <!-- Left Column - Order & Membership Summary -->
-                        <div class="confirmation-left">
-                            <!-- Order confirmation card (5 zones) -->
+                        <div class="confirmation-flow">
+
+                            <!-- 1. Quick order summary -->
+                            <section class="confirmation-order-summary" id="confirmationOrderSummary" aria-labelledby="confirmationSummaryTitle">
+                                <h2 class="visually-hidden" id="confirmationSummaryTitle" data-i18n-key="confirmation.orderSummary">Order summary</h2>
+                                <div class="confirmation-order-summary-card">
+                                    <div class="confirmation-order-summary-main">
+                                        <p class="confirmation-order-summary-product" data-summary-field="summary-product-name"><span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span></p>
+                                        <p class="confirmation-order-summary-total" data-summary-field="summary-order-total"><span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span></p>
+                                    </div>
+                                    <p class="confirmation-order-summary-meta" data-summary-field="summary-meta" hidden></p>
+                                    <button type="button" class="confirmation-order-summary-cta" data-action="scroll-to-order-details" data-i18n-key="confirmation.viewOrderDetails">
+                                        View order details
+                                    </button>
+                                </div>
+                            </section>
+
+                            <!-- 2. Explore your membership (membership only) -->
+                            <section class="member-onboarding-section" id="memberOnboardingSection" style="display: none;" aria-labelledby="memberOnboardingTitle">
+                            <div class="member-onboarding-panel">
+                                <h3 class="member-onboarding-title" id="memberOnboardingTitle" data-i18n-key="confirmation.onboarding.title">Explore your membership</h3>
+                                <p class="member-onboarding-lead" data-i18n-key="confirmation.onboarding.lead">Perks, classes, and community. Start with whichever feels right.</p>
+                                <ul class="member-onboarding-list">
+                                    <li class="member-onboarding-item">
+                                        <a class="member-onboarding-link member-onboarding-link--bloclife" href="https://boulders.dk/bloclife" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.bloclife.aria">
+                                            <span class="member-onboarding-icon" aria-hidden="true">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                                </svg>
+                                            </span>
+                                            <span class="member-onboarding-copy">
+                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.bloclife.title">Bloc Life perks</span>
+                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.bloclife.desc">Loyalty rewards from day one. Gear, café, and more.</span>
+                                            </span>
+                                            <span class="member-onboarding-chevron" aria-hidden="true">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                            </span>
+                                        </a>
+                                    </li>
+                                    <li class="member-onboarding-item">
+                                        <a class="member-onboarding-link member-onboarding-link--classes" href="https://boulders.goactivebooking.com/event-categories/12/events" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.classes.aria">
+                                            <span class="member-onboarding-icon" aria-hidden="true">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                                    <path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>
+                                                    <path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/>
+                                                </svg>
+                                            </span>
+                                            <span class="member-onboarding-copy">
+                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.classes.title">Book a class</span>
+                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.classes.desc">Intro courses are free for members. Reserve your spot.</span>
+                                            </span>
+                                            <span class="member-onboarding-chevron" aria-hidden="true">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                            </span>
+                                        </a>
+                                    </li>
+                                    <li class="member-onboarding-item">
+                                        <a class="member-onboarding-link member-onboarding-link--community" href="https://boulders.goactivebooking.com/class-web-categories/37/classes?facility=3%7C1%7C6%7C13%7C7%7C4%7C11%7C5%7C12%7C8%7C9&amp;tab=DAY" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.communities.aria">
+                                            <span class="member-onboarding-icon" aria-hidden="true">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                                                    <circle cx="9" cy="7" r="4"/>
+                                                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                                </svg>
+                                            </span>
+                                            <span class="member-onboarding-copy">
+                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.communities.title">Join a community</span>
+                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.communities.desc">Social Sessions. Themed nights, drop in anytime.</span>
+                                            </span>
+                                            <span class="member-onboarding-chevron" aria-hidden="true">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                            </span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                            </section>
+
+                            <!-- 3. Good to know — first session video -->
+                            <section class="first-session-video-section" id="firstSessionVideoSection" aria-labelledby="firstSessionVideoTitle">
+                                <div class="first-session-video-card">
+                                    <a class="first-session-video-link" id="firstSessionVideoLink" href="https://www.youtube.com/watch?v=W-4skXhGWM0&amp;t=1s" target="_blank" rel="noopener noreferrer" data-action="first-session-video" data-i18n-aria-key="confirmation.firstSession.aria">
+                                        <span class="first-session-video-thumb">
+                                            <img class="first-session-video-thumb-img" src="https://i.ytimg.com/vi/W-4skXhGWM0/maxresdefault.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async">
+                                            <span class="first-session-video-thumb-shade" aria-hidden="true"></span>
+                                            <span class="first-session-video-play" aria-hidden="true">
+                                                <span class="first-session-video-play-ring"></span>
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11.04-6.86a1 1 0 0 0 0-1.72L9.5 4.28A1 1 0 0 0 8 5.14z"/></svg>
+                                            </span>
+                                            <span class="first-session-video-duration" data-i18n-key="confirmation.firstSession.duration">4 min</span>
+                                        </span>
+                                        <span class="first-session-video-copy">
+                                            <span class="first-session-video-eyebrow" data-i18n-key="confirmation.firstSession.eyebrow">Good to know</span>
+                                            <h3 class="first-session-video-title" id="firstSessionVideoTitle" data-i18n-key="confirmation.firstSession.title">Your first visit</h3>
+                                            <p class="first-session-video-desc" data-i18n-key="confirmation.firstSession.desc">A quick guide to what to know before you climb at the gym.</p>
+                                            <span class="first-session-video-cta">
+                                                <span data-i18n-key="confirmation.firstSession.cta">Watch video</span>
+                                                <svg class="first-session-video-cta-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                                    <polyline points="15 3 21 3 21 9"/>
+                                                    <line x1="10" y1="14" x2="21" y2="3"/>
+                                                </svg>
+                                            </span>
+                                        </span>
+                                    </a>
+                                </div>
+                            </section>
+
+                            <!-- 4. What happens next -->
+                            <div class="next-steps">
+                                <h3 class="steps-title" data-i18n-key="confirmation.nextStepsTitle">What happens next?</h3>
+                                <ul class="steps-list">
+                                    <li class="step-item">
+                                        <div class="step-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="3" y="5" width="18" height="14" rx="2"/>
+                                                <path d="m3 7 9 6 9-6"/>
+                                            </svg>
+                                        </div>
+                                        <span id="nextStep1" data-i18n-key="confirmation.nextStep1">Email confirmation sent to your inbox</span>
+                                    </li>
+                                    <li class="step-item">
+                                        <div class="step-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="8" cy="15" r="4"/>
+                                                <path d="M10.85 12.15 21 2"/>
+                                                <path d="m18 5 3 3"/>
+                                                <path d="m15 8 2 2"/>
+                                            </svg>
+                                        </div>
+                                        <span id="nextStep2" data-i18n-key="confirmation.nextStep2.membership">Membership activation & auto-renewal setup</span>
+                                    </li>
+                                    <li class="step-item">
+                                        <div class="step-icon" aria-hidden="true">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                                                <circle cx="12" cy="10" r="3"/>
+                                            </svg>
+                                        </div>
+                                        <span id="nextStep3" data-i18n-key="confirmation.nextStep3.membership">Pick up your membership card at the gym</span>
+                                    </li>
+                                </ul>
+                                <p id="freetrialActivationChangeCta" class="step-change-activation-cta" style="display: none;">
+                                    <a id="freetrialActivationChangeLink" href="mailto:medlem@boulders.dm" data-i18n-key="confirmation.freetrial.changeActivationCta">Need to change activation day? Click here</a>
+                                </p>
+                            </div>
+
+                            <!-- 5. Invite friends -->
+                            <section class="invite-friends-section" id="inviteFriendsSection" aria-labelledby="inviteFriendsTitle">
+                                <div class="invite-friends-card">
+                                    <div class="invite-friends-icon" aria-hidden="true">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="3" y="8" width="18" height="4" rx="1"/>
+                                            <path d="M12 8v13"/>
+                                            <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/>
+                                            <path d="M7.5 8a2.5 2.5 0 1 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 1 1 0 5"/>
+                                        </svg>
+                                    </div>
+                                    <h3 class="invite-friends-title" id="inviteFriendsTitle" data-i18n-key="invite.title">Invite your friends!</h3>
+                                    <p class="invite-friends-subtitle" data-i18n-key="invite.subtitle">Share your link — when your friends sign up, they get a free 2-week trial.</p>
+
+                                    <div class="invite-share-buttons">
+                                        <button type="button" id="inviteCopyBtn" class="invite-share-btn invite-share-btn--copy" data-action="invite-copy-link" aria-label="Copy invite link">
+                                            <span class="invite-share-icon" aria-hidden="true">
+                                                <svg class="invite-share-icon-default" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                                <svg class="invite-share-icon-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="20 6 9 17 4 12"/></svg>
+                                            </span>
+                                            <span class="invite-share-label">
+                                                <span class="invite-share-label-default" data-i18n-key="invite.copyLink">Copy link</span>
+                                                <span class="invite-share-label-success" data-i18n-key="invite.copied">Copied!</span>
+                                            </span>
+                                        </button>
+                                        <button type="button" class="invite-share-btn invite-share-btn--whatsapp" data-action="invite-share-whatsapp" aria-label="Share via WhatsApp">
+                                            <span class="invite-share-icon" aria-hidden="true">
+                                                <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M20.52 3.48A11.84 11.84 0 0 0 12.04 0C5.5 0 .2 5.3.2 11.84c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.68a11.83 11.83 0 0 0 5.64 1.44h.01c6.53 0 11.83-5.3 11.84-11.84 0-3.16-1.23-6.13-3.37-8.44ZM12.05 21.6h-.01a9.74 9.74 0 0 1-4.97-1.36l-.36-.21-3.8 1 1.02-3.7-.23-.38a9.73 9.73 0 0 1-1.5-5.11c0-5.39 4.39-9.78 9.79-9.78 2.61 0 5.07 1.02 6.92 2.87a9.73 9.73 0 0 1 2.86 6.93c0 5.4-4.39 9.78-9.78 9.78Zm5.36-7.32c-.29-.15-1.74-.86-2-.96-.27-.1-.47-.15-.67.15-.2.29-.77.96-.94 1.16-.17.2-.35.22-.64.07-.29-.15-1.24-.46-2.36-1.45a8.85 8.85 0 0 1-1.63-2.03c-.17-.29-.02-.45.13-.6.13-.13.29-.35.44-.52.15-.17.2-.29.29-.49.1-.2.05-.37-.02-.52-.07-.15-.67-1.6-.91-2.2-.24-.58-.49-.5-.67-.51l-.57-.01a1.1 1.1 0 0 0-.79.37 3.34 3.34 0 0 0-1.04 2.48c0 1.46 1.07 2.88 1.22 3.08.15.2 2.1 3.21 5.09 4.5.71.31 1.27.5 1.7.64.71.23 1.36.2 1.87.12.57-.08 1.74-.71 1.99-1.4.25-.69.25-1.27.17-1.4-.07-.13-.27-.2-.56-.35Z"/></svg>
+                                            </span>
+                                            <span class="invite-share-label">WhatsApp</span>
+                                        </button>
+                                        <button type="button" class="invite-share-btn invite-share-btn--messenger" data-action="invite-share-messenger" aria-label="Share via Messenger">
+                                            <span class="invite-share-icon" aria-hidden="true">
+                                                <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 0C5.37 0 0 4.97 0 11.1c0 3.5 1.74 6.62 4.46 8.65V24l4.07-2.23c1.08.3 2.23.46 3.47.46 6.63 0 12-4.97 12-11.13C24 4.97 18.63 0 12 0Zm1.19 14.96-3.06-3.27-5.97 3.27 6.57-6.97 3.13 3.27 5.9-3.27-6.57 6.97Z"/></svg>
+                                            </span>
+                                            <span class="invite-share-label">Messenger</span>
+                                        </button>
+                                        <button type="button" class="invite-share-btn invite-share-btn--instagram" data-action="invite-share-instagram" aria-label="Share via Instagram">
+                                            <span class="invite-share-icon" aria-hidden="true">
+                                                <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                                            </span>
+                                            <span class="invite-share-label">Instagram</span>
+                                        </button>
+                                        <button type="button" class="invite-share-btn invite-share-btn--sms" data-action="invite-share-sms" aria-label="Share via Messages">
+                                            <span class="invite-share-icon" aria-hidden="true">
+                                                <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 2C6.48 2 2 5.94 2 10.8c0 2.78 1.45 5.25 3.71 6.86V22l3.93-2.16c.76.13 1.55.2 2.36.2 5.52 0 10-3.94 10-8.8C22 5.94 17.52 2 12 2Z"/></svg>
+                                            </span>
+                                            <span class="invite-share-label" data-i18n-key="invite.share.sms">Messages</span>
+                                        </button>
+                                        <button type="button" class="invite-share-btn invite-share-btn--email" data-action="invite-share-email" aria-label="Share via Email">
+                                            <span class="invite-share-icon" aria-hidden="true">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/><path d="m4 7 8 6 8-6"/></svg>
+                                            </span>
+                                            <span class="invite-share-label" data-i18n-key="invite.share.email">Email</span>
+                                        </button>
+                                        <button type="button" class="invite-share-btn invite-share-btn--native" data-action="invite-share-native" aria-label="Share via more apps">
+                                            <span class="invite-share-icon" aria-hidden="true">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>
+                                            </span>
+                                            <span class="invite-share-label" data-i18n-key="invite.share.more">More</span>
+                                        </button>
+                                    </div>
+
+                                    <p class="invite-friends-footnote" data-i18n-key="invite.footnote">Your friends get 2 weeks free. No card required to start.</p>
+                                </div>
+                            </section>
+
+                            <!-- 6. Full order details -->
+                            <section class="confirmation-order-details" id="confirmationOrderDetails" tabindex="-1" aria-labelledby="confirmationOrderDetailsTitle">
+                                <h2 class="confirmation-order-details-title" id="confirmationOrderDetailsTitle" data-i18n-key="confirmation.orderDetailsFull">Order details</h2>
                             <div class="confirmation-order-card-v2" id="confirmationOrderSection" role="region" aria-labelledby="confirmationOrderTitle">
                                 <h2 class="visually-hidden" id="confirmationOrderTitle" data-i18n-key="confirmation.yourOrder">Your order</h2>
 
@@ -1190,206 +1405,8 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <!-- Right Column - Next Steps -->
-                        <div class="confirmation-right">
-                            <section class="member-onboarding-section" id="memberOnboardingSection" style="display: none;" aria-labelledby="memberOnboardingTitle">
-                            <div class="member-onboarding-panel">
-                                <h3 class="member-onboarding-title" id="memberOnboardingTitle" data-i18n-key="confirmation.onboarding.title">Explore your membership</h3>
-                                <p class="member-onboarding-lead" data-i18n-key="confirmation.onboarding.lead">Perks, classes, and community. Start with whichever feels right.</p>
-                                <ul class="member-onboarding-list">
-                                    <li class="member-onboarding-item">
-                                        <a class="member-onboarding-link member-onboarding-link--bloclife" href="https://boulders.dk/bloclife" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.bloclife.aria">
-                                            <span class="member-onboarding-icon" aria-hidden="true">
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                                </svg>
-                                            </span>
-                                            <span class="member-onboarding-copy">
-                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.bloclife.title">Bloc Life perks</span>
-                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.bloclife.desc">Loyalty rewards from day one. Gear, café, and more.</span>
-                                            </span>
-                                            <span class="member-onboarding-chevron" aria-hidden="true">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                                            </span>
-                                        </a>
-                                    </li>
-                                    <li class="member-onboarding-item">
-                                        <a class="member-onboarding-link member-onboarding-link--classes" href="https://boulders.goactivebooking.com/event-categories/12/events" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.classes.aria">
-                                            <span class="member-onboarding-icon" aria-hidden="true">
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                                    <rect x="3" y="4" width="18" height="18" rx="2"/>
-                                                    <path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>
-                                                    <path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/>
-                                                </svg>
-                                            </span>
-                                            <span class="member-onboarding-copy">
-                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.classes.title">Book a class</span>
-                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.classes.desc">Intro courses are free for members. Reserve your spot.</span>
-                                            </span>
-                                            <span class="member-onboarding-chevron" aria-hidden="true">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                                            </span>
-                                        </a>
-                                    </li>
-                                    <li class="member-onboarding-item">
-                                        <a class="member-onboarding-link member-onboarding-link--community" href="https://boulders.goactivebooking.com/class-web-categories/37/classes?facility=3%7C1%7C6%7C13%7C7%7C4%7C11%7C5%7C12%7C8%7C9&amp;tab=DAY" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.communities.aria">
-                                            <span class="member-onboarding-icon" aria-hidden="true">
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                                                    <circle cx="9" cy="7" r="4"/>
-                                                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                                                </svg>
-                                            </span>
-                                            <span class="member-onboarding-copy">
-                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.communities.title">Join a community</span>
-                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.communities.desc">Social Sessions. Themed nights, drop in anytime.</span>
-                                            </span>
-                                            <span class="member-onboarding-chevron" aria-hidden="true">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                                            </span>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </div>
                             </section>
 
-                            <!-- First session video — all success flows -->
-                            <section class="first-session-video-section" id="firstSessionVideoSection" aria-labelledby="firstSessionVideoTitle">
-                                <div class="first-session-video-card">
-                                    <a class="first-session-video-link" id="firstSessionVideoLink" href="https://www.youtube.com/watch?v=W-4skXhGWM0&amp;t=1s" target="_blank" rel="noopener noreferrer" data-action="first-session-video" data-i18n-aria-key="confirmation.firstSession.aria">
-                                        <span class="first-session-video-thumb">
-                                            <img class="first-session-video-thumb-img" src="https://i.ytimg.com/vi/W-4skXhGWM0/maxresdefault.jpg" alt="" width="1280" height="720" loading="lazy" decoding="async">
-                                            <span class="first-session-video-thumb-shade" aria-hidden="true"></span>
-                                            <span class="first-session-video-play" aria-hidden="true">
-                                                <span class="first-session-video-play-ring"></span>
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11.04-6.86a1 1 0 0 0 0-1.72L9.5 4.28A1 1 0 0 0 8 5.14z"/></svg>
-                                            </span>
-                                            <span class="first-session-video-duration" data-i18n-key="confirmation.firstSession.duration">4 min</span>
-                                        </span>
-                                        <span class="first-session-video-copy">
-                                            <span class="first-session-video-eyebrow" data-i18n-key="confirmation.firstSession.eyebrow">Good to know</span>
-                                            <h3 class="first-session-video-title" id="firstSessionVideoTitle" data-i18n-key="confirmation.firstSession.title">Your first visit</h3>
-                                            <p class="first-session-video-desc" data-i18n-key="confirmation.firstSession.desc">A quick guide to what to know before you climb at the gym.</p>
-                                            <span class="first-session-video-cta">
-                                                <span data-i18n-key="confirmation.firstSession.cta">Watch video</span>
-                                                <svg class="first-session-video-cta-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                                                    <polyline points="15 3 21 3 21 9"/>
-                                                    <line x1="10" y1="14" x2="21" y2="3"/>
-                                                </svg>
-                                            </span>
-                                        </span>
-                                    </a>
-                                </div>
-                            </section>
-
-                            <!-- Next Steps -->
-                        <div class="next-steps">
-                                <h3 class="steps-title" data-i18n-key="confirmation.nextStepsTitle">What happens next?</h3>
-                                <ul class="steps-list">
-                                    <li class="step-item">
-                                        <div class="step-icon" aria-hidden="true">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                                <rect x="3" y="5" width="18" height="14" rx="2"/>
-                                                <path d="m3 7 9 6 9-6"/>
-                                            </svg>
-                                        </div>
-                                        <span id="nextStep1" data-i18n-key="confirmation.nextStep1">Email confirmation sent to your inbox</span>
-                                    </li>
-                                    <li class="step-item">
-                                        <div class="step-icon" aria-hidden="true">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                                <circle cx="8" cy="15" r="4"/>
-                                                <path d="M10.85 12.15 21 2"/>
-                                                <path d="m18 5 3 3"/>
-                                                <path d="m15 8 2 2"/>
-                                            </svg>
-                                        </div>
-                                        <span id="nextStep2" data-i18n-key="confirmation.nextStep2.membership">Membership activation & auto-renewal setup</span>
-                                    </li>
-                                    <li class="step-item">
-                                        <div class="step-icon" aria-hidden="true">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-                                                <circle cx="12" cy="10" r="3"/>
-                                            </svg>
-                                        </div>
-                                        <span id="nextStep3" data-i18n-key="confirmation.nextStep3.membership">Pick up your membership card at the gym</span>
-                                    </li>
-                            </ul>
-                            <p id="freetrialActivationChangeCta" class="step-change-activation-cta" style="display: none;">
-                                <a id="freetrialActivationChangeLink" href="mailto:medlem@boulders.dm" data-i18n-key="confirmation.freetrial.changeActivationCta">Need to change activation day? Click here</a>
-                            </p>
-                        </div>
-
-                            <!-- Invite Friends Section -->
-                            <section class="invite-friends-section" id="inviteFriendsSection" aria-labelledby="inviteFriendsTitle">
-                                <div class="invite-friends-card">
-                                    <div class="invite-friends-icon" aria-hidden="true">
-                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                                            <rect x="3" y="8" width="18" height="4" rx="1"/>
-                                            <path d="M12 8v13"/>
-                                            <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/>
-                                            <path d="M7.5 8a2.5 2.5 0 1 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 1 1 0 5"/>
-                                        </svg>
-                                    </div>
-                                    <h3 class="invite-friends-title" id="inviteFriendsTitle" data-i18n-key="invite.title">Invite your friends!</h3>
-                                    <p class="invite-friends-subtitle" data-i18n-key="invite.subtitle">Share your link — when your friends sign up, they get a free 2-week trial.</p>
-
-                                    <div class="invite-share-buttons">
-                                        <button type="button" id="inviteCopyBtn" class="invite-share-btn invite-share-btn--copy" data-action="invite-copy-link" aria-label="Copy invite link">
-                                            <span class="invite-share-icon" aria-hidden="true">
-                                                <svg class="invite-share-icon-default" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                                                <svg class="invite-share-icon-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><polyline points="20 6 9 17 4 12"/></svg>
-                                            </span>
-                                            <span class="invite-share-label">
-                                                <span class="invite-share-label-default" data-i18n-key="invite.copyLink">Copy link</span>
-                                                <span class="invite-share-label-success" data-i18n-key="invite.copied">Copied!</span>
-                                            </span>
-                                        </button>
-                                        <button type="button" class="invite-share-btn invite-share-btn--whatsapp" data-action="invite-share-whatsapp" aria-label="Share via WhatsApp">
-                                            <span class="invite-share-icon" aria-hidden="true">
-                                                <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M20.52 3.48A11.84 11.84 0 0 0 12.04 0C5.5 0 .2 5.3.2 11.84c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.68a11.83 11.83 0 0 0 5.64 1.44h.01c6.53 0 11.83-5.3 11.84-11.84 0-3.16-1.23-6.13-3.37-8.44ZM12.05 21.6h-.01a9.74 9.74 0 0 1-4.97-1.36l-.36-.21-3.8 1 1.02-3.7-.23-.38a9.73 9.73 0 0 1-1.5-5.11c0-5.39 4.39-9.78 9.79-9.78 2.61 0 5.07 1.02 6.92 2.87a9.73 9.73 0 0 1 2.86 6.93c0 5.4-4.39 9.78-9.78 9.78Zm5.36-7.32c-.29-.15-1.74-.86-2-.96-.27-.1-.47-.15-.67.15-.2.29-.77.96-.94 1.16-.17.2-.35.22-.64.07-.29-.15-1.24-.46-2.36-1.45a8.85 8.85 0 0 1-1.63-2.03c-.17-.29-.02-.45.13-.6.13-.13.29-.35.44-.52.15-.17.2-.29.29-.49.1-.2.05-.37-.02-.52-.07-.15-.67-1.6-.91-2.2-.24-.58-.49-.5-.67-.51l-.57-.01a1.1 1.1 0 0 0-.79.37 3.34 3.34 0 0 0-1.04 2.48c0 1.46 1.07 2.88 1.22 3.08.15.2 2.1 3.21 5.09 4.5.71.31 1.27.5 1.7.64.71.23 1.36.2 1.87.12.57-.08 1.74-.71 1.99-1.4.25-.69.25-1.27.17-1.4-.07-.13-.27-.2-.56-.35Z"/></svg>
-                                            </span>
-                                            <span class="invite-share-label">WhatsApp</span>
-                                        </button>
-                                        <button type="button" class="invite-share-btn invite-share-btn--messenger" data-action="invite-share-messenger" aria-label="Share via Messenger">
-                                            <span class="invite-share-icon" aria-hidden="true">
-                                                <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 0C5.37 0 0 4.97 0 11.1c0 3.5 1.74 6.62 4.46 8.65V24l4.07-2.23c1.08.3 2.23.46 3.47.46 6.63 0 12-4.97 12-11.13C24 4.97 18.63 0 12 0Zm1.19 14.96-3.06-3.27-5.97 3.27 6.57-6.97 3.13 3.27 5.9-3.27-6.57 6.97Z"/></svg>
-                                            </span>
-                                            <span class="invite-share-label">Messenger</span>
-                                        </button>
-                                        <button type="button" class="invite-share-btn invite-share-btn--instagram" data-action="invite-share-instagram" aria-label="Share via Instagram">
-                                            <span class="invite-share-icon" aria-hidden="true">
-                                                <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-                                            </span>
-                                            <span class="invite-share-label">Instagram</span>
-                                        </button>
-                                        <button type="button" class="invite-share-btn invite-share-btn--sms" data-action="invite-share-sms" aria-label="Share via Messages">
-                                            <span class="invite-share-icon" aria-hidden="true">
-                                                <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 2C6.48 2 2 5.94 2 10.8c0 2.78 1.45 5.25 3.71 6.86V22l3.93-2.16c.76.13 1.55.2 2.36.2 5.52 0 10-3.94 10-8.8C22 5.94 17.52 2 12 2Z"/></svg>
-                                            </span>
-                                            <span class="invite-share-label" data-i18n-key="invite.share.sms">Messages</span>
-                                        </button>
-                                        <button type="button" class="invite-share-btn invite-share-btn--email" data-action="invite-share-email" aria-label="Share via Email">
-                                            <span class="invite-share-icon" aria-hidden="true">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5v-9Z"/><path d="m4 7 8 6 8-6"/></svg>
-                                            </span>
-                                            <span class="invite-share-label" data-i18n-key="invite.share.email">Email</span>
-                                        </button>
-                                        <button type="button" class="invite-share-btn invite-share-btn--native" data-action="invite-share-native" aria-label="Share via more apps">
-                                            <span class="invite-share-icon" aria-hidden="true">
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>
-                                            </span>
-                                            <span class="invite-share-label" data-i18n-key="invite.share.more">More</span>
-                                        </button>
-                                    </div>
-
-                                    <p class="invite-friends-footnote" data-i18n-key="invite.footnote">Your friends get 2 weeks free. No card required to start.</p>
-                                </div>
-                            </section>
                         </div>
                     </div>
                 </div>
