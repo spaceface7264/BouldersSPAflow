@@ -7941,16 +7941,115 @@ main {
 }
 
 .success-badge {
-    width: 72px;
-    height: 72px;
-    background-color: #10B981;
-    border-radius: 50%;
+    --success-badge-size: 96px;
+    position: relative;
+    width: var(--success-badge-size);
+    height: var(--success-badge-size);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 24px;
-    color: white;
-    box-shadow: 0 10px 32px -8px rgba(16, 185, 129, 0.45);
+    margin: 0 auto 28px;
+}
+
+.success-badge::before {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    background: linear-gradient(155deg, #2c2c2c 0%, #1e1e1e 48%, #141414 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.11),
+        inset 0 -2px 8px rgba(0, 0, 0, 0.35),
+        0 16px 44px rgba(0, 0, 0, 0.42),
+        0 0 0 1px rgba(244, 1, 245, 0.14);
+}
+
+.success-badge__halo {
+    position: absolute;
+    inset: -18px;
+    border-radius: 50%;
+    background: radial-gradient(
+        circle,
+        rgba(244, 1, 245, 0.5) 0%,
+        rgba(255, 108, 255, 0.22) 28%,
+        rgba(52, 211, 153, 0.12) 52%,
+        transparent 72%
+    );
+    opacity: 0;
+    pointer-events: none;
+}
+
+.success-badge__orbit {
+    position: absolute;
+    inset: 2px;
+    border-radius: 50%;
+    border: 1px dashed rgba(244, 1, 245, 0.42);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.success-badge__burst {
+    position: absolute;
+    inset: 10px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.success-badge__spark {
+    --spark-distance: 50px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 5px;
+    height: 5px;
+    margin: -2.5px 0 0 -2.5px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.85);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.success-badge__spark:nth-of-type(4)  { --spark-angle: 0deg;   --spark-distance: 54px; }
+.success-badge__spark:nth-of-type(5)  { --spark-angle: 30deg;  --spark-distance: 46px; }
+.success-badge__spark:nth-of-type(6)  { --spark-angle: 60deg;  --spark-distance: 52px; }
+.success-badge__spark:nth-of-type(7)  { --spark-angle: 90deg;  --spark-distance: 44px; }
+.success-badge__spark:nth-of-type(8)  { --spark-angle: 120deg; --spark-distance: 56px; }
+.success-badge__spark:nth-of-type(9)  { --spark-angle: 150deg; --spark-distance: 48px; }
+.success-badge__spark:nth-of-type(10) { --spark-angle: 180deg; --spark-distance: 54px; }
+.success-badge__spark:nth-of-type(11) { --spark-angle: 210deg; --spark-distance: 46px; }
+.success-badge__spark:nth-of-type(12) { --spark-angle: 240deg; --spark-distance: 52px; }
+.success-badge__spark:nth-of-type(13) { --spark-angle: 270deg; --spark-distance: 44px; }
+.success-badge__spark:nth-of-type(14) { --spark-angle: 300deg; --spark-distance: 56px; }
+.success-badge__spark:nth-of-type(15) { --spark-angle: 330deg; --spark-distance: 48px; }
+
+.success-badge__spark:nth-of-type(4n+1) {
+    background: #ff6cff;
+    box-shadow: 0 0 10px rgba(255, 108, 255, 0.95);
+}
+.success-badge__spark:nth-of-type(4n+3) {
+    background: #6ee7b7;
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.9);
+}
+.success-badge__spark:nth-of-type(even) {
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+}
+
+.success-badge__svg {
+    position: relative;
+    z-index: 1;
+    width: 60px;
+    height: 60px;
+    overflow: visible;
+}
+
+.success-badge__track {
+    fill: none;
 }
 
 .success-title {
@@ -8042,27 +8141,82 @@ main {
 
 /* ── Success Page v2 — animated badge, ring, check, and copy ─────────── */
 
-.success-badge__svg {
-    overflow: visible;
-}
-
 .success-badge__ring,
 .success-badge__check {
+    fill: none;
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
 }
 
-.success-badge.is-animating {
-    transform-origin: 50% 50%;
-    animation: success-badge-pop 520ms ease-out both;
+/* Settled state when entrance animation is not running (revisit / reduced motion). */
+.success-badge:not(.is-animating) .success-badge__ring,
+.success-badge:not(.is-animating) .success-badge__check {
+    stroke-dashoffset: 0;
 }
 
+.success-badge:not(.is-animating) .success-badge__halo {
+    opacity: 0.88;
+}
+
+.success-badge:not(.is-animating) .success-badge__orbit {
+    opacity: 0.55;
+}
+
+.success-badge.is-animating {
+    transform-origin: 50% 50%;
+    animation:
+        success-badge-pop 620ms cubic-bezier(0.16, 1, 0.3, 1) both,
+        success-badge-idle-pulse 2.6s ease-in-out 1200ms infinite;
+}
+
+.success-badge.is-animating::before {
+    animation: success-badge-disc-pulse 2.6s ease-in-out 1200ms infinite;
+}
+
+.success-badge.is-animating .success-badge__halo {
+    animation:
+        success-badge-halo-in 720ms cubic-bezier(0.16, 1, 0.3, 1) 240ms both,
+        success-badge-halo-breathe 2.6s ease-in-out 1200ms infinite;
+}
+
+.success-badge.is-animating .success-badge__orbit {
+    animation:
+        success-badge-orbit-in 520ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both,
+        success-badge-orbit-spin 14s linear 1000ms infinite;
+}
+
+.success-badge.is-animating .success-badge__burst {
+    animation: success-badge-burst 760ms cubic-bezier(0.16, 1, 0.3, 1) 540ms both;
+}
+
+.success-badge.is-animating .success-badge__spark {
+    animation: success-badge-spark 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.success-badge.is-animating .success-badge__spark:nth-of-type(4)  { animation-delay: 560ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(5)  { animation-delay: 590ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(6)  { animation-delay: 620ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(7)  { animation-delay: 650ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(8)  { animation-delay: 680ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(9)  { animation-delay: 710ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(10) { animation-delay: 740ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(11) { animation-delay: 770ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(12) { animation-delay: 800ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(13) { animation-delay: 830ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(14) { animation-delay: 860ms; }
+.success-badge.is-animating .success-badge__spark:nth-of-type(15) { animation-delay: 890ms; }
+
 .success-badge.is-animating .success-badge__ring {
-    animation: success-stroke-draw 360ms ease-out 220ms both;
+    animation:
+        success-stroke-draw 480ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both,
+        success-badge-ring-pulse 2.6s ease-in-out 1200ms infinite;
 }
 
 .success-badge.is-animating .success-badge__check {
-    animation: success-stroke-draw 280ms ease-out 520ms both;
+    transform-origin: 32px 32px;
+    animation:
+        success-stroke-draw 360ms cubic-bezier(0.16, 1, 0.3, 1) 520ms both,
+        success-badge-check-pop 480ms cubic-bezier(0.34, 1.45, 0.64, 1) 860ms both;
 }
 
 .confirmation-header.is-animating .success-title {
@@ -8129,10 +8283,73 @@ main {
 #step-5.is-revealing.has-header-pill .step-item:nth-child(3) { animation-delay: 1480ms; }
 
 @keyframes success-badge-pop {
-    0%   { transform: scale(0.3); opacity: 0; }
-    55%  { transform: scale(1.1); opacity: 1; }
-    75%  { transform: scale(0.96); }
+    0%   { transform: scale(0.84); opacity: 0; }
+    55%  { transform: scale(1.06); opacity: 1; }
     100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes success-badge-halo-in {
+    0%   { opacity: 0; transform: scale(0.78); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes success-badge-halo-breathe {
+    0%, 100% { opacity: 0.7; transform: scale(0.96); }
+    50%      { opacity: 1; transform: scale(1.14); }
+}
+
+@keyframes success-badge-idle-pulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.045); }
+}
+
+@keyframes success-badge-disc-pulse {
+    0%, 100% {
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.11),
+            inset 0 -2px 8px rgba(0, 0, 0, 0.35),
+            0 16px 44px rgba(0, 0, 0, 0.42),
+            0 0 0 1px rgba(244, 1, 245, 0.14);
+    }
+    50% {
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.15),
+            inset 0 -2px 8px rgba(0, 0, 0, 0.35),
+            0 16px 44px rgba(0, 0, 0, 0.42),
+            0 0 32px rgba(244, 1, 245, 0.38),
+            0 0 12px rgba(52, 211, 153, 0.2),
+            0 0 0 1px rgba(244, 1, 245, 0.32);
+    }
+}
+
+@keyframes success-badge-ring-pulse {
+    0%, 100% { opacity: 1; filter: drop-shadow(0 0 0 transparent); }
+    50%      { opacity: 1; filter: drop-shadow(0 0 6px rgba(255, 108, 255, 0.65)); }
+}
+
+@keyframes success-badge-orbit-in {
+    0%   { opacity: 0; transform: scale(0.88) rotate(-48deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes success-badge-orbit-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes success-badge-burst {
+    0%   { opacity: 0.75; transform: scale(0.92); }
+    100% { opacity: 0; transform: scale(1.55); }
+}
+
+@keyframes success-badge-spark {
+    0%   { opacity: 0; transform: rotate(var(--spark-angle, 0deg)) translateY(0) scale(0); }
+    20%  { opacity: 1; }
+    100% { opacity: 0; transform: rotate(var(--spark-angle, 0deg)) translateY(calc(-1 * var(--spark-distance, 50px))) scale(0.15); }
+}
+
+@keyframes success-badge-check-pop {
+    0%, 100% { transform: scale(1); }
+    45%      { transform: scale(1.1); }
 }
 
 @keyframes success-stroke-draw {
@@ -8147,6 +8364,11 @@ main {
 
 @media (prefers-reduced-motion: reduce) {
     .success-badge.is-animating,
+    .success-badge.is-animating::before,
+    .success-badge.is-animating .success-badge__halo,
+    .success-badge.is-animating .success-badge__orbit,
+    .success-badge.is-animating .success-badge__burst,
+    .success-badge.is-animating .success-badge__spark,
     .success-badge.is-animating .success-badge__ring,
     .success-badge.is-animating .success-badge__check,
     .confirmation-header.is-animating .success-title,
@@ -8161,6 +8383,12 @@ main {
     }
     #step-5.has-header-pill .success-header-pill {
         opacity: 1;
+    }
+    .success-badge__halo {
+        opacity: 0.88;
+    }
+    .success-badge__orbit {
+        opacity: 0.55;
     }
     .success-badge__ring,
     .success-badge__check {
@@ -9888,12 +10116,18 @@ main {
     }
 
     .success-badge {
-        width: 64px;
-        height: 64px;
+        --success-badge-size: 84px;
+        margin-bottom: 24px;
     }
-    .success-badge svg {
-        width: 40px;
-        height: 40px;
+    .success-badge::before {
+        inset: 7px;
+    }
+    .success-badge__halo {
+        inset: -14px;
+    }
+    .success-badge__svg {
+        width: 52px;
+        height: 52px;
     }
 
     .success-title {

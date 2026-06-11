@@ -21443,6 +21443,77 @@ function determineProductTypeFromOrder() {
   return 'membership';
 }
 
+let successPingAudioContext = null;
+
+/**
+ * Soft two-note chime via Web Audio — no asset to load.
+ * Timed to the checkmark stroke landing (~520ms), not page entry.
+ */
+function playSuccessPing(delayMs = 520) {
+  setTimeout(() => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!successPingAudioContext) {
+        successPingAudioContext = new AudioCtx();
+      }
+      const ctx = successPingAudioContext;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      const t0 = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.0001, t0);
+      master.gain.exponentialRampToValueAtTime(0.32, t0 + 0.012);
+      master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.62);
+      master.connect(ctx.destination);
+
+      // Leading tick — ring finishing
+      const tick = ctx.createOscillator();
+      tick.type = 'triangle';
+      tick.frequency.setValueAtTime(784, t0); // G5
+      const tickGain = ctx.createGain();
+      tickGain.gain.setValueAtTime(0.75, t0);
+      tickGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+      tick.connect(tickGain);
+      tickGain.connect(master);
+      tick.start(t0);
+      tick.stop(t0 + 0.13);
+
+      // Resolve — checkmark lands
+      const pingAt = t0 + 0.07;
+      const ping = ctx.createOscillator();
+      ping.type = 'triangle';
+      ping.frequency.setValueAtTime(1174.7, pingAt); // D6
+      const pingGain = ctx.createGain();
+      pingGain.gain.setValueAtTime(0.0001, pingAt);
+      pingGain.gain.exponentialRampToValueAtTime(1, pingAt + 0.018);
+      pingGain.gain.exponentialRampToValueAtTime(0.0001, pingAt + 0.55);
+      ping.connect(pingGain);
+      pingGain.connect(master);
+      ping.start(pingAt);
+      ping.stop(pingAt + 0.58);
+
+      // Overtone — adds chime presence without harshness
+      const shimmer = ctx.createOscillator();
+      shimmer.type = 'sine';
+      shimmer.frequency.setValueAtTime(1174.7 * 2, pingAt);
+      const shimmerGain = ctx.createGain();
+      shimmerGain.gain.setValueAtTime(0.0001, pingAt);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.42, pingAt + 0.02);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.0001, pingAt + 0.38);
+      shimmer.connect(shimmerGain);
+      shimmerGain.connect(master);
+      shimmer.start(pingAt);
+      shimmer.stop(pingAt + 0.4);
+    } catch (err) {
+      if (window.DEBUG_LOGS === true) console.warn('[success-ping] failed', err);
+    }
+  }, delayMs);
+}
+
 function playSuccessAnimation() {
   if (state.successAnimationPlayed) return;
   const badge = document.querySelector('#step-5 .success-badge');
@@ -21468,13 +21539,16 @@ function playSuccessAnimation() {
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   if (reducedMotion) return;
 
+  // Chime on check-land (synced with CSS stroke-draw delay on .success-badge__check)
+  playSuccessPing(520);
+
   const rect = badge.getBoundingClientRect();
   const origin = {
     x: (rect.left + rect.width / 2) / window.innerWidth,
     y: (rect.top + rect.height / 2) / window.innerHeight,
   };
-  // Brand-coded palette: success greens + off-white + brand magenta accent.
-  const colors = ['#10B981', '#34D399', '#059669', '#F8FAFC', '#F0F'];
+  // Brand-coded palette: magenta accent + success greens + highlights.
+  const colors = ['#F401F5', '#ff6cff', '#10B981', '#34D399', '#059669', '#F8FAFC'];
 
   const fire = (delay, opts) => {
     setTimeout(() => {
@@ -21497,8 +21571,10 @@ function playSuccessAnimation() {
     }, delay);
   };
 
-  fire(220, {});
-  fire(360, { particleCount: 40, spread: 100, startVelocity: 26, scalar: 0.8 });
+  // Ring draw → wide burst → check-land sparkle
+  fire(180, { particleCount: 95, spread: 72, startVelocity: 40, scalar: 0.95 });
+  fire(320, { particleCount: 55, spread: 108, startVelocity: 30, scalar: 0.88 });
+  fire(560, { particleCount: 38, spread: 58, startVelocity: 24, scalar: 0.75, ticks: 190 });
 }
 
 function renderConfirmationView() {
