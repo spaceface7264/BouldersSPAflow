@@ -6348,7 +6348,7 @@ const translations = {
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
     'confirmation.title': 'You’re in!',
     'confirmation.message': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
-    'confirmation.message.membership': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.message.membership': 'Bekræftelsesmail er på vej. Udforsk fordelene nedenfor, eller mød op i hallen, når det passer dig.',
     'confirmation.message.15daypass': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.message.punchcard': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.message.firstclimb': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
@@ -6390,6 +6390,18 @@ const translations = {
     'confirmation.validUntil': 'Gyldig til:',
     'confirmation.validity': 'Gyldighed',
     'confirmation.validityIntro.15daypass': 'Dit pas er gyldigt fra',
+    'confirmation.membershipIntro': 'Du er nu medlem hos',
+    'confirmation.onboarding.title': 'Udforsk dit medlemskab',
+    'confirmation.onboarding.lead': 'Fordele, hold og fællesskab. Vælg det, der passer dig.',
+    'confirmation.onboarding.bloclife.title': 'Bloc Life-fordele',
+    'confirmation.onboarding.bloclife.desc': 'Loyalitetsfordele fra dag ét. Grej, café og mere.',
+    'confirmation.onboarding.bloclife.aria': 'Se Bloc Life-fordele (åbner i nyt vindue)',
+    'confirmation.onboarding.classes.title': 'Book et hold',
+    'confirmation.onboarding.classes.desc': 'Introhold er gratis for medlemmer. Reservér din plads.',
+    'confirmation.onboarding.classes.aria': 'Book introhold (åbner i nyt vindue)',
+    'confirmation.onboarding.communities.title': 'Sociale sessions',
+    'confirmation.onboarding.communities.desc': 'Temaaftener. Mød bare op, når det passer dig.',
+    'confirmation.onboarding.communities.aria': 'Se sociale sessions (åbner i nyt vindue)',
     'confirmation.punchCardDetails': 'Klippekort detaljer',
     'confirmation.name': 'Navn:',
     'confirmation.cardType': 'Korttype:',
@@ -6614,7 +6626,7 @@ const translations = {
     'message.noProducts.15daypass': 'No 15-Day Trial Pass options available at this time.',
     'confirmation.title': 'You’re in!',
     'confirmation.message': 'Welcome to the Boulders community. Visit any gym to start climbing!',
-    'confirmation.message.membership': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.message.membership': 'Confirmation email on its way. Explore your perks below, or visit the gym whenever you\'re ready.',
     'confirmation.message.15daypass': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.message.punchcard': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.message.firstclimb': 'Welcome to the Boulders community. Visit any gym to start climbing!',
@@ -6656,6 +6668,18 @@ const translations = {
     'confirmation.validUntil': 'Valid Until:',
     'confirmation.validity': 'Valid',
     'confirmation.validityIntro.15daypass': 'Your pass is valid from',
+    'confirmation.membershipIntro': "You're now a member at",
+    'confirmation.onboarding.title': 'Explore your membership',
+    'confirmation.onboarding.lead': 'Perks, classes, and community. Start with whichever feels right.',
+    'confirmation.onboarding.bloclife.title': 'Bloc Life perks',
+    'confirmation.onboarding.bloclife.desc': 'Loyalty rewards from day one. Gear, café, and more.',
+    'confirmation.onboarding.bloclife.aria': 'View Bloc Life perks (opens in a new tab)',
+    'confirmation.onboarding.classes.title': 'Book a class',
+    'confirmation.onboarding.classes.desc': 'Intro courses are free for members. Reserve your spot.',
+    'confirmation.onboarding.classes.aria': 'Book an intro class (opens in a new tab)',
+    'confirmation.onboarding.communities.title': 'Join a community',
+    'confirmation.onboarding.communities.desc': 'Social Sessions. Themed nights, drop in anytime.',
+    'confirmation.onboarding.communities.aria': 'View Social Sessions schedule (opens in a new tab)',
     'confirmation.punchCardDetails': 'Punch Card Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Card Type:',
@@ -6931,7 +6955,7 @@ const translations = {
     'modal.campaignRejection.option2': 'Support kontaktieren',
     'confirmation.title': 'You’re in!',
     'confirmation.message': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
-    'confirmation.message.membership': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.message.membership': 'Die Bestätigungs-E-Mail ist unterwegs. Entdecke unten deine Vorteile oder komm vorbei, wann es dir passt.',
     'confirmation.message.15daypass': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.message.punchcard': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.message.firstclimb': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
@@ -6973,6 +6997,18 @@ const translations = {
     'confirmation.validUntil': 'Gültig bis:',
     'confirmation.validity': 'Gültig',
     'confirmation.validityIntro.15daypass': 'Ihr Pass ist gültig ab',
+    'confirmation.membershipIntro': 'Du bist jetzt Mitglied bei',
+    'confirmation.onboarding.title': 'Deine Mitgliedschaft entdecken',
+    'confirmation.onboarding.lead': 'Vorteile, Kurse und Community. Wähle, womit du starten möchtest.',
+    'confirmation.onboarding.bloclife.title': 'Bloc Life Vorteile',
+    'confirmation.onboarding.bloclife.desc': 'Treuevorteile ab Tag eins. Ausrüstung, Café und mehr.',
+    'confirmation.onboarding.bloclife.aria': 'Bloc Life Vorteile ansehen (öffnet in neuem Tab)',
+    'confirmation.onboarding.classes.title': 'Kurs buchen',
+    'confirmation.onboarding.classes.desc': 'Intro-Kurse sind für Mitglieder kostenlos. Platz reservieren.',
+    'confirmation.onboarding.classes.aria': 'Intro-Kurs buchen (öffnet in neuem Tab)',
+    'confirmation.onboarding.communities.title': 'Community beitreten',
+    'confirmation.onboarding.communities.desc': 'Social Sessions. Themenabende, einfach vorbeikommen.',
+    'confirmation.onboarding.communities.aria': 'Social Sessions ansehen (öffnet in neuem Tab)',
     'confirmation.punchCardDetails': 'Stempelkarten-Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Kartentyp:',
@@ -13284,6 +13320,31 @@ function trackInviteShare(method) {
 function isMobileUserAgent() {
   if (typeof navigator === 'undefined') return false;
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+}
+
+function renderMemberOnboarding(productType) {
+  const section = document.getElementById('memberOnboardingSection');
+  const layout = document.querySelector('#step-5 .confirmation-layout');
+  if (!section) return;
+
+  const show = productType === 'membership';
+  section.style.display = show ? '' : 'none';
+  if (layout) {
+    if (show) layout.setAttribute('data-with-onboarding', 'true');
+    else layout.removeAttribute('data-with-onboarding');
+  }
+
+  if (!show) return;
+
+  section.querySelectorAll('[data-i18n-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-key');
+    if (key) el.textContent = t(key);
+  });
+
+  section.querySelectorAll('[data-i18n-aria-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-aria-key');
+    if (key) el.setAttribute('aria-label', t(key));
+  });
 }
 
 function renderInviteFriends(productType) {
@@ -21574,7 +21635,8 @@ function renderConfirmationView() {
     nextStep1.textContent = t('confirmation.nextStep1');
   }
 
-  // Render the invite-friends section (membership only; UA-aware buttons + copy state reset)
+  // Membership onboarding highlights + invite-friends (membership-centric flows)
+  renderMemberOnboarding(productType);
   renderInviteFriends(productType);
   
   if (nextStep2 && nextStep3) {
@@ -21748,11 +21810,57 @@ function renderConfirmationView() {
     }
   }
   
-  // Hide the validity pill by default; the 15-day-pass branch below will
-  // re-enable it when valid dates are available.
+  // Hide header highlight pills by default; product branches below re-enable them.
+  const defaultMembershipPill = document.getElementById('successMembershipPill');
   const defaultValidityPill = document.getElementById('successValidityPill');
+  if (defaultMembershipPill) defaultMembershipPill.style.display = 'none';
   if (defaultValidityPill) defaultValidityPill.style.display = 'none';
-  step5Panel?.classList.remove('has-validity-dates');
+  step5Panel?.classList.remove('has-header-pill');
+
+  // Membership header highlight — home gym + monthly price under the subheading.
+  if (productType === 'membership') {
+    const membershipPill = document.getElementById('successMembershipPill');
+    const headerGym = document.querySelector('[data-summary-field="header-primary-gym"]');
+    const headerPrice = document.querySelector('[data-summary-field="header-membership-price"]');
+
+    let gymLabel = '—';
+    if (apiOrder?.customer?.primaryGym) {
+      gymLabel = resolveGymLabel(apiOrder.customer.primaryGym);
+    } else if (apiOrder?.businessUnit?.name) {
+      gymLabel = apiOrder.businessUnit.name;
+    } else if (apiOrder?.primaryGym) {
+      gymLabel = apiOrder.primaryGym;
+    } else if (state.selectedGymName) {
+      gymLabel = state.selectedGymName;
+    }
+
+    let priceLabel = '—';
+    let recurringPrice = null;
+    if (apiOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].payRecurring.price.amount;
+      recurringPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.subscriptionItems?.[0]?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].price.amount;
+      recurringPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.membershipPrice != null) {
+      recurringPrice = Number(apiOrder.membershipPrice);
+    }
+
+    if (recurringPrice != null && !Number.isNaN(recurringPrice)) {
+      const formatted = formatCurrencyHalfKrone(roundToHalfKrone(recurringPrice));
+      priceLabel = `${formatted}/month`;
+    }
+
+    const hasMembershipHighlight = gymLabel !== '—';
+    if (headerGym) headerGym.textContent = gymLabel;
+    if (headerPrice) headerPrice.textContent = priceLabel;
+    if (membershipPill) {
+      membershipPill.style.display = hasMembershipHighlight ? 'block' : 'none';
+    }
+    if (hasMembershipHighlight) {
+      step5Panel?.classList.add('has-header-pill');
+    }
+  }
 
   // 15-Day Trial Pass specific fields - from API only
   if (productType === '15daypass') {
@@ -21808,7 +21916,9 @@ function renderConfirmationView() {
     if (validityPill) {
       validityPill.style.display = hasValidDates ? 'block' : 'none';
     }
-    step5Panel?.classList.toggle('has-validity-dates', !!hasValidDates);
+    if (hasValidDates) {
+      step5Panel?.classList.add('has-header-pill');
+    }
     if (headerPassStart && hasValidDates) headerPassStart.textContent = formatLongDate(parsedStart);
     if (headerPassEnd && hasValidDates) headerPassEnd.textContent = formatLongDate(parsedEnd);
 

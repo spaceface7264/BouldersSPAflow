@@ -915,8 +915,13 @@
                         </div>
                         <h1 class="success-title" data-i18n-key="confirmation.title">You’re in!</h1>
                         <p class="success-message" data-i18n-key="confirmation.message">Welcome to the Boulders community. Visit any gym to start climbing!</p>
-                        <div class="success-validity-pill" id="successValidityPill" style="display: none;" role="status" aria-live="polite">
-                            <p class="success-validity-intro" data-i18n-key="confirmation.validityIntro.15daypass">Your pass is valid from</p>
+                        <div class="success-header-pill success-membership-pill" id="successMembershipPill" style="display: none;" role="status" aria-live="polite">
+                            <p class="success-header-pill-intro" data-i18n-key="confirmation.membershipIntro">You're now a member at</p>
+                            <p class="success-header-pill-highlight" data-summary-field="header-primary-gym">—</p>
+                            <p class="success-header-pill-meta" data-summary-field="header-membership-price">—</p>
+                        </div>
+                        <div class="success-header-pill success-validity-pill" id="successValidityPill" style="display: none;" role="status" aria-live="polite">
+                            <p class="success-header-pill-intro" data-i18n-key="confirmation.validityIntro.15daypass">Your pass is valid from</p>
                             <p class="success-validity-range">
                                 <span class="success-validity-date" data-summary-field="header-pass-start-date">—</span>
                                 <span class="success-validity-separator" aria-hidden="true">→</span>
@@ -1085,11 +1090,11 @@
                                         <span class="membership-label" data-i18n-key="confirmation.membershipType">Type:</span>
                                         <span class="membership-value" data-summary-field="membership-type">—</span>
                                     </div>
-                                    <div class="membership-item">
+                                    <div class="membership-item membership-item--in-header" data-header-pill-field="primary-gym">
                                         <span class="membership-label" data-i18n-key="confirmation.primaryGym">Primary Gym:</span>
                                         <span class="membership-value" data-summary-field="primary-gym">—</span>
                                     </div>
-                                    <div class="membership-item">
+                                    <div class="membership-item membership-item--in-header" data-header-pill-field="membership-price">
                                         <span class="membership-label" data-i18n-key="confirmation.monthlyPrice">Monthly Price:</span>
                                         <span class="membership-value" data-summary-field="membership-price">0,00 kr</span>
                                     </div>
@@ -1149,6 +1154,65 @@
                         
                         <!-- Right Column - Next Steps -->
                         <div class="confirmation-right">
+                            <div class="member-onboarding-panel" id="memberOnboardingSection" style="display: none;" aria-labelledby="memberOnboardingTitle">
+                                <h3 class="member-onboarding-title" id="memberOnboardingTitle" data-i18n-key="confirmation.onboarding.title">Explore your membership</h3>
+                                <p class="member-onboarding-lead" data-i18n-key="confirmation.onboarding.lead">Perks, classes, and community. Start with whichever feels right.</p>
+                                <ul class="member-onboarding-list">
+                                    <li class="member-onboarding-item">
+                                        <a class="member-onboarding-link member-onboarding-link--bloclife" href="https://boulders.dk/bloclife" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.bloclife.aria">
+                                            <span class="member-onboarding-icon" aria-hidden="true">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                                </svg>
+                                            </span>
+                                            <span class="member-onboarding-copy">
+                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.bloclife.title">Bloc Life perks</span>
+                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.bloclife.desc">Loyalty rewards from day one. Gear, café, and more.</span>
+                                            </span>
+                                            <span class="member-onboarding-chevron" aria-hidden="true">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                            </span>
+                                        </a>
+                                    </li>
+                                    <li class="member-onboarding-item">
+                                        <a class="member-onboarding-link member-onboarding-link--classes" href="https://boulders.goactivebooking.com/event-categories/12/events" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.classes.aria">
+                                            <span class="member-onboarding-icon" aria-hidden="true">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                                    <path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>
+                                                    <path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/>
+                                                </svg>
+                                            </span>
+                                            <span class="member-onboarding-copy">
+                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.classes.title">Book a class</span>
+                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.classes.desc">Intro courses are free for members. Reserve your spot.</span>
+                                            </span>
+                                            <span class="member-onboarding-chevron" aria-hidden="true">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                            </span>
+                                        </a>
+                                    </li>
+                                    <li class="member-onboarding-item">
+                                        <a class="member-onboarding-link member-onboarding-link--community" href="https://boulders.goactivebooking.com/class-web-categories/37/classes?facility=3%7C1%7C6%7C13%7C7%7C4%7C11%7C5%7C12%7C8%7C9&amp;tab=DAY" target="_blank" rel="noopener noreferrer" data-i18n-aria-key="confirmation.onboarding.communities.aria">
+                                            <span class="member-onboarding-icon" aria-hidden="true">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                                                    <circle cx="9" cy="7" r="4"/>
+                                                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                                </svg>
+                                            </span>
+                                            <span class="member-onboarding-copy">
+                                                <span class="member-onboarding-link-title" data-i18n-key="confirmation.onboarding.communities.title">Join a community</span>
+                                                <span class="member-onboarding-link-desc" data-i18n-key="confirmation.onboarding.communities.desc">Social Sessions. Themed nights, drop in anytime.</span>
+                                            </span>
+                                            <span class="member-onboarding-chevron" aria-hidden="true">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                                            </span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+
                             <!-- Next Steps -->
                         <div class="next-steps">
                                 <h3 class="steps-title" data-i18n-key="confirmation.nextStepsTitle">What happens next?</h3>
