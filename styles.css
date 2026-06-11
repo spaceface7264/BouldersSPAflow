@@ -8248,8 +8248,13 @@ main {
     animation: success-rise 360ms ease-out both;
     animation-delay: 720ms;
 }
-#step-5.is-revealing .confirmation-left > .confirmation-card:nth-child(2) {
-    animation-delay: 800ms;
+#step-5.is-revealing #confirmationOrderSection {
+    animation-delay: 920ms;
+}
+#step-5.is-revealing #confirmationMembershipSection,
+#step-5.is-revealing #confirmation15DayPassSection,
+#step-5.is-revealing #confirmationPunchCardSection {
+    animation-delay: 980ms;
 }
 #step-5.is-revealing .first-session-video-section {
     animation-delay: 750ms;
@@ -8278,8 +8283,13 @@ main {
 #step-5.is-revealing.has-header-pill .invite-friends-section {
     animation-delay: 1060ms;
 }
-#step-5.is-revealing.has-header-pill .confirmation-left > .confirmation-card:nth-child(2) {
-    animation-delay: 1140ms;
+#step-5.is-revealing.has-header-pill #confirmationOrderSection {
+    animation-delay: 1560ms;
+}
+#step-5.is-revealing.has-header-pill #confirmationMembershipSection,
+#step-5.is-revealing.has-header-pill #confirmation15DayPassSection,
+#step-5.is-revealing.has-header-pill #confirmationPunchCardSection {
+    animation-delay: 1620ms;
 }
 #step-5.is-revealing.has-header-pill .first-session-video-section {
     animation-delay: 1090ms;
@@ -9741,10 +9751,7 @@ main {
         radial-gradient(ellipse 90% 70% at 100% 0%, rgba(244, 1, 245, 0.14) 0%, transparent 58%),
         linear-gradient(155deg, #232323 0%, #1a1a1a 52%, #161616 100%);
     border: 1px solid rgba(255, 255, 255, 0.09);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.06),
-        0 10px 32px rgba(0, 0, 0, 0.32);
-    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+    transition: border-color 0.25s ease, transform 0.25s ease;
 }
 
 .first-session-video-card::before {
@@ -9762,11 +9769,6 @@ main {
 
 .first-session-video-card:hover {
     border-color: rgba(244, 1, 245, 0.34);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 0 0 1px rgba(244, 1, 245, 0.12),
-        0 14px 40px rgba(0, 0, 0, 0.4),
-        0 0 28px rgba(244, 1, 245, 0.14);
     transform: translateY(-2px);
 }
 
@@ -10129,21 +10131,12 @@ main {
             #F401F5 360deg
         ) border-box;
     overflow: hidden;
-    box-shadow:
-        0 0 24px rgba(244, 1, 245, 0.28),
-        0 8px 28px rgba(0, 0, 0, 0.45);
-    animation:
-        invite-glow-pulse 3.5s ease-in-out infinite,
-        invite-border-spin 6s linear infinite;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    animation: invite-border-spin 6s linear infinite;
+    transition: transform 0.25s ease;
 }
 
 .member-onboarding-panel:hover {
     transform: translateY(-2px);
-    box-shadow:
-        0 0 36px rgba(244, 1, 245, 0.45),
-        0 14px 36px rgba(0, 0, 0, 0.5);
-    animation-play-state: paused, running;
 }
 
 .member-onboarding-panel::before {
@@ -10365,20 +10358,20 @@ main {
     .confirmation-layout[data-with-invite="true"] .confirmation-right {
         display: contents;
     }
-    .confirmation-layout[data-with-invite="true"] .confirmation-left > .confirmation-card:first-child { order: 1; }
-    .confirmation-layout[data-with-invite="true"] .first-session-video-section { order: 2; }
-    .confirmation-layout[data-with-invite="true"] .next-steps { order: 3; }
-    .confirmation-layout[data-with-invite="true"] .invite-friends-section { order: 4; }
+    .confirmation-layout[data-with-invite="true"] .first-session-video-section { order: 1; }
+    .confirmation-layout[data-with-invite="true"] .next-steps { order: 2; }
+    .confirmation-layout[data-with-invite="true"] .invite-friends-section { order: 3; }
+    .confirmation-layout[data-with-invite="true"] #confirmationOrderSection { order: 4; }
     .confirmation-layout[data-with-invite="true"] #confirmationMembershipSection,
     .confirmation-layout[data-with-invite="true"] #confirmation15DayPassSection,
     .confirmation-layout[data-with-invite="true"] #confirmationPunchCardSection { order: 5; }
 
     /* Membership: surface perks immediately after the success header */
     .confirmation-layout[data-with-onboarding="true"] #memberOnboardingSection { order: 1; }
-    .confirmation-layout[data-with-onboarding="true"] .confirmation-left > .confirmation-card:first-child { order: 2; }
-    .confirmation-layout[data-with-onboarding="true"] .first-session-video-section { order: 3; }
-    .confirmation-layout[data-with-onboarding="true"] .next-steps { order: 4; }
-    .confirmation-layout[data-with-onboarding="true"] .invite-friends-section { order: 5; }
+    .confirmation-layout[data-with-onboarding="true"] .first-session-video-section { order: 2; }
+    .confirmation-layout[data-with-onboarding="true"] .next-steps { order: 3; }
+    .confirmation-layout[data-with-onboarding="true"] .invite-friends-section { order: 4; }
+    .confirmation-layout[data-with-onboarding="true"] #confirmationOrderSection { order: 5; }
     .confirmation-layout[data-with-onboarding="true"] #confirmationMembershipSection,
     .confirmation-layout[data-with-onboarding="true"] #confirmation15DayPassSection,
     .confirmation-layout[data-with-onboarding="true"] #confirmationPunchCardSection { order: 6; }
@@ -11444,35 +11437,12 @@ main {
     padding: 28px 24px 24px;
     text-align: center;
     overflow: hidden;
-    box-shadow:
-        0 0 24px rgba(244, 1, 245, 0.28),
-        0 8px 28px rgba(0, 0, 0, 0.45);
-    animation:
-        invite-glow-pulse 3.5s ease-in-out infinite,
-        invite-border-spin 6s linear infinite;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    animation: invite-border-spin 6s linear infinite;
+    transition: transform 0.25s ease;
 }
 
 .invite-friends-card:hover {
     transform: translateY(-2px);
-    box-shadow:
-        0 0 36px rgba(244, 1, 245, 0.45),
-        0 14px 36px rgba(0, 0, 0, 0.5);
-    /* Pulse pauses on hover; the rotation keeps drifting so the card stays alive */
-    animation-play-state: paused, running;
-}
-
-@keyframes invite-glow-pulse {
-    0%, 100% {
-        box-shadow:
-            0 0 22px rgba(244, 1, 245, 0.22),
-            0 8px 28px rgba(0, 0, 0, 0.45);
-    }
-    50% {
-        box-shadow:
-            0 0 34px rgba(244, 1, 245, 0.42),
-            0 8px 28px rgba(0, 0, 0, 0.45);
-    }
 }
 
 @keyframes invite-border-spin {
