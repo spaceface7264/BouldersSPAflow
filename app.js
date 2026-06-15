@@ -541,6 +541,83 @@ function isFirstClimbRoute() {
   return active?.componentName === 'LandingFirstClimb';
 }
 
+const TIKTOK_ATTRIBUTION_COUPON = 'TIKTOK';
+
+function normalizeCouponName(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function extractCouponNamesFromOrder(order) {
+  const names = new Set();
+  if (!order || typeof order !== 'object') return names;
+
+  const itemGroups = [
+    order.subscriptionItems,
+    order.valueCardItems,
+    order.articleItems,
+    order.entryItems,
+    order.eventItems,
+    order.serviceItems,
+  ];
+
+  for (const items of itemGroups) {
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      const couponName = item?.coupon?.name;
+      if (couponName) names.add(normalizeCouponName(couponName));
+    }
+  }
+
+  return names;
+}
+
+function hasTikTokAttribution(order = null, storedOrder = null) {
+  const target = normalizeCouponName(TIKTOK_ATTRIBUTION_COUPON);
+
+  if (state.discountApplied && state.discountCode) {
+    if (normalizeCouponName(state.discountCode) === target) return true;
+  }
+
+  if (storedOrder?.discountApplied && storedOrder?.discountCode) {
+    if (normalizeCouponName(storedOrder.discountCode) === target) return true;
+  }
+
+  const resolvedOrder = order || state.fullOrder;
+  return extractCouponNamesFromOrder(resolvedOrder).has(target);
+}
+
+function isFree15DayPassProduct(order = null) {
+  const resolvedOrder = order || state.fullOrder;
+  const product = resolvedOrder?.subscriptionItems?.[0]?.product;
+  return hasProductLabel(product, '15daypassfree');
+}
+
+function isPaidTikTok15DayPassPurchase(purchaseValue, order = null, storedOrder = null) {
+  if (determineProductTypeFromOrder() !== '15daypass') return false;
+  if (isFree15DayPassProduct(order)) return false;
+  if (!hasTikTokAttribution(order, storedOrder)) return false;
+
+  const paidAmount = Number(purchaseValue);
+  return Number.isFinite(paidAmount) && paidAmount > 0;
+}
+
+function trackTikTokAttributedPurchase(transactionId, purchaseItems = [], purchaseValue = 0, order = null, storedOrder = null) {
+  if (state.testMode) return;
+  if (!isPaidTikTok15DayPassPurchase(purchaseValue, order, storedOrder)) return;
+  if (!window.TikTok?.trackCompletePayment) return;
+
+  try {
+    window.TikTok.trackCompletePayment(
+      transactionId,
+      purchaseItems,
+      purchaseValue,
+      'DKK',
+    );
+  } catch (error) {
+    console.warn('[TikTok] Error tracking purchase:', error);
+  }
+}
+
 // firstclimb is a one-per-customer offer. Every user — new or existing — can
 // buy it exactly once. A customer is disqualified if they have ever held a
 // product carrying the dedicated `Første Gang` label (the canonical blocking
@@ -17328,6 +17405,8 @@ function persistOrderSnapshot(orderId) {
       selectedProductId: state.selectedProductId, // Store product ID for restoration
       subscriptionStartDate: state.subscriptionStartDate, // 15-day pass activation date
       paymentMethod: state.paymentMethod,
+      discountCode: state.discountCode,
+      discountApplied: state.discountApplied,
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -20124,6 +20203,7 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null } = {}) {
     );
     markPurchaseTracked(orderId);
     devLog('[GTM] purchase tracked:', { transactionId, purchaseValue, itemCount: purchaseItems.length });
+    trackTikTokAttributedPurchase(transactionId, purchaseItems, purchaseValue, order, storedOrder);
     return true;
   } catch (error) {
     devWarn('[GTM] Error tracking purchase:', error);
@@ -20192,6 +20272,8 @@ async function loadOrderForConfirmation(orderId) {
         if (storedOrder.cartItems) state.cartItems = storedOrder.cartItems;
         if (storedOrder.totals) state.totals = storedOrder.totals;
         if (storedOrder.selectedBusinessUnit) state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+        if (storedOrder.discountCode) state.discountCode = storedOrder.discountCode;
+        if (storedOrder.discountApplied != null) state.discountApplied = storedOrder.discountApplied;
         console.log('[Payment Return] Restored order data from sessionStorage:', storedOrder);
       }
       
