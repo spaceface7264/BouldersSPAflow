@@ -4867,6 +4867,7 @@ const state = {
   subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
   // 15-day pass: activation date (null = today, or YYYY-MM-DD string for future start)
   subscriptionStartDate: null,
+  lastReferralLinkGeneratedEventKey: null,
   checkoutConfirmAccepted: false,
   checkoutConfirmPreviousFocus: null,
   checkoutConfirmPendingAfterEdit: false,
@@ -6349,7 +6350,7 @@ const translations = {
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
-    'confirmation.title': 'You’re in!',
+    'confirmation.title': 'You\'re in!',
     'confirmation.title.withName': 'Du er med, {name}!',
     'confirmation.message': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.message.membership': 'Bekræftelsesmail er på vej. Udforsk fordelene nedenfor, eller mød op i hallen, når det passer dig.',
@@ -6452,6 +6453,7 @@ const translations = {
     'invite.15daypass.shareMessage': 'Hej! {name} her – jeg har lige købt et 15-dages prøvepas hos Boulders. Kom og klatre med mig:',
     'invite.punchcard.subtitle': 'Klippekortet er perfekt at dele. Inviter en ven til en klatretur næste gang.',
     'invite.punchcard.shareMessage': 'Hej! {name} her – jeg har lige købt et klippekort hos Boulders. Kom og klatre med mig:',
+    'invite.general.shareMessage': 'Hej! {name} her – kom og klatre med mig hos Boulders:',
     'invite.copyLink': 'Kopiér link',
     'invite.copied': 'Kopieret!',
     'invite.copiedToast': 'Linket er kopieret – del det med dine venner!',
@@ -6463,6 +6465,7 @@ const translations = {
     'invite.share.more': 'Mere',
     'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
+    'invite.general.shareSubject': 'Kom og klatre med mig hos Boulders',
     'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
     'invite.firstclimb.title': 'Invitér dine venner!',
     'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko og kalk er for alle, der ikke har prøvet det før. Send linket til dine venner.',
@@ -6649,7 +6652,7 @@ const translations = {
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15-Day Trial Pass options available at this time.',
-    'confirmation.title': 'You’re in!',
+    'confirmation.title': 'You\'re in!',
     'confirmation.title.withName': 'You’re in, {name}!',
     'confirmation.message': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.message.membership': 'Confirmation email on its way. Explore your perks below, or visit the gym whenever you\'re ready.',
@@ -6752,6 +6755,7 @@ const translations = {
     'invite.15daypass.shareMessage': 'Hey! {name} here — I just grabbed a 15-day trial pass at Boulders. Come climb with me:',
     'invite.punchcard.subtitle': 'Punch cards are made for sharing. Bring a friend along for your next climb.',
     'invite.punchcard.shareMessage': 'Hey! {name} here — I just picked up a punch card at Boulders. Come climb with me:',
+    'invite.general.shareMessage': 'Hey! {name} here — come climb with me at Boulders:',
     'invite.copyLink': 'Copy link',
     'invite.copied': 'Copied!',
     'invite.copiedToast': 'Link copied — share it with your friends!',
@@ -6762,6 +6766,7 @@ const translations = {
     'invite.share.email': 'Email',
     'invite.share.more': 'More',
     'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
+    'invite.general.shareSubject': 'Come climb with me at Boulders',
     'invite.firstclimb.title': 'Invite your friends!',
     'invite.firstclimb.subtitle': 'Our 99 kr day ticket including rental shoes and chalk is open to anyone who hasn’t tried it yet. Send the link to your friends.',
     'invite.firstclimb.footnote': 'The offer can only be used once per person.',
@@ -7000,7 +7005,7 @@ const translations = {
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
-    'confirmation.title': 'You’re in!',
+    'confirmation.title': 'You\'re in!',
     'confirmation.title.withName': 'Du bist dabei, {name}!',
     'confirmation.message': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.message.membership': 'Die Bestätigungs-E-Mail ist unterwegs. Entdecke unten deine Vorteile oder komm vorbei, wann es dir passt.',
@@ -7100,6 +7105,7 @@ const translations = {
     'invite.15daypass.shareMessage': 'Hey! Hier ist {name} – ich habe gerade einen 15-Tage-Probepass bei Boulders gekauft. Komm und klettere mit mir:',
     'invite.punchcard.subtitle': 'Die Stempelkarte ist perfekt zum Teilen. Bring einen Freund mit zum nächsten Klettertag.',
     'invite.punchcard.shareMessage': 'Hey! Hier ist {name} – ich habe gerade eine Stempelkarte bei Boulders gekauft. Komm und klettere mit mir:',
+    'invite.general.shareMessage': 'Hey! Hier ist {name} – komm und klettere mit mir bei Boulders:',
     'invite.copyLink': 'Link kopieren',
     'invite.copied': 'Kopiert!',
     'invite.copiedToast': 'Link kopiert – teile ihn mit deinen Freunden!',
@@ -7110,6 +7116,7 @@ const translations = {
     'invite.share.email': 'E-Mail',
     'invite.share.more': 'Mehr',
     'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
+    'invite.general.shareSubject': 'Komm und klettere mit mir bei Boulders',
     'invite.firstclimb.title': 'Lade deine Freunde ein!',
     'invite.firstclimb.subtitle': 'Unsere Tageskarte für 99 kr inkl. Leihschuhe und Chalk ist für alle, die sie noch nicht ausprobiert haben. Schick deinen Freunden den Link.',
     'invite.firstclimb.footnote': 'Das Angebot kann pro Person nur einmal eingelöst werden.',
@@ -7220,6 +7227,16 @@ function updatePageTranslations() {
     const translation = t(key);
     if (translation && translation !== key) {
       element.placeholder = translation;
+    }
+  });
+
+  // Keep aria-label keys synced when language changes.
+  document.querySelectorAll('[data-i18n-aria-key]').forEach((element) => {
+    const key = element.getAttribute('data-i18n-aria-key');
+    if (!key) return;
+    const translation = t(key);
+    if (translation && translation !== key) {
+      element.setAttribute('aria-label', translation);
     }
   });
   
@@ -7712,6 +7729,11 @@ async function changeLanguage(languageCode) {
   if (state.currentStep === 1) {
     console.log('[Language] Reloading gyms with language:', languageCode);
     await loadGymsFromAPI();
+  }
+
+  // Re-render confirmation summary in active locale (dates/meta are formatted in render).
+  if (state.currentStep === 5) {
+    renderConfirmationView();
   }
 }
 
@@ -13327,6 +13349,7 @@ function logReferralAttributionToSheet(data) {
 // Invite Friends helpers
 // ===========================
 const INVITE_SHARE_URL_BASE = 'https://join.boulders.dk/freetrial';
+const INVITE_SHARE_URL_GENERAL = 'https://join.boulders.dk';
 
 // Resolve the current user's customer ID for use as the recruiter ID in the
 // shared link. Reads from multiple sources because `state.customerId` is
@@ -13357,7 +13380,19 @@ function getCurrentRecruiterId() {
 // Personalized share URL: appends ?ref=<recruiter customer ID> when we know
 // who the sharer is. Falls back to the plain base URL for anonymous shares
 // (e.g. logged-out test mode) so existing behavior is preserved.
-function buildInviteShareUrl() {
+function resolveInviteProductType() {
+  const detected = determineProductTypeFromOrder();
+  if (detected === '15daypass' || detected === 'punch-card' || detected === 'membership') {
+    return detected;
+  }
+  const summaryType = String(state?.order?.productType || '').toLowerCase();
+  if (summaryType === '15daypass' || summaryType === 'punch-card' || summaryType === 'membership') {
+    return summaryType;
+  }
+  return 'membership';
+}
+
+function buildInviteShareUrl(productType = resolveInviteProductType()) {
   // /99kr invites point at the offer landing page itself, with no referral
   // query param — this is an offer share, not a recruiter link.
   if (isFirstClimbRoute()) {
@@ -13366,6 +13401,9 @@ function buildInviteShareUrl() {
     } catch (_) {
       return `${INVITE_SHARE_URL_BASE.replace(/\/+$/, '')}/99kr`;
     }
+  }
+  if (productType === '15daypass' || productType === 'punch-card') {
+    return INVITE_SHARE_URL_GENERAL;
   }
   if (!REFERRAL_TRACKING_ENABLED) return INVITE_SHARE_URL_BASE;
   const recruiterId = getCurrentRecruiterId();
@@ -13376,7 +13414,11 @@ function buildInviteShareUrl() {
 function resolveConfirmationFirstName(apiOrder = null) {
   const order = apiOrder || state.fullOrder || state.order || null;
   const customer = order?.customer || state.authenticatedCustomer || null;
-  const formCustomer = state.formCustomer || null;
+  let formCustomer = null;
+  try {
+    const payload = buildCheckoutPayload();
+    formCustomer = payload?.customer || null;
+  } catch (_) { /* form may be unavailable */ }
 
   if (customer?.firstName) {
     return String(customer.firstName).trim();
@@ -13403,11 +13445,12 @@ function getInviteFirstName() {
 
 function getInviteShareMessage() {
   const firstName = getInviteFirstName();
-  const productType = state?.order?.productType || '';
+  const productType = resolveInviteProductType();
+  const shareUrl = buildInviteShareUrl(productType);
+  const hasReferralLink = shareUrl.includes(`${REFERRAL_QUERY_PARAM}=`);
   let templateKey = 'invite.shareMessage';
   if (isFirstClimbRoute()) templateKey = 'invite.firstclimb.shareMessage';
-  else if (productType === '15daypass') templateKey = 'invite.15daypass.shareMessage';
-  else if (productType === 'punch-card') templateKey = 'invite.punchcard.shareMessage';
+  else if (!hasReferralLink) templateKey = 'invite.general.shareMessage';
   const template = t(templateKey) || 'Hey! Climb with me at Boulders:';
   const withName = firstName
     ? template.replace('{name}', firstName)
@@ -13416,16 +13459,18 @@ function getInviteShareMessage() {
 }
 
 function getInviteShareText() {
-  return `${getInviteShareMessage()} ${buildInviteShareUrl()}`;
+  const productType = resolveInviteProductType();
+  return `${getInviteShareMessage()} ${buildInviteShareUrl(productType)}`;
 }
 
 function trackInviteShare(method) {
+  const productType = resolveInviteProductType();
   try {
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({
       event: 'invite_share',
       method,
-      share_url: buildInviteShareUrl(),
+      share_url: buildInviteShareUrl(productType),
     });
   } catch (err) {
     console.warn('[Invite] Failed to push GTM event:', err);
@@ -13541,13 +13586,20 @@ function renderInviteFriends(productType) {
   // same as attribution success (see test mode `?testSuccess=true`).
   if (REFERRAL_TRACKING_ENABLED) {
     const recruiterId = getCurrentRecruiterId();
-    if (recruiterId) {
+    const shareUrl = buildInviteShareUrl(productType);
+    const hasReferralLink = shareUrl.includes(`${REFERRAL_QUERY_PARAM}=`);
+    if (recruiterId && hasReferralLink) {
+      const orderKey = state.fullOrder?.number || state.fullOrder?.id || state.order?.orderNumber || state.order?.orderId || 'unknown';
+      const eventKey = `${orderKey}:${recruiterId}`;
       try {
-        window.dataLayer = window.dataLayer || [];
-        window.dataLayer.push({
-          event: 'referral_link_generated',
-          referrer_id: recruiterId,
-        });
+        if (state.lastReferralLinkGeneratedEventKey !== eventKey) {
+          window.dataLayer = window.dataLayer || [];
+          window.dataLayer.push({
+            event: 'referral_link_generated',
+            referrer_id: recruiterId,
+          });
+          state.lastReferralLinkGeneratedEventKey = eventKey;
+        }
       } catch (_) { /* GTM optional */ }
     }
   }
@@ -13639,12 +13691,17 @@ async function copyTextToClipboard(text) {
 }
 
 async function handleInviteShare(method) {
-  const shareUrl = buildInviteShareUrl();
+  const productType = resolveInviteProductType();
+  const shareUrl = buildInviteShareUrl(productType);
   const message = getInviteShareMessage();
   const shareText = getInviteShareText();
+  const hasReferralLink = shareUrl.includes(`${REFERRAL_QUERY_PARAM}=`);
+  const shareSubject = hasReferralLink
+    ? (t('invite.shareSubject') || '2 weeks of free climbing at Boulders')
+    : (t('invite.general.shareSubject') || 'Come climb with me at Boulders');
   const encodedText = encodeURIComponent(shareText);
   const encodedUrl = encodeURIComponent(shareUrl);
-  const encodedSubject = encodeURIComponent(t('invite.shareSubject') || '2 weeks of free climbing at Boulders');
+  const encodedSubject = encodeURIComponent(shareSubject);
 
   switch (method) {
     case 'whatsapp':
@@ -13695,7 +13752,7 @@ async function handleInviteShare(method) {
       try {
         if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
           await navigator.share({
-            title: t('invite.shareSubject') || '2 weeks of free climbing at Boulders',
+            title: shareSubject,
             text: message,
             url: shareUrl,
           });
@@ -22003,7 +22060,8 @@ function renderConfirmationView() {
     memberZone.hidden = isFirstClimbFlow;
     memberZone.querySelector('[data-member-field="phone"]')?.toggleAttribute('hidden', false);
     memberZone.querySelector('[data-member-field="punch-card"]')?.toggleAttribute('hidden', productType !== 'punch-card' || isFirstClimbFlow);
-    memberZone.querySelector('[data-member-field="15daypass"]')?.toggleAttribute('hidden', true);
+    memberZone.querySelector('[data-member-field="punch-card-expiry"]')?.toggleAttribute('hidden', productType !== 'punch-card' || isFirstClimbFlow);
+    memberZone.querySelector('[data-member-field="15daypass"]')?.toggleAttribute('hidden', productType !== '15daypass' || isFirstClimbFlow);
   }
 
   if (recurringNote) {
@@ -22173,7 +22231,7 @@ function renderConfirmationView() {
 
     if (recurringPrice != null && !Number.isNaN(recurringPrice)) {
       const formatted = formatCurrencyHalfKrone(roundToHalfKrone(recurringPrice));
-      priceLabel = `${formatted}/month`;
+      priceLabel = `${formatted}${t('confirmation.perMonthShort', '/month')}`;
     }
 
     const hasMembershipHighlight = gymLabel !== '—';
@@ -22312,8 +22370,8 @@ function createPurchaseItemElement() {
   // Show aggregate info for all punch cards if multiple, or single card details
   if (productType === 'punch-card') {
     const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
-    const punchCardQuantity = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-quantity"]');
-    const punchCardExpiry = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-expiry"]');
+    const punchCardQuantity = document.querySelector('#confirmationMemberZone [data-summary-field="punch-card-quantity"]');
+    const punchCardExpiry = document.querySelector('#confirmationMemberZone [data-summary-field="punch-card-expiry"]');
     
     // Use API valueCardItems data - aggregate if multiple cards
     const valueCardItems = apiOrder?.valueCardItems || [];
@@ -22339,13 +22397,16 @@ function createPurchaseItemElement() {
 
     const productLinePrice = document.querySelector('#confirmationOrderSection [data-summary-field="product-line-price"]');
     if (productLinePrice && valueCardItems.length > 0) {
-      const firstItem = valueCardItems[0];
-      const itemTotal = firstItem.price?.amount
-        ? (typeof firstItem.price.amount === 'object' ? firstItem.price.amount.amount / 100 : firstItem.price.amount / 100)
-        : null;
+      const itemTotal = valueCardItems.reduce((sum, item) => {
+        if (!item?.price?.amount) return sum;
+        const amount = typeof item.price.amount === 'object'
+          ? item.price.amount.amount / 100
+          : item.price.amount / 100;
+        return sum + amount;
+      }, 0);
       setConfirmationSummaryField(
         productLinePrice,
-        itemTotal != null ? formatCurrencyHalfKrone(roundToHalfKrone(itemTotal)) : null,
+        itemTotal > 0 ? formatCurrencyHalfKrone(roundToHalfKrone(itemTotal)) : null,
         'number',
       );
     }
@@ -22594,6 +22655,8 @@ function createPurchaseItemElement() {
   syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder);
 }
 
+let receiptCloseTimeoutId = null;
+
 async function showDetailedReceipt() {
   if (!state.fullOrder && !state.order) {
     console.warn('[Receipt] No order data available');
@@ -22602,6 +22665,10 @@ async function showDetailedReceipt() {
   
   const modal = document.getElementById('detailedReceiptModal');
   if (!modal) return;
+  if (receiptCloseTimeoutId) {
+    clearTimeout(receiptCloseTimeoutId);
+    receiptCloseTimeoutId = null;
+  }
   
   const order = state.fullOrder || state.order;
   
@@ -22874,8 +22941,15 @@ async function showDetailedReceipt() {
     document.body.appendChild(modal);
   }
   
-  // Prevent background scrolling - save current scroll position
-  const scrollY = window.scrollY;
+  // Prevent background scrolling - preserve an existing locked offset if close
+  // animation is still pending and the modal is reopened.
+  let scrollY = window.scrollY;
+  if (document.body.style.position === 'fixed') {
+    const lockedTop = parseInt(document.body.style.top || '0', 10);
+    if (!Number.isNaN(lockedTop)) {
+      scrollY = Math.abs(lockedTop);
+    }
+  }
   document.body.style.position = 'fixed';
   document.body.style.top = `-${scrollY}px`;
   document.body.style.width = '100%';
@@ -22892,32 +22966,36 @@ async function showDetailedReceipt() {
 function closeDetailedReceipt() {
   const modal = document.getElementById('detailedReceiptModal');
   if (!modal) return;
+  if (receiptCloseTimeoutId) {
+    clearTimeout(receiptCloseTimeoutId);
+    receiptCloseTimeoutId = null;
+  }
 
   modal.classList.remove('is-open');
+  const scrollY = document.body.style.top;
 
   // After the slide/fade transition completes, hide entirely. Also clear any
   // transform/transition the swipe-to-dismiss handler may have left behind.
   const finalize = () => {
+    receiptCloseTimeoutId = null;
     modal.style.display = 'none';
     const content = modal.querySelector('.receipt-modal-content');
     if (content) {
       content.style.transform = '';
       content.style.transition = '';
     }
+    // Restore background scrolling only when close animation has completed.
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+
+    if (scrollY) {
+      window.scrollTo(0, parseInt(scrollY || '0', 10) * -1);
+    }
   };
   // 360ms covers the longest transition (mobile slide = 320ms) with headroom.
-  setTimeout(finalize, 360);
-
-  // Restore background scrolling - restore scroll position
-  const scrollY = document.body.style.top;
-  document.body.style.position = '';
-  document.body.style.top = '';
-  document.body.style.width = '';
-  document.body.style.overflow = '';
-
-  if (scrollY) {
-    window.scrollTo(0, parseInt(scrollY || '0') * -1);
-  }
+  receiptCloseTimeoutId = setTimeout(finalize, 360);
 }
 
 // Mobile drawer: drag down on the content to dismiss. The handler is no-op on
