@@ -8176,6 +8176,105 @@ main {
     line-height: 1.55;
 }
 
+.success-app-download-section {
+    width: 100%;
+}
+
+.success-app-download-card {
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    gap: 12px;
+    padding: clamp(18px, 2.8vw, 26px);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background:
+        radial-gradient(130% 110% at 0% 0%, rgba(244, 1, 245, 0.22) 0%, rgba(244, 1, 245, 0) 58%),
+        radial-gradient(120% 120% at 100% 100%, rgba(52, 211, 153, 0.2) 0%, rgba(52, 211, 153, 0) 60%),
+        rgba(10, 16, 28, 0.84);
+    box-shadow: 0 20px 42px rgba(0, 0, 0, 0.34);
+}
+
+.success-app-download-eyebrow {
+    margin: 0;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.success-app-download-title {
+    margin: 0;
+    color: #fff;
+    font-size: clamp(1.32rem, 2.5vw, 1.68rem);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+
+.success-app-download-subtitle {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.84);
+    font-size: var(--font-size-base);
+    line-height: 1.55;
+}
+
+.success-app-download-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 2px;
+}
+
+.success-app-download-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    padding: 0 16px;
+    border-radius: 12px;
+    text-decoration: none;
+    text-align: center;
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1.2;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.success-app-download-btn--ios {
+    color: #0f172a;
+    background: linear-gradient(105deg, #f8fafc 0%, #e2e8f0 100%);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
+}
+
+.success-app-download-btn--android {
+    color: #fff;
+    background: linear-gradient(110deg, #16a34a 0%, #22c55e 55%, #34d399 100%);
+    box-shadow: 0 12px 24px rgba(22, 163, 74, 0.34);
+}
+
+.success-app-download-btn:hover,
+.success-app-download-btn:focus-visible {
+    transform: translateY(-1px);
+}
+
+.success-app-download-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.95);
+    outline-offset: 2px;
+}
+
+.success-app-download-note {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: rgba(255, 255, 255, 0.72);
+}
+
+@media (min-width: 640px) {
+    .success-app-download-actions {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
 /* Product-specific highlights below the success subheading (membership, 15-day pass). */
 .success-header-pill {
     max-width: 480px;
@@ -8344,28 +8443,32 @@ main {
 #step-5.is-revealing .confirmation-order-details,
 #step-5.is-revealing .confirmation-order-card-v2,
 #step-5.is-revealing .next-steps,
+#step-5.is-revealing .success-app-download-section,
 #step-5.is-revealing .member-onboarding-section,
 #step-5.is-revealing .first-session-video-section,
 #step-5.is-revealing .invite-friends-section {
     animation: success-rise 360ms ease-out both;
 }
-#step-5.is-revealing .confirmation-order-summary {
+#step-5.is-revealing .success-app-download-section {
     animation-delay: 720ms;
 }
-#step-5.is-revealing .member-onboarding-section {
+#step-5.is-revealing .confirmation-order-summary {
     animation-delay: 780ms;
 }
-#step-5.is-revealing .first-session-video-section {
+#step-5.is-revealing .member-onboarding-section {
     animation-delay: 840ms;
 }
-#step-5.is-revealing .next-steps {
+#step-5.is-revealing .first-session-video-section {
     animation-delay: 900ms;
 }
-#step-5.is-revealing .invite-friends-section {
+#step-5.is-revealing .next-steps {
     animation-delay: 960ms;
 }
-#step-5.is-revealing .confirmation-order-details {
+#step-5.is-revealing .invite-friends-section {
     animation-delay: 1020ms;
+}
+#step-5.is-revealing .confirmation-order-details {
+    animation-delay: 1080ms;
 }
 #step-5.is-revealing .step-item {
     animation: success-rise 280ms ease-out both;
@@ -8378,20 +8481,26 @@ main {
 #step-5.is-revealing.has-header-pill .confirmation-order-summary {
     animation-delay: 1060ms;
 }
-#step-5.is-revealing.has-header-pill .member-onboarding-section {
+#step-5.is-revealing.has-header-pill .success-app-download-section {
     animation-delay: 1120ms;
 }
-#step-5.is-revealing.has-header-pill .first-session-video-section {
+#step-5.is-revealing.has-header-pill .confirmation-order-summary {
     animation-delay: 1180ms;
 }
-#step-5.is-revealing.has-header-pill .next-steps {
+#step-5.is-revealing.has-header-pill .member-onboarding-section {
     animation-delay: 1240ms;
 }
-#step-5.is-revealing.has-header-pill .invite-friends-section {
+#step-5.is-revealing.has-header-pill .first-session-video-section {
     animation-delay: 1300ms;
 }
-#step-5.is-revealing.has-header-pill .confirmation-order-details {
+#step-5.is-revealing.has-header-pill .next-steps {
     animation-delay: 1360ms;
+}
+#step-5.is-revealing.has-header-pill .invite-friends-section {
+    animation-delay: 1420ms;
+}
+#step-5.is-revealing.has-header-pill .confirmation-order-details {
+    animation-delay: 1480ms;
 }
 #step-5.is-revealing.has-header-pill .step-item:nth-child(1) { animation-delay: 1320ms; }
 #step-5.is-revealing.has-header-pill .step-item:nth-child(2) { animation-delay: 1380ms; }

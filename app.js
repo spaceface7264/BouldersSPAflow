@@ -555,6 +555,8 @@ function isFirstClimbRoute() {
 
 const FIRST_SESSION_VIDEO_ID = 'W-4skXhGWM0';
 const FIRST_SESSION_VIDEO_URL = `https://www.youtube.com/watch?v=${FIRST_SESSION_VIDEO_ID}&t=1s`;
+const APP_STORE_DOWNLOAD_URL = 'https://apps.apple.com/dk/app/boulders/id6482294468';
+const GOOGLE_PLAY_DOWNLOAD_URL = 'https://play.google.com/store/apps/details?id=se.brpsystems.boulders';
 
 const TIKTOK_ATTRIBUTION_COUPON = 'TIKTOK';
 
@@ -7178,6 +7180,15 @@ const translations = {
     'confirmation.title': 'You\'re in!',
     'confirmation.title.withName': 'Du er med, {name}!',
     'confirmation.message': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.appDownload.eyebrow': 'Download vores app',
+    'confirmation.appDownload.title': 'Hav Boulders i lommen',
+    'confirmation.appDownload.subtitle': 'Administrér dit medlemskab, tjek hurtigt ind, og hold styr på din næste klatretur.',
+    'confirmation.appDownload.cta.ios': 'Download i App Store',
+    'confirmation.appDownload.cta.android': 'Hent i Google Play',
+    'confirmation.appDownload.note': 'Fås til iPhone og Android.',
+    'confirmation.appDownload.note.membership': 'Brug appen til at se og bruge dit Loyalitetsprogram direkte i hallen.',
+    'confirmation.appDownload.aria.ios': 'Download Boulders-appen i App Store (åbner i nyt vindue)',
+    'confirmation.appDownload.aria.android': 'Download Boulders-appen i Google Play (åbner i nyt vindue)',
     'confirmation.message.membership': 'Bekræftelsesmail er på vej. Udforsk fordelene nedenfor, eller mød op i hallen, når det passer dig.',
     'confirmation.message.15daypass': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.message.punchcard': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
@@ -7496,6 +7507,15 @@ const translations = {
     'confirmation.title': 'You\'re in!',
     'confirmation.title.withName': 'You’re in, {name}!',
     'confirmation.message': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.appDownload.eyebrow': 'Download our app',
+    'confirmation.appDownload.title': 'Keep Boulders in your pocket',
+    'confirmation.appDownload.subtitle': 'Manage your account, check in fast, and stay ready for your next climb.',
+    'confirmation.appDownload.cta.ios': 'Download on the App Store',
+    'confirmation.appDownload.cta.android': 'Get it on Google Play',
+    'confirmation.appDownload.note': 'Available for iPhone and Android.',
+    'confirmation.appDownload.note.membership': 'View and use your Loyalty Program directly in the app.',
+    'confirmation.appDownload.aria.ios': 'Download the Boulders app on the App Store (opens in a new window)',
+    'confirmation.appDownload.aria.android': 'Download the Boulders app on Google Play (opens in a new window)',
     'confirmation.message.membership': 'Confirmation email on its way. Explore your perks below, or visit the gym whenever you\'re ready.',
     'confirmation.message.15daypass': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.message.punchcard': 'Welcome to the Boulders community. Visit any gym to start climbing!',
@@ -7881,6 +7901,15 @@ const translations = {
     'confirmation.title': 'You\'re in!',
     'confirmation.title.withName': 'Du bist dabei, {name}!',
     'confirmation.message': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.appDownload.eyebrow': 'Lade unsere App herunter',
+    'confirmation.appDownload.title': 'Boulders in deiner Tasche',
+    'confirmation.appDownload.subtitle': 'Verwalte deine Mitgliedschaft, checke schneller ein und bleib bereit fur deine nachste Session.',
+    'confirmation.appDownload.cta.ios': 'Im App Store laden',
+    'confirmation.appDownload.cta.android': 'Bei Google Play laden',
+    'confirmation.appDownload.note': 'Verfugbar fur iPhone und Android.',
+    'confirmation.appDownload.note.membership': 'Sieh und nutze dein Loyalitatsprogramm direkt in der App.',
+    'confirmation.appDownload.aria.ios': 'Boulders-App im App Store herunterladen (offnet in neuem Fenster)',
+    'confirmation.appDownload.aria.android': 'Boulders-App bei Google Play herunterladen (offnet in neuem Fenster)',
     'confirmation.message.membership': 'Die Bestätigungs-E-Mail ist unterwegs. Entdecke unten deine Vorteile oder komm vorbei, wann es dir passt.',
     'confirmation.message.15daypass': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.message.punchcard': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
@@ -14145,6 +14174,14 @@ function handleGlobalClick(event) {
       handleInviteShare('native');
       break;
     }
+    case 'download-app-ios': {
+      trackAppDownloadClick('ios');
+      break;
+    }
+    case 'download-app-android': {
+      trackAppDownloadClick('android');
+      break;
+    }
     default:
       break;
   }
@@ -14410,6 +14447,17 @@ function trackInviteShare(method) {
   } catch (err) {
     console.warn('[Invite] Failed to push GTM event:', err);
   }
+}
+
+function trackAppDownloadClick(platform) {
+  try {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: 'app_download_click',
+      platform,
+      product_type: determineProductTypeFromOrder(),
+    });
+  } catch (_) { /* GTM optional */ }
 }
 
 function isMobileUserAgent() {
@@ -23006,6 +23054,21 @@ function resolveConfirmationPhone(customer, apiOrder) {
   return null;
 }
 
+function renderSuccessAppDownloadSection(productType) {
+  const iosLink = document.getElementById('downloadAppStoreBtn');
+  const androidLink = document.getElementById('downloadGooglePlayBtn');
+  const note = document.querySelector('.success-app-download-note');
+  if (iosLink) iosLink.href = APP_STORE_DOWNLOAD_URL;
+  if (androidLink) androidLink.href = GOOGLE_PLAY_DOWNLOAD_URL;
+  if (note) {
+    const noteKey = productType === 'membership'
+      ? 'confirmation.appDownload.note.membership'
+      : 'confirmation.appDownload.note';
+    note.setAttribute('data-i18n-key', noteKey);
+    note.textContent = t(noteKey);
+  }
+}
+
 function renderConfirmationView() {
   // CRITICAL: Don't render success page if payment failed or is pending (unless in test mode)
   if (!state.testMode && state.paymentFailed === true) {
@@ -23113,6 +23176,7 @@ function renderConfirmationView() {
     successMessage.setAttribute('data-i18n-key', messageKey);
     successMessage.textContent = t(messageKey);
   }
+  renderSuccessAppDownloadSection(productType);
 
   // Update "What happens next?" steps based on product type (use translation keys)
   const nextStep1 = document.getElementById('nextStep1');

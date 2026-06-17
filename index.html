@@ -1263,6 +1263,40 @@
                     <div class="confirmation-layout">
                         <div class="confirmation-flow">
 
+                            <!-- 0. Primary conversion: app download -->
+                            <section class="success-app-download-section" id="successAppDownloadSection" aria-labelledby="successAppDownloadTitle">
+                                <div class="success-app-download-card">
+                                    <p class="success-app-download-eyebrow" data-i18n-key="confirmation.appDownload.eyebrow">Download our app</p>
+                                    <h2 class="success-app-download-title" id="successAppDownloadTitle" data-i18n-key="confirmation.appDownload.title">Keep everything in your pocket</h2>
+                                    <p class="success-app-download-subtitle" data-i18n-key="confirmation.appDownload.subtitle">Manage your membership, check in fast, and stay on top of your next climb.</p>
+                                    <div class="success-app-download-actions">
+                                        <a
+                                            id="downloadAppStoreBtn"
+                                            class="success-app-download-btn success-app-download-btn--ios"
+                                            href="#"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            data-action="download-app-ios"
+                                            data-i18n-aria-key="confirmation.appDownload.aria.ios"
+                                        >
+                                            <span class="success-app-download-btn-label" data-i18n-key="confirmation.appDownload.cta.ios">Download on the App Store</span>
+                                        </a>
+                                        <a
+                                            id="downloadGooglePlayBtn"
+                                            class="success-app-download-btn success-app-download-btn--android"
+                                            href="#"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            data-action="download-app-android"
+                                            data-i18n-aria-key="confirmation.appDownload.aria.android"
+                                        >
+                                            <span class="success-app-download-btn-label" data-i18n-key="confirmation.appDownload.cta.android">Get it on Google Play</span>
+                                        </a>
+                                    </div>
+                                    <p class="success-app-download-note" data-i18n-key="confirmation.appDownload.note">Available for iPhone and Android.</p>
+                                </div>
+                            </section>
+
                             <!-- 1. Quick order summary -->
                             <section class="confirmation-order-summary" id="confirmationOrderSummary" aria-labelledby="confirmationSummaryTitle">
                                 <h2 class="visually-hidden" id="confirmationSummaryTitle" data-i18n-key="confirmation.orderSummary">Order summary</h2>
