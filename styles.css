@@ -5524,6 +5524,7 @@ body {
     align-items: center;
     justify-content: center;
     border-bottom: none;
+    padding: 32px 32px 16px;
 }
 #campaignRejectionModal .terms-modal-title {
     text-align: center;
@@ -5535,8 +5536,8 @@ body {
 }
 #campaignRejectionModal .terms-modal-header-actions {
     position: absolute;
-    top: 0px;
-    right: 6px;
+    top: 12px;
+    right: 12px;
 }
 #campaignRejectionModal .terms-modal-close {
     padding: 6px;
@@ -5640,7 +5641,7 @@ body {
         flex-direction: row;
     }
     #campaignRejectionModal .campaign-rejection-content {
-        padding: 12px 40px 32px 40px;
+        padding: 0px 40px 32px 40px;
     }
     #campaignRejectionModal .campaign-rejection-message {
         font-size: var(--font-size-base);
@@ -5654,8 +5655,11 @@ body {
     }
 }
 @media (min-width: 1024px) {
+    #campaignRejectionModal .terms-modal-header {
+        padding: 32px 48px 20px;
+    }
     #campaignRejectionModal .campaign-rejection-content {
-        padding: 56px 48px 48px 48px;
+        padding: 0px 48px 32px 48px;
     }
     #campaignRejectionModal .campaign-rejection-actions {
         gap: 20px;
@@ -5670,8 +5674,11 @@ body {
 }
 
 @media (max-width: 639px) {
+    #campaignRejectionModal .terms-modal-header {
+        padding: 24px 24px 12px;
+    }
     #campaignRejectionModal .campaign-rejection-content {
-        padding: 32px 24px 24px 24px;
+        padding: 0px 24px 24px 24px;
     }
     #campaignRejectionModal .campaign-rejection-message {
         font-size: var(--font-size-md);
