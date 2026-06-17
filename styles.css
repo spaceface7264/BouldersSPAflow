@@ -5656,10 +5656,10 @@ body {
 }
 @media (min-width: 1024px) {
     #campaignRejectionModal .terms-modal-header {
-        padding: 48px 48px 20px;
+        padding: 32px 48px 20px;
     }
     #campaignRejectionModal .campaign-rejection-content {
-        padding: 0px 48px 48px 48px;
+        padding: 0px 48px 32px 48px;
     }
     #campaignRejectionModal .campaign-rejection-actions {
         gap: 20px;
