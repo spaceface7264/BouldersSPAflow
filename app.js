@@ -9653,38 +9653,35 @@ const termsContent = {
     da: `<h2>Vilkår og betingelser for klippekort</h2>
 
 <h3>§1 Generelt</h3>
-<p>Følgende regelsæt er gældende for klippekort hos Boulders.<br>
-Ved oprettelse af et klippekort accepterer du at modtage nyhedsmails og anden relevant information pr. e-mail.</p>
+<p>Følgende regelsæt er gældende for klippekort hos Boulders.</p>
+<p>Ved oprettelse af et klippekort accepterer du at modtage nyhedsmails og anden relevant information pr. e-mail.</p>
 
 <h3>§2 Husets regler og andre bestemmelser</h3>
-<p>I tilfælde af overtrædelse af regelsættet, personalets anvisninger eller husets regler, kan Boulders til enhver tid lukke dit klippekort med øjeblikkelig virkning. Boulders forbeholder sig også retten til at udelukke dig fra at klatre hos Boulders på ubestemt tid.<br>
-Udleverede plastikkort fungerer som adgangskort og skal altid medbringes og indlæses, inden du benytter det pågældende klatrecenter. Hvis du mister eller beskadiger dit adgangskort, skal du straks meddele dette til Boulders, som vil udstede et nyt adgangskort mod et gebyr.</p>
+<p>I tilfælde af overtrædelse af regelsættet, personalets anvisninger eller husets regler, kan Boulders til enhver tid lukke dit klippekort med øjeblikkelig virkning. Boulders forbeholder sig også retten til at udelukke dig fra at klatre hos Boulders på ubestemt tid.</p>
+<p>Udleverede plastikkort fungerer som adgangskort og skal altid medbringes og indlæses, inden du benytter det pågældende klatrecenter. Hvis du mister eller beskadiger dit adgangskort, skal du straks meddele dette til Boulders, som vil udstede et nyt adgangskort mod et gebyr.</p>
 
 <h3>§3 Helbredstilstand og personskade</h3>
-<p>Al færdsel i Boulders klatrecentre og al klatring sker på eget ansvar. Boulders tager ikke ansvar for din brug af Boulders' faciliteter eller udendørsområder. Du er som klatrer selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter hos Boulders. Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld.<br>
-Kunden er derfor indforstået med, at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders. Kunden erklærer sig således indforstået med, at eventuelle skader på kunden selv eller tredjemand ikke vil blive erstattet af Boulders. Det er dit personlige ansvar at inspicere din landingszone inden klatring. I øvrigt følges dansk erstatningsret på området.</p>
+<p>Al færdsel i Boulders klatrecentre og al klatring sker på eget ansvar. Boulders tager ikke ansvar for din brug af Boulders' faciliteter eller udendørsområder. Du er som klatrer selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter hos Boulders. Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld.</p>
+<p>Kunden er derfor indforstået med, at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders. Kunden erklærer sig således indforstået med, at eventuelle skader på kunden selv eller tredjemand ikke vil blive erstattet af Boulders. Det er dit personlige ansvar at inspicere din landingszone inden klatring. I øvrigt følges dansk erstatningsret på området.</p>
 
 <h3>§4 Persondataforordningen (GDPR)</h3>
 <p>Når du opretter et klippekort i Boulders accepterer du, at Boulders indsamler og behandler oplysninger om dig. Hos Boulders indsamler og behandler vi kun de oplysninger, der er nødvendige for at administrere dit klippekort. Boulders anvender ikke oplysningerne til andre formål. Boulders opbevarer oplysningerne om dig i op til 1 år efter dit klippekort. Herefter vil alle oplysninger blive destrueret. Kontakt medlem@boulders.dk efter klippekortets udløb for at få slette dine oplysninger omgående.</p>
-
 <p>Når Boulders registrerer oplysninger om dig, har du ret til at:</p>
-<ul>
+<ol>
 <li>Få indsigt i de oplysninger, som vi behandler om dig.</li>
 <li>Gøre indsigelse mod at indsamlingen og behandlingen af dine oplysninger finder sted.</li>
 <li>Få oplysninger, der er vildledende eller urigtige, rettet eller slettet.</li>
-</ul>
+</ol>
+<p>Du har også ret til at klage til Datatilsynet over Boulders' behandling af dine personoplysninger.</p>
+<p>Henvendelser vedrørende vores behandling af dine oplysninger skal ske til medlem@boulders.dk.</p>
+<p>Boulders er dataansvarlig i forbindelse med vores behandling af de oplysninger du giver os.</p>
 
-<p>Du har også ret til at klage til Datatilsynet over Boulders' behandling af dine personoplysninger.<br>
-Henvendelser vedrørende vores behandling af dine oplysninger skal ske til medlem@boulders.dk.<br>
-Boulders er dataansvarlig i forbindelse med vores behandling af de oplysninger du giver os.</p>
-
-<h3>§5 Ombytning til Medlemskab</h3>
+<h3>§5 Ombytning til medlemskab</h3>
 <p>Det er muligt at ombytte hele sit ubrugte eller delvist brugte klippekort til et medlemskab. Boulders tager derved højde for antal brugte klip og købsprisen og udregner derved restancen, som bliver fratrukket det ønskede medlemskab. Bemærk at der skal underskrives et regelsæt til medlemskab. Det er ikke muligt at få refunderet restancen ved endt medlemskab. Ønskes ombytning skal du skrive en mail til medlem@boulders.dk. Boulders ombytter ikke i receptionen.</p>
 
 <h3>§6 Handelsbetingelser</h3>
 <p>Dit klippekort er gyldigt i 12 måneder fra købsdatoen og betales forud. Du har ikke ret til at få refunderet resterende klip eller på anden måde modtage godtgørelse for ubrugte klip.</p>
-<p>Ved køb af et klippekort i Boulders har du 14 dages fortrydelsesret fra den dag, klippekort blev oprettet. For at gøre brug af fortrydelsesretten, skal du registrere en anmodning om fortrydelse nederst i vores selvbetjening. Fortrydelsesretten kan ikke benyttes ved gentagne oprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af gældende entrépriser for det antal gange klippekort er benyttet.</p>
-
+<p>Ved køb af et klippekort i Boulders har du 14 dages fortrydelsesret fra den dag, klippekortet blev oprettet. For at gøre brug af fortrydelsesretten, skal du registrere en anmodning om fortrydelse nederst i vores selvbetjening. Fortrydelsesretten kan ikke benyttes ved gentagne oprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af gældende entrépriser for det antal gange klippekortet er benyttet.</p>
 <p>Klippekortet er ikke personligt og må gerne benyttes af andre. Enhver person, der benytter et klip fra en klippekortholders kort, skal dog underskrive Boulders' gældende ansvarsfraskrivelse.</p>`,
     en: `<h2>Terms and Conditions for Punch Cards</h2>
 
