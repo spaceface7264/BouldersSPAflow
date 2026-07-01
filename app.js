@@ -7186,7 +7186,7 @@ const translations = {
     'firstclimb.banner.perks': 'Lejesko og kalk inkl. · Alle Boulders haller · Gyldig 1 måned',
     'firstclimb.existingCustomer.block': 'Du har allerede brugt dette tilbud.',
     'firstclimb.existingCustomer.title': 'Du har allerede brugt dette tilbud',
-    'firstclimb.existingCustomer.body': 'Vores 99 kr dagsbillet kan kun købes én gang pr. konto, og du har allerede brugt din {email}. Du er stadig velkommen til at klatre — vælg et af vores andre produkter.',
+    'firstclimb.existingCustomer.body': 'Vores 99 kr dagsbillet kan kun købes én gang pr. konto, og {email} har allerede brugt tilbuddet. Du er stadig velkommen til at klatre — vælg et af vores andre produkter.',
     'firstclimb.existingCustomer.cta': 'Se andre adgangsmuligheder',
     'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
     'faq.firstclimb.included.a': 'Bliv så længe du vil i alle Boulders haller, plus lejesko og kalk. Ingen skjulte gebyrer.',
