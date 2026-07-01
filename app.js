@@ -667,28 +667,138 @@ async function _firstclimbAuthFetch(path) {
   const token = (typeof window.getAccessToken === 'function') ? window.getAccessToken() : null;
   if (!token) throw new Error('No access token for customer history fetch');
   const url = buildApiUrl({
-    baseUrl: businessUnitsAPI?.baseUrl || null,
-    useProxy: businessUnitsAPI?.useProxy ?? true,
+    baseUrl: authAPI?.baseUrl || null,
+    useProxy: authAPI?.useProxy ?? false,
     path,
   });
-  return requestJson({
-    url,
+  const response = await fetch(url, {
     method: 'GET',
     headers: {
+      'Accept': 'application/json',
       'Accept-Language': getAcceptLanguageHeader(),
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
   });
+  const text = await response.text();
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!response.ok) {
+    const error = new Error(`HTTP error! status: ${response.status}`);
+    error.status = response.status;
+    error.payload = text;
+    throw error;
+  }
+  if (contentType.includes('application/json')) {
+    return JSON.parse(text);
+  }
+  const trimmed = text.trim();
+  if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    try { return JSON.parse(trimmed); } catch (parseErr) {
+      throw new Error(`API returned invalid JSON. Status: ${response.status}. ${parseErr?.message || parseErr}`);
+    }
+  }
+  throw new Error(
+    `API returned non-JSON response. Status: ${response.status}. ` +
+    'This usually means the API endpoint is not working correctly or the proxy is misconfigured.'
+  );
+}
+
+function customerProfileExposesPurchaseHistory(customer) {
+  if (!customer) return false;
+  return ['subscriptions', 'valueCards', 'valuecards', 'validCards', 'receipts']
+    .some((key) => Array.isArray(customer[key]));
+}
+
+function customerProfileHasValueCardHistory(customer) {
+  if (!customer) return false;
+  return [customer.valueCards, customer.valuecards, customer.validCards]
+    .some((list) => Array.isArray(list));
+}
+
+function getFirstclimbCatalogProductId() {
+  const product = (state.landingMatchedProducts || [])[0];
+  return product?.id != null ? String(product.id) : null;
+}
+
+function collectFirstclimbProductIdsFromCustomerProfile(customer) {
+  const ids = new Set();
+  if (!customer) return ids;
+  const addRef = (ref) => {
+    const id = ref?.id ?? ref?.productId ?? ref?.product?.id;
+    if (id != null) ids.add(String(id));
+  };
+  (Array.isArray(customer.subscriptions) ? customer.subscriptions : []).forEach((sub) => {
+    addRef(sub?.subscriptionProduct || sub?.product);
+  });
+  const valueCardLists = [customer.valueCards, customer.valuecards, customer.validCards]
+    .filter((list) => Array.isArray(list));
+  valueCardLists.forEach((list) => {
+    list.forEach((vc) => addRef(vc?.valueCardProduct || vc?.validCardProduct || vc?.product));
+  });
+  return ids;
+}
+
+function customerProfileHasFirstclimbBlockingLabel(customer) {
+  if (!customer) return false;
+  const products = [];
+  (Array.isArray(customer.subscriptions) ? customer.subscriptions : []).forEach((sub) => {
+    const product = sub?.subscriptionProduct || sub?.product;
+    if (product) products.push(product);
+  });
+  [customer.valueCards, customer.valuecards, customer.validCards]
+    .filter((list) => Array.isArray(list))
+    .forEach((list) => {
+      list.forEach((vc) => {
+        const product = vc?.valueCardProduct || vc?.validCardProduct || vc?.product;
+        if (product) products.push(product);
+      });
+    });
+  return products.some((product) => productHasFirstclimbBlockingLabel(product));
+}
+
+let firstclimbGuardCustomerRefreshPromise = null;
+
+async function refreshAuthenticatedCustomerForFirstclimbGuard() {
+  if (!isUserAuthenticated()) return;
+  if (firstclimbGuardCustomerRefreshPromise) {
+    await firstclimbGuardCustomerRefreshPromise;
+    return;
+  }
+  firstclimbGuardCustomerRefreshPromise = (async () => {
+    const metadata = getTokenMetadata();
+    const resolvedCustomerId = state.customerId || metadata?.username || metadata?.userName;
+    if (!resolvedCustomerId) return;
+    try {
+      const customerData = await authAPI.getCustomer(String(resolvedCustomerId));
+      state.customerId = String(resolvedCustomerId);
+      state.authenticatedCustomer = customerData;
+    } catch (error) {
+      console.warn('[firstclimb] Could not refresh customer profile before eligibility check:', error);
+    }
+  })();
+  try {
+    await firstclimbGuardCustomerRefreshPromise;
+  } finally {
+    firstclimbGuardCustomerRefreshPromise = null;
+  }
 }
 
 // Pull product IDs the customer currently holds or has ever held. Errors on
-// any single endpoint are swallowed — we'd rather fail open per-source than
-// abort the whole check (the caller defaults to "block" if all sources fail).
+// individual endpoints are swallowed; callers block only on positive evidence.
 async function collectFirstclimbCustomerProductIds(customerId) {
-  if (!customerId) return { ids: new Set(), errors: ['no customer id'] };
+  if (!customerId) return { ids: new Set(), errors: ['no customer id'], sourcesOk: 0, purchaseHistoryVerified: false, inlineBlocking: false };
   const ids = new Set();
   const errors = [];
+  let sourcesOk = 0;
+  let valueCardsOk = false;
+  let receiptsOk = false;
+
+  const customer = state.authenticatedCustomer;
+  if (customer && customerProfileExposesPurchaseHistory(customer)) {
+    collectFirstclimbProductIdsFromCustomerProfile(customer).forEach((id) => ids.add(id));
+    sourcesOk += 1;
+  }
+
   const safeFetch = async (path) => {
     try { return await _firstclimbAuthFetch(path); }
     catch (e) { errors.push(`${path}: ${e?.message || e}`); return null; }
@@ -702,11 +812,38 @@ async function collectFirstclimbCustomerProductIds(customerId) {
     const id = ref?.id ?? ref?.productId ?? ref?.product?.id;
     if (id != null) ids.add(String(id));
   };
-  (Array.isArray(subs) ? subs : []).forEach((s) => addRef(s?.subscriptionProduct || s?.product));
-  (Array.isArray(valueCards) ? valueCards : []).forEach((vc) => addRef(vc?.valueCardProduct || vc?.validCardProduct || vc?.product));
-  (Array.isArray(receipts) ? receipts : []).forEach((r) => {
-    (r?.receiptItems || r?.items || []).forEach((item) => addRef(item?.product || item));
-  });
+  if (Array.isArray(subs)) {
+    sourcesOk += 1;
+    subs.forEach((s) => addRef(s?.subscriptionProduct || s?.product));
+  }
+  if (Array.isArray(valueCards)) {
+    valueCardsOk = true;
+    sourcesOk += 1;
+    for (const vc of valueCards) {
+      const product = vc?.valueCardProduct || vc?.validCardProduct || vc?.product;
+      if (product && productHasFirstclimbBlockingLabel(product)) {
+        return {
+          ids,
+          errors,
+          sourcesOk,
+          purchaseHistoryVerified: true,
+          inlineBlocking: true,
+        };
+      }
+      addRef(vc?.valueCardProduct || vc?.validCardProduct || vc?.product);
+      if (product?.id != null) ids.add(String(product.id));
+    }
+  }
+  if (Array.isArray(receipts)) {
+    receiptsOk = true;
+    sourcesOk += 1;
+    receipts.forEach((r) => {
+      (r?.receiptItems || r?.items || []).forEach((item) => addRef(item?.product || item));
+    });
+  }
+  const purchaseHistoryVerified = valueCardsOk
+    || receiptsOk
+    || customerProfileHasValueCardHistory(customer);
   console.log('[firstclimb] customer history product IDs collected:', {
     customerId,
     ids: Array.from(ids),
@@ -715,9 +852,15 @@ async function collectFirstclimbCustomerProductIds(customerId) {
       valueCards: Array.isArray(valueCards) ? valueCards.length : 0,
       receipts: Array.isArray(receipts) ? receipts.length : 0,
     },
+    sourcesOk,
+    valueCardsOk,
+    receiptsOk,
+    purchaseHistoryVerified,
+    profileHasValueCards: customerProfileHasValueCardHistory(customer),
+    profileExposesHistory: customerProfileExposesPurchaseHistory(customer),
     errors,
   });
-  return { ids, errors };
+  return { ids, errors, sourcesOk, purchaseHistoryVerified, inlineBlocking: false };
 }
 
 // Resolve a product by id from the already-loaded catalog if possible, else fetch.
@@ -735,10 +878,24 @@ async function resolveProductForFirstclimbCheck(productId) {
 }
 
 async function customerHasFirstclimbBlockingHistory(customerId) {
-  const { ids, errors } = await collectFirstclimbCustomerProductIds(customerId);
+  if (customerProfileHasFirstclimbBlockingLabel(state.authenticatedCustomer)) {
+    return true;
+  }
+  const { ids, errors, inlineBlocking } = await collectFirstclimbCustomerProductIds(customerId);
+  if (inlineBlocking) return true;
   if (errors.length) console.warn('[firstclimb] history fetch had partial errors:', errors);
-  if (ids.size === 0) return false; // clean history
+
+  const catalogProductId = getFirstclimbCatalogProductId();
+  if (catalogProductId && ids.has(catalogProductId)) {
+    return true;
+  }
+  if (ids.size === 0) {
+    // No positive evidence of a prior firstclimb purchase — allow (never false-block).
+    return false;
+  }
+
   for (const id of ids) {
+    if (catalogProductId && id === catalogProductId) return true;
     let product = null;
     try { product = await resolveProductForFirstclimbCheck(id); } catch (_) {}
     if (product && productHasFirstclimbBlockingLabel(product)) {
@@ -749,10 +906,63 @@ async function customerHasFirstclimbBlockingHistory(customerId) {
   return false;
 }
 
+// Central firstclimb guard — returns { blocked, skipped? }. Blocks only on
+// positive evidence of a prior firstclimb purchase; API/profile gaps allow through.
+async function runFirstclimbGuard(source) {
+  if (!isFirstClimbRoute()) return { blocked: false };
+
+  let customerIdForCheck = state.customerId
+    || getTokenMetadata()?.username
+    || getTokenMetadata()?.userName;
+
+  if (!customerIdForCheck && isUserAuthenticated()) {
+    try {
+      await syncAuthenticatedCustomerState();
+      customerIdForCheck = state.customerId;
+    } catch (_) {}
+  }
+
+  if (!customerIdForCheck) {
+    return { blocked: false, skipped: true };
+  }
+
+  await refreshAuthenticatedCustomerForFirstclimbGuard();
+
+  let hasBlockingHistory = false;
+  try {
+    hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
+  } catch (historyErr) {
+    console.warn(`[firstclimb] history check failed (${source}); allowing flow:`, historyErr);
+    hasBlockingHistory = false;
+  }
+
+  if (!hasBlockingHistory) return { blocked: false };
+
+  const blockedEmail = state.authenticatedEmail
+    || state.authenticatedCustomer?.email
+    || getTokenMetadata()?.email
+    || '';
+  try { window.clearTokens && window.clearTokens(); } catch (_) {}
+  state.customerId = null;
+  state.authenticatedCustomer = null;
+  state.authenticatedEmail = null;
+  try { refreshLoginUI(); } catch (_) {}
+  blockFirstClimbExistingCustomer({ email: blockedEmail, source });
+  return { blocked: true };
+}
+
+async function awaitFirstclimbGuard() {
+  if (!isFirstClimbRoute() || !state.firstclimbGuardPromise) return { blocked: false };
+  return state.firstclimbGuardPromise;
+}
+
 // firstclimb is a single-product flow. Once the gym is chosen we have everything
 // we need to skip the product-selection step and drop the user straight into the
 // form/checkout step with the value card already selected (quantity locked to 1).
 async function advanceFirstClimbFromGym() {
+  const guard = await awaitFirstclimbGuard();
+  if (guard.blocked) return;
+
   if (state.selectedBusinessUnit && !productsLoadPromise) {
     loadProductsFromAPI();
   }
@@ -786,10 +996,9 @@ async function advanceFirstClimbFromGym() {
   setTimeout(() => scrollToTop(), 200);
 }
 
-// firstclimb is a new-customer-only product. If BRP recognizes the email
-// (or the user is already logged in), we surface a modal explaining why the
-// purchase can't proceed and direct them to the regular entry options.
-function blockFirstClimbExistingCustomer({ email } = {}) {
+// firstclimb is a one-per-customer offer. Block only when we have positive
+// evidence of a prior purchase; never block on API/profile gaps.
+function blockFirstClimbExistingCustomer({ email, source } = {}) {
   const emailVal = (email || '').toLowerCase();
   const title = (typeof t === 'function' && t('firstclimb.existingCustomer.title'))
     || 'This offer is for new climbers only';
@@ -5302,6 +5511,8 @@ const state = {
   selectedGymName: null, // Store selected gym name for display
   landingRouteConfig: null, // Active landing route config for path-specific product surfacing
   landingMatchedProducts: [], // Products matched by active landing route label
+  firstclimbGuardPromise: null, // Resolves when /99kr eligibility check completes (blocks navigation until done)
+  isPaymentReturnFlow: false, // True when this page load is a return from the payment provider / success render — skips only the automatic /99kr eligibility check on load (the just-bought product would otherwise misfire the blocker on the confirmation page). Checkout-time guards are unaffected.
   currentAuthMode: null, // Track current auth mode (login/create)
   membershipPlanId: null,
   valueCardQuantities: new Map(),
@@ -6623,39 +6834,18 @@ function init() {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
   }
 
-  // firstclimb: if the user arrives already authenticated, kick off an async
-  // history check. Block only if they hold/held one of the disqualifying products.
-  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb' && isUserAuthenticated()) {
-    (async () => {
-      let customerIdForCheck = state.customerId
-        || getTokenMetadata()?.username
-        || getTokenMetadata()?.userName;
-      try {
-        if (!customerIdForCheck) {
-          await syncAuthenticatedCustomerState();
-          customerIdForCheck = state.customerId;
-        }
-      } catch (_) {}
-      let hasBlockingHistory = true;
-      try {
-        hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
-      } catch (historyErr) {
-        console.warn('[init] firstclimb history check failed; blocking by default:', historyErr);
-        hasBlockingHistory = true;
-      }
-      if (hasBlockingHistory) {
-        const blockedEmail = state.authenticatedEmail
-          || state.authenticatedCustomer?.email
-          || getTokenMetadata()?.email
-          || '';
-        try { window.clearTokens && window.clearTokens(); } catch (_) {}
-        state.customerId = null;
-        state.authenticatedCustomer = null;
-        state.authenticatedEmail = null;
-        try { refreshLoginUI(); } catch (_) {}
-        blockFirstClimbExistingCustomer({ email: blockedEmail });
-      }
-    })();
+  // firstclimb: block navigation/checkout until eligibility is verified for
+  // authenticated arrivals. Non-authenticated users get a no-op promise; checkout
+  // re-runs the guard once a customer id exists.
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
+    // Skip only the *automatic* eligibility check when this load is a
+    // payment-return / success render: the customer now owns the product they
+    // just bought, so an auto-run guard would false-block them on the
+    // confirmation page. The real checkout-time guards still run on normal
+    // loads, so this does not open a URL-param bypass of checkout eligibility.
+    state.firstclimbGuardPromise = (isUserAuthenticated() && !state.isPaymentReturnFlow)
+      ? runFirstclimbGuard('init')
+      : Promise.resolve({ blocked: false });
   }
 
   // /99kr: tag the body so route-scoped CSS rules can target this flow.
@@ -8369,8 +8559,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
+  // Flag success/return renders so the /99kr eligibility guard is suppressed for
+  // this load. After a successful purchase the customer legitimately owns the
+  // firstclimb product, so re-running the guard here would falsely block them on
+  // the success page. Covers real payment returns, receipt links, and test modes.
+  state.isPaymentReturnFlow = Boolean(
+    (orderId && (paymentReturn === 'return' || hasReceiptParam)) || testSuccess || testPaymentFailed
+  );
+
   init();
-  
+
   // If in test mode for payment failed, navigate directly to failed page
   if (testPaymentFailed) {
     console.log('[Test Mode] Navigating to payment failed page for testing');
@@ -9187,37 +9385,16 @@ async function handleLoginSubmit(event) {
     const username = payload?.username || email;
     state.authenticatedEmail = email;
 
-    // /99kr: a successful login means the email has an existing BRP profile.
-    // Inspect product history — block only if they've held a product carrying
-    // the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS). Empty-profile
-    // and never-bought-anything customers can still buy.
+    // /99kr: inspect product history — block only if they've held a product
+    // carrying a blocking label (see FIRSTCLIMB_BLOCKING_LABELS).
     if (isFirstClimbRoute()) {
-      let customerIdForCheck = null;
       try {
         await syncAuthenticatedCustomerState(username, email);
-        customerIdForCheck = state.customerId
-          || getTokenMetadata()?.username
-          || getTokenMetadata()?.userName;
       } catch (syncErr) {
         console.warn('[login] customer state sync failed before firstclimb history check:', syncErr);
       }
-      let hasBlockingHistory = true;
-      try {
-        hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
-      } catch (historyErr) {
-        console.warn('[login] firstclimb history check failed; blocking by default:', historyErr);
-        hasBlockingHistory = true;
-      }
-      if (hasBlockingHistory) {
-        try { window.clearTokens && window.clearTokens(); } catch (_) {}
-        state.customerId = null;
-        state.authenticatedCustomer = null;
-        state.authenticatedEmail = null;
-        try { refreshLoginUI(); } catch (_) {}
-        blockFirstClimbExistingCustomer({ email });
-        return;
-      }
-      // Clean history → carry on with the normal logged-in flow.
+      const guard = await runFirstclimbGuard('login');
+      if (guard.blocked) return;
     }
 
     // Sync customer state and fetch profile
@@ -11120,33 +11297,14 @@ async function handleSaveAccount() {
           console.log('[Save Account] firstclimb pre-check login failed (expected for new customer):', preCheckErr?.message || preCheckErr);
         }
         if (preCheckLoggedIn) {
-          let customerIdForCheck = null;
           try {
             await syncAuthenticatedCustomerState(undefined, candidateEmail);
-            customerIdForCheck = state.customerId
-              || getTokenMetadata()?.username
-              || getTokenMetadata()?.userName;
           } catch (syncErr) {
             console.warn('[Save Account] customer state sync failed before history check:', syncErr);
           }
 
-          let hasBlockingHistory = true; // fail-safe default
-          try {
-            hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
-          } catch (historyErr) {
-            console.warn('[Save Account] firstclimb history check failed; blocking by default:', historyErr);
-            hasBlockingHistory = true;
-          }
-
-          if (hasBlockingHistory) {
-            try { window.clearTokens && window.clearTokens(); } catch (_) {}
-            state.customerId = null;
-            state.authenticatedCustomer = null;
-            state.authenticatedEmail = null;
-            try { refreshLoginUI(); } catch (_) {}
-            blockFirstClimbExistingCustomer({ email: candidateEmail });
-            return;
-          }
+          const guard = await runFirstclimbGuard('saveAccount-preCheck');
+          if (guard.blocked) return;
 
           // Clean history → treat the existing-customer login as the sign-in for
           // this purchase. No create-customer POST is needed; the user is ready
@@ -11374,6 +11532,10 @@ async function handleSaveAccount() {
         try {
           await authAPI.login(emailVal, password, { saveTokens: true });
           await syncAuthenticatedCustomerState();
+          if (isFirstClimbRoute()) {
+            const guard = await runFirstclimbGuard('saveAccount-duplicateEmail');
+            if (guard.blocked) return;
+          }
           showSaveAccountMessage('Account saved successfully! You are now logged in.', 'success');
           showToast('Account saved successfully!', 'success');
           refreshLoginUI();
@@ -17852,6 +18014,15 @@ async function handleCheckout() {
     showCampaignRejectionModal();
     return;
   }
+
+  if (isFirstClimbRoute()) {
+    const initGuard = await awaitFirstclimbGuard();
+    if (initGuard.blocked) return;
+    if (isUserAuthenticated()) {
+      const guard = await runFirstclimbGuard('checkout-pre');
+      if (guard.blocked) return;
+    }
+  }
   
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
@@ -18204,6 +18375,14 @@ async function handleCheckout() {
         }
         
         console.log('[checkout] Customer created:', customerId);
+        if (isFirstClimbRoute()) {
+          const guard = await runFirstclimbGuard('checkout-post-create');
+          if (guard.blocked) {
+            setCheckoutLoadingState(false);
+            state.checkoutInProgress = false;
+            return;
+          }
+        }
         try {
           await ensureOrderCreated('profile-create');
           await ensureSubscriptionAttached('profile-create');
@@ -18224,6 +18403,14 @@ async function handleCheckout() {
               await syncAuthenticatedCustomerState();
               customerId = state.customerId || getTokenMetadata()?.username || getTokenMetadata()?.userName;
               if (customerId) state.customerId = String(customerId);
+              if (isFirstClimbRoute()) {
+                const guard = await runFirstclimbGuard('checkout-duplicateEmail');
+                if (guard.blocked) {
+                  setCheckoutLoadingState(false);
+                  state.checkoutInProgress = false;
+                  return;
+                }
+              }
               try {
                 sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
                   id: customerId,
@@ -18278,8 +18465,17 @@ async function handleCheckout() {
       }
     } else {
       // User is logged in, get customer ID from token or state
-      // For now, we'll proceed with order creation
       console.log('[checkout] User is authenticated');
+    }
+
+    // /99kr: final guard once customer id is known — blocks order creation.
+    if (isFirstClimbRoute()) {
+      const guard = await runFirstclimbGuard('checkout-pre-order');
+      if (guard.blocked) {
+        setCheckoutLoadingState(false);
+        state.checkoutInProgress = false;
+        return;
+      }
     }
 
     // Step 2: Ensure order exists (create if needed)
