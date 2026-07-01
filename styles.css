@@ -5337,9 +5337,10 @@ body {
 
 .terms-modal-content-text .search-highlight {
     background: rgba(244, 1, 245, 0.3);
-    padding: 2px 4px;
-    border-radius: 3px;
+    border-radius: 2px;
     font-weight: 600;
+    padding: 0;
+    margin: 0;
 }
 
 .terms-modal-content-text .search-no-results {
