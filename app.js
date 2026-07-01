@@ -9348,8 +9348,9 @@ function closeForgotPasswordModal() {
 // Terms Content - Embedded directly to avoid CORS issues
 const termsContent = {
   membership: {
-    da: `<h2>Vilkår og betingelser for medlemmer og 15 dages klatring i Boulders</h2>
-<p><strong>Gælder alle medlemskaber</strong></p>
+    da: `<h2>Vilkår og betingelser for Medlemmer og 15-Dages Klatring i Boulders</h2>
+<p><strong>Gælder alle medlemskaber.</strong></p>
+<p><em>(English contact can be found after the conclusion of the Danish contract.)</em></p>
 
 <h3>Accept</h3>
 <p>Ved gennemførsel af indmeldelsesprocessen har du accepteret nedenstående regelsæt. Din accept af aftalen er en bindende aftale mellem medlemmet og Boulders. Din accept heraf fungerer som en underskrift.</p>
@@ -9418,10 +9419,15 @@ const termsContent = {
 <p>Medlemskortet skal altid medbringes og indlæses, inden du benytter det pågældende klatrecenter. Boulders forbeholder sig retten til at opkrævet et gebyr for glemt medlemskort og retten til at påkræve at du køber et nyt medlemskort efter gentagende at have glemt dit kort.</p>
 <p>Hvis du mister eller beskadiger dit medlemskort, skal du straks meddele dette til Boulders, som vil udstede et nyt medlemskort mod et gebyr.</p>
 
-<h3>§5A U16 medlemskaber</h3>
-<p>Det er et krav for oprettelse af U16 medlemskab, at personen der benytter medlemskabet er under 16 år.</p>
-<p>U16 medlemskaber skal oprettes af forældre/værge, læs mere om medlemskaber til umyndige i §3A.</p>
-<p>U16 medlemskaber vil automatisk overgå til almindelig voksenpris- og betingelser, når medlemmer fylder 16 år. Er medlemmer studerende, skal dette oplyses med studenteridentifikation til medlem@boulders.dk inden overgang fra U16 medlemskab.</p>
+<h3>§5A Junior medlemskaber</h3>
+<p>Det er et krav for oprettelse af junior medlemskab, at personen der benytter medlemskabet er under 16 år.</p>
+<p>Junior medlemskaber skal oprettes af forældre/værge, læs mere om medlemskaber til umyndige i §3A.</p>
+<p>Junior medlemskaber vil automatisk overgå til almindelig voksenpris- og betingelser, når medlemmer fylder 16 år. Er medlemmer studerende, skal dette oplyses med studenteridentifikation til medlem@boulders.dk inden overgang fra junior medlemskab.</p>
+<p>Gældende priser, medlemstyper og betingelser kan altid findes på boulders.dk</p>
+
+<h3>§5B Student & Youth medlemskaber</h3>
+<p>Det er et krav for oprettelse af Student & Youth medlemskab, at personen der benytter medlemskabet er mellem 16 og 20 år.</p>
+<p>Student & Youth medlemskaber vil automatisk overgå til almindelig voksenpris- og betingelser, når medlemmet fylder 21 år eller ikke længere har gyldigt studie ID. Er medlemmet fyldt 21 år og fortsat studerende, skal dette oplyses med studenteridentifikation.</p>
 <p>Gældende priser, medlemstyper og betingelser kan altid findes på boulders.dk</p>
 
 <h3>§6 Betaling</h3>
@@ -9447,6 +9453,7 @@ const termsContent = {
 <p>Det er ikke muligt at berosætte medlemskaber i en kampagne/prisreduceret/tilbudsperiode.</p>
 <p>Du kan starte bero på din Boulders online medlemsprofil eller pr. e-mail til medlem@boulders.dk.</p>
 <p>Medlemmet beholder sine optjente medlemsfordele og anciennitet under berosætning.</p>
+<p>Berogebyret er ikke refunderbart.</p>
 
 <h3>§8 Opsigelse af medlemskab</h3>
 <p>Opsigelsesperioden for et medlemskab er løbende måned + næste hele afsluttede måned. Et medlemskab kan derfor kun ophøre med effekt sidste dag i en måned.</p>
@@ -9460,7 +9467,7 @@ const termsContent = {
 <p>Ved opsigelse mister medlemmet sine optjente medlemsfordele og anciennitet. Ønsker man at beholde sine fordele, bør berosætning overvejes.</p>
 
 <h3>§9 Fortrydelsesret</h3>
-<p>Ved oprettelsen af et medlemskab i Boulders har du 14 dages fortrydelsesret fra den dag, medlemskabet blev oprettet. For at gøre brug af fortrydelsesretten, skal du rette henvendelse til medlem@boulders.dk. Fortrydelsesretten kan ikke benyttes ved gentagne medlemskabsoprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af normal entré for samtlige antal besøg i den periode, du har benyttet dig af dit medlemskab.</p>
+<p>Ved oprettelsen af et medlemskab i Boulders har du 14 dages fortrydelsesret fra den dag, medlemskabet blev oprettet. For at gøre brug af fortrydelsesretten, skal du registrere en anmodning om fortrydelse nederst i vores selvbetjening. Fortrydelsesretten kan ikke benyttes ved gentagne medlemskabsoprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af normal entré for samtlige antal besøg i den periode, du har benyttet dig af dit medlemskab.</p>
 
 <h3>§10 Helbredstilstand og personskade</h3>
 <p>Al færdsel i Boulders klatrecentre og al klatring sker på eget ansvar. Boulders tager ikke ansvar for din brug af Boulders' faciliteter eller udendørsområder. Du er som medlem selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter hos Boulders.</p>
@@ -9490,11 +9497,10 @@ const termsContent = {
 <p>Alle køb omfattet af disse medlemsbetingelser er underlagt dansk ret, dog ikke CISG (Den Internationale Købelov), medmindre andet fremgår af ufravigelige regler. Eventuelle uenigheder, som ikke kan afgøres i mindelighed, afgøres af de danske domstole, medmindre andet fremgår af ufravigelige regler.</p>
 
 <h3>§14 15 dages klatring</h3>
-<p>15 dages klatring må kun benyttes af personer, der ikke tidligere har været medlem eller tidligere har benyttet et 15 dages kort. Opdages snyd med dette vil indehaveren blive pålagt at betale forholdsmæssig entré for sin brug af 15 dages klatring.</p>
-<p>15 dages klatring er personligt og må ikke deles med andre.</p>
-<p>Der henvises yderligere til §10 – helbredstilstand og personskade, §10A – Værdigenstande, §12- Persondataforordningen (GDPR) i dette regelsæt, der også er gældende for 15 dages klatring.</p>`,
-    en: `<h2>Rules for Members and Trial Pass holders at Boulders</h2>
-<p><strong>The following rules apply to all memberships</strong></p>
+<p>15 Dages kort er personligt og må ikke deles med andre. Der henvises yderligere til §9 - fortrydelsesret, §10 – helbredstilstand og personskade, §10A – Værdigenstande, §12- Persondataforordningen (GDPR) i dette regelsæt, der også er gældende for 15 Dages kort.</p>
+<p><strong>Særligt gældende for 15 Dages Gave:</strong> 15 Dages Gave må kun benyttes af personer, der ikke tidligere har været medlem eller tidligere har benyttet et 15 dages Gave. Opdages snyd med dette vil indehaveren blive pålagt at betale forholdsmæssig entré for sin brug af 15 Dages Gave.</p>`,
+    en: `<h2>Rules for Members and 15 Days of Climbing at Boulders</h2>
+<p><strong>The following rules apply to all memberships.</strong></p>
 
 <h3>Acceptance</h3>
 <p>By completing the registration process, you accept the rules outlined below. Your acceptance of this agreement constitutes a binding agreement between you and Boulders. Your acceptance serves as a signature.</p>
@@ -9520,7 +9526,7 @@ const termsContent = {
 <li>§11. Force Majeure</li>
 <li>§12. Data Protection (GDPR)</li>
 <li>§13. Governing Law and Jurisdiction</li>
-<li>§14. 15 Day Trial Pass</li>
+<li>§14. 15 Day-Climbing Pass</li>
 </ul>
 
 <h3>§1 General Provisions</h3>
@@ -9561,9 +9567,13 @@ const termsContent = {
 <p>In the event of a breach of membership terms, staff instructions, or house rules, Boulders may terminate your membership with immediate effect at any time. Boulders also reserves the right to permanently or indefinitely exclude you from membership at Boulders.</p>
 <p>The membership card must always be brought and scanned before using the respective climbing center. Boulders reserves the right to charge a fee for forgotten membership cards and may require you to purchase a new membership card if you repeatedly forget it. If you lose or damage your membership card, you must immediately inform Boulders, who will issue a new card for a fee.</p>
 
-<h3>§5A U16 Memberships</h3>
-<p>It is a requirement for obtaining a U16 membership that the individual using the membership is under 16 years of age. U16 memberships must be created by a parent or guardian; see §3A for more details regarding memberships for minors.</p>
-<p>U16 memberships will automatically transition to a regular adult membership, with applicable adult pricing and terms, upon the member's 16th birthday. If the member qualifies for a student membership, this must be documented with valid student identification by emailing medlem@boulders.dk prior to the transition from the U16 membership.</p>
+<h3>§5A Junior Memberships</h3>
+<p>It is a requirement for obtaining a junior membership that the individual using the membership is under 16 years of age. Junior memberships must be created by a parent or guardian; see §3A for more details regarding memberships for minors.</p>
+<p>Junior memberships will automatically transition to a regular adult membership, with applicable adult pricing and terms, upon the member's 16th birthday. If the member qualifies for a student membership, this must be documented with valid student identification by emailing medlem@boulders.dk prior to the transition from the junior membership.</p>
+<p>Current prices, membership types, and terms can always be found at boulders.dk.</p>
+
+<h3>§5B Student & Youth memberships</h3>
+<p>To create a Student & Youth membership, the person using the membership must be between 16 and 20 years old. Student & Youth memberships automatically convert to standard adult pricing and terms when the member turns 21 or no longer holds a valid student ID. If the member has turned 21 and is still a student, this must be documented with student identification.</p>
 <p>Current prices, membership types, and terms can always be found at boulders.dk.</p>
 
 <h3>§6 Payment</h3>
@@ -9589,6 +9599,7 @@ const termsContent = {
 <p>It is not possible to freeze memberships during a campaign/discounted/promotional period.</p>
 <p>You can initiate a freeze via your Boulders online membership profile or by emailing medlem@boulders.dk.</p>
 <p>Members retain their accrued membership benefits and seniority during the freezing period.</p>
+<p>Membership freeze fees are non-refundable.</p>
 
 <h3>§8 Termination of Membership</h3>
 <p>Termination must be done online through your membership profile or by emailing medlem@boulders.dk. When terminating your membership, you must provide your full name and/or membership number. The termination is valid from the day Boulders receives it, and you have received a confirmation from Boulders acknowledging the termination.</p>
@@ -9602,8 +9613,8 @@ const termsContent = {
 <p>Upon termination, members lose their accrued benefits and seniority. If you wish to retain these, freezing your membership may be considered.</p>
 
 <h3>§9 Right of Withdrawal</h3>
-<p>When creating a membership with Boulders, you have a 14-day right of withdrawal from the date the membership was created. To exercise your right of withdrawal, contact medlem@boulders.dk. The right of withdrawal cannot be used for repeated membership sign-ups.</p>
-<p>If you exercise your right of withdrawal, Boulders is entitled to require proportional payment in the form of normal entry fees for all visits made during the period in which your membership was active.</p>
+<p>When creating a membership with Boulders, you have a 14-day right of withdrawal from the date the membership was created. To exercise your right of withdrawal, you must submit a withdrawal request at the bottom of our self-service portal. The right of withdrawal cannot be used for repeated membership sign-ups.</p>
+<p>If you exercise your right of withdrawal, Boulders is entitled to require proportional payment in the form of the standard entry price for all visits made during the period in which you used your membership.</p>
 
 <h3>§10 Health Conditions and Personal Injury</h3>
 <p>All activity in Boulders climbing centers and climbing itself is conducted at your own risk. Boulders assumes no responsibility for your use of Boulders' facilities or outdoor areas. As a member, you are responsible for ensuring that your health condition allows participation in activities at Boulders.</p>
@@ -9634,10 +9645,9 @@ const termsContent = {
 <p>All purchases covered by these membership terms are subject to Danish law, excluding the CISG (United Nations Convention on Contracts for the International Sale of Goods), unless otherwise specified by mandatory rules.</p>
 <p>Any disputes that cannot be resolved amicably shall be settled by the Danish courts unless otherwise required by mandatory rules.</p>
 
-<h3>§14 15-Day Trial Pass</h3>
-<p>The 15-Day Trial Pass may only be used by individuals who have not previously been members or used a 15-day pass. If misuse of this pass is discovered, the holder will be required to pay a proportional entrance fee for the usage of the 15-Day Trial Pass.</p>
-<p>The 15-Day Trial Pass is personal and may not be shared with others.</p>
-<p>Additionally, references are made to §10 – Health Condition and Personal Injury, §10A – Valuables, and §12 – General Data Protection Regulation (GDPR), which also apply to the 15-Day Trial Pass.</p>`
+<h3>§14 15-Day Climbing Pass</h3>
+<p>15-Day Passes are personal and may not be shared with others. Please also refer to §9 – Right of Withdrawal, §10 – Health Condition and Personal Injury, §10A – Valuables, and §12 – The General Data Protection Regulation (GDPR) in these terms, all of which also apply to the 15-Day Pass.</p>
+<p><strong>Special terms for the 15-Day Gift Pass:</strong> The 15-Day Gift Pass may only be used by individuals who have not previously been members or previously used a 15-Day Gift Pass. If misuse is detected, the holder will be required to pay a proportional entry fee for their use of the 15-Day Gift Pass.</p>`
   },
   punchcard: {
     da: `<h2>Vilkår og betingelser for klippekort</h2>
