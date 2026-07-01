@@ -9679,18 +9679,18 @@ Henvendelser vedrørende vores behandling af dine oplysninger skal ske til medle
 Boulders er dataansvarlig i forbindelse med vores behandling af de oplysninger du giver os.</p>
 
 <h3>§5 Ombytning til Medlemskab</h3>
-<p>Det er muligt at ombytte sit ubrugte eller delvist brugte klippekort til et medlemskab. Boulders tager derved højde for antal brugte klip og købsprisen og udregner derved restancen, som bliver fratrukket det ønskede medlemskab. Bemærk at der skal underskrives et regelsæt til medlemskab. Det er ikke muligt at få refunderet restancen ved endt medlemskab. Ønskes ombytning skal du skrive en mail til medlem@boulders.dk. Boulders ombytter ikke i receptionen.</p>
+<p>Det er muligt at ombytte hele sit ubrugte eller delvist brugte klippekort til et medlemskab. Boulders tager derved højde for antal brugte klip og købsprisen og udregner derved restancen, som bliver fratrukket det ønskede medlemskab. Bemærk at der skal underskrives et regelsæt til medlemskab. Det er ikke muligt at få refunderet restancen ved endt medlemskab. Ønskes ombytning skal du skrive en mail til medlem@boulders.dk. Boulders ombytter ikke i receptionen.</p>
 
 <h3>§6 Handelsbetingelser</h3>
-<p>Dit klippekort er gyldigt i 12 måneder fra købsdatoen og betales forud. Du har ikke ret til at få refunderet resterende klip eller på anden måde modtage godtgørelse for ubrugte klip.<br>
-Ved køb af et klippekort i Boulders har du 14 dages fortrydelsesret fra den dag, klippekort blev oprettet. For at gøre brug af fortrydelsesretten, skal du rette henvendelse til medlem@boulders.dk. Fortrydelsesretten kan ikke benyttes ved gentagne oprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af gældende entrépriser for det antal gange klippekort er benyttet og priserne vil reflektere tidspunktet for check-in i relation til peakpriser og off-peakpriser.</p>
+<p>Dit klippekort er gyldigt i 12 måneder fra købsdatoen og betales forud. Du har ikke ret til at få refunderet resterende klip eller på anden måde modtage godtgørelse for ubrugte klip.</p>
+<p>Ved køb af et klippekort i Boulders har du 14 dages fortrydelsesret fra den dag, klippekort blev oprettet. For at gøre brug af fortrydelsesretten, skal du registrere en anmodning om fortrydelse nederst i vores selvbetjening. Fortrydelsesretten kan ikke benyttes ved gentagne oprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af gældende entrépriser for det antal gange klippekort er benyttet.</p>
 
 <p>Klippekortet er ikke personligt og må gerne benyttes af andre. Enhver person, der benytter et klip fra en klippekortholders kort, skal dog underskrive Boulders' gældende ansvarsfraskrivelse.</p>`,
-    en: `<h2>Terms and Conditions for Punch Card</h2>
+    en: `<h2>Terms and Conditions for Punch Cards</h2>
 
 <h3>§1 General</h3>
-<p>The following rules apply to punch cards at Boulders.<br>
-By purchasing a punch card, you agree to receive newsletters and other relevant information via email.</p>
+<p>The following rules apply to punch cards at Boulders.</p>
+<p>By purchasing a punch card, you agree to receive newsletters and other relevant information via email.</p>
 
 <h3>§2 House Rules and Other Provisions</h3>
 <p>In case of a breach of the rules, staff instructions, or house rules, Boulders reserves the right to cancel your punch card with immediate effect. Boulders also reserves the right to ban you from climbing at Boulders indefinitely.<br>
@@ -9715,12 +9715,11 @@ Inquiries regarding our processing of your information should be directed to med
 Boulders is the data controller responsible for processing the information you provide to us.</p>
 
 <h3>§5 Conversion to Membership</h3>
-<p>It is possible to convert an unused or partially used punch card into a membership. Boulders will take into account the number of used punches and the purchase price to calculate the remaining balance, which will be deducted from the desired membership. Note that you will need to sign a membership agreement. Any remaining balance from the conversion cannot be refunded upon the termination of the membership.<br>
-To request a conversion, you must send an email to medlem@boulders.dk. Boulders does not process conversions at the reception.</p>
+<p>It is possible to convert your entire unused or partially used punch card into a membership. Boulders will take into account the number of used punches and the purchase price to calculate the remaining balance, which will be deducted from the desired membership. Note that you will need to sign a membership agreement. Any remaining balance from the conversion cannot be refunded upon the termination of the membership. To request a conversion, you must send an email to medlem@boulders.dk. Boulders does not process conversions at the reception.</p>
 
 <h3>§6 Terms of Sale</h3>
-<p>Your punch card is valid for 12 months from the date of purchase and must be paid upfront. You are not entitled to a refund for remaining punches or any other compensation for unused punches.<br>
-When purchasing a punch card at Boulders, you have a 14-day right of withdrawal from the date the punch card was created. To exercise your right of withdrawal, you must contact medlem@boulders.dk. The right of withdrawal cannot be exercised for repeated purchases. If you exercise your right of withdrawal, Boulders is entitled to demand proportional payment based on applicable entrance fees for the number of times the punch card has been used. Prices will reflect the check-in time in relation to peak and off-peak pricing.</p>
+<p>Your punch card is valid for 12 months from the date of purchase and must be paid upfront. You are not entitled to a refund for remaining punches or any other compensation for unused punches.</p>
+<p>When purchasing a punch card at Boulders, you have a 14-day right of withdrawal from the date the punch card was created. To exercise your right of withdrawal, you must submit a withdrawal request at the bottom of our self-service portal. The right of withdrawal cannot be exercised for repeated purchases. If you exercise your right of withdrawal, Boulders is entitled to demand proportional payment based on applicable entrance fees for the number of times the punch card has been used.</p>
 
 <p>The punch card is not personal and may be used by others. However, any person using a punch from a cardholder's punch card must sign Boulders' applicable liability waiver.</p>`
   },
