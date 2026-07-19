@@ -157,7 +157,7 @@ function trackBeginCheckout(items = [], value = 0, currency = 'DKK') {
 
 /**
  * Track purchase event (when order is completed)
- * GA4 Event: purchase
+ * GA4 Event: purchase (or a dedicated event via metadata.eventName, e.g. purchase_99kr)
  * @param {string} transactionId - Order/transaction ID
  * @param {Array<object>} items - Array of purchased items
  * @param {number} value - Total purchase value
@@ -165,15 +165,18 @@ function trackBeginCheckout(items = [], value = 0, currency = 'DKK') {
  * @param {number} shipping - Shipping amount (optional)
  * @param {string} currency - Currency code (default: 'DKK')
  * @param {object} metadata - Optional top-level event parameters (gym_id, payment_type, etc.)
+ *   Pass metadata.eventName to override the Data Layer event name (default: 'purchase').
  */
 function trackPurchase(transactionId, items = [], value = 0, tax = 0, shipping = 0, currency = 'DKK', metadata = {}) {
+  const eventName = metadata?.eventName || 'purchase';
+
   if (!transactionId) {
-    gtmWarn('[GTM] purchase: Transaction ID is required');
+    gtmWarn(`[GTM] ${eventName}: Transaction ID is required`);
     return;
   }
 
   if (!Array.isArray(items) || items.length === 0) {
-    gtmWarn('[GTM] purchase: Items array is required');
+    gtmWarn(`[GTM] ${eventName}: Items array is required`);
     return;
   }
 
@@ -192,10 +195,10 @@ function trackPurchase(transactionId, items = [], value = 0, tax = 0, shipping =
     }
   };
 
-  const { gym_name: _gymName, ...topLevelMetadata } = metadata || {};
+  const { gym_name: _gymName, eventName: _eventName, ...topLevelMetadata } = metadata || {};
   Object.assign(eventData, topLevelMetadata);
 
-  pushToDataLayer('purchase', eventData);
+  pushToDataLayer(eventName, eventData);
 }
 
 // Export functions for use in other scripts

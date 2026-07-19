@@ -17563,6 +17563,8 @@ function updateDiscountDisplay() {
 function persistOrderSnapshot(orderId) {
   if (!orderId) return;
   try {
+    const landingRoute = state.landingRouteConfig?.labelKey
+      || (isFirstClimbRoute() ? 'firstclimb' : null);
     sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
       orderId,
       membershipPlanId: state.membershipPlanId,
@@ -17575,6 +17577,8 @@ function persistOrderSnapshot(orderId) {
       paymentMethod: state.paymentMethod,
       discountCode: state.discountCode,
       discountApplied: state.discountApplied,
+      // Durable offer signal for post-payment tracking (path alone can be unreliable)
+      landingRoute,
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -20363,6 +20367,32 @@ function resolvePurchaseTrackingMetadata(order, storedOrder = null) {
   return metadata;
 }
 
+function orderHasFirstclimbBlockingProduct(order) {
+  if (!order) return false;
+  const lineGroups = [
+    order.subscriptionItems,
+    order.valueCardItems,
+    order.articleItems,
+    order.entryItems,
+  ];
+  for (const group of lineGroups) {
+    if (!Array.isArray(group)) continue;
+    for (const item of group) {
+      if (productHasFirstclimbBlockingLabel(item?.product)) return true;
+    }
+  }
+  return false;
+}
+
+/** True when this completed order should dual-fire purchase_99kr. */
+function isFirstClimbPurchase(order = null, storedOrder = null) {
+  if (isFirstClimbRoute()) return true;
+  if (storedOrder?.landingRoute === 'firstclimb') return true;
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') return true;
+  if (orderHasFirstclimbBlockingProduct(order)) return true;
+  return false;
+}
+
 function trackConfirmedPurchase({ order, orderId, storedOrder = null } = {}) {
   if (!orderId) {
     devWarn('[GTM] purchase not tracked: missing orderId');
@@ -20392,6 +20422,7 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null } = {}) {
 
   const transactionId = order?.number ?? order?.id ?? orderId;
   const metadata = resolvePurchaseTrackingMetadata(order, storedOrder);
+  const dualFire99kr = isFirstClimbPurchase(order, storedOrder);
 
   try {
     window.GTM.trackPurchase(
@@ -20403,8 +20434,24 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null } = {}) {
       'DKK',
       metadata
     );
+    if (dualFire99kr) {
+      window.GTM.trackPurchase(
+        transactionId,
+        purchaseItems,
+        purchaseValue,
+        0,
+        0,
+        'DKK',
+        { ...metadata, eventName: 'purchase_99kr' }
+      );
+    }
     markPurchaseTracked(orderId);
-    devLog('[GTM] purchase tracked:', { transactionId, purchaseValue, itemCount: purchaseItems.length });
+    devLog('[GTM] purchase tracked:', {
+      transactionId,
+      purchaseValue,
+      itemCount: purchaseItems.length,
+      purchase_99kr: dualFire99kr,
+    });
     trackTikTokAttributedPurchase(transactionId, purchaseItems, purchaseValue, order, storedOrder);
     return true;
   } catch (error) {
