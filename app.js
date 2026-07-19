@@ -2473,13 +2473,18 @@ class OrderAPI {
         orderData.businessUnit = state.selectedBusinessUnit;
       }
 
+      // Tag join.boulders.dk orders so BRP can filter exports (source is queryable; returnUrl is not)
+      if (!orderData.source) {
+        orderData.source = 'join.boulders.dk';
+      }
+
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
         path: '/api/orders',
       });
       
-      console.log('[Step 7] Creating order:', url);
+      console.log('[Step 7] Creating order:', url, { source: orderData.source });
       
       const accessToken = typeof window.getAccessToken === 'function' 
         ? window.getAccessToken() 
@@ -17767,6 +17772,7 @@ async function ensureOrderCreated(context = 'auto') {
   const orderData = {
     customer: Number(state.customerId),
     businessUnit: state.selectedBusinessUnit,
+    source: 'join.boulders.dk',
   };
 
   orderCreationPromise = (async () => {
