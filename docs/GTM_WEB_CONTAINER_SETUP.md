@@ -129,6 +129,29 @@ Create separate tags for each ecommerce event. Each tag will:
 4. **Name:** `GA4 - Purchase`
 5. **Save**
 
+### 2.5 Purchase 99kr Event Tag (distinct conversion)
+
+The `/99kr` day-ticket flow dual-fires: standard `purchase` (revenue) **and** `purchase_99kr` (dedicated conversion). Configure this tag so Ads/campaigns can optimize on 99kr alone without removing day tickets from total revenue.
+
+1. **Go to Tags → New**
+2. **Tag Configuration:**
+   - Choose: **Google Analytics: GA4 Event**
+   - **Configuration Tag:** `GA4 - Configuration`
+   - **Event Name:** `purchase_99kr`
+   - **Ecommerce:** Enable "Use data from the ecommerce event"
+   - **Send to server container:** Enable
+   - **Server container URL:** Your Stape domain
+   - **Container ID:** `GTM-P8DL49HC`
+
+3. **Triggering:**
+   - Choose: **Custom Event**
+   - **Event name:** `purchase_99kr`
+
+4. **Name:** `GA4 - Purchase 99kr`
+5. **Save**
+
+6. **In GA4** (Admin → Events / Key events): mark `purchase_99kr` as a key event / conversion if Ads or reporting should treat it as a dedicated goal. Do **not** remove or replace the standard `purchase` key event.
+
 ---
 
 ## Step 3: Server-Side Forwarding (Alternative Method)
@@ -148,7 +171,7 @@ If your GA4 tags don't have built-in forwarding, you can use a separate forwardi
        var lastEvent = window.dataLayer[window.dataLayer.length - 1];
        
        // Only forward ecommerce events
-       var ecommerceEvents = ['select_item', 'add_to_cart', 'begin_checkout', 'purchase'];
+       var ecommerceEvents = ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr'];
        if (lastEvent && lastEvent.event && ecommerceEvents.indexOf(lastEvent.event) !== -1) {
          // Forward to server-side container
          fetch('https://YOUR-STAPE-DOMAIN/collect', {
@@ -171,7 +194,7 @@ If your GA4 tags don't have built-in forwarding, you can use a separate forwardi
 
 3. **Triggering:**
    - Choose: **Custom Event**
-   - **Event name:** `select_item|add_to_cart|begin_checkout|purchase` (use regex)
+   - **Event name:** `select_item|add_to_cart|begin_checkout|purchase|purchase_99kr` (use regex)
 
 4. **Name:** `Server Container - Forward Events`
 5. **Save**
@@ -231,6 +254,7 @@ Create variables to easily access ecommerce data:
    - Add to cart → `add_to_cart` should fire
    - Click checkout → `begin_checkout` should fire
    - Complete purchase → `purchase` should fire
+   - Complete a `/99kr` day-ticket purchase → **both** `purchase` and `purchase_99kr` should fire (same `transaction_id` / value)
 
 ### 5.2 Check DataLayer
 
@@ -240,7 +264,7 @@ In browser console:
 console.log(window.dataLayer);
 
 // Filter ecommerce events
-window.dataLayer.filter(e => e.event && ['select_item', 'add_to_cart', 'begin_checkout', 'purchase'].includes(e.event))
+window.dataLayer.filter(e => e.event && ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr'].includes(e.event))
 ```
 
 ### 5.3 GA4 DebugView
@@ -337,6 +361,7 @@ In each GA4 tag:
 | GA4 - Add to Cart | add_to_cart | Custom Event: add_to_cart |
 | GA4 - Begin Checkout | begin_checkout | Custom Event: begin_checkout |
 | GA4 - Purchase | purchase | Custom Event: purchase |
+| GA4 - Purchase 99kr | purchase_99kr | Custom Event: purchase_99kr |
 
 ### DataLayer Event Structure
 
@@ -386,6 +411,22 @@ In each GA4 tag:
     shipping: 0,
     items: [...]
   }
+}
+
+// purchase_99kr (dual-fired with purchase on /99kr day-ticket completions only)
+{
+  event: 'purchase_99kr',
+  ecommerce: {
+    transaction_id: '817247',
+    value: 99.00,
+    currency: 'DKK',
+    tax: 0,
+    shipping: 0,
+    items: [...]
+  },
+  gym_id: '1',
+  payment_type: 'card',
+  landing_path: '/99kr'
 }
 ```
 
