@@ -18237,10 +18237,7 @@ async function handleCheckout() {
         try {
           sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
             id: customerId,
-            firstName: payload.customer?.firstName,
-            lastName: payload.customer?.lastName,
-            email: payload.customer?.email,
-            primaryGym: payload.customer?.primaryGym,
+            ...buildStoredCheckoutCustomer(payload.customer),
           }));
         } catch (e) {
           console.warn('[checkout] Could not save customer to sessionStorage:', e);
@@ -18424,10 +18421,7 @@ async function handleCheckout() {
               try {
                 sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
                   id: customerId,
-                  firstName: payload.customer?.firstName,
-                  lastName: payload.customer?.lastName,
-                  email: payload.customer?.email,
-                  primaryGym: payload.customer?.primaryGym,
+                  ...buildStoredCheckoutCustomer(payload.customer),
                 }));
               } catch (e) {
                 console.warn('[checkout] Could not save customer to sessionStorage:', e);
@@ -20358,18 +20352,211 @@ function sumPurchaseItemsKr(items) {
   );
 }
 
-function resolvePurchaseTrackingMetadata(order, storedOrder = null) {
+function normalizeMetaTrackingValue(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+}
+
+function normalizeMetaTrackingEmail(value) {
+  const normalized = normalizeMetaTrackingValue(value);
+  return normalized ? normalized.toLowerCase() : null;
+}
+
+function normalizeMetaTrackingPhone(value) {
+  const normalized = normalizeMetaTrackingValue(value);
+  if (!normalized) return null;
+  const digitsOnly = normalized.replace(/\D+/g, '');
+  return digitsOnly || null;
+}
+
+function normalizeMetaTrackingDateOfBirth(value) {
+  const normalized = normalizeMetaTrackingValue(value);
+  if (!normalized) return null;
+  const digitsOnly = normalized.replace(/\D+/g, '');
+  return digitsOnly.length === 8 ? digitsOnly : null;
+}
+
+function getFirstPresentValue(...values) {
+  for (const value of values) {
+    if (value != null && String(value).trim() !== '') {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getNormalizedMetaPhone(customer = null, storedCustomer = null) {
+  const mobilePhone = customer?.mobilePhone;
+  if (mobilePhone && typeof mobilePhone === 'object') {
+    return normalizeMetaTrackingPhone(`${mobilePhone.countryCode || ''}${mobilePhone.number || ''}`);
+  }
+  const storedMobilePhone = storedCustomer?.mobilePhone;
+  if (storedMobilePhone && typeof storedMobilePhone === 'object') {
+    return normalizeMetaTrackingPhone(`${storedMobilePhone.countryCode || ''}${storedMobilePhone.number || ''}`);
+  }
+  return normalizeMetaTrackingPhone(
+    getFirstPresentValue(
+      customer?.phone,
+      customer?.phoneNumber,
+      storedCustomer?.phone,
+      storedCustomer?.phoneNumber
+    )
+  );
+}
+
+function getNormalizedMetaCity(customer = null, storedCustomer = null) {
+  return normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.city,
+      customer?.addressCity,
+      customer?.shippingAddress?.city,
+      customer?.billingAddress?.city,
+      storedCustomer?.city,
+      storedCustomer?.shippingAddress?.city
+    )
+  );
+}
+
+function getNormalizedMetaPostalCode(customer = null, storedCustomer = null) {
+  return normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.postalCode,
+      customer?.zip,
+      customer?.shippingAddress?.postalCode,
+      customer?.billingAddress?.postalCode,
+      storedCustomer?.postalCode,
+      storedCustomer?.shippingAddress?.postalCode
+    )
+  );
+}
+
+function getNormalizedMetaState(customer = null, storedCustomer = null) {
+  return normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.state,
+      customer?.region,
+      customer?.shippingAddress?.state,
+      customer?.shippingAddress?.region,
+      customer?.billingAddress?.state,
+      customer?.billingAddress?.region,
+      storedCustomer?.state,
+      storedCustomer?.region,
+      storedCustomer?.shippingAddress?.state,
+      storedCustomer?.shippingAddress?.region
+    )
+  );
+}
+
+function buildStoredCheckoutCustomer(payloadCustomer = {}) {
+  if (!payloadCustomer || typeof payloadCustomer !== 'object') {
+    return {};
+  }
+
+  const phoneNumber =
+    payloadCustomer.phone?.number ||
+    payloadCustomer.phoneNumber ||
+    null;
+  const phoneCountryCode = payloadCustomer.phone?.countryCode || null;
+  const mobilePhone = phoneNumber
+    ? { countryCode: phoneCountryCode, number: phoneNumber }
+    : (payloadCustomer.mobilePhone || null);
+
+  const streetAddress =
+    payloadCustomer.address?.street ||
+    payloadCustomer.address ||
+    null;
+  const postalCode =
+    payloadCustomer.address?.postalCode ||
+    payloadCustomer.postalCode ||
+    payloadCustomer.shippingAddress?.postalCode ||
+    null;
+  const city =
+    payloadCustomer.address?.city ||
+    payloadCustomer.city ||
+    payloadCustomer.shippingAddress?.city ||
+    null;
+  const shippingAddress =
+    streetAddress || city || postalCode
+      ? {
+          ...(streetAddress ? { street: streetAddress } : {}),
+          ...(city ? { city } : {}),
+          ...(postalCode ? { postalCode } : {}),
+          country: 'DK',
+        }
+      : (payloadCustomer.shippingAddress || null);
+
+  return {
+    firstName: payloadCustomer.firstName || null,
+    lastName: payloadCustomer.lastName || null,
+    email: payloadCustomer.email || null,
+    primaryGym: payloadCustomer.primaryGym || null,
+    birthDate: payloadCustomer.birthDate || payloadCustomer.dateOfBirth || null,
+    phoneNumber,
+    postalCode,
+    city,
+    shippingAddress,
+    mobilePhone,
+  };
+}
+
+function resolvePurchaseTrackingMetadata(order, storedOrder = null, storedCustomer = null) {
   const businessUnit = order?.businessUnit || {};
   const gymId = businessUnit.id || storedOrder?.selectedBusinessUnit || state.selectedBusinessUnit || null;
   const gymName = businessUnit.name || businessUnit.label || null;
   const paymentType = storedOrder?.paymentMethod || state.paymentMethod || null;
   const landingPath = normalizePathname(window.location.pathname);
+  const customer = order?.customer || state.authenticatedCustomer || null;
+  const transactionId = order?.number ?? order?.id ?? null;
+  const eventIdBase = transactionId != null ? String(transactionId) : null;
+  const tokenMetadata = getTokenMetadata();
+  const email = normalizeMetaTrackingEmail(
+    getFirstPresentValue(
+      customer?.email,
+      storedCustomer?.email,
+      state.authenticatedEmail,
+      tokenMetadata?.email
+    )
+  );
+  const phone = getNormalizedMetaPhone(customer, storedCustomer);
+  const firstName = normalizeMetaTrackingValue(
+    getFirstPresentValue(customer?.firstName, customer?.first_name, storedCustomer?.firstName)
+  );
+  const lastName = normalizeMetaTrackingValue(
+    getFirstPresentValue(customer?.lastName, customer?.last_name, storedCustomer?.lastName)
+  );
+  const dateOfBirth = normalizeMetaTrackingDateOfBirth(
+    getFirstPresentValue(customer?.birthDate, customer?.dateOfBirth, storedCustomer?.birthDate)
+  );
+  const postalCode = getNormalizedMetaPostalCode(customer, storedCustomer);
+  const city = getNormalizedMetaCity(customer, storedCustomer);
+  const stateRegion = getNormalizedMetaState(customer, storedCustomer);
+  const externalId = normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.id,
+      customer?.customerId,
+      storedCustomer?.id,
+      state.customerId,
+      tokenMetadata?.username,
+      tokenMetadata?.userName
+    )
+  );
 
   const metadata = {};
   if (gymId != null) metadata.gym_id = String(gymId);
   if (gymName) metadata.gym_name = gymName;
   if (paymentType) metadata.payment_type = String(paymentType);
   if (landingPath) metadata.landing_path = landingPath;
+  if (eventIdBase) metadata.event_id = `purchase:${eventIdBase}`;
+  if (email) metadata.email = email;
+  if (phone) metadata.phone = phone;
+  if (externalId) metadata.external_id = externalId;
+  if (firstName) metadata.fn = firstName;
+  if (lastName) metadata.ln = lastName;
+  if (postalCode) metadata.zip = postalCode;
+  if (city) metadata.ct = city;
+  if (stateRegion) metadata.st = stateRegion;
+  if (dateOfBirth) metadata.dob = dateOfBirth;
   return metadata;
 }
 
@@ -20399,7 +20586,7 @@ function isFirstClimbPurchase(order = null, storedOrder = null) {
   return false;
 }
 
-function trackConfirmedPurchase({ order, orderId, storedOrder = null } = {}) {
+function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCustomer = null } = {}) {
   if (!orderId) {
     devWarn('[GTM] purchase not tracked: missing orderId');
     return false;
@@ -20427,7 +20614,7 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null } = {}) {
   }
 
   const transactionId = order?.number ?? order?.id ?? orderId;
-  const metadata = resolvePurchaseTrackingMetadata(order, storedOrder);
+  const metadata = resolvePurchaseTrackingMetadata(order, storedOrder, storedCustomer);
   const dualFire99kr = isFirstClimbPurchase(order, storedOrder);
 
   try {
@@ -20448,7 +20635,11 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null } = {}) {
         0,
         0,
         'DKK',
-        { ...metadata, eventName: 'purchase_99kr' }
+        {
+          ...metadata,
+          eventName: 'purchase_99kr',
+          ...(metadata.event_id ? { event_id: `${metadata.event_id}:99kr` } : {}),
+        }
       );
     }
     markPurchaseTracked(orderId);
@@ -20470,6 +20661,15 @@ function readStoredCheckoutOrder() {
   try {
     const orderData = sessionStorage.getItem('boulders_checkout_order');
     return orderData ? JSON.parse(orderData) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function readStoredCheckoutCustomer() {
+  try {
+    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    return customerData ? JSON.parse(customerData) : null;
   } catch (_) {
     return null;
   }
@@ -20597,7 +20797,7 @@ async function loadOrderForConfirmation(orderId) {
           updateStepIndicator();
           updateNavigationButtons();
           updateMainSubtitle();
-          trackConfirmedPurchase({ order: summaryOrder, orderId, storedOrder });
+          trackConfirmedPurchase({ order: summaryOrder, orderId, storedOrder, storedCustomer });
           renderConfirmationView();
           return;
         }
@@ -20949,7 +21149,7 @@ async function loadOrderForConfirmation(orderId) {
     // Update payment overview with order data
     updatePaymentOverview();
     
-    trackConfirmedPurchase({ order, orderId, storedOrder });
+    trackConfirmedPurchase({ order, orderId, storedOrder, storedCustomer });
 
     // Only render confirmation view if payment is confirmed
     renderConfirmationView();
@@ -21788,7 +21988,13 @@ function showPaymentPendingMessage(order, orderId) {
         console.log('[Payment Pending] ✅ Payment confirmed! Reloading page to show success...');
         clearInterval(pollInterval);
         const storedOrder = readStoredCheckoutOrder();
-        trackConfirmedPurchase({ order: updatedOrder, orderId, storedOrder });
+        const storedCustomer = readStoredCheckoutCustomer();
+        trackConfirmedPurchase({
+          order: updatedOrder,
+          orderId,
+          storedOrder,
+          storedCustomer,
+        });
         // Reload the page to show the success message
         window.location.reload();
       } else if (pollCount >= maxPolls) {
