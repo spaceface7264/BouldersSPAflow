@@ -20453,17 +20453,50 @@ function buildStoredCheckoutCustomer(payloadCustomer = {}) {
     return {};
   }
 
+  const phoneNumber =
+    payloadCustomer.phone?.number ||
+    payloadCustomer.phoneNumber ||
+    null;
+  const phoneCountryCode = payloadCustomer.phone?.countryCode || null;
+  const mobilePhone = phoneNumber
+    ? { countryCode: phoneCountryCode, number: phoneNumber }
+    : (payloadCustomer.mobilePhone || null);
+
+  const streetAddress =
+    payloadCustomer.address?.street ||
+    payloadCustomer.address ||
+    null;
+  const postalCode =
+    payloadCustomer.address?.postalCode ||
+    payloadCustomer.postalCode ||
+    payloadCustomer.shippingAddress?.postalCode ||
+    null;
+  const city =
+    payloadCustomer.address?.city ||
+    payloadCustomer.city ||
+    payloadCustomer.shippingAddress?.city ||
+    null;
+  const shippingAddress =
+    streetAddress || city || postalCode
+      ? {
+          ...(streetAddress ? { street: streetAddress } : {}),
+          ...(city ? { city } : {}),
+          ...(postalCode ? { postalCode } : {}),
+          country: 'DK',
+        }
+      : (payloadCustomer.shippingAddress || null);
+
   return {
     firstName: payloadCustomer.firstName || null,
     lastName: payloadCustomer.lastName || null,
     email: payloadCustomer.email || null,
     primaryGym: payloadCustomer.primaryGym || null,
-    birthDate: payloadCustomer.birthDate || null,
-    phoneNumber: payloadCustomer.phoneNumber || null,
-    postalCode: payloadCustomer.postalCode || payloadCustomer.shippingAddress?.postalCode || null,
-    city: payloadCustomer.city || payloadCustomer.shippingAddress?.city || null,
-    shippingAddress: payloadCustomer.shippingAddress || null,
-    mobilePhone: payloadCustomer.mobilePhone || null,
+    birthDate: payloadCustomer.birthDate || payloadCustomer.dateOfBirth || null,
+    phoneNumber,
+    postalCode,
+    city,
+    shippingAddress,
+    mobilePhone,
   };
 }
 
