@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dev Payment Mock</title>
+<style>
+  :root { font-family: system-ui, -apple-system, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; background: #f3f4f6; color: #111; min-height: 100vh; display: flex; flex-direction: column; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: #fff; border-bottom: 1px solid #e5e7eb;
+  }
+  header .cancel {
+    background: none; border: 0; color: #2563eb; font: 500 14px system-ui;
+    cursor: pointer; padding: 6px 8px;
+  }
+  header .total { font: 600 14px system-ui; }
+  header .total small { color: #6b7280; font-weight: 500; }
+  .badge {
+    margin: 10px 16px 0; padding: 6px 10px; border-radius: 6px;
+    background: #fef3c7; color: #92400e; font: 500 12px system-ui;
+  }
+  main {
+    flex: 1; padding: 24px 16px; display: flex; flex-direction: column;
+    gap: 14px; max-width: 480px; margin: 0 auto; width: 100%;
+  }
+  .card {
+    background: #fff; border-radius: 12px; padding: 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .card h2 { font-size: 14px; margin: 0 0 12px; color: #111; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  label { display: block; font: 500 12px system-ui; color: #6b7280; margin-bottom: 4px; }
+  input {
+    width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
+    border-radius: 8px; font: 400 14px system-ui;
+  }
+  .pay {
+    width: 100%; margin-top: 16px; padding: 14px;
+    background: #111; color: #fff; border: 0; border-radius: 10px;
+    font: 600 15px system-ui; cursor: pointer;
+  }
+  .pay:hover { background: #000; }
+  .cancel-pay {
+    width: 100%; margin-top: 8px; padding: 12px;
+    background: transparent; color: #ef4444; border: 0;
+    font: 500 14px system-ui; cursor: pointer;
+  }
+  .footer {
+    text-align: center; color: #6b7280; font: 400 11px system-ui;
+    padding: 12px 0 24px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <button class="cancel" id="cancelTopBtn" type="button">‹ Afbryd</button>
+  <div class="total">I Alt <small id="amount">650,50 DKK</small></div>
+</header>
+
+<div class="badge">DEV MOCK — not a real payment page. Simulates Reepay return handoff.</div>
+
+<main>
+  <div class="card">
+    <h2>Betalingskort</h2>
+    <label for="card">Kortnummer</label>
+    <input id="card" type="text" placeholder="0000 0000 0000 0000" value="4000 0000 0000 0002" />
+    <div class="row">
+      <div>
+        <label for="exp">Udløbsdato</label>
+        <input id="exp" type="text" placeholder="MM / ÅÅ" value="12 / 29" />
+      </div>
+      <div>
+        <label for="cvc">Kontrolcifre</label>
+        <input id="cvc" type="text" placeholder="CVC" value="123" />
+      </div>
+    </div>
+    <button class="pay" id="payBtn" type="button">Gem og betal <span id="payAmount">650,50 DKK</span></button>
+    <button class="cancel-pay" id="cancelBtn" type="button">Annuller betaling</button>
+  </div>
+
+  <div class="footer">Sikker betaling med <strong>Mock PSP</strong></div>
+</main>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const orderId = params.get('orderId') || '999999';
+  const returnTo = params.get('returnTo') || '/';
+
+  const pay = () => {
+    // Mimic Reepay redirecting back to the merchant's returnUrl.
+    // The parent iframe-modal listens for this same-origin navigation and
+    // promotes the URL to the top window, which triggers the existing
+    // ?payment=return handler in app.js.
+    const url = `${returnTo}?payment=return&orderId=${encodeURIComponent(orderId)}&mock=1`;
+    console.log('[dev-payment-mock] Simulating payment success → navigating to', url);
+    window.location.href = url;
+  };
+
+  const cancel = () => {
+    const url = `${returnTo}?payment=return&orderId=${encodeURIComponent(orderId)}&status=cancelled&mock=1`;
+    console.log('[dev-payment-mock] Simulating cancel → navigating to', url);
+    window.location.href = url;
+  };
+
+  document.getElementById('payBtn').addEventListener('click', pay);
+  document.getElementById('cancelBtn').addEventListener('click', cancel);
+  document.getElementById('cancelTopBtn').addEventListener('click', cancel);
+</script>
+</body>
+</html>
