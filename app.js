@@ -20386,6 +20386,33 @@ function getFirstPresentValue(...values) {
   return null;
 }
 
+// Google enhanced conversions discard phone numbers that are not E.164, so only
+// emit one when an explicit country code is available (Meta's `phone` stays digits-only).
+function getNormalizedPhoneE164(customer = null, storedCustomer = null) {
+  const mobilePhone = (customer?.mobilePhone && typeof customer.mobilePhone === 'object')
+    ? customer.mobilePhone
+    : (storedCustomer?.mobilePhone && typeof storedCustomer.mobilePhone === 'object')
+      ? storedCustomer.mobilePhone
+      : null;
+  if (!mobilePhone?.countryCode || !mobilePhone?.number) return null;
+  const digitsOnly = normalizeMetaTrackingPhone(`${mobilePhone.countryCode}${mobilePhone.number}`);
+  return digitsOnly ? `+${digitsOnly}` : null;
+}
+
+function getNormalizedTrackingCountry(customer = null, storedCustomer = null) {
+  const raw = normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.shippingAddress?.country,
+      customer?.billingAddress?.country,
+      customer?.country,
+      storedCustomer?.shippingAddress?.country,
+      storedCustomer?.country
+    )
+  );
+  if (!raw) return null;
+  return /^[A-Za-z]{2}$/.test(raw) ? raw.toLowerCase() : null;
+}
+
 function getNormalizedMetaPhone(customer = null, storedCustomer = null) {
   const mobilePhone = customer?.mobilePhone;
   if (mobilePhone && typeof mobilePhone === 'object') {
@@ -20519,6 +20546,8 @@ function resolvePurchaseTrackingMetadata(order, storedOrder = null, storedCustom
     )
   );
   const phone = getNormalizedMetaPhone(customer, storedCustomer);
+  const phoneE164 = getNormalizedPhoneE164(customer, storedCustomer);
+  const country = getNormalizedTrackingCountry(customer, storedCustomer);
   const firstName = normalizeMetaTrackingValue(
     getFirstPresentValue(customer?.firstName, customer?.first_name, storedCustomer?.firstName)
   );
@@ -20550,6 +20579,8 @@ function resolvePurchaseTrackingMetadata(order, storedOrder = null, storedCustom
   if (eventIdBase) metadata.event_id = `purchase:${eventIdBase}`;
   if (email) metadata.email = email;
   if (phone) metadata.phone = phone;
+  if (phoneE164) metadata.phone_e164 = phoneE164;
+  if (country) metadata.country = country;
   if (externalId) metadata.external_id = externalId;
   if (firstName) metadata.fn = firstName;
   if (lastName) metadata.ln = lastName;
