@@ -89,6 +89,19 @@ captured. Treat every user-data field as optional in GTM so a missing value neve
 
 ---
 
+## Step 0 — Deploy the CSP fix first
+
+The conversion tag cannot load until the Content Security Policy that allows
+`www.googleadservices.com` is live. Deploy to Cloudflare Pages (`_headers` is a Cloudflare Pages
+feature — the GitHub Pages workflow in `.github/workflows/deploy.yml` ignores it), then confirm:
+
+```bash
+curl -sI https://join.boulders.dk/99kr | grep -i content-security-policy | grep -o googleadservices
+```
+
+If that prints nothing, the fix is not live yet and every step below will appear to work in GTM
+Preview while recording nothing in Google Ads.
+
 ## Step 1 — Data Layer variables
 
 Create these under **Variables → New → Data Layer Variable** (Version 2) if they do not already
@@ -149,17 +162,21 @@ Without it, `gclid` is not persisted and click-through conversions go unattribut
 example a client-side and a server-side hit), so it must not be left blank.
 
 The conversion action was created with a fixed value of `1.0 DKK`. Passing `{{DLV -
-ecommerce.value}}` reports the actual paid amount (`99`, or less with a discount code). If s360
-wants the conversion to keep a flat value, leave the value field empty instead of hard-coding `1`,
-and set the value in the Google Ads conversion action.
+ecommerce.value}}` reports the actual paid amount (`99`, or less with a discount code), but only if
+the conversion action in Google Ads is set to **Use different values for each conversion** — with
+the default *Use the same value*, Google ignores the value the tag sends. Set that under
+Goals → Conversions → `99 kr.` → *Edit settings* → *Value*, keeping `1 DKK` as the fallback for
+hits that arrive without a value. If s360 would rather keep a flat value, leave the tag's value
+field empty instead of hard-coding `1`.
 
 ### Enhanced conversions (optional but recommended)
 
-In the same tag, expand **Advanced Settings → Enhanced Conversions** (requires enhanced conversions
-to be turned on for the conversion action in Google Ads, under customer data terms):
+Enhanced conversions must first be switched on for the conversion action in Google Ads
+(Goals → Conversions → `99 kr.` → *Enhanced conversions* → accept the customer data terms, method
+**Google Tag Manager**). Then wire the data up in GTM.
 
-- Enhanced Conversions: **Enable**
-- Method: **Manual configuration** → **Code**, mapping:
+First create the user data variable — **Variables → New → User-Provided Data** (under *Utilities*),
+type **Manual configuration**:
 
 | Google field | Variable |
 |--------------|----------|
@@ -167,10 +184,16 @@ to be turned on for the conversion action in Google Ads, under customer data ter
 | Phone Number | `{{DLV - phone_e164}}` |
 | First Name | `{{DLV - fn}}` |
 | Last Name | `{{DLV - ln}}` |
-| Postal Code | `{{DLV - zip}}` |
+| Street | *(leave empty — street address is not published to the Data Layer)* |
 | City | `{{DLV - ct}}` |
 | Region | `{{DLV - st}}` |
+| Postal Code | `{{DLV - zip}}` |
 | Country | `{{DLV - country}}` |
+
+Name it `UPD - Purchase`.
+
+Then in the `GAds - Conversion - 99 kr day ticket` tag, tick **Include user-provided data from your
+website** and select `UPD - Purchase`.
 
 Use `phone_e164`, not `phone`. Google requires E.164 (`+45…`); the digits-only `phone` field exists
 for Meta CAPI and would be discarded.
