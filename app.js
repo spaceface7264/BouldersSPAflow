@@ -20388,29 +20388,46 @@ function getFirstPresentValue(...values) {
 
 // Google enhanced conversions discard phone numbers that are not E.164, so only
 // emit one when an explicit country code is available (Meta's `phone` stays digits-only).
+// BRP returns countryCode as an integer (45), the checkout form as a string ('+45').
 function getNormalizedPhoneE164(customer = null, storedCustomer = null) {
-  const mobilePhone = (customer?.mobilePhone && typeof customer.mobilePhone === 'object')
-    ? customer.mobilePhone
-    : (storedCustomer?.mobilePhone && typeof storedCustomer.mobilePhone === 'object')
-      ? storedCustomer.mobilePhone
-      : null;
-  if (!mobilePhone?.countryCode || !mobilePhone?.number) return null;
-  const digitsOnly = normalizeMetaTrackingPhone(`${mobilePhone.countryCode}${mobilePhone.number}`);
-  return digitsOnly ? `+${digitsOnly}` : null;
+  const candidates = [
+    customer?.mobilePhone,
+    customer?.phone,
+    storedCustomer?.mobilePhone,
+    storedCustomer?.phone,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const countryCode = normalizeMetaTrackingPhone(candidate.countryCode);
+    const number = normalizeMetaTrackingPhone(candidate.number);
+    if (countryCode && number) return `+${countryCode}${number}`;
+  }
+  return null;
+}
+
+// BRP addresses carry country as a CountryOutRef ({ id, alpha2, name }); the checkout
+// snapshot stores a plain 'DK'.
+function resolveIsoCountryCode(value) {
+  const raw = (value && typeof value === 'object')
+    ? normalizeMetaTrackingValue(value.alpha2 ?? value.code ?? value.isoCode)
+    : normalizeMetaTrackingValue(value);
+  if (!raw) return null;
+  return /^[A-Za-z]{2}$/.test(raw) ? raw.toLowerCase() : null;
 }
 
 function getNormalizedTrackingCountry(customer = null, storedCustomer = null) {
-  const raw = normalizeMetaTrackingValue(
-    getFirstPresentValue(
-      customer?.shippingAddress?.country,
-      customer?.billingAddress?.country,
-      customer?.country,
-      storedCustomer?.shippingAddress?.country,
-      storedCustomer?.country
-    )
-  );
-  if (!raw) return null;
-  return /^[A-Za-z]{2}$/.test(raw) ? raw.toLowerCase() : null;
+  const candidates = [
+    customer?.shippingAddress?.country,
+    customer?.billingAddress?.country,
+    customer?.country,
+    storedCustomer?.shippingAddress?.country,
+    storedCustomer?.country,
+  ];
+  for (const candidate of candidates) {
+    const resolved = resolveIsoCountryCode(candidate);
+    if (resolved) return resolved;
+  }
+  return null;
 }
 
 function getNormalizedMetaPhone(customer = null, storedCustomer = null) {
