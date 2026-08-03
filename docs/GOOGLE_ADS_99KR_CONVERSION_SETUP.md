@@ -92,15 +92,18 @@ captured. Treat every user-data field as optional in GTM so a missing value neve
 ## Step 0 — Deploy the CSP fix first
 
 The conversion tag cannot load until the Content Security Policy that allows
-`www.googleadservices.com` is live. Deploy to Cloudflare Pages (`_headers` is a Cloudflare Pages
-feature — the GitHub Pages workflow in `.github/workflows/deploy.yml` ignores it), then confirm:
+`www.googleadservices.com` is live. Cloudflare Pages builds from the repo, so merging to `main`
+deploys it; `_headers` is a Cloudflare Pages feature, and the GitHub Pages workflow in
+`.github/workflows/deploy.yml` does not apply it. Confirm the deployed policy with:
 
 ```bash
-curl -sI https://join.boulders.dk/99kr | grep -i content-security-policy | grep -o googleadservices
+curl -sI https://join.boulders.dk/99kr | tr ';' '\n' | grep 'script-src' | grep -o googleadservices
 ```
 
 If that prints nothing, the fix is not live yet and every step below will appear to work in GTM
-Preview while recording nothing in Google Ads.
+Preview while recording nothing in Google Ads. Check `script-src` specifically — the policy already
+allowed `*.googleadservices.com` under `connect-src`, so grepping the whole header gives a false
+positive.
 
 ## Step 1 — Data Layer variables
 
