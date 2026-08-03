@@ -5204,9 +5204,10 @@ function populateCountrySelector(selectElement, countries) {
       const option = document.createElement('option');
       const phoneCode = `+${country.phoneCountryCode}`;
       option.value = phoneCode;
-      // Format: "+45 Denmark" or "+45" if no name
+      // Name first ("Denmark +45") so the list reads in the same order it is sorted,
+      // and so native select type-ahead matches what the user types.
       const countryName = country.name || country.alpha2 || '';
-      option.textContent = countryName ? `${phoneCode} ${countryName}` : phoneCode;
+      option.textContent = countryName ? `${countryName} ${phoneCode}` : phoneCode;
       
       // Store data attribute for flag lookup
       if (country.alpha2) {
