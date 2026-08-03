@@ -152,6 +152,8 @@ The `/99kr` day-ticket flow dual-fires: standard `purchase` (revenue) **and** `p
 
 6. **In GA4** (Admin → Events / Key events): mark `purchase_99kr` as a key event / conversion if Ads or reporting should treat it as a dedicated goal. Do **not** remove or replace the standard `purchase` key event.
 
+7. **Google Ads conversion** for the same event (`AW-805899643`, conversion action `99 kr.`): see `docs/GOOGLE_ADS_99KR_CONVERSION_SETUP.md`.
+
 ---
 
 ## Step 3: Server-Side Forwarding (Alternative Method)
