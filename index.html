@@ -115,7 +115,7 @@
             sampleRate: 1.0,
             // Performance tracing: 100% locally for verification, 10% in production (quota)
             tracesSampleRate: isProduction ? 0.1 : 1.0,
-            debug: !isProduction,
+            // Note: `debug: true` requires a *.debug.min.js CDN bundle; omitted for the production min bundle.
             release: 'join-boulders-dk@' + (new Date().toISOString().split('T')[0]),
             integrations: [
               Sentry.browserTracingIntegration({
