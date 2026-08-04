@@ -60,13 +60,20 @@ export function initSentry(options = {}) {
     // Lower rate to reduce quota usage
     tracesSampleRate: options.tracesSampleRate || 0.1,
 
+    // Only attach sentry-trace/baggage to same-origin API calls (avoids CORS on BRP)
+    tracePropagationTargets: options.tracePropagationTargets || [
+      'localhost',
+      /^\//,
+    ],
+
     // Integrations
     integrations: [
       // Browser tracing for performance monitoring
       Sentry.browserTracingIntegration({
-        // Trace user interactions
         traceFetch: true,
         traceXHR: true,
+        instrumentPageLoad: true,
+        instrumentNavigation: true,
       }),
 
       // Breadcrumbs for debugging context
@@ -85,11 +92,22 @@ export function initSentry(options = {}) {
       'top.GLOBALS',
       'chrome-extension://',
       'moz-extension://',
-
+      'safari-extension://',
+      'runtime.sendMessage',
+      '_AutofillCallbackHandler',
+      // In-app browsers / WebViews (Meta, Android)
+      'webkit.messageHandlers',
+      'Java object is gone',
       // Network errors that are expected
       'NetworkError',
       'Failed to fetch',
-
+      'Load failed',
+      // Expected auth / rate-limit / campaign outcomes
+      'INVALID_CREDENTIALS',
+      'Rate limit exceeded',
+      'Too many requests',
+      'HTTP error! status: 429',
+      'PRODUCT_NOT_ALLOWED',
       // User cancellations
       'AbortError',
       'User cancelled',
@@ -97,6 +115,21 @@ export function initSentry(options = {}) {
 
     // Filter sensitive data from being sent to Sentry
     beforeSend(event, hint) {
+      const err = hint?.originalException;
+      const message =
+        (err && (err.message || String(err))) ||
+        event.exception?.values?.[0]?.value ||
+        event.message ||
+        '';
+      const status = err?.status;
+      // Do not blanket-drop all 400/401 — only known auth/validation/rate-limit outcomes.
+      if (
+        status === 429 ||
+        /INVALID_CREDENTIALS|Rate limit exceeded|Too many requests|HTTP error! status: 429|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
+      ) {
+        return null;
+      }
+
       // Remove sensitive data from request headers
       if (event.request?.headers) {
         delete event.request.headers.Authorization;

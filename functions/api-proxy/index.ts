@@ -71,7 +71,8 @@ function getSecurityHeaders(origin: string): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept-Language',
+    // Include Sentry distributed-tracing headers for browser → proxy spans
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept-Language, sentry-trace, baggage',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
