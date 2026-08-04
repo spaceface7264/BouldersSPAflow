@@ -1135,12 +1135,14 @@ const PARENT_REQUIRED_FIELDS = [
 const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 
 
-// Business units rarely change within a single visit; cache per language
-// for a few minutes so repeated calls (init, geolocation toggle, language
-// switch back-and-forth) don't re-hit BRP and trip their rate limit.
+// Business units rarely change within a single visit; cache successful live
+// responses per language so repeated calls don't re-hit BRP.
 const BUSINESS_UNITS_CACHE_TTL_MS = 5 * 60 * 1000;
 const BUSINESS_UNITS_STORAGE_KEY = 'boulders.businessUnits.v1';
 const businessUnitsCache = new Map(); // languageCode -> { data, timestamp }
+// Tracks whether the last getBusinessUnits() result was live API data or an
+// emergency fallback (so callers can schedule a quiet recovery retry).
+let lastBusinessUnitsFetch = { source: 'live', error: null };
 
 // Last-known gym list baked into the bundle so Step 1 can still render when
 // BRP rate-limits /api/reference/business-units (HTTP 429). IDs must match BRP.
@@ -1164,7 +1166,8 @@ function readBusinessUnitsFromStorage(language) {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
-    const entry = parsed[language] || parsed['*'];
+    // Only reuse the same language — never serve DA names while UI is EN.
+    const entry = parsed[language];
     if (!entry?.data) return null;
     return entry;
   } catch {
@@ -1176,21 +1179,32 @@ function writeBusinessUnitsToStorage(language, data) {
   try {
     const raw = localStorage.getItem(BUSINESS_UNITS_STORAGE_KEY);
     const store = raw ? JSON.parse(raw) : {};
-    const payload = { data, timestamp: Date.now() };
-    store[language] = payload;
-    store['*'] = payload; // language-agnostic stale fallback
+    store[language] = { data, timestamp: Date.now() };
     localStorage.setItem(BUSINESS_UNITS_STORAGE_KEY, JSON.stringify(store));
   } catch {
     // Ignore quota / private-mode failures
   }
 }
 
-function getStaleBusinessUnits(language) {
+function getEmergencyBusinessUnits(language) {
   const memory = businessUnitsCache.get(language);
-  if (memory?.data) return memory.data;
+  if (memory?.data) return { data: memory.data, source: 'stale-memory' };
   const stored = readBusinessUnitsFromStorage(language);
-  if (stored?.data) return stored.data;
-  return BUSINESS_UNITS_FALLBACK;
+  if (stored?.data) return { data: stored.data, source: 'stale-storage' };
+  return { data: BUSINESS_UNITS_FALLBACK, source: 'fallback' };
+}
+
+function scheduleGymListRecovery(error) {
+  const retryMs = getRetryDelayFromError(error);
+  gymLoadCooldownUntil = Date.now() + retryMs;
+  if (gymLoadRetryTimeoutId) return;
+  console.warn(`[Step 1] Using emergency gym list; will retry live API in ~${Math.ceil(retryMs / 1000)}s`);
+  gymLoadRetryTimeoutId = setTimeout(() => {
+    gymLoadRetryTimeoutId = null;
+    loadGymsFromAPI({ forceNetwork: true }).catch((retryError) => {
+      console.warn('[Step 1] Auto-retry gym load failed:', retryError);
+    });
+  }, Math.max(retryMs + 250, 1000));
 }
 
 // API Integration Functions
@@ -1204,11 +1218,16 @@ class BusinessUnitsAPI {
   // Get all business units from API
   // Step 3: Fetch from /api/reference/business-units endpoint
   // Note: This endpoint uses "No Auth" according to Postman docs
-  async getBusinessUnits() {
+  async getBusinessUnits({ forceNetwork = false } = {}) {
     const language = getAcceptLanguageHeader();
     const cached = businessUnitsCache.get(language);
-    if (cached && (Date.now() - cached.timestamp) < BUSINESS_UNITS_CACHE_TTL_MS) {
+    if (
+      !forceNetwork &&
+      cached &&
+      (Date.now() - cached.timestamp) < BUSINESS_UNITS_CACHE_TTL_MS
+    ) {
       devLog('Using cached business units for', language);
+      lastBusinessUnitsFetch = { source: 'live', error: null };
       return cached.data;
     }
 
@@ -1233,6 +1252,7 @@ class BusinessUnitsAPI {
 
       businessUnitsCache.set(language, { data, timestamp: Date.now() });
       writeBusinessUnitsToStorage(language, data);
+      lastBusinessUnitsFetch = { source: 'live', error: null };
 
       return data;
     } catch (error) {
@@ -1245,16 +1265,13 @@ class BusinessUnitsAPI {
         payload: error.payload,
       });
 
-      // Keep Step 1 usable during BRP rate limits / outages: prefer stale
-      // in-memory or localStorage data, then the baked-in gym list.
-      const stale = getStaleBusinessUnits(language);
-      if (stale) {
-        console.warn('[Step 1] Serving stale/fallback business units after fetch failure');
-        businessUnitsCache.set(language, { data: stale, timestamp: Date.now() });
-        return stale;
-      }
-
-      throw error;
+      // Never block Step 1: serve last-known / baked-in gyms immediately.
+      // Do NOT write this into the live TTL cache — that would skip retries
+      // for 5 minutes after BRP recovers.
+      const emergency = getEmergencyBusinessUnits(language);
+      console.warn(`[Step 1] Serving ${emergency.source} business units after fetch failure`);
+      lastBusinessUnitsFetch = { source: emergency.source, error };
+      return emergency.data;
     }
   }
 
@@ -4896,15 +4913,27 @@ let userLocation = null;
 let gymsWithDistances = [];
 
 // Load gyms from API and update UI
-async function loadGymsFromAPI() {
+async function loadGymsFromAPI({ forceNetwork = false } = {}) {
   const now = Date.now();
-  if (now < gymLoadCooldownUntil) {
+  // During rate-limit cooldown, still show emergency gyms so the funnel
+  // never blocks — only skip hammering the network unless forceNetwork.
+  if (!forceNetwork && now < gymLoadCooldownUntil) {
     const secondsLeft = Math.ceil((gymLoadCooldownUntil - now) / 1000);
-    console.log(`[Step 1] Skipping gym load (cooldown ${secondsLeft}s remaining)`);
-    const noResults = document.getElementById('noResults');
-    if (noResults) {
-      noResults.classList.remove('hidden');
-      noResults.textContent = `Vi henter haller igen om ~${secondsLeft}s...`;
+    console.log(`[Step 1] Cooldown ${secondsLeft}s remaining — serving emergency gym list`);
+    const emergency = getEmergencyBusinessUnits(getAcceptLanguageHeader());
+    const gymList = document.querySelector('.gym-list');
+    if (gymList && gymList.children.length === 0 && emergency?.data) {
+      // Render emergency list without a network call
+      lastBusinessUnitsFetch = { source: emergency.source, error: lastBusinessUnitsFetch.error };
+      const gyms = emergency.data;
+      gymsWithDistances = gyms;
+      const noResults = document.getElementById('noResults');
+      if (noResults) noResults.classList.add('hidden');
+      gymList.innerHTML = '';
+      gyms.forEach((gym) => {
+        if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
+      });
+      setupGymEventListeners();
     }
     return;
   }
@@ -4914,7 +4943,7 @@ async function loadGymsFromAPI() {
       clearTimeout(gymLoadRetryTimeoutId);
       gymLoadRetryTimeoutId = null;
     }
-    const response = await businessUnitsAPI.getBusinessUnits();
+    const response = await businessUnitsAPI.getBusinessUnits({ forceNetwork });
     
     // Handle different response formats - could be array or object with data property
     const gyms = Array.isArray(response) ? response : (response.data || response.items || []);
@@ -5098,44 +5127,42 @@ async function loadGymsFromAPI() {
     if (state.currentStep === 1) {
       renderFAQ();
     }
+
+    // If we had to use emergency data, quietly retry live API after retryAfter
+    // so users get full gym details once BRP recovers — without blocking them now.
+    if (lastBusinessUnitsFetch.source !== 'live' && lastBusinessUnitsFetch.error) {
+      scheduleGymListRecovery(lastBusinessUnitsFetch.error);
+    } else {
+      gymLoadCooldownUntil = 0;
+    }
     
   } catch (error) {
-    if (isRateLimitError(error)) {
-      const retryMs = getRetryDelayFromError(error);
-      gymLoadCooldownUntil = Date.now() + retryMs;
-      console.warn(`[Step 1] Business units rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
-      const noResults = document.getElementById('noResults');
-      if (noResults) {
-        noResults.classList.remove('hidden');
-        noResults.textContent = `Vi henter haller igen om ~${Math.ceil(retryMs / 1000)}s...`;
-      }
-      if (!gymLoadRetryTimeoutId) {
-        gymLoadRetryTimeoutId = setTimeout(() => {
-          gymLoadRetryTimeoutId = null;
-          loadGymsFromAPI().catch((retryError) => {
-            console.warn('[Step 1] Auto-retry gym load failed:', retryError);
-          });
-        }, Math.max(retryMs + 250, 1000));
-      }
-      return;
-    }
+    // Absolute last resort — should be rare because getBusinessUnits already
+    // returns the baked-in list. Still never leave Step 1 empty if we can help it.
     console.error('Failed to load gyms from API:', error);
-
-    // Show user-friendly error message
+    const emergency = getEmergencyBusinessUnits(getAcceptLanguageHeader());
     const gymList = document.querySelector('.gym-list');
     const noResults = document.getElementById('noResults');
+    if (gymList && emergency?.data?.length) {
+      gymsWithDistances = emergency.data;
+      gymList.innerHTML = '';
+      emergency.data.forEach((gym) => {
+        if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
+      });
+      setupGymEventListeners();
+      if (noResults) noResults.classList.add('hidden');
+      scheduleGymListRecovery(error);
+      return;
+    }
     if (gymList && noResults) {
       gymList.innerHTML = '';
       noResults.classList.remove('hidden');
-
-      // Provide more helpful error message based on error type
       let errorMessage = 'Failed to load locations. ';
       if (error.message && error.message.includes('HTML instead of JSON')) {
         errorMessage += 'API proxy may not be configured correctly. Please contact support.';
       } else {
         errorMessage += error.message || 'Please check console for details.';
       }
-
       noResults.textContent = errorMessage;
     }
   }
