@@ -120,6 +120,10 @@
             sampleRate: 1.0,
             // Performance tracing: 100% locally for verification, 10% in production (quota)
             tracesSampleRate: isProduction ? 0.1 : 1.0,
+            // Session Replay: do not record every visit. Buffer mode is started manually
+            // (after Cookiebot statistics consent) so User Feedback / errors can attach a replay.
+            replaysSessionSampleRate: 0,
+            replaysOnErrorSampleRate: 0,
             // Note: `debug: true` requires a *.debug.min.js CDN bundle; omitted for the production min bundle.
             release: 'join-boulders-dk@' + (new Date().toISOString().split('T')[0]),
             integrations: [
@@ -129,7 +133,14 @@
                   /^\//, // same-origin /api-proxy and Vite /api proxies
                 ],
               }),
-              // Session Replay is intentionally not enabled — bundle includes it for feedback support only.
+              Sentry.replayIntegration({
+                // Privacy-first defaults for a membership/checkout flow
+                maskAllText: true,
+                maskAllInputs: true,
+                blockAllMedia: true,
+                networkDetailAllowUrls: [],
+                networkCaptureBodies: false,
+              }),
               Sentry.feedbackIntegration(defaultFeedbackOptions),
             ],
             // Filter out common non-critical errors
@@ -203,6 +214,42 @@
 
           window.Sentry = Sentry;
 
+          function hasStatisticsConsent() {
+            try {
+              // Cookiebot statistics category maps to analytics_storage / Session Replay.
+              if (window.Cookiebot && window.Cookiebot.consent) {
+                return !!window.Cookiebot.consent.statistics;
+              }
+            } catch (e) {
+              // Ignore consent lookup errors
+            }
+            // Local/dev without Cookiebot: allow buffering so feedback+replay can be verified.
+            return !isProduction;
+          }
+
+          function syncSentryReplayWithConsent() {
+            const replay = Sentry.getReplay && Sentry.getReplay();
+            if (!replay) return;
+
+            if (hasStatisticsConsent()) {
+              if (typeof replay.startBuffering === 'function') {
+                replay.startBuffering();
+              }
+            } else if (typeof replay.stop === 'function') {
+              replay.stop();
+            }
+          }
+
+          window.syncSentryReplayWithConsent = syncSentryReplayWithConsent;
+
+          // Cookiebot fires these as consent changes; also sync immediately if already decided.
+          window.addEventListener('CookiebotOnConsentReady', syncSentryReplayWithConsent);
+          window.addEventListener('CookiebotOnAccept', syncSentryReplayWithConsent);
+          window.addEventListener('CookiebotOnAcceptAll', syncSentryReplayWithConsent);
+          window.addEventListener('CookiebotOnDecline', syncSentryReplayWithConsent);
+          window.addEventListener('CookiebotOnDeclineAll', syncSentryReplayWithConsent);
+          syncSentryReplayWithConsent();
+
           function getFeedbackOptionOverrides() {
             if (typeof window.getProblemReportFeedbackOptions === 'function') {
               return window.getProblemReportFeedbackOptions() || {};
@@ -273,6 +320,10 @@
               console.warn('[Sentry] Feedback integration unavailable');
               return;
             }
+
+            // Ensure buffer mode is running (when consented) before the form opens,
+            // so the submission can attach the prior ~60s of session activity.
+            syncSentryReplayWithConsent();
 
             if (typeof window.enrichProblemReportContext === 'function') {
               window.enrichProblemReportContext();
