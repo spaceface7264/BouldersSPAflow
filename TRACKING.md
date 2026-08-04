@@ -68,6 +68,38 @@ CSP refusals                    : 0
 
 ---
 
+## Meta: browser pixel + server-side CAPI
+
+Meta receives every purchase twice on purpose — once from the browser pixel and once from the
+Conversions API — and relies on a shared **event name + event ID** to collapse them into one
+conversion. Both halves must agree or Meta counts both.
+
+| | |
+|---|---|
+| Pixel | `Boulders.dk pixel`, ID `186711226889123` |
+| Server container | `join.boulders.dk-server` (`GTM-P8DL49HC`), hosted on Stape |
+| Server tag | `Meta CAPI` — Stape's *Facebook Conversion API* template |
+| Server event name | *Inherit from client* (Stape maps GA4 `purchase` → Meta `Purchase`) |
+| Server event ID | `{{ed - event_id}}` — the `event_id` forwarded by the web GA4 tags |
+
+The web `GA4 - Event - *` tags forward `event_id` plus the user-data keys to the server container,
+so `{{ed - …}}` on the server resolves to what `app.js` published. That half has been correct since
+2026-07.
+
+The five browser pixel tags map one Data Layer event each to a Meta event:
+
+| Web tag | Meta event | Fires on |
+|---|---|---|
+| `Facebook Pixel - purchase` | standard `Purchase` | `ce - purchase` |
+| `Facebook Pixel - purchase_99kr` | custom `purchase_99kr` | `ce - purchase_99kr` |
+| `Facebook Pixel - purchase_membership` | custom `purchase_membership` | `purchase - membership not 15` |
+| `Facebook Pixel - purchase_valuecard` | custom `purchase_valuecard` | `purchase - category value-card` |
+| `Facebook Pixel - purchase_fifteen` | custom `purchase_fifteen` | `purchase - 15 days` |
+
+A 99 kr order therefore produces **two legitimate Meta events**: a standard `Purchase` and a custom
+`purchase_99kr`, because `app.js` dual-fires `purchase` and `purchase_99kr`. Adding those two
+together double counts by construction — that is reporting, not a tracking fault.
+
 ## Data Layer contract
 
 `resolvePurchaseTrackingMetadata()` in `app.js` publishes these top-level keys on `purchase` and
@@ -146,6 +178,16 @@ Google Ads needs, per [Google's CSP reference](https://developers.google.com/tag
 - Draft email to Thit at s360 covering the three findings below is **written but not sent** — Rami is
   holding it until other fixes land.
 
+- Four browser pixel tags still read the dead `--dlv - customer.*` keys for advanced matching:
+  `purchase`, `purchase_membership`, `purchase_valuecard`, `purchase_fifteen`. They should use
+  `DLV - email`, `DLV - phone` (digits-only — Meta, *not* `phone_e164`), `DLV - fn`, `DLV - ln`,
+  `DLV - zip`, `DLV - ct`, `DLV - st`, `DLV - country`. `purchase_99kr` is already correct, which is
+  why it scores 8.2/10 in Meta against 4.8 for `purchase_membership`. Planned as a second publish
+  after the deduplication fix is verified.
+- The server `Meta CAPI` tag is set to *Send data always*. The trigger is named
+  `meta events & ad_storage`, so consent is probably enforced there — worth confirming, because
+  sending customer data server-side for users who declined marketing cookies is a compliance issue.
+
 **s360's (do not change these without them):**
 
 - `-- User-Provided Data` maps `--dlv - customer.email` and `--dlv - customer.address.*`, keys this
@@ -153,6 +195,8 @@ Google Ads needs, per [Google's CSP reference](https://developers.google.com/tag
   `GAds -` conversions, four `GA4 - Event -` purchases, and `GAds User-provided Data Event` — meaning
   enhanced conversions send nothing. Matches the *"Enhanced conversions has setup issues"* diagnostic
   in the Ads account. `UPD - Purchase` is mapped correctly and can be reused.
+- Meta reporting must not add the standard `Purchase` and the custom `purchase_99kr` together for
+  99 kr orders. Both fire by design; summing them double counts.
 - The 99 kr day ticket is a value-card product in BRP, so the trigger `purchase - category value-card`
   also matches it. Every 99 kr order records as both `99 kr.` and `Value Card Purchase`, double
   counting in campaign optimisation.
@@ -160,6 +204,51 @@ Google Ads needs, per [Google's CSP reference](https://developers.google.com/tag
   conversion data has gaps across all `GAds -` tags.
 
 ---
+
+## Change log
+
+GTM container changes are not in this repo, so record them here. Reverting any of them means
+republishing an earlier container version: **GTM → Versions → pick the version → Publish**.
+
+### 2026-08-04 — Meta deduplication fix (web container `GTM-KHB92N9P`)
+
+Published as `Fix Meta event deduplication (browser event ID)`. Five tags modified, nothing added or
+deleted.
+
+| Tag | Event ID before | Event ID after |
+|---|---|---|
+| `Facebook Pixel - purchase` | `{{Unique Event ID}}` | `{{DLV - event_id}}` |
+| `Facebook Pixel - purchase_99kr` | *(empty)* | `{{DLV - event_id}}` |
+| `Facebook Pixel - purchase_membership` | `{{Unique Event ID}}` | `{{DLV - event_id}}` |
+| `Facebook Pixel - purchase_valuecard` | `{{Unique Event ID}}` | `{{DLV - event_id}}` |
+| `Facebook Pixel - purchase_fifteen` | `{{Unique Event ID}}` | `{{DLV - event_id}}` |
+
+**Why.** `{{Unique Event ID}}` is generated per page load in the browser and the server cannot
+reproduce it; on `purchase_99kr` the field was empty entirely. The server was already sending
+`{{ed - event_id}}`, so Meta saw two unrelated IDs for the same purchase and counted both.
+
+**Evidence before the change**, 28 Jul – 3 Aug:
+
+| Source | Count |
+|---|---|
+| 99 kr tickets sold (BRP) | 343 |
+| `purchase_99kr` events in GA4 | 296 |
+| Conversions in Meta | 470 |
+
+Meta's own panel read *"Additional conversions reported from the Conversions API: **+136.4%** vs
+pixel alone"* on the `Purchase` event. A healthy setup adds roughly 5–20%.
+
+**How to tell it worked.** That percentage should fall sharply within a day or two, and Meta's event
+volume should converge on actual sales. Historical data stays inflated; the fix is not retroactive.
+
+**To revert:** republish the GTM version immediately preceding `Fix Meta event deduplication
+(browser event ID)`.
+
+### 2026-08-04 — Google Ads 99 kr conversion (web container `GTM-KHB92N9P`)
+
+Published as `Add Google Ads 99 kr day-ticket conversion (AW-805899643)`. Five objects added, none
+modified: `DLV - phone_e164`, `DLV - country`, `DLV - st`, `UPD - Purchase`, and the tag
+`GAds - 99 kr day ticket`. See the Google Ads section above.
 
 ## Gotchas for whoever picks this up
 
