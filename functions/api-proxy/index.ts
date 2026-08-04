@@ -25,6 +25,19 @@ const ALLOWED_PATH_PATTERNS = [
 // Maximum request body size (1MB)
 const MAX_REQUEST_SIZE = 1024 * 1024;
 
+// Endpoints that are safe to cache at the edge: public, identical for every
+// visitor (aside from language), and change rarely. Caching these here
+// (shared across ALL visitors) cuts outbound calls to BRP far more than
+// any per-browser caching can, which helps us stay under BRP's rate limit.
+const EDGE_CACHEABLE_PATHS = [
+  '/api/reference/business-units',
+];
+const EDGE_CACHE_TTL_SECONDS = 15 * 60; // 15 minutes — gym list rarely changes
+
+function isEdgeCacheablePath(path: string, method: string): boolean {
+  return method === 'GET' && EDGE_CACHEABLE_PATHS.includes(path);
+}
+
 // Helper function to validate origin
 // Returns the origin if valid, null if invalid
 function validateOrigin(origin: string | null): string | null {
@@ -176,6 +189,38 @@ export async function onRequest(context: any) {
   console.log('[API Proxy] Constructed URL:', apiUrl);
   console.log('[API Proxy] Full request will be:', request.method, apiUrl);
 
+  // Serve from the shared edge cache when possible, so many visitors can
+  // reuse one response instead of each triggering a call to BRP.
+  // Use a synthetic URL with a query param (not a #fragment) — Cache API
+  // implementations often ignore URL fragments when matching keys.
+  const cacheable = isEdgeCacheablePath(apiPath, request.method);
+  const language = request.headers.get('Accept-Language') || 'da-DK';
+  const edgeCache = (globalThis as any).caches?.default;
+  const cacheKey = cacheable
+    ? new Request(
+        `https://join.boulders.dk/__edge_cache${apiPath}?lang=${encodeURIComponent(language)}`,
+        { method: 'GET' }
+      )
+    : null;
+
+  if (cacheKey && edgeCache) {
+    const cachedResponse = await edgeCache.match(cacheKey);
+    if (cachedResponse) {
+      const responseHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Edge-Cache': 'HIT',
+      };
+      if (allowedOrigin) {
+        Object.assign(responseHeaders, getSecurityHeaders(allowedOrigin));
+      }
+      return new Response(await cachedResponse.text(), {
+        status: cachedResponse.status,
+        headers: responseHeaders,
+      });
+    }
+  }
+
   try {
     // Build request headers
     const headers: Record<string, string> = {
@@ -256,7 +301,20 @@ export async function onRequest(context: any) {
     if (allowedOrigin) {
       Object.assign(responseHeaders, getSecurityHeaders(allowedOrigin));
     }
-    
+
+    if (cacheKey && edgeCache && response.status === 200) {
+      const cacheEntry = new Response(JSON.stringify(jsonData), {
+        status: response.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': `public, max-age=${EDGE_CACHE_TTL_SECONDS}`,
+        },
+      });
+      context.waitUntil(edgeCache.put(cacheKey, cacheEntry));
+    }
+
+    responseHeaders['X-Edge-Cache'] = cacheKey ? 'MISS' : 'BYPASS';
+
     return new Response(
       JSON.stringify(jsonData),
       {
