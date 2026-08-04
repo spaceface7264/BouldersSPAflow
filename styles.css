@@ -10875,15 +10875,53 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
 }
 
 /* =================================
-   SENTRY USER FEEDBACK ("Report a problem")
+   REPORT A PROBLEM (custom trigger + Sentry form)
    ================================= */
-/* Keep trigger above cart/modals, below Cookiebot (~2e9). Leave bottom room for cookie banner. */
+.report-problem-btn {
+    position: fixed;
+    right: 16px;
+    bottom: 72px; /* leave room for Cookiebot banner */
+    z-index: 10050; /* above cart/modals, below Cookiebot */
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(31, 40, 55, 0.72);
+    color: rgba(209, 213, 219, 0.9);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.report-problem-btn:hover,
+.report-problem-btn:focus-visible {
+    color: #fff;
+    border-color: rgba(255, 0, 255, 0.55);
+    background: rgba(31, 40, 55, 0.9);
+    outline: none;
+}
+
+.report-problem-btn:focus-visible {
+    box-shadow: 0 0 0 2px rgba(255, 0, 255, 0.45);
+}
+
+.report-problem-btn__icon {
+    display: block;
+    pointer-events: none;
+}
+
+/* Theme the Sentry feedback dialog only (trigger is custom above). */
 #sentry-feedback {
     --font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
     --font-size: 14px;
-    --z-index: 10050;
-    --inset: auto 0 72px auto;
-    --page-margin: 16px;
+    --z-index: 10060;
     --accent-background: #FF00FF;
     --accent-foreground: #ffffff;
     --foreground: #1F2837;
