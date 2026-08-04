@@ -7,17 +7,21 @@ first-climb day ticket.
 |-------|-------|
 | Conversion name | `99 kr.` |
 | Conversion ID | `805899643` (tag ID `AW-805899643`) |
-| Conversion label | `1NImCKjKItscEPuapIAD` — **verify before saving, see below** |
+| Conversion label | `1NImCKjKltscEPuapIAD` — character 9 is a lowercase L, see below |
 | Currency | `DKK` |
 | Default value | `1.0` (overridden with the real order value, see Step 4) |
 | Data Layer event | `purchase_99kr` |
 | GTM web container | `GTM-KHB92N9P` |
 
-> **Verify the conversion label character by character.** The label contains a glyph that renders
-> identically as capital `I` and lowercase `l` in the Google Ads UI and in the email s360 sent
-> (`1NImCKjK` **I/l** `tscEPuapIAD`). Copy it straight from Google Ads → Goals → Conversions →
-> `99 kr.` → *Tag setup*, and paste it into GTM. A wrong character silently records zero
-> conversions.
+> **Never retype the conversion label.** It mixes characters that render identically in most UI
+> fonts. Verified against the codepoints, the 20 characters are:
+>
+> `1` (digit one) `N` `I` (capital i) `m` `C` `K` `j` `K` `l` (lowercase L) `t` `s` `c` `E` `P` `u`
+> `a` `p` `I` (capital i) `A` `D`
+>
+> Copy it from Google Ads → Goals → Conversions → `99 kr.` → *Manage* → *Use Google Tag Manager*,
+> or let the **Set up in Google Tag Manager** button on that screen pre-fill it. A wrong character
+> silently records zero conversions and reports no error in GTM or Google Ads.
 
 ---
 
@@ -164,19 +168,18 @@ Without it, `gclid` is not persisted and click-through conversions go unattribut
 `Order ID` is what makes Google drop duplicates if the same order is ever reported twice (for
 example a client-side and a server-side hit), so it must not be left blank.
 
-The conversion action was created with a fixed value of `1.0 DKK`. Passing `{{DLV -
-ecommerce.value}}` reports the actual paid amount (`99`, or less with a discount code), but only if
-the conversion action in Google Ads is set to **Use different values for each conversion** — with
-the default *Use the same value*, Google ignores the value the tag sends. Set that under
-Goals → Conversions → `99 kr.` → *Edit settings* → *Value*, keeping `1 DKK` as the fallback for
-hits that arrive without a value. If s360 would rather keep a flat value, leave the tag's value
-field empty instead of hard-coding `1`.
+Passing `{{DLV - ecommerce.value}}` reports the actual paid amount (`99`, or less with a discount
+code), but only if the conversion action in Google Ads is set to **Use different values for each
+conversion** — with *Use the same value*, Google ignores the value the tag sends. The `99 kr.`
+action is already set correctly: its Details tab reads *"Use different values. If there's no value,
+use DKK1."* Verify under Goals → Conversions → `99 kr.` → *Edit settings* → *Value* if in doubt.
 
 ### Enhanced conversions (optional but recommended)
 
 Enhanced conversions must first be switched on for the conversion action in Google Ads
 (Goals → Conversions → `99 kr.` → *Enhanced conversions* → accept the customer data terms, method
-**Google Tag Manager**). Then wire the data up in GTM.
+**Google Tag Manager**). On the `99 kr.` action this was already done when s360 created it — the
+Details tab reads *Enhanced Conversions: Managed through Google Tag*. Then wire the data up in GTM.
 
 First create the user data variable — **Variables → New → User-Provided Data** (under *Utilities*),
 type **Manual configuration**:
