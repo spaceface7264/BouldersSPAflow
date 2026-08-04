@@ -1135,6 +1135,12 @@ const PARENT_REQUIRED_FIELDS = [
 const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 
 
+// Business units rarely change within a single visit; cache per language
+// for a few minutes so repeated calls (init, geolocation toggle, language
+// switch back-and-forth) don't re-hit BRP and trip their rate limit.
+const BUSINESS_UNITS_CACHE_TTL_MS = 5 * 60 * 1000;
+const businessUnitsCache = new Map(); // languageCode -> { data, timestamp }
+
 // API Integration Functions
 class BusinessUnitsAPI {
   constructor(baseUrl = null) {
@@ -1147,6 +1153,13 @@ class BusinessUnitsAPI {
   // Step 3: Fetch from /api/reference/business-units endpoint
   // Note: This endpoint uses "No Auth" according to Postman docs
   async getBusinessUnits() {
+    const language = getAcceptLanguageHeader();
+    const cached = businessUnitsCache.get(language);
+    if (cached && (Date.now() - cached.timestamp) < BUSINESS_UNITS_CACHE_TTL_MS) {
+      devLog('Using cached business units for', language);
+      return cached.data;
+    }
+
     try {
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
@@ -1154,9 +1167,9 @@ class BusinessUnitsAPI {
         path: '/api/reference/business-units',
       });
       devLog('Fetching business units from:', url);
-      
+
       const headers = {
-        'Accept-Language': getAcceptLanguageHeader(), // Step 2: Language default
+        'Accept-Language': language, // Step 2: Language default
         'Content-Type': 'application/json',
         // No Authorization header needed - endpoint uses "No Auth"
       };
@@ -1165,6 +1178,8 @@ class BusinessUnitsAPI {
       devLog('Business units API response:', data);
       devLog('Response type:', Array.isArray(data) ? 'Array' : typeof data);
       devLog('Number of items:', Array.isArray(data) ? data.length : 'N/A');
+
+      businessUnitsCache.set(language, { data, timestamp: Date.now() });
 
       return data;
     } catch (error) {
