@@ -10877,19 +10877,20 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
 /* =================================
    REPORT A PROBLEM (custom trigger + Sentry form)
    ================================= */
+/* Mirror Cookiebot's bottom-left floating control: flush to the opposite corner. */
 .report-problem-btn {
     position: fixed;
-    right: 16px;
-    bottom: 72px; /* leave room for Cookiebot banner */
+    right: max(16px, env(safe-area-inset-right, 0px));
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
     z-index: 10050; /* above cart/modals, below Cookiebot */
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     margin: 0;
     border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 8px;
-    background: rgba(31, 40, 55, 0.72);
-    color: rgba(209, 213, 219, 0.9);
+    border-radius: 50%;
+    background: rgba(31, 40, 55, 0.78);
+    color: rgba(209, 213, 219, 0.92);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -10898,13 +10899,16 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    /* Keep tappable on mobile without fighting page scroll */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .report-problem-btn:hover,
 .report-problem-btn:focus-visible {
     color: #fff;
     border-color: rgba(255, 0, 255, 0.55);
-    background: rgba(31, 40, 55, 0.9);
+    background: rgba(31, 40, 55, 0.92);
     outline: none;
 }
 
@@ -10915,6 +10919,16 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
 .report-problem-btn__icon {
     display: block;
     pointer-events: none;
+}
+
+@media (max-width: 640px) {
+    .report-problem-btn {
+        /* Match Cookiebot edge inset on phones; stay clear of home-indicator */
+        right: max(12px, env(safe-area-inset-right, 0px));
+        bottom: max(12px, env(safe-area-inset-bottom, 0px));
+        width: 40px;
+        height: 40px;
+    }
 }
 
 /* Theme the Sentry feedback dialog only (trigger is custom above). */
