@@ -50,8 +50,8 @@
       gtag("set", "url_passthrough", false);
     </script>
 
-    <!-- Sentry Error Monitoring - Load from CDN and initialize immediately -->
-    <script src="https://browser.sentry-cdn.com/7.91.0/bundle.min.js" crossorigin="anonymous"></script>
+    <!-- Sentry Error Monitoring - tracing bundle required for performance (pageload/navigation/fetch) -->
+    <script src="https://browser.sentry-cdn.com/7.91.0/bundle.tracing.min.js" crossorigin="anonymous"></script>
     <script>
       // Initialize Sentry immediately - runs synchronously before any modules
       (function() {
@@ -64,9 +64,19 @@
               environment: isProduction ? 'production' : 'development',
               sendDefaultPii: true,
               sampleRate: 1.0,
-              tracesSampleRate: 0.1,
+              // Performance tracing: 100% locally for verification, 10% in production (quota)
+              tracesSampleRate: isProduction ? 0.1 : 1.0,
               debug: !isProduction, // Only enable debug in development
               release: 'join-boulders-dk@' + (new Date().toISOString().split('T')[0]), // Release tracking
+              integrations: [
+                // v7 CDN API — creates pageload + history navigation + fetch/XHR spans
+                new Sentry.BrowserTracing({
+                  tracePropagationTargets: [
+                    'localhost',
+                    /^\//, // same-origin /api-proxy and Vite /api proxies
+                  ],
+                }),
+              ],
               // Filter out common non-critical errors
               ignoreErrors: [
                 // Browser extensions
@@ -74,10 +84,24 @@
                 'chrome-extension://',
                 'moz-extension://',
                 'safari-extension://',
+                'runtime.sendMessage',
+                '_AutofillCallbackHandler',
+                // In-app browsers / WebViews (Meta, Android)
+                'webkit.messageHandlers',
+                'Java object is gone',
                 // Network errors that are expected
                 'NetworkError',
                 'Failed to fetch',
                 'Network request failed',
+                'Load failed',
+                // Expected auth / rate-limit / campaign outcomes (not product bugs)
+                'INVALID_CREDENTIALS',
+                'Rate limit exceeded',
+                'Too many requests',
+                'HTTP error! status: 429',
+                /rate\s*limit/i,
+                /\b429\b/,
+                'PRODUCT_NOT_ALLOWED',
                 // User cancellations
                 'AbortError',
                 'User cancelled',
@@ -89,6 +113,23 @@
                 /^Javascript error: Script error\.?$/,
               ],
               beforeSend(event, hint) {
+                const err = hint && hint.originalException;
+                const message =
+                  (err && (err.message || String(err))) ||
+                  (event.exception && event.exception.values && event.exception.values[0] && event.exception.values[0].value) ||
+                  event.message ||
+                  '';
+                const status = err && err.status;
+                // Defense in depth: drop expected client noise even if ignoreErrors misses a variant.
+                // 429 / rate-limit is a hard no — never an Error issue, any message shape.
+                // Do not blanket-drop all 400/401 — only known auth/validation outcomes.
+                if (
+                  status === 429 ||
+                  /\b429\b|rate\s*limit|too many requests/i.test(message) ||
+                  /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
+                ) {
+                  return null;
+                }
                 // Only log in development
                 if (!isProduction) {
                   console.log('[Sentry] Capturing:', event.message || event.exception?.values?.[0]?.value);

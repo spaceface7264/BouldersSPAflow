@@ -1,7 +1,18 @@
 // Sentry is initialized in index.html via CDN script tag
 // Use window.Sentry for error tracking
 const Sentry = window.Sentry || {};
+
+/** Rate limits are expected backend backpressure — never report them as product errors. */
+const isRateLimitLikeError = (error) => {
+  if (!error) return false;
+  if (error.status === 429) return true;
+  const message = typeof error.message === 'string' ? error.message : String(error);
+  return /\b429\b|rate\s*limit|too many requests/i.test(message);
+};
+
 const captureException = (error, context) => {
+  // Hard gate: 429 / rate-limit must never become Sentry issues (call sites can forget).
+  if (isRateLimitLikeError(error)) return;
   if (Sentry.captureException) {
     Sentry.captureException(error, context);
   }
@@ -1745,6 +1756,14 @@ class AuthAPI {
         const payloadText = typeof errorPayload === 'string' ? errorPayload : JSON.stringify(errorPayload);
         console.error(`[Step 6] Login error (${error.status || 'unknown'}):`, payloadText || error);
 
+        const rethrowLoginError = (message) => {
+          const loginError = new Error(message);
+          // Preserve HTTP status so the outer catch can skip expected 400/401/429 noise in Sentry.
+          loginError.status = error.status;
+          loginError.payload = errorPayload;
+          throw loginError;
+        };
+
         // Handle rate limit errors with better messaging
         if (error.status === 429) {
           let retryAfterSeconds = 60; // Default 1 minute (60 seconds)
@@ -1764,17 +1783,17 @@ class AuthAPI {
           const retryMessage = retryMinutes > 0
             ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
             : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
-          throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${error.status} - ${payloadText})`);
+          rethrowLoginError(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${error.status} - ${payloadText})`);
         }
 
         // Handle 401 errors - preserve error structure for getErrorMessage
         if (error.status === 401 && errorPayload && typeof errorPayload === 'object') {
           if (errorPayload.error?.code === 'INVALID_CREDENTIALS' || errorPayload.error?.message) {
-            throw new Error(`Login failed: ${error.status} - ${payloadText}`);
+            rethrowLoginError(`Login failed: ${error.status} - ${payloadText}`);
           }
         }
 
-        throw new Error(`Login failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        rethrowLoginError(`Login failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
 
       devLog('[Step 6] Login response:', data);
@@ -1823,13 +1842,22 @@ class AuthAPI {
     } catch (error) {
       console.error('[Step 6] Login error:', error);
 
-      // Report login errors to Sentry (excluding rate limits and user input errors)
-      if (error.status !== 429 && error.status !== 400 && error.status !== 401) {
+      // Report unexpected login failures only — wrong password, validation, and rate limits are UX.
+      const status = error.status;
+      const message = typeof error.message === 'string' ? error.message : '';
+      const isExpectedLoginNoise =
+        status === 429 ||
+        status === 400 ||
+        status === 401 ||
+        message.includes('INVALID_CREDENTIALS') ||
+        message.includes('Rate limit exceeded') ||
+        /Login failed:\s*(400|401)\b/.test(message);
+      if (!isExpectedLoginNoise) {
         captureException(error, {
           tags: {
             flow: 'authentication',
             error_type: 'login_failed',
-            status: error.status,
+            status: status,
           },
         });
       }
@@ -3780,7 +3808,12 @@ class PaymentAPI {
           }
         }
         
-        throw new Error(`Generate Payment Link Card failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        const paymentLinkError = new Error(
+          `Generate Payment Link Card failed: ${error.status || 'unknown'} - ${payloadText || error.message}`
+        );
+        paymentLinkError.status = error.status;
+        paymentLinkError.payload = error.payload;
+        throw paymentLinkError;
       }
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
@@ -18030,10 +18063,7 @@ async function autoEnsureOrderIfReady(context = 'auto') {
 }
 
 function isRateLimitError(error) {
-  if (!error) return false;
-  if (error.status === 429) return true;
-  const message = typeof error.message === 'string' ? error.message : '';
-  return message.includes('429') || message.toLowerCase().includes('too many requests');
+  return isRateLimitLikeError(error);
 }
 
 function getRetryDelayFromError(error, defaultMs = 120000) {
@@ -18472,7 +18502,11 @@ async function handleCheckout() {
                 } else {
                   setCheckoutLoadingState(false);
                   state.checkoutInProgress = false;
-                  throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again.`);
+                  const rateLimitError = new Error(
+                    `Rate limit exceeded. Please wait ${retryMessage} before trying again.`
+                  );
+                  rateLimitError.status = 429;
+                  throw rateLimitError;
                 }
               } else {
                 console.warn('[checkout] ⚠️ Login after customer creation failed:', loginError);
@@ -19454,26 +19488,28 @@ async function handleCheckout() {
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
 
-          // Report critical payment errors to Sentry
-          captureException(error, {
-            tags: {
-              flow: 'checkout',
-              error_type: 'payment_link_generation',
-            },
-            extra: {
-              orderId: state.fullOrder?.id,
-              subscriptionItems: state.fullOrder?.subscriptionItems,
-            },
-          });
-
           // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
           const isProductNotAllowed = error.isProductNotAllowed || 
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
           
           if (isProductNotAllowed) {
-            // Show modal with options instead of toast
+            // Show modal with options instead of toast — expected campaign restriction, not a product bug
             showCampaignRejectionModal();
             return; // Stop checkout flow without throwing error
+          }
+
+          // Report unexpected payment errors only (skip rate limits — handled as UX cooldown)
+          if (!isRateLimitError(error)) {
+            captureException(error, {
+              tags: {
+                flow: 'checkout',
+                error_type: 'payment_link_generation',
+              },
+              extra: {
+                orderId: state.fullOrder?.id,
+                subscriptionItems: state.fullOrder?.subscriptionItems,
+              },
+            });
           }
           
           // Check if this is a payment link generation error due to backend pricing bug
