@@ -20590,14 +20590,26 @@ function buildStoredCheckoutCustomer(payloadCustomer = {}) {
   };
 }
 
-function resolvePurchaseTrackingMetadata(order, storedOrder = null, storedCustomer = null) {
+// BRP order numbers and order ids come from separate sequences, so falling back from one to the
+// other lets two different orders report the same transaction id — order 1124358 (number 1124360)
+// and order 1124360 (no number available) both reported 1124360, which downstream platforms read
+// as one order purchased twice. Namespace the fallback so it can never collide with a real number.
+function resolvePurchaseTransactionId(order = null, orderId = null) {
+  const orderNumber = order?.numberIsPlaceholder ? null : order?.number;
+  const normalizedNumber = normalizeMetaTrackingValue(orderNumber);
+  if (normalizedNumber) return normalizedNumber;
+
+  const fallbackId = normalizeMetaTrackingValue(orderId ?? order?.id);
+  return fallbackId ? `order-${fallbackId}` : null;
+}
+
+function resolvePurchaseTrackingMetadata(order, storedOrder = null, storedCustomer = null, transactionId = null) {
   const businessUnit = order?.businessUnit || {};
   const gymId = businessUnit.id || storedOrder?.selectedBusinessUnit || state.selectedBusinessUnit || null;
   const gymName = businessUnit.name || businessUnit.label || null;
   const paymentType = storedOrder?.paymentMethod || state.paymentMethod || null;
   const landingPath = normalizePathname(window.location.pathname);
   const customer = order?.customer || state.authenticatedCustomer || null;
-  const transactionId = order?.number ?? order?.id ?? null;
   const eventIdBase = transactionId != null ? String(transactionId) : null;
   const tokenMetadata = getTokenMetadata();
   const email = normalizeMetaTrackingEmail(
@@ -20707,8 +20719,8 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
     purchaseValue = sumPurchaseItemsKr(purchaseItems);
   }
 
-  const transactionId = order?.number ?? order?.id ?? orderId;
-  const metadata = resolvePurchaseTrackingMetadata(order, storedOrder, storedCustomer);
+  const transactionId = resolvePurchaseTransactionId(order, orderId);
+  const metadata = resolvePurchaseTrackingMetadata(order, storedOrder, storedCustomer, transactionId);
   const dualFire99kr = isFirstClimbPurchase(order, storedOrder);
 
   try {
@@ -20871,7 +20883,10 @@ async function loadOrderForConfirmation(orderId) {
           const summaryOrder = {
             id: orderId,
             orderId,
+            // The order fetch failed, so the real order number is unknown; the id stands in for
+            // display only. Tracking must not treat it as a number — see resolvePurchaseTransactionId.
             number: orderId,
+            numberIsPlaceholder: true,
             created: new Date().toISOString(),
             total: storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal ?? 0,
             totalAmount: storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal ?? 0,
