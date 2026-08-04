@@ -50,128 +50,365 @@
       gtag("set", "url_passthrough", false);
     </script>
 
-    <!-- Sentry Error Monitoring - tracing bundle required for performance (pageload/navigation/fetch) -->
-    <script src="https://browser.sentry-cdn.com/7.91.0/bundle.tracing.min.js" crossorigin="anonymous"></script>
+    <!-- Sentry Error Monitoring - tracing + user feedback (replay code present in bundle but not enabled) -->
+    <script
+      src="https://browser.sentry-cdn.com/10.69.0/bundle.tracing.replay.feedback.min.js"
+      integrity="sha384-MYqf3df88IARhd6SFXGE6GuT/Laybfhi/vpKSqFQKknTRhtSxiXnc5rIDOWmqWmz"
+      crossorigin="anonymous"
+    ></script>
     <script>
       // Initialize Sentry immediately - runs synchronously before any modules
       (function() {
-        if (typeof Sentry !== 'undefined') {
-          try {
-            const isProduction = window.location.hostname === 'join.boulders.dk';
-            
-            Sentry.init({
-              dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
-              environment: isProduction ? 'production' : 'development',
-              sendDefaultPii: true,
-              sampleRate: 1.0,
-              // Performance tracing: 100% locally for verification, 10% in production (quota)
-              tracesSampleRate: isProduction ? 0.1 : 1.0,
-              debug: !isProduction, // Only enable debug in development
-              release: 'join-boulders-dk@' + (new Date().toISOString().split('T')[0]), // Release tracking
-              integrations: [
-                // v7 CDN API — creates pageload + history navigation + fetch/XHR spans
-                new Sentry.BrowserTracing({
-                  tracePropagationTargets: [
-                    'localhost',
-                    /^\//, // same-origin /api-proxy and Vite /api proxies
-                  ],
-                }),
-              ],
-              // Filter out common non-critical errors
-              ignoreErrors: [
-                // Browser extensions
-                'top.GLOBALS',
-                'chrome-extension://',
-                'moz-extension://',
-                'safari-extension://',
-                'runtime.sendMessage',
-                '_AutofillCallbackHandler',
-                // In-app browsers / WebViews (Meta, Android)
-                'webkit.messageHandlers',
-                'Java object is gone',
-                // Network errors that are expected
-                'NetworkError',
-                'Failed to fetch',
-                'Network request failed',
-                'Load failed',
-                // Expected auth / rate-limit / campaign outcomes (not product bugs)
-                'INVALID_CREDENTIALS',
-                'Rate limit exceeded',
-                'Too many requests',
-                'HTTP error! status: 429',
-                /rate\s*limit/i,
-                /\b429\b/,
-                'PRODUCT_NOT_ALLOWED',
-                // User cancellations
-                'AbortError',
-                'User cancelled',
-                // Common browser quirks
-                'ResizeObserver loop limit exceeded',
-                'Non-Error promise rejection captured',
-                // Script errors from extensions
-                /^Script error\.?$/,
-                /^Javascript error: Script error\.?$/,
-              ],
-              beforeSend(event, hint) {
-                const err = hint && hint.originalException;
-                const message =
-                  (err && (err.message || String(err))) ||
-                  (event.exception && event.exception.values && event.exception.values[0] && event.exception.values[0].value) ||
-                  event.message ||
-                  '';
-                const status = err && err.status;
-                // Defense in depth: drop expected client noise even if ignoreErrors misses a variant.
-                // 429 / rate-limit is a hard no — never an Error issue, any message shape.
-                // Do not blanket-drop all 400/401 — only known auth/validation outcomes.
-                if (
-                  status === 429 ||
-                  /\b429\b|rate\s*limit|too many requests/i.test(message) ||
-                  /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
-                ) {
-                  return null;
-                }
-                // Only log in development
-                if (!isProduction) {
-                  console.log('[Sentry] Capturing:', event.message || event.exception?.values?.[0]?.value);
-                }
-                return event;
-              },
-            });
-            
-            // Verify initialization
-            const hub = Sentry.getCurrentHub();
-            const client = hub.getClient();
-            if (client) {
-              if (!isProduction) {
-                console.log('[Sentry] ✅ Initialized in', client.getOptions()?.environment, 'mode');
-              }
-            } else {
-              console.error('[Sentry] ❌ Initialization failed');
-            }
-            
-            // Make available globally
-            window.Sentry = Sentry;
-            
-            // Test function for debugging (available in all environments)
-            window.testSentry = function() {
-              const testHub = Sentry.getCurrentHub();
-              const testClient = testHub.getClient();
-              
-              if (!testClient) {
-                console.error('[Sentry Test] ❌ Client not found');
-                return;
-              }
-              
-              console.log('[Sentry Test] Sending test events...');
-              Sentry.captureException(new Error('Test error - ' + new Date().toISOString()));
-              Sentry.captureMessage('Test message - ' + new Date().toISOString(), 'info');
-              console.log('[Sentry Test] ✅ Test events sent - check dashboard in 5-10 seconds');
-            };
-          } catch (e) {
-            console.error('[Sentry] ❌ Initialization error:', e);
-          }
-        } else {
+        if (typeof Sentry === 'undefined') {
           console.error('[Sentry] ❌ Sentry SDK not loaded');
+          return;
+        }
+
+        try {
+          const isProduction = window.location.hostname === 'join.boulders.dk';
+
+          // Danish-first defaults; app.js refreshes labels when language changes.
+          const defaultFeedbackOptions = {
+            autoInject: false,
+            colorScheme: 'light',
+            showBranding: false,
+            enableScreenshot: true,
+            isEmailRequired: true,
+            showName: true,
+            showEmail: true,
+            triggerLabel: 'Rapportér et problem',
+            triggerAriaLabel: 'Rapportér et problem',
+            formTitle: 'Rapportér et problem',
+            submitButtonLabel: 'Send rapport',
+            cancelButtonLabel: 'Annuller',
+            confirmButtonLabel: 'Bekræft',
+            addScreenshotButtonLabel: 'Tilføj skærmbillede',
+            removeScreenshotButtonLabel: 'Fjern skærmbillede',
+            nameLabel: 'Navn',
+            namePlaceholder: 'Dit navn',
+            emailLabel: 'E-mail',
+            emailPlaceholder: 'din.email@example.com',
+            isRequiredLabel: '(påkrævet)',
+            messageLabel: 'Beskrivelse',
+            messagePlaceholder: 'Hvad gik galt? Hvad forventede du?',
+            successMessageText: 'Tak for din rapport!',
+            themeLight: {
+              foreground: '#1F2837',
+              background: '#ffffff',
+              accentForeground: '#ffffff',
+              accentBackground: '#FF00FF',
+              successColor: '#059669',
+              errorColor: '#df3338',
+              boxShadow: '0px 4px 24px 0px rgba(31, 40, 55, 0.16)',
+            },
+            onSubmitSuccess: function() {
+              if (typeof window.showReportProblemSuccess === 'function') {
+                window.showReportProblemSuccess();
+              }
+            },
+          };
+
+          Sentry.init({
+            dsn: "https://1cc58b6b7d525b61ce37f528a8ddf2ed@o4510727758741504.ingest.de.sentry.io/4510727788888144",
+            environment: isProduction ? 'production' : 'development',
+            sendDefaultPii: true,
+            sampleRate: 1.0,
+            // Performance tracing: 100% locally for verification, 10% in production (quota)
+            tracesSampleRate: isProduction ? 0.1 : 1.0,
+            // Session Replay: do not record every visit. Buffer mode is started manually
+            // (after Cookiebot statistics consent) so User Feedback / errors can attach a replay.
+            replaysSessionSampleRate: 0,
+            replaysOnErrorSampleRate: 0,
+            // Note: `debug: true` requires a *.debug.min.js CDN bundle; omitted for the production min bundle.
+            release: 'join-boulders-dk@' + (new Date().toISOString().split('T')[0]),
+            integrations: [
+              Sentry.browserTracingIntegration({
+                tracePropagationTargets: [
+                  'localhost',
+                  /^\//, // same-origin /api-proxy and Vite /api proxies
+                ],
+              }),
+              Sentry.replayIntegration({
+                // Privacy-first defaults for a membership/checkout flow
+                maskAllText: true,
+                maskAllInputs: true,
+                blockAllMedia: true,
+                networkDetailAllowUrls: [],
+                networkCaptureBodies: false,
+              }),
+              Sentry.feedbackIntegration(defaultFeedbackOptions),
+            ],
+            // Filter out common non-critical errors
+            ignoreErrors: [
+              // Browser extensions
+              'top.GLOBALS',
+              'chrome-extension://',
+              'moz-extension://',
+              'safari-extension://',
+              'runtime.sendMessage',
+              '_AutofillCallbackHandler',
+              // In-app browsers / WebViews (Meta, Android)
+              'webkit.messageHandlers',
+              'Java object is gone',
+              // Network errors that are expected
+              'NetworkError',
+              'Failed to fetch',
+              'Network request failed',
+              'Load failed',
+              // Expected auth / rate-limit / campaign outcomes (not product bugs)
+              'INVALID_CREDENTIALS',
+              'Rate limit exceeded',
+              'Too many requests',
+              'HTTP error! status: 429',
+              /rate\s*limit/i,
+              /\b429\b/,
+              'PRODUCT_NOT_ALLOWED',
+              // User cancellations
+              'AbortError',
+              'User cancelled',
+              // Common browser quirks
+              'ResizeObserver loop limit exceeded',
+              'Non-Error promise rejection captured',
+              // Script errors from extensions
+              /^Script error\.?$/,
+              /^Javascript error: Script error\.?$/,
+            ],
+            beforeSend(event, hint) {
+              const err = hint && hint.originalException;
+              const message =
+                (err && (err.message || String(err))) ||
+                (event.exception && event.exception.values && event.exception.values[0] && event.exception.values[0].value) ||
+                event.message ||
+                '';
+              const status = err && err.status;
+              // Defense in depth: drop expected client noise even if ignoreErrors misses a variant.
+              // 429 / rate-limit is a hard no — never an Error issue, any message shape.
+              // Do not blanket-drop all 400/401 — only known auth/validation outcomes.
+              if (
+                status === 429 ||
+                /\b429\b|rate\s*limit|too many requests/i.test(message) ||
+                /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
+              ) {
+                return null;
+              }
+              if (!isProduction) {
+                console.log('[Sentry] Capturing:', event.message || event.exception?.values?.[0]?.value);
+              }
+              return event;
+            },
+          });
+
+          const client = Sentry.getClient && Sentry.getClient();
+          if (client) {
+            if (!isProduction) {
+              console.log('[Sentry] ✅ Initialized in', client.getOptions()?.environment, 'mode');
+            }
+          } else {
+            console.error('[Sentry] ❌ Initialization failed');
+          }
+
+          window.Sentry = Sentry;
+
+          function hasStatisticsConsent() {
+            try {
+              // Cookiebot statistics category maps to analytics_storage / Session Replay.
+              if (window.Cookiebot && window.Cookiebot.consent) {
+                return !!window.Cookiebot.consent.statistics;
+              }
+            } catch (e) {
+              // Ignore consent lookup errors
+            }
+            // Local/dev without Cookiebot: allow buffering so feedback+replay can be verified.
+            return !isProduction;
+          }
+
+          function syncSentryReplayWithConsent() {
+            const replay = Sentry.getReplay && Sentry.getReplay();
+            if (!replay) return;
+
+            if (hasStatisticsConsent()) {
+              if (typeof replay.startBuffering === 'function') {
+                replay.startBuffering();
+              }
+            } else if (typeof replay.stop === 'function') {
+              replay.stop();
+            }
+          }
+
+          window.syncSentryReplayWithConsent = syncSentryReplayWithConsent;
+
+          // Cookiebot fires these as consent changes; also sync immediately if already decided.
+          window.addEventListener('CookiebotOnConsentReady', syncSentryReplayWithConsent);
+          window.addEventListener('CookiebotOnAccept', syncSentryReplayWithConsent);
+          window.addEventListener('CookiebotOnAcceptAll', syncSentryReplayWithConsent);
+          window.addEventListener('CookiebotOnDecline', syncSentryReplayWithConsent);
+          window.addEventListener('CookiebotOnDeclineAll', syncSentryReplayWithConsent);
+          syncSentryReplayWithConsent();
+
+          function getFeedbackOptionOverrides() {
+            if (typeof window.getProblemReportFeedbackOptions === 'function') {
+              return window.getProblemReportFeedbackOptions() || {};
+            }
+            return {};
+          }
+
+          var reportProblemSuccessTimer = null;
+          var REPORT_PROBLEM_SUCCESS_MS = 2800;
+          var activeProblemReportForm = null;
+          var openingProblemReport = false;
+
+          function getReportProblemTriggerLabel() {
+            const options = getFeedbackOptionOverrides();
+            return options.triggerAriaLabel || options.triggerLabel || defaultFeedbackOptions.triggerAriaLabel;
+          }
+
+          function getReportProblemSuccessLabel() {
+            const options = getFeedbackOptionOverrides();
+            return options.successMessageText || defaultFeedbackOptions.successMessageText;
+          }
+
+          function getReportProblemTags() {
+            if (typeof window.getProblemReportTags === 'function') {
+              try {
+                return window.getProblemReportTags() || {};
+              } catch (e) {
+                return {};
+              }
+            }
+            return {};
+          }
+
+          function releaseProblemReportForm(form) {
+            if (form && typeof form.removeFromDom === 'function') {
+              try {
+                form.removeFromDom();
+              } catch (e) {
+                // Form may already be detached by the SDK
+              }
+            }
+            if (!form || activeProblemReportForm === form) {
+              activeProblemReportForm = null;
+            }
+          }
+
+          // Sync aria-label on our custom bug trigger (no Sentry default pill widget).
+          window.refreshSentryFeedbackWidget = function refreshSentryFeedbackWidget() {
+            const trigger = document.getElementById('reportProblemButton');
+            if (!trigger || trigger.classList.contains('is-success')) return;
+            const label = getReportProblemTriggerLabel();
+            trigger.setAttribute('aria-label', label);
+            trigger.setAttribute('title', label);
+            const messageEl = trigger.querySelector('.report-problem-btn__message');
+            if (messageEl) messageEl.textContent = getReportProblemSuccessLabel();
+          };
+
+          window.showReportProblemSuccess = function showReportProblemSuccess() {
+            const trigger = document.getElementById('reportProblemButton');
+            if (!trigger) return;
+
+            const successLabel = getReportProblemSuccessLabel();
+            const messageEl = trigger.querySelector('.report-problem-btn__message');
+            if (messageEl) messageEl.textContent = successLabel;
+
+            trigger.classList.add('is-success');
+            trigger.setAttribute('aria-label', successLabel);
+            trigger.setAttribute('title', successLabel);
+            trigger.setAttribute('aria-live', 'polite');
+            trigger.disabled = true;
+
+            if (reportProblemSuccessTimer) {
+              clearTimeout(reportProblemSuccessTimer);
+            }
+            reportProblemSuccessTimer = setTimeout(function() {
+              trigger.classList.remove('is-success');
+              trigger.disabled = false;
+              trigger.removeAttribute('aria-live');
+              const label = getReportProblemTriggerLabel();
+              trigger.setAttribute('aria-label', label);
+              trigger.setAttribute('title', label);
+              reportProblemSuccessTimer = null;
+            }, REPORT_PROBLEM_SUCCESS_MS);
+          };
+
+          window.openProblemReport = async function openProblemReport() {
+            const trigger = document.getElementById('reportProblemButton');
+            if (trigger && (trigger.disabled || trigger.classList.contains('is-success'))) {
+              return;
+            }
+
+            // One form at a time — re-focus existing instead of stacking.
+            if (activeProblemReportForm) {
+              if (typeof activeProblemReportForm.open === 'function') {
+                activeProblemReportForm.open();
+              }
+              return;
+            }
+            if (openingProblemReport) return;
+
+            const feedback = Sentry.getFeedback && Sentry.getFeedback();
+            if (!feedback || typeof feedback.createForm !== 'function') {
+              console.warn('[Sentry] Feedback integration unavailable');
+              return;
+            }
+
+            // Ensure buffer mode is running (when consented) before the form opens,
+            // so the submission can attach the prior ~60s of session activity.
+            syncSentryReplayWithConsent();
+
+            openingProblemReport = true;
+            let form = null;
+            try {
+              const options = Object.assign({}, defaultFeedbackOptions, getFeedbackOptionOverrides(), {
+                autoInject: false,
+                // Feedback-event tags only (not global session scope)
+                tags: getReportProblemTags(),
+                onFormClose: function() {
+                  releaseProblemReportForm(form);
+                },
+                onSubmitSuccess: function() {
+                  releaseProblemReportForm(form);
+                  if (typeof window.showReportProblemSuccess === 'function') {
+                    window.showReportProblemSuccess();
+                  }
+                },
+                onSubmitError: function() {
+                  releaseProblemReportForm(form);
+                },
+              });
+              form = await feedback.createForm(options);
+              activeProblemReportForm = form;
+              form.appendToDom();
+              form.open();
+            } catch (e) {
+              releaseProblemReportForm(form);
+              console.warn('[Sentry] Failed to open feedback form', e);
+            } finally {
+              openingProblemReport = false;
+            }
+          };
+
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+              window.refreshSentryFeedbackWidget();
+            });
+          } else {
+            window.refreshSentryFeedbackWidget();
+          }
+
+          window.testSentry = function() {
+            const testClient = Sentry.getClient && Sentry.getClient();
+            if (!testClient) {
+              console.error('[Sentry Test] ❌ Client not found');
+              return;
+            }
+
+            console.log('[Sentry Test] Sending test events...');
+            Sentry.captureException(new Error('Test error - ' + new Date().toISOString()));
+            Sentry.captureMessage('Test message - ' + new Date().toISOString(), 'info');
+            console.log('[Sentry Test] ✅ Test events sent - check dashboard in 5-10 seconds');
+          };
+        } catch (e) {
+          console.error('[Sentry] ❌ Initialization error:', e);
         }
       })();
     </script>
@@ -1511,6 +1748,24 @@
         </div>
     </div>
 
+    <!-- Minimal floating "Report a problem" trigger (opens Sentry User Feedback) -->
+    <button
+        type="button"
+        id="reportProblemButton"
+        class="report-problem-btn"
+        data-action="report-problem"
+        aria-label="Rapportér et problem"
+        title="Rapportér et problem"
+    >
+        <svg class="report-problem-btn__icon report-problem-btn__icon--bug" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M20 8h-2.81a5.99 5.99 0 0 0-1.82-1.96L17 4.41 15.59 3l-2.17 2.17a6.01 6.01 0 0 0-2.84 0L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z"/>
+        </svg>
+        <svg class="report-problem-btn__icon report-problem-btn__icon--success" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M9.55 17.6 4.9 12.95l1.4-1.4 3.25 3.25L17.7 6.65l1.4 1.4L9.55 17.6z"/>
+        </svg>
+        <span class="report-problem-btn__message">Tak for din rapport!</span>
+    </button>
+
     <!-- Global Footer -->
     <footer class="global-footer">
         <div class="footer-content">
@@ -1541,6 +1796,17 @@
                     <li>
                         <button type="button" class="footer-cookie-settings-link" id="cookieSettingsButton" data-i18n-key="cookie.settings.button">
                             Cookie Settings
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="footer-section">
+                <h4 data-i18n-key="footer.support.title">Support</h4>
+                <ul>
+                    <li>
+                        <button type="button" class="footer-cookie-settings-link" data-action="report-problem" data-i18n-key="footer.support.report">
+                            Report a problem
                         </button>
                     </li>
                 </ul>

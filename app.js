@@ -7253,6 +7253,22 @@ const translations = {
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
     'footer.terms.title': 'Vilkår og Betingelser', 'footer.terms.all': 'Vilkår og Betingelser', 'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab', 'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
     'footer.policies.title': 'Politikker', 'footer.policies.privacy': 'Privatlivspolitik', 'footer.policies.cookie': 'Cookiepolitik', 'footer.rights': 'Alle rettigheder forbeholdes', 'footer.copyright': '© 2026 Boulders. Alle rettigheder forbeholdes.',
+    'footer.support.title': 'Support', 'footer.support.report': 'Rapportér et problem',
+    'feedback.trigger': 'Rapportér et problem',
+    'feedback.formTitle': 'Rapportér et problem',
+    'feedback.submit': 'Send rapport',
+    'feedback.cancel': 'Annuller',
+    'feedback.confirm': 'Bekræft',
+    'feedback.addScreenshot': 'Tilføj skærmbillede',
+    'feedback.removeScreenshot': 'Fjern skærmbillede',
+    'feedback.nameLabel': 'Navn',
+    'feedback.namePlaceholder': 'Dit navn',
+    'feedback.emailLabel': 'E-mail',
+    'feedback.emailPlaceholder': 'din.email@example.com',
+    'feedback.required': '(påkrævet)',
+    'feedback.messageLabel': 'Beskrivelse',
+    'feedback.messagePlaceholder': 'Hvad gik galt? Hvad forventede du?',
+    'feedback.success': 'Tak for din rapport!',
     'cookie.banner.title': 'Vi bruger cookies', 'cookie.banner.description': 'Vi bruger cookies til at forbedre din browsingoplevelse, analysere trafik på sitet og personalisere indhold. Ved at klikke på "Accepter alle" giver du samtykke til vores brug af cookies. Du kan administrere dine præferencer eller læse mere i vores <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookiepolitik</a>.', 'cookie.banner.accept': 'Accepter alle', 'cookie.banner.reject': 'Afvis alle', 'cookie.banner.settings': 'Tilpas',
     'cookie.settings.title': 'Cookie-indstillinger', 'cookie.settings.description': 'Administrer dine cookie-præferencer. Du kan aktivere eller deaktivere forskellige typer cookies nedenfor. Essentielle cookies kan ikke deaktiveres, da de er nødvendige for, at hjemmesiden fungerer.', 'cookie.settings.save': 'Gem præferencer', 'cookie.settings.button': 'Cookie-indstillinger',
     'cookie.category.essential.title': 'Essentielle Cookies', 'cookie.category.essential.desc': 'Disse cookies er nødvendige for, at hjemmesiden fungerer og kan ikke deaktiveres.',
@@ -7513,6 +7529,22 @@ const translations = {
     'confirmation.pending.stillProcessing': 'Payment is still being processed. Please check back in a few minutes or contact support if you\'ve completed payment. Order #',
     'footer.terms.title': 'Terms and Conditions', 'footer.terms.all': 'Terms and Conditions', 'footer.terms.membership': 'Terms and Conditions for Membership', 'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
     'footer.policies.title': 'Policies', 'footer.policies.privacy': 'Privacy Policy', 'footer.policies.cookie': 'Cookie Policy', 'footer.rights': 'All rights reserved', 'footer.copyright': '© 2026 Boulders. All rights reserved.',
+    'footer.support.title': 'Support', 'footer.support.report': 'Report a problem',
+    'feedback.trigger': 'Report a problem',
+    'feedback.formTitle': 'Report a problem',
+    'feedback.submit': 'Send report',
+    'feedback.cancel': 'Cancel',
+    'feedback.confirm': 'Confirm',
+    'feedback.addScreenshot': 'Add a screenshot',
+    'feedback.removeScreenshot': 'Remove screenshot',
+    'feedback.nameLabel': 'Name',
+    'feedback.namePlaceholder': 'Your name',
+    'feedback.emailLabel': 'Email',
+    'feedback.emailPlaceholder': 'your.email@example.com',
+    'feedback.required': '(required)',
+    'feedback.messageLabel': 'Description',
+    'feedback.messagePlaceholder': 'What went wrong? What did you expect?',
+    'feedback.success': 'Thank you for your report!',
     'cookie.banner.title': 'We use cookies', 'cookie.banner.description': 'We use cookies to enhance your browsing experience, analyze site traffic, and personalize content. By clicking "Accept All", you consent to our use of cookies. You can manage your preferences or learn more in our <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie Policy</a>.', 'cookie.banner.accept': 'Accept All', 'cookie.banner.reject': 'Reject All', 'cookie.banner.settings': 'Customize',
     'cookie.settings.title': 'Cookie Preferences', 'cookie.settings.description': 'Manage your cookie preferences. You can enable or disable different types of cookies below. Essential cookies cannot be disabled as they are necessary for the website to function.', 'cookie.settings.save': 'Save Preferences', 'cookie.settings.button': 'Cookie Settings',
     'cookie.category.essential.title': 'Essential Cookies', 'cookie.category.essential.desc': 'These cookies are necessary for the website to function and cannot be disabled.',
@@ -7710,6 +7742,22 @@ const translations = {
     'message.noProducts.15daypass': 'Derzeit sind keine 15-Tage-Pass-Optionen verfügbar.',
     'footer.terms.title': 'Allgemeine Geschäftsbedingungen', 'footer.terms.all': 'Allgemeine Geschäftsbedingungen', 'footer.terms.membership': 'Allgemeine Geschäftsbedingungen für Mitgliedschaft', 'footer.terms.punchcard': 'Allgemeine Geschäftsbedingungen für Stempelkarte',
     'footer.policies.title': 'Richtlinien', 'footer.policies.privacy': 'Datenschutzrichtlinie', 'footer.policies.cookie': 'Cookie-Richtlinie', 'footer.rights': 'Alle Rechte vorbehalten', 'footer.copyright': '© 2026 Boulders. Alle Rechte vorbehalten.',
+    'footer.support.title': 'Support', 'footer.support.report': 'Problem melden',
+    'feedback.trigger': 'Problem melden',
+    'feedback.formTitle': 'Problem melden',
+    'feedback.submit': 'Bericht senden',
+    'feedback.cancel': 'Abbrechen',
+    'feedback.confirm': 'Bestätigen',
+    'feedback.addScreenshot': 'Screenshot hinzufügen',
+    'feedback.removeScreenshot': 'Screenshot entfernen',
+    'feedback.nameLabel': 'Name',
+    'feedback.namePlaceholder': 'Dein Name',
+    'feedback.emailLabel': 'E-Mail',
+    'feedback.emailPlaceholder': 'deine.email@example.com',
+    'feedback.required': '(erforderlich)',
+    'feedback.messageLabel': 'Beschreibung',
+    'feedback.messagePlaceholder': 'Was ist schiefgelaufen? Was hast du erwartet?',
+    'feedback.success': 'Danke für deinen Bericht!',
     'cookie.banner.title': 'Wir verwenden Cookies', 'cookie.banner.description': 'Wir verwenden Cookies, um Ihr Browsing-Erlebnis zu verbessern, den Website-Verkehr zu analysieren und Inhalte zu personalisieren. Durch Klicken auf "Alle akzeptieren" stimmen Sie unserer Verwendung von Cookies zu. Sie können Ihre Einstellungen verwalten oder mehr in unserer <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie-Richtlinie</a> erfahren.', 'cookie.banner.accept': 'Alle akzeptieren', 'cookie.banner.reject': 'Alle ablehnen', 'cookie.banner.settings': 'Anpassen',
     'cookie.settings.title': 'Cookie-Einstellungen', 'cookie.settings.description': 'Verwalten Sie Ihre Cookie-Einstellungen. Sie können unten verschiedene Cookie-Typen aktivieren oder deaktivieren. Essenzielle Cookies können nicht deaktiviert werden, da sie für die Funktionsweise der Website erforderlich sind.', 'cookie.settings.save': 'Einstellungen speichern', 'cookie.settings.button': 'Cookie-Einstellungen',
     'cookie.category.essential.title': 'Essenzielle Cookies', 'cookie.category.essential.desc': 'Diese Cookies sind für die Funktionsweise der Website erforderlich und können nicht deaktiviert werden.',
@@ -7828,6 +7876,69 @@ function t(key, fallback = '') {
   return translations[lang]?.[key] || translations[DEFAULT_LANGUAGE]?.[key] || fallback || key;
 }
 
+/** Labels + theme for Sentry User Feedback widget/form (DA-first via t()). */
+function getProblemReportFeedbackOptions() {
+  return {
+    colorScheme: 'light',
+    showBranding: false,
+    enableScreenshot: true,
+    isEmailRequired: true,
+    showName: true,
+    showEmail: true,
+    triggerLabel: t('feedback.trigger', 'Rapportér et problem'),
+    triggerAriaLabel: t('feedback.trigger', 'Rapportér et problem'),
+    formTitle: t('feedback.formTitle', 'Rapportér et problem'),
+    submitButtonLabel: t('feedback.submit', 'Send rapport'),
+    cancelButtonLabel: t('feedback.cancel', 'Annuller'),
+    confirmButtonLabel: t('feedback.confirm', 'Bekræft'),
+    addScreenshotButtonLabel: t('feedback.addScreenshot', 'Tilføj skærmbillede'),
+    removeScreenshotButtonLabel: t('feedback.removeScreenshot', 'Fjern skærmbillede'),
+    nameLabel: t('feedback.nameLabel', 'Navn'),
+    namePlaceholder: t('feedback.namePlaceholder', 'Dit navn'),
+    emailLabel: t('feedback.emailLabel', 'E-mail'),
+    emailPlaceholder: t('feedback.emailPlaceholder', 'din.email@example.com'),
+    isRequiredLabel: t('feedback.required', '(påkrævet)'),
+    messageLabel: t('feedback.messageLabel', 'Beskrivelse'),
+    messagePlaceholder: t('feedback.messagePlaceholder', 'Hvad gik galt? Hvad forventede du?'),
+    successMessageText: t('feedback.success', 'Tak for din rapport!'),
+    themeLight: {
+      foreground: '#1F2837',
+      background: '#ffffff',
+      accentForeground: '#ffffff',
+      accentBackground: '#FF00FF',
+      successColor: '#059669',
+      errorColor: '#df3338',
+      boxShadow: '0px 4px 24px 0px rgba(31, 40, 55, 0.16)',
+    },
+  };
+}
+
+/**
+ * Feedback-scoped signup tags only (passed into createForm `tags`).
+ * Do not use global Sentry.setTag/setContext here — that leaks onto later error events.
+ */
+function getProblemReportTags() {
+  const tags = {};
+  try {
+    if (state.currentStep != null) tags.signup_step = String(state.currentStep);
+    if (state.language) tags.language = String(state.language);
+    if (state.selectedBusinessUnit != null) tags.business_unit = String(state.selectedBusinessUnit);
+    if (state.selectedGymId != null) tags.gym_id = String(state.selectedGymId);
+    if (state.selectedProductId != null) tags.product_id = String(state.selectedProductId);
+    if (state.selectedProductType) tags.product_type = String(state.selectedProductType);
+    if (state.orderId != null) tags.order_id = String(state.orderId);
+    if (state.customerId != null) tags.customer_id = String(state.customerId);
+    const landingName = state.landingRouteConfig?.componentName || state.landingRouteConfig?.path;
+    if (landingName) tags.landing_route = String(landingName);
+  } catch (e) {
+    // Never block the feedback form on tag enrichment failures
+  }
+  return tags;
+}
+
+window.getProblemReportFeedbackOptions = getProblemReportFeedbackOptions;
+window.getProblemReportTags = getProblemReportTags;
+
 // Update all translations on the page
 function updatePageTranslations() {
   const lang = state.language || DEFAULT_LANGUAGE;
@@ -7920,6 +8031,11 @@ function updatePageTranslations() {
   // Update addon modal translations
   updateAddonModalTranslations();
   applyOfferLandingCategoryCopy();
+
+  // Keep Sentry "Report a problem" floating trigger labels in sync with language
+  if (typeof window.refreshSentryFeedbackWidget === 'function') {
+    window.refreshSentryFeedbackWidget();
+  }
   
   // Update step labels
   const stepLabels = document.querySelectorAll('.step-label');
@@ -9321,6 +9437,13 @@ function setupEventListeners() {
     if (e.target.closest('[data-action="open-cookie-declaration"]')) {
       e.preventDefault();
       openCookieDeclarationModal();
+    }
+
+    if (e.target.closest('[data-action="report-problem"]')) {
+      e.preventDefault();
+      if (typeof window.openProblemReport === 'function') {
+        window.openProblemReport();
+      }
     }
     
     if (e.target.closest('[data-action="open-terms"]')) {
