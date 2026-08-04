@@ -107,6 +107,8 @@ export function initSentry(options = {}) {
       'Rate limit exceeded',
       'Too many requests',
       'HTTP error! status: 429',
+      /rate\s*limit/i,
+      /\b429\b/,
       'PRODUCT_NOT_ALLOWED',
       // User cancellations
       'AbortError',
@@ -122,10 +124,12 @@ export function initSentry(options = {}) {
         event.message ||
         '';
       const status = err?.status;
-      // Do not blanket-drop all 400/401 — only known auth/validation/rate-limit outcomes.
+      // 429 / rate-limit is a hard no — never an Error issue, any message shape.
+      // Do not blanket-drop all 400/401 — only known auth/validation outcomes.
       if (
         status === 429 ||
-        /INVALID_CREDENTIALS|Rate limit exceeded|Too many requests|HTTP error! status: 429|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
+        /\b429\b|rate\s*limit|too many requests/i.test(message) ||
+        /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
       ) {
         return null;
       }
@@ -162,6 +166,12 @@ export function initSentry(options = {}) {
  * @param {Object} context - Additional context
  */
 export function captureException(error, context = {}) {
+  // Hard gate: rate limits must never become Sentry issues.
+  const status = error?.status;
+  const message = typeof error?.message === 'string' ? error.message : String(error || '');
+  if (status === 429 || /\b429\b|rate\s*limit|too many requests/i.test(message)) {
+    return;
+  }
   Sentry.captureException(error, {
     tags: context.tags,
     extra: context.extra,

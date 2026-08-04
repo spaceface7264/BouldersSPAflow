@@ -99,6 +99,8 @@
                 'Rate limit exceeded',
                 'Too many requests',
                 'HTTP error! status: 429',
+                /rate\s*limit/i,
+                /\b429\b/,
                 'PRODUCT_NOT_ALLOWED',
                 // User cancellations
                 'AbortError',
@@ -119,10 +121,12 @@
                   '';
                 const status = err && err.status;
                 // Defense in depth: drop expected client noise even if ignoreErrors misses a variant.
-                // Do not blanket-drop all 400/401 — only known auth/validation/rate-limit outcomes.
+                // 429 / rate-limit is a hard no — never an Error issue, any message shape.
+                // Do not blanket-drop all 400/401 — only known auth/validation outcomes.
                 if (
                   status === 429 ||
-                  /INVALID_CREDENTIALS|Rate limit exceeded|Too many requests|HTTP error! status: 429|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
+                  /\b429\b|rate\s*limit|too many requests/i.test(message) ||
+                  /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
                 ) {
                   return null;
                 }

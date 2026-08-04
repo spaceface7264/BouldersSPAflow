@@ -1,7 +1,18 @@
 // Sentry is initialized in index.html via CDN script tag
 // Use window.Sentry for error tracking
 const Sentry = window.Sentry || {};
+
+/** Rate limits are expected backend backpressure — never report them as product errors. */
+const isRateLimitLikeError = (error) => {
+  if (!error) return false;
+  if (error.status === 429) return true;
+  const message = typeof error.message === 'string' ? error.message : String(error);
+  return /\b429\b|rate\s*limit|too many requests/i.test(message);
+};
+
 const captureException = (error, context) => {
+  // Hard gate: 429 / rate-limit must never become Sentry issues (call sites can forget).
+  if (isRateLimitLikeError(error)) return;
   if (Sentry.captureException) {
     Sentry.captureException(error, context);
   }
@@ -18052,10 +18063,7 @@ async function autoEnsureOrderIfReady(context = 'auto') {
 }
 
 function isRateLimitError(error) {
-  if (!error) return false;
-  if (error.status === 429) return true;
-  const message = typeof error.message === 'string' ? error.message : '';
-  return message.includes('429') || message.toLowerCase().includes('too many requests');
+  return isRateLimitLikeError(error);
 }
 
 function getRetryDelayFromError(error, defaultMs = 120000) {
@@ -18494,7 +18502,11 @@ async function handleCheckout() {
                 } else {
                   setCheckoutLoadingState(false);
                   state.checkoutInProgress = false;
-                  throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again.`);
+                  const rateLimitError = new Error(
+                    `Rate limit exceeded. Please wait ${retryMessage} before trying again.`
+                  );
+                  rateLimitError.status = 429;
+                  throw rateLimitError;
                 }
               } else {
                 console.warn('[checkout] ⚠️ Login after customer creation failed:', loginError);
