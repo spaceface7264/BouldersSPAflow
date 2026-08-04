@@ -20229,23 +20229,68 @@ window.getOrderDiagnostics = async function(orderId) {
 };
 
 const PURCHASE_TRACKED_KEY_PREFIX = 'boulders_purchase_tracked_';
+// A confirmation URL survives the tab it was created in: customers re-open it from history, from
+// a second tab, or from the BRP receipt mail. sessionStorage only remembers within one tab, so the
+// guard lives in localStorage and every re-open of the same order is silently ignored. Entries
+// carry a timestamp so the key space cannot grow without bound.
+const PURCHASE_TRACKED_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 function getPurchaseTrackedStorageKey(orderId) {
   return `${PURCHASE_TRACKED_KEY_PREFIX}${orderId}`;
 }
 
+// sessionStorage is kept as a fallback: some privacy modes reject localStorage writes, and flags
+// written before this guard moved storage still live there.
+function getPurchaseTrackedStorages() {
+  const storages = [];
+  try { if (window.localStorage) storages.push(window.localStorage); } catch (_) { /* blocked */ }
+  try { if (window.sessionStorage) storages.push(window.sessionStorage); } catch (_) { /* blocked */ }
+  return storages;
+}
+
 function isPurchaseAlreadyTracked(orderId) {
-  try {
-    return sessionStorage.getItem(getPurchaseTrackedStorageKey(orderId)) === '1';
-  } catch (_) {
-    return false;
+  const key = getPurchaseTrackedStorageKey(orderId);
+  for (const storage of getPurchaseTrackedStorages()) {
+    let raw = null;
+    try { raw = storage.getItem(key); } catch (_) { continue; }
+    if (!raw) continue;
+    if (raw === '1') return true; // legacy flag, written before entries carried a timestamp
+    const trackedAt = Number(raw);
+    if (!Number.isFinite(trackedAt) || Date.now() - trackedAt < PURCHASE_TRACKED_TTL_MS) return true;
+    try { storage.removeItem(key); } catch (_) { /* ignore */ }
   }
+  return false;
 }
 
 function markPurchaseTracked(orderId) {
-  try {
-    sessionStorage.setItem(getPurchaseTrackedStorageKey(orderId), '1');
-  } catch (_) { /* ignore */ }
+  const key = getPurchaseTrackedStorageKey(orderId);
+  const trackedAt = String(Date.now());
+  for (const storage of getPurchaseTrackedStorages()) {
+    try { storage.setItem(key, trackedAt); } catch (_) { /* ignore */ }
+  }
+  prunePurchaseTrackedEntries();
+}
+
+function prunePurchaseTrackedEntries() {
+  for (const storage of getPurchaseTrackedStorages()) {
+    const keys = [];
+    try {
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i);
+        if (key && key.startsWith(PURCHASE_TRACKED_KEY_PREFIX)) keys.push(key);
+      }
+    } catch (_) { continue; }
+    for (const key of keys) {
+      try {
+        const raw = storage.getItem(key);
+        if (raw === '1') continue; // legacy flags have no timestamp; leave them in place
+        const trackedAt = Number(raw);
+        if (Number.isFinite(trackedAt) && Date.now() - trackedAt >= PURCHASE_TRACKED_TTL_MS) {
+          storage.removeItem(key);
+        }
+      } catch (_) { /* ignore */ }
+    }
+  }
 }
 
 function getOrderTotalKrForTracking(order, storedOrder = null) {
