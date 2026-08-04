@@ -10873,3 +10873,20 @@ body.firstclimb-flow .step-indicator {
 body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
     display: none;
 }
+
+/* =================================
+   SENTRY USER FEEDBACK ("Report a problem")
+   ================================= */
+/* Keep trigger above cart/modals, below Cookiebot (~2e9). Leave bottom room for cookie banner. */
+#sentry-feedback {
+    --font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-size: 14px;
+    --z-index: 10050;
+    --inset: auto 0 72px auto;
+    --page-margin: 16px;
+    --accent-background: #FF00FF;
+    --accent-foreground: #ffffff;
+    --foreground: #1F2837;
+    --background: #ffffff;
+    --box-shadow: 0 4px 24px rgba(31, 40, 55, 0.16);
+}
