@@ -1139,7 +1139,59 @@ const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 // for a few minutes so repeated calls (init, geolocation toggle, language
 // switch back-and-forth) don't re-hit BRP and trip their rate limit.
 const BUSINESS_UNITS_CACHE_TTL_MS = 5 * 60 * 1000;
+const BUSINESS_UNITS_STORAGE_KEY = 'boulders.businessUnits.v1';
 const businessUnitsCache = new Map(); // languageCode -> { data, timestamp }
+
+// Last-known gym list baked into the bundle so Step 1 can still render when
+// BRP rate-limits /api/reference/business-units (HTTP 429). IDs must match BRP.
+const BUSINESS_UNITS_FALLBACK = [
+  { id: 13, name: 'Boulders Aalborg', address: { street: 'Skjernvej 4D', postalCode: '9220', city: 'Aalborg' } },
+  { id: 11, name: 'Boulders Aarhus Aaby', address: { street: 'Søren Frichs Vej 54', postalCode: '8230', city: 'Aarhus' } },
+  { id: 1, name: 'Boulders Aarhus City', address: { street: 'Ankersgade 12', postalCode: '8000', city: 'Aarhus' } },
+  { id: 3, name: 'Boulders Aarhus Nord', address: { street: 'Graham Bells Vej 18A', postalCode: '8200', city: 'Aarhus' } },
+  { id: 4, name: 'Boulders Aarhus Syd', address: { street: 'Søren Nymarks Vej 6A', postalCode: '8270', city: 'Aarhus' } },
+  { id: 9, name: 'Boulders Amager', address: { street: 'Amager Landevej 233', postalCode: '2770', city: 'København' } },
+  { id: 8, name: 'Boulders Hvidovre', address: { street: 'Strandmarksvej 20', postalCode: '2650', city: 'København' } },
+  { id: 6, name: 'Boulders KBH Sydhavn', address: { street: 'Bådehavnsgade 38', postalCode: '2450', city: 'København' } },
+  { id: 5, name: 'Boulders Odense', address: { street: 'Wichmandsgade 11', postalCode: '5000', city: 'Odense' } },
+  { id: 7, name: 'Boulders Valby', address: { street: 'Vigerslev Allé 47', postalCode: '2500', city: 'København' } },
+  { id: 12, name: 'Boulders Vanløse', address: { street: 'Vanløse Torv 1, Kronen Vanløse', postalCode: '2720', city: 'København' } },
+];
+
+function readBusinessUnitsFromStorage(language) {
+  try {
+    const raw = localStorage.getItem(BUSINESS_UNITS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const entry = parsed[language] || parsed['*'];
+    if (!entry?.data) return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function writeBusinessUnitsToStorage(language, data) {
+  try {
+    const raw = localStorage.getItem(BUSINESS_UNITS_STORAGE_KEY);
+    const store = raw ? JSON.parse(raw) : {};
+    const payload = { data, timestamp: Date.now() };
+    store[language] = payload;
+    store['*'] = payload; // language-agnostic stale fallback
+    localStorage.setItem(BUSINESS_UNITS_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // Ignore quota / private-mode failures
+  }
+}
+
+function getStaleBusinessUnits(language) {
+  const memory = businessUnitsCache.get(language);
+  if (memory?.data) return memory.data;
+  const stored = readBusinessUnitsFromStorage(language);
+  if (stored?.data) return stored.data;
+  return BUSINESS_UNITS_FALLBACK;
+}
 
 // API Integration Functions
 class BusinessUnitsAPI {
@@ -1180,6 +1232,7 @@ class BusinessUnitsAPI {
       devLog('Number of items:', Array.isArray(data) ? data.length : 'N/A');
 
       businessUnitsCache.set(language, { data, timestamp: Date.now() });
+      writeBusinessUnitsToStorage(language, data);
 
       return data;
     } catch (error) {
@@ -1191,7 +1244,16 @@ class BusinessUnitsAPI {
         status: error.status,
         payload: error.payload,
       });
-      // Don't use fallback mock data - throw error so caller can handle it
+
+      // Keep Step 1 usable during BRP rate limits / outages: prefer stale
+      // in-memory or localStorage data, then the baked-in gym list.
+      const stale = getStaleBusinessUnits(language);
+      if (stale) {
+        console.warn('[Step 1] Serving stale/fallback business units after fetch failure');
+        businessUnitsCache.set(language, { data: stale, timestamp: Date.now() });
+        return stale;
+      }
+
       throw error;
     }
   }
@@ -17948,37 +18010,38 @@ function isRateLimitError(error) {
 }
 
 function getRetryDelayFromError(error, defaultMs = 120000) {
-  // Default to 2 minutes (120 seconds) if we can't extract retryAfter
-  const message = typeof error?.message === 'string' ? error.message : '';
-  
-  // Try to extract retryAfter from JSON in error message
-  try {
-    const jsonMatch = message.match(/\{[\s\S]*"retryAfter"[\s\S]*\}/);
-    if (jsonMatch) {
-      const jsonData = JSON.parse(jsonMatch[0]);
-      if (jsonData.retryAfter) {
-        const seconds = parseInt(jsonData.retryAfter, 10);
-        if (!isNaN(seconds) && seconds > 0) {
-          // Use the actual retryAfter time from API (no cap)
-          // Convert seconds to milliseconds
-          return Math.max(seconds * 1000, 1000);
+  // Default to 2 minutes (120 seconds) if we can't extract retryAfter.
+  // Prefer error.payload (set by requestJson) over parsing error.message.
+  const candidates = [];
+  if (error?.payload != null) candidates.push(error.payload);
+  if (typeof error?.message === 'string') candidates.push(error.message);
+
+  for (const candidate of candidates) {
+    let retryAfter = null;
+    if (typeof candidate === 'object' && candidate !== null) {
+      retryAfter = candidate.retryAfter ?? candidate.error?.retryAfter;
+    } else if (typeof candidate === 'string') {
+      try {
+        const jsonMatch = candidate.match(/\{[\s\S]*"retryAfter"[\s\S]*\}/);
+        if (jsonMatch) {
+          const jsonData = JSON.parse(jsonMatch[0]);
+          retryAfter = jsonData.retryAfter ?? jsonData.error?.retryAfter;
         }
+      } catch {
+        // fall through to regex
+      }
+      if (retryAfter == null) {
+        const match = candidate.match(/"retryAfter"\s*:\s*(\d+)/i);
+        if (match) retryAfter = match[1];
       }
     }
-  } catch (e) {
-    // JSON parse failed, try regex fallback
-  }
-  
-  // Fallback: regex extraction
-  const match = message.match(/"retryAfter":\s*(\d+)/i);
-  if (match) {
-    const seconds = parseInt(match[1], 10);
+
+    const seconds = parseInt(retryAfter, 10);
     if (!isNaN(seconds) && seconds > 0) {
-      // Use the actual retryAfter time from API (no cap)
       return Math.max(seconds * 1000, 1000);
     }
   }
-  
+
   return defaultMs;
 }
 

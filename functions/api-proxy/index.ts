@@ -32,7 +32,7 @@ const MAX_REQUEST_SIZE = 1024 * 1024;
 const EDGE_CACHEABLE_PATHS = [
   '/api/reference/business-units',
 ];
-const EDGE_CACHE_TTL_SECONDS = 5 * 60; // 5 minutes
+const EDGE_CACHE_TTL_SECONDS = 15 * 60; // 15 minutes — gym list rarely changes
 
 function isEdgeCacheablePath(path: string, method: string): boolean {
   return method === 'GET' && EDGE_CACHEABLE_PATHS.includes(path);
@@ -191,11 +191,16 @@ export async function onRequest(context: any) {
 
   // Serve from the shared edge cache when possible, so many visitors can
   // reuse one response instead of each triggering a call to BRP.
+  // Use a synthetic URL with a query param (not a #fragment) — Cache API
+  // implementations often ignore URL fragments when matching keys.
   const cacheable = isEdgeCacheablePath(apiPath, request.method);
   const language = request.headers.get('Accept-Language') || 'da-DK';
   const edgeCache = (globalThis as any).caches?.default;
   const cacheKey = cacheable
-    ? new Request(`${apiUrl}#lang=${language}`, { method: 'GET' })
+    ? new Request(
+        `https://join.boulders.dk/__edge_cache${apiPath}?lang=${encodeURIComponent(language)}`,
+        { method: 'GET' }
+      )
     : null;
 
   if (cacheKey && edgeCache) {
