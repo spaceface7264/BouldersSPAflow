@@ -4821,13 +4821,13 @@ let gymsWithDistances = [];
 // Load gyms from API and update UI
 async function loadGymsFromAPI() {
   const now = Date.now();
-  if (isLocalDevHost() && now < gymLoadCooldownUntil) {
+  if (now < gymLoadCooldownUntil) {
     const secondsLeft = Math.ceil((gymLoadCooldownUntil - now) / 1000);
     console.log(`[Step 1] Skipping gym load (cooldown ${secondsLeft}s remaining)`);
     const noResults = document.getElementById('noResults');
     if (noResults) {
       noResults.classList.remove('hidden');
-      noResults.textContent = `API rate limit in local dev. Retrying in ~${secondsLeft}s...`;
+      noResults.textContent = `Vi henter haller igen om ~${secondsLeft}s...`;
     }
     return;
   }
@@ -5023,14 +5023,14 @@ async function loadGymsFromAPI() {
     }
     
   } catch (error) {
-    if (isLocalDevHost() && isRateLimitError(error)) {
+    if (isRateLimitError(error)) {
       const retryMs = getRetryDelayFromError(error);
       gymLoadCooldownUntil = Date.now() + retryMs;
       console.warn(`[Step 1] Business units rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
       const noResults = document.getElementById('noResults');
       if (noResults) {
         noResults.classList.remove('hidden');
-        noResults.textContent = `API rate limit in local dev. Retrying in ~${Math.ceil(retryMs / 1000)}s...`;
+        noResults.textContent = `Vi henter haller igen om ~${Math.ceil(retryMs / 1000)}s...`;
       }
       if (!gymLoadRetryTimeoutId) {
         gymLoadRetryTimeoutId = setTimeout(() => {
@@ -5043,14 +5043,14 @@ async function loadGymsFromAPI() {
       return;
     }
     console.error('Failed to load gyms from API:', error);
-    
+
     // Show user-friendly error message
     const gymList = document.querySelector('.gym-list');
     const noResults = document.getElementById('noResults');
     if (gymList && noResults) {
       gymList.innerHTML = '';
       noResults.classList.remove('hidden');
-      
+
       // Provide more helpful error message based on error type
       let errorMessage = 'Failed to load locations. ';
       if (error.message && error.message.includes('HTML instead of JSON')) {
@@ -5058,7 +5058,7 @@ async function loadGymsFromAPI() {
       } else {
         errorMessage += error.message || 'Please check console for details.';
       }
-      
+
       noResults.textContent = errorMessage;
     }
   }
