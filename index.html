@@ -101,11 +101,6 @@
               errorColor: '#df3338',
               boxShadow: '0px 4px 24px 0px rgba(31, 40, 55, 0.16)',
             },
-            onFormOpen: function() {
-              if (typeof window.enrichProblemReportContext === 'function') {
-                window.enrichProblemReportContext();
-              }
-            },
             onSubmitSuccess: function() {
               if (typeof window.showReportProblemSuccess === 'function') {
                 window.showReportProblemSuccess();
@@ -259,6 +254,8 @@
 
           var reportProblemSuccessTimer = null;
           var REPORT_PROBLEM_SUCCESS_MS = 2800;
+          var activeProblemReportForm = null;
+          var openingProblemReport = false;
 
           function getReportProblemTriggerLabel() {
             const options = getFeedbackOptionOverrides();
@@ -268,6 +265,30 @@
           function getReportProblemSuccessLabel() {
             const options = getFeedbackOptionOverrides();
             return options.successMessageText || defaultFeedbackOptions.successMessageText;
+          }
+
+          function getReportProblemTags() {
+            if (typeof window.getProblemReportTags === 'function') {
+              try {
+                return window.getProblemReportTags() || {};
+              } catch (e) {
+                return {};
+              }
+            }
+            return {};
+          }
+
+          function releaseProblemReportForm(form) {
+            if (form && typeof form.removeFromDom === 'function') {
+              try {
+                form.removeFromDom();
+              } catch (e) {
+                // Form may already be detached by the SDK
+              }
+            }
+            if (!form || activeProblemReportForm === form) {
+              activeProblemReportForm = null;
+            }
           }
 
           // Sync aria-label on our custom bug trigger (no Sentry default pill widget).
@@ -315,6 +336,15 @@
               return;
             }
 
+            // One form at a time — re-focus existing instead of stacking.
+            if (activeProblemReportForm) {
+              if (typeof activeProblemReportForm.open === 'function') {
+                activeProblemReportForm.open();
+              }
+              return;
+            }
+            if (openingProblemReport) return;
+
             const feedback = Sentry.getFeedback && Sentry.getFeedback();
             if (!feedback || typeof feedback.createForm !== 'function') {
               console.warn('[Sentry] Feedback integration unavailable');
@@ -325,21 +355,36 @@
             // so the submission can attach the prior ~60s of session activity.
             syncSentryReplayWithConsent();
 
-            if (typeof window.enrichProblemReportContext === 'function') {
-              window.enrichProblemReportContext();
+            openingProblemReport = true;
+            let form = null;
+            try {
+              const options = Object.assign({}, defaultFeedbackOptions, getFeedbackOptionOverrides(), {
+                autoInject: false,
+                // Feedback-event tags only (not global session scope)
+                tags: getReportProblemTags(),
+                onFormClose: function() {
+                  releaseProblemReportForm(form);
+                },
+                onSubmitSuccess: function() {
+                  releaseProblemReportForm(form);
+                  if (typeof window.showReportProblemSuccess === 'function') {
+                    window.showReportProblemSuccess();
+                  }
+                },
+                onSubmitError: function() {
+                  releaseProblemReportForm(form);
+                },
+              });
+              form = await feedback.createForm(options);
+              activeProblemReportForm = form;
+              form.appendToDom();
+              form.open();
+            } catch (e) {
+              releaseProblemReportForm(form);
+              console.warn('[Sentry] Failed to open feedback form', e);
+            } finally {
+              openingProblemReport = false;
             }
-
-            const options = Object.assign({}, defaultFeedbackOptions, getFeedbackOptionOverrides(), {
-              autoInject: false,
-              onSubmitSuccess: function() {
-                if (typeof window.showReportProblemSuccess === 'function') {
-                  window.showReportProblemSuccess();
-                }
-              },
-            });
-            const form = await feedback.createForm(options);
-            form.appendToDom();
-            form.open();
           };
 
           if (document.readyState === 'loading') {

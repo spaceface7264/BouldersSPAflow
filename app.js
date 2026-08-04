@@ -7913,47 +7913,31 @@ function getProblemReportFeedbackOptions() {
   };
 }
 
-/** Attach signup-flow context so feedback reports are easier to triage in Sentry. */
-function enrichProblemReportContext() {
-  if (!Sentry || typeof Sentry.setContext !== 'function') return;
-
-  const routePath = window.location.pathname || '/';
-  const landingName = state.landingRouteConfig?.componentName || state.landingRouteConfig?.path || null;
-
+/**
+ * Feedback-scoped signup tags only (passed into createForm `tags`).
+ * Do not use global Sentry.setTag/setContext here — that leaks onto later error events.
+ */
+function getProblemReportTags() {
+  const tags = {};
   try {
-    if (typeof Sentry.setTag === 'function') {
-      Sentry.setTag('signup_step', String(state.currentStep ?? ''));
-      if (state.selectedBusinessUnit != null) {
-        Sentry.setTag('business_unit', String(state.selectedBusinessUnit));
-      }
-      if (state.orderId != null) {
-        Sentry.setTag('order_id', String(state.orderId));
-      }
-      if (landingName) {
-        Sentry.setTag('landing_route', String(landingName));
-      }
-    }
-
-    Sentry.setContext('signup', {
-      step: state.currentStep ?? null,
-      language: state.language || null,
-      businessUnit: state.selectedBusinessUnit ?? null,
-      gymId: state.selectedGymId ?? null,
-      gymName: state.selectedGymName ?? null,
-      productId: state.selectedProductId ?? null,
-      productType: state.selectedProductType ?? null,
-      orderId: state.orderId ?? null,
-      customerId: state.customerId ?? null,
-      landingRoute: landingName,
-      path: routePath,
-    });
+    if (state.currentStep != null) tags.signup_step = String(state.currentStep);
+    if (state.language) tags.language = String(state.language);
+    if (state.selectedBusinessUnit != null) tags.business_unit = String(state.selectedBusinessUnit);
+    if (state.selectedGymId != null) tags.gym_id = String(state.selectedGymId);
+    if (state.selectedProductId != null) tags.product_id = String(state.selectedProductId);
+    if (state.selectedProductType) tags.product_type = String(state.selectedProductType);
+    if (state.orderId != null) tags.order_id = String(state.orderId);
+    if (state.customerId != null) tags.customer_id = String(state.customerId);
+    const landingName = state.landingRouteConfig?.componentName || state.landingRouteConfig?.path;
+    if (landingName) tags.landing_route = String(landingName);
   } catch (e) {
-    // Never block the feedback form on context enrichment failures
+    // Never block the feedback form on tag enrichment failures
   }
+  return tags;
 }
 
 window.getProblemReportFeedbackOptions = getProblemReportFeedbackOptions;
-window.enrichProblemReportContext = enrichProblemReportContext;
+window.getProblemReportTags = getProblemReportTags;
 
 // Update all translations on the page
 function updatePageTranslations() {
