@@ -1730,12 +1730,9 @@ class AuthAPI {
     try {
       const { saveTokens = true, expectedFailure = false } = options;
 
-      // Honor shared cooldown on every login path (form, create auto-login, checkout).
-      // expectedFailure probes (if any) still respect server 429s but skip the pre-check
-      // so they cannot themselves extend a local throttle loop.
-      if (!expectedFailure) {
-        assertLoginNotCoolingDown();
-      }
+      // Honor shared cooldown on every login path (form, create auto-login, checkout, probes).
+      // expectedFailure only quiets expected 401 logging — it does not bypass rate limits.
+      assertLoginNotCoolingDown();
 
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
@@ -11712,9 +11709,62 @@ async function handleSaveAccount() {
       console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
 
-    // /99kr: do NOT probe login before create. Every new customer was generating a
-    // 401 INVALID_CREDENTIALS (and cascading 429s). Existing accounts are handled by
-    // the duplicate-email → login fallback below (and firstclimb guard after login).
+    // /99kr defensive existing-customer pre-check. BRP doesn't always reject duplicate
+    // emails on the create endpoint, so we attempt login with the typed credentials.
+    // If login succeeds, inspect product history — block only if they've held a product
+    // carrying a firstclimb blocking label (see FIRSTCLIMB_BLOCKING_LABELS).
+    // New customers get an expected 401 (quiet via expectedFailure; Sentry-filtered;
+    // does not count toward client-side failed-login throttle).
+    if (isFirstClimbRoute()) {
+      const candidateEmail = customerData.email;
+      const candidatePassword = customerData.password;
+      if (candidateEmail && candidatePassword) {
+        let preCheckLoggedIn = false;
+        try {
+          await authAPI.login(candidateEmail, candidatePassword, {
+            saveTokens: true,
+            expectedFailure: true,
+          });
+          preCheckLoggedIn = true;
+        } catch (preCheckErr) {
+          // Expected for genuinely new customers. Fall through to normal create.
+          // Respect cooldown if the probe itself hit a 429.
+          if (
+            preCheckErr?.status === 429 ||
+            preCheckErr?.isLoginCooldown ||
+            /\b429\b|rate\s*limit|too many requests/i.test(String(preCheckErr?.message || ''))
+          ) {
+            const retryMs = getLoginCooldownRemainingMs() || getRetryDelayFromError(preCheckErr);
+            if (getLoginCooldownRemainingMs() <= 0) setLoginCooldown(retryMs);
+            showSaveAccountMessage(getLoginRateLimitToastMessage(retryMs), 'error');
+            showToast(getLoginRateLimitToastMessage(retryMs), 'error');
+            return;
+          }
+          console.log(
+            '[Save Account] firstclimb pre-check login failed (expected for new customer):',
+            preCheckErr?.message || preCheckErr
+          );
+        }
+        if (preCheckLoggedIn) {
+          try {
+            await syncAuthenticatedCustomerState(undefined, candidateEmail);
+          } catch (syncErr) {
+            console.warn('[Save Account] customer state sync failed before history check:', syncErr);
+          }
+
+          const guard = await runFirstclimbGuard('saveAccount-preCheck');
+          if (guard.blocked) return;
+
+          // Clean history → treat the existing-customer login as the sign-in for
+          // this purchase. No create-customer POST is needed.
+          try { refreshLoginUI(); } catch (_) {}
+          showSaveAccountMessage('Welcome back! You can proceed to checkout.', 'success');
+          showToast('Logged in successfully.', 'success');
+          if (state.currentStep === 4) updatePaymentOverview();
+          return;
+        }
+      }
+    }
 
     console.log('[Save Account] Creating customer account...');
     const customer = await authAPI.createCustomer(customerData);
@@ -11883,6 +11933,12 @@ async function handleSaveAccount() {
       
       // Show appropriate message based on whether user is logged in
       if (hasTokens) {
+        // Defense in depth: if create/auto-login somehow authenticated an existing
+        // firstclimb customer, block before they reach Til Kassen.
+        if (isFirstClimbRoute()) {
+          const guard = await runFirstclimbGuard('saveAccount-postCreate');
+          if (guard.blocked) return;
+        }
         showSaveAccountMessage('Account saved successfully! You are now logged in. You can proceed to checkout.', 'success');
         showToast('Account saved and logged in successfully!', 'success');
         
@@ -11903,6 +11959,8 @@ async function handleSaveAccount() {
             try {
               await authAPI.login(autoEmail, autoPassword, { saveTokens: true });
               await syncAuthenticatedCustomerState(undefined, autoEmail);
+              const guard = await runFirstclimbGuard('saveAccount-tokenlessAutoLogin');
+              if (guard.blocked) return;
               try { refreshLoginUI(); } catch (_) {}
               showSaveAccountMessage('Account saved successfully! You are now logged in. You can proceed to checkout.', 'success');
               showToast('Account saved and logged in successfully!', 'success');
