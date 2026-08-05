@@ -1728,7 +1728,15 @@ class AuthAPI {
   // Step 6: Login - Submit login credentials and store tokens
   async login(email, password, options = {}) {
     try {
-      const { saveTokens = true } = options;
+      const { saveTokens = true, expectedFailure = false } = options;
+
+      // Honor shared cooldown on every login path (form, create auto-login, checkout).
+      // expectedFailure probes (if any) still respect server 429s but skip the pre-check
+      // so they cannot themselves extend a local throttle loop.
+      if (!expectedFailure) {
+        assertLoginNotCoolingDown();
+      }
+
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
@@ -1754,20 +1762,27 @@ class AuthAPI {
       } catch (error) {
         const errorPayload = error?.payload;
         const payloadText = typeof errorPayload === 'string' ? errorPayload : JSON.stringify(errorPayload);
-        console.error(`[Step 6] Login error (${error.status || 'unknown'}):`, payloadText || error);
+        if (expectedFailure && (error.status === 401 || error.status === 400)) {
+          console.log(`[Step 6] Login probe failed as expected (${error.status || 'unknown'}):`, payloadText || error.message);
+        } else {
+          console.error(`[Step 6] Login error (${error.status || 'unknown'}):`, payloadText || error);
+        }
 
         const rethrowLoginError = (message) => {
           const loginError = new Error(message);
           // Preserve HTTP status so the outer catch can skip expected 400/401/429 noise in Sentry.
           loginError.status = error.status;
           loginError.payload = errorPayload;
+          if (error.retryAfter != null) loginError.retryAfter = error.retryAfter;
           throw loginError;
         };
 
         // Handle rate limit errors with better messaging
         if (error.status === 429) {
           let retryAfterSeconds = 60; // Default 1 minute (60 seconds)
-          if (errorPayload && typeof errorPayload === 'object' && errorPayload.retryAfter) {
+          if (typeof error.retryAfter === 'number' && error.retryAfter > 0) {
+            retryAfterSeconds = error.retryAfter;
+          } else if (errorPayload && typeof errorPayload === 'object' && errorPayload.retryAfter) {
             retryAfterSeconds = parseInt(errorPayload.retryAfter, 10);
           } else if (payloadText) {
             const retryMatch = payloadText.match(/retryAfter["\s:]*(\d+)/i);
@@ -1775,14 +1790,11 @@ class AuthAPI {
               retryAfterSeconds = parseInt(retryMatch[1], 10);
             }
           }
-          if (typeof window !== 'undefined') {
-            window.loginCooldownUntil = Date.now() + (retryAfterSeconds * 1000);
+          if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+            retryAfterSeconds = 60;
           }
-          const retryMinutes = Math.floor(retryAfterSeconds / 60);
-          const retrySeconds = retryAfterSeconds % 60;
-          const retryMessage = retryMinutes > 0
-            ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
-            : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
+          setLoginCooldown(retryAfterSeconds * 1000);
+          const retryMessage = formatWaitDuration(retryAfterSeconds * 1000);
           rethrowLoginError(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${error.status} - ${payloadText})`);
         }
 
@@ -1840,19 +1852,19 @@ class AuthAPI {
       
       return data;
     } catch (error) {
-      console.error('[Step 6] Login error:', error);
-
-      // Report unexpected login failures only — wrong password, validation, and rate limits are UX.
       const status = error.status;
       const message = typeof error.message === 'string' ? error.message : '';
       const isExpectedLoginNoise =
+        error.isLoginCooldown ||
         status === 429 ||
         status === 400 ||
         status === 401 ||
         message.includes('INVALID_CREDENTIALS') ||
         message.includes('Rate limit exceeded') ||
         /Login failed:\s*(400|401)\b/.test(message);
+
       if (!isExpectedLoginNoise) {
+        console.error('[Step 6] Login error:', error);
         captureException(error, {
           tags: {
             flow: 'authentication',
@@ -1860,6 +1872,9 @@ class AuthAPI {
             status: status,
           },
         });
+      } else if (!error.isLoginCooldown) {
+        // Expected UX outcomes — keep a breadcrumb-level log, not an error storm.
+        console.log('[Step 6] Login rejected (expected):', status || message);
       }
 
       throw error;
@@ -5724,6 +5739,93 @@ let gymLoadCooldownUntil = 0;
 let gymLoadRetryTimeoutId = null;
 let customerSyncCooldownUntil = 0;
 let loginCooldownUntil = 0;
+/** Consecutive failed credential attempts on the real login form (session-local). */
+let loginFailedAttempts = 0;
+/** Client-side throttle before the server 429s us. Applied only to real login submits. */
+const LOGIN_CLIENT_THROTTLE_RULES = Object.freeze([
+  Object.freeze({ after: 5, ms: 30_000 }),
+  Object.freeze({ after: 8, ms: 120_000 }),
+  Object.freeze({ after: 12, ms: 300_000 }),
+]);
+
+function getLoginCooldownRemainingMs() {
+  const until = loginCooldownUntil || (typeof window !== 'undefined' && window.loginCooldownUntil) || 0;
+  return Math.max(0, until - Date.now());
+}
+
+function setLoginCooldown(ms) {
+  const until = Date.now() + Math.max(0, Number(ms) || 0);
+  loginCooldownUntil = until;
+  if (typeof window !== 'undefined') {
+    window.loginCooldownUntil = until;
+  }
+}
+
+function clearLoginCooldownAndFailures() {
+  loginCooldownUntil = 0;
+  loginFailedAttempts = 0;
+  if (typeof window !== 'undefined') {
+    window.loginCooldownUntil = 0;
+  }
+}
+
+/** Human-readable wait duration for rate-limit toasts (DA-first via t()). */
+function formatWaitDuration(ms) {
+  const totalSeconds = Math.max(1, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0 && seconds === 0) {
+    return minutes === 1
+      ? t('auth.wait.oneMinute', '1 minut')
+      : t('auth.wait.minutes', '{minutes} minutter').replace('{minutes}', String(minutes));
+  }
+  if (minutes > 0) {
+    return t('auth.wait.minutesAndSeconds', '{minutes} min. og {seconds} sek.')
+      .replace('{minutes}', String(minutes))
+      .replace('{seconds}', String(seconds));
+  }
+  return totalSeconds === 1
+    ? t('auth.wait.oneSecond', '1 sekund')
+    : t('auth.wait.seconds', '{seconds} sekunder').replace('{seconds}', String(totalSeconds));
+}
+
+function getLoginRateLimitToastMessage(ms) {
+  return t(
+    'auth.rateLimit.wait',
+    'For mange forsøg. Vent venligst {duration} før du prøver igen.'
+  ).replace('{duration}', formatWaitDuration(ms));
+}
+
+function createLoginCooldownError(remainingMs) {
+  const err = new Error(getLoginRateLimitToastMessage(remainingMs));
+  err.status = 429;
+  err.isLoginCooldown = true;
+  err.retryAfter = Math.ceil(remainingMs / 1000);
+  return err;
+}
+
+/** Enforce shared login cooldown before any authAPI.login call. */
+function assertLoginNotCoolingDown() {
+  const remaining = getLoginCooldownRemainingMs();
+  if (remaining > 0) {
+    throw createLoginCooldownError(remaining);
+  }
+}
+
+/** Escalate local cooldown after repeated wrong-password attempts (real login form only). */
+function recordFailedLoginAttempt() {
+  loginFailedAttempts += 1;
+  let throttleMs = 0;
+  for (const rule of LOGIN_CLIENT_THROTTLE_RULES) {
+    if (loginFailedAttempts >= rule.after) {
+      throttleMs = rule.ms;
+    }
+  }
+  if (throttleMs > 0 && throttleMs > getLoginCooldownRemainingMs()) {
+    setLoginCooldown(throttleMs);
+  }
+}
+
 let campaignCountdownIntervalId = null;
 let activationDatePeriodHintTimeoutId = null;
 let campaignGuardCustomerRefreshPromise = null;
@@ -7130,6 +7232,18 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
+    'auth.invalidCredentials': 'Ugyldig e-mail eller adgangskode. Tjek dine oplysninger og prøv igen.',
+    'auth.error.missingFields': 'Indtast både e-mail og adgangskode.',
+    'auth.loggedInAs': 'Logget ind som {name}.',
+    'auth.wait.oneMinute': '1 minut',
+    'auth.wait.minutes': '{minutes} minutter',
+    'auth.wait.minutesAndSeconds': '{minutes} min. og {seconds} sek.',
+    'auth.wait.oneSecond': '1 sekund',
+    'auth.wait.seconds': '{seconds} sekunder',
+    'auth.rateLimit.wait': 'For mange forsøg. Vent venligst {duration} før du prøver igen.',
+    'auth.saveAccount.rateLimited': 'Profilen er oprettet! Login er midlertidigt begrænset. Log ind manuelt, eller vent {duration}.',
+    'auth.saveAccount.autoLoginFailed': 'Profilen er oprettet, men vi kunne ikke logge dig ind automatisk. Prøv at logge ind, eller kontakt support.',
+    'auth.saveAccount.autoLoginFailedToast': 'Profil oprettet, men auto-login fejlede.',
     'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discountAmountWithPercent': 'Rabat ({percent})', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.discount.removed': 'Rabatkode fjernet.', 'cart.discount.removeFailed': 'Kunne ikke fjerne rabatkoden. Prøv igen.', 'cart.discount.empty': 'Indtast en rabatkode', 'cart.discount.loginRequired': 'Log ind eller opret en konto for at bruge en rabatkode', 'cart.discount.locationRequired': 'Vælg en hal først', 'cart.discount.selectProduct': 'Vælg et medlemskab eller klippekort først', 'cart.discount.notFound': 'Rabatkoden blev ikke fundet. Tjek koden og prøv igen.', 'cart.discount.invalid': 'Ugyldig rabatkode. Tjek koden og prøv igen.', 'cart.discount.expired': 'Denne rabatkode er udløbet.', 'cart.discount.alreadyUsed': 'Denne rabatkode er allerede brugt.', 'cart.discount.notApplicable': 'Rabatkoden gælder ikke for denne ordre.', 'cart.discount.forbidden': 'Rabatkoden kan ikke bruges på denne ordre.', 'cart.discount.genericFailed': 'Kunne ikke anvende rabatkoden. Prøv igen.', 'cart.discount.noOrder': 'Ingen ordre fundet. Genindlæs siden og prøv igen.', 'cart.discount.methodNotSupported': 'Rabatkode kunne ikke anvendes. Kontakt support.', 'cart.discount.applying': 'Anvender…', 'cart.discount.creatingOrder': 'Opretter ordre…', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
@@ -7424,6 +7538,18 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
+    'auth.invalidCredentials': 'Invalid email or password. Please check your details and try again.',
+    'auth.error.missingFields': 'Please enter both email and password.',
+    'auth.loggedInAs': 'Logged in as {name}.',
+    'auth.wait.oneMinute': '1 minute',
+    'auth.wait.minutes': '{minutes} minutes',
+    'auth.wait.minutesAndSeconds': '{minutes} min and {seconds} sec',
+    'auth.wait.oneSecond': '1 second',
+    'auth.wait.seconds': '{seconds} seconds',
+    'auth.rateLimit.wait': 'Too many attempts. Please wait {duration} before trying again.',
+    'auth.saveAccount.rateLimited': 'Account saved! Login is temporarily limited. Please log in manually, or wait {duration}.',
+    'auth.saveAccount.autoLoginFailed': 'Account saved, but we could not sign you in automatically. Please try logging in, or contact support.',
+    'auth.saveAccount.autoLoginFailedToast': 'Account saved, but auto-login failed.',
     'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discountAmountWithPercent': 'Discount ({percent})', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.discount.empty': 'Enter a discount code', 'cart.discount.loginRequired': 'Log in or create an account to use a discount code', 'cart.discount.locationRequired': 'Select a gym first', 'cart.discount.selectProduct': 'Select a membership or punch card first', 'cart.discount.notFound': 'Discount code not found. Check the code and try again.', 'cart.discount.invalid': 'Invalid discount code. Check the code and try again.', 'cart.discount.expired': 'This discount code has expired.', 'cart.discount.alreadyUsed': 'This discount code has already been used.', 'cart.discount.notApplicable': 'This discount code does not apply to your order.', 'cart.discount.forbidden': 'This discount code cannot be used on this order.', 'cart.discount.genericFailed': 'Could not apply the discount code. Please try again.', 'cart.discount.noOrder': 'No order found. Refresh the page and try again.', 'cart.discount.methodNotSupported': 'Discount code could not be applied. Please contact support.', 'cart.discount.applying': 'Applying…', 'cart.discount.creatingOrder': 'Creating order…', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
@@ -7700,6 +7826,18 @@ const translations = {
     'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
+    'auth.invalidCredentials': 'Ungültige E-Mail oder Passwort. Bitte überprüfen Sie Ihre Angaben und versuchen Sie es erneut.',
+    'auth.error.missingFields': 'Bitte geben Sie E-Mail und Passwort ein.',
+    'auth.loggedInAs': 'Angemeldet als {name}.',
+    'auth.wait.oneMinute': '1 Minute',
+    'auth.wait.minutes': '{minutes} Minuten',
+    'auth.wait.minutesAndSeconds': '{minutes} Min. und {seconds} Sek.',
+    'auth.wait.oneSecond': '1 Sekunde',
+    'auth.wait.seconds': '{seconds} Sekunden',
+    'auth.rateLimit.wait': 'Zu viele Versuche. Bitte warten Sie {duration}, bevor Sie es erneut versuchen.',
+    'auth.saveAccount.rateLimited': 'Konto gespeichert! Login ist vorübergehend eingeschränkt. Bitte melden Sie sich manuell an, oder warten Sie {duration}.',
+    'auth.saveAccount.autoLoginFailed': 'Konto gespeichert, aber die automatische Anmeldung ist fehlgeschlagen. Bitte melden Sie sich an, oder kontaktieren Sie den Support.',
+    'auth.saveAccount.autoLoginFailedToast': 'Konto gespeichert, aber Auto-Login fehlgeschlagen.',
     'firstclimb.category.title': 'Dein erster Kletterbesuch',
     'firstclimb.category.description': 'Eine Tageskarte für 99 kr inkl. Leihschuhe und Chalk. Nur für neue Kletterer.',
     'firstclimb.banner.title': 'Dein erster Kletterbesuch · 99 kr',
@@ -9614,17 +9752,10 @@ async function handleLoginSubmit(event) {
     return;
   }
 
-  // Check for login cooldown (rate limiting)
-  const now = Date.now();
-  const cooldownUntil = loginCooldownUntil || (typeof window !== 'undefined' && window.loginCooldownUntil) || 0;
-  if (now < cooldownUntil) {
-    const secondsLeft = Math.ceil((cooldownUntil - now) / 1000);
-    const minutesLeft = Math.floor(secondsLeft / 60);
-    const remainingSeconds = secondsLeft % 60;
-    const cooldownMessage = minutesLeft > 0
-      ? `${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}${remainingSeconds > 0 ? ` and ${remainingSeconds} second${remainingSeconds !== 1 ? 's' : ''}` : ''}`
-      : `${secondsLeft} second${secondsLeft !== 1 ? 's' : ''}`;
-    showToast(`Rate limit: Please wait ${cooldownMessage} before trying again.`, 'error');
+  // Check for login cooldown (rate limiting / client throttle)
+  const remainingMs = getLoginCooldownRemainingMs();
+  if (remainingMs > 0) {
+    showToast(getLoginRateLimitToastMessage(remainingMs), 'error');
     return;
   }
 
@@ -9632,7 +9763,7 @@ async function handleLoginSubmit(event) {
   const password = DOM.loginPassword?.value || '';
 
   if (!email || !password) {
-    showToast('Please enter both email and password.', 'error');
+    showToast(t('auth.error.missingFields', 'Indtast både e-mail og adgangskode.'), 'error');
     if (!email) {
       DOM.loginEmail?.closest('.form-group')?.classList.add('error');
     }
@@ -9683,7 +9814,10 @@ async function handleLoginSubmit(event) {
         } else if (customerData?.lastName) {
           displayName = customerData.lastName;
         }
-        showToast(`Logged in as ${displayName}.`, 'success');
+        showToast(
+          t('auth.loggedInAs', 'Logget ind som {name}.').replace('{name}', displayName),
+          'success'
+        );
         
         // Refresh UI again to show profile data
         refreshLoginUI();
@@ -9693,7 +9827,10 @@ async function handleLoginSubmit(event) {
           window.dispatchEvent(new Event('auth-state-changed'));
         }
       } else {
-        showToast(`Logged in as ${email}.`, 'success');
+        showToast(
+          t('auth.loggedInAs', 'Logget ind som {name}.').replace('{name}', email),
+          'success'
+        );
       }
       
       // Dispatch event to notify React components
@@ -9703,7 +9840,10 @@ async function handleLoginSubmit(event) {
     } catch (profileError) {
       console.warn('[login] Could not fetch customer profile:', profileError);
       // Continue even if profile fetch fails - refresh UI with whatever data we have
-      showToast(`Logged in as ${email}.`, 'success');
+      showToast(
+        t('auth.loggedInAs', 'Logget ind som {name}.').replace('{name}', email),
+        'success'
+      );
       refreshLoginUI();
       
       // Dispatch event to notify React components
@@ -9717,39 +9857,67 @@ async function handleLoginSubmit(event) {
       updatePaymentOverview();
     }
     DOM.loginForm?.reset();
-    // Clear cooldown on successful login
-    loginCooldownUntil = 0;
-    if (typeof window !== 'undefined') {
-      window.loginCooldownUntil = 0;
-    }
+    clearLoginCooldownAndFailures();
   } catch (error) {
-    console.error('[login] Login failed:', error);
-    
-    // Handle rate limit errors - set cooldown to prevent further attempts
-    if (error.message && error.message.includes('Rate limit exceeded')) {
-      const retryMs = getRetryDelayFromError(error);
-      loginCooldownUntil = Date.now() + retryMs;
-      if (typeof window !== 'undefined') {
-        window.loginCooldownUntil = loginCooldownUntil;
+    const isRateLimited =
+      error?.isLoginCooldown ||
+      error?.status === 429 ||
+      (error?.message && (
+        error.message.includes('Rate limit exceeded') ||
+        /\b429\b|too many requests/i.test(error.message)
+      ));
+
+    if (isRateLimited) {
+      const retryMs = error?.isLoginCooldown
+        ? getLoginCooldownRemainingMs() || getRetryDelayFromError(error)
+        : getRetryDelayFromError(error);
+      if (!error?.isLoginCooldown) {
+        setLoginCooldown(retryMs);
       }
-      const secondsLeft = Math.ceil(retryMs / 1000);
-      const minutesLeft = Math.floor(secondsLeft / 60);
-      const remainingSeconds = secondsLeft % 60;
-      const cooldownMessage = minutesLeft > 0
-        ? `${minutesLeft} minute${minutesLeft !== 1 ? 's' : ''}${remainingSeconds > 0 ? ` and ${remainingSeconds} second${remainingSeconds !== 1 ? 's' : ''}` : ''}`
-        : `${secondsLeft} second${secondsLeft !== 1 ? 's' : ''}`;
-      showToast(`Rate limit exceeded. Please wait ${cooldownMessage} before trying again.`, 'error');
-      console.warn(`[login] Rate limited. Cooldown set for ${secondsLeft}s (${cooldownMessage})`);
+      showToast(getLoginRateLimitToastMessage(retryMs), 'error');
+      console.warn(`[login] Rate limited. Cooldown set for ${Math.ceil(retryMs / 1000)}s`);
     } else {
-      // Extract and highlight error fields
-      const errorFields = extractErrorFields(error);
-      errorFields.forEach(({ fieldId }) => {
-        if (fieldId) {
-          highlightFieldError(fieldId, false);
+      // Wrong password / validation — escalate local throttle to stop hammering the API.
+      const isInvalidCredentials =
+        error?.status === 401 ||
+        (typeof error?.message === 'string' && (
+          error.message.includes('INVALID_CREDENTIALS') ||
+          /Login failed:\s*401\b/.test(error.message)
+        ));
+      if (isInvalidCredentials) {
+        const cooldownBefore = getLoginCooldownRemainingMs();
+        recordFailedLoginAttempt();
+        highlightFieldError('loginEmail', false);
+        highlightFieldError('loginPassword', false);
+        const cooldownAfter = getLoginCooldownRemainingMs();
+        // If client throttle just engaged, combine credential + wait guidance in one toast.
+        if (cooldownAfter > cooldownBefore) {
+          showToast(
+            `${t(
+              'auth.invalidCredentials',
+              'Ugyldig e-mail eller adgangskode. Tjek dine oplysninger og prøv igen.'
+            )} ${getLoginRateLimitToastMessage(cooldownAfter)}`,
+            'error'
+          );
+        } else {
+          showToast(
+            t(
+              'auth.invalidCredentials',
+              'Ugyldig e-mail eller adgangskode. Tjek dine oplysninger og prøv igen.'
+            ),
+            'error'
+          );
         }
-      });
-      
-      showToast(getErrorMessage(error, 'Login'), 'error');
+      } else {
+        console.error('[login] Login failed:', error);
+        const errorFields = extractErrorFields(error);
+        errorFields.forEach(({ fieldId }) => {
+          if (fieldId) {
+            highlightFieldError(fieldId, false);
+          }
+        });
+        showToast(getErrorMessage(error, 'Login'), 'error');
+      }
     }
   } finally {
     state.loginInProgress = false;
@@ -11544,45 +11712,9 @@ async function handleSaveAccount() {
       console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
 
-    // /99kr defensive existing-customer pre-check. BRP doesn't always reject duplicate
-    // emails on the create endpoint, so we attempt login with the typed credentials.
-    // If login succeeds, we inspect the customer's product history — only block if
-    // they've held a product carrying the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS).
-    // Otherwise (abandoned-but-empty profile, never-bought-anything customer) we
-    // treat them as eligible: keep the tokens, sync state, skip create-customer.
-    if (isFirstClimbRoute()) {
-      const candidateEmail = customerData.email;
-      const candidatePassword = customerData.password;
-      if (candidateEmail && candidatePassword) {
-        let preCheckLoggedIn = false;
-        try {
-          await authAPI.login(candidateEmail, candidatePassword, { saveTokens: true });
-          preCheckLoggedIn = true;
-        } catch (preCheckErr) {
-          // Expected for genuinely new customers. Fall through to normal create.
-          console.log('[Save Account] firstclimb pre-check login failed (expected for new customer):', preCheckErr?.message || preCheckErr);
-        }
-        if (preCheckLoggedIn) {
-          try {
-            await syncAuthenticatedCustomerState(undefined, candidateEmail);
-          } catch (syncErr) {
-            console.warn('[Save Account] customer state sync failed before history check:', syncErr);
-          }
-
-          const guard = await runFirstclimbGuard('saveAccount-preCheck');
-          if (guard.blocked) return;
-
-          // Clean history → treat the existing-customer login as the sign-in for
-          // this purchase. No create-customer POST is needed; the user is ready
-          // to proceed to Til Kassen.
-          try { refreshLoginUI(); } catch (_) {}
-          showSaveAccountMessage('Welcome back! You can proceed to checkout.', 'success');
-          showToast('Logged in successfully.', 'success');
-          if (state.currentStep === 4) updatePaymentOverview();
-          return;
-        }
-      }
-    }
+    // /99kr: do NOT probe login before create. Every new customer was generating a
+    // 401 INVALID_CREDENTIALS (and cascading 429s). Existing accounts are handled by
+    // the duplicate-email → login fallback below (and firstclimb guard after login).
 
     console.log('[Save Account] Creating customer account...');
     const customer = await authAPI.createCustomer(customerData);
@@ -11685,18 +11817,27 @@ async function handleSaveAccount() {
           
           // Handle rate limit errors specifically
           const errorMessage = loginError.message || String(loginError);
-          if (errorMessage.includes('429') || errorMessage.includes('Rate limit') || errorMessage.includes('Too many requests')) {
-            // Extract retryAfter if available
-            let retryAfterSeconds = 60; // Default 1 minute
-            const retryAfterMatch = errorMessage.match(/retryAfter["\s:]*(\d+)/i);
-            if (retryAfterMatch) {
-              retryAfterSeconds = parseInt(retryAfterMatch[1], 10);
+          if (
+            loginError?.status === 429 ||
+            loginError?.isLoginCooldown ||
+            errorMessage.includes('429') ||
+            errorMessage.includes('Rate limit') ||
+            errorMessage.includes('Too many requests')
+          ) {
+            const retryMs = getLoginCooldownRemainingMs() || getRetryDelayFromError(loginError);
+            if (getLoginCooldownRemainingMs() <= 0) {
+              setLoginCooldown(retryMs);
             }
-            const retryMinutes = Math.ceil(retryAfterSeconds / 60);
-            
-            console.warn(`[Save Account] Rate limit hit. Will retry login automatically in ${retryMinutes} minute(s)`);
-            showSaveAccountMessage(`Account saved successfully! Login temporarily rate-limited. Please log in manually to continue, or wait ${retryMinutes} minute(s) and refresh.`, 'error');
-            showToast('Account saved! Login rate-limited. Please log in manually.', 'warning');
+            const waitLabel = formatWaitDuration(retryMs);
+            console.warn(`[Save Account] Rate limit hit. Cooldown: ${waitLabel}`);
+            showSaveAccountMessage(
+              t(
+                'auth.saveAccount.rateLimited',
+                'Profilen er oprettet! Login er midlertidigt begrænset. Log ind manuelt, eller vent {duration}.'
+              ).replace('{duration}', waitLabel),
+              'error'
+            );
+            showToast(getLoginRateLimitToastMessage(retryMs), 'warning');
           } else {
             // Other login errors
             console.warn('[Save Account] Auto-login failed, user will need to log in manually:', loginError);
@@ -11768,8 +11909,34 @@ async function handleSaveAccount() {
               if (state.currentStep === 4) updatePaymentOverview();
             } catch (autoLoginErr) {
               console.warn('[Save Account] firstclimb auto-login after tokenless create failed:', autoLoginErr);
-              showSaveAccountMessage('Account saved, but we could not sign you in automatically. Please try again or contact support.', 'error');
-              showToast('Account saved, but auto-login failed.', 'error');
+              if (
+                autoLoginErr?.status === 429 ||
+                autoLoginErr?.isLoginCooldown ||
+                /\b429\b|rate\s*limit|too many requests/i.test(String(autoLoginErr?.message || ''))
+              ) {
+                const retryMs = getLoginCooldownRemainingMs() || getRetryDelayFromError(autoLoginErr);
+                if (getLoginCooldownRemainingMs() <= 0) setLoginCooldown(retryMs);
+                showSaveAccountMessage(
+                  t(
+                    'auth.saveAccount.rateLimited',
+                    'Profilen er oprettet! Login er midlertidigt begrænset. Log ind manuelt, eller vent {duration}.'
+                  ).replace('{duration}', formatWaitDuration(retryMs)),
+                  'error'
+                );
+                showToast(getLoginRateLimitToastMessage(retryMs), 'warning');
+              } else {
+                showSaveAccountMessage(
+                  t(
+                    'auth.saveAccount.autoLoginFailed',
+                    'Profilen er oprettet, men vi kunne ikke logge dig ind automatisk. Prøv at logge ind, eller kontakt support.'
+                  ),
+                  'error'
+                );
+                showToast(
+                  t('auth.saveAccount.autoLoginFailedToast', 'Profil oprettet, men auto-login fejlede.'),
+                  'error'
+                );
+              }
             }
           } else {
             showSaveAccountMessage('Account saved successfully! Please log in to continue.', 'success');
@@ -11806,9 +11973,20 @@ async function handleSaveAccount() {
           showToast('Account saved successfully!', 'success');
           refreshLoginUI();
         } catch (loginErr) {
-          const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
-          showSaveAccountMessage(duplicateMessage, 'error');
-          showToast('Account already exists. Please log in.', 'error');
+          if (
+            loginErr?.status === 429 ||
+            loginErr?.isLoginCooldown ||
+            /\b429\b|rate\s*limit|too many requests/i.test(String(loginErr?.message || ''))
+          ) {
+            const retryMs = getLoginCooldownRemainingMs() || getRetryDelayFromError(loginErr);
+            if (getLoginCooldownRemainingMs() <= 0) setLoginCooldown(retryMs);
+            showSaveAccountMessage(getLoginRateLimitToastMessage(retryMs), 'error');
+            showToast(getLoginRateLimitToastMessage(retryMs), 'error');
+          } else {
+            const duplicateMessage = `An account with this email address${emailVal ? ` (${emailVal})` : ''} already exists. Please log in instead.`;
+            showSaveAccountMessage(duplicateMessage, 'error');
+            showToast('Account already exists. Please log in.', 'error');
+          }
           const emailInput = document.getElementById('email');
           if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
           switchAuthMode('login', emailVal);
@@ -18191,7 +18369,11 @@ function isRateLimitError(error) {
 
 function getRetryDelayFromError(error, defaultMs = 120000) {
   // Default to 2 minutes (120 seconds) if we can't extract retryAfter.
-  // Prefer error.payload (set by requestJson) over parsing error.message.
+  // Prefer error.retryAfter / error.payload (set by requestJson) over parsing error.message.
+  if (typeof error?.retryAfter === 'number' && error.retryAfter > 0) {
+    return Math.max(error.retryAfter * 1000, 1000);
+  }
+
   const candidates = [];
   if (error?.payload != null) candidates.push(error.payload);
   if (typeof error?.message === 'string') candidates.push(error.message);
@@ -18599,24 +18781,19 @@ async function handleCheckout() {
             } catch (loginError) {
               // Handle rate limit errors specifically
               const errorMessage = loginError.message || String(loginError);
-              if (errorMessage.includes('429') || errorMessage.includes('Rate limit') || errorMessage.includes('Too many requests')) {
-                // Extract retryAfter from error message (it's in seconds)
-                let retryAfterSeconds = 60; // Default 1 minute (60 seconds) - more reasonable
-                const retryAfterMatch = errorMessage.match(/retryAfter["\s:]*(\d+)/i);
-                if (retryAfterMatch) {
-                  retryAfterSeconds = parseInt(retryAfterMatch[1], 10);
-                  // Cap at 2 minutes (120 seconds) for better UX - API might say 15 minutes but that's too long
-                  retryAfterSeconds = Math.min(retryAfterSeconds, 120);
-                }
-                
-                const retryMinutes = Math.ceil(retryAfterSeconds / 60);
-                const retrySeconds = retryAfterSeconds % 60;
-                const retryMessage = retryMinutes > 0 
-                  ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
-                  : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
-                
-                console.error(`[checkout] ⚠️ Rate limit exceeded. Please wait ${retryMessage} before trying again.`);
-                showToast(`Rate limit exceeded. Please wait ${retryMessage} before trying again.`, 'error');
+              if (
+                loginError?.status === 429 ||
+                loginError?.isLoginCooldown ||
+                errorMessage.includes('429') ||
+                errorMessage.includes('Rate limit') ||
+                errorMessage.includes('Too many requests')
+              ) {
+                const retryMs = getLoginCooldownRemainingMs() || getRetryDelayFromError(loginError);
+                if (getLoginCooldownRemainingMs() <= 0) setLoginCooldown(retryMs);
+                const retryMessage = formatWaitDuration(retryMs);
+
+                console.warn(`[checkout] Rate limit exceeded. Please wait ${retryMessage} before trying again.`);
+                showToast(getLoginRateLimitToastMessage(retryMs), 'error');
                 
                 // If we have existing tokens, try to use them
                 if (existingAccessToken && existingRefreshToken) {
@@ -18626,7 +18803,7 @@ async function handleCheckout() {
                   setCheckoutLoadingState(false);
                   state.checkoutInProgress = false;
                   const rateLimitError = new Error(
-                    `Rate limit exceeded. Please wait ${retryMessage} before trying again.`
+                    getLoginRateLimitToastMessage(retryMs)
                   );
                   rateLimitError.status = 429;
                   throw rateLimitError;

@@ -29,6 +29,37 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
 
+    <!--
+      Defensive WebView shim (runs before any third-party scripts).
+      Instagram/Meta in-app browsers sometimes evaluate window.webkit.messageHandlers
+      even when no native bridge exists, which throws an unhandled TypeError and can
+      tear down the page. Only fill in missing parents; never overwrite a real bridge.
+    -->
+    <script>
+      (function () {
+        try {
+          if (typeof window === 'undefined') return;
+          if (!window.webkit) window.webkit = {};
+          if (!window.webkit.messageHandlers) {
+            var handlers = {};
+            window.webkit.messageHandlers = typeof Proxy !== 'undefined'
+              ? new Proxy(handlers, {
+                  get: function (target, prop) {
+                    if (prop in target) return target[prop];
+                    if (typeof prop === 'symbol') return undefined;
+                    var noop = { postMessage: function () {} };
+                    target[prop] = noop;
+                    return noop;
+                  },
+                })
+              : handlers;
+          }
+        } catch (e) {
+          // Ignore — shim must never break page boot.
+        }
+      })();
+    </script>
+
     <!-- Cookiebot - Must load first to set consent before GTM/tracking -->
     <script id="Cookiebot" src="https://consent.cookiebot.com/uc.js" data-cbid="31a4df3e-7adc-432b-8c8c-30c07e1d0f93" data-blockingmode="manual" type="text/javascript" async></script>
 
@@ -149,6 +180,9 @@
               '_AutofillCallbackHandler',
               // In-app browsers / WebViews (Meta, Android)
               'webkit.messageHandlers',
+              "undefined is not an object (evaluating 'window.webkit.messageHandlers')",
+              "Cannot read properties of undefined (reading 'messageHandlers')",
+              "Cannot read property 'messageHandlers' of undefined",
               'Java object is gone',
               // Network errors that are expected
               'NetworkError',
@@ -187,7 +221,7 @@
               if (
                 status === 429 ||
                 /\b429\b|rate\s*limit|too many requests/i.test(message) ||
-                /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
+                /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
               ) {
                 return null;
               }

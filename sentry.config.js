@@ -97,6 +97,9 @@ export function initSentry(options = {}) {
       '_AutofillCallbackHandler',
       // In-app browsers / WebViews (Meta, Android)
       'webkit.messageHandlers',
+      "undefined is not an object (evaluating 'window.webkit.messageHandlers')",
+      "Cannot read properties of undefined (reading 'messageHandlers')",
+      "Cannot read property 'messageHandlers' of undefined",
       'Java object is gone',
       // Network errors that are expected
       'NetworkError',
@@ -129,7 +132,7 @@ export function initSentry(options = {}) {
       if (
         status === 429 ||
         /\b429\b|rate\s*limit|too many requests/i.test(message) ||
-        /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
+        /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
       ) {
         return null;
       }
