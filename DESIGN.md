@@ -116,7 +116,9 @@ The full OpenAPI 3.0 spec for BRP API3 is checked in at `docs/brp-api3-openapi.y
 
 ## Observability
 
-- **Sentry** captures unhandled errors and traces (10% sample). Environment is `production` only on `join.boulders.dk`; everywhere else is `development`. A common-noise denylist (`NetworkError`, `Failed to fetch`, extension-injected errors) is configured in `index.html`.
+- **Sentry** (CDN init in `index.html`, tracing + feedback + replay bundle): captures unhandled errors and traces (10% sample in production). Environment is `production` only on `join.boulders.dk`; everywhere else is `development`. A common-noise denylist (`NetworkError`, `Failed to fetch`, extension-injected errors, expected auth/rate-limit outcomes) is configured in `index.html`.
+- **Report a problem**: floating bug-icon button (bottom-right) + footer Support link open Sentry User Feedback. Reports are triaged in Sentry → User Feedback. Signup identifiers are passed as feedback-only `tags` (not global session scope). After submit, the floating button briefly shows a success state.
+- **Session Replay**: buffer mode only, gated on Cookiebot **statistics** consent (always on in local/dev). Attached to feedback submissions; text/inputs masked. CSP needs `worker-src 'self' blob:` (and `child-src` for older Safari) in `_headers`.
 - **Logs are silent by default**: `console.log`/`console.warn` are no-ops unless `window.DEBUG_LOGS === true`. Use `devLog`/`devWarn` in code so that flipping the global flag re-enables logging. This is the only realistic way to debug a customer-reported issue in prod without redeploying.
 - **GTM + Google Consent Mode v2** are wired such that nothing fires before Cookiebot resolves consent. `gtm-utils.js` is the typed wrapper around `dataLayer.push`.
 
