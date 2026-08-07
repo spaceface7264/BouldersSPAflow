@@ -1,7 +1,18 @@
 // Sentry is initialized in index.html via CDN script tag
 // Use window.Sentry for error tracking
 const Sentry = window.Sentry || {};
+
+/** Rate limits are expected backend backpressure — never report them as product errors. */
+const isRateLimitLikeError = (error) => {
+  if (!error) return false;
+  if (error.status === 429) return true;
+  const message = typeof error.message === 'string' ? error.message : String(error);
+  return /\b429\b|rate\s*limit|too many requests/i.test(message);
+};
+
 const captureException = (error, context) => {
+  // Hard gate: 429 / rate-limit must never become Sentry issues (call sites can forget).
+  if (isRateLimitLikeError(error)) return;
   if (Sentry.captureException) {
     Sentry.captureException(error, context);
   }
@@ -57,6 +68,434 @@ function getTodayLocalDateString() {
   const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/** BRP API3 CurrencyOut.amount is always in minor units (øre). */
+function extractCurrencyOutKr(currencyOut) {
+  if (currencyOut == null) return 0;
+  if (typeof currencyOut === 'number') {
+    return roundToHalfKrone(currencyOut / 100);
+  }
+  if (typeof currencyOut === 'object') {
+    if (typeof currencyOut.amount === 'number') {
+      return roundToHalfKrone(currencyOut.amount / 100);
+    }
+    const nested = currencyOut.value ?? currencyOut.discount;
+    if (nested != null) return extractCurrencyOutKr(nested);
+  }
+  return 0;
+}
+
+/** Parse coupon discount from CurrencyOut, item.coupon, or order response. */
+function extractCouponDiscountKr(source) {
+  if (source == null) return 0;
+  if (typeof source === 'number') return extractCurrencyOutKr(source);
+  if (typeof source === 'object') {
+    if (source.couponDiscount != null || source.price?.couponDiscount != null) {
+      return extractCurrencyOutKr(source.couponDiscount ?? source.price?.couponDiscount);
+    }
+    if (source.discount != null && source.name != null) {
+      return extractCurrencyOutKr(source.discount);
+    }
+    return extractCurrencyOutKr(source);
+  }
+  return 0;
+}
+
+function calculateOrderCouponDiscountKr(order, subtotalForFallback = 0) {
+  const fromCouponField = extractCouponDiscountKr(
+    order?.couponDiscount ?? order?.price?.couponDiscount
+  );
+  if (fromCouponField > 0) return fromCouponField;
+
+  const price = order?.price;
+  if (price && subtotalForFallback > 0) {
+    const orderTotalKr = extractCurrencyOutKr(price.amount ?? price.total ?? price.leftToPay);
+    if (orderTotalKr > 0 && orderTotalKr < subtotalForFallback) {
+      return roundToHalfKrone(subtotalForFallback - orderTotalKr);
+    }
+  }
+  return 0;
+}
+
+function capCouponDiscountKr(discountAmount, subtotal) {
+  if (discountAmount > subtotal && subtotal > 0) {
+    console.warn('[Discount] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
+    return subtotal;
+  }
+  return discountAmount;
+}
+
+/** Original / discount / pay-now breakdown for payment overview when a coupon is applied. */
+function resolvePayNowDiscountBreakdown(basePayNowKr) {
+  const base = roundToHalfKrone(basePayNowKr);
+  const catalogSubtotal = roundToHalfKrone(state.totals.subtotal || 0);
+  const stateDiscountKr = state.discountApplied
+    ? roundToHalfKrone(state.totals.discountAmount || 0)
+    : 0;
+  const orderCouponKr = getOrderCouponDiscountKr();
+  const orderCouponKrForLogic = orderCouponKr > 0 ? orderCouponKr : stateDiscountKr;
+
+  if (orderCouponKrForLogic <= 0 && stateDiscountKr <= 0) {
+    return { beforeDiscount: base, discountKr: 0, afterDiscount: base, hasDiscount: false };
+  }
+
+  const orderPriceKr = state.fullOrder?.price?.amount !== undefined
+    ? roundToHalfKrone(extractCurrencyOutKr(state.fullOrder.price.amount))
+    : null;
+
+  let afterDiscount = base;
+  let beforeDiscount = base;
+  let discountKr = orderCouponKrForLogic;
+
+  if (orderPriceKr !== null && (orderCouponKr > 0 || (stateDiscountKr > 0 && orderPriceKr < base))) {
+    afterDiscount = orderPriceKr;
+    const orderDerivedBefore = roundToHalfKrone(afterDiscount + orderCouponKrForLogic);
+    // Keep the catalog/cart price the user saw before applying the coupon. BRP's
+    // order-derived pre-discount total can differ by half-krone (e.g. 99,50 vs 99,00).
+    const anchorBefore = catalogSubtotal > afterDiscount ? catalogSubtotal : orderDerivedBefore;
+    beforeDiscount = anchorBefore > afterDiscount ? anchorBefore : orderDerivedBefore;
+    discountKr = roundToHalfKrone(Math.max(0, beforeDiscount - afterDiscount));
+  } else {
+    beforeDiscount = catalogSubtotal > 0 ? catalogSubtotal : base;
+    afterDiscount = roundToHalfKrone(Math.max(0, beforeDiscount - orderCouponKrForLogic));
+    discountKr = roundToHalfKrone(Math.max(0, beforeDiscount - afterDiscount));
+  }
+
+  const hasDiscount = discountKr > 0 && beforeDiscount > afterDiscount;
+  return { beforeDiscount, discountKr, afterDiscount, hasDiscount };
+}
+
+function getOrderCouponDiscountKr() {
+  const fromOrder = roundToHalfKrone(extractCouponDiscountKr(state.fullOrder?.couponDiscount));
+  if (fromOrder > 0) return fromOrder;
+
+  const order = state.fullOrder;
+  const itemGroups = [
+    order?.subscriptionItems,
+    order?.valueCardItems,
+    order?.articleItems,
+    order?.entryItems,
+  ].filter(Array.isArray);
+
+  let lineSum = 0;
+  for (const items of itemGroups) {
+    for (const item of items) {
+      if (item?.coupon?.discount) {
+        lineSum += extractCurrencyOutKr(item.coupon.discount);
+      }
+    }
+  }
+  return roundToHalfKrone(lineSum);
+}
+
+function isPunchCardCheckout() {
+  return state.selectedProductType === 'punch-card' && Boolean(state.selectedProductId);
+}
+
+function ensurePaymentOverviewDomRefs() {
+  if (!DOM.paymentOverview) {
+    DOM.paymentOverview = document.querySelector('.payment-overview:not(.payment-overview-total-wrap)')
+      || document.querySelector('.payment-overview');
+  }
+  if (!DOM.payNow) DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
+  if (!DOM.monthlyPayment) DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
+  if (!DOM.paymentDiscount) DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
+  if (!DOM.paymentPayNowOriginal) DOM.paymentPayNowOriginal = document.querySelector('[data-summary-field="pay-now-original"]');
+  if (!DOM.firstMonthRow) DOM.firstMonthRow = document.querySelector('.payment-overview-first-month');
+  if (!DOM.paymentBoundUntil) DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
+}
+
+function applyPaymentOverviewDiscountRows(payNowBreakdown) {
+  const originalRow = DOM.paymentPayNowOriginal?.closest('.payment-overview-original')
+    || document.querySelector('.payment-overview-original');
+  if (payNowBreakdown.hasDiscount) {
+    if (originalRow) originalRow.style.display = 'flex';
+    if (DOM.paymentPayNowOriginal) {
+      DOM.paymentPayNowOriginal.textContent = formatCurrencyHalfKrone(payNowBreakdown.beforeDiscount);
+    }
+    if (DOM.paymentDiscount) {
+      DOM.paymentDiscount.textContent = `-${formatCurrencyHalfKrone(payNowBreakdown.discountKr)}`;
+      const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
+      if (discountRow) {
+        discountRow.style.display = 'flex';
+        const discountLabel = discountRow.querySelector('.payment-label');
+        if (discountLabel) discountLabel.textContent = getDiscountAmountLabel(payNowBreakdown);
+      }
+    }
+  } else {
+    if (originalRow) originalRow.style.display = 'none';
+    if (DOM.paymentDiscount) {
+      const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
+      if (discountRow) discountRow.style.display = 'none';
+    }
+  }
+}
+
+function getPunchCardPayNowBaseKr() {
+  const subtotal = state.totals.subtotal || 0;
+  if (state.fullOrder?.price?.amount === undefined) return subtotal;
+
+  const orderKr = roundToHalfKrone(extractCurrencyOutKr(state.fullOrder.price.amount));
+  const couponKr = getOrderCouponDiscountKr();
+  if (couponKr > 0) return roundToHalfKrone(orderKr + couponKr);
+  if (state.discountApplied && state.totals.discountAmount > 0) {
+    return roundToHalfKrone(orderKr + state.totals.discountAmount);
+  }
+  return orderKr > 0 ? orderKr : subtotal;
+}
+
+function updatePunchCardPaymentOverview() {
+  DOM.paymentOverview.style.display = 'block';
+  const totalWrap = document.querySelector('.payment-overview-total-wrap');
+  if (totalWrap) totalWrap.style.display = 'none';
+
+  const monthlyPaymentItem = DOM.monthlyPayment?.closest('.payment-overview-item');
+  if (monthlyPaymentItem) monthlyPaymentItem.style.display = 'none';
+  if (DOM.firstMonthRow) DOM.firstMonthRow.style.display = 'none';
+  if (DOM.paymentBoundUntil) DOM.paymentBoundUntil.style.display = 'none';
+  if (DOM.paymentOverview) DOM.paymentOverview.classList.remove('payment-overview--tiered-offer');
+
+  const payNowBreakdown = resolvePayNowDiscountBreakdown(getPunchCardPayNowBaseKr());
+  const payNowAmount = roundToHalfKrone(payNowBreakdown.afterDiscount);
+
+  state.totals.payNowAmount = payNowAmount;
+  state.totals.cartTotal = payNowAmount;
+
+  applyPaymentOverviewDiscountRows(payNowBreakdown);
+
+  if (DOM.payNow) {
+    DOM.payNow.textContent = formatCurrencyHalfKrone(payNowAmount);
+    const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
+    const periodElement = payNowRow?.querySelector('.payment-label-period');
+    if (periodElement) periodElement.textContent = '';
+  }
+
+  const payNowIncludesEl = document.querySelector('[data-summary-field="pay-now-includes"]');
+  if (payNowIncludesEl) {
+    payNowIncludesEl.style.display = 'none';
+    payNowIncludesEl.textContent = '';
+  }
+
+  applyFreeFlowCartUi();
+}
+
+function formatCouponPercent(percent) {
+  if (!Number.isFinite(percent) || percent <= 0) return null;
+  // Half-krone rounding on amounts can yield 25.125% etc. for a 25% coupon — snap to integer when close.
+  const rounded = Math.abs(percent - Math.round(percent)) < 0.2
+    ? Math.round(percent)
+    : Math.round(percent * 10) / 10;
+  return `${rounded}%`;
+}
+
+function getDiscountAmountLabel(payNowBreakdown) {
+  if (!payNowBreakdown?.hasDiscount || payNowBreakdown.beforeDiscount <= 0) {
+    return t('cart.discountAmount');
+  }
+  const percent = (payNowBreakdown.discountKr / payNowBreakdown.beforeDiscount) * 100;
+  const percentText = formatCouponPercent(percent);
+  if (!percentText) return t('cart.discountAmount');
+  return t('cart.discountAmountWithPercent').replace('{percent}', percentText);
+}
+
+function normalizeCartProductId(id) {
+  if (id == null) return null;
+  if (typeof id === 'string' && id.startsWith('punch-')) {
+    return parseInt(id.replace('punch-', ''), 10);
+  }
+  return id;
+}
+
+function findOrderItemForCartItem(item) {
+  const order = state.fullOrder;
+  if (!order || !item) return null;
+
+  const productId = normalizeCartProductId(item.productId ?? item.id);
+  const matchProduct = (orderItem) => {
+    const pid = orderItem?.product?.id;
+    return pid === productId || String(pid) === String(productId);
+  };
+
+  if (item.type === 'membership') {
+    return order.subscriptionItems?.find(matchProduct) ?? null;
+  }
+  if (item.type === 'value-card') {
+    return order.valueCardItems?.find(matchProduct) ?? null;
+  }
+  if (item.type === 'addon') {
+    return order.articleItems?.find(matchProduct) ?? null;
+  }
+  return null;
+}
+
+/** Per-item coupon from BRP order line (product-specific); 0 when coupon does not apply. */
+function getCartItemCouponDiscountKr(item) {
+  if (!state.discountApplied) return 0;
+  const orderItem = findOrderItemForCartItem(item);
+  if (!orderItem?.coupon?.discount) return 0;
+  return extractCurrencyOutKr(orderItem.coupon.discount);
+}
+
+function getCartItemDisplayPrices(item) {
+  const originalPrice = item.amount;
+  const itemDiscount = getCartItemCouponDiscountKr(item);
+  const displayPrice = itemDiscount > 0
+    ? Math.max(0, roundToHalfKrone(originalPrice - itemDiscount))
+    : originalPrice;
+  return { originalPrice, displayPrice, itemDiscount };
+}
+
+function renderCartItemPriceElement(priceEl, item) {
+  if (!priceEl) return;
+  const { originalPrice, displayPrice, itemDiscount } = getCartItemDisplayPrices(item);
+  const roundedOriginal = roundToHalfKrone(originalPrice);
+  const roundedDisplay = roundToHalfKrone(displayPrice);
+
+  if (itemDiscount > 0 && roundedDisplay !== roundedOriginal) {
+    priceEl.classList.add('cart-price-discounted');
+    priceEl.innerHTML = sanitizeHTML(
+      `<span class="cart-price-old">${formatPriceHalfKrone(roundedOriginal)} kr.</span><span class="cart-price-new">${formatPriceHalfKrone(roundedDisplay)} kr.</span>`
+    );
+    return;
+  }
+  priceEl.classList.remove('cart-price-discounted');
+  priceEl.textContent = formatPriceHalfKrone(roundedDisplay) + ' kr.';
+}
+
+let discountApplyInFlight = false;
+
+function beginApplyDiscountLoading(label) {
+  discountApplyInFlight = true;
+  if (!DOM.applyDiscountBtn) return;
+  DOM.applyDiscountBtn.disabled = true;
+  DOM.applyDiscountBtn.textContent = label;
+}
+
+function endApplyDiscountLoading() {
+  discountApplyInFlight = false;
+  syncApplyDiscountButtonState();
+}
+
+function isApplyDiscountButtonLoading() {
+  return discountApplyInFlight;
+}
+
+function syncApplyDiscountButtonState() {
+  if (!DOM.applyDiscountBtn || !DOM.discountInput || state.discountApplied) return;
+  if (discountApplyInFlight) return;
+  DOM.applyDiscountBtn.textContent = t('button.apply');
+  DOM.applyDiscountBtn.disabled = DOM.discountInput.value.trim().length === 0;
+}
+
+let discountInputErrorTimer = null;
+
+function clearDiscountInputError() {
+  if (discountInputErrorTimer) {
+    window.clearTimeout(discountInputErrorTimer);
+    discountInputErrorTimer = null;
+  }
+  DOM.discountInput?.classList.remove('discount-input--error');
+}
+
+function setDiscountInputError() {
+  clearDiscountInputError();
+  DOM.discountInput?.classList.add('discount-input--error');
+  discountInputErrorTimer = window.setTimeout(() => {
+    if (!state.discountApplied) clearDiscountInputError();
+  }, 5000);
+}
+
+function resolveDiscountApplyErrorMessage(errorText) {
+  const text = String(errorText || '').toLowerCase();
+
+  if (text.includes('log in') || text.includes('account') || text.includes('log ind') || text.includes('konto')) {
+    return t('cart.discount.loginRequired');
+  }
+  if (text.includes('gym location') || text.includes('business unit')) {
+    return t('cart.discount.locationRequired');
+  }
+  if (text.includes('coupon_not_applicable') || text.includes('not applicable')) {
+    return t('cart.discount.notApplicable');
+  }
+  if (text.includes('coupon_not_found') || text.includes('not found') || text.includes('404')) {
+    return t('cart.discount.notFound');
+  }
+  if (text.includes('coupon_expired') || text.includes('expired') || text.includes('udløb')) {
+    return t('cart.discount.expired');
+  }
+  if (text.includes('coupon_already_used') || text.includes('already used')) {
+    return t('cart.discount.alreadyUsed');
+  }
+  if (text.includes('403') || text.includes('forbidden')) {
+    return t('cart.discount.forbidden');
+  }
+  if (text.includes('405')) {
+    return t('cart.discount.methodNotSupported');
+  }
+  if (text.includes('400') || text.includes('invalid') || text.includes('no discount applied')) {
+    return t('cart.discount.invalid');
+  }
+
+  return t('cart.discount.genericFailed');
+}
+
+function showDiscountError(message) {
+  showDiscountMessage(message, 'error');
+  setDiscountInputError();
+  DOM.discountInput?.focus();
+}
+
+function handleDiscountInputChange() {
+  clearDiscountInputError();
+  const existingError = document.querySelector('.discount-message-error');
+  if (existingError) clearDiscountMessage();
+  syncApplyDiscountButtonState();
+}
+
+function updateDiscountFormControls() {
+  const entry = DOM.discountFormEntry || DOM.discountForm?.querySelector('.discount-form-entry');
+  const chip = DOM.discountAppliedChip || DOM.discountForm?.querySelector('.discount-applied-chip');
+  const codeEl = DOM.discountAppliedCode || chip?.querySelector('.discount-applied-code');
+  const removeLink = DOM.removeDiscountBtn || chip?.querySelector('.discount-remove-link');
+
+  if (state.discountApplied && state.discountCode) {
+    if (entry) entry.hidden = true;
+    if (chip) {
+      chip.hidden = false;
+      if (codeEl) codeEl.textContent = state.discountCode;
+    }
+    if (removeLink) {
+      removeLink.disabled = false;
+      removeLink.textContent = t('button.removeCoupon');
+    }
+    return;
+  }
+
+  if (entry) entry.hidden = false;
+  if (chip) chip.hidden = true;
+  if (removeLink) {
+    removeLink.disabled = false;
+    removeLink.textContent = t('button.removeCoupon');
+  }
+  syncApplyDiscountButtonState();
+}
+
+function resetLocalDiscountState({ preserveInput = false } = {}) {
+  state.discountCode = null;
+  state.discountApplied = false;
+  state.totals.discountAmount = 0;
+  if (DOM.discountInput) {
+    DOM.discountInput.disabled = false;
+    if (!preserveInput) {
+      DOM.discountInput.value = '';
+    }
+    DOM.discountInput.style.opacity = '';
+    if (!preserveInput) {
+      clearDiscountInputError();
+    }
+  }
+  updateDiscountFormControls();
 }
 
 const debugEnabled = window.DEBUG_LOGS === true;
@@ -117,6 +556,83 @@ function isFirstClimbRoute() {
 const FIRST_SESSION_VIDEO_ID = 'W-4skXhGWM0';
 const FIRST_SESSION_VIDEO_URL = `https://www.youtube.com/watch?v=${FIRST_SESSION_VIDEO_ID}&t=1s`;
 
+const TIKTOK_ATTRIBUTION_COUPON = 'TIKTOK';
+
+function normalizeCouponName(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function extractCouponNamesFromOrder(order) {
+  const names = new Set();
+  if (!order || typeof order !== 'object') return names;
+
+  const itemGroups = [
+    order.subscriptionItems,
+    order.valueCardItems,
+    order.articleItems,
+    order.entryItems,
+    order.eventItems,
+    order.serviceItems,
+  ];
+
+  for (const items of itemGroups) {
+    if (!Array.isArray(items)) continue;
+    for (const item of items) {
+      const couponName = item?.coupon?.name;
+      if (couponName) names.add(normalizeCouponName(couponName));
+    }
+  }
+
+  return names;
+}
+
+function hasTikTokAttribution(order = null, storedOrder = null) {
+  const target = normalizeCouponName(TIKTOK_ATTRIBUTION_COUPON);
+
+  if (state.discountApplied && state.discountCode) {
+    if (normalizeCouponName(state.discountCode) === target) return true;
+  }
+
+  if (storedOrder?.discountApplied && storedOrder?.discountCode) {
+    if (normalizeCouponName(storedOrder.discountCode) === target) return true;
+  }
+
+  const resolvedOrder = order || state.fullOrder;
+  return extractCouponNamesFromOrder(resolvedOrder).has(target);
+}
+
+function isFree15DayPassProduct(order = null) {
+  const resolvedOrder = order || state.fullOrder;
+  const product = resolvedOrder?.subscriptionItems?.[0]?.product;
+  return hasProductLabel(product, '15daypassfree');
+}
+
+function isPaidTikTok15DayPassPurchase(purchaseValue, order = null, storedOrder = null) {
+  if (determineProductTypeFromOrder() !== '15daypass') return false;
+  if (isFree15DayPassProduct(order)) return false;
+  if (!hasTikTokAttribution(order, storedOrder)) return false;
+
+  const paidAmount = Number(purchaseValue);
+  return Number.isFinite(paidAmount) && paidAmount > 0;
+}
+
+function trackTikTokAttributedPurchase(transactionId, purchaseItems = [], purchaseValue = 0, order = null, storedOrder = null) {
+  if (state.testMode) return;
+  if (!isPaidTikTok15DayPassPurchase(purchaseValue, order, storedOrder)) return;
+  if (!window.TikTok?.trackCompletePayment) return;
+
+  try {
+    window.TikTok.trackCompletePayment(
+      transactionId,
+      purchaseItems,
+      purchaseValue,
+      'DKK',
+    );
+  } catch (error) {
+    console.warn('[TikTok] Error tracking purchase:', error);
+  }
+}
+
 // firstclimb is a one-per-customer offer. Every user — new or existing — can
 // buy it exactly once. A customer is disqualified if they have ever held a
 // product carrying the dedicated `Første Gang` label (the canonical blocking
@@ -166,28 +682,138 @@ async function _firstclimbAuthFetch(path) {
   const token = (typeof window.getAccessToken === 'function') ? window.getAccessToken() : null;
   if (!token) throw new Error('No access token for customer history fetch');
   const url = buildApiUrl({
-    baseUrl: businessUnitsAPI?.baseUrl || null,
-    useProxy: businessUnitsAPI?.useProxy ?? true,
+    baseUrl: authAPI?.baseUrl || null,
+    useProxy: authAPI?.useProxy ?? false,
     path,
   });
-  return requestJson({
-    url,
+  const response = await fetch(url, {
     method: 'GET',
     headers: {
+      'Accept': 'application/json',
       'Accept-Language': getAcceptLanguageHeader(),
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
   });
+  const text = await response.text();
+  const contentType = response.headers.get('Content-Type') || '';
+  if (!response.ok) {
+    const error = new Error(`HTTP error! status: ${response.status}`);
+    error.status = response.status;
+    error.payload = text;
+    throw error;
+  }
+  if (contentType.includes('application/json')) {
+    return JSON.parse(text);
+  }
+  const trimmed = text.trim();
+  if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    try { return JSON.parse(trimmed); } catch (parseErr) {
+      throw new Error(`API returned invalid JSON. Status: ${response.status}. ${parseErr?.message || parseErr}`);
+    }
+  }
+  throw new Error(
+    `API returned non-JSON response. Status: ${response.status}. ` +
+    'This usually means the API endpoint is not working correctly or the proxy is misconfigured.'
+  );
+}
+
+function customerProfileExposesPurchaseHistory(customer) {
+  if (!customer) return false;
+  return ['subscriptions', 'valueCards', 'valuecards', 'validCards', 'receipts']
+    .some((key) => Array.isArray(customer[key]));
+}
+
+function customerProfileHasValueCardHistory(customer) {
+  if (!customer) return false;
+  return [customer.valueCards, customer.valuecards, customer.validCards]
+    .some((list) => Array.isArray(list));
+}
+
+function getFirstclimbCatalogProductId() {
+  const product = (state.landingMatchedProducts || [])[0];
+  return product?.id != null ? String(product.id) : null;
+}
+
+function collectFirstclimbProductIdsFromCustomerProfile(customer) {
+  const ids = new Set();
+  if (!customer) return ids;
+  const addRef = (ref) => {
+    const id = ref?.id ?? ref?.productId ?? ref?.product?.id;
+    if (id != null) ids.add(String(id));
+  };
+  (Array.isArray(customer.subscriptions) ? customer.subscriptions : []).forEach((sub) => {
+    addRef(sub?.subscriptionProduct || sub?.product);
+  });
+  const valueCardLists = [customer.valueCards, customer.valuecards, customer.validCards]
+    .filter((list) => Array.isArray(list));
+  valueCardLists.forEach((list) => {
+    list.forEach((vc) => addRef(vc?.valueCardProduct || vc?.validCardProduct || vc?.product));
+  });
+  return ids;
+}
+
+function customerProfileHasFirstclimbBlockingLabel(customer) {
+  if (!customer) return false;
+  const products = [];
+  (Array.isArray(customer.subscriptions) ? customer.subscriptions : []).forEach((sub) => {
+    const product = sub?.subscriptionProduct || sub?.product;
+    if (product) products.push(product);
+  });
+  [customer.valueCards, customer.valuecards, customer.validCards]
+    .filter((list) => Array.isArray(list))
+    .forEach((list) => {
+      list.forEach((vc) => {
+        const product = vc?.valueCardProduct || vc?.validCardProduct || vc?.product;
+        if (product) products.push(product);
+      });
+    });
+  return products.some((product) => productHasFirstclimbBlockingLabel(product));
+}
+
+let firstclimbGuardCustomerRefreshPromise = null;
+
+async function refreshAuthenticatedCustomerForFirstclimbGuard() {
+  if (!isUserAuthenticated()) return;
+  if (firstclimbGuardCustomerRefreshPromise) {
+    await firstclimbGuardCustomerRefreshPromise;
+    return;
+  }
+  firstclimbGuardCustomerRefreshPromise = (async () => {
+    const metadata = getTokenMetadata();
+    const resolvedCustomerId = state.customerId || metadata?.username || metadata?.userName;
+    if (!resolvedCustomerId) return;
+    try {
+      const customerData = await authAPI.getCustomer(String(resolvedCustomerId));
+      state.customerId = String(resolvedCustomerId);
+      state.authenticatedCustomer = customerData;
+    } catch (error) {
+      console.warn('[firstclimb] Could not refresh customer profile before eligibility check:', error);
+    }
+  })();
+  try {
+    await firstclimbGuardCustomerRefreshPromise;
+  } finally {
+    firstclimbGuardCustomerRefreshPromise = null;
+  }
 }
 
 // Pull product IDs the customer currently holds or has ever held. Errors on
-// any single endpoint are swallowed — we'd rather fail open per-source than
-// abort the whole check (the caller defaults to "block" if all sources fail).
+// individual endpoints are swallowed; callers block only on positive evidence.
 async function collectFirstclimbCustomerProductIds(customerId) {
-  if (!customerId) return { ids: new Set(), errors: ['no customer id'] };
+  if (!customerId) return { ids: new Set(), errors: ['no customer id'], sourcesOk: 0, purchaseHistoryVerified: false, inlineBlocking: false };
   const ids = new Set();
   const errors = [];
+  let sourcesOk = 0;
+  let valueCardsOk = false;
+  let receiptsOk = false;
+
+  const customer = state.authenticatedCustomer;
+  if (customer && customerProfileExposesPurchaseHistory(customer)) {
+    collectFirstclimbProductIdsFromCustomerProfile(customer).forEach((id) => ids.add(id));
+    sourcesOk += 1;
+  }
+
   const safeFetch = async (path) => {
     try { return await _firstclimbAuthFetch(path); }
     catch (e) { errors.push(`${path}: ${e?.message || e}`); return null; }
@@ -201,11 +827,38 @@ async function collectFirstclimbCustomerProductIds(customerId) {
     const id = ref?.id ?? ref?.productId ?? ref?.product?.id;
     if (id != null) ids.add(String(id));
   };
-  (Array.isArray(subs) ? subs : []).forEach((s) => addRef(s?.subscriptionProduct || s?.product));
-  (Array.isArray(valueCards) ? valueCards : []).forEach((vc) => addRef(vc?.valueCardProduct || vc?.validCardProduct || vc?.product));
-  (Array.isArray(receipts) ? receipts : []).forEach((r) => {
-    (r?.receiptItems || r?.items || []).forEach((item) => addRef(item?.product || item));
-  });
+  if (Array.isArray(subs)) {
+    sourcesOk += 1;
+    subs.forEach((s) => addRef(s?.subscriptionProduct || s?.product));
+  }
+  if (Array.isArray(valueCards)) {
+    valueCardsOk = true;
+    sourcesOk += 1;
+    for (const vc of valueCards) {
+      const product = vc?.valueCardProduct || vc?.validCardProduct || vc?.product;
+      if (product && productHasFirstclimbBlockingLabel(product)) {
+        return {
+          ids,
+          errors,
+          sourcesOk,
+          purchaseHistoryVerified: true,
+          inlineBlocking: true,
+        };
+      }
+      addRef(vc?.valueCardProduct || vc?.validCardProduct || vc?.product);
+      if (product?.id != null) ids.add(String(product.id));
+    }
+  }
+  if (Array.isArray(receipts)) {
+    receiptsOk = true;
+    sourcesOk += 1;
+    receipts.forEach((r) => {
+      (r?.receiptItems || r?.items || []).forEach((item) => addRef(item?.product || item));
+    });
+  }
+  const purchaseHistoryVerified = valueCardsOk
+    || receiptsOk
+    || customerProfileHasValueCardHistory(customer);
   console.log('[firstclimb] customer history product IDs collected:', {
     customerId,
     ids: Array.from(ids),
@@ -214,9 +867,15 @@ async function collectFirstclimbCustomerProductIds(customerId) {
       valueCards: Array.isArray(valueCards) ? valueCards.length : 0,
       receipts: Array.isArray(receipts) ? receipts.length : 0,
     },
+    sourcesOk,
+    valueCardsOk,
+    receiptsOk,
+    purchaseHistoryVerified,
+    profileHasValueCards: customerProfileHasValueCardHistory(customer),
+    profileExposesHistory: customerProfileExposesPurchaseHistory(customer),
     errors,
   });
-  return { ids, errors };
+  return { ids, errors, sourcesOk, purchaseHistoryVerified, inlineBlocking: false };
 }
 
 // Resolve a product by id from the already-loaded catalog if possible, else fetch.
@@ -234,10 +893,24 @@ async function resolveProductForFirstclimbCheck(productId) {
 }
 
 async function customerHasFirstclimbBlockingHistory(customerId) {
-  const { ids, errors } = await collectFirstclimbCustomerProductIds(customerId);
+  if (customerProfileHasFirstclimbBlockingLabel(state.authenticatedCustomer)) {
+    return true;
+  }
+  const { ids, errors, inlineBlocking } = await collectFirstclimbCustomerProductIds(customerId);
+  if (inlineBlocking) return true;
   if (errors.length) console.warn('[firstclimb] history fetch had partial errors:', errors);
-  if (ids.size === 0) return false; // clean history
+
+  const catalogProductId = getFirstclimbCatalogProductId();
+  if (catalogProductId && ids.has(catalogProductId)) {
+    return true;
+  }
+  if (ids.size === 0) {
+    // No positive evidence of a prior firstclimb purchase — allow (never false-block).
+    return false;
+  }
+
   for (const id of ids) {
+    if (catalogProductId && id === catalogProductId) return true;
     let product = null;
     try { product = await resolveProductForFirstclimbCheck(id); } catch (_) {}
     if (product && productHasFirstclimbBlockingLabel(product)) {
@@ -248,10 +921,63 @@ async function customerHasFirstclimbBlockingHistory(customerId) {
   return false;
 }
 
+// Central firstclimb guard — returns { blocked, skipped? }. Blocks only on
+// positive evidence of a prior firstclimb purchase; API/profile gaps allow through.
+async function runFirstclimbGuard(source) {
+  if (!isFirstClimbRoute()) return { blocked: false };
+
+  let customerIdForCheck = state.customerId
+    || getTokenMetadata()?.username
+    || getTokenMetadata()?.userName;
+
+  if (!customerIdForCheck && isUserAuthenticated()) {
+    try {
+      await syncAuthenticatedCustomerState();
+      customerIdForCheck = state.customerId;
+    } catch (_) {}
+  }
+
+  if (!customerIdForCheck) {
+    return { blocked: false, skipped: true };
+  }
+
+  await refreshAuthenticatedCustomerForFirstclimbGuard();
+
+  let hasBlockingHistory = false;
+  try {
+    hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
+  } catch (historyErr) {
+    console.warn(`[firstclimb] history check failed (${source}); allowing flow:`, historyErr);
+    hasBlockingHistory = false;
+  }
+
+  if (!hasBlockingHistory) return { blocked: false };
+
+  const blockedEmail = state.authenticatedEmail
+    || state.authenticatedCustomer?.email
+    || getTokenMetadata()?.email
+    || '';
+  try { window.clearTokens && window.clearTokens(); } catch (_) {}
+  state.customerId = null;
+  state.authenticatedCustomer = null;
+  state.authenticatedEmail = null;
+  try { refreshLoginUI(); } catch (_) {}
+  blockFirstClimbExistingCustomer({ email: blockedEmail, source });
+  return { blocked: true };
+}
+
+async function awaitFirstclimbGuard() {
+  if (!isFirstClimbRoute() || !state.firstclimbGuardPromise) return { blocked: false };
+  return state.firstclimbGuardPromise;
+}
+
 // firstclimb is a single-product flow. Once the gym is chosen we have everything
 // we need to skip the product-selection step and drop the user straight into the
 // form/checkout step with the value card already selected (quantity locked to 1).
 async function advanceFirstClimbFromGym() {
+  const guard = await awaitFirstclimbGuard();
+  if (guard.blocked) return;
+
   if (state.selectedBusinessUnit && !productsLoadPromise) {
     loadProductsFromAPI();
   }
@@ -285,10 +1011,9 @@ async function advanceFirstClimbFromGym() {
   setTimeout(() => scrollToTop(), 200);
 }
 
-// firstclimb is a new-customer-only product. If BRP recognizes the email
-// (or the user is already logged in), we surface a modal explaining why the
-// purchase can't proceed and direct them to the regular entry options.
-function blockFirstClimbExistingCustomer({ email } = {}) {
+// firstclimb is a one-per-customer offer. Block only when we have positive
+// evidence of a prior purchase; never block on API/profile gaps.
+function blockFirstClimbExistingCustomer({ email, source } = {}) {
   const emailVal = (email || '').toLowerCase();
   const title = (typeof t === 'function' && t('firstclimb.existingCustomer.title'))
     || 'This offer is for new climbers only';
@@ -425,6 +1150,78 @@ const PARENT_REQUIRED_FIELDS = [
 const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
 
 
+// Business units rarely change within a single visit; cache successful live
+// responses per language so repeated calls don't re-hit BRP.
+const BUSINESS_UNITS_CACHE_TTL_MS = 5 * 60 * 1000;
+const BUSINESS_UNITS_STORAGE_KEY = 'boulders.businessUnits.v1';
+const businessUnitsCache = new Map(); // languageCode -> { data, timestamp }
+// Tracks whether the last getBusinessUnits() result was live API data or an
+// emergency fallback (so callers can schedule a quiet recovery retry).
+let lastBusinessUnitsFetch = { source: 'live', error: null };
+
+// Last-known gym list baked into the bundle so Step 1 can still render when
+// BRP rate-limits /api/reference/business-units (HTTP 429). IDs must match BRP.
+const BUSINESS_UNITS_FALLBACK = [
+  { id: 13, name: 'Boulders Aalborg', address: { street: 'Skjernvej 4D', postalCode: '9220', city: 'Aalborg' } },
+  { id: 11, name: 'Boulders Aarhus Aaby', address: { street: 'Søren Frichs Vej 54', postalCode: '8230', city: 'Aarhus' } },
+  { id: 1, name: 'Boulders Aarhus City', address: { street: 'Ankersgade 12', postalCode: '8000', city: 'Aarhus' } },
+  { id: 3, name: 'Boulders Aarhus Nord', address: { street: 'Graham Bells Vej 18A', postalCode: '8200', city: 'Aarhus' } },
+  { id: 4, name: 'Boulders Aarhus Syd', address: { street: 'Søren Nymarks Vej 6A', postalCode: '8270', city: 'Aarhus' } },
+  { id: 9, name: 'Boulders Amager', address: { street: 'Amager Landevej 233', postalCode: '2770', city: 'København' } },
+  { id: 8, name: 'Boulders Hvidovre', address: { street: 'Strandmarksvej 20', postalCode: '2650', city: 'København' } },
+  { id: 6, name: 'Boulders KBH Sydhavn', address: { street: 'Bådehavnsgade 38', postalCode: '2450', city: 'København' } },
+  { id: 5, name: 'Boulders Odense', address: { street: 'Wichmandsgade 11', postalCode: '5000', city: 'Odense' } },
+  { id: 7, name: 'Boulders Valby', address: { street: 'Vigerslev Allé 47', postalCode: '2500', city: 'København' } },
+  { id: 12, name: 'Boulders Vanløse', address: { street: 'Vanløse Torv 1, Kronen Vanløse', postalCode: '2720', city: 'København' } },
+];
+
+function readBusinessUnitsFromStorage(language) {
+  try {
+    const raw = localStorage.getItem(BUSINESS_UNITS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    // Only reuse the same language — never serve DA names while UI is EN.
+    const entry = parsed[language];
+    if (!entry?.data) return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+function writeBusinessUnitsToStorage(language, data) {
+  try {
+    const raw = localStorage.getItem(BUSINESS_UNITS_STORAGE_KEY);
+    const store = raw ? JSON.parse(raw) : {};
+    store[language] = { data, timestamp: Date.now() };
+    localStorage.setItem(BUSINESS_UNITS_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // Ignore quota / private-mode failures
+  }
+}
+
+function getEmergencyBusinessUnits(language) {
+  const memory = businessUnitsCache.get(language);
+  if (memory?.data) return { data: memory.data, source: 'stale-memory' };
+  const stored = readBusinessUnitsFromStorage(language);
+  if (stored?.data) return { data: stored.data, source: 'stale-storage' };
+  return { data: BUSINESS_UNITS_FALLBACK, source: 'fallback' };
+}
+
+function scheduleGymListRecovery(error) {
+  const retryMs = getRetryDelayFromError(error);
+  gymLoadCooldownUntil = Date.now() + retryMs;
+  if (gymLoadRetryTimeoutId) return;
+  console.warn(`[Step 1] Using emergency gym list; will retry live API in ~${Math.ceil(retryMs / 1000)}s`);
+  gymLoadRetryTimeoutId = setTimeout(() => {
+    gymLoadRetryTimeoutId = null;
+    loadGymsFromAPI({ forceNetwork: true }).catch((retryError) => {
+      console.warn('[Step 1] Auto-retry gym load failed:', retryError);
+    });
+  }, Math.max(retryMs + 250, 1000));
+}
+
 // API Integration Functions
 class BusinessUnitsAPI {
   constructor(baseUrl = null) {
@@ -436,7 +1233,19 @@ class BusinessUnitsAPI {
   // Get all business units from API
   // Step 3: Fetch from /api/reference/business-units endpoint
   // Note: This endpoint uses "No Auth" according to Postman docs
-  async getBusinessUnits() {
+  async getBusinessUnits({ forceNetwork = false } = {}) {
+    const language = getAcceptLanguageHeader();
+    const cached = businessUnitsCache.get(language);
+    if (
+      !forceNetwork &&
+      cached &&
+      (Date.now() - cached.timestamp) < BUSINESS_UNITS_CACHE_TTL_MS
+    ) {
+      devLog('Using cached business units for', language);
+      lastBusinessUnitsFetch = { source: 'live', error: null };
+      return cached.data;
+    }
+
     try {
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
@@ -444,9 +1253,9 @@ class BusinessUnitsAPI {
         path: '/api/reference/business-units',
       });
       devLog('Fetching business units from:', url);
-      
+
       const headers = {
-        'Accept-Language': getAcceptLanguageHeader(), // Step 2: Language default
+        'Accept-Language': language, // Step 2: Language default
         'Content-Type': 'application/json',
         // No Authorization header needed - endpoint uses "No Auth"
       };
@@ -455,6 +1264,10 @@ class BusinessUnitsAPI {
       devLog('Business units API response:', data);
       devLog('Response type:', Array.isArray(data) ? 'Array' : typeof data);
       devLog('Number of items:', Array.isArray(data) ? data.length : 'N/A');
+
+      businessUnitsCache.set(language, { data, timestamp: Date.now() });
+      writeBusinessUnitsToStorage(language, data);
+      lastBusinessUnitsFetch = { source: 'live', error: null };
 
       return data;
     } catch (error) {
@@ -466,8 +1279,14 @@ class BusinessUnitsAPI {
         status: error.status,
         payload: error.payload,
       });
-      // Don't use fallback mock data - throw error so caller can handle it
-      throw error;
+
+      // Never block Step 1: serve last-known / baked-in gyms immediately.
+      // Do NOT write this into the live TTL cache — that would skip retries
+      // for 5 minutes after BRP recovers.
+      const emergency = getEmergencyBusinessUnits(language);
+      console.warn(`[Step 1] Serving ${emergency.source} business units after fetch failure`);
+      lastBusinessUnitsFetch = { source: emergency.source, error };
+      return emergency.data;
     }
   }
 
@@ -941,6 +1760,14 @@ class AuthAPI {
         const payloadText = typeof errorPayload === 'string' ? errorPayload : JSON.stringify(errorPayload);
         console.error(`[Step 6] Login error (${error.status || 'unknown'}):`, payloadText || error);
 
+        const rethrowLoginError = (message) => {
+          const loginError = new Error(message);
+          // Preserve HTTP status so the outer catch can skip expected 400/401/429 noise in Sentry.
+          loginError.status = error.status;
+          loginError.payload = errorPayload;
+          throw loginError;
+        };
+
         // Handle rate limit errors with better messaging
         if (error.status === 429) {
           let retryAfterSeconds = 60; // Default 1 minute (60 seconds)
@@ -960,17 +1787,17 @@ class AuthAPI {
           const retryMessage = retryMinutes > 0
             ? `${retryMinutes} minute${retryMinutes !== 1 ? 's' : ''}${retrySeconds > 0 ? ` and ${retrySeconds} second${retrySeconds !== 1 ? 's' : ''}` : ''}`
             : `${retryAfterSeconds} second${retryAfterSeconds !== 1 ? 's' : ''}`;
-          throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${error.status} - ${payloadText})`);
+          rethrowLoginError(`Rate limit exceeded. Please wait ${retryMessage} before trying again. (${error.status} - ${payloadText})`);
         }
 
         // Handle 401 errors - preserve error structure for getErrorMessage
         if (error.status === 401 && errorPayload && typeof errorPayload === 'object') {
           if (errorPayload.error?.code === 'INVALID_CREDENTIALS' || errorPayload.error?.message) {
-            throw new Error(`Login failed: ${error.status} - ${payloadText}`);
+            rethrowLoginError(`Login failed: ${error.status} - ${payloadText}`);
           }
         }
 
-        throw new Error(`Login failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        rethrowLoginError(`Login failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
       }
 
       devLog('[Step 6] Login response:', data);
@@ -1019,13 +1846,22 @@ class AuthAPI {
     } catch (error) {
       console.error('[Step 6] Login error:', error);
 
-      // Report login errors to Sentry (excluding rate limits and user input errors)
-      if (error.status !== 429 && error.status !== 400 && error.status !== 401) {
+      // Report unexpected login failures only — wrong password, validation, and rate limits are UX.
+      const status = error.status;
+      const message = typeof error.message === 'string' ? error.message : '';
+      const isExpectedLoginNoise =
+        status === 429 ||
+        status === 400 ||
+        status === 401 ||
+        message.includes('INVALID_CREDENTIALS') ||
+        message.includes('Rate limit exceeded') ||
+        /Login failed:\s*(400|401)\b/.test(message);
+      if (!isExpectedLoginNoise) {
         captureException(error, {
           tags: {
             flow: 'authentication',
             error_type: 'login_failed',
-            status: error.status,
+            status: status,
           },
         });
       }
@@ -1763,13 +2599,18 @@ class OrderAPI {
         orderData.businessUnit = state.selectedBusinessUnit;
       }
 
+      // Tag join.boulders.dk orders so BRP can filter exports (source is queryable; returnUrl is not)
+      if (!orderData.source) {
+        orderData.source = 'join.boulders.dk';
+      }
+
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
         path: '/api/orders',
       });
       
-      console.log('[Step 7] Creating order:', url);
+      console.log('[Step 7] Creating order:', url, { source: orderData.source });
       
       const accessToken = typeof window.getAccessToken === 'function' 
         ? window.getAccessToken() 
@@ -2382,6 +3223,16 @@ class OrderAPI {
     const orderPriceAmount = orderData?.price?.amount || 0;
     const orderPriceInCents = typeof orderPriceAmount === 'object' ? orderPriceAmount.amount : orderPriceAmount;
     
+    // The order price from BRP already has any coupon discount deducted, while
+    // expectedPrice is calculated coupon-free. Add the discount back before
+    // comparing, otherwise applying a coupon makes verification fail and the
+    // UI overrides the (correct) discounted backend price.
+    const rawCouponDiscount = orderData?.couponDiscount;
+    const couponDiscountInCents = typeof rawCouponDiscount === 'object'
+      ? (rawCouponDiscount?.amount || 0)
+      : (rawCouponDiscount || 0);
+    const effectiveOrderPriceInCents = orderPriceInCents + couponDiscountInCents;
+    
     // Check if start date is correct (should be today or tomorrow at most)
     let daysUntilStart = 0;
     if (initialPaymentPeriod?.start) {
@@ -2394,7 +3245,7 @@ class OrderAPI {
     // Check if price is correct
     let priceCorrect = false;
     const priceDifference = expectedPrice
-      ? Math.abs(orderPriceInCents - expectedPrice.amountInCents)
+      ? Math.abs(effectiveOrderPriceInCents - expectedPrice.amountInCents)
       : null;
     if (expectedPrice) {
       // Allow up to 1 DKK difference to account for backend rounding
@@ -2744,79 +3595,56 @@ class OrderAPI {
         }
       }
       console.log('[Discount] Apply coupon response:', data);
-      
-      // Extract couponDiscount from response
-      // Response is an Order object with couponDiscount field
-      const couponDiscount = data?.couponDiscount || data?.price?.couponDiscount || null;
-      let discountAmount = 0;
-      
-      console.log('[Discount] Full API response structure:', {
-        hasCouponDiscount: !!data?.couponDiscount,
-        hasPriceCouponDiscount: !!data?.price?.couponDiscount,
-        couponDiscountType: typeof couponDiscount,
-        couponDiscountValue: couponDiscount,
-        priceObject: data?.price ? Object.keys(data.price) : null,
-        orderTotal: data?.price?.total,
-        orderLeftToPay: data?.price?.leftToPay,
-      });
-      
-      if (couponDiscount) {
-        console.log('[Discount] Raw coupon discount:', couponDiscount);
-        
-        if (typeof couponDiscount === 'object') {
-          // Try different possible fields - avoid 'total' as it might be order total, not discount
-          discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-          
-          // If amount is in cents (common in APIs), convert to DKK
-          if (discountAmount > 10000) {
-            console.log('[Discount] Large amount detected, might be in cents:', discountAmount);
-            discountAmount = discountAmount / 100;
-            console.log('[Discount] Converted from cents:', discountAmount);
-          }
-          // Round to half krone
-          discountAmount = roundToHalfKrone(discountAmount);
-        } else if (typeof couponDiscount === 'number') {
-          discountAmount = couponDiscount;
-          
-          // If amount is in cents, convert to DKK
-          if (discountAmount > 10000) {
-            console.log('[Discount] Large number detected, might be in cents:', discountAmount);
-            discountAmount = discountAmount / 100;
-            console.log('[Discount] Converted from cents:', discountAmount);
-          }
-          // Round to half krone
-          discountAmount = roundToHalfKrone(discountAmount);
-        }
-      }
-      
-      // Fallback: Calculate discount from price difference if couponDiscount extraction failed
-      if (!discountAmount || discountAmount === 0) {
-        console.log('[Discount] Attempting to calculate discount from price difference...');
-        const orderPrice = data?.price;
-        if (orderPrice) {
-          // Get subtotal from current state
-          const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-          const newTotal = orderPrice.total || orderPrice.leftToPay || 0;
-          
-          // Convert to DKK if in cents
-          const newTotalDKK = newTotal > 10000 ? newTotal / 100 : newTotal;
-          
-          if (newTotalDKK < subtotal && subtotal > 0) {
-            discountAmount = roundToHalfKrone(subtotal - newTotalDKK);
-            console.log('[Discount] Calculated from price difference:', discountAmount, '(subtotal:', subtotal, 'new total:', newTotalDKK, ')');
-          }
-        }
-      }
-      
+
+      const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+      const discountAmount = calculateOrderCouponDiscountKr(data, subtotal);
       console.log('[Discount] Final extracted discountAmount:', discountAmount);
-      
+
       return {
         ...data,
-        discountAmount: discountAmount,
+        discountAmount,
       };
     } catch (error) {
       console.error('[Discount] Apply coupon error:', error);
       throw error;
+    }
+  }
+
+  // Remove coupon from order - DELETE /api/ver3/orders/{order}/coupons/{couponName}
+  async removeDiscountCode(orderId, discountCode) {
+    const encodedCoupon = encodeURIComponent(discountCode);
+    let url;
+    if (this.useProxy) {
+      url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/ver3/orders/${orderId}/coupons/${encodedCoupon}`,
+      });
+    } else if (this.isDevelopment) {
+      url = `/api/ver3/orders/${orderId}/coupons/${encodedCoupon}`;
+    } else {
+      url = `https://boulders.brpsystems.com/apiserver/api/ver3/orders/${orderId}/coupons/${encodedCoupon}`;
+    }
+
+    console.log('[Discount] Removing coupon:', discountCode, 'from order:', orderId);
+
+    const accessToken = typeof window.getAccessToken === 'function'
+      ? window.getAccessToken()
+      : null;
+
+    const headers = {
+      'Accept-Language': getAcceptLanguageHeader(),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    };
+
+    try {
+      return await requestJson({ url, method: 'DELETE', headers });
+    } catch (error) {
+      const payloadText = typeof error.payload === 'string'
+        ? error.payload
+        : JSON.stringify(error.payload);
+      console.error(`[Discount] Remove coupon error (${error.status || 'unknown'}):`, payloadText || error);
+      throw new Error(`Remove coupon failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
     }
   }
 }
@@ -2984,7 +3812,12 @@ class PaymentAPI {
           }
         }
         
-        throw new Error(`Generate Payment Link Card failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        const paymentLinkError = new Error(
+          `Generate Payment Link Card failed: ${error.status || 'unknown'} - ${payloadText || error.message}`
+        );
+        paymentLinkError.status = error.status;
+        paymentLinkError.payload = error.payload;
+        throw paymentLinkError;
       }
       console.log('[Step 9] ✅ Generate Payment Link Card response:', JSON.stringify(data, null, 2));
       
@@ -4117,15 +4950,27 @@ let userLocation = null;
 let gymsWithDistances = [];
 
 // Load gyms from API and update UI
-async function loadGymsFromAPI() {
+async function loadGymsFromAPI({ forceNetwork = false } = {}) {
   const now = Date.now();
-  if (isLocalDevHost() && now < gymLoadCooldownUntil) {
+  // During rate-limit cooldown, still show emergency gyms so the funnel
+  // never blocks — only skip hammering the network unless forceNetwork.
+  if (!forceNetwork && now < gymLoadCooldownUntil) {
     const secondsLeft = Math.ceil((gymLoadCooldownUntil - now) / 1000);
-    console.log(`[Step 1] Skipping gym load (cooldown ${secondsLeft}s remaining)`);
-    const noResults = document.getElementById('noResults');
-    if (noResults) {
-      noResults.classList.remove('hidden');
-      noResults.textContent = `API rate limit in local dev. Retrying in ~${secondsLeft}s...`;
+    console.log(`[Step 1] Cooldown ${secondsLeft}s remaining — serving emergency gym list`);
+    const emergency = getEmergencyBusinessUnits(getAcceptLanguageHeader());
+    const gymList = document.querySelector('.gym-list');
+    if (gymList && gymList.children.length === 0 && emergency?.data) {
+      // Render emergency list without a network call
+      lastBusinessUnitsFetch = { source: emergency.source, error: lastBusinessUnitsFetch.error };
+      const gyms = emergency.data;
+      gymsWithDistances = gyms;
+      const noResults = document.getElementById('noResults');
+      if (noResults) noResults.classList.add('hidden');
+      gymList.innerHTML = '';
+      gyms.forEach((gym) => {
+        if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
+      });
+      setupGymEventListeners();
     }
     return;
   }
@@ -4135,7 +4980,7 @@ async function loadGymsFromAPI() {
       clearTimeout(gymLoadRetryTimeoutId);
       gymLoadRetryTimeoutId = null;
     }
-    const response = await businessUnitsAPI.getBusinessUnits();
+    const response = await businessUnitsAPI.getBusinessUnits({ forceNetwork });
     
     // Handle different response formats - could be array or object with data property
     const gyms = Array.isArray(response) ? response : (response.data || response.items || []);
@@ -4319,44 +5164,42 @@ async function loadGymsFromAPI() {
     if (state.currentStep === 1) {
       renderFAQ();
     }
+
+    // If we had to use emergency data, quietly retry live API after retryAfter
+    // so users get full gym details once BRP recovers — without blocking them now.
+    if (lastBusinessUnitsFetch.source !== 'live' && lastBusinessUnitsFetch.error) {
+      scheduleGymListRecovery(lastBusinessUnitsFetch.error);
+    } else {
+      gymLoadCooldownUntil = 0;
+    }
     
   } catch (error) {
-    if (isLocalDevHost() && isRateLimitError(error)) {
-      const retryMs = getRetryDelayFromError(error);
-      gymLoadCooldownUntil = Date.now() + retryMs;
-      console.warn(`[Step 1] Business units rate limited. Cooling down for ${Math.ceil(retryMs / 1000)}s`);
-      const noResults = document.getElementById('noResults');
-      if (noResults) {
-        noResults.classList.remove('hidden');
-        noResults.textContent = `API rate limit in local dev. Retrying in ~${Math.ceil(retryMs / 1000)}s...`;
-      }
-      if (!gymLoadRetryTimeoutId) {
-        gymLoadRetryTimeoutId = setTimeout(() => {
-          gymLoadRetryTimeoutId = null;
-          loadGymsFromAPI().catch((retryError) => {
-            console.warn('[Step 1] Auto-retry gym load failed:', retryError);
-          });
-        }, Math.max(retryMs + 250, 1000));
-      }
-      return;
-    }
+    // Absolute last resort — should be rare because getBusinessUnits already
+    // returns the baked-in list. Still never leave Step 1 empty if we can help it.
     console.error('Failed to load gyms from API:', error);
-    
-    // Show user-friendly error message
+    const emergency = getEmergencyBusinessUnits(getAcceptLanguageHeader());
     const gymList = document.querySelector('.gym-list');
     const noResults = document.getElementById('noResults');
+    if (gymList && emergency?.data?.length) {
+      gymsWithDistances = emergency.data;
+      gymList.innerHTML = '';
+      emergency.data.forEach((gym) => {
+        if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
+      });
+      setupGymEventListeners();
+      if (noResults) noResults.classList.add('hidden');
+      scheduleGymListRecovery(error);
+      return;
+    }
     if (gymList && noResults) {
       gymList.innerHTML = '';
       noResults.classList.remove('hidden');
-      
-      // Provide more helpful error message based on error type
       let errorMessage = 'Failed to load locations. ';
       if (error.message && error.message.includes('HTML instead of JSON')) {
         errorMessage += 'API proxy may not be configured correctly. Please contact support.';
       } else {
         errorMessage += error.message || 'Please check console for details.';
       }
-      
       noResults.textContent = errorMessage;
     }
   }
@@ -4502,9 +5345,10 @@ function populateCountrySelector(selectElement, countries) {
       const option = document.createElement('option');
       const phoneCode = `+${country.phoneCountryCode}`;
       option.value = phoneCode;
-      // Format: "+45 Denmark" or "+45" if no name
+      // Name first ("Denmark +45") so the list reads in the same order it is sorted,
+      // and so native select type-ahead matches what the user types.
       const countryName = country.name || country.alpha2 || '';
-      option.textContent = countryName ? `${phoneCode} ${countryName}` : phoneCode;
+      option.textContent = countryName ? `${countryName} ${phoneCode}` : phoneCode;
       
       // Store data attribute for flag lookup
       if (country.alpha2) {
@@ -4814,6 +5658,8 @@ const state = {
   selectedGymName: null, // Store selected gym name for display
   landingRouteConfig: null, // Active landing route config for path-specific product surfacing
   landingMatchedProducts: [], // Products matched by active landing route label
+  firstclimbGuardPromise: null, // Resolves when /99kr eligibility check completes (blocks navigation until done)
+  isPaymentReturnFlow: false, // True when this page load is a return from the payment provider / success render — skips only the automatic /99kr eligibility check on load (the just-bought product would otherwise misfire the blocker on the confirmation page). Checkout-time guards are unaffected.
   currentAuthMode: null, // Track current auth mode (login/create)
   membershipPlanId: null,
   valueCardQuantities: new Map(),
@@ -6137,39 +6983,18 @@ function init() {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
   }
 
-  // firstclimb: if the user arrives already authenticated, kick off an async
-  // history check. Block only if they hold/held one of the disqualifying products.
-  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb' && isUserAuthenticated()) {
-    (async () => {
-      let customerIdForCheck = state.customerId
-        || getTokenMetadata()?.username
-        || getTokenMetadata()?.userName;
-      try {
-        if (!customerIdForCheck) {
-          await syncAuthenticatedCustomerState();
-          customerIdForCheck = state.customerId;
-        }
-      } catch (_) {}
-      let hasBlockingHistory = true;
-      try {
-        hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
-      } catch (historyErr) {
-        console.warn('[init] firstclimb history check failed; blocking by default:', historyErr);
-        hasBlockingHistory = true;
-      }
-      if (hasBlockingHistory) {
-        const blockedEmail = state.authenticatedEmail
-          || state.authenticatedCustomer?.email
-          || getTokenMetadata()?.email
-          || '';
-        try { window.clearTokens && window.clearTokens(); } catch (_) {}
-        state.customerId = null;
-        state.authenticatedCustomer = null;
-        state.authenticatedEmail = null;
-        try { refreshLoginUI(); } catch (_) {}
-        blockFirstClimbExistingCustomer({ email: blockedEmail });
-      }
-    })();
+  // firstclimb: block navigation/checkout until eligibility is verified for
+  // authenticated arrivals. Non-authenticated users get a no-op promise; checkout
+  // re-runs the guard once a customer id exists.
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
+    // Skip only the *automatic* eligibility check when this load is a
+    // payment-return / success render: the customer now owns the product they
+    // just bought, so an auto-run guard would false-block them on the
+    // confirmation page. The real checkout-time guards still run on normal
+    // loads, so this does not open a URL-param bypass of checkout eligibility.
+    state.firstclimbGuardPromise = (isUserAuthenticated() && !state.isPaymentReturnFlow)
+      ? runFirstclimbGuard('init')
+      : Promise.resolve({ blocked: false });
   }
 
   // /99kr: tag the body so route-scoped CSS rules can target this flow.
@@ -6290,7 +7115,7 @@ const translations = {
     'main.subtitle.step2': 'Vælg din adgangstype', 'main.subtitle.step2.secondary': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen.',
     'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
     'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger', 'button.select': 'Vælg', 'button.addToCart': 'Tilføj til kurv', 'button.added': 'Tilføjet!',
-    'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'gym.nearest': 'Nærmeste',
+    'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'button.removeCoupon': 'Fjern', 'gym.nearest': 'Nærmeste',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
     'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
@@ -6311,7 +7136,7 @@ const translations = {
     'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
-    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
+    'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discountAmountWithPercent': 'Rabat ({percent})', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.discount.removed': 'Rabatkode fjernet.', 'cart.discount.removeFailed': 'Kunne ikke fjerne rabatkoden. Prøv igen.', 'cart.discount.empty': 'Indtast en rabatkode', 'cart.discount.loginRequired': 'Log ind eller opret en konto for at bruge en rabatkode', 'cart.discount.locationRequired': 'Vælg en hal først', 'cart.discount.selectProduct': 'Vælg et medlemskab eller klippekort først', 'cart.discount.notFound': 'Rabatkoden blev ikke fundet. Tjek koden og prøv igen.', 'cart.discount.invalid': 'Ugyldig rabatkode. Tjek koden og prøv igen.', 'cart.discount.expired': 'Denne rabatkode er udløbet.', 'cart.discount.alreadyUsed': 'Denne rabatkode er allerede brugt.', 'cart.discount.notApplicable': 'Rabatkoden gælder ikke for denne ordre.', 'cart.discount.forbidden': 'Rabatkoden kan ikke bruges på denne ordre.', 'cart.discount.genericFailed': 'Kunne ikke anvende rabatkoden. Prøv igen.', 'cart.discount.noOrder': 'Ingen ordre fundet. Genindlæs siden og prøv igen.', 'cart.discount.methodNotSupported': 'Rabatkode kunne ikke anvendes. Kontakt support.', 'cart.discount.applying': 'Anvender…', 'cart.discount.creatingOrder': 'Opretter ordre…', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
     'quantity.label': 'Vælg antal',
     'activationDate.label': 'Hvornår vil du aktivere din prøveperiode?',
     'activationDate.now': 'Aktiver nu',
@@ -6476,6 +7301,22 @@ const translations = {
     'confirmation.pending.stillProcessing': 'Betalingen behandles stadig. Tjek tilbage om et par minutter eller kontakt support, hvis du har gennemført betalingen. Ordre #',
     'footer.terms.title': 'Vilkår og Betingelser', 'footer.terms.all': 'Vilkår og Betingelser', 'footer.terms.membership': 'Vilkår og Betingelser for Medlemskab', 'footer.terms.punchcard': 'Vilkår og Betingelser for Klippekort',
     'footer.policies.title': 'Politikker', 'footer.policies.privacy': 'Privatlivspolitik', 'footer.policies.cookie': 'Cookiepolitik', 'footer.rights': 'Alle rettigheder forbeholdes', 'footer.copyright': '© 2026 Boulders. Alle rettigheder forbeholdes.',
+    'footer.support.title': 'Support', 'footer.support.report': 'Rapportér et problem',
+    'feedback.trigger': 'Rapportér et problem',
+    'feedback.formTitle': 'Rapportér et problem',
+    'feedback.submit': 'Send rapport',
+    'feedback.cancel': 'Annuller',
+    'feedback.confirm': 'Bekræft',
+    'feedback.addScreenshot': 'Tilføj skærmbillede',
+    'feedback.removeScreenshot': 'Fjern skærmbillede',
+    'feedback.nameLabel': 'Navn',
+    'feedback.namePlaceholder': 'Dit navn',
+    'feedback.emailLabel': 'E-mail',
+    'feedback.emailPlaceholder': 'din.email@example.com',
+    'feedback.required': '(påkrævet)',
+    'feedback.messageLabel': 'Beskrivelse',
+    'feedback.messagePlaceholder': 'Hvad gik galt? Hvad forventede du?',
+    'feedback.success': 'Tak for din rapport!',
     'cookie.banner.title': 'Vi bruger cookies', 'cookie.banner.description': 'Vi bruger cookies til at forbedre din browsingoplevelse, analysere trafik på sitet og personalisere indhold. Ved at klikke på "Accepter alle" giver du samtykke til vores brug af cookies. Du kan administrere dine præferencer eller læse mere i vores <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookiepolitik</a>.', 'cookie.banner.accept': 'Accepter alle', 'cookie.banner.reject': 'Afvis alle', 'cookie.banner.settings': 'Tilpas',
     'cookie.settings.title': 'Cookie-indstillinger', 'cookie.settings.description': 'Administrer dine cookie-præferencer. Du kan aktivere eller deaktivere forskellige typer cookies nedenfor. Essentielle cookies kan ikke deaktiveres, da de er nødvendige for, at hjemmesiden fungerer.', 'cookie.settings.save': 'Gem præferencer', 'cookie.settings.button': 'Cookie-indstillinger',
     'cookie.category.essential.title': 'Essentielle Cookies', 'cookie.category.essential.desc': 'Disse cookies er nødvendige for, at hjemmesiden fungerer og kan ikke deaktiveres.',
@@ -6503,8 +7344,8 @@ const translations = {
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
     'modal.loading': 'Indlæser...',
     'modal.campaignRejection.title': 'Kampagne ikke tilgængelig',
-    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes at du har forladt betalingsvinduet uden at gennenmføre, et eksisterende abonnementer eller kampagnebegrænsning. Kontakt support hvis du tror dette er en fejl. Du kan stadig oprette et almindeligt medlemskab.',
-    'modal.campaignRejection.option1': 'Se almindelig medlemskaber',
+    'modal.campaignRejection.message': 'Dette tilbud er ikke tilgængeligt for din konto. Dette kan skyldes at du har forladt betalingsvinduet uden at gennemføre, et ikke eksisterende abbonement eller kampagnebegrænsning. Kontakt support hvis du tror dette er en fejl. Du kan stadig oprette et almindeligt medlemskab.',
+    'modal.campaignRejection.option1': 'Se almindelige medlemskaber',
     'modal.campaignRejection.option2': 'Kontakt support',
     'modal.cartOfferExpired.title': 'Tilbuddet er udløbet',
     'modal.cartOfferExpired.message': 'Tiden til at gennemføre dit køb er udløbet. Du kan stadig forsøge at betale til den viste pris, eller gå tilbage og vælge et andet medlemskab.',
@@ -6552,7 +7393,7 @@ const translations = {
     'firstclimb.banner.perks': 'Lejesko og kalk inkl. · Alle Boulders haller · Gyldig 1 måned',
     'firstclimb.existingCustomer.block': 'Du har allerede brugt dette tilbud.',
     'firstclimb.existingCustomer.title': 'Du har allerede brugt dette tilbud',
-    'firstclimb.existingCustomer.body': 'Vores 99 kr dagsbillet kan kun købes én gang pr. konto, og du har allerede brugt din {email}. Du er stadig velkommen til at klatre — vælg et af vores andre produkter.',
+    'firstclimb.existingCustomer.body': 'Vores 99 kr dagsbillet kan kun købes én gang pr. konto, og {email} har allerede brugt tilbuddet. Du er stadig velkommen til at klatre — vælg et af vores andre produkter.',
     'firstclimb.existingCustomer.cta': 'Se andre adgangsmuligheder',
     'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
     'faq.firstclimb.included.a': 'Bliv så længe du vil i alle Boulders haller, plus lejesko og kalk. Ingen skjulte gebyrer.',
@@ -6610,7 +7451,7 @@ const translations = {
     'main.subtitle.step2': 'Choose your access type', 'main.subtitle.step2.secondary': 'Choose membership if you climb at least once a week.',
     'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
     'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit', 'button.select': 'Select', 'button.addToCart': 'Add to cart', 'button.added': 'Added!',
-    'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'gym.nearest': 'Nearest',
+    'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'button.removeCoupon': 'Remove', 'gym.nearest': 'Nearest',
     'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
     'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
@@ -6631,7 +7472,7 @@ const translations = {
     'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
-    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
+    'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discountAmountWithPercent': 'Discount ({percent})', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.discount.empty': 'Enter a discount code', 'cart.discount.loginRequired': 'Log in or create an account to use a discount code', 'cart.discount.locationRequired': 'Select a gym first', 'cart.discount.selectProduct': 'Select a membership or punch card first', 'cart.discount.notFound': 'Discount code not found. Check the code and try again.', 'cart.discount.invalid': 'Invalid discount code. Check the code and try again.', 'cart.discount.expired': 'This discount code has expired.', 'cart.discount.alreadyUsed': 'This discount code has already been used.', 'cart.discount.notApplicable': 'This discount code does not apply to your order.', 'cart.discount.forbidden': 'This discount code cannot be used on this order.', 'cart.discount.genericFailed': 'Could not apply the discount code. Please try again.', 'cart.discount.noOrder': 'No order found. Refresh the page and try again.', 'cart.discount.methodNotSupported': 'Discount code could not be applied. Please contact support.', 'cart.discount.applying': 'Applying…', 'cart.discount.creatingOrder': 'Creating order…', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
     'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Name',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
@@ -6778,6 +7619,22 @@ const translations = {
     'confirmation.pending.stillProcessing': 'Payment is still being processed. Please check back in a few minutes or contact support if you\'ve completed payment. Order #',
     'footer.terms.title': 'Terms and Conditions', 'footer.terms.all': 'Terms and Conditions', 'footer.terms.membership': 'Terms and Conditions for Membership', 'footer.terms.punchcard': 'Terms and Conditions for Punch Card',
     'footer.policies.title': 'Policies', 'footer.policies.privacy': 'Privacy Policy', 'footer.policies.cookie': 'Cookie Policy', 'footer.rights': 'All rights reserved', 'footer.copyright': '© 2026 Boulders. All rights reserved.',
+    'footer.support.title': 'Support', 'footer.support.report': 'Report a problem',
+    'feedback.trigger': 'Report a problem',
+    'feedback.formTitle': 'Report a problem',
+    'feedback.submit': 'Send report',
+    'feedback.cancel': 'Cancel',
+    'feedback.confirm': 'Confirm',
+    'feedback.addScreenshot': 'Add a screenshot',
+    'feedback.removeScreenshot': 'Remove screenshot',
+    'feedback.nameLabel': 'Name',
+    'feedback.namePlaceholder': 'Your name',
+    'feedback.emailLabel': 'Email',
+    'feedback.emailPlaceholder': 'your.email@example.com',
+    'feedback.required': '(required)',
+    'feedback.messageLabel': 'Description',
+    'feedback.messagePlaceholder': 'What went wrong? What did you expect?',
+    'feedback.success': 'Thank you for your report!',
     'cookie.banner.title': 'We use cookies', 'cookie.banner.description': 'We use cookies to enhance your browsing experience, analyze site traffic, and personalize content. By clicking "Accept All", you consent to our use of cookies. You can manage your preferences or learn more in our <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie Policy</a>.', 'cookie.banner.accept': 'Accept All', 'cookie.banner.reject': 'Reject All', 'cookie.banner.settings': 'Customize',
     'cookie.settings.title': 'Cookie Preferences', 'cookie.settings.description': 'Manage your cookie preferences. You can enable or disable different types of cookies below. Essential cookies cannot be disabled as they are necessary for the website to function.', 'cookie.settings.save': 'Save Preferences', 'cookie.settings.button': 'Cookie Settings',
     'cookie.category.essential.title': 'Essential Cookies', 'cookie.category.essential.desc': 'These cookies are necessary for the website to function and cannot be disabled.',
@@ -6912,7 +7769,7 @@ const translations = {
     'main.subtitle.step2': 'Wählen Sie Ihren Zugangstyp', 'main.subtitle.step2.secondary': 'Wählen Sie Mitgliedschaft, wenn Sie mindestens einmal im Monat klettern.',
     'main.subtitle.step3': 'Möchten Sie Pommes dazu?', 'main.subtitle.step4': 'Senden',
     'button.next': 'Weiter', 'button.back': 'Zurück', 'button.continue': 'Fortsetzen', 'button.skip': 'Überspringen', 'button.complete': 'Fertig', 'button.edit': 'Bearbeiten', 'button.select': 'Auswählen', 'button.addToCart': 'In den Warenkorb', 'button.added': 'Hinzugefügt!',
-    'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'gym.nearest': 'Nächste',
+    'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'button.removeCoupon': 'Entfernen', 'gym.nearest': 'Nächste',
     'form.email': 'E-Mail*', 'form.email.placeholder': 'E-Mail', 'form.password': 'Passwort*', 'form.password.placeholder': 'Passwort',
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
     'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
@@ -6952,7 +7809,7 @@ const translations = {
     'faq.firstclimb.howToUse.a': 'Komm einfach innerhalb des Monats vorbei. Gib dem Personal deine Telefonnummer oder E-Mail, dann aktivieren sie deine Tageskarte und händigen dir Leihschuhe und Chalk aus.',
     'faq.firstclimb.afterDay.q': 'Was passiert nach meinem ersten Tag?',
     'faq.firstclimb.afterDay.a': 'Bleib dran! Du kannst direkt vor Ort auf eine Mitgliedschaft, ein 15-Tage-Ticket oder eine Stempelkarte upgraden — oder online, wenn du bereit bist.',
-    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
+    'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discountAmountWithPercent': 'Rabatt ({percent})', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.discount.removed': 'Rabattcode entfernt.', 'cart.discount.removeFailed': 'Rabattcode konnte nicht entfernt werden. Bitte versuchen Sie es erneut.', 'cart.discount.empty': 'Geben Sie einen Rabattcode ein', 'cart.discount.loginRequired': 'Melden Sie sich an oder erstellen Sie ein Konto, um einen Rabattcode zu verwenden', 'cart.discount.locationRequired': 'Wählen Sie zuerst eine Halle', 'cart.discount.selectProduct': 'Wählen Sie zuerst eine Mitgliedschaft oder eine Stempelkarte', 'cart.discount.notFound': 'Rabattcode nicht gefunden. Überprüfen Sie den Code und versuchen Sie es erneut.', 'cart.discount.invalid': 'Ungültiger Rabattcode. Überprüfen Sie den Code und versuchen Sie es erneut.', 'cart.discount.expired': 'Dieser Rabattcode ist abgelaufen.', 'cart.discount.alreadyUsed': 'Dieser Rabattcode wurde bereits verwendet.', 'cart.discount.notApplicable': 'Dieser Rabattcode gilt nicht für diese Bestellung.', 'cart.discount.forbidden': 'Dieser Rabattcode kann für diese Bestellung nicht verwendet werden.', 'cart.discount.genericFailed': 'Rabattcode konnte nicht angewendet werden. Bitte versuchen Sie es erneut.', 'cart.discount.noOrder': 'Keine Bestellung gefunden. Laden Sie die Seite neu und versuchen Sie es erneut.', 'cart.discount.methodNotSupported': 'Rabattcode konnte nicht angewendet werden. Bitte kontaktieren Sie den Support.', 'cart.discount.applying': 'Wird angewendet…', 'cart.discount.creatingOrder': 'Bestellung wird erstellt…', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
     'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Name',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
@@ -6975,6 +7832,22 @@ const translations = {
     'message.noProducts.15daypass': 'Derzeit sind keine 15-Tage-Pass-Optionen verfügbar.',
     'footer.terms.title': 'Allgemeine Geschäftsbedingungen', 'footer.terms.all': 'Allgemeine Geschäftsbedingungen', 'footer.terms.membership': 'Allgemeine Geschäftsbedingungen für Mitgliedschaft', 'footer.terms.punchcard': 'Allgemeine Geschäftsbedingungen für Stempelkarte',
     'footer.policies.title': 'Richtlinien', 'footer.policies.privacy': 'Datenschutzrichtlinie', 'footer.policies.cookie': 'Cookie-Richtlinie', 'footer.rights': 'Alle Rechte vorbehalten', 'footer.copyright': '© 2026 Boulders. Alle Rechte vorbehalten.',
+    'footer.support.title': 'Support', 'footer.support.report': 'Problem melden',
+    'feedback.trigger': 'Problem melden',
+    'feedback.formTitle': 'Problem melden',
+    'feedback.submit': 'Bericht senden',
+    'feedback.cancel': 'Abbrechen',
+    'feedback.confirm': 'Bestätigen',
+    'feedback.addScreenshot': 'Screenshot hinzufügen',
+    'feedback.removeScreenshot': 'Screenshot entfernen',
+    'feedback.nameLabel': 'Name',
+    'feedback.namePlaceholder': 'Dein Name',
+    'feedback.emailLabel': 'E-Mail',
+    'feedback.emailPlaceholder': 'deine.email@example.com',
+    'feedback.required': '(erforderlich)',
+    'feedback.messageLabel': 'Beschreibung',
+    'feedback.messagePlaceholder': 'Was ist schiefgelaufen? Was hast du erwartet?',
+    'feedback.success': 'Danke für deinen Bericht!',
     'cookie.banner.title': 'Wir verwenden Cookies', 'cookie.banner.description': 'Wir verwenden Cookies, um Ihr Browsing-Erlebnis zu verbessern, den Website-Verkehr zu analysieren und Inhalte zu personalisieren. Durch Klicken auf "Alle akzeptieren" stimmen Sie unserer Verwendung von Cookies zu. Sie können Ihre Einstellungen verwalten oder mehr in unserer <a href="#" data-action="open-terms" data-terms-type="cookie" class="cookie-banner-link">Cookie-Richtlinie</a> erfahren.', 'cookie.banner.accept': 'Alle akzeptieren', 'cookie.banner.reject': 'Alle ablehnen', 'cookie.banner.settings': 'Anpassen',
     'cookie.settings.title': 'Cookie-Einstellungen', 'cookie.settings.description': 'Verwalten Sie Ihre Cookie-Einstellungen. Sie können unten verschiedene Cookie-Typen aktivieren oder deaktivieren. Essenzielle Cookies können nicht deaktiviert werden, da sie für die Funktionsweise der Website erforderlich sind.', 'cookie.settings.save': 'Einstellungen speichern', 'cookie.settings.button': 'Cookie-Einstellungen',
     'cookie.category.essential.title': 'Essenzielle Cookies', 'cookie.category.essential.desc': 'Diese Cookies sind für die Funktionsweise der Website erforderlich und können nicht deaktiviert werden.',
@@ -7135,6 +8008,69 @@ function t(key, fallback = '') {
   return translations[lang]?.[key] || translations[DEFAULT_LANGUAGE]?.[key] || fallback || key;
 }
 
+/** Labels + theme for Sentry User Feedback widget/form (DA-first via t()). */
+function getProblemReportFeedbackOptions() {
+  return {
+    colorScheme: 'light',
+    showBranding: false,
+    enableScreenshot: true,
+    isEmailRequired: true,
+    showName: true,
+    showEmail: true,
+    triggerLabel: t('feedback.trigger', 'Rapportér et problem'),
+    triggerAriaLabel: t('feedback.trigger', 'Rapportér et problem'),
+    formTitle: t('feedback.formTitle', 'Rapportér et problem'),
+    submitButtonLabel: t('feedback.submit', 'Send rapport'),
+    cancelButtonLabel: t('feedback.cancel', 'Annuller'),
+    confirmButtonLabel: t('feedback.confirm', 'Bekræft'),
+    addScreenshotButtonLabel: t('feedback.addScreenshot', 'Tilføj skærmbillede'),
+    removeScreenshotButtonLabel: t('feedback.removeScreenshot', 'Fjern skærmbillede'),
+    nameLabel: t('feedback.nameLabel', 'Navn'),
+    namePlaceholder: t('feedback.namePlaceholder', 'Dit navn'),
+    emailLabel: t('feedback.emailLabel', 'E-mail'),
+    emailPlaceholder: t('feedback.emailPlaceholder', 'din.email@example.com'),
+    isRequiredLabel: t('feedback.required', '(påkrævet)'),
+    messageLabel: t('feedback.messageLabel', 'Beskrivelse'),
+    messagePlaceholder: t('feedback.messagePlaceholder', 'Hvad gik galt? Hvad forventede du?'),
+    successMessageText: t('feedback.success', 'Tak for din rapport!'),
+    themeLight: {
+      foreground: '#1F2837',
+      background: '#ffffff',
+      accentForeground: '#ffffff',
+      accentBackground: '#FF00FF',
+      successColor: '#059669',
+      errorColor: '#df3338',
+      boxShadow: '0px 4px 24px 0px rgba(31, 40, 55, 0.16)',
+    },
+  };
+}
+
+/**
+ * Feedback-scoped signup tags only (passed into createForm `tags`).
+ * Do not use global Sentry.setTag/setContext here — that leaks onto later error events.
+ */
+function getProblemReportTags() {
+  const tags = {};
+  try {
+    if (state.currentStep != null) tags.signup_step = String(state.currentStep);
+    if (state.language) tags.language = String(state.language);
+    if (state.selectedBusinessUnit != null) tags.business_unit = String(state.selectedBusinessUnit);
+    if (state.selectedGymId != null) tags.gym_id = String(state.selectedGymId);
+    if (state.selectedProductId != null) tags.product_id = String(state.selectedProductId);
+    if (state.selectedProductType) tags.product_type = String(state.selectedProductType);
+    if (state.orderId != null) tags.order_id = String(state.orderId);
+    if (state.customerId != null) tags.customer_id = String(state.customerId);
+    const landingName = state.landingRouteConfig?.componentName || state.landingRouteConfig?.path;
+    if (landingName) tags.landing_route = String(landingName);
+  } catch (e) {
+    // Never block the feedback form on tag enrichment failures
+  }
+  return tags;
+}
+
+window.getProblemReportFeedbackOptions = getProblemReportFeedbackOptions;
+window.getProblemReportTags = getProblemReportTags;
+
 // Update all translations on the page
 function updatePageTranslations() {
   const lang = state.language || DEFAULT_LANGUAGE;
@@ -7243,6 +8179,11 @@ function updatePageTranslations() {
   // Update addon modal translations
   updateAddonModalTranslations();
   applyOfferLandingCategoryCopy();
+
+  // Keep Sentry "Report a problem" floating trigger labels in sync with language
+  if (typeof window.refreshSentryFeedbackWidget === 'function') {
+    window.refreshSentryFeedbackWidget();
+  }
   
   // Update step labels
   const stepLabels = document.querySelectorAll('.step-label');
@@ -7437,6 +8378,10 @@ function updateFormTranslations() {
   if (applyDiscountBtn && applyDiscountBtn.hasAttribute('data-i18n-key')) {
     applyDiscountBtn.textContent = t('button.apply');
   }
+  const removeDiscountBtn = document.querySelector('.discount-remove-link');
+  if (removeDiscountBtn && removeDiscountBtn.hasAttribute('data-i18n-key')) {
+    removeDiscountBtn.textContent = t('button.removeCoupon');
+  }
   
   // Forgot password modal
   const resetPasswordTitle = document.querySelector('#forgotPasswordModal .info-section-title[data-i18n-key="form.resetPassword"]');
@@ -7479,10 +8424,6 @@ function updateCartTranslations() {
   }
   
   // Discount section
-  const discountToggle = document.querySelector('.discount-toggle span[data-i18n-key="cart.discount"]');
-  if (discountToggle) {
-    discountToggle.textContent = t('cart.discount');
-  }
   
   const discountInput = document.querySelector('.discount-input[data-i18n-placeholder]');
   if (discountInput) {
@@ -7976,6 +8917,9 @@ document.addEventListener('DOMContentLoaded', () => {
     state.testMode = true;
   }
   let orderId = urlParams.get('orderId');
+  const receiptId = urlParams.get('receiptid') || urlParams.get('receiptId');
+  const receiptUuid = urlParams.get('receiptuuid') || urlParams.get('receiptUuid');
+  const hasReceiptParam = Boolean(receiptId || receiptUuid);
   let isPaymentReturnFlow = false;
   
   // Fix: Payment provider may append /confirmation to orderId
@@ -7990,7 +8934,7 @@ document.addEventListener('DOMContentLoaded', () => {
       orderId = null;
     } else {
       orderId = numericOrderId.toString();
-      isPaymentReturnFlow = paymentReturn === 'return' && !!orderId;
+      isPaymentReturnFlow = true;
     }
   }
   
@@ -7999,7 +8943,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // CRITICAL: Check for payment errors BEFORE init() to prevent step 1 from showing
-  if (paymentReturn === 'return' && orderId) {
+  if (orderId && (paymentReturn === 'return' || hasReceiptParam)) {
     // We're returning from payment - check for errors first
     console.log('[Payment Return] Detected payment return for order:', orderId);
     
@@ -8027,8 +8971,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
+  // Flag success/return renders so the /99kr eligibility guard is suppressed for
+  // this load. After a successful purchase the customer legitimately owns the
+  // firstclimb product, so re-running the guard here would falsely block them on
+  // the success page. Covers real payment returns, receipt links, and test modes.
+  state.isPaymentReturnFlow = Boolean(
+    (orderId && (paymentReturn === 'return' || hasReceiptParam)) || testSuccess || testPaymentFailed
+  );
+
   init();
-  
+
   // If in test mode for payment failed, navigate directly to failed page
   if (testPaymentFailed) {
     console.log('[Test Mode] Navigating to payment failed page for testing');
@@ -8165,7 +9117,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // If returning from payment, fetch order data and show confirmation view
-  if (paymentReturn === 'return' && orderId) {
+  if (orderId && (paymentReturn === 'return' || hasReceiptParam)) {
     // TEST MODE: Force failure for testing (add ?test=fail to URL)
     const testMode = urlParams.get('test');
     if (testMode === 'fail') {
@@ -8275,6 +9227,7 @@ function cacheDom() {
   DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
   DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
   DOM.paymentDiscount = document.querySelector('[data-summary-field="discount-amount"]');
+  DOM.paymentPayNowOriginal = document.querySelector('[data-summary-field="pay-now-original"]');
   DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
   DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
   DOM.faqSection = document.getElementById('faqSection');
@@ -8282,10 +9235,13 @@ function cacheDom() {
   DOM.checkoutBtn = document.querySelector('[data-action="submit-checkout"]');
   DOM.privacyConsent = document.getElementById('privacyConsent');
   DOM.termsConsent = document.getElementById('termsConsent');
-  DOM.discountToggle = document.querySelector('.discount-toggle');
   DOM.discountForm = document.querySelector('.discount-form');
+  DOM.discountFormEntry = document.querySelector('.discount-form-entry');
+  DOM.discountAppliedChip = document.querySelector('.discount-applied-chip');
+  DOM.discountAppliedCode = document.querySelector('.discount-applied-code');
   DOM.discountInput = document.querySelector('.discount-input');
   DOM.applyDiscountBtn = document.querySelector('.apply-discount-btn');
+  DOM.removeDiscountBtn = document.querySelector('.discount-remove-link');
   DOM.discountDisplay = document.querySelector('[data-discount-display]');
   DOM.skipAddonsBtn = document.getElementById('skipAddons');
   DOM.backFromAddonsBtn = document.getElementById('backFromAddons');
@@ -8381,10 +9337,12 @@ function cacheTemplates() {
 function setupEventListeners() {
   DOM.nextBtn?.addEventListener('click', nextStep);
   DOM.prevBtn?.addEventListener('click', prevStep);
-  DOM.discountToggle?.addEventListener('click', toggleDiscountForm);
   DOM.applyDiscountBtn?.addEventListener('click', handleApplyDiscount);
+  DOM.removeDiscountBtn?.addEventListener('click', handleRemoveDiscount);
+  updateDiscountFormControls();
+  DOM.discountInput?.addEventListener('input', handleDiscountInputChange);
   DOM.discountInput?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !DOM.applyDiscountBtn?.disabled) {
       handleApplyDiscount();
     }
   });
@@ -8634,6 +9592,13 @@ function setupEventListeners() {
       e.preventDefault();
       openCookieDeclarationModal();
     }
+
+    if (e.target.closest('[data-action="report-problem"]')) {
+      e.preventDefault();
+      if (typeof window.openProblemReport === 'function') {
+        window.openProblemReport();
+      }
+    }
     
     if (e.target.closest('[data-action="open-terms"]')) {
       e.preventDefault();
@@ -8843,37 +9808,16 @@ async function handleLoginSubmit(event) {
     const username = payload?.username || email;
     state.authenticatedEmail = email;
 
-    // /99kr: a successful login means the email has an existing BRP profile.
-    // Inspect product history — block only if they've held a product carrying
-    // the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS). Empty-profile
-    // and never-bought-anything customers can still buy.
+    // /99kr: inspect product history — block only if they've held a product
+    // carrying a blocking label (see FIRSTCLIMB_BLOCKING_LABELS).
     if (isFirstClimbRoute()) {
-      let customerIdForCheck = null;
       try {
         await syncAuthenticatedCustomerState(username, email);
-        customerIdForCheck = state.customerId
-          || getTokenMetadata()?.username
-          || getTokenMetadata()?.userName;
       } catch (syncErr) {
         console.warn('[login] customer state sync failed before firstclimb history check:', syncErr);
       }
-      let hasBlockingHistory = true;
-      try {
-        hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
-      } catch (historyErr) {
-        console.warn('[login] firstclimb history check failed; blocking by default:', historyErr);
-        hasBlockingHistory = true;
-      }
-      if (hasBlockingHistory) {
-        try { window.clearTokens && window.clearTokens(); } catch (_) {}
-        state.customerId = null;
-        state.authenticatedCustomer = null;
-        state.authenticatedEmail = null;
-        try { refreshLoginUI(); } catch (_) {}
-        blockFirstClimbExistingCustomer({ email });
-        return;
-      }
-      // Clean history → carry on with the normal logged-in flow.
+      const guard = await runFirstclimbGuard('login');
+      if (guard.blocked) return;
     }
 
     // Sync customer state and fetch profile
@@ -9004,8 +9948,9 @@ function closeForgotPasswordModal() {
 // Terms Content - Embedded directly to avoid CORS issues
 const termsContent = {
   membership: {
-    da: `<h2>Vilkår og betingelser for medlemmer og 15 dages klatring i Boulders</h2>
-<p><strong>Gælder alle medlemskaber</strong></p>
+    da: `<h2>Vilkår og betingelser for Medlemmer og 15-Dages Klatring i Boulders</h2>
+<p><strong>Gælder alle medlemskaber.</strong></p>
+<p><em>(English contact can be found after the conclusion of the Danish contract.)</em></p>
 
 <h3>Accept</h3>
 <p>Ved gennemførsel af indmeldelsesprocessen har du accepteret nedenstående regelsæt. Din accept af aftalen er en bindende aftale mellem medlemmet og Boulders. Din accept heraf fungerer som en underskrift.</p>
@@ -9074,10 +10019,15 @@ const termsContent = {
 <p>Medlemskortet skal altid medbringes og indlæses, inden du benytter det pågældende klatrecenter. Boulders forbeholder sig retten til at opkrævet et gebyr for glemt medlemskort og retten til at påkræve at du køber et nyt medlemskort efter gentagende at have glemt dit kort.</p>
 <p>Hvis du mister eller beskadiger dit medlemskort, skal du straks meddele dette til Boulders, som vil udstede et nyt medlemskort mod et gebyr.</p>
 
-<h3>§5A U16 medlemskaber</h3>
-<p>Det er et krav for oprettelse af U16 medlemskab, at personen der benytter medlemskabet er under 16 år.</p>
-<p>U16 medlemskaber skal oprettes af forældre/værge, læs mere om medlemskaber til umyndige i §3A.</p>
-<p>U16 medlemskaber vil automatisk overgå til almindelig voksenpris- og betingelser, når medlemmer fylder 16 år. Er medlemmer studerende, skal dette oplyses med studenteridentifikation til medlem@boulders.dk inden overgang fra U16 medlemskab.</p>
+<h3>§5A Junior medlemskaber</h3>
+<p>Det er et krav for oprettelse af junior medlemskab, at personen der benytter medlemskabet er under 16 år.</p>
+<p>Junior medlemskaber skal oprettes af forældre/værge, læs mere om medlemskaber til umyndige i §3A.</p>
+<p>Junior medlemskaber vil automatisk overgå til almindelig voksenpris- og betingelser, når medlemmer fylder 16 år. Er medlemmer studerende, skal dette oplyses med studenteridentifikation til medlem@boulders.dk inden overgang fra junior medlemskab.</p>
+<p>Gældende priser, medlemstyper og betingelser kan altid findes på boulders.dk</p>
+
+<h3>§5B Student & Youth medlemskaber</h3>
+<p>Det er et krav for oprettelse af Student & Youth medlemskab, at personen der benytter medlemskabet er mellem 16 og 20 år.</p>
+<p>Student & Youth medlemskaber vil automatisk overgå til almindelig voksenpris- og betingelser, når medlemmet fylder 21 år eller ikke længere har gyldigt studie ID. Er medlemmet fyldt 21 år og fortsat studerende, skal dette oplyses med studenteridentifikation.</p>
 <p>Gældende priser, medlemstyper og betingelser kan altid findes på boulders.dk</p>
 
 <h3>§6 Betaling</h3>
@@ -9103,6 +10053,7 @@ const termsContent = {
 <p>Det er ikke muligt at berosætte medlemskaber i en kampagne/prisreduceret/tilbudsperiode.</p>
 <p>Du kan starte bero på din Boulders online medlemsprofil eller pr. e-mail til medlem@boulders.dk.</p>
 <p>Medlemmet beholder sine optjente medlemsfordele og anciennitet under berosætning.</p>
+<p>Berogebyret er ikke refunderbart.</p>
 
 <h3>§8 Opsigelse af medlemskab</h3>
 <p>Opsigelsesperioden for et medlemskab er løbende måned + næste hele afsluttede måned. Et medlemskab kan derfor kun ophøre med effekt sidste dag i en måned.</p>
@@ -9116,7 +10067,7 @@ const termsContent = {
 <p>Ved opsigelse mister medlemmet sine optjente medlemsfordele og anciennitet. Ønsker man at beholde sine fordele, bør berosætning overvejes.</p>
 
 <h3>§9 Fortrydelsesret</h3>
-<p>Ved oprettelsen af et medlemskab i Boulders har du 14 dages fortrydelsesret fra den dag, medlemskabet blev oprettet. For at gøre brug af fortrydelsesretten, skal du rette henvendelse til medlem@boulders.dk. Fortrydelsesretten kan ikke benyttes ved gentagne medlemskabsoprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af normal entré for samtlige antal besøg i den periode, du har benyttet dig af dit medlemskab.</p>
+<p>Ved oprettelsen af et medlemskab i Boulders har du 14 dages fortrydelsesret fra den dag, medlemskabet blev oprettet. For at gøre brug af fortrydelsesretten, skal du registrere en anmodning om fortrydelse nederst i vores selvbetjening. Fortrydelsesretten kan ikke benyttes ved gentagne medlemskabsoprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af normal entré for samtlige antal besøg i den periode, du har benyttet dig af dit medlemskab.</p>
 
 <h3>§10 Helbredstilstand og personskade</h3>
 <p>Al færdsel i Boulders klatrecentre og al klatring sker på eget ansvar. Boulders tager ikke ansvar for din brug af Boulders' faciliteter eller udendørsområder. Du er som medlem selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter hos Boulders.</p>
@@ -9146,11 +10097,10 @@ const termsContent = {
 <p>Alle køb omfattet af disse medlemsbetingelser er underlagt dansk ret, dog ikke CISG (Den Internationale Købelov), medmindre andet fremgår af ufravigelige regler. Eventuelle uenigheder, som ikke kan afgøres i mindelighed, afgøres af de danske domstole, medmindre andet fremgår af ufravigelige regler.</p>
 
 <h3>§14 15 dages klatring</h3>
-<p>15 dages klatring må kun benyttes af personer, der ikke tidligere har været medlem eller tidligere har benyttet et 15 dages kort. Opdages snyd med dette vil indehaveren blive pålagt at betale forholdsmæssig entré for sin brug af 15 dages klatring.</p>
-<p>15 dages klatring er personligt og må ikke deles med andre.</p>
-<p>Der henvises yderligere til §10 – helbredstilstand og personskade, §10A – Værdigenstande, §12- Persondataforordningen (GDPR) i dette regelsæt, der også er gældende for 15 dages klatring.</p>`,
-    en: `<h2>Rules for Members and Trial Pass holders at Boulders</h2>
-<p><strong>The following rules apply to all memberships</strong></p>
+<p>15 Dages kort er personligt og må ikke deles med andre. Der henvises yderligere til §9 - fortrydelsesret, §10 – helbredstilstand og personskade, §10A – Værdigenstande, §12- Persondataforordningen (GDPR) i dette regelsæt, der også er gældende for 15 Dages kort.</p>
+<p><strong>Særligt gældende for 15 Dages Gave:</strong> 15 Dages Gave må kun benyttes af personer, der ikke tidligere har været medlem eller tidligere har benyttet et 15 dages Gave. Opdages snyd med dette vil indehaveren blive pålagt at betale forholdsmæssig entré for sin brug af 15 Dages Gave.</p>`,
+    en: `<h2>Rules for Members and 15 Days of Climbing at Boulders</h2>
+<p><strong>The following rules apply to all memberships.</strong></p>
 
 <h3>Acceptance</h3>
 <p>By completing the registration process, you accept the rules outlined below. Your acceptance of this agreement constitutes a binding agreement between you and Boulders. Your acceptance serves as a signature.</p>
@@ -9176,7 +10126,7 @@ const termsContent = {
 <li>§11. Force Majeure</li>
 <li>§12. Data Protection (GDPR)</li>
 <li>§13. Governing Law and Jurisdiction</li>
-<li>§14. 15 Day Trial Pass</li>
+<li>§14. 15 Day-Climbing Pass</li>
 </ul>
 
 <h3>§1 General Provisions</h3>
@@ -9217,9 +10167,13 @@ const termsContent = {
 <p>In the event of a breach of membership terms, staff instructions, or house rules, Boulders may terminate your membership with immediate effect at any time. Boulders also reserves the right to permanently or indefinitely exclude you from membership at Boulders.</p>
 <p>The membership card must always be brought and scanned before using the respective climbing center. Boulders reserves the right to charge a fee for forgotten membership cards and may require you to purchase a new membership card if you repeatedly forget it. If you lose or damage your membership card, you must immediately inform Boulders, who will issue a new card for a fee.</p>
 
-<h3>§5A U16 Memberships</h3>
-<p>It is a requirement for obtaining a U16 membership that the individual using the membership is under 16 years of age. U16 memberships must be created by a parent or guardian; see §3A for more details regarding memberships for minors.</p>
-<p>U16 memberships will automatically transition to a regular adult membership, with applicable adult pricing and terms, upon the member's 16th birthday. If the member qualifies for a student membership, this must be documented with valid student identification by emailing medlem@boulders.dk prior to the transition from the U16 membership.</p>
+<h3>§5A Junior Memberships</h3>
+<p>It is a requirement for obtaining a junior membership that the individual using the membership is under 16 years of age. Junior memberships must be created by a parent or guardian; see §3A for more details regarding memberships for minors.</p>
+<p>Junior memberships will automatically transition to a regular adult membership, with applicable adult pricing and terms, upon the member's 16th birthday. If the member qualifies for a student membership, this must be documented with valid student identification by emailing medlem@boulders.dk prior to the transition from the junior membership.</p>
+<p>Current prices, membership types, and terms can always be found at boulders.dk.</p>
+
+<h3>§5B Student & Youth memberships</h3>
+<p>To create a Student & Youth membership, the person using the membership must be between 16 and 20 years old. Student & Youth memberships automatically convert to standard adult pricing and terms when the member turns 21 or no longer holds a valid student ID. If the member has turned 21 and is still a student, this must be documented with student identification.</p>
 <p>Current prices, membership types, and terms can always be found at boulders.dk.</p>
 
 <h3>§6 Payment</h3>
@@ -9245,6 +10199,7 @@ const termsContent = {
 <p>It is not possible to freeze memberships during a campaign/discounted/promotional period.</p>
 <p>You can initiate a freeze via your Boulders online membership profile or by emailing medlem@boulders.dk.</p>
 <p>Members retain their accrued membership benefits and seniority during the freezing period.</p>
+<p>Membership freeze fees are non-refundable.</p>
 
 <h3>§8 Termination of Membership</h3>
 <p>Termination must be done online through your membership profile or by emailing medlem@boulders.dk. When terminating your membership, you must provide your full name and/or membership number. The termination is valid from the day Boulders receives it, and you have received a confirmation from Boulders acknowledging the termination.</p>
@@ -9258,8 +10213,8 @@ const termsContent = {
 <p>Upon termination, members lose their accrued benefits and seniority. If you wish to retain these, freezing your membership may be considered.</p>
 
 <h3>§9 Right of Withdrawal</h3>
-<p>When creating a membership with Boulders, you have a 14-day right of withdrawal from the date the membership was created. To exercise your right of withdrawal, contact medlem@boulders.dk. The right of withdrawal cannot be used for repeated membership sign-ups.</p>
-<p>If you exercise your right of withdrawal, Boulders is entitled to require proportional payment in the form of normal entry fees for all visits made during the period in which your membership was active.</p>
+<p>When creating a membership with Boulders, you have a 14-day right of withdrawal from the date the membership was created. To exercise your right of withdrawal, you must submit a withdrawal request at the bottom of our self-service portal. The right of withdrawal cannot be used for repeated membership sign-ups.</p>
+<p>If you exercise your right of withdrawal, Boulders is entitled to require proportional payment in the form of the standard entry price for all visits made during the period in which you used your membership.</p>
 
 <h3>§10 Health Conditions and Personal Injury</h3>
 <p>All activity in Boulders climbing centers and climbing itself is conducted at your own risk. Boulders assumes no responsibility for your use of Boulders' facilities or outdoor areas. As a member, you are responsible for ensuring that your health condition allows participation in activities at Boulders.</p>
@@ -9290,53 +10245,49 @@ const termsContent = {
 <p>All purchases covered by these membership terms are subject to Danish law, excluding the CISG (United Nations Convention on Contracts for the International Sale of Goods), unless otherwise specified by mandatory rules.</p>
 <p>Any disputes that cannot be resolved amicably shall be settled by the Danish courts unless otherwise required by mandatory rules.</p>
 
-<h3>§14 15-Day Trial Pass</h3>
-<p>The 15-Day Trial Pass may only be used by individuals who have not previously been members or used a 15-day pass. If misuse of this pass is discovered, the holder will be required to pay a proportional entrance fee for the usage of the 15-Day Trial Pass.</p>
-<p>The 15-Day Trial Pass is personal and may not be shared with others.</p>
-<p>Additionally, references are made to §10 – Health Condition and Personal Injury, §10A – Valuables, and §12 – General Data Protection Regulation (GDPR), which also apply to the 15-Day Trial Pass.</p>`
+<h3>§14 15-Day Climbing Pass</h3>
+<p>15-Day Passes are personal and may not be shared with others. Please also refer to §9 – Right of Withdrawal, §10 – Health Condition and Personal Injury, §10A – Valuables, and §12 – The General Data Protection Regulation (GDPR) in these terms, all of which also apply to the 15-Day Pass.</p>
+<p><strong>Special terms for the 15-Day Gift Pass:</strong> The 15-Day Gift Pass may only be used by individuals who have not previously been members or previously used a 15-Day Gift Pass. If misuse is detected, the holder will be required to pay a proportional entry fee for their use of the 15-Day Gift Pass.</p>`
   },
   punchcard: {
     da: `<h2>Vilkår og betingelser for klippekort</h2>
 
 <h3>§1 Generelt</h3>
-<p>Følgende regelsæt er gældende for klippekort hos Boulders.<br>
-Ved oprettelse af et klippekort accepterer du at modtage nyhedsmails og anden relevant information pr. e-mail.</p>
+<p>Følgende regelsæt er gældende for klippekort hos Boulders.</p>
+<p>Ved oprettelse af et klippekort accepterer du at modtage nyhedsmails og anden relevant information pr. e-mail.</p>
 
 <h3>§2 Husets regler og andre bestemmelser</h3>
-<p>I tilfælde af overtrædelse af regelsættet, personalets anvisninger eller husets regler, kan Boulders til enhver tid lukke dit klippekort med øjeblikkelig virkning. Boulders forbeholder sig også retten til at udelukke dig fra at klatre hos Boulders på ubestemt tid.<br>
-Udleverede plastikkort fungerer som adgangskort og skal altid medbringes og indlæses, inden du benytter det pågældende klatrecenter. Hvis du mister eller beskadiger dit adgangskort, skal du straks meddele dette til Boulders, som vil udstede et nyt adgangskort mod et gebyr.</p>
+<p>I tilfælde af overtrædelse af regelsættet, personalets anvisninger eller husets regler, kan Boulders til enhver tid lukke dit klippekort med øjeblikkelig virkning. Boulders forbeholder sig også retten til at udelukke dig fra at klatre hos Boulders på ubestemt tid.</p>
+<p>Udleverede plastikkort fungerer som adgangskort og skal altid medbringes og indlæses, inden du benytter det pågældende klatrecenter. Hvis du mister eller beskadiger dit adgangskort, skal du straks meddele dette til Boulders, som vil udstede et nyt adgangskort mod et gebyr.</p>
 
 <h3>§3 Helbredstilstand og personskade</h3>
-<p>Al færdsel i Boulders klatrecentre og al klatring sker på eget ansvar. Boulders tager ikke ansvar for din brug af Boulders' faciliteter eller udendørsområder. Du er som klatrer selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter hos Boulders. Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld.<br>
-Kunden er derfor indforstået med, at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders. Kunden erklærer sig således indforstået med, at eventuelle skader på kunden selv eller tredjemand ikke vil blive erstattet af Boulders. Det er dit personlige ansvar at inspicere din landingszone inden klatring. I øvrigt følges dansk erstatningsret på området.</p>
+<p>Al færdsel i Boulders klatrecentre og al klatring sker på eget ansvar. Boulders tager ikke ansvar for din brug af Boulders' faciliteter eller udendørsområder. Du er som klatrer selv ansvarlig for at være i en helbredstilstand, der tillader deltagelse i aktiviteter hos Boulders. Klatring er en sportsaktivitet, hvor det er påregneligt, at der kan ske skader og uheld.</p>
+<p>Kunden er derfor indforstået med, at benyttelse af Boulders' faciliteter, herunder klatrefaciliteter, foretages på kundens eget ansvar, samt at kunden ikke kan gøre erstatningsansvar gældende på nogen måde overfor Boulders. Kunden erklærer sig således indforstået med, at eventuelle skader på kunden selv eller tredjemand ikke vil blive erstattet af Boulders. Det er dit personlige ansvar at inspicere din landingszone inden klatring. I øvrigt følges dansk erstatningsret på området.</p>
 
 <h3>§4 Persondataforordningen (GDPR)</h3>
 <p>Når du opretter et klippekort i Boulders accepterer du, at Boulders indsamler og behandler oplysninger om dig. Hos Boulders indsamler og behandler vi kun de oplysninger, der er nødvendige for at administrere dit klippekort. Boulders anvender ikke oplysningerne til andre formål. Boulders opbevarer oplysningerne om dig i op til 1 år efter dit klippekort. Herefter vil alle oplysninger blive destrueret. Kontakt medlem@boulders.dk efter klippekortets udløb for at få slette dine oplysninger omgående.</p>
-
 <p>Når Boulders registrerer oplysninger om dig, har du ret til at:</p>
-<ul>
+<ol>
 <li>Få indsigt i de oplysninger, som vi behandler om dig.</li>
 <li>Gøre indsigelse mod at indsamlingen og behandlingen af dine oplysninger finder sted.</li>
 <li>Få oplysninger, der er vildledende eller urigtige, rettet eller slettet.</li>
-</ul>
+</ol>
+<p>Du har også ret til at klage til Datatilsynet over Boulders' behandling af dine personoplysninger.</p>
+<p>Henvendelser vedrørende vores behandling af dine oplysninger skal ske til medlem@boulders.dk.</p>
+<p>Boulders er dataansvarlig i forbindelse med vores behandling af de oplysninger du giver os.</p>
 
-<p>Du har også ret til at klage til Datatilsynet over Boulders' behandling af dine personoplysninger.<br>
-Henvendelser vedrørende vores behandling af dine oplysninger skal ske til medlem@boulders.dk.<br>
-Boulders er dataansvarlig i forbindelse med vores behandling af de oplysninger du giver os.</p>
-
-<h3>§5 Ombytning til Medlemskab</h3>
-<p>Det er muligt at ombytte sit ubrugte eller delvist brugte klippekort til et medlemskab. Boulders tager derved højde for antal brugte klip og købsprisen og udregner derved restancen, som bliver fratrukket det ønskede medlemskab. Bemærk at der skal underskrives et regelsæt til medlemskab. Det er ikke muligt at få refunderet restancen ved endt medlemskab. Ønskes ombytning skal du skrive en mail til medlem@boulders.dk. Boulders ombytter ikke i receptionen.</p>
+<h3>§5 Ombytning til medlemskab</h3>
+<p>Det er muligt at ombytte hele sit ubrugte eller delvist brugte klippekort til et medlemskab. Boulders tager derved højde for antal brugte klip og købsprisen og udregner derved restancen, som bliver fratrukket det ønskede medlemskab. Bemærk at der skal underskrives et regelsæt til medlemskab. Det er ikke muligt at få refunderet restancen ved endt medlemskab. Ønskes ombytning skal du skrive en mail til medlem@boulders.dk. Boulders ombytter ikke i receptionen.</p>
 
 <h3>§6 Handelsbetingelser</h3>
-<p>Dit klippekort er gyldigt i 12 måneder fra købsdatoen og betales forud. Du har ikke ret til at få refunderet resterende klip eller på anden måde modtage godtgørelse for ubrugte klip.<br>
-Ved køb af et klippekort i Boulders har du 14 dages fortrydelsesret fra den dag, klippekort blev oprettet. For at gøre brug af fortrydelsesretten, skal du rette henvendelse til medlem@boulders.dk. Fortrydelsesretten kan ikke benyttes ved gentagne oprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af gældende entrépriser for det antal gange klippekort er benyttet og priserne vil reflektere tidspunktet for check-in i relation til peakpriser og off-peakpriser.</p>
-
+<p>Dit klippekort er gyldigt i 12 måneder fra købsdatoen og betales forud. Du har ikke ret til at få refunderet resterende klip eller på anden måde modtage godtgørelse for ubrugte klip.</p>
+<p>Ved køb af et klippekort i Boulders har du 14 dages fortrydelsesret fra den dag, klippekortet blev oprettet. For at gøre brug af fortrydelsesretten, skal du registrere en anmodning om fortrydelse nederst i vores selvbetjening. Fortrydelsesretten kan ikke benyttes ved gentagne oprettelser. Hvis du benytter dig af din fortrydelsesret, har Boulders ret til at kræve forholdsmæssig betaling i form af gældende entrépriser for det antal gange klippekortet er benyttet.</p>
 <p>Klippekortet er ikke personligt og må gerne benyttes af andre. Enhver person, der benytter et klip fra en klippekortholders kort, skal dog underskrive Boulders' gældende ansvarsfraskrivelse.</p>`,
-    en: `<h2>Terms and Conditions for Punch Card</h2>
+    en: `<h2>Terms and Conditions for Punch Cards</h2>
 
 <h3>§1 General</h3>
-<p>The following rules apply to punch cards at Boulders.<br>
-By purchasing a punch card, you agree to receive newsletters and other relevant information via email.</p>
+<p>The following rules apply to punch cards at Boulders.</p>
+<p>By purchasing a punch card, you agree to receive newsletters and other relevant information via email.</p>
 
 <h3>§2 House Rules and Other Provisions</h3>
 <p>In case of a breach of the rules, staff instructions, or house rules, Boulders reserves the right to cancel your punch card with immediate effect. Boulders also reserves the right to ban you from climbing at Boulders indefinitely.<br>
@@ -9361,12 +10312,11 @@ Inquiries regarding our processing of your information should be directed to med
 Boulders is the data controller responsible for processing the information you provide to us.</p>
 
 <h3>§5 Conversion to Membership</h3>
-<p>It is possible to convert an unused or partially used punch card into a membership. Boulders will take into account the number of used punches and the purchase price to calculate the remaining balance, which will be deducted from the desired membership. Note that you will need to sign a membership agreement. Any remaining balance from the conversion cannot be refunded upon the termination of the membership.<br>
-To request a conversion, you must send an email to medlem@boulders.dk. Boulders does not process conversions at the reception.</p>
+<p>It is possible to convert your entire unused or partially used punch card into a membership. Boulders will take into account the number of used punches and the purchase price to calculate the remaining balance, which will be deducted from the desired membership. Note that you will need to sign a membership agreement. Any remaining balance from the conversion cannot be refunded upon the termination of the membership. To request a conversion, you must send an email to medlem@boulders.dk. Boulders does not process conversions at the reception.</p>
 
 <h3>§6 Terms of Sale</h3>
-<p>Your punch card is valid for 12 months from the date of purchase and must be paid upfront. You are not entitled to a refund for remaining punches or any other compensation for unused punches.<br>
-When purchasing a punch card at Boulders, you have a 14-day right of withdrawal from the date the punch card was created. To exercise your right of withdrawal, you must contact medlem@boulders.dk. The right of withdrawal cannot be exercised for repeated purchases. If you exercise your right of withdrawal, Boulders is entitled to demand proportional payment based on applicable entrance fees for the number of times the punch card has been used. Prices will reflect the check-in time in relation to peak and off-peak pricing.</p>
+<p>Your punch card is valid for 12 months from the date of purchase and must be paid upfront. You are not entitled to a refund for remaining punches or any other compensation for unused punches.</p>
+<p>When purchasing a punch card at Boulders, you have a 14-day right of withdrawal from the date the punch card was created. To exercise your right of withdrawal, you must submit a withdrawal request at the bottom of our self-service portal. The right of withdrawal cannot be exercised for repeated purchases. If you exercise your right of withdrawal, Boulders is entitled to demand proportional payment based on applicable entrance fees for the number of times the punch card has been used.</p>
 
 <p>The punch card is not personal and may be used by others. However, any person using a punch from a cardholder's punch card must sign Boulders' applicable liability waiver.</p>`
   },
@@ -10770,33 +11720,14 @@ async function handleSaveAccount() {
           console.log('[Save Account] firstclimb pre-check login failed (expected for new customer):', preCheckErr?.message || preCheckErr);
         }
         if (preCheckLoggedIn) {
-          let customerIdForCheck = null;
           try {
             await syncAuthenticatedCustomerState(undefined, candidateEmail);
-            customerIdForCheck = state.customerId
-              || getTokenMetadata()?.username
-              || getTokenMetadata()?.userName;
           } catch (syncErr) {
             console.warn('[Save Account] customer state sync failed before history check:', syncErr);
           }
 
-          let hasBlockingHistory = true; // fail-safe default
-          try {
-            hasBlockingHistory = await customerHasFirstclimbBlockingHistory(customerIdForCheck);
-          } catch (historyErr) {
-            console.warn('[Save Account] firstclimb history check failed; blocking by default:', historyErr);
-            hasBlockingHistory = true;
-          }
-
-          if (hasBlockingHistory) {
-            try { window.clearTokens && window.clearTokens(); } catch (_) {}
-            state.customerId = null;
-            state.authenticatedCustomer = null;
-            state.authenticatedEmail = null;
-            try { refreshLoginUI(); } catch (_) {}
-            blockFirstClimbExistingCustomer({ email: candidateEmail });
-            return;
-          }
+          const guard = await runFirstclimbGuard('saveAccount-preCheck');
+          if (guard.blocked) return;
 
           // Clean history → treat the existing-customer login as the sign-in for
           // this purchase. No create-customer POST is needed; the user is ready
@@ -11024,6 +11955,10 @@ async function handleSaveAccount() {
         try {
           await authAPI.login(emailVal, password, { saveTokens: true });
           await syncAuthenticatedCustomerState();
+          if (isFirstClimbRoute()) {
+            const guard = await runFirstclimbGuard('saveAccount-duplicateEmail');
+            if (guard.blocked) return;
+          }
           showSaveAccountMessage('Account saved successfully! You are now logged in.', 'success');
           showToast('Account saved successfully!', 'success');
           refreshLoginUI();
@@ -14174,21 +15109,6 @@ function handlePaymentChange(event) {
   }
 }
 
-function toggleDiscountForm() {
-  if (!DOM.discountForm) return;
-  const isVisible = DOM.discountForm.style.display !== 'none';
-  DOM.discountForm.style.display = isVisible ? 'none' : 'flex';
-  DOM.discountToggle?.classList.toggle('active', !isVisible);
-  
-  // Focus on input field when form is shown
-  if (!isVisible && DOM.discountInput) {
-    // Use setTimeout to ensure the form is visible before focusing
-    setTimeout(() => {
-      DOM.discountInput.focus();
-    }, 0);
-  }
-}
-
 // Postal code auto-fill functionality
 let postalCodeLookupTimers = {
   customer: null,
@@ -14492,7 +15412,7 @@ async function handleApplyDiscount() {
   const discountCode = DOM.discountInput.value.trim().toUpperCase();
   
   if (!discountCode) {
-    showDiscountMessage('Please enter a coupon code', 'error');
+    showDiscountError(t('cart.discount.empty'));
     return;
   }
   
@@ -14511,8 +15431,7 @@ async function handleApplyDiscount() {
     if (hasItems) {
       // User has items - create order first, then apply coupon
       console.log('[Discount] No order exists, creating order to apply coupon...');
-      DOM.applyDiscountBtn.disabled = true;
-      DOM.applyDiscountBtn.textContent = 'Creating order...';
+      beginApplyDiscountLoading(t('cart.discount.creatingOrder'));
       clearDiscountMessage();
       
       try {
@@ -14594,48 +15513,18 @@ async function handleApplyDiscount() {
         }
         
         // Continue to apply coupon below (don't return)
-        DOM.applyDiscountBtn.textContent = 'Applying...';
+        beginApplyDiscountLoading(t('cart.discount.applying'));
       } catch (orderError) {
         console.error('[Discount] Failed to create order for coupon:', orderError);
         // Show specific error message
         const errorMsg = orderError.message || 'Failed to create order. Please try again.';
         
-        // Check if it's a prerequisite issue
-        let displayMsg = errorMsg;
-        if (errorMsg.includes('log in') || errorMsg.includes('account')) {
-          displayMsg = '✗ Please log in or create an account to apply a discount code';
-        } else if (errorMsg.includes('gym location') || errorMsg.includes('business unit')) {
-          displayMsg = '✗ Please select a gym location first';
-        } else {
-          displayMsg = `✗ ${errorMsg}`;
-        }
-        
-        showDiscountMessage(displayMsg, 'error');
-        DOM.discountInput.style.borderColor = '#EF4444';
-        DOM.discountInput.style.backgroundColor = '#FEF2F2';
-        DOM.applyDiscountBtn.disabled = false;
-        DOM.applyDiscountBtn.textContent = 'Apply';
-        
-        // Clear error styling after delay
-        setTimeout(() => {
-          if (DOM.discountInput && !state.discountApplied) {
-            DOM.discountInput.style.borderColor = '';
-            DOM.discountInput.style.backgroundColor = '';
-          }
-        }, 5000);
+        showDiscountError(resolveDiscountApplyErrorMessage(errorMsg));
+        endApplyDiscountLoading();
         return;
       }
     } else {
-      // No items selected - show error message
-      showDiscountMessage('✗ Please select a membership or punch card first', 'error');
-      DOM.discountInput.style.borderColor = '#EF4444';
-      DOM.discountInput.style.backgroundColor = '#FEF2F2';
-      setTimeout(() => {
-        if (DOM.discountInput && !state.discountApplied) {
-          DOM.discountInput.style.borderColor = '';
-          DOM.discountInput.style.backgroundColor = '';
-        }
-      }, 5000);
+      showDiscountError(t('cart.discount.selectProduct'));
       return;
     }
   }
@@ -14646,15 +15535,12 @@ async function handleApplyDiscount() {
   
   if (!orderIdToUse) {
     console.error('[Discount] No order ID available for discount application');
-    showDiscountMessage('✗ No order found. Please refresh the page and try again.', 'error');
-    DOM.applyDiscountBtn.disabled = false;
-    DOM.applyDiscountBtn.textContent = 'Apply';
+    showDiscountError(t('cart.discount.noOrder'));
+    endApplyDiscountLoading();
     return;
   }
   
-  // Set loading state
-  DOM.applyDiscountBtn.disabled = true;
-  DOM.applyDiscountBtn.textContent = 'Applying...';
+  beginApplyDiscountLoading(t('cart.discount.applying'));
   clearDiscountMessage();
   
   // Ensure state.orderId is set for consistency
@@ -14723,78 +15609,18 @@ async function handleApplyDiscount() {
     console.log('[Discount] Applying discount code:', discountCode, 'to order:', orderIdToUse);
     const response = await orderAPI.applyDiscountCode(orderIdToUse, discountCode);
     console.log('[Discount] API response received:', response);
-    
-    // Extract discount information from response
-    // API returns Order object with couponDiscount field
-    // couponDiscount can be an object { amount, currency } or a number
-    const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
-    let discountAmount = 0;
-    
-    console.log('[Discount] Extracting discount from response:', {
-      couponDiscount,
-      couponDiscountType: typeof couponDiscount,
-      responseKeys: Object.keys(response || {}),
-    });
-    
-    if (couponDiscount) {
-      if (typeof couponDiscount === 'object') {
-        // Avoid 'total' field as it might be order total, not discount
-        discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-        
-        // If amount is in cents, convert to DKK
-        if (discountAmount > 10000) {
-          console.log('[Discount] Large discountAmount detected, converting from cents:', discountAmount);
-          discountAmount = discountAmount / 100;
-        }
-      } else if (typeof couponDiscount === 'number') {
-        discountAmount = couponDiscount;
-        
-        // If amount is in cents, convert to DKK
-        if (discountAmount > 10000) {
-          console.log('[Discount] Large discountAmount detected, converting from cents:', discountAmount);
-          discountAmount = discountAmount / 100;
-        }
-      }
-    }
-    
-    // Also check if discountAmount was already extracted by the API method
-    if (!discountAmount && response?.discountAmount) {
-      discountAmount = response.discountAmount;
-      
-      // If amount is in cents, convert to DKK
-      if (discountAmount > 10000) {
-        console.log('[Discount] Large discountAmount from response, converting from cents:', discountAmount);
-        discountAmount = discountAmount / 100;
-      }
-    }
-    
-    // Calculate discount from price difference if needed
-    if (!discountAmount && response?.price) {
-      const originalTotal = state.totals.subtotal || state.totals.cartTotal || 0;
-      let newTotal = response.price.total || response.price.leftToPay || 0;
-      
-      // Convert to DKK if in cents
-      if (newTotal > 10000) {
-        newTotal = newTotal / 100;
-      }
-      
-      if (newTotal < originalTotal && originalTotal > 0) {
-        discountAmount = originalTotal - newTotal;
-        console.log('[Discount] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-      }
-    }
-    
-    // Ensure subtotal is calculated before validating discount
+
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
-      updateCartSummary(); // This will calculate subtotal using API data
+      updateCartSummary();
     }
-    
-    // Validate discount amount - ensure it doesn't exceed subtotal
+
     const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-    if (discountAmount > subtotal && subtotal > 0) {
-      console.warn('[Discount] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
-      discountAmount = subtotal;
+    let discountAmount = calculateOrderCouponDiscountKr(response, subtotal);
+    if (discountAmount <= 0 && response?.discountAmount != null) {
+      discountAmount = extractCurrencyOutKr(response.discountAmount);
     }
+    discountAmount = capCouponDiscountKr(discountAmount, subtotal);
+    const couponDiscount = response?.couponDiscount || response?.price?.couponDiscount;
     
     if (discountAmount > 0) {
       // Success - apply discount
@@ -14810,9 +15636,20 @@ async function handleApplyDiscount() {
         // Merge updated price data into existing fullOrder
         state.fullOrder.price = response.price || state.fullOrder.price;
         state.fullOrder.couponDiscount = response.couponDiscount || state.fullOrder.couponDiscount;
-        if (response.subscriptionItems && response.subscriptionItems.length > 0) {
+        if (response.subscriptionItems?.length) {
           state.fullOrder.subscriptionItems = response.subscriptionItems;
         }
+        if (response.valueCardItems?.length) {
+          state.fullOrder.valueCardItems = response.valueCardItems;
+        }
+        if (response.articleItems?.length) {
+          state.fullOrder.articleItems = response.articleItems;
+        }
+      }
+
+      const syncedDiscount = getOrderCouponDiscountKr();
+      if (syncedDiscount > 0) {
+        state.totals.discountAmount = syncedDiscount;
       }
       
       console.log('[Discount] Applying discount:', {
@@ -14893,11 +15730,7 @@ async function handleApplyDiscount() {
         DOM.cartTotal.offsetHeight; // Trigger reflow
       }
       
-      // Disable input and button after successful application
-      DOM.discountInput.disabled = true;
-      DOM.discountInput.style.opacity = '0.6';
-      DOM.discountInput.style.borderColor = '#10B981';
-      DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
+      updateDiscountFormControls();
     } else {
       // Check if coupon was actually applied to the order (even if discountAmount is 0)
       // The API might return success but with 0 discount (e.g., for future use coupons)
@@ -14931,10 +15764,7 @@ async function handleApplyDiscount() {
           }, 2000);
         });
         
-        DOM.discountInput.disabled = true;
-        DOM.discountInput.style.opacity = '0.6';
-        DOM.discountInput.style.borderColor = '#10B981';
-        DOM.discountInput.style.backgroundColor = '#F0FDF4'; // Light green background
+        updateDiscountFormControls();
       } else {
         throw new Error('Invalid coupon code or no discount applied');
       }
@@ -14949,85 +15779,91 @@ async function handleApplyDiscount() {
       // Don't reset discount state - coupon might have been applied
       // Just show a generic error
       showDiscountMessage('An error occurred while applying the coupon. Please refresh the page.', 'error');
-      DOM.applyDiscountBtn.disabled = false;
-      DOM.applyDiscountBtn.textContent = 'Apply';
+      endApplyDiscountLoading();
       return; // Exit early to avoid resetting state
     }
     
-    // Reset discount state on actual error
-    state.discountCode = null;
-    state.discountApplied = false;
-    state.totals.discountAmount = 0;
-    updateCartSummary(); // Update cart using API-based function
-    updateDiscountDisplay(); // Clear discount display
+    resetLocalDiscountState({ preserveInput: true });
+    updateCartSummary();
+    updateDiscountDisplay();
     
-    // Parse error message to extract error code
-    let errorMessageText = 'Failed to apply coupon. Please try again.';
-    const errorText = errorMessage;
-    
-    // Check for specific error codes in the response
-    if (errorText.includes('COUPON_NOT_APPLICABLE')) {
-      errorMessageText = '✗ This coupon is not applicable to your current order. It may have restrictions on products, minimum order amount, or other conditions.';
-    } else if (errorText.includes('COUPON_NOT_FOUND') || errorText.includes('404')) {
-      errorMessageText = '✗ Coupon code not found. Please check the code and try again.';
-    } else if (errorText.includes('COUPON_EXPIRED') || errorText.includes('expired')) {
-      errorMessageText = '✗ This coupon has expired and is no longer valid.';
-    } else if (errorText.includes('COUPON_ALREADY_USED')) {
-      errorMessageText = '✗ This coupon has already been used and cannot be applied again.';
-    } else if (errorText.includes('403') || errorText.includes('Forbidden')) {
-      errorMessageText = '✗ This coupon cannot be applied. It may have restrictions or is not valid for your order.';
-    } else if (errorText.includes('400') || errorText.includes('invalid')) {
-      errorMessageText = '✗ Invalid coupon code. Please check the code and try again.';
-    } else if (errorText.includes('405')) {
-      errorMessageText = '✗ Coupon application method not supported. Please contact support.';
-    } else {
-      errorMessageText = '✗ ' + errorMessageText;
-    }
-    
-    showDiscountMessage(errorMessageText, 'error');
-    
-    // Reset input styling on error
-    DOM.discountInput.style.borderColor = '#EF4444'; // Red border on error
-    DOM.discountInput.style.backgroundColor = '#FEF2F2'; // Light red background
-    DOM.discountInput.focus(); // Focus input so user can try again
-    
-    // Clear error styling after a delay
-    setTimeout(() => {
-      if (DOM.discountInput && !state.discountApplied) {
-        DOM.discountInput.style.borderColor = '';
-        DOM.discountInput.style.backgroundColor = '';
-      }
-    }, 5000);
+    showDiscountError(resolveDiscountApplyErrorMessage(errorMessage));
   } finally {
-    // Reset button state
-    DOM.applyDiscountBtn.disabled = false;
-    DOM.applyDiscountBtn.textContent = 'Apply';
+    endApplyDiscountLoading();
+    updateDiscountFormControls();
   }
 }
 
+async function handleRemoveDiscount() {
+  if (!state.discountApplied || !state.discountCode) return;
+  if (DOM.removeDiscountBtn?.disabled) return;
+
+  const discountCode = state.discountCode;
+  const orderId = state.orderId || state.fullOrder?.id;
+
+  if (DOM.removeDiscountBtn) {
+    DOM.removeDiscountBtn.disabled = true;
+    DOM.removeDiscountBtn.textContent = '...';
+  }
+
+  try {
+    if (orderId) {
+      const updatedOrder = await orderAPI.removeDiscountCode(orderId, discountCode);
+      state.fullOrder = updatedOrder;
+    }
+    resetLocalDiscountState();
+    clearDiscountMessage();
+    updateCartSummary();
+    updateDiscountDisplay();
+    updatePaymentOverview();
+    showDiscountMessage(t('cart.discount.removed', 'Discount code removed.'), 'info');
+  } catch (error) {
+    console.error('[Discount] Error removing coupon:', error);
+    showDiscountMessage(t('cart.discount.removeFailed'), 'error');
+  } finally {
+    updateDiscountFormControls();
+  }
+}
+
+let discountMessageDismissTimer = null;
+
+function dismissDiscountMessage(messageEl) {
+  if (!messageEl?.isConnected) return;
+  messageEl.classList.add('discount-message-dismiss');
+  discountMessageDismissTimer = window.setTimeout(() => {
+    messageEl.remove();
+    discountMessageDismissTimer = null;
+  }, 300);
+}
+
 function showDiscountMessage(message, type = 'info') {
-  // Remove existing message if any
   clearDiscountMessage();
-  
-  // Create message element
+
   const messageEl = document.createElement('div');
   messageEl.className = `discount-message discount-message-${type}`;
   messageEl.textContent = message;
-  
-  // Insert after discount form
+  if (type === 'error') {
+    messageEl.setAttribute('role', 'alert');
+    messageEl.setAttribute('aria-live', 'polite');
+  }
+
   if (DOM.discountForm) {
     DOM.discountForm.insertAdjacentElement('afterend', messageEl);
   }
-  
-  // Auto-remove success messages after 5 seconds
-  if (type === 'success') {
-    setTimeout(() => {
-      messageEl.remove();
+
+  // Auto-dismiss transient feedback after 5 seconds
+  if (type === 'success' || type === 'info' || type === 'error') {
+    discountMessageDismissTimer = window.setTimeout(() => {
+      dismissDiscountMessage(messageEl);
     }, 5000);
   }
 }
 
 function clearDiscountMessage() {
+  if (discountMessageDismissTimer) {
+    window.clearTimeout(discountMessageDismissTimer);
+    discountMessageDismissTimer = null;
+  }
   const existingMessage = document.querySelector('.discount-message');
   if (existingMessage) {
     existingMessage.remove();
@@ -15838,34 +16674,7 @@ function renderCartItems() {
       if (item.type === 'membership') {
         priceEl.style.display = 'none';
       } else if (item.type !== 'value-card') {
-        // Calculate discounted price for this item
-        let displayPrice = item.amount;
-        let originalPrice = item.amount;
-        
-        // If discount is applied, calculate discounted price proportionally
-        if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
-          // Calculate discount ratio
-          const discountRatio = state.totals.discountAmount / state.totals.subtotal;
-          // Apply discount proportionally to this item
-          const itemDiscount = item.amount * discountRatio;
-          displayPrice = Math.max(0, item.amount - itemDiscount);
-          
-          // If discount is 100% or more, show 0
-          if (state.totals.discountAmount >= state.totals.subtotal) {
-            displayPrice = 0;
-          }
-        }
-        
-        // Display price - show discounted price if different from original
-        if (displayPrice !== originalPrice && state.discountApplied) {
-          // Show original price with strikethrough and discounted price
-          const originalText = formatPriceHalfKrone(roundToHalfKrone(originalPrice));
-          const discountedText = formatPriceHalfKrone(roundToHalfKrone(displayPrice));
-          priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${originalText} kr</span><span style="color: #10B981; font-weight: 600;">${discountedText} kr</span>`);
-        } else {
-          // Always show price, including "0 kr." for free items
-          priceEl.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
-        }
+        renderCartItemPriceElement(priceEl, item);
       }
     }
 
@@ -15880,37 +16689,7 @@ function renderCartItems() {
   subscriptionItems.forEach((item, index) => {
     const cartItem = renderCartItem(item, index === 0);
     DOM.cartItems.appendChild(cartItem);
-    // Value-card: add Total (X klip) + price in a row below the cart-item
-    if (item.type === 'value-card') {
-      const totalRow = document.createElement('div');
-      totalRow.className = 'cart-item-total-row';
-      const labelSpan = document.createElement('span');
-      const punches = item.totalPunches != null && item.totalPunches > 0 ? item.totalPunches : 0;
-      // firstclimb is a single-day ticket — just say "Total" instead of the
-      // "Total (X Klip)" punch-card label. Same fallback for any value card BRP
-      // returns without a clip count.
-      if (isFirstClimbRoute() || punches === 0) {
-        labelSpan.textContent = t('cart.total') || 'Total';
-      } else if (punches === 1) {
-        labelSpan.textContent = `Total (${t('cart.punch.one')})`;
-      } else {
-        labelSpan.textContent = `Total (${punches} ${t('cart.punch.label')})`;
-      }
-      labelSpan.className = 'cart-total-label';
-      totalRow.appendChild(labelSpan);
-      const priceSpan = document.createElement('span');
-      let displayPrice = item.amount;
-      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
-        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
-        const itemDiscount = item.amount * discountRatio;
-        displayPrice = Math.max(0, item.amount - itemDiscount);
-        if (state.totals.discountAmount >= state.totals.subtotal) displayPrice = 0;
-      }
-      priceSpan.textContent = formatPriceHalfKrone(roundToHalfKrone(displayPrice)) + ' kr.';
-      priceSpan.className = 'cart-item-total-price';
-      totalRow.appendChild(priceSpan);
-      DOM.cartItems.appendChild(totalRow);
-    }
+    // Punch-card totals live in payment overview (same breakdown as membership checkout).
   });
 
   // Render addon items in separate container (below payment overview, above total)
@@ -15978,36 +16757,7 @@ function renderCartAddons() {
     }
     
     if (priceEl) {
-      // Calculate discounted price for this item
-      let displayPrice = item.amount;
-      let originalPrice = item.amount;
-      
-      // If discount is applied, calculate discounted price proportionally
-      if (state.discountApplied && state.totals.discountAmount > 0 && state.totals.subtotal > 0) {
-        // Calculate discount ratio
-        const discountRatio = state.totals.discountAmount / state.totals.subtotal;
-        // Apply discount proportionally to this item
-        const itemDiscount = item.amount * discountRatio;
-        displayPrice = Math.max(0, item.amount - itemDiscount);
-        
-        // If discount is 100% or more, show 0
-        if (state.totals.discountAmount >= state.totals.subtotal) {
-          displayPrice = 0;
-        }
-      }
-      
-      // Round prices to half krone
-      const roundedOriginalPrice = roundToHalfKrone(originalPrice);
-      const roundedDisplayPrice = roundToHalfKrone(displayPrice);
-      
-      // Display price - show discounted price if different from original
-      if (roundedDisplayPrice !== roundedOriginalPrice && state.discountApplied) {
-        // Show original price with strikethrough and discounted price
-        priceEl.innerHTML = sanitizeHTML(`<span style="text-decoration: line-through; opacity: 0.6; margin-right: 8px;">${formatPriceHalfKrone(roundedOriginalPrice)} kr.</span><span style="color: #10B981; font-weight: 600;">${formatPriceHalfKrone(roundedDisplayPrice)} kr.</span>`);
-      } else {
-        // Always show price, including "0 kr." for free items
-        priceEl.textContent = formatPriceHalfKrone(roundedDisplayPrice) + ' kr.';
-      }
+      renderCartItemPriceElement(priceEl, item);
     }
 
     DOM.cartAddons.appendChild(cartItem);
@@ -16045,10 +16795,11 @@ function renderCartTotal() {
   
   // Show/hide cart total container based on whether there are items
   if (cartTotalContainer) {
-    const hasItems = state.cartItems && state.cartItems.length > 0;
-    // Only show if there are non-membership items (membership price is shown in payment overview)
-    const hasNonMembershipItems = state.cartItems && state.cartItems.some(item => item.type !== 'membership');
-    cartTotalContainer.style.display = hasNonMembershipItems ? 'block' : 'none';
+    // Prices for membership and punch-card flows are shown in payment overview
+    const showLegacyCartTotal = state.cartItems?.some(
+      (item) => item.type !== 'membership' && item.type !== 'value-card'
+    );
+    cartTotalContainer.style.display = showLegacyCartTotal ? 'block' : 'none';
   }
   
   // Update discount display if discount is applied
@@ -16082,44 +16833,38 @@ function updatePaymentOverview() {
     return;
   }
   
-  // Only show payment overview if there's a membership (subscription) in the cart
   const hasMembership = state.selectedProductType === 'membership' && state.selectedProductId;
-  
-  // Initialize DOM references
-  if (!DOM.paymentOverview) {
-    DOM.paymentOverview = document.querySelector('.payment-overview');
-  }
-  if (!DOM.payNow) {
-    DOM.payNow = document.querySelector('[data-summary-field="pay-now"]');
-  }
-  if (!DOM.monthlyPayment) {
-    DOM.monthlyPayment = document.querySelector('[data-summary-field="monthly-payment"]');
-  }
+  const hasPunchCardCheckout = isPunchCardCheckout();
+
+  ensurePaymentOverviewDomRefs();
+
   if (!DOM.paymentBillingPeriod) {
     DOM.paymentBillingPeriod = document.querySelector('[data-summary-field="payment-billing-period"]');
-  }
-  if (!DOM.paymentBoundUntil) {
-    DOM.paymentBoundUntil = document.querySelector('[data-summary-field="payment-bound-until"]');
   }
   if (!DOM.firstMonthAmount) {
     DOM.firstMonthAmount = document.querySelector('[data-summary-field="first-month"]');
   }
-  if (!DOM.firstMonthRow) {
-    DOM.firstMonthRow = document.querySelector('.payment-overview-first-month');
-  }
-  
-  if (!DOM.paymentOverview || !DOM.payNow || !DOM.monthlyPayment) {
+
+  if (!DOM.paymentOverview || !DOM.payNow) {
     return;
   }
-  
-  if (!hasMembership) {
-    // Hide payment overview and total wrapper if no membership
+
+  if (!hasMembership && !hasPunchCardCheckout) {
     DOM.paymentOverview.style.display = 'none';
     const totalWrap = document.querySelector('.payment-overview-total-wrap');
     if (totalWrap) totalWrap.style.display = 'none';
     return;
   }
-  
+
+  if (hasPunchCardCheckout && !hasMembership) {
+    updatePunchCardPaymentOverview();
+    return;
+  }
+
+  if (!DOM.monthlyPayment) {
+    return;
+  }
+
   // Show payment overview - don't wait for order data, show prices from product data immediately
   DOM.paymentOverview.style.display = 'block';
   
@@ -16584,13 +17329,17 @@ function updatePaymentOverview() {
       console.log('[Payment Overview] ✅ Using API price from order (fullOrder.price.amount):', orderPriceDKK, 'DKK');
       
       if (is15DayPass) {
-      // For 15-day pass: always use product list price (one-time payment), not prorated order math
+      // For 15-day pass: use list price unless the order already has a coupon-adjusted price
       const dayPassPriceInCents =
         currentProduct?.priceWithInterval?.price?.amount ??
         productFromOrder?.priceWithInterval?.price?.amount ??
         currentProduct?.price?.amount ??
         0;
-      payNowAmount = dayPassPriceInCents > 0 ? (dayPassPriceInCents / 100) : orderPriceDKK;
+      const orderHasCoupon = extractCouponDiscountKr(state.fullOrder?.couponDiscount) > 0
+        || (state.discountApplied && state.totals.discountAmount > 0);
+      payNowAmount = orderHasCoupon
+        ? orderPriceDKK
+        : (dayPassPriceInCents > 0 ? (dayPassPriceInCents / 100) : orderPriceDKK);
       
       // Use selected activation date or today; end = start + 14 days (inclusive 15-day period)
       const today = new Date();
@@ -16978,18 +17727,8 @@ function updatePaymentOverview() {
     billingPeriodText = t('cart.billingPeriodConfirmed');
   }
   
-  // If discount is applied but order price isn't available yet, reflect discount in pay-now
-  if (state.discountApplied && state.totals.discountAmount > 0 && !state.fullOrder?.price?.amount) {
-    const adjustedPayNow = Math.max(0, payNowAmount - state.totals.discountAmount);
-    if (adjustedPayNow !== payNowAmount) {
-      console.log('[Payment Overview] Applying discount to pay-now fallback:', {
-        original: payNowAmount,
-        discount: state.totals.discountAmount,
-        adjusted: adjustedPayNow
-      });
-      payNowAmount = adjustedPayNow;
-    }
-  }
+  const payNowBreakdown = resolvePayNowDiscountBreakdown(payNowAmount);
+  payNowAmount = payNowBreakdown.afterDiscount;
 
   // Round payNowAmount to half krone and store in state for use in cart total calculation
   state.totals.payNowAmount = roundToHalfKrone(payNowAmount);
@@ -17155,18 +17894,7 @@ function updatePaymentOverview() {
     }
   }
 
-  // Show discount row in payment overview when discount is applied
-  if (DOM.paymentDiscount) {
-    const discountRow = DOM.paymentDiscount.closest('.payment-overview-discount');
-    if (state.discountApplied && state.totals.discountAmount > 0) {
-      DOM.paymentDiscount.textContent = `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`;
-      if (discountRow) {
-        discountRow.style.display = 'flex';
-      }
-    } else if (discountRow) {
-      discountRow.style.display = 'none';
-    }
-  }
+  applyPaymentOverviewDiscountRows(payNowBreakdown);
   
   // Display boundUntil date separately if available (for memberships with promotional periods)
   if (DOM.paymentBoundUntil) {
@@ -17216,14 +17944,9 @@ function updatePaymentOverview() {
     // Total calculation:
     // - If payNowAmount already includes addons (from backend order that has addons), use it as-is
     // - Otherwise, add addonTotal to payNowAmount (order doesn't have addons yet, or no order data)
+    // payNowAmount already reflects coupon via resolvePayNowDiscountBreakdown
     let total = payNowIncludesAddons ? payNowAmount : payNowAmount + addonTotal;
-    
-    // Apply discount if applicable
-    if (state.discountApplied && state.totals.discountAmount > 0) {
-      total = Math.max(0, total - state.totals.discountAmount);
-    }
-    
-    // Round and use as the single authoritative "Pay now" amount.
+
     const roundedTotal = roundToHalfKrone(total);
     if (DOM.payNow) {
       DOM.payNow.textContent = formatPriceHalfKrone(roundedTotal) + ' kr.';
@@ -17298,10 +18021,18 @@ function updateDiscountDisplay() {
   
   // Show discount display if discount is applied OR if discount code is stored (pending application)
   // BUT: Don't show pending message if we're currently applying a discount (button is disabled)
-  const isApplyingDiscount = DOM.applyDiscountBtn && DOM.applyDiscountBtn.disabled && DOM.applyDiscountBtn.textContent.includes('Applying');
+  const isApplyingDiscount = isApplyDiscountButtonLoading();
   const shouldShowPending = state.discountCode && !state.discountApplied && !isApplyingDiscount;
   
-  if (state.discountApplied || shouldShowPending) {
+  updateDiscountFormControls();
+
+  // Payment overview already shows Rabat + Betal nu — skip the duplicate breakdown box.
+  if (state.discountApplied) {
+    if (discountDisplay) discountDisplay.style.display = 'none';
+    return;
+  }
+
+  if (shouldShowPending) {
     // Ensure subtotal is calculated - but don't call updateCartTotals() to avoid recursion
     // Instead, just recalculate subtotal if needed
     if (!state.totals.subtotal || state.totals.subtotal === 0) {
@@ -17350,33 +18081,7 @@ function updateDiscountDisplay() {
       DOM.discountDisplay = discountDisplay;
     }
     
-    // Build discount display HTML - show subtotal, discount, and final total
-    if (state.discountApplied) {
-      // Discount is applied - show actual discount amount
-      const discountValue = state.totals.discountAmount > 0
-        ? `-${formatCurrencyHalfKrone(state.totals.discountAmount)}`
-        : formatCurrencyHalfKrone(0);
-      const discountPercent = (state.totals.subtotal > 0 && state.totals.discountAmount > 0)
-        ? (state.totals.discountAmount / state.totals.subtotal) * 100
-        : null;
-      const discountPercentText = (typeof discountPercent === 'number' && Number.isFinite(discountPercent))
-        ? `, ${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(discountPercent)}%`
-        : '';
-      discountDisplay.innerHTML = sanitizeHTML(`
-        <div class="discount-row">
-          <span class="discount-label">Subtotal:</span>
-          <span class="discount-value">${formatCurrencyHalfKrone(state.totals.subtotal)}</span>
-        </div>
-        <div class="discount-row discount-applied">
-          <span class="discount-label">Discount (${state.discountCode}${discountPercentText}):</span>
-          <span class="discount-value">${discountValue}</span>
-        </div>
-        <div class="discount-row discount-total" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
-          <span class="discount-label" style="font-weight: bold;">Total:</span>
-          <span class="discount-value" style="font-weight: bold;">${formatCurrencyHalfKrone(state.totals.cartTotal)}</span>
-        </div>
-      `);
-    } else if (state.discountCode && !state.discountApplied) {
+    if (state.discountCode && !state.discountApplied) {
       // Discount code entered but not yet applied (pending) - show subtotal only
       discountDisplay.innerHTML = sanitizeHTML(`
         <div class="discount-row">
@@ -17402,6 +18107,8 @@ function updateDiscountDisplay() {
 function persistOrderSnapshot(orderId) {
   if (!orderId) return;
   try {
+    const landingRoute = state.landingRouteConfig?.labelKey
+      || (isFirstClimbRoute() ? 'firstclimb' : null);
     sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
       orderId,
       membershipPlanId: state.membershipPlanId,
@@ -17411,6 +18118,11 @@ function persistOrderSnapshot(orderId) {
       selectedProductType: state.selectedProductType, // Store product type for restoration
       selectedProductId: state.selectedProductId, // Store product ID for restoration
       subscriptionStartDate: state.subscriptionStartDate, // 15-day pass activation date
+      paymentMethod: state.paymentMethod,
+      discountCode: state.discountCode,
+      discountApplied: state.discountApplied,
+      // Durable offer signal for post-payment tracking (path alone can be unreliable)
+      landingRoute,
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -17476,21 +18188,12 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   state.paymentLinkGenerated = false;
   state.checkoutInProgress = false;
   state.billingPeriod = '';
-  state.totals.discountAmount = 0;
+  resetLocalDiscountState();
   state.totals.payNowAmount = 0;
-  state.discountApplied = false;
-  state.discountCode = null;
 
   // Re-enable logout button and reset checkout button if they were disabled during checkout
   setCheckoutLoadingState(false);
 
-  if (DOM.discountInput) {
-    DOM.discountInput.disabled = false;
-    DOM.discountInput.value = '';
-    DOM.discountInput.style.opacity = '';
-    DOM.discountInput.style.borderColor = '';
-    DOM.discountInput.style.backgroundColor = '';
-  }
   clearDiscountMessage();
   updateDiscountDisplay();
 
@@ -17608,6 +18311,7 @@ async function ensureOrderCreated(context = 'auto') {
   const orderData = {
     customer: Number(state.customerId),
     businessUnit: state.selectedBusinessUnit,
+    source: 'join.boulders.dk',
   };
 
   orderCreationPromise = (async () => {
@@ -17760,44 +18464,42 @@ async function autoEnsureOrderIfReady(context = 'auto') {
 }
 
 function isRateLimitError(error) {
-  if (!error) return false;
-  if (error.status === 429) return true;
-  const message = typeof error.message === 'string' ? error.message : '';
-  return message.includes('429') || message.toLowerCase().includes('too many requests');
+  return isRateLimitLikeError(error);
 }
 
 function getRetryDelayFromError(error, defaultMs = 120000) {
-  // Default to 2 minutes (120 seconds) if we can't extract retryAfter
-  const message = typeof error?.message === 'string' ? error.message : '';
-  
-  // Try to extract retryAfter from JSON in error message
-  try {
-    const jsonMatch = message.match(/\{[\s\S]*"retryAfter"[\s\S]*\}/);
-    if (jsonMatch) {
-      const jsonData = JSON.parse(jsonMatch[0]);
-      if (jsonData.retryAfter) {
-        const seconds = parseInt(jsonData.retryAfter, 10);
-        if (!isNaN(seconds) && seconds > 0) {
-          // Use the actual retryAfter time from API (no cap)
-          // Convert seconds to milliseconds
-          return Math.max(seconds * 1000, 1000);
+  // Default to 2 minutes (120 seconds) if we can't extract retryAfter.
+  // Prefer error.payload (set by requestJson) over parsing error.message.
+  const candidates = [];
+  if (error?.payload != null) candidates.push(error.payload);
+  if (typeof error?.message === 'string') candidates.push(error.message);
+
+  for (const candidate of candidates) {
+    let retryAfter = null;
+    if (typeof candidate === 'object' && candidate !== null) {
+      retryAfter = candidate.retryAfter ?? candidate.error?.retryAfter;
+    } else if (typeof candidate === 'string') {
+      try {
+        const jsonMatch = candidate.match(/\{[\s\S]*"retryAfter"[\s\S]*\}/);
+        if (jsonMatch) {
+          const jsonData = JSON.parse(jsonMatch[0]);
+          retryAfter = jsonData.retryAfter ?? jsonData.error?.retryAfter;
         }
+      } catch {
+        // fall through to regex
+      }
+      if (retryAfter == null) {
+        const match = candidate.match(/"retryAfter"\s*:\s*(\d+)/i);
+        if (match) retryAfter = match[1];
       }
     }
-  } catch (e) {
-    // JSON parse failed, try regex fallback
-  }
-  
-  // Fallback: regex extraction
-  const match = message.match(/"retryAfter":\s*(\d+)/i);
-  if (match) {
-    const seconds = parseInt(match[1], 10);
+
+    const seconds = parseInt(retryAfter, 10);
     if (!isNaN(seconds) && seconds > 0) {
-      // Use the actual retryAfter time from API (no cap)
       return Math.max(seconds * 1000, 1000);
     }
   }
-  
+
   return defaultMs;
 }
 
@@ -17858,6 +18560,15 @@ async function handleCheckout() {
   if (hasCampaignInCart() && customerHasMembershipCampaignBlockRequirement()) {
     showCampaignRejectionModal();
     return;
+  }
+
+  if (isFirstClimbRoute()) {
+    const initGuard = await awaitFirstclimbGuard();
+    if (initGuard.blocked) return;
+    if (isUserAuthenticated()) {
+      const guard = await runFirstclimbGuard('checkout-pre');
+      if (guard.blocked) return;
+    }
   }
   
   // Mark checkout as in progress to prevent state resets
@@ -18063,10 +18774,7 @@ async function handleCheckout() {
         try {
           sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
             id: customerId,
-            firstName: payload.customer?.firstName,
-            lastName: payload.customer?.lastName,
-            email: payload.customer?.email,
-            primaryGym: payload.customer?.primaryGym,
+            ...buildStoredCheckoutCustomer(payload.customer),
           }));
         } catch (e) {
           console.warn('[checkout] Could not save customer to sessionStorage:', e);
@@ -18195,7 +18903,11 @@ async function handleCheckout() {
                 } else {
                   setCheckoutLoadingState(false);
                   state.checkoutInProgress = false;
-                  throw new Error(`Rate limit exceeded. Please wait ${retryMessage} before trying again.`);
+                  const rateLimitError = new Error(
+                    `Rate limit exceeded. Please wait ${retryMessage} before trying again.`
+                  );
+                  rateLimitError.status = 429;
+                  throw rateLimitError;
                 }
               } else {
                 console.warn('[checkout] ⚠️ Login after customer creation failed:', loginError);
@@ -18211,6 +18923,14 @@ async function handleCheckout() {
         }
         
         console.log('[checkout] Customer created:', customerId);
+        if (isFirstClimbRoute()) {
+          const guard = await runFirstclimbGuard('checkout-post-create');
+          if (guard.blocked) {
+            setCheckoutLoadingState(false);
+            state.checkoutInProgress = false;
+            return;
+          }
+        }
         try {
           await ensureOrderCreated('profile-create');
           await ensureSubscriptionAttached('profile-create');
@@ -18231,13 +18951,18 @@ async function handleCheckout() {
               await syncAuthenticatedCustomerState();
               customerId = state.customerId || getTokenMetadata()?.username || getTokenMetadata()?.userName;
               if (customerId) state.customerId = String(customerId);
+              if (isFirstClimbRoute()) {
+                const guard = await runFirstclimbGuard('checkout-duplicateEmail');
+                if (guard.blocked) {
+                  setCheckoutLoadingState(false);
+                  state.checkoutInProgress = false;
+                  return;
+                }
+              }
               try {
                 sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
                   id: customerId,
-                  firstName: payload.customer?.firstName,
-                  lastName: payload.customer?.lastName,
-                  email: payload.customer?.email,
-                  primaryGym: payload.customer?.primaryGym,
+                  ...buildStoredCheckoutCustomer(payload.customer),
                 }));
               } catch (e) {
                 console.warn('[checkout] Could not save customer to sessionStorage:', e);
@@ -18285,8 +19010,17 @@ async function handleCheckout() {
       }
     } else {
       // User is logged in, get customer ID from token or state
-      // For now, we'll proceed with order creation
       console.log('[checkout] User is authenticated');
+    }
+
+    // /99kr: final guard once customer id is known — blocks order creation.
+    if (isFirstClimbRoute()) {
+      const guard = await runFirstclimbGuard('checkout-pre-order');
+      if (guard.blocked) {
+        setCheckoutLoadingState(false);
+        state.checkoutInProgress = false;
+        return;
+      }
     }
 
     // Step 2: Ensure order exists (create if needed)
@@ -18298,20 +19032,7 @@ async function handleCheckout() {
       }
       state.orderId = ensuredOrderId;
       
-      // Store order and cart data in sessionStorage for payment return
-      try {
-        sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
-          orderId: state.orderId,
-          membershipPlanId: state.membershipPlanId,
-          cartItems: state.cartItems || [],
-          totals: state.totals,
-          selectedBusinessUnit: state.selectedBusinessUnit, // Store for primaryGym lookup
-          selectedProductType: state.selectedProductType, // Store product type for restoration
-          selectedProductId: state.selectedProductId, // Store product ID for restoration
-        }));
-      } catch (e) {
-        console.warn('[checkout] Could not save order to sessionStorage:', e);
-      }
+      persistOrderSnapshot(state.orderId);
     } catch (error) {
       console.error('[checkout] Order creation failed:', error);
       showToast(getErrorMessage(error, 'Order creation'), 'error');
@@ -18371,25 +19092,14 @@ async function handleCheckout() {
                 const existingCouponDiscount = orderCheck?.couponDiscount || orderCheck?.price?.couponDiscount;
                 if (existingCouponDiscount) {
                   console.log('[checkout] ✅ Discount already exists on order, verifying amount...');
-                  // Discount already exists, verify it matches our expected amount
-                  let existingDiscountAmount = 0;
-                  if (typeof existingCouponDiscount === 'object') {
-                    existingDiscountAmount = existingCouponDiscount.amount || existingCouponDiscount.value || existingCouponDiscount.discount || 0;
-                    if (existingDiscountAmount > 10000) existingDiscountAmount = existingDiscountAmount / 100;
-                  } else if (typeof existingCouponDiscount === 'number') {
-                    existingDiscountAmount = existingCouponDiscount;
-                    if (existingDiscountAmount > 10000) existingDiscountAmount = existingDiscountAmount / 100;
-                  }
-                  
-                  // Use the discount amount from the order if it exists
-                  // Also get the actual order total to ensure we have the correct price
-                  let orderTotalFromAPI = 0;
-                  const orderPrice = orderCheck?.price;
-                  if (orderPrice) {
-                    orderTotalFromAPI = orderPrice.total?.amount || orderPrice.total || orderPrice.leftToPay?.amount || orderPrice.leftToPay || 0;
-                    if (orderTotalFromAPI > 10000) orderTotalFromAPI = orderTotalFromAPI / 100;
-                  }
-                  
+                  const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+                  const existingDiscountAmount = roundToHalfKrone(
+                    calculateOrderCouponDiscountKr(orderCheck, subtotal)
+                  );
+                  const orderTotalFromAPI = extractCurrencyOutKr(
+                    orderCheck?.price?.amount ?? orderCheck?.price?.total ?? orderCheck?.price?.leftToPay
+                  );
+
                   if (existingDiscountAmount > 0 || orderTotalFromAPI > 0) {
                     console.log('[checkout] Using existing discount amount from order:', existingDiscountAmount);
                     console.log('[checkout] Order total from API:', orderTotalFromAPI);
@@ -18416,42 +19126,14 @@ async function handleCheckout() {
                 console.log('[checkout] Discount not found on order, applying now...');
                 const discountResponse = await orderAPI.applyDiscountCode(state.orderId, discountCodeToApply);
                 console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
-              
-                // Extract discount from couponDiscount field
-                const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
-                let discountAmount = 0;
-              
-              if (couponDiscount) {
-                if (typeof couponDiscount === 'object') {
-                  discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
-                } else if (typeof couponDiscount === 'number') {
-                  discountAmount = couponDiscount;
-                  if (discountAmount > 10000) discountAmount = discountAmount / 100;
+
+                const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
+                let discountAmount = calculateOrderCouponDiscountKr(discountResponse, subtotal);
+                if (discountAmount <= 0 && discountResponse?.discountAmount != null) {
+                  discountAmount = extractCurrencyOutKr(discountResponse.discountAmount);
                 }
-              }
-              
-              if (!discountAmount && discountResponse?.discountAmount) {
-                discountAmount = discountResponse.discountAmount;
-                if (discountAmount > 10000) discountAmount = discountAmount / 100;
-              }
-              
-              // Calculate from price difference if needed
-              if (!discountAmount && discountResponse?.price) {
-                const originalTotal = state.totals.subtotal || state.totals.cartTotal || 0;
-                let newTotal = discountResponse.price.total || discountResponse.price.leftToPay || 0;
-                if (newTotal > 10000) newTotal = newTotal / 100;
-                if (newTotal < originalTotal && originalTotal > 0) {
-                  discountAmount = originalTotal - newTotal;
-                }
-              }
-              
-              // Cap discount at subtotal
-              const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-              if (discountAmount > subtotal && subtotal > 0) {
-                discountAmount = subtotal;
-              }
-              
+                discountAmount = roundToHalfKrone(capCouponDiscountKr(discountAmount, subtotal));
+
               if (discountAmount > 0) {
                 state.discountCode = discountCodeToApply;
                 state.discountApplied = true;
@@ -19207,26 +19889,28 @@ async function handleCheckout() {
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
 
-          // Report critical payment errors to Sentry
-          captureException(error, {
-            tags: {
-              flow: 'checkout',
-              error_type: 'payment_link_generation',
-            },
-            extra: {
-              orderId: state.fullOrder?.id,
-              subscriptionItems: state.fullOrder?.subscriptionItems,
-            },
-          });
-
           // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
           const isProductNotAllowed = error.isProductNotAllowed || 
                                       (error.message && error.message.includes('PRODUCT_NOT_ALLOWED'));
           
           if (isProductNotAllowed) {
-            // Show modal with options instead of toast
+            // Show modal with options instead of toast — expected campaign restriction, not a product bug
             showCampaignRejectionModal();
             return; // Stop checkout flow without throwing error
+          }
+
+          // Report unexpected payment errors only (skip rate limits — handled as UX cooldown)
+          if (!isRateLimitError(error)) {
+            captureException(error, {
+              tags: {
+                flow: 'checkout',
+                error_type: 'payment_link_generation',
+              },
+              extra: {
+                orderId: state.fullOrder?.id,
+                subscriptionItems: state.fullOrder?.subscriptionItems,
+              },
+            });
           }
           
           // Check if this is a payment link generation error due to backend pricing bug
@@ -19504,109 +20188,25 @@ async function handleCheckout() {
             
             console.log('[checkout] Coupon API response:', JSON.stringify(discountResponse, null, 2));
             
-            // Extract discount from couponDiscount field
-            // API returns Order object with couponDiscount field
-            const couponDiscount = discountResponse?.couponDiscount || discountResponse?.price?.couponDiscount;
-            let discountAmount = 0;
-            
-            console.log('[checkout] Raw couponDiscount:', couponDiscount);
-            console.log('[checkout] couponDiscount type:', typeof couponDiscount);
-            
-            if (couponDiscount) {
-              if (typeof couponDiscount === 'object') {
-                // Avoid 'total' field as it might be order total, not discount
-                discountAmount = couponDiscount.amount || couponDiscount.value || couponDiscount.discount || 0;
-                
-                // If amount is in cents, convert to DKK
-                if (discountAmount > 10000) {
-                  console.log('[checkout] Large discountAmount detected, converting from cents:', discountAmount);
-                  discountAmount = discountAmount / 100;
-                }
-                
-                console.log('[checkout] Extracted discountAmount from object:', discountAmount);
-              } else if (typeof couponDiscount === 'number') {
-                discountAmount = couponDiscount;
-                
-                // If amount is in cents, convert to DKK
-                if (discountAmount > 10000) {
-                  console.log('[checkout] Large discountAmount detected, converting from cents:', discountAmount);
-                  discountAmount = discountAmount / 100;
-                }
-                
-                console.log('[checkout] Extracted discountAmount from number:', discountAmount);
-              }
-            }
-            
-            // Also check if discountAmount was already extracted by the API method
-            if (!discountAmount && discountResponse?.discountAmount) {
-              discountAmount = discountResponse.discountAmount;
-              
-              // If amount is in cents, convert to DKK
-              if (discountAmount > 10000) {
-                console.log('[checkout] Large discountAmount from response, converting from cents:', discountAmount);
-                discountAmount = discountAmount / 100;
-              }
-              
-              console.log('[checkout] Using discountAmount from response:', discountAmount);
-            }
-            
-            // Check price.leftToPay or price.total as fallback
-            if (!discountAmount && discountResponse?.price) {
-              const originalTotal = state.totals.subtotal || state.totals.cartTotal;
-              let newTotal = discountResponse.price.total || discountResponse.price.leftToPay || 0;
-              
-              // Convert to DKK if in cents
-              if (newTotal > 10000) {
-                newTotal = newTotal / 100;
-              }
-              
-              if (newTotal < originalTotal && originalTotal > 0) {
-                discountAmount = originalTotal - newTotal;
-                console.log('[checkout] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-              }
-            }
-            
-            // Validate discount amount - ensure it doesn't exceed subtotal
             const subtotal = state.totals.subtotal || state.totals.cartTotal || 0;
-            if (discountAmount > subtotal && subtotal > 0) {
-              console.warn('[checkout] Discount amount exceeds subtotal, capping at subtotal:', discountAmount, '->', subtotal);
-              discountAmount = subtotal;
+            let discountAmount = calculateOrderCouponDiscountKr(discountResponse, subtotal);
+            if (discountAmount <= 0 && discountResponse?.discountAmount != null) {
+              discountAmount = extractCurrencyOutKr(discountResponse.discountAmount);
             }
-            
-            console.log('[checkout] Final discountAmount:', discountAmount, '(subtotal:', subtotal, ')');
-            
-            // If we couldn't extract discount amount, try fetching the order to get updated totals
-            if (!discountAmount || discountAmount === 0) {
-              console.log('[checkout] Attempting to fetch updated order to calculate discount...');
+
+            if (!discountAmount) {
               try {
                 const updatedOrder = await orderAPI.getOrder(state.orderId);
-                console.log('[checkout] Updated order:', JSON.stringify(updatedOrder, null, 2));
-                
-                // Try to extract discount from updated order
-                const updatedCouponDiscount = updatedOrder?.couponDiscount || updatedOrder?.price?.couponDiscount;
-                if (updatedCouponDiscount) {
-                  if (typeof updatedCouponDiscount === 'object') {
-                    discountAmount = updatedCouponDiscount.amount || updatedCouponDiscount.value || updatedCouponDiscount.total || 0;
-                  } else if (typeof updatedCouponDiscount === 'number') {
-                    discountAmount = updatedCouponDiscount;
-                  }
-                  console.log('[checkout] Extracted discount from updated order:', discountAmount);
-                }
-                
-                // Calculate discount from price difference if still not found
-                if (!discountAmount || discountAmount === 0) {
-                  const originalTotal = state.totals.subtotal || state.totals.cartTotal;
-                  const newTotal = updatedOrder?.price?.total || updatedOrder?.price?.leftToPay || updatedOrder?.total || 0;
-                  if (newTotal < originalTotal && newTotal > 0) {
-                    discountAmount = originalTotal - newTotal;
-                    console.log('[checkout] Calculated discount from price difference:', discountAmount, '(original:', originalTotal, 'new:', newTotal, ')');
-                  }
-                }
+                state.fullOrder = updatedOrder;
+                discountAmount = calculateOrderCouponDiscountKr(updatedOrder, subtotal);
               } catch (fetchError) {
                 console.warn('[checkout] Could not fetch updated order:', fetchError);
               }
             }
-            
+
+            discountAmount = roundToHalfKrone(capCouponDiscountKr(discountAmount, subtotal));
+            console.log('[checkout] Final discountAmount:', discountAmount, '(subtotal:', subtotal, ')');
+
             if (discountAmount > 0) {
               // Success - apply discount
               state.discountCode = discountCodeToApply;
@@ -19620,11 +20220,9 @@ async function handleCheckout() {
               // Update UI to show coupon is applied
               if (DOM.discountInput) {
                 DOM.discountInput.value = discountCodeToApply;
-                DOM.discountInput.disabled = true;
-                DOM.discountInput.style.opacity = '0.6';
-                DOM.discountInput.style.borderColor = '#10B981';
               }
-              
+              updateDiscountFormControls();
+
               // Show success message
               showDiscountMessage(`Coupon "${discountCodeToApply}" applied! Discount: ${formatCurrencyHalfKrone(discountAmount)}`, 'success');
               
@@ -19787,6 +20385,7 @@ async function handleCheckout() {
       // This prevents the back button from going back to the checkout page
       setTimeout(() => {
         try {
+          persistOrderSnapshot(state.orderId);
           console.log('[checkout] Executing window.location.replace with:', effectivePaymentLink);
           window.location.replace(effectivePaymentLink);
         } catch (error) {
@@ -19820,6 +20419,7 @@ async function handleCheckout() {
         console.log('[checkout] Found payment link in state, using that instead');
         showToast('Redirecting to secure payment...', 'info');
         setTimeout(() => {
+          persistOrderSnapshot(state.orderId);
           window.location.replace(stateLink);
         }, 500);
       } else {
@@ -20170,6 +20770,559 @@ window.getOrderDiagnostics = async function(orderId) {
   }
 };
 
+const PURCHASE_TRACKED_KEY_PREFIX = 'boulders_purchase_tracked_';
+// A confirmation URL survives the tab it was created in: customers re-open it from history, from
+// a second tab, or from the BRP receipt mail. sessionStorage only remembers within one tab, so the
+// guard lives in localStorage and every re-open of the same order is silently ignored. Entries
+// carry a timestamp so the key space cannot grow without bound.
+const PURCHASE_TRACKED_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+function getPurchaseTrackedStorageKey(orderId) {
+  return `${PURCHASE_TRACKED_KEY_PREFIX}${orderId}`;
+}
+
+// sessionStorage is kept as a fallback: some privacy modes reject localStorage writes, and flags
+// written before this guard moved storage still live there.
+function getPurchaseTrackedStorages() {
+  const storages = [];
+  try { if (window.localStorage) storages.push(window.localStorage); } catch (_) { /* blocked */ }
+  try { if (window.sessionStorage) storages.push(window.sessionStorage); } catch (_) { /* blocked */ }
+  return storages;
+}
+
+function isPurchaseAlreadyTracked(orderId) {
+  const key = getPurchaseTrackedStorageKey(orderId);
+  for (const storage of getPurchaseTrackedStorages()) {
+    let raw = null;
+    try { raw = storage.getItem(key); } catch (_) { continue; }
+    if (!raw) continue;
+    if (raw === '1') return true; // legacy flag, written before entries carried a timestamp
+    const trackedAt = Number(raw);
+    if (!Number.isFinite(trackedAt) || Date.now() - trackedAt < PURCHASE_TRACKED_TTL_MS) return true;
+    try { storage.removeItem(key); } catch (_) { /* ignore */ }
+  }
+  return false;
+}
+
+function markPurchaseTracked(orderId) {
+  const key = getPurchaseTrackedStorageKey(orderId);
+  const trackedAt = String(Date.now());
+  for (const storage of getPurchaseTrackedStorages()) {
+    try { storage.setItem(key, trackedAt); } catch (_) { /* ignore */ }
+  }
+  prunePurchaseTrackedEntries();
+}
+
+function prunePurchaseTrackedEntries() {
+  for (const storage of getPurchaseTrackedStorages()) {
+    const keys = [];
+    try {
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i);
+        if (key && key.startsWith(PURCHASE_TRACKED_KEY_PREFIX)) keys.push(key);
+      }
+    } catch (_) { continue; }
+    for (const key of keys) {
+      try {
+        const raw = storage.getItem(key);
+        if (raw === '1') continue; // legacy flags have no timestamp; leave them in place
+        const trackedAt = Number(raw);
+        if (Number.isFinite(trackedAt) && Date.now() - trackedAt >= PURCHASE_TRACKED_TTL_MS) {
+          storage.removeItem(key);
+        }
+      } catch (_) { /* ignore */ }
+    }
+  }
+}
+
+function getOrderTotalKrForTracking(order, storedOrder = null) {
+  const fromOrderPrice = extractCurrencyOutKr(order?.price?.amount ?? order?.price);
+  if (fromOrderPrice > 0) return fromOrderPrice;
+
+  const storedTotal = storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal;
+  if (storedTotal > 0) return roundToHalfKrone(storedTotal);
+
+  const legacy = order?.total ?? order?.totalAmount ?? order?.data?.total;
+  if (typeof legacy === 'number' && legacy > 0) {
+    return legacy > 10000 ? roundToHalfKrone(legacy / 100) : roundToHalfKrone(legacy);
+  }
+
+  return 0;
+}
+
+function buildPurchaseItemsFromOrder(order) {
+  if (!order) return [];
+  const items = [];
+
+  const pushItem = ({ id, name, amountKr, type, quantity = 1 }) => {
+    if (!id && !name) return;
+    items.push({
+      id: id || name,
+      productId: id,
+      name: name || 'Product',
+      amount: roundToHalfKrone(amountKr),
+      type,
+      quantity,
+    });
+  };
+
+  for (const item of order.subscriptionItems || []) {
+    const product = item.product || {};
+    const qty = item.quantity || 1;
+    const lineKr = extractCurrencyOutKr(item.price?.amount ?? item.price);
+    pushItem({
+      id: product.id || item.id,
+      name: product.name || 'Membership',
+      amountKr: lineKr,
+      type: 'membership',
+      quantity: qty,
+    });
+  }
+
+  for (const item of order.valueCardItems || []) {
+    const product = item.product || {};
+    const qty = item.quantity || 1;
+    const lineKr = extractCurrencyOutKr(item.price?.amount ?? item.price);
+    pushItem({
+      id: product.id || item.id,
+      name: product.name || 'Punch Card',
+      amountKr: lineKr,
+      type: 'value-card',
+      quantity: qty,
+    });
+  }
+
+  for (const item of order.articleItems || []) {
+    const product = item.product || {};
+    const qty = item.quantity || 1;
+    const lineKr = extractCurrencyOutKr(item.price?.amount ?? item.price);
+    pushItem({
+      id: product.id || item.id,
+      name: product.name || 'Add-on',
+      amountKr: lineKr,
+      type: 'addon',
+      quantity: qty,
+    });
+  }
+
+  for (const item of order.entryItems || []) {
+    const product = item.product || {};
+    const qty = item.quantity || 1;
+    const lineKr = extractCurrencyOutKr(item.price?.amount ?? item.price);
+    pushItem({
+      id: product.id || item.id,
+      name: product.name || 'Day ticket',
+      amountKr: lineKr,
+      type: 'entry',
+      quantity: qty,
+    });
+  }
+
+  return items;
+}
+
+function resolvePurchaseItems(order, storedOrder = null) {
+  const fromCart = (state.cartItems && state.cartItems.length > 0)
+    ? state.cartItems
+    : (storedOrder?.cartItems || []);
+  if (fromCart.length > 0) return fromCart;
+  return buildPurchaseItemsFromOrder(order);
+}
+
+function sumPurchaseItemsKr(items) {
+  return roundToHalfKrone(
+    items.reduce((sum, item) => {
+      const unit = typeof item.amount === 'number'
+        ? item.amount
+        : (typeof item.price === 'number' ? item.price : 0);
+      return sum + unit * (item.quantity || 1);
+    }, 0)
+  );
+}
+
+function normalizeMetaTrackingValue(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+}
+
+function normalizeMetaTrackingEmail(value) {
+  const normalized = normalizeMetaTrackingValue(value);
+  return normalized ? normalized.toLowerCase() : null;
+}
+
+function normalizeMetaTrackingPhone(value) {
+  const normalized = normalizeMetaTrackingValue(value);
+  if (!normalized) return null;
+  const digitsOnly = normalized.replace(/\D+/g, '');
+  return digitsOnly || null;
+}
+
+function normalizeMetaTrackingDateOfBirth(value) {
+  const normalized = normalizeMetaTrackingValue(value);
+  if (!normalized) return null;
+  const digitsOnly = normalized.replace(/\D+/g, '');
+  return digitsOnly.length === 8 ? digitsOnly : null;
+}
+
+function getFirstPresentValue(...values) {
+  for (const value of values) {
+    if (value != null && String(value).trim() !== '') {
+      return value;
+    }
+  }
+  return null;
+}
+
+// Google enhanced conversions discard phone numbers that are not E.164, so only
+// emit one when an explicit country code is available (Meta's `phone` stays digits-only).
+// BRP returns countryCode as an integer (45), the checkout form as a string ('+45').
+function getNormalizedPhoneE164(customer = null, storedCustomer = null) {
+  const candidates = [
+    customer?.mobilePhone,
+    customer?.phone,
+    storedCustomer?.mobilePhone,
+    storedCustomer?.phone,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const countryCode = normalizeMetaTrackingPhone(candidate.countryCode);
+    const number = normalizeMetaTrackingPhone(candidate.number);
+    if (countryCode && number) return `+${countryCode}${number}`;
+  }
+  return null;
+}
+
+// BRP addresses carry country as a CountryOutRef ({ id, alpha2, name }); the checkout
+// snapshot stores a plain 'DK'.
+function resolveIsoCountryCode(value) {
+  const raw = (value && typeof value === 'object')
+    ? normalizeMetaTrackingValue(value.alpha2 ?? value.code ?? value.isoCode)
+    : normalizeMetaTrackingValue(value);
+  if (!raw) return null;
+  return /^[A-Za-z]{2}$/.test(raw) ? raw.toLowerCase() : null;
+}
+
+function getNormalizedTrackingCountry(customer = null, storedCustomer = null) {
+  const candidates = [
+    customer?.shippingAddress?.country,
+    customer?.billingAddress?.country,
+    customer?.country,
+    storedCustomer?.shippingAddress?.country,
+    storedCustomer?.country,
+  ];
+  for (const candidate of candidates) {
+    const resolved = resolveIsoCountryCode(candidate);
+    if (resolved) return resolved;
+  }
+  return null;
+}
+
+function getNormalizedMetaPhone(customer = null, storedCustomer = null) {
+  const mobilePhone = customer?.mobilePhone;
+  if (mobilePhone && typeof mobilePhone === 'object') {
+    return normalizeMetaTrackingPhone(`${mobilePhone.countryCode || ''}${mobilePhone.number || ''}`);
+  }
+  const storedMobilePhone = storedCustomer?.mobilePhone;
+  if (storedMobilePhone && typeof storedMobilePhone === 'object') {
+    return normalizeMetaTrackingPhone(`${storedMobilePhone.countryCode || ''}${storedMobilePhone.number || ''}`);
+  }
+  return normalizeMetaTrackingPhone(
+    getFirstPresentValue(
+      customer?.phone,
+      customer?.phoneNumber,
+      storedCustomer?.phone,
+      storedCustomer?.phoneNumber
+    )
+  );
+}
+
+function getNormalizedMetaCity(customer = null, storedCustomer = null) {
+  return normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.city,
+      customer?.addressCity,
+      customer?.shippingAddress?.city,
+      customer?.billingAddress?.city,
+      storedCustomer?.city,
+      storedCustomer?.shippingAddress?.city
+    )
+  );
+}
+
+function getNormalizedMetaPostalCode(customer = null, storedCustomer = null) {
+  return normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.postalCode,
+      customer?.zip,
+      customer?.shippingAddress?.postalCode,
+      customer?.billingAddress?.postalCode,
+      storedCustomer?.postalCode,
+      storedCustomer?.shippingAddress?.postalCode
+    )
+  );
+}
+
+function getNormalizedMetaState(customer = null, storedCustomer = null) {
+  return normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.state,
+      customer?.region,
+      customer?.shippingAddress?.state,
+      customer?.shippingAddress?.region,
+      customer?.billingAddress?.state,
+      customer?.billingAddress?.region,
+      storedCustomer?.state,
+      storedCustomer?.region,
+      storedCustomer?.shippingAddress?.state,
+      storedCustomer?.shippingAddress?.region
+    )
+  );
+}
+
+function buildStoredCheckoutCustomer(payloadCustomer = {}) {
+  if (!payloadCustomer || typeof payloadCustomer !== 'object') {
+    return {};
+  }
+
+  const phoneNumber =
+    payloadCustomer.phone?.number ||
+    payloadCustomer.phoneNumber ||
+    null;
+  const phoneCountryCode = payloadCustomer.phone?.countryCode || null;
+  const mobilePhone = phoneNumber
+    ? { countryCode: phoneCountryCode, number: phoneNumber }
+    : (payloadCustomer.mobilePhone || null);
+
+  const streetAddress =
+    payloadCustomer.address?.street ||
+    payloadCustomer.address ||
+    null;
+  const postalCode =
+    payloadCustomer.address?.postalCode ||
+    payloadCustomer.postalCode ||
+    payloadCustomer.shippingAddress?.postalCode ||
+    null;
+  const city =
+    payloadCustomer.address?.city ||
+    payloadCustomer.city ||
+    payloadCustomer.shippingAddress?.city ||
+    null;
+  const shippingAddress =
+    streetAddress || city || postalCode
+      ? {
+          ...(streetAddress ? { street: streetAddress } : {}),
+          ...(city ? { city } : {}),
+          ...(postalCode ? { postalCode } : {}),
+          country: 'DK',
+        }
+      : (payloadCustomer.shippingAddress || null);
+
+  return {
+    firstName: payloadCustomer.firstName || null,
+    lastName: payloadCustomer.lastName || null,
+    email: payloadCustomer.email || null,
+    primaryGym: payloadCustomer.primaryGym || null,
+    birthDate: payloadCustomer.birthDate || payloadCustomer.dateOfBirth || null,
+    phoneNumber,
+    postalCode,
+    city,
+    shippingAddress,
+    mobilePhone,
+  };
+}
+
+// BRP order numbers and order ids come from separate sequences, so falling back from one to the
+// other lets two different orders report the same transaction id — order 1124358 (number 1124360)
+// and order 1124360 (no number available) both reported 1124360, which downstream platforms read
+// as one order purchased twice. Namespace the fallback so it can never collide with a real number.
+function resolvePurchaseTransactionId(order = null, orderId = null) {
+  const orderNumber = order?.numberIsPlaceholder ? null : order?.number;
+  const normalizedNumber = normalizeMetaTrackingValue(orderNumber);
+  if (normalizedNumber) return normalizedNumber;
+
+  const fallbackId = normalizeMetaTrackingValue(orderId ?? order?.id);
+  return fallbackId ? `order-${fallbackId}` : null;
+}
+
+function resolvePurchaseTrackingMetadata(order, storedOrder = null, storedCustomer = null, transactionId = null) {
+  const businessUnit = order?.businessUnit || {};
+  const gymId = businessUnit.id || storedOrder?.selectedBusinessUnit || state.selectedBusinessUnit || null;
+  const gymName = businessUnit.name || businessUnit.label || null;
+  const paymentType = storedOrder?.paymentMethod || state.paymentMethod || null;
+  const landingPath = normalizePathname(window.location.pathname);
+  const customer = order?.customer || state.authenticatedCustomer || null;
+  const eventIdBase = transactionId != null ? String(transactionId) : null;
+  const tokenMetadata = getTokenMetadata();
+  const email = normalizeMetaTrackingEmail(
+    getFirstPresentValue(
+      customer?.email,
+      storedCustomer?.email,
+      state.authenticatedEmail,
+      tokenMetadata?.email
+    )
+  );
+  const phone = getNormalizedMetaPhone(customer, storedCustomer);
+  const phoneE164 = getNormalizedPhoneE164(customer, storedCustomer);
+  const country = getNormalizedTrackingCountry(customer, storedCustomer);
+  const firstName = normalizeMetaTrackingValue(
+    getFirstPresentValue(customer?.firstName, customer?.first_name, storedCustomer?.firstName)
+  );
+  const lastName = normalizeMetaTrackingValue(
+    getFirstPresentValue(customer?.lastName, customer?.last_name, storedCustomer?.lastName)
+  );
+  const dateOfBirth = normalizeMetaTrackingDateOfBirth(
+    getFirstPresentValue(customer?.birthDate, customer?.dateOfBirth, storedCustomer?.birthDate)
+  );
+  const postalCode = getNormalizedMetaPostalCode(customer, storedCustomer);
+  const city = getNormalizedMetaCity(customer, storedCustomer);
+  const stateRegion = getNormalizedMetaState(customer, storedCustomer);
+  const externalId = normalizeMetaTrackingValue(
+    getFirstPresentValue(
+      customer?.id,
+      customer?.customerId,
+      storedCustomer?.id,
+      state.customerId,
+      tokenMetadata?.username,
+      tokenMetadata?.userName
+    )
+  );
+
+  const metadata = {};
+  if (gymId != null) metadata.gym_id = String(gymId);
+  if (gymName) metadata.gym_name = gymName;
+  if (paymentType) metadata.payment_type = String(paymentType);
+  if (landingPath) metadata.landing_path = landingPath;
+  if (eventIdBase) metadata.event_id = `purchase:${eventIdBase}`;
+  if (email) metadata.email = email;
+  if (phone) metadata.phone = phone;
+  if (phoneE164) metadata.phone_e164 = phoneE164;
+  if (country) metadata.country = country;
+  if (externalId) metadata.external_id = externalId;
+  if (firstName) metadata.fn = firstName;
+  if (lastName) metadata.ln = lastName;
+  if (postalCode) metadata.zip = postalCode;
+  if (city) metadata.ct = city;
+  if (stateRegion) metadata.st = stateRegion;
+  if (dateOfBirth) metadata.dob = dateOfBirth;
+  return metadata;
+}
+
+function orderHasFirstclimbBlockingProduct(order) {
+  if (!order) return false;
+  const lineGroups = [
+    order.subscriptionItems,
+    order.valueCardItems,
+    order.articleItems,
+    order.entryItems,
+  ];
+  for (const group of lineGroups) {
+    if (!Array.isArray(group)) continue;
+    for (const item of group) {
+      if (productHasFirstclimbBlockingLabel(item?.product)) return true;
+    }
+  }
+  return false;
+}
+
+/** True when this completed order should dual-fire purchase_99kr. */
+function isFirstClimbPurchase(order = null, storedOrder = null) {
+  if (isFirstClimbRoute()) return true;
+  if (storedOrder?.landingRoute === 'firstclimb') return true;
+  if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') return true;
+  if (orderHasFirstclimbBlockingProduct(order)) return true;
+  return false;
+}
+
+function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCustomer = null } = {}) {
+  if (!orderId) {
+    devWarn('[GTM] purchase not tracked: missing orderId');
+    return false;
+  }
+
+  if (isPurchaseAlreadyTracked(orderId)) {
+    devLog('[GTM] purchase already tracked for order', orderId);
+    return false;
+  }
+
+  if (!window.GTM?.trackPurchase) {
+    devWarn('[GTM] purchase not tracked: GTM utilities not loaded');
+    return false;
+  }
+
+  const purchaseItems = resolvePurchaseItems(order, storedOrder);
+  if (!purchaseItems.length) {
+    devWarn('[GTM] purchase not tracked: no items for order', orderId);
+    return false;
+  }
+
+  let purchaseValue = getOrderTotalKrForTracking(order, storedOrder);
+  if (purchaseValue <= 0) {
+    purchaseValue = sumPurchaseItemsKr(purchaseItems);
+  }
+
+  const transactionId = resolvePurchaseTransactionId(order, orderId);
+  const metadata = resolvePurchaseTrackingMetadata(order, storedOrder, storedCustomer, transactionId);
+  const dualFire99kr = isFirstClimbPurchase(order, storedOrder);
+
+  try {
+    window.GTM.trackPurchase(
+      transactionId,
+      purchaseItems,
+      purchaseValue,
+      0,
+      0,
+      'DKK',
+      metadata
+    );
+    if (dualFire99kr) {
+      window.GTM.trackPurchase(
+        transactionId,
+        purchaseItems,
+        purchaseValue,
+        0,
+        0,
+        'DKK',
+        {
+          ...metadata,
+          eventName: 'purchase_99kr',
+          ...(metadata.event_id ? { event_id: `${metadata.event_id}:99kr` } : {}),
+        }
+      );
+    }
+    markPurchaseTracked(orderId);
+    devLog('[GTM] purchase tracked:', {
+      transactionId,
+      purchaseValue,
+      itemCount: purchaseItems.length,
+      purchase_99kr: dualFire99kr,
+    });
+    trackTikTokAttributedPurchase(transactionId, purchaseItems, purchaseValue, order, storedOrder);
+    return true;
+  } catch (error) {
+    devWarn('[GTM] Error tracking purchase:', error);
+    return false;
+  }
+}
+
+function readStoredCheckoutOrder() {
+  try {
+    const orderData = sessionStorage.getItem('boulders_checkout_order');
+    return orderData ? JSON.parse(orderData) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function readStoredCheckoutCustomer() {
+  try {
+    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    return customerData ? JSON.parse(customerData) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Load order data when returning from payment
 async function loadOrderForConfirmation(orderId) {
   // CRITICAL: Check for URL error parameters FIRST (before resetting flags)
@@ -20222,6 +21375,8 @@ async function loadOrderForConfirmation(orderId) {
         if (storedOrder.cartItems) state.cartItems = storedOrder.cartItems;
         if (storedOrder.totals) state.totals = storedOrder.totals;
         if (storedOrder.selectedBusinessUnit) state.selectedBusinessUnit = storedOrder.selectedBusinessUnit;
+        if (storedOrder.discountCode) state.discountCode = storedOrder.discountCode;
+        if (storedOrder.discountApplied != null) state.discountApplied = storedOrder.discountApplied;
         console.log('[Payment Return] Restored order data from sessionStorage:', storedOrder);
       }
       
@@ -20270,7 +21425,10 @@ async function loadOrderForConfirmation(orderId) {
           const summaryOrder = {
             id: orderId,
             orderId,
+            // The order fetch failed, so the real order number is unknown; the id stands in for
+            // display only. Tracking must not treat it as a number — see resolvePurchaseTransactionId.
             number: orderId,
+            numberIsPlaceholder: true,
             created: new Date().toISOString(),
             total: storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal ?? 0,
             totalAmount: storedOrder?.totals?.cartTotal ?? state.totals?.cartTotal ?? 0,
@@ -20290,6 +21448,7 @@ async function loadOrderForConfirmation(orderId) {
           updateStepIndicator();
           updateNavigationButtons();
           updateMainSubtitle();
+          trackConfirmedPurchase({ order: summaryOrder, orderId, storedOrder, storedCustomer });
           renderConfirmationView();
           return;
         }
@@ -20576,8 +21735,7 @@ async function loadOrderForConfirmation(orderId) {
       customer.primaryGym = primaryGym || customer.primaryGym || customer.primary_gym;
     }
     
-    // Use order total if available, otherwise use stored total
-    const orderTotal = order?.total || order?.totalAmount || order?.data?.total || storedOrder?.totals?.cartTotal || 0;
+    const orderTotal = getOrderTotalKrForTracking(order, storedOrder);
     
     // Store diagnostic data for easy access (after customer is extracted)
     window.lastPaymentDiagnostics = {
@@ -20642,36 +21800,8 @@ async function loadOrderForConfirmation(orderId) {
     // Update payment overview with order data
     updatePaymentOverview();
     
-    // GTM: Track purchase event when payment is confirmed
-    const purchaseItems = (state.cartItems && state.cartItems.length > 0)
-      ? state.cartItems
-      : (storedOrder?.cartItems || []);
-    if (window.GTM && window.GTM.trackPurchase && purchaseItems.length > 0) {
-      try {
-        // Get order total - prefer from order object, fallback to cart total
-        const purchaseValue = orderTotal || 
-                             (order?.price?.total?.amount ? order.price.total.amount / 100 : 0) ||
-                             (order?.price?.total ? order.price.total / 100 : 0) ||
-                             state.totals.cartTotal || 0;
-        
-        // Get transaction ID
-        const transactionId = order?.number || order?.id || orderId;
-        
-        window.GTM.trackPurchase(
-          transactionId,
-          purchaseItems,
-          purchaseValue,
-          0, // tax
-          0, // shipping
-          'DKK'
-        );
-      } catch (error) {
-        console.warn('[GTM] Error tracking purchase:', error);
-      }
-    } else if (window.GTM && window.GTM.trackPurchase) {
-      console.warn('[GTM] purchase not tracked: missing cart items after payment return');
-    }
-    
+    trackConfirmedPurchase({ order, orderId, storedOrder, storedCustomer });
+
     // Only render confirmation view if payment is confirmed
     renderConfirmationView();
   } catch (error) {
@@ -21496,6 +22626,14 @@ function showPaymentPendingMessage(order, orderId) {
       if (isPaymentConfirmed || isOrderPaid) {
         console.log('[Payment Pending] ✅ Payment confirmed! Reloading page to show success...');
         clearInterval(pollInterval);
+        const storedOrder = readStoredCheckoutOrder();
+        const storedCustomer = readStoredCheckoutCustomer();
+        trackConfirmedPurchase({
+          order: updatedOrder,
+          orderId,
+          storedOrder,
+          storedCustomer,
+        });
         // Reload the page to show the success message
         window.location.reload();
       } else if (pollCount >= maxPolls) {
@@ -22124,7 +23262,6 @@ function renderConfirmationView() {
     }
     setConfirmationSummaryField(memberName, name, 'name');
   }
-
   if (memberPhone) {
     const customer = apiOrder?.customer || state.authenticatedCustomer || null;
     setConfirmationSummaryField(memberPhone, resolveConfirmationPhone(customer, apiOrder), 'number');
@@ -22731,7 +23868,7 @@ async function showDetailedReceipt() {
   }
   
   const subtotal = totalDKK - vatAmount;
-  const discount = order.couponDiscount?.amount ? (typeof order.couponDiscount.amount === 'object' ? order.couponDiscount.amount.amount / 100 : order.couponDiscount.amount / 100) : 0;
+  const discount = extractCouponDiscountKr(order.couponDiscount);
   
   // Populate order overview
   const receiptSubtotal = document.getElementById('receiptSubtotal');
@@ -23193,11 +24330,11 @@ function applyFreeFlowCartUi() {
     const payNowLabel = payNowRow.querySelector('.payment-label');
     if (payNowLabel) {
       const payNowInfoWrapper = payNowLabel.querySelector('.paynow-info-wrapper');
-      payNowLabel.textContent = isFreeFlow
+      payNowLabel.textContent = isFreeTrialSelected
         ? `${t('cart.freePeriod') || 'Gratis periode'}:`
         : `${t('cart.payNow') || 'Pay now'}:`;
       if (payNowInfoWrapper) {
-        if (isFreeFlow) {
+        if (isFreeTrialSelected) {
           payNowInfoWrapper.remove();
         } else {
           payNowLabel.appendChild(payNowInfoWrapper);
@@ -23217,7 +24354,7 @@ function applyFreeFlowCartUi() {
 
   const discountSection = document.querySelector('.discount-section');
   if (discountSection) {
-    discountSection.style.display = isFreeFlow ? 'none' : '';
+    discountSection.style.display = isFreeTrialSelected ? 'none' : '';
   }
 
   return { isFreeTrialSelected, isZeroTotal, isFreeFlow };

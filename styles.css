@@ -5337,9 +5337,10 @@ body {
 
 .terms-modal-content-text .search-highlight {
     background: rgba(244, 1, 245, 0.3);
-    padding: 2px 4px;
-    border-radius: 3px;
+    border-radius: 2px;
     font-weight: 600;
+    padding: 0;
+    margin: 0;
 }
 
 .terms-modal-content-text .search-no-results {
@@ -5524,6 +5525,7 @@ body {
     align-items: center;
     justify-content: center;
     border-bottom: none;
+    padding: 32px 32px 16px;
 }
 #campaignRejectionModal .terms-modal-title {
     text-align: center;
@@ -5535,8 +5537,8 @@ body {
 }
 #campaignRejectionModal .terms-modal-header-actions {
     position: absolute;
-    top: 0px;
-    right: 6px;
+    top: 12px;
+    right: 12px;
 }
 #campaignRejectionModal .terms-modal-close {
     padding: 6px;
@@ -5640,7 +5642,7 @@ body {
         flex-direction: row;
     }
     #campaignRejectionModal .campaign-rejection-content {
-        padding: 12px 40px 32px 40px;
+        padding: 0px 40px 32px 40px;
     }
     #campaignRejectionModal .campaign-rejection-message {
         font-size: var(--font-size-base);
@@ -5654,8 +5656,11 @@ body {
     }
 }
 @media (min-width: 1024px) {
+    #campaignRejectionModal .terms-modal-header {
+        padding: 32px 48px 20px;
+    }
     #campaignRejectionModal .campaign-rejection-content {
-        padding: 56px 48px 48px 48px;
+        padding: 0px 48px 32px 48px;
     }
     #campaignRejectionModal .campaign-rejection-actions {
         gap: 20px;
@@ -5670,8 +5675,11 @@ body {
 }
 
 @media (max-width: 639px) {
+    #campaignRejectionModal .terms-modal-header {
+        padding: 24px 24px 12px;
+    }
     #campaignRejectionModal .campaign-rejection-content {
-        padding: 32px 24px 24px 24px;
+        padding: 0px 24px 24px 24px;
     }
     #campaignRejectionModal .campaign-rejection-message {
         font-size: var(--font-size-md);
@@ -6572,6 +6580,23 @@ body.firstclimb-flow .summary-edit-btn {
     white-space: nowrap;
 }
 
+.cart-price-discounted {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cart-price-old {
+    text-decoration: line-through;
+    opacity: 0.6;
+    font-weight: 500;
+}
+
+.cart-price-new {
+    color: #10B981;
+    font-weight: 600;
+}
+
 /* Home Gym Info */
 .home-gym-info {
     display: flex;
@@ -7119,6 +7144,18 @@ body.firstclimb-flow .summary-edit-btn {
     font-weight: 700;
 }
 
+.payment-overview-original .payment-label {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.payment-overview-original .payment-amount {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    text-decoration: line-through;
+    text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+
 .payment-overview-discount .payment-label,
 .payment-overview-discount .payment-amount {
     color: #10B981;
@@ -7156,41 +7193,64 @@ body.firstclimb-flow .summary-edit-btn {
     margin-bottom: 20px;
 }
 
-.discount-toggle {
-    width: 100%;
-    background: none;
-    border: 1px solid #374151;
-    border-radius: 8px;
-    padding: 12px 16px;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: all 0.3s ease;
-}
-
-.discount-toggle:hover {
-    border-color: #F401F5;
-    color: white;
-}
-
-.toggle-icon {
-    font-size: var(--font-size-lg);
-    transition: transform 0.3s ease;
-}
-
-.discount-toggle.active .toggle-icon {
-    transform: rotate(45deg);
-}
-
 .discount-form {
-    margin-top: 12px;
-    display: flex;
-    gap: 8px;
-    min-width: 0; /* Allow flex shrinking */
+    min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
+}
+
+.discount-form-entry {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+}
+
+.discount-form-entry[hidden] {
+    display: none !important;
+}
+
+.discount-applied-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    border-radius: 6px;
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.discount-applied-chip[hidden] {
+    display: none !important;
+}
+
+.discount-applied-code {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: #10B981;
+    letter-spacing: 0.02em;
+}
+
+.discount-remove-link {
+    padding: 0;
+    border: none;
+    background: none;
+    color: #9CA3AF;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+}
+
+.discount-remove-link:hover {
+    color: #F87171;
+}
+
+.discount-remove-link:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .discount-input {
@@ -7209,6 +7269,17 @@ body.firstclimb-flow .summary-edit-btn {
 .discount-input:focus {
     outline: none;
     border-color: #F401F5;
+}
+
+.discount-input--error {
+    border-color: #F87171 !important;
+    background-color: rgba(127, 29, 29, 0.35) !important;
+    box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25);
+}
+
+.discount-input--error:focus {
+    border-color: #FCA5A5 !important;
+    box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.2);
 }
 
 .apply-discount-btn {
@@ -7269,11 +7340,15 @@ body.firstclimb-flow .summary-edit-btn {
 
 /* Discount Messages */
 .discount-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
     margin-top: 8px;
     padding: 10px 14px;
     border-radius: 6px;
     font-size: var(--font-size-sm);
     font-weight: 500;
+    line-height: 1.45;
     animation: slideIn 0.3s ease-out;
 }
 
@@ -7288,6 +7363,17 @@ body.firstclimb-flow .summary-edit-btn {
     }
 }
 
+.discount-message-dismiss {
+    animation: discountMessageFadeOut 0.3s ease-out forwards;
+}
+
+@keyframes discountMessageFadeOut {
+    to {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+}
+
 .discount-message-success {
     background-color: rgba(16, 185, 129, 0.15);
     color: #10B981;
@@ -7296,10 +7382,18 @@ body.firstclimb-flow .summary-edit-btn {
 }
 
 .discount-message-error {
-    background-color: rgba(239, 68, 68, 0.15);
-    color: #EF4444;
-    border: 1px solid rgba(239, 68, 68, 0.4);
-    font-weight: 600;
+    background-color: rgba(127, 29, 29, 0.4);
+    color: #FECACA;
+    border: 1px solid rgba(248, 113, 113, 0.45);
+    font-weight: 500;
+}
+
+.discount-message-error::before {
+    content: '✕';
+    flex-shrink: 0;
+    font-weight: 700;
+    color: #F87171;
+    line-height: 1.45;
 }
 
 .discount-message-info {
@@ -7659,6 +7753,12 @@ main {
 
 .cookie-declaration-content a:hover {
     text-decoration: underline;
+}
+
+/* Cookiebot consent dialog — block site font-size from cascading into the widget */
+#CybotCookiebotDialog *,
+#CybotCookiebotDialogBodyUnderlay * {
+    font-size: var(--font-size-base) !important;
 }
 
 /* Footer Bottom */
@@ -12107,4 +12207,136 @@ body.firstclimb-flow .step-indicator {
    has nothing left to sell. Hide it. */
 body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
     display: none;
+}
+
+/* =================================
+   REPORT A PROBLEM (custom trigger + Sentry form)
+   ================================= */
+/* Mirror Cookiebot's bottom-left floating control: flush to the opposite corner. */
+.report-problem-btn {
+    position: fixed;
+    right: max(16px, env(safe-area-inset-right, 0px));
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    z-index: 10050; /* above cart/modals, below Cookiebot */
+    width: 44px;
+    height: 44px;
+    max-width: calc(100vw - 32px);
+    padding: 0;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    background: rgba(31, 40, 55, 0.78);
+    color: rgba(209, 213, 219, 0.92);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition:
+      width 0.28s ease,
+      padding 0.28s ease,
+      color 0.15s ease,
+      border-color 0.15s ease,
+      background 0.2s ease,
+      gap 0.2s ease;
+    /* Keep tappable on mobile without fighting page scroll */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.report-problem-btn:hover,
+.report-problem-btn:focus-visible {
+    color: #fff;
+    border-color: rgba(255, 0, 255, 0.55);
+    background: rgba(31, 40, 55, 0.92);
+    outline: none;
+}
+
+.report-problem-btn:focus-visible {
+    box-shadow: 0 0 0 2px rgba(255, 0, 255, 0.45);
+}
+
+.report-problem-btn__icon {
+    display: block;
+    flex: 0 0 auto;
+    pointer-events: none;
+}
+
+.report-problem-btn__icon--success,
+.report-problem-btn__message {
+    display: none;
+}
+
+.report-problem-btn.is-success {
+    width: auto;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 14px 0 12px;
+    gap: 8px;
+    color: #ecfdf5;
+    border-color: rgba(5, 150, 105, 0.55);
+    background: rgba(5, 150, 105, 0.92);
+    cursor: default;
+}
+
+.report-problem-btn.is-success:hover,
+.report-problem-btn.is-success:focus-visible {
+    color: #ecfdf5;
+    border-color: rgba(5, 150, 105, 0.7);
+    background: rgba(5, 150, 105, 0.96);
+    box-shadow: none;
+}
+
+.report-problem-btn.is-success .report-problem-btn__icon--bug {
+    display: none;
+}
+
+.report-problem-btn.is-success .report-problem-btn__icon--success,
+.report-problem-btn.is-success .report-problem-btn__message {
+    display: block;
+}
+
+.report-problem-btn__message {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.01em;
+}
+
+@media (max-width: 640px) {
+    .report-problem-btn {
+        /* Match Cookiebot edge inset on phones; stay clear of home-indicator */
+        right: max(12px, env(safe-area-inset-right, 0px));
+        bottom: max(12px, env(safe-area-inset-bottom, 0px));
+        width: 40px;
+        height: 40px;
+    }
+
+    .report-problem-btn.is-success {
+        min-width: 40px;
+        height: 40px;
+        padding: 0 12px 0 10px;
+        gap: 6px;
+    }
+
+    .report-problem-btn__message {
+        font-size: 12px;
+    }
+}
+
+/* Theme the Sentry feedback dialog only (trigger is custom above). */
+#sentry-feedback {
+    --font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-size: 14px;
+    --z-index: 10060;
+    --accent-background: #FF00FF;
+    --accent-foreground: #ffffff;
+    --foreground: #1F2837;
+    --background: #ffffff;
+    --box-shadow: 0 4px 24px rgba(31, 40, 55, 0.16);
 }

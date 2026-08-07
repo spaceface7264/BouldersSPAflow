@@ -60,13 +60,20 @@ export function initSentry(options = {}) {
     // Lower rate to reduce quota usage
     tracesSampleRate: options.tracesSampleRate || 0.1,
 
+    // Only attach sentry-trace/baggage to same-origin API calls (avoids CORS on BRP)
+    tracePropagationTargets: options.tracePropagationTargets || [
+      'localhost',
+      /^\//,
+    ],
+
     // Integrations
     integrations: [
       // Browser tracing for performance monitoring
       Sentry.browserTracingIntegration({
-        // Trace user interactions
         traceFetch: true,
         traceXHR: true,
+        instrumentPageLoad: true,
+        instrumentNavigation: true,
       }),
 
       // Breadcrumbs for debugging context
@@ -85,11 +92,24 @@ export function initSentry(options = {}) {
       'top.GLOBALS',
       'chrome-extension://',
       'moz-extension://',
-
+      'safari-extension://',
+      'runtime.sendMessage',
+      '_AutofillCallbackHandler',
+      // In-app browsers / WebViews (Meta, Android)
+      'webkit.messageHandlers',
+      'Java object is gone',
       // Network errors that are expected
       'NetworkError',
       'Failed to fetch',
-
+      'Load failed',
+      // Expected auth / rate-limit / campaign outcomes
+      'INVALID_CREDENTIALS',
+      'Rate limit exceeded',
+      'Too many requests',
+      'HTTP error! status: 429',
+      /rate\s*limit/i,
+      /\b429\b/,
+      'PRODUCT_NOT_ALLOWED',
       // User cancellations
       'AbortError',
       'User cancelled',
@@ -97,6 +117,23 @@ export function initSentry(options = {}) {
 
     // Filter sensitive data from being sent to Sentry
     beforeSend(event, hint) {
+      const err = hint?.originalException;
+      const message =
+        (err && (err.message || String(err))) ||
+        event.exception?.values?.[0]?.value ||
+        event.message ||
+        '';
+      const status = err?.status;
+      // 429 / rate-limit is a hard no — never an Error issue, any message shape.
+      // Do not blanket-drop all 400/401 — only known auth/validation outcomes.
+      if (
+        status === 429 ||
+        /\b429\b|rate\s*limit|too many requests/i.test(message) ||
+        /INVALID_CREDENTIALS|PRODUCT_NOT_ALLOWED|Login failed:\s*(400|401)\b|webkit\.messageHandlers|_AutofillCallbackHandler|runtime\.sendMessage|Java object is gone/i.test(message)
+      ) {
+        return null;
+      }
+
       // Remove sensitive data from request headers
       if (event.request?.headers) {
         delete event.request.headers.Authorization;
@@ -129,6 +166,12 @@ export function initSentry(options = {}) {
  * @param {Object} context - Additional context
  */
 export function captureException(error, context = {}) {
+  // Hard gate: rate limits must never become Sentry issues.
+  const status = error?.status;
+  const message = typeof error?.message === 'string' ? error.message : String(error || '');
+  if (status === 429 || /\b429\b|rate\s*limit|too many requests/i.test(message)) {
+    return;
+  }
   Sentry.captureException(error, {
     tags: context.tags,
     extra: context.extra,

@@ -81,3 +81,4 @@ In production (Cloudflare Pages), `functions/api-proxy/index.ts` is the CORS-val
 - Debug logging is gated on `window.DEBUG_LOGS === true`; outside that flag `console.log`/`warn` are no-ops. Use `devLog`/`devWarn` in `app.js`.
 - Auth/session state is cookie-backed via `utils/tokenStorage.js` (`readLoginSessionCookie`, `writeLoginSessionCookie`, `clearLoginSessionCookie`, `hydrateFromCookie`).
 - Dates sent to BRP use the user's *local* calendar date, not UTC — see `getTodayLocalDateString` in `app.js`.
+- Tracking (GA4, Meta, TikTok, Google Ads) has its own handover doc: `TRACKING.md`. Read it before changing tracking code, the CSP in `_headers`, or the GTM container — it covers the Data Layer contract, which deploy target applies `_headers`, and the failure mode where a missing CSP domain silently kills a tag while GTM still reports success.
