@@ -1126,6 +1126,7 @@ const REQUIRED_FIELDS = [
   'dateOfBirth',
   'streetAddress',
   'postalCode',
+  'city',
   'email',
   'countryCode',
   'password',
@@ -1137,6 +1138,7 @@ const PARENT_REQUIRED_FIELDS = [
   'parentDateOfBirth',
   'parentStreetAddress',
   'parentPostalCode',
+  'parentCity',
   'parentEmail',
   'parentCountryCode',
   'parentPassword',
@@ -1662,7 +1664,7 @@ class ReferenceDataAPI {
           
           // Try local lookup if available
           if (typeof lookupCityByPostalCode === 'function') {
-            const localCity = lookupCityByPostalCode(cleanPostalCode);
+            const localCity = normalizeLookedUpCity(lookupCityByPostalCode(cleanPostalCode));
             if (localCity) {
               console.log('[PostalCode] Found city in local lookup:', localCity);
               return localCity;
@@ -1683,7 +1685,8 @@ class ReferenceDataAPI {
       
       // Extract city name from response
       // API might return: { city: "Copenhagen" } or { address: { city: "Copenhagen" } }
-      const city = data?.city || data?.address?.city || data?.name || null;
+      const rawCity = data?.city || data?.address?.city || data?.name || null;
+      const city = normalizeLookedUpCity(rawCity);
       
       if (city) {
         console.log('[PostalCode] Found city:', city, 'for postal code:', cleanPostalCode);
@@ -1701,7 +1704,7 @@ class ReferenceDataAPI {
         // Try local lookup if available
         if (typeof lookupCityByPostalCode === 'function') {
           const cleanPostalCode = postalCode.trim().replace(/\s+/g, '');
-          const localCity = lookupCityByPostalCode(cleanPostalCode);
+          const localCity = normalizeLookedUpCity(lookupCityByPostalCode(cleanPostalCode));
           if (localCity) {
             console.log('[PostalCode] Found city in local lookup:', localCity);
             return localCity;
@@ -7114,14 +7117,14 @@ const translations = {
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
     'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
     'form.dateOfBirth': 'Fødselsdato*', 'form.streetAddress': 'Gade og husnummer*', 'form.streetAddress.placeholder': 'Gade og husnummer',
-    'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By', 'form.city.placeholder': 'Auto',
+    'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Indtast by',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Indtast din e-mail', 'form.country': 'Land', 'form.phoneNumber': 'Mobilnummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
     'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Opret profil',
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
     'form.parentDateOfBirth': 'Fødselsdato*', 'form.parentStreetAddress': 'Gade og husnummer*', 'form.parentStreetAddress.placeholder': 'Indtast gade og husnummer',
-    'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By', 'form.parentCity.placeholder': 'København',
+    'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By*', 'form.parentCity.placeholder': 'København',
     'form.parentEmail': 'E-mail*', 'form.parentEmail.placeholder': 'Indtast din e-mail', 'form.parentCountryCode': 'Land',
     'form.parentPhoneNumber': 'Mobilnummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Samme adresse og kontaktinformation',
     'form.error.firstName': 'Indtast venligst dit fornavn', 'form.error.lastName': 'Indtast venligst dit efternavn',
@@ -7408,14 +7411,14 @@ const translations = {
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
     'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
     'form.dateOfBirth': 'Date of birth*', 'form.streetAddress': 'Street and house number*', 'form.streetAddress.placeholder': 'Street and house nr',
-    'form.postalCode': 'Postal code*', 'form.postalCode.placeholder': 'Zipcode', 'form.city': 'City', 'form.city.placeholder': 'Auto',
+    'form.postalCode': 'Postal code*', 'form.postalCode.placeholder': 'Zipcode', 'form.city': 'City*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Enter city',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Enter your email', 'form.country': 'Country', 'form.phoneNumber': 'Mobile number*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Password*', 'form.password.create.placeholder': 'Create a password',
     'form.confirmPassword': 'Confirm password*', 'form.confirmPassword.placeholder': 'Confirm your password', 'form.saveAccount': 'Save Account',
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
     'form.parentFullName': 'First and last name*', 'form.parentFullName.placeholder': 'Enter your full name',
     'form.parentDateOfBirth': 'Date of birth*', 'form.parentStreetAddress': 'Street and house number*', 'form.parentStreetAddress.placeholder': 'Enter street and house number',
-    'form.parentPostalCode': 'Postal code*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'City', 'form.parentCity.placeholder': 'Copenhagen',
+    'form.parentPostalCode': 'Postal code*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'City*', 'form.parentCity.placeholder': 'Copenhagen',
     'form.parentEmail': 'E-mail*', 'form.parentEmail.placeholder': 'Enter your email', 'form.parentCountryCode': 'Country',
     'form.parentPhoneNumber': 'Mobile number*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Same address and contact information',
     'form.error.firstName': 'Please enter your first name', 'form.error.lastName': 'Please enter your last name',
@@ -7684,14 +7687,14 @@ const translations = {
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
     'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
     'form.dateOfBirth': 'Geburtsdatum*', 'form.streetAddress': 'Straße und Hausnummer*', 'form.streetAddress.placeholder': 'Straße und Hausnummer',
-    'form.postalCode': 'Postleitzahl*', 'form.postalCode.placeholder': 'Postleitzahl', 'form.city': 'Stadt', 'form.city.placeholder': 'Auto',
+    'form.postalCode': 'Postleitzahl*', 'form.postalCode.placeholder': 'Postleitzahl', 'form.city': 'Stadt*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Stadt eingeben',
     'form.email.create': 'E-Mail*', 'form.email.create.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.country': 'Land', 'form.phoneNumber': 'Handynummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Passwort*', 'form.password.create.placeholder': 'Erstellen Sie ein Passwort',
     'form.confirmPassword': 'Passwort bestätigen*', 'form.confirmPassword.placeholder': 'Bestätigen Sie Ihr Passwort', 'form.saveAccount': 'Profil erstellen',
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
     'form.parentFullName': 'Vorname und Nachname*', 'form.parentFullName.placeholder': 'Geben Sie Ihren vollständigen Namen ein',
     'form.parentDateOfBirth': 'Geburtsdatum*', 'form.parentStreetAddress': 'Straße und Hausnummer*', 'form.parentStreetAddress.placeholder': 'Geben Sie Straße und Hausnummer ein',
-    'form.parentPostalCode': 'Postleitzahl*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'Stadt', 'form.parentCity.placeholder': 'Kopenhagen',
+    'form.parentPostalCode': 'Postleitzahl*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'Stadt*', 'form.parentCity.placeholder': 'Kopenhagen',
     'form.parentEmail': 'E-Mail*', 'form.parentEmail.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.parentCountryCode': 'Land',
     'form.parentPhoneNumber': 'Handynummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Gleiche Adresse und Kontaktinformationen',
     'form.error.firstName': 'Bitte geben Sie Ihren Vornamen ein', 'form.error.lastName': 'Bitte geben Sie Ihren Nachnamen ein',
@@ -11431,7 +11434,9 @@ async function handleSaveAccount() {
     
     // Get address fields
     const streetAddress = payload.customer?.address?.street || document.getElementById('streetAddress')?.value?.trim() || payload.customer?.address;
-    const city = payload.customer?.address?.city || document.getElementById('city')?.value?.trim() || payload.customer?.city;
+    const city = normalizeLookedUpCity(
+      payload.customer?.address?.city || document.getElementById('city')?.value?.trim() || payload.customer?.city
+    );
     const postalCode = payload.customer?.address?.postalCode || document.getElementById('postalCode')?.value?.trim() || payload.customer?.postalCode;
     // Country is always Denmark (DK) for this application
     const country = 'DK';
@@ -14837,295 +14842,163 @@ let postalCodeLookupTimers = {
   parent: null,
 };
 
+/** Danish postal codes are exactly 4 digits. Foreign codes (e.g. DE 5-digit) must allow manual city entry. */
+function isDanishPostalCodeFormat(postalCode) {
+  return /^\d{4}$/.test(String(postalCode || '').trim());
+}
+
+/** Reject empty / bogus lookup values like the literal string "null". */
+function normalizeLookedUpCity(city) {
+  if (city == null) return null;
+  if (typeof city !== 'string') {
+    if (typeof city === 'number' && Number.isFinite(city)) {
+      return String(city);
+    }
+    return null;
+  }
+  const trimmed = city.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (lower === 'null' || lower === 'undefined' || lower === 'nan') return null;
+  return trimmed;
+}
+
+function getManualCityPlaceholder() {
+  return t('form.city.manualPlaceholder', 'Enter city');
+}
+
+function setCityFieldReadonly(cityField, value = '') {
+  if (!cityField) return;
+  cityField.value = value || '';
+  cityField.setAttribute('readonly', 'readonly');
+  cityField.removeAttribute('placeholder');
+  cityField.style.opacity = '1';
+  cityField.style.cursor = 'default';
+}
+
+function setCityFieldEditable(cityField, { clearValue = true } = {}) {
+  if (!cityField) return;
+  if (clearValue) cityField.value = '';
+  cityField.removeAttribute('readonly');
+  cityField.placeholder = getManualCityPlaceholder();
+  cityField.style.opacity = '1';
+  cityField.style.cursor = 'text';
+}
+
+function setCityFieldLoading(cityField) {
+  if (!cityField) return;
+  cityField.value = 'Loading...';
+  cityField.style.opacity = '0.6';
+}
+
+function applyPostalCodeCityLookupResult(cityField, result, postalCode, { logPrefix = 'PostalCode' } = {}) {
+  if (!cityField) return;
+
+  if (result && typeof result === 'object' && result.unavailable) {
+    setCityFieldEditable(cityField);
+    console.log(`[${logPrefix}] API unavailable - city field is now editable`);
+    return;
+  }
+
+  const city = normalizeLookedUpCity(typeof result === 'string' ? result : null);
+  if (city) {
+    setCityFieldReadonly(cityField, city);
+    console.log(`[${logPrefix}] Auto-filled city:`, city, 'for postal code:', postalCode);
+    return;
+  }
+
+  // City not found (or bogus "null" string) — allow manual entry
+  setCityFieldEditable(cityField);
+  console.log(`[${logPrefix}] No city found for postal code:`, postalCode, '- city field is now editable');
+}
+
+async function lookupAndApplyCity(referenceAPI, cityField, postalCode, { logPrefix = 'PostalCode' } = {}) {
+  setCityFieldLoading(cityField);
+  try {
+    const result = await referenceAPI.lookupCityByPostalCode(postalCode);
+    applyPostalCodeCityLookupResult(cityField, result, postalCode, { logPrefix });
+  } catch (error) {
+    console.error(`[${logPrefix}] Error looking up city:`, error);
+    // Don't lock the field on errors — user must still be able to type a city
+    setCityFieldEditable(cityField);
+  }
+}
+
 function setupPostalCodeAutoFill() {
   const referenceAPI = new ReferenceDataAPI();
-  
-  // Setup for customer postal code field
-  if (DOM.postalCode && DOM.city) {
-    DOM.postalCode.addEventListener('input', (e) => {
+
+  const bindPostalCityPair = ({ postalInput, cityField, timerKey, logPrefix }) => {
+    if (!postalInput || !cityField) return;
+
+    postalInput.addEventListener('input', (e) => {
       const postalCode = e.target.value.trim();
-      
-      // Clear existing timer
-      if (postalCodeLookupTimers.customer) {
-        clearTimeout(postalCodeLookupTimers.customer);
+
+      if (postalCodeLookupTimers[timerKey]) {
+        clearTimeout(postalCodeLookupTimers[timerKey]);
       }
-      
-      // Clear city field if postal code is empty and revert to readonly
-      if (!postalCode || postalCode.length === 0) {
-        if (DOM.city) {
-          DOM.city.value = '';
-          DOM.city.setAttribute('readonly', 'readonly');
-          DOM.city.removeAttribute('placeholder');
-          DOM.city.style.opacity = '1';
-          DOM.city.style.cursor = 'default';
+
+      if (!postalCode) {
+        setCityFieldReadonly(cityField, '');
+        return;
+      }
+
+      // Non-Danish formats (e.g. German 5-digit PLZ): unlock city immediately for manual entry.
+      // Previously this path forced readonly, which blocked foreign addresses entirely.
+      if (!isDanishPostalCodeFormat(postalCode)) {
+        setCityFieldEditable(cityField);
+        return;
+      }
+
+      postalCodeLookupTimers[timerKey] = setTimeout(async () => {
+        await lookupAndApplyCity(referenceAPI, cityField, postalCode, { logPrefix });
+      }, 500);
+    });
+
+    postalInput.addEventListener('blur', async (e) => {
+      const postalCode = e.target.value.trim();
+
+      if (postalCodeLookupTimers[timerKey]) {
+        clearTimeout(postalCodeLookupTimers[timerKey]);
+        postalCodeLookupTimers[timerKey] = null;
+      }
+
+      if (!postalCode) {
+        setCityFieldReadonly(cityField, '');
+        return;
+      }
+
+      if (!isDanishPostalCodeFormat(postalCode)) {
+        // Keep any city the user already typed; just ensure the field is editable
+        setCityFieldEditable(cityField, { clearValue: false });
+        if (!cityField.value || cityField.value === 'Loading...') {
+          cityField.value = '';
+          cityField.placeholder = getManualCityPlaceholder();
         }
         return;
       }
-      
-      // Debounce: wait 500ms after user stops typing
-      postalCodeLookupTimers.customer = setTimeout(async () => {
-        // Check if postal code is valid format (4 digits for Danish postal codes)
-        if (/^\d{4}$/.test(postalCode)) {
-          try {
-            // Show loading state
-            if (DOM.city) {
-              DOM.city.value = 'Loading...';
-              DOM.city.style.opacity = '0.6';
-            }
-            
-            const result = await referenceAPI.lookupCityByPostalCode(postalCode);
-            
-            if (result && typeof result === 'object' && result.unavailable) {
-              // API endpoint not available - make city field editable
-              if (DOM.city) {
-                DOM.city.removeAttribute('readonly');
-                DOM.city.placeholder = 'Enter city name';
-                DOM.city.value = '';
-                DOM.city.style.opacity = '1';
-                DOM.city.style.cursor = 'text';
-                console.log('[PostalCode] API unavailable - city field is now editable');
-              }
-            } else if (result && typeof result === 'string') {
-              // City found - auto-fill and set readonly
-              if (DOM.city) {
-                DOM.city.value = result;
-                DOM.city.setAttribute('readonly', 'readonly');
-                DOM.city.removeAttribute('placeholder');
-                DOM.city.style.opacity = '1';
-                DOM.city.style.cursor = 'default';
-                console.log('[PostalCode] Auto-filled city:', result, 'for postal code:', postalCode);
-              }
-            } else {
-              // City not found - make field editable so user can enter city manually
-              if (DOM.city) {
-                DOM.city.value = '';
-                DOM.city.removeAttribute('readonly');
-                DOM.city.placeholder = 'Enter city name';
-                DOM.city.style.opacity = '1';
-                DOM.city.style.cursor = 'text';
-                console.log('[PostalCode] No city found for postal code:', postalCode, '- city field is now editable');
-              }
-            }
-          } catch (error) {
-            console.error('[PostalCode] Error looking up city:', error);
-            if (DOM.city) {
-              DOM.city.value = '';
-              DOM.city.setAttribute('readonly', 'readonly');
-              DOM.city.removeAttribute('placeholder');
-              DOM.city.style.opacity = '1';
-              DOM.city.style.cursor = 'default';
-            }
-          }
-        } else {
-          // Invalid format - clear city field and revert to readonly
-          if (DOM.city) {
-            DOM.city.value = '';
-            DOM.city.setAttribute('readonly', 'readonly');
-            DOM.city.removeAttribute('placeholder');
-            DOM.city.style.opacity = '1';
-            DOM.city.style.cursor = 'default';
-          }
-        }
-      }, 500);
-    });
-    
-    // Also handle blur event for immediate lookup when user leaves field
-    DOM.postalCode.addEventListener('blur', async (e) => {
-      const postalCode = e.target.value.trim();
-      
-      // Clear any pending timer
-      if (postalCodeLookupTimers.customer) {
-        clearTimeout(postalCodeLookupTimers.customer);
-        postalCodeLookupTimers.customer = null;
-      }
-      
-      // Only lookup if postal code is valid and city is empty
-      if (postalCode && /^\d{4}$/.test(postalCode) && (!DOM.city || !DOM.city.value || DOM.city.value === 'Loading...')) {
-        try {
-          if (DOM.city) {
-            DOM.city.value = 'Loading...';
-            DOM.city.style.opacity = '0.6';
-          }
-          
-          const result = await referenceAPI.lookupCityByPostalCode(postalCode);
-          
-          if (result && typeof result === 'object' && result.unavailable) {
-            // API endpoint not available - make city field editable
-            if (DOM.city) {
-              DOM.city.removeAttribute('readonly');
-              DOM.city.placeholder = 'Enter city name';
-              DOM.city.value = '';
-              DOM.city.style.opacity = '1';
-              DOM.city.style.cursor = 'text';
-            }
-          } else if (result && typeof result === 'string') {
-            // City found - auto-fill
-            if (DOM.city) {
-              DOM.city.value = result;
-              DOM.city.style.opacity = '1';
-            }
-          } else if (DOM.city) {
-            DOM.city.value = '';
-            DOM.city.style.opacity = '1';
-          }
-        } catch (error) {
-          console.error('[PostalCode] Error looking up city on blur:', error);
-          if (DOM.city) {
-            DOM.city.value = '';
-            DOM.city.style.opacity = '1';
-          }
-        }
-      }
-    });
-  }
-  
-  // Setup for parent/guardian postal code field
-  if (DOM.parentPostalCode && DOM.parentCity) {
-    DOM.parentPostalCode.addEventListener('input', (e) => {
-      const postalCode = e.target.value.trim();
-      
-      // Clear existing timer
-      if (postalCodeLookupTimers.parent) {
-        clearTimeout(postalCodeLookupTimers.parent);
-      }
-      
-      // Clear city field if postal code is empty and revert to readonly
-      if (!postalCode || postalCode.length === 0) {
-        if (DOM.parentCity) {
-          DOM.parentCity.value = '';
-          DOM.parentCity.setAttribute('readonly', 'readonly');
-          DOM.parentCity.removeAttribute('placeholder');
-          DOM.parentCity.style.opacity = '1';
-          DOM.parentCity.style.cursor = 'default';
-        }
+
+      const currentCity = cityField.value?.trim();
+      if (currentCity && currentCity !== 'Loading...' && normalizeLookedUpCity(currentCity)) {
         return;
       }
-      
-      // Debounce: wait 500ms after user stops typing
-      postalCodeLookupTimers.parent = setTimeout(async () => {
-        // Check if postal code is valid format (4 digits for Danish postal codes)
-        if (/^\d{4}$/.test(postalCode)) {
-          try {
-            // Show loading state
-            if (DOM.parentCity) {
-              DOM.parentCity.value = 'Loading...';
-              DOM.parentCity.style.opacity = '0.6';
-            }
-            
-            const result = await referenceAPI.lookupCityByPostalCode(postalCode);
-            
-            if (result && typeof result === 'object' && result.unavailable) {
-              // API endpoint not available - make city field editable
-              if (DOM.parentCity) {
-                DOM.parentCity.removeAttribute('readonly');
-                DOM.parentCity.placeholder = 'Enter city name';
-                DOM.parentCity.value = '';
-                DOM.parentCity.style.opacity = '1';
-                DOM.parentCity.style.cursor = 'text';
-                console.log('[PostalCode] API unavailable - parent city field is now editable');
-              }
-            } else if (result && typeof result === 'string') {
-              // City found - auto-fill and set readonly
-              if (DOM.parentCity) {
-                DOM.parentCity.value = result;
-                DOM.parentCity.setAttribute('readonly', 'readonly');
-                DOM.parentCity.removeAttribute('placeholder');
-                DOM.parentCity.style.opacity = '1';
-                DOM.parentCity.style.cursor = 'default';
-                console.log('[PostalCode] Auto-filled parent city:', result, 'for postal code:', postalCode);
-              }
-            } else {
-              // City not found - make field editable so user can enter city manually
-              if (DOM.parentCity) {
-                DOM.parentCity.value = '';
-                DOM.parentCity.removeAttribute('readonly');
-                DOM.parentCity.placeholder = 'Enter city name';
-                DOM.parentCity.style.opacity = '1';
-                DOM.parentCity.style.cursor = 'text';
-                console.log('[PostalCode] No city found for parent postal code:', postalCode, '- city field is now editable');
-              }
-            }
-          } catch (error) {
-            console.error('[PostalCode] Error looking up parent city:', error);
-            if (DOM.parentCity) {
-              DOM.parentCity.value = '';
-              DOM.parentCity.setAttribute('readonly', 'readonly');
-              DOM.parentCity.removeAttribute('placeholder');
-              DOM.parentCity.style.opacity = '1';
-              DOM.parentCity.style.cursor = 'default';
-            }
-          }
-        } else {
-          // Invalid format - clear city field and revert to readonly
-          if (DOM.parentCity) {
-            DOM.parentCity.value = '';
-            DOM.parentCity.setAttribute('readonly', 'readonly');
-            DOM.parentCity.removeAttribute('placeholder');
-            DOM.parentCity.style.opacity = '1';
-            DOM.parentCity.style.cursor = 'default';
-          }
-        }
-      }, 500);
+
+      await lookupAndApplyCity(referenceAPI, cityField, postalCode, { logPrefix });
     });
-    
-    // Also handle blur event for immediate lookup when user leaves field
-    DOM.parentPostalCode.addEventListener('blur', async (e) => {
-      const postalCode = e.target.value.trim();
-      
-      // Clear any pending timer
-      if (postalCodeLookupTimers.parent) {
-        clearTimeout(postalCodeLookupTimers.parent);
-        postalCodeLookupTimers.parent = null;
-      }
-      
-      // Only lookup if postal code is valid and city is empty
-      if (postalCode && /^\d{4}$/.test(postalCode) && (!DOM.parentCity || !DOM.parentCity.value || DOM.parentCity.value === 'Loading...')) {
-        try {
-          if (DOM.parentCity) {
-            DOM.parentCity.value = 'Loading...';
-            DOM.parentCity.style.opacity = '0.6';
-          }
-          
-          const result = await referenceAPI.lookupCityByPostalCode(postalCode);
-          
-          if (result && typeof result === 'object' && result.unavailable) {
-            // API endpoint not available - make city field editable
-            if (DOM.parentCity) {
-              DOM.parentCity.removeAttribute('readonly');
-              DOM.parentCity.placeholder = 'Enter city name';
-              DOM.parentCity.value = '';
-              DOM.parentCity.style.opacity = '1';
-              DOM.parentCity.style.cursor = 'text';
-            }
-          } else if (result && typeof result === 'string') {
-            // City found - auto-fill and set readonly
-            if (DOM.parentCity) {
-              DOM.parentCity.value = result;
-              DOM.parentCity.setAttribute('readonly', 'readonly');
-              DOM.parentCity.removeAttribute('placeholder');
-              DOM.parentCity.style.opacity = '1';
-              DOM.parentCity.style.cursor = 'default';
-            }
-          } else {
-            // City not found - make field editable so user can enter city manually
-            if (DOM.parentCity) {
-              DOM.parentCity.value = '';
-              DOM.parentCity.removeAttribute('readonly');
-              DOM.parentCity.placeholder = 'Enter city name';
-              DOM.parentCity.style.opacity = '1';
-              DOM.parentCity.style.cursor = 'text';
-            }
-          }
-        } catch (error) {
-          console.error('[PostalCode] Error looking up parent city on blur:', error);
-          if (DOM.parentCity) {
-            DOM.parentCity.value = '';
-            DOM.parentCity.style.opacity = '1';
-          }
-        }
-      }
-    });
-  }
+  };
+
+  bindPostalCityPair({
+    postalInput: DOM.postalCode,
+    cityField: DOM.city,
+    timerKey: 'customer',
+    logPrefix: 'PostalCode',
+  });
+
+  bindPostalCityPair({
+    postalInput: DOM.parentPostalCode,
+    cityField: DOM.parentCity,
+    timerKey: 'parent',
+    logPrefix: 'PostalCode/parent',
+  });
 }
 
 async function handleApplyDiscount() {
@@ -18364,7 +18237,7 @@ async function handleCheckout() {
         
         // Get address fields
         const streetAddress = payload.customer?.address?.street || payload.customer?.address;
-        const city = payload.customer?.address?.city || payload.customer?.city;
+        const city = normalizeLookedUpCity(payload.customer?.address?.city || payload.customer?.city);
         const postalCode = payload.customer?.address?.postalCode || payload.customer?.postalCode;
         // Country is always Denmark (DK) for this application
         const country = 'DK';
