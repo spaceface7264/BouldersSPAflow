@@ -1129,6 +1129,7 @@ const REQUIRED_FIELDS = [
   'city',
   'email',
   'countryCode',
+  'phoneNumber',
   'password',
   'primaryGym',
 ];
@@ -1141,6 +1142,7 @@ const PARENT_REQUIRED_FIELDS = [
   'parentCity',
   'parentEmail',
   'parentCountryCode',
+  'parentPhoneNumber',
   'parentPassword',
   'parentPrimaryGym',
 ];
@@ -5398,16 +5400,7 @@ function updateCountryFlagIcon(selectElement) {
   } else {
     // Fallback: try to infer from phone code (common countries)
     const phoneCode = selectedValue.replace('+', '');
-    const commonFlags = {
-      '45': 'DK', // Denmark
-      '46': 'SE', // Sweden
-      '47': 'NO', // Norway
-      '358': 'FI', // Finland
-      '49': 'DE', // Germany
-      '33': 'FR', // France
-      '44': 'GB', // United Kingdom
-      '1': 'US', // United States
-    };
+    const commonFlags = PHONE_COUNTRY_TO_ALPHA2;
     
     const inferredAlpha2 = commonFlags[phoneCode];
     if (inferredAlpha2) {
@@ -11438,8 +11431,7 @@ async function handleSaveAccount() {
       payload.customer?.address?.city || document.getElementById('city')?.value?.trim() || payload.customer?.city
     );
     const postalCode = payload.customer?.address?.postalCode || document.getElementById('postalCode')?.value?.trim() || payload.customer?.postalCode;
-    // Country is always Denmark (DK) for this application
-    const country = 'DK';
+    const country = resolveAddressCountryAlpha2(phoneCountryCode, postalCode);
     
     // Build shippingAddress object if we have address data (API expects shippingAddress)
     let shippingAddress = null;
@@ -11448,7 +11440,7 @@ async function handleSaveAccount() {
       if (streetAddress) shippingAddress.street = streetAddress;
       if (city) shippingAddress.city = city;
       if (postalCode) shippingAddress.postalCode = postalCode;
-      shippingAddress.country = country; // Always DK
+      shippingAddress.country = country;
     }
     
     // Get privacy/terms consent timestamp for acceptedRegistrationTerms
@@ -11481,7 +11473,7 @@ async function handleSaveAccount() {
       address: streetAddress, // Keep for backward compatibility
       city: city, // Keep for backward compatibility
       postalCode: postalCode, // Keep for backward compatibility - ensure it's always included
-      country: country, // Always DK
+      country,
       primaryGym: payload.customer?.primaryGym || state.selectedBusinessUnit,
       password: payload.customer?.password || document.getElementById('password')?.value,
       customerType: 1, // Required by API
@@ -11884,6 +11876,7 @@ function checkSaveAccountButtonState() {
     'dateOfBirth',
     'streetAddress',
     'postalCode',
+    'city',
     'email',
     'phoneNumber',
     'password',
@@ -11892,7 +11885,17 @@ function checkSaveAccountButtonState() {
   let allFieldsFilled = true;
   requiredFields.forEach(fieldId => {
     const input = document.getElementById(fieldId);
-    if (!input || !input.value.trim()) {
+    if (!input) {
+      allFieldsFilled = false;
+      return;
+    }
+    if (fieldId === 'city') {
+      if (!normalizeLookedUpCity(input.value)) {
+        allFieldsFilled = false;
+      }
+      return;
+    }
+    if (!input.value.trim()) {
       allFieldsFilled = false;
     }
   });
@@ -14847,7 +14850,7 @@ function isDanishPostalCodeFormat(postalCode) {
   return /^\d{4}$/.test(String(postalCode || '').trim());
 }
 
-/** Reject empty / bogus lookup values like the literal string "null". */
+/** Reject empty / bogus lookup values like the literal string "null" or transient "Loading...". */
 function normalizeLookedUpCity(city) {
   if (city == null) return null;
   if (typeof city !== 'string') {
@@ -14859,8 +14862,54 @@ function normalizeLookedUpCity(city) {
   const trimmed = city.trim();
   if (!trimmed) return null;
   const lower = trimmed.toLowerCase();
-  if (lower === 'null' || lower === 'undefined' || lower === 'nan') return null;
+  if (lower === 'null' || lower === 'undefined' || lower === 'nan' || lower === 'loading...') return null;
   return trimmed;
+}
+
+const PHONE_COUNTRY_TO_ALPHA2 = Object.freeze({
+  '45': 'DK',
+  '46': 'SE',
+  '47': 'NO',
+  '358': 'FI',
+  '49': 'DE',
+  '33': 'FR',
+  '44': 'GB',
+  '1': 'US',
+});
+
+/** Infer ISO alpha-2 for shipping address: DK postcodes stay DK; foreign postcodes follow phone country. */
+function resolveAddressCountryAlpha2(phoneCountryCode, postalCode) {
+  if (isDanishPostalCodeFormat(postalCode)) {
+    return 'DK';
+  }
+
+  const normalizedPhone = String(phoneCountryCode || '+45').trim();
+  const fromMap = countryDataMap.get(normalizedPhone)?.alpha2;
+  if (fromMap) {
+    return String(fromMap).toUpperCase();
+  }
+
+  const phoneDigits = normalizedPhone.replace(/^\+/, '');
+  return PHONE_COUNTRY_TO_ALPHA2[phoneDigits] || 'DK';
+}
+
+function syncCopiedCityField(sourceCityField, targetCityField, sourcePostalField) {
+  if (!targetCityField) return;
+
+  const postalCode = sourcePostalField?.value?.trim() || '';
+  targetCityField.value = sourceCityField?.value || '';
+
+  if (!postalCode || !isDanishPostalCodeFormat(postalCode)) {
+    setCityFieldEditable(targetCityField, { clearValue: false });
+    return;
+  }
+
+  const normalizedCity = normalizeLookedUpCity(targetCityField.value);
+  if (normalizedCity) {
+    setCityFieldReadonly(targetCityField, normalizedCity);
+  } else {
+    setCityFieldEditable(targetCityField, { clearValue: false });
+  }
 }
 
 function getManualCityPlaceholder() {
@@ -15499,6 +15548,13 @@ function copyAddressAndContactInfo() {
     const source = document.getElementById(sourceId);
     const target = document.getElementById(targetId);
     if (!source || !target) return;
+
+    if (sourceId === 'city' && targetId === 'parentCity') {
+      syncCopiedCityField(source, target, document.getElementById('postalCode'));
+      target.classList.add('readonly-field');
+      return;
+    }
+
     target.value = source.value;
     target.readOnly = true;
     if (target.tagName === 'SELECT') {
@@ -18239,8 +18295,7 @@ async function handleCheckout() {
         const streetAddress = payload.customer?.address?.street || payload.customer?.address;
         const city = normalizeLookedUpCity(payload.customer?.address?.city || payload.customer?.city);
         const postalCode = payload.customer?.address?.postalCode || payload.customer?.postalCode;
-        // Country is always Denmark (DK) for this application
-        const country = 'DK';
+        const country = resolveAddressCountryAlpha2(phoneCountryCode, postalCode);
         
         // Build shippingAddress object if we have address data (API expects shippingAddress)
         let shippingAddress = null;
@@ -18249,7 +18304,7 @@ async function handleCheckout() {
           if (streetAddress) shippingAddress.street = streetAddress;
           if (city) shippingAddress.city = city;
           if (postalCode) shippingAddress.postalCode = postalCode;
-          shippingAddress.country = country; // Always DK
+          shippingAddress.country = country;
         }
         
         // Get privacy/terms consent timestamp for acceptedRegistrationTerms
@@ -20699,17 +20754,19 @@ function buildStoredCheckoutCustomer(payloadCustomer = {}) {
     payloadCustomer.shippingAddress?.postalCode ||
     null;
   const city =
-    payloadCustomer.address?.city ||
-    payloadCustomer.city ||
-    payloadCustomer.shippingAddress?.city ||
-    null;
+    normalizeLookedUpCity(
+      payloadCustomer.address?.city ||
+      payloadCustomer.city ||
+      payloadCustomer.shippingAddress?.city
+    );
+  const resolvedCountry = resolveAddressCountryAlpha2(phoneCountryCode, postalCode);
   const shippingAddress =
     streetAddress || city || postalCode
       ? {
           ...(streetAddress ? { street: streetAddress } : {}),
           ...(city ? { city } : {}),
           ...(postalCode ? { postalCode } : {}),
-          country: 'DK',
+          country: resolvedCountry,
         }
       : (payloadCustomer.shippingAddress || null);
 
@@ -23323,7 +23380,13 @@ function validateForm(animate = false) {
   if (!skipPersonalValidation) {
     REQUIRED_FIELDS.forEach((fieldId) => {
       const field = document.getElementById(fieldId);
-      if (field && !field.value.trim()) {
+      if (!field) return;
+
+      const isEmpty = fieldId === 'city' || fieldId === 'parentCity'
+        ? !normalizeLookedUpCity(field.value)
+        : !field.value.trim();
+
+      if (isEmpty) {
         isValid = false;
         errors.push(`Missing required field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
@@ -23334,7 +23397,13 @@ function validateForm(animate = false) {
   if (!skipPersonalValidation && DOM.parentGuardianForm && DOM.parentGuardianForm.style.display !== 'none') {
     PARENT_REQUIRED_FIELDS.forEach((fieldId) => {
       const field = document.getElementById(fieldId);
-      if (field && !field.value.trim()) {
+      if (!field) return;
+
+      const isEmpty = fieldId === 'parentCity'
+        ? !normalizeLookedUpCity(field.value)
+        : !field.value.trim();
+
+      if (isEmpty) {
         isValid = false;
         errors.push(`Missing parent/guardian field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
