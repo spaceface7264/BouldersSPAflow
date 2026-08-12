@@ -14894,22 +14894,33 @@ function resolveAddressCountryAlpha2(phoneCountryCode, postalCode) {
 }
 
 function syncCopiedCityField(sourceCityField, targetCityField, sourcePostalField) {
-  if (!targetCityField) return;
+  if (!targetCityField) return false;
 
   const postalCode = sourcePostalField?.value?.trim() || '';
-  targetCityField.value = sourceCityField?.value || '';
+  const normalizedCity = normalizeLookedUpCity(sourceCityField?.value);
 
   if (!postalCode || !isDanishPostalCodeFormat(postalCode)) {
-    setCityFieldEditable(targetCityField, { clearValue: false });
-    return;
+    if (normalizedCity) {
+      setCityFieldEditable(targetCityField, { clearValue: false });
+      targetCityField.value = normalizedCity;
+    } else {
+      setCityFieldEditable(targetCityField);
+    }
+    return false;
   }
 
-  const normalizedCity = normalizeLookedUpCity(targetCityField.value);
   if (normalizedCity) {
     setCityFieldReadonly(targetCityField, normalizedCity);
-  } else {
-    setCityFieldEditable(targetCityField, { clearValue: false });
+    return true;
   }
+
+  setCityFieldEditable(targetCityField);
+  return false;
+}
+
+function isPostalLookupStillValid(postalInput, requestedPostalCode) {
+  const currentPostal = postalInput?.value?.trim() || '';
+  return currentPostal === requestedPostalCode && isDanishPostalCodeFormat(currentPostal);
 }
 
 function getManualCityPlaceholder() {
@@ -14961,13 +14972,25 @@ function applyPostalCodeCityLookupResult(cityField, result, postalCode, { logPre
   console.log(`[${logPrefix}] No city found for postal code:`, postalCode, '- city field is now editable');
 }
 
-async function lookupAndApplyCity(referenceAPI, cityField, postalCode, { logPrefix = 'PostalCode' } = {}) {
+async function lookupAndApplyCity(referenceAPI, postalInput, cityField, postalCode, { logPrefix = 'PostalCode' } = {}) {
   setCityFieldLoading(cityField);
   try {
     const result = await referenceAPI.lookupCityByPostalCode(postalCode);
+    if (!isPostalLookupStillValid(postalInput, postalCode)) {
+      if (!isDanishPostalCodeFormat(postalInput?.value?.trim() || '')) {
+        setCityFieldEditable(cityField, { clearValue: cityField.value === 'Loading...' });
+      }
+      return;
+    }
     applyPostalCodeCityLookupResult(cityField, result, postalCode, { logPrefix });
   } catch (error) {
     console.error(`[${logPrefix}] Error looking up city:`, error);
+    if (!isPostalLookupStillValid(postalInput, postalCode)) {
+      if (!isDanishPostalCodeFormat(postalInput?.value?.trim() || '')) {
+        setCityFieldEditable(cityField, { clearValue: cityField.value === 'Loading...' });
+      }
+      return;
+    }
     // Don't lock the field on errors — user must still be able to type a city
     setCityFieldEditable(cityField);
   }
@@ -14999,7 +15022,7 @@ function setupPostalCodeAutoFill() {
       }
 
       postalCodeLookupTimers[timerKey] = setTimeout(async () => {
-        await lookupAndApplyCity(referenceAPI, cityField, postalCode, { logPrefix });
+        await lookupAndApplyCity(referenceAPI, postalInput, cityField, postalCode, { logPrefix });
       }, 500);
     });
 
@@ -15031,7 +15054,7 @@ function setupPostalCodeAutoFill() {
         return;
       }
 
-      await lookupAndApplyCity(referenceAPI, cityField, postalCode, { logPrefix });
+      await lookupAndApplyCity(referenceAPI, postalInput, cityField, postalCode, { logPrefix });
     });
   };
 
@@ -15550,8 +15573,10 @@ function copyAddressAndContactInfo() {
     if (!source || !target) return;
 
     if (sourceId === 'city' && targetId === 'parentCity') {
-      syncCopiedCityField(source, target, document.getElementById('postalCode'));
-      target.classList.add('readonly-field');
+      const isReadonly = syncCopiedCityField(source, target, document.getElementById('postalCode'));
+      if (isReadonly) {
+        target.classList.add('readonly-field');
+      }
       return;
     }
 
