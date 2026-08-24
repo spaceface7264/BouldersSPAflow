@@ -56,6 +56,9 @@ import {
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
 
+/** GoActive / BRP app id for Boulders. Required so reset emails link to boulders.goactivebooking.com/resetPassword. */
+const BOULDERS_GOACTIVE_APP_ID = 416;
+
 /**
  * Gets today's date in YYYY-MM-DD format using local time (not UTC).
  * This ensures we always send the user's local "today" date to the backend.
@@ -533,6 +536,8 @@ const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
   '/membership-offer',
   '/99kr',
+  '/reset-password',
+  '/resetpassword',
 ]));
 
 function normalizePathname(pathname) {
@@ -540,6 +545,29 @@ function normalizePathname(pathname) {
   if (!raw || raw === '/') return '/';
   const withoutTrailingSlash = raw.replace(/\/+$/, '');
   return withoutTrailingSlash || '/';
+}
+
+function isPasswordResetRoute(pathname = window.location.pathname) {
+  const path = normalizePathname(pathname);
+  return path === '/reset-password' || path === '/resetpassword';
+}
+
+function parsePasswordResetToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const padded = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4));
+    const payload = JSON.parse(atob(padded + pad));
+    const customerId = Number(payload.sub);
+    if (!Number.isFinite(customerId) || customerId <= 0) return null;
+    if (payload.resetPassword !== true) return null;
+    if (payload.exp && payload.exp * 1000 < Date.now()) return null;
+    return { customerId, token };
+  } catch {
+    return null;
+  }
 }
 
 function resolveLandingRouteConfig(pathname = window.location.pathname) {
@@ -1996,17 +2024,14 @@ class AuthAPI {
 
   // Step 6: Password reset - Offer forgotten-password flow
   // Endpoint: POST /api/ver3/auth/resetpassword
-  // Base URL: https://boulders.brpsystems.com/apiserver (handled by proxy for ver3 endpoints)
-  // appId is optional - if not provided, BRP will use default setting for reset link
-  async resetPassword(email, appId = null) {
+  // appId 416 points the email link at Boulders' GoActive reset page.
+  async resetPassword(email) {
     try {
-      const url = this.useProxy
-        ? buildApiUrl({
-            baseUrl: this.baseUrl,
-            useProxy: this.useProxy,
-            path: '/api/ver3/auth/resetpassword',
-          })
-        : 'https://boulders.brpsystems.com/apiserver/api/ver3/auth/resetpassword';
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/ver3/auth/resetpassword',
+      });
       
       devLog('[Step 6] Requesting password reset:', url);
       
@@ -2015,16 +2040,7 @@ class AuthAPI {
         'Content-Type': 'application/json',
       };
       
-      // Build payload - appId is optional
-      // If appId is provided, convert to number; otherwise omit it
-      const payload = { email };
-      if (appId !== null && appId !== undefined) {
-        const numericAppId = typeof appId === 'string' ? parseInt(appId, 10) : appId;
-        if (!isNaN(numericAppId)) {
-          payload.appId = numericAppId;
-        }
-      }
-      
+      const payload = { email, appId: BOULDERS_GOACTIVE_APP_ID };
       devLog('[Step 6] Password reset payload:', payload);
 
       let data;
@@ -2048,6 +2064,25 @@ class AuthAPI {
       console.error('[Step 6] Password reset error:', error);
       throw error;
     }
+  }
+
+  async completePasswordReset(customerId, password, token) {
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/customers/${customerId}`,
+    });
+    return requestJson({
+      url,
+      method: 'PUT',
+      headers: {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: { password },
+      expectJson: false,
+    });
   }
 
   // Step 6: Create customer - For new users
@@ -6968,6 +7003,13 @@ function applyConditionalSteps() {
 
 function init() {
   applyRouteIndexingPolicy(window.location.pathname);
+  if (isPasswordResetRoute()) {
+    document.body.classList.add('password-reset-route');
+    initLanguageSwitcher();
+    initPasswordResetPage();
+    hideLoadingOverlay();
+    return;
+  }
   state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
   if (state.landingRouteConfig) {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
@@ -7070,7 +7112,7 @@ function hideLoadingOverlay() {
     if (headerContent) {
       headerContent.style.display = '';
     }
-    if (mainContent) {
+    if (mainContent && !document.body.classList.contains('password-reset-route')) {
       mainContent.style.display = '';
       // Update FAQ visibility after main is shown
       setTimeout(() => {
@@ -7122,8 +7164,20 @@ const translations = {
     'form.parentPhoneNumber': 'Mobilnummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Samme adresse og kontaktinformation',
     'form.error.firstName': 'Indtast venligst dit fornavn', 'form.error.lastName': 'Indtast venligst dit efternavn',
     'form.error.email': 'Indtast venligst en gyldig e-mailadresse',
-    'form.resetPassword': 'NULSTIL ADGANGSKODE', 'form.resetPassword.desc': 'Indtast din e-mailadresse, og vi sender dig instruktioner til at nulstille din adgangskode.',
-    'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
+    'form.resetPassword': 'Nulstil adgangskode', 'form.resetPassword.desc': 'Indtast e-mailen til din konto.',
+    'form.resetPassword.success': 'Tjek din indbakke og spam. Vi sender et link, hvis kontoen med {email} findes.', 'form.sendResetLink': 'Send link',
+    'page.resetPassword.title': 'Nulstil adgangskode',
+    'page.resetPassword.desc': 'Vælg en ny adgangskode til din konto.',
+    'page.resetPassword.new': 'Ny adgangskode',
+    'page.resetPassword.confirm': 'Bekræft ny adgangskode',
+    'page.resetPassword.submit': 'Gem ny adgangskode',
+    'page.resetPassword.submitting': 'Gemmer…',
+    'page.resetPassword.done': 'Adgangskoden er opdateret. Du kan nu logge ind med den nye adgangskode.',
+    'page.resetPassword.backToLogin': 'Tilbage til Join Boulders',
+    'page.resetPassword.invalid': 'Dette nulstillingslink er ugyldigt eller udløbet. Anmod om et nyt fra login.',
+    'page.resetPassword.mismatch': 'Adgangskoderne matcher ikke.',
+    'page.resetPassword.tooShort': 'Adgangskoden skal være mindst 6 tegn.',
+    'page.resetPassword.failed': 'Kunne ikke opdatere adgangskoden. Prøv igen.',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discountAmountWithPercent': 'Rabat ({percent})', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.discount.removed': 'Rabatkode fjernet.', 'cart.discount.removeFailed': 'Kunne ikke fjerne rabatkoden. Prøv igen.', 'cart.discount.empty': 'Indtast en rabatkode', 'cart.discount.loginRequired': 'Log ind eller opret en konto for at bruge en rabatkode', 'cart.discount.locationRequired': 'Vælg en hal først', 'cart.discount.selectProduct': 'Vælg et medlemskab eller klippekort først', 'cart.discount.notFound': 'Rabatkoden blev ikke fundet. Tjek koden og prøv igen.', 'cart.discount.invalid': 'Ugyldig rabatkode. Tjek koden og prøv igen.', 'cart.discount.expired': 'Denne rabatkode er udløbet.', 'cart.discount.alreadyUsed': 'Denne rabatkode er allerede brugt.', 'cart.discount.notApplicable': 'Rabatkoden gælder ikke for denne ordre.', 'cart.discount.forbidden': 'Rabatkoden kan ikke bruges på denne ordre.', 'cart.discount.genericFailed': 'Kunne ikke anvende rabatkoden. Prøv igen.', 'cart.discount.noOrder': 'Ingen ordre fundet. Genindlæs siden og prøv igen.', 'cart.discount.methodNotSupported': 'Rabatkode kunne ikke anvendes. Kontakt support.', 'cart.discount.applying': 'Anvender…', 'cart.discount.creatingOrder': 'Opretter ordre…', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
@@ -7416,8 +7470,20 @@ const translations = {
     'form.parentPhoneNumber': 'Mobile number*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Same address and contact information',
     'form.error.firstName': 'Please enter your first name', 'form.error.lastName': 'Please enter your last name',
     'form.error.email': 'Please enter a valid email address',
-    'form.resetPassword': 'RESET PASSWORD', 'form.resetPassword.desc': 'Enter your email address and we\'ll send you instructions to reset your password.',
-    'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
+    'form.resetPassword': 'Reset password', 'form.resetPassword.desc': 'Enter the email for your account.',
+    'form.resetPassword.success': 'Check your inbox and spam. We\'ll send a link if the account with {email} exists.', 'form.sendResetLink': 'Send link',
+    'page.resetPassword.title': 'Reset password',
+    'page.resetPassword.desc': 'Choose a new password for your account.',
+    'page.resetPassword.new': 'New password',
+    'page.resetPassword.confirm': 'Confirm new password',
+    'page.resetPassword.submit': 'Set new password',
+    'page.resetPassword.submitting': 'Saving…',
+    'page.resetPassword.done': 'Your password has been updated. You can log in with the new password.',
+    'page.resetPassword.backToLogin': 'Back to Join Boulders',
+    'page.resetPassword.invalid': 'This reset link is invalid or has expired. Request a new one from login.',
+    'page.resetPassword.mismatch': 'Passwords do not match.',
+    'page.resetPassword.tooShort': 'Password must be at least 6 characters.',
+    'page.resetPassword.failed': 'Could not update the password. Try again.',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discountAmountWithPercent': 'Discount ({percent})', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.discount.empty': 'Enter a discount code', 'cart.discount.loginRequired': 'Log in or create an account to use a discount code', 'cart.discount.locationRequired': 'Select a gym first', 'cart.discount.selectProduct': 'Select a membership or punch card first', 'cart.discount.notFound': 'Discount code not found. Check the code and try again.', 'cart.discount.invalid': 'Invalid discount code. Check the code and try again.', 'cart.discount.expired': 'This discount code has expired.', 'cart.discount.alreadyUsed': 'This discount code has already been used.', 'cart.discount.notApplicable': 'This discount code does not apply to your order.', 'cart.discount.forbidden': 'This discount code cannot be used on this order.', 'cart.discount.genericFailed': 'Could not apply the discount code. Please try again.', 'cart.discount.noOrder': 'No order found. Refresh the page and try again.', 'cart.discount.methodNotSupported': 'Discount code could not be applied. Please contact support.', 'cart.discount.applying': 'Applying…', 'cart.discount.creatingOrder': 'Creating order…', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
@@ -7692,8 +7758,20 @@ const translations = {
     'form.parentPhoneNumber': 'Handynummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Gleiche Adresse und Kontaktinformationen',
     'form.error.firstName': 'Bitte geben Sie Ihren Vornamen ein', 'form.error.lastName': 'Bitte geben Sie Ihren Nachnamen ein',
     'form.error.email': 'Bitte geben Sie eine gültige E-Mail-Adresse ein',
-    'form.resetPassword': 'PASSWORT ZURÜCKSETZEN', 'form.resetPassword.desc': 'Geben Sie Ihre E-Mail-Adresse ein und wir senden Ihnen Anweisungen zum Zurücksetzen Ihres Passworts.',
-    'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
+    'form.resetPassword': 'Passwort zurücksetzen', 'form.resetPassword.desc': 'Geben Sie die E-Mail Ihres Kontos ein.',
+    'form.resetPassword.success': 'Prüfen Sie Posteingang und Spam. Wir senden einen Link, wenn das Konto mit {email} existiert.', 'form.sendResetLink': 'Link senden',
+    'page.resetPassword.title': 'Passwort zurücksetzen',
+    'page.resetPassword.desc': 'Wählen Sie ein neues Passwort für Ihr Konto.',
+    'page.resetPassword.new': 'Neues Passwort',
+    'page.resetPassword.confirm': 'Neues Passwort bestätigen',
+    'page.resetPassword.submit': 'Neues Passwort speichern',
+    'page.resetPassword.submitting': 'Wird gespeichert…',
+    'page.resetPassword.done': 'Ihr Passwort wurde aktualisiert. Sie können sich mit dem neuen Passwort anmelden.',
+    'page.resetPassword.backToLogin': 'Zurück zu Join Boulders',
+    'page.resetPassword.invalid': 'Dieser Link ist ungültig oder abgelaufen. Fordern Sie unter Login einen neuen an.',
+    'page.resetPassword.mismatch': 'Die Passwörter stimmen nicht überein.',
+    'page.resetPassword.tooShort': 'Das Passwort muss mindestens 6 Zeichen lang sein.',
+    'page.resetPassword.failed': 'Passwort konnte nicht aktualisiert werden. Versuchen Sie es erneut.',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
     'firstclimb.category.title': 'Dein erster Kletterbesuch',
@@ -8232,19 +8310,15 @@ function updateFormTranslations() {
   }
   
   // Forgot password modal
-  const resetPasswordTitle = document.querySelector('#forgotPasswordModal .info-section-title[data-i18n-key="form.resetPassword"]');
+  const resetPasswordTitle = document.querySelector('#forgotPasswordTitle');
   if (resetPasswordTitle) {
     resetPasswordTitle.textContent = t('form.resetPassword');
   }
   
   const resetPasswordDesc = document.querySelector('.forgot-password-description[data-i18n-key]');
-  if (resetPasswordDesc) {
-    resetPasswordDesc.textContent = t('form.resetPassword.desc');
-  }
-  
   const resetPasswordSuccess = document.querySelector('.forgot-password-success-message[data-i18n-key]');
-  if (resetPasswordSuccess) {
-    resetPasswordSuccess.textContent = t('form.resetPassword.success');
+  if (resetPasswordDesc || resetPasswordSuccess) {
+    renderForgotPasswordCopy();
   }
   
   const sendResetLinkBtn = document.querySelector('.login-btn[data-i18n-key="form.sendResetLink"]');
@@ -8261,6 +8335,8 @@ function updateFormTranslations() {
   if (closeBtn) {
     closeBtn.textContent = t('button.close');
   }
+
+  renderPasswordResetPageCopy();
 }
 
 // Update cart translations
@@ -9753,6 +9829,122 @@ async function handleLoginSubmit(event) {
   }
 }
 
+function forgotPasswordCopyHtml(key, email) {
+  let template = t(key);
+  if (!email) {
+    return template
+      .replace(' med {email}', '')
+      .replace(' with {email}', '')
+      .replace(' mit {email}', '');
+  }
+  const escaped = String(email)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return template.replaceAll('{email}', `<strong>${escaped}</strong>`);
+}
+
+function renderForgotPasswordCopy() {
+  const email = DOM.forgotPasswordEmail?.value.trim() || '';
+  const desc = document.querySelector('#forgotPasswordModal .forgot-password-description');
+  const success = document.querySelector('#forgotPasswordModal .forgot-password-success-message');
+  if (desc) desc.textContent = t('form.resetPassword.desc');
+  if (success) success.innerHTML = sanitizeHTML(forgotPasswordCopyHtml('form.resetPassword.success', email));
+}
+
+function renderPasswordResetPageCopy() {
+  const page = document.getElementById('passwordResetPage');
+  if (!page) return;
+  page.querySelectorAll('[data-i18n-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-key');
+    if (!key) return;
+    el.textContent = t(key);
+  });
+}
+
+function initPasswordResetPage() {
+  const page = document.getElementById('passwordResetPage');
+  const form = document.getElementById('passwordResetForm');
+  const invalid = document.getElementById('passwordResetInvalid');
+  const success = document.getElementById('passwordResetSuccess');
+  const errorEl = document.getElementById('passwordResetError');
+  const desc = document.getElementById('passwordResetDesc');
+  const newInput = document.getElementById('passwordResetNew');
+  const confirmInput = document.getElementById('passwordResetConfirm');
+  const submitButton = document.getElementById('passwordResetSubmit');
+  if (!page || !form || !invalid || !success) return;
+
+  renderPasswordResetPageCopy();
+
+  document.querySelectorAll('[data-action="go-to-step-1"]').forEach((el) => {
+    el.addEventListener('click', (event) => {
+      event.preventDefault();
+      window.location.assign('/');
+    });
+  });
+
+  const session = parsePasswordResetToken(new URLSearchParams(window.location.search).get('token') || '');
+  if (!session) {
+    form.hidden = true;
+    success.hidden = true;
+    if (desc) desc.hidden = true;
+    invalid.hidden = false;
+    return;
+  }
+
+  invalid.hidden = true;
+  success.hidden = true;
+  form.hidden = false;
+  if (desc) desc.hidden = false;
+  newInput?.focus();
+
+  const showError = (message) => {
+    if (!errorEl) return;
+    errorEl.hidden = !message;
+    errorEl.textContent = message || '';
+  };
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const password = newInput?.value || '';
+    const confirm = confirmInput?.value || '';
+    showError('');
+    newInput?.closest('.form-group')?.classList.remove('error');
+    confirmInput?.closest('.form-group')?.classList.remove('error');
+
+    if (password.length < 6) {
+      showError(t('page.resetPassword.tooShort'));
+      newInput?.closest('.form-group')?.classList.add('error');
+      return;
+    }
+    if (password !== confirm) {
+      showError(t('page.resetPassword.mismatch'));
+      confirmInput?.closest('.form-group')?.classList.add('error');
+      return;
+    }
+
+    const originalLabel = submitButton?.textContent || t('page.resetPassword.submit');
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = t('page.resetPassword.submitting');
+    }
+
+    try {
+      await authAPI.completePasswordReset(session.customerId, password, session.token);
+      form.hidden = true;
+      if (desc) desc.hidden = true;
+      success.hidden = false;
+    } catch (error) {
+      console.error('[Password Reset] Complete failed:', error.status || error);
+      showError(t('page.resetPassword.failed'));
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = originalLabel;
+      }
+    }
+  });
+}
+
 function openForgotPasswordModal() {
   if (!DOM.forgotPasswordModal) return;
   
@@ -9764,6 +9956,14 @@ function openForgotPasswordModal() {
   DOM.forgotPasswordModal.style.display = 'flex';
   DOM.forgotPasswordForm.style.display = 'block';
   DOM.forgotPasswordSuccess.style.display = 'none';
+  const resetDesc = document.querySelector('.forgot-password-description');
+  if (resetDesc) resetDesc.style.display = '';
+  const submitButton = DOM.forgotPasswordForm?.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = t('form.sendResetLink') || 'Send link';
+  }
+  renderForgotPasswordCopy();
   document.body.classList.add('modal-open');
   
   // Focus on email input
@@ -9777,6 +9977,7 @@ function closeForgotPasswordModal() {
   
   DOM.forgotPasswordModal.style.display = 'none';
   document.body.classList.remove('modal-open');
+  DOM.forgotPasswordLink?.focus();
   
   // Reset form
   if (DOM.forgotPasswordForm) {
@@ -10980,11 +11181,11 @@ async function handleForgotPasswordSubmit(event) {
     console.log('[Forgot Password] Requesting password reset for:', email);
     await authAPI.resetPassword(email);
     
-    // Show success message
     DOM.forgotPasswordForm.style.display = 'none';
     DOM.forgotPasswordSuccess.style.display = 'block';
-    
-    showToast('Password reset instructions have been sent to your email.', 'success');
+    const resetDesc = document.querySelector('.forgot-password-description');
+    if (resetDesc) resetDesc.style.display = 'none';
+    renderForgotPasswordCopy();
     
     console.log('[Forgot Password] Password reset request successful');
   } catch (error) {

@@ -483,6 +483,35 @@
         </div>
     </header>
 
+    <div id="passwordResetPage" class="password-reset-page">
+        <div class="forgot-password-modal-content password-reset-card">
+            <h1 class="forgot-password-modal-title" id="passwordResetTitle" data-i18n-key="page.resetPassword.title">Reset password</h1>
+            <p class="forgot-password-description" id="passwordResetDesc" data-i18n-key="page.resetPassword.desc">Choose a new password for your account.</p>
+
+            <p class="password-reset-status" id="passwordResetInvalid" hidden data-i18n-key="page.resetPassword.invalid">This reset link is invalid or has expired. Request a new one from login.</p>
+
+            <form class="forgot-password-form" id="passwordResetForm" hidden>
+                <div class="form-group">
+                    <label for="passwordResetNew" data-i18n-key="page.resetPassword.new">New password</label>
+                    <input type="password" id="passwordResetNew" name="passwordResetNew" autocomplete="new-password" required minlength="6">
+                </div>
+                <div class="form-group password-reset-confirm-group">
+                    <label for="passwordResetConfirm" data-i18n-key="page.resetPassword.confirm">Confirm new password</label>
+                    <input type="password" id="passwordResetConfirm" name="passwordResetConfirm" autocomplete="new-password" required minlength="6">
+                </div>
+                <p class="password-reset-error" id="passwordResetError" hidden></p>
+                <div class="forgot-password-actions">
+                    <button type="submit" class="login-btn forgot-password-submit" id="passwordResetSubmit" data-i18n-key="page.resetPassword.submit">Set new password</button>
+                </div>
+            </form>
+
+            <div class="forgot-password-success" id="passwordResetSuccess" hidden>
+                <p class="forgot-password-success-message" id="passwordResetDone" data-i18n-key="page.resetPassword.done">Your password has been updated. You can log in with the new password.</p>
+                <a href="/" class="login-btn forgot-password-submit" id="passwordResetBack" data-i18n-key="page.resetPassword.backToLogin">Back to Join Boulders</a>
+            </div>
+        </div>
+    </div>
+
     <!-- /99kr offer banner. Hidden unless body.firstclimb-flow is set so the
          markup is inert on other routes. -->
     <div class="firstclimb-banner" data-firstclimb-banner role="note" aria-live="polite">
@@ -777,26 +806,26 @@
                                         </form>
                                         
                                         <!-- Forgot Password Modal -->
-                                        <div class="forgot-password-modal" id="forgotPasswordModal" style="display: none;">
+                                        <div class="forgot-password-modal" id="forgotPasswordModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle" aria-describedby="forgotPasswordDesc">
                                             <div class="forgot-password-modal-content">
-                                                <h3 class="info-section-title" data-i18n-key="form.resetPassword">RESET PASSWORD</h3>
-                                                <p class="forgot-password-description" data-i18n-key="form.resetPassword.desc">Enter your email address and we'll send you instructions to reset your password.</p>
+                                                <h2 class="forgot-password-modal-title" id="forgotPasswordTitle" data-i18n-key="form.resetPassword">Reset password</h2>
+                                                <p class="forgot-password-description" id="forgotPasswordDesc" data-i18n-key="form.resetPassword.desc">Enter the email for your account.</p>
                                                 
                                                 <form class="forgot-password-form" id="forgotPasswordForm">
                                                     <div class="form-group">
                                                         <label for="forgotPasswordEmail" data-i18n-key="form.email">E-mail*</label>
-                                                        <input type="email" id="forgotPasswordEmail" name="forgotPasswordEmail" placeholder="" data-i18n-placeholder="form.email.create.placeholder" required>
+                                                        <input type="email" id="forgotPasswordEmail" name="forgotPasswordEmail" placeholder="" data-i18n-placeholder="form.email.create.placeholder" autocomplete="email" required>
                                                     </div>
                                                     
                                                     <div class="forgot-password-actions">
                                                         <button type="button" class="forgot-password-cancel-btn" data-action="close-forgot-password" data-i18n-key="button.cancel">Cancel</button>
-                                                        <button type="submit" class="login-btn" data-i18n-key="form.sendResetLink">SEND RESET LINK</button>
+                                                        <button type="submit" class="login-btn forgot-password-submit" data-i18n-key="form.sendResetLink">Send link</button>
                                                     </div>
                                                 </form>
                                                 
-                                                <div class="forgot-password-success" id="forgotPasswordSuccess" style="display: none;">
-                                                    <p class="forgot-password-success-message" data-i18n-key="form.resetPassword.success">Password reset instructions have been sent to your email.</p>
-                                                    <button type="button" class="login-btn" data-action="close-forgot-password" data-i18n-key="button.close">Close</button>
+                                                <div class="forgot-password-success" id="forgotPasswordSuccess" style="display: none;" role="status">
+                                                    <p class="forgot-password-success-message" data-i18n-key="form.resetPassword.success">Check your inbox and spam. We'll send a link if the account with {email} exists.</p>
+                                                    <button type="button" class="login-btn forgot-password-submit" data-action="close-forgot-password" data-i18n-key="button.close">Close</button>
                                                 </div>
                                             </div>
                                         </div>
