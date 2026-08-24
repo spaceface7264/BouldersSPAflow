@@ -5253,6 +5253,58 @@ body {
     }
 }
 
+.password-reset-page {
+    display: none;
+}
+
+body.password-reset-route .password-reset-page {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    min-height: 100dvh;
+    padding: max(72px, calc(env(safe-area-inset-top) + 64px)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+body.password-reset-route .main,
+body.password-reset-route .step-indicator,
+body.password-reset-route .gym-heads-up,
+body.password-reset-route .access-heads-up,
+body.password-reset-route .selected-gym-display,
+body.password-reset-route .firstclimb-banner,
+body.password-reset-route .faq-section,
+body.password-reset-route .global-footer {
+    display: none !important;
+}
+
+.password-reset-card {
+    width: 100%;
+}
+
+.password-reset-confirm-group {
+    margin-top: 16px;
+}
+
+.password-reset-status,
+.password-reset-error {
+    margin: 0 0 16px;
+    color: #f87171;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+.password-reset-page .forgot-password-submit {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    box-sizing: border-box;
+}
+
+@media (min-width: 480px) {
+    body.password-reset-route .password-reset-page {
+        align-items: center;
+    }
+}
+
 /* Terms Modal */
 .terms-modal {
     position: fixed;

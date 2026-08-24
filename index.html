@@ -246,6 +246,35 @@
         </div>
     </header>
 
+    <div id="passwordResetPage" class="password-reset-page">
+        <div class="forgot-password-modal-content password-reset-card">
+            <h1 class="forgot-password-modal-title" id="passwordResetTitle" data-i18n-key="page.resetPassword.title">Reset password</h1>
+            <p class="forgot-password-description" id="passwordResetDesc" data-i18n-key="page.resetPassword.desc">Choose a new password for your account.</p>
+
+            <p class="password-reset-status" id="passwordResetInvalid" hidden data-i18n-key="page.resetPassword.invalid">This reset link is invalid or has expired. Request a new one from login.</p>
+
+            <form class="forgot-password-form" id="passwordResetForm" hidden>
+                <div class="form-group">
+                    <label for="passwordResetNew" data-i18n-key="page.resetPassword.new">New password</label>
+                    <input type="password" id="passwordResetNew" name="passwordResetNew" autocomplete="new-password" required minlength="6">
+                </div>
+                <div class="form-group password-reset-confirm-group">
+                    <label for="passwordResetConfirm" data-i18n-key="page.resetPassword.confirm">Confirm new password</label>
+                    <input type="password" id="passwordResetConfirm" name="passwordResetConfirm" autocomplete="new-password" required minlength="6">
+                </div>
+                <p class="password-reset-error" id="passwordResetError" hidden></p>
+                <div class="forgot-password-actions">
+                    <button type="submit" class="login-btn forgot-password-submit" id="passwordResetSubmit" data-i18n-key="page.resetPassword.submit">Set new password</button>
+                </div>
+            </form>
+
+            <div class="forgot-password-success" id="passwordResetSuccess" hidden>
+                <p class="forgot-password-success-message" id="passwordResetDone" data-i18n-key="page.resetPassword.done">Your password has been updated. You can log in with the new password.</p>
+                <a href="/" class="login-btn forgot-password-submit" id="passwordResetBack" data-i18n-key="page.resetPassword.backToLogin">Back to Join Boulders</a>
+            </div>
+        </div>
+    </div>
+
     <!-- /99kr offer banner. Hidden unless body.firstclimb-flow is set so the
          markup is inert on other routes. -->
     <div class="firstclimb-banner" data-firstclimb-banner role="note" aria-live="polite">

@@ -59,6 +59,13 @@ const copyFunctionsPlugin = () => ({
       fs.copyFileSync(headersFile, distHeadersFile);
       console.log(`[Vite] Copied _headers to dist/`);
     }
+
+    const redirectsFile = path.resolve(__dirname, '_redirects');
+    if (fs.existsSync(redirectsFile)) {
+      const distRedirectsFile = path.resolve(__dirname, 'dist', '_redirects');
+      fs.copyFileSync(redirectsFile, distRedirectsFile);
+      console.log(`[Vite] Copied _redirects to dist/`);
+    }
   }
 });
 

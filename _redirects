@@ -1,3 +1,9 @@
+# SPA: serve the app for password-reset links from the BRP email.
+/reset-password    /index.html  200
+/reset-password/   /index.html  200
+/resetPassword     /index.html  200
+/resetPassword/    /index.html  200
+
 # Redirect /hero to /hero/ so hero landing page loads
 /hero    /hero/    302
 /firstmonthfree    /firstmonthfree/    302
