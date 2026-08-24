@@ -56,6 +56,9 @@ import {
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
 
+/** GoActive / BRP app id for Boulders. Required so reset emails link to boulders.goactivebooking.com/resetPassword. */
+const BOULDERS_GOACTIVE_APP_ID = 416;
+
 /**
  * Gets today's date in YYYY-MM-DD format using local time (not UTC).
  * This ensures we always send the user's local "today" date to the backend.
@@ -1991,17 +1994,14 @@ class AuthAPI {
 
   // Step 6: Password reset - Offer forgotten-password flow
   // Endpoint: POST /api/ver3/auth/resetpassword
-  // Base URL: https://boulders.brpsystems.com/apiserver (handled by proxy for ver3 endpoints)
-  // appId is optional - if not provided, BRP will use default setting for reset link
-  async resetPassword(email, appId = null) {
+  // appId 416 points the email link at Boulders' GoActive reset page.
+  async resetPassword(email) {
     try {
-      const url = this.useProxy
-        ? buildApiUrl({
-            baseUrl: this.baseUrl,
-            useProxy: this.useProxy,
-            path: '/api/ver3/auth/resetpassword',
-          })
-        : 'https://boulders.brpsystems.com/apiserver/api/ver3/auth/resetpassword';
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/ver3/auth/resetpassword',
+      });
       
       devLog('[Step 6] Requesting password reset:', url);
       
@@ -2010,16 +2010,7 @@ class AuthAPI {
         'Content-Type': 'application/json',
       };
       
-      // Build payload - appId is optional
-      // If appId is provided, convert to number; otherwise omit it
-      const payload = { email };
-      if (appId !== null && appId !== undefined) {
-        const numericAppId = typeof appId === 'string' ? parseInt(appId, 10) : appId;
-        if (!isNaN(numericAppId)) {
-          payload.appId = numericAppId;
-        }
-      }
-      
+      const payload = { email, appId: BOULDERS_GOACTIVE_APP_ID };
       devLog('[Step 6] Password reset payload:', payload);
 
       let data;
@@ -7126,8 +7117,8 @@ const translations = {
     'form.parentPhoneNumber': 'Mobilnummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Samme adresse og kontaktinformation',
     'form.error.firstName': 'Indtast venligst dit fornavn', 'form.error.lastName': 'Indtast venligst dit efternavn',
     'form.error.email': 'Indtast venligst en gyldig e-mailadresse',
-    'form.resetPassword': 'NULSTIL ADGANGSKODE', 'form.resetPassword.desc': 'Indtast din e-mailadresse, og vi sender dig instruktioner til at nulstille din adgangskode.',
-    'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
+    'form.resetPassword': 'Nulstil adgangskode', 'form.resetPassword.desc': 'Indtast e-mailen til din konto.',
+    'form.resetPassword.success': 'Tjek din indbakke og spam. Vi sender et link, hvis kontoen med {email} findes.', 'form.sendResetLink': 'Send link',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discountAmountWithPercent': 'Rabat ({percent})', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.discount.removed': 'Rabatkode fjernet.', 'cart.discount.removeFailed': 'Kunne ikke fjerne rabatkoden. Prøv igen.', 'cart.discount.empty': 'Indtast en rabatkode', 'cart.discount.loginRequired': 'Log ind eller opret en konto for at bruge en rabatkode', 'cart.discount.locationRequired': 'Vælg en hal først', 'cart.discount.selectProduct': 'Vælg et medlemskab eller klippekort først', 'cart.discount.notFound': 'Rabatkoden blev ikke fundet. Tjek koden og prøv igen.', 'cart.discount.invalid': 'Ugyldig rabatkode. Tjek koden og prøv igen.', 'cart.discount.expired': 'Denne rabatkode er udløbet.', 'cart.discount.alreadyUsed': 'Denne rabatkode er allerede brugt.', 'cart.discount.notApplicable': 'Rabatkoden gælder ikke for denne ordre.', 'cart.discount.forbidden': 'Rabatkoden kan ikke bruges på denne ordre.', 'cart.discount.genericFailed': 'Kunne ikke anvende rabatkoden. Prøv igen.', 'cart.discount.noOrder': 'Ingen ordre fundet. Genindlæs siden og prøv igen.', 'cart.discount.methodNotSupported': 'Rabatkode kunne ikke anvendes. Kontakt support.', 'cart.discount.applying': 'Anvender…', 'cart.discount.creatingOrder': 'Opretter ordre…', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
@@ -7404,8 +7395,8 @@ const translations = {
     'form.parentPhoneNumber': 'Mobile number*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Same address and contact information',
     'form.error.firstName': 'Please enter your first name', 'form.error.lastName': 'Please enter your last name',
     'form.error.email': 'Please enter a valid email address',
-    'form.resetPassword': 'RESET PASSWORD', 'form.resetPassword.desc': 'Enter your email address and we\'ll send you instructions to reset your password.',
-    'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
+    'form.resetPassword': 'Reset password', 'form.resetPassword.desc': 'Enter the email for your account.',
+    'form.resetPassword.success': 'Check your inbox and spam. We\'ll send a link if the account with {email} exists.', 'form.sendResetLink': 'Send link',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discountAmountWithPercent': 'Discount ({percent})', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.discount.empty': 'Enter a discount code', 'cart.discount.loginRequired': 'Log in or create an account to use a discount code', 'cart.discount.locationRequired': 'Select a gym first', 'cart.discount.selectProduct': 'Select a membership or punch card first', 'cart.discount.notFound': 'Discount code not found. Check the code and try again.', 'cart.discount.invalid': 'Invalid discount code. Check the code and try again.', 'cart.discount.expired': 'This discount code has expired.', 'cart.discount.alreadyUsed': 'This discount code has already been used.', 'cart.discount.notApplicable': 'This discount code does not apply to your order.', 'cart.discount.forbidden': 'This discount code cannot be used on this order.', 'cart.discount.genericFailed': 'Could not apply the discount code. Please try again.', 'cart.discount.noOrder': 'No order found. Refresh the page and try again.', 'cart.discount.methodNotSupported': 'Discount code could not be applied. Please contact support.', 'cart.discount.applying': 'Applying…', 'cart.discount.creatingOrder': 'Creating order…', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
@@ -7664,8 +7655,8 @@ const translations = {
     'form.parentPhoneNumber': 'Handynummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Gleiche Adresse und Kontaktinformationen',
     'form.error.firstName': 'Bitte geben Sie Ihren Vornamen ein', 'form.error.lastName': 'Bitte geben Sie Ihren Nachnamen ein',
     'form.error.email': 'Bitte geben Sie eine gültige E-Mail-Adresse ein',
-    'form.resetPassword': 'PASSWORT ZURÜCKSETZEN', 'form.resetPassword.desc': 'Geben Sie Ihre E-Mail-Adresse ein und wir senden Ihnen Anweisungen zum Zurücksetzen Ihres Passworts.',
-    'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
+    'form.resetPassword': 'Passwort zurücksetzen', 'form.resetPassword.desc': 'Geben Sie die E-Mail Ihres Kontos ein.',
+    'form.resetPassword.success': 'Prüfen Sie Posteingang und Spam. Wir senden einen Link, wenn das Konto mit {email} existiert.', 'form.sendResetLink': 'Link senden',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
     'firstclimb.category.title': 'Dein erster Kletterbesuch',
@@ -8120,19 +8111,15 @@ function updateFormTranslations() {
   }
   
   // Forgot password modal
-  const resetPasswordTitle = document.querySelector('#forgotPasswordModal .info-section-title[data-i18n-key="form.resetPassword"]');
+  const resetPasswordTitle = document.querySelector('#forgotPasswordTitle');
   if (resetPasswordTitle) {
     resetPasswordTitle.textContent = t('form.resetPassword');
   }
   
   const resetPasswordDesc = document.querySelector('.forgot-password-description[data-i18n-key]');
-  if (resetPasswordDesc) {
-    resetPasswordDesc.textContent = t('form.resetPassword.desc');
-  }
-  
   const resetPasswordSuccess = document.querySelector('.forgot-password-success-message[data-i18n-key]');
-  if (resetPasswordSuccess) {
-    resetPasswordSuccess.textContent = t('form.resetPassword.success');
+  if (resetPasswordDesc || resetPasswordSuccess) {
+    renderForgotPasswordCopy();
   }
   
   const sendResetLinkBtn = document.querySelector('.login-btn[data-i18n-key="form.sendResetLink"]');
@@ -9634,6 +9621,29 @@ async function handleLoginSubmit(event) {
   }
 }
 
+function forgotPasswordCopyHtml(key, email) {
+  let template = t(key);
+  if (!email) {
+    return template
+      .replace(' med {email}', '')
+      .replace(' with {email}', '')
+      .replace(' mit {email}', '');
+  }
+  const escaped = String(email)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return template.replaceAll('{email}', `<strong>${escaped}</strong>`);
+}
+
+function renderForgotPasswordCopy() {
+  const email = DOM.forgotPasswordEmail?.value.trim() || '';
+  const desc = document.querySelector('.forgot-password-description');
+  const success = document.querySelector('.forgot-password-success-message');
+  if (desc) desc.textContent = t('form.resetPassword.desc');
+  if (success) success.innerHTML = sanitizeHTML(forgotPasswordCopyHtml('form.resetPassword.success', email));
+}
+
 function openForgotPasswordModal() {
   if (!DOM.forgotPasswordModal) return;
   
@@ -9645,6 +9655,14 @@ function openForgotPasswordModal() {
   DOM.forgotPasswordModal.style.display = 'flex';
   DOM.forgotPasswordForm.style.display = 'block';
   DOM.forgotPasswordSuccess.style.display = 'none';
+  const resetDesc = document.querySelector('.forgot-password-description');
+  if (resetDesc) resetDesc.style.display = '';
+  const submitButton = DOM.forgotPasswordForm?.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = t('form.sendResetLink') || 'Send link';
+  }
+  renderForgotPasswordCopy();
   document.body.classList.add('modal-open');
   
   // Focus on email input
@@ -9658,6 +9676,7 @@ function closeForgotPasswordModal() {
   
   DOM.forgotPasswordModal.style.display = 'none';
   document.body.classList.remove('modal-open');
+  DOM.forgotPasswordLink?.focus();
   
   // Reset form
   if (DOM.forgotPasswordForm) {
@@ -10861,11 +10880,11 @@ async function handleForgotPasswordSubmit(event) {
     console.log('[Forgot Password] Requesting password reset for:', email);
     await authAPI.resetPassword(email);
     
-    // Show success message
     DOM.forgotPasswordForm.style.display = 'none';
     DOM.forgotPasswordSuccess.style.display = 'block';
-    
-    showToast('Password reset instructions have been sent to your email.', 'success');
+    const resetDesc = document.querySelector('.forgot-password-description');
+    if (resetDesc) resetDesc.style.display = 'none';
+    renderForgotPasswordCopy();
     
     console.log('[Forgot Password] Password reset request successful');
   } catch (error) {

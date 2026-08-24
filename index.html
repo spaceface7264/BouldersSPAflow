@@ -540,26 +540,26 @@
                                         </form>
                                         
                                         <!-- Forgot Password Modal -->
-                                        <div class="forgot-password-modal" id="forgotPasswordModal" style="display: none;">
+                                        <div class="forgot-password-modal" id="forgotPasswordModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle" aria-describedby="forgotPasswordDesc">
                                             <div class="forgot-password-modal-content">
-                                                <h3 class="info-section-title" data-i18n-key="form.resetPassword">RESET PASSWORD</h3>
-                                                <p class="forgot-password-description" data-i18n-key="form.resetPassword.desc">Enter your email address and we'll send you instructions to reset your password.</p>
+                                                <h2 class="forgot-password-modal-title" id="forgotPasswordTitle" data-i18n-key="form.resetPassword">Reset password</h2>
+                                                <p class="forgot-password-description" id="forgotPasswordDesc" data-i18n-key="form.resetPassword.desc">Enter the email for your account.</p>
                                                 
                                                 <form class="forgot-password-form" id="forgotPasswordForm">
                                                     <div class="form-group">
                                                         <label for="forgotPasswordEmail" data-i18n-key="form.email">E-mail*</label>
-                                                        <input type="email" id="forgotPasswordEmail" name="forgotPasswordEmail" placeholder="" data-i18n-placeholder="form.email.create.placeholder" required>
+                                                        <input type="email" id="forgotPasswordEmail" name="forgotPasswordEmail" placeholder="" data-i18n-placeholder="form.email.create.placeholder" autocomplete="email" required>
                                                     </div>
                                                     
                                                     <div class="forgot-password-actions">
                                                         <button type="button" class="forgot-password-cancel-btn" data-action="close-forgot-password" data-i18n-key="button.cancel">Cancel</button>
-                                                        <button type="submit" class="login-btn" data-i18n-key="form.sendResetLink">SEND RESET LINK</button>
+                                                        <button type="submit" class="login-btn forgot-password-submit" data-i18n-key="form.sendResetLink">Send link</button>
                                                     </div>
                                                 </form>
                                                 
-                                                <div class="forgot-password-success" id="forgotPasswordSuccess" style="display: none;">
-                                                    <p class="forgot-password-success-message" data-i18n-key="form.resetPassword.success">Password reset instructions have been sent to your email.</p>
-                                                    <button type="button" class="login-btn" data-action="close-forgot-password" data-i18n-key="button.close">Close</button>
+                                                <div class="forgot-password-success" id="forgotPasswordSuccess" style="display: none;" role="status">
+                                                    <p class="forgot-password-success-message" data-i18n-key="form.resetPassword.success">Check your inbox and spam. We'll send a link if the account with {email} exists.</p>
+                                                    <button type="button" class="login-btn forgot-password-submit" data-action="close-forgot-password" data-i18n-key="button.close">Close</button>
                                                 </div>
                                             </div>
                                         </div>
