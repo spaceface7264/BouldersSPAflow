@@ -45,6 +45,8 @@ There is no router library. Landing variants live in `LANDING_ROUTE_CONFIG` at t
 
 `resolveLandingRouteConfig()` reads `window.location.pathname` once on load. The `labelKey` is a BRP product label — the route filters BRP's product catalog to whatever carries that label, so marketing can launch a new campaign by attaching a label to a product in BRP without a code change. `mode: 'single'` auto-selects the one matching product; `mode: 'multi'` shows a chooser. `NON_INDEXABLE_PATHS` lists routes that get `<meta name="robots" content="noindex">` injected so paid landing pages don't compete with the canonical home page in search.
 
+`/reset-password` (and `/resetPassword`) is not a landing route. `init()` detects it, adds `body.password-reset-route`, and returns before gym/catalog bootstrap so the mail link is not the signup stepper. BRP still mints the reset JWT for GoActive `appId` 416; the email HTML rewrites the host to `join.boulders.dk`. Completing the form `PUT`s `{ password }` to `/api/ver3/customers/{id}` with that JWT. Pages will 308 a 200 rewrite of `/reset-password` → `/index.html` onto `/`, which drops the route — `_redirects` therefore 308s the no-slash URL to `/reset-password/` and only then rewrites to `index.html`.
+
 ### Product taxonomy via BRP labels
 
 BRP doesn't model "this is a membership" vs. "this is a punch card" — everything is a product with attached **labels**. We layer our own visibility/categorization rules on top of those labels (see `app.js` around lines 3159–3475):
@@ -123,7 +125,7 @@ The full OpenAPI 3.0 spec for BRP API3 is checked in at `docs/brp-api3-openapi.y
 ## Build & deploy
 
 - Vite is the bundler. `tsc` runs first (build script: `tsc && vite build`) so the React tree's type errors fail the build even though `app.js` is unchecked.
-- `copyFunctionsPlugin` in `vite.config.ts` copies `functions/`, `postal-codes-dk.js`, and `_headers` into `dist/` at `closeBundle` so a `wrangler pages deploy ./dist` ships everything Pages expects.
+- `copyFunctionsPlugin` in `vite.config.ts` copies `functions/`, `postal-codes-dk.js`, `_headers`, and `_redirects` into `dist/` at `closeBundle` so a `wrangler pages deploy ./dist` ships everything Pages expects.
 - `resolveBasePath()` lets the same build be hosted under `/` or a subpath via `VITE_BASE_PATH` / `GITHUB_REPOSITORY`. Production is always `/`.
 - Two deploy targets exist: Cloudflare Pages (the default, `npm run deploy`) and Cloudflare Workers (`npm run deploy:cloudflare`). Workers exists because Pages Functions has had outages where the Workers target was the fallback.
 

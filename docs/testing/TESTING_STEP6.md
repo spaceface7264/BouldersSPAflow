@@ -82,17 +82,10 @@
 - [ ] If refresh succeeds, new tokens should be saved
 - [ ] If refresh fails, tokens should be cleared
 
-### 6. Password Reset (POST /api/auth/reset-password)
-- [ ] Test password reset:
-  ```javascript
-  authAPI.resetPassword('test@example.com')
-    .then(response => console.log('Password reset success:', response))
-    .catch(error => console.error('Password reset error:', error));
-  ```
-- [ ] Check console - should see:
-  - `[Step 6] Requesting password reset: ...`
-  - `[Step 6] Password reset response: ...`
-- [ ] Should show confirmation message to user (if UI implemented)
+### 6. Password Reset
+- [ ] Forgot-password modal: `POST /api/ver3/auth/resetpassword` with `{ email, appId: 416 }` (416 is required; other appIds 403). Dummy email still returns 201.
+- [ ] Mail button goes to `https://join.boulders.dk/reset-password/?token=…` (path kept). If the URL becomes `/?token=…`, `_redirects` is rewriting `/reset-password` onto `/`.
+- [ ] Complete form: `PUT /api/ver3/customers/{id}` with `{ password }` and `Authorization: Bearer <token>`. Then log in on join with the new password.
 
 ### 7. Customer Creation (POST /api/customers)
 - [ ] Ensure a business unit is selected:
