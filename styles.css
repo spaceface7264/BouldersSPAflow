@@ -11127,3 +11127,134 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
     --background: #ffffff;
     --box-shadow: 0 4px 24px rgba(31, 40, 55, 0.16);
 }
+
+/* Step 4 compact layout: wrap instead of clip on ~320–480px phones */
+@media (max-width: 480px) {
+    #step-4 .info-form-section,
+    #step-4 .order-summary-section,
+    #step-4 .order-summary {
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: visible;
+    }
+
+    #step-4 .form-container {
+        padding: 16px;
+        box-sizing: border-box;
+    }
+
+    #step-4 .order-summary {
+        padding: 16px;
+        padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+        box-sizing: border-box;
+    }
+
+    #step-4 .auth-mode-switch-btn {
+        position: static;
+        min-height: 44px;
+        margin: 0 0 12px auto;
+        display: flex;
+    }
+
+    #step-4 .auth-mode-switch-text {
+        white-space: normal;
+    }
+
+    #step-4 .form-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    #step-4 .phone-country,
+    #step-4 .country-selector,
+    #step-4 .country-selector select,
+    #step-4 .country-selector select#countryCode {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    #step-4 .form-group {
+        margin-bottom: 16px;
+    }
+
+    #step-4 .form-group-consent {
+        margin-bottom: 12px;
+    }
+
+    #step-4 .payment-overview-paynow-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: auto auto;
+        align-items: end;
+        column-gap: 10px;
+        row-gap: 2px;
+    }
+
+    #step-4 .payment-overview-paynow-row .payment-label {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+    }
+
+    #step-4 .payment-overview-paynow-row .payment-label-period {
+        grid-column: 1;
+        grid-row: 2;
+        margin-left: 0;
+        min-width: 0;
+    }
+
+    #step-4 .payment-overview-paynow-row .payment-amount,
+    #step-4 .payment-overview-paynow-row .payment-paynow-amount-stack {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        align-self: end;
+        justify-self: end;
+        margin-left: 0;
+        min-width: 0;
+    }
+
+    #step-4 .item-name {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    #step-4 .profile-info-row {
+        align-items: flex-start;
+    }
+
+    #step-4 .profile-info-label {
+        min-width: 0;
+    }
+
+    #step-4 .profile-info-value {
+        overflow-wrap: anywhere;
+    }
+
+    #step-4 .consent-checkbox {
+        align-items: flex-start;
+    }
+
+    #step-4 .consent-text {
+        overflow-wrap: anywhere;
+    }
+
+    #step-4 .consent-checkbox .checkmark {
+        position: relative;
+        margin-top: 2px;
+    }
+
+    #step-4 .consent-checkbox .checkmark::before {
+        content: '';
+        position: absolute;
+        inset: -14px;
+    }
+
+    #step-4 .discount-form-entry {
+        flex-wrap: wrap;
+    }
+
+    #step-4 .apply-discount-btn {
+        flex-shrink: 0;
+    }
+}
