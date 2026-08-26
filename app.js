@@ -12388,6 +12388,13 @@ function handleGymSelection(item) {
   if (previousBusinessUnit !== numericId) {
     state.referenceData = {};
     state.referenceDataLoaded = false;
+    if (previousBusinessUnit) {
+      resetOrderStateForProductChange('gym-change');
+      state.membershipPlanId = null;
+      state.selectedProductId = null;
+      state.selectedProductType = null;
+      updateCheckoutButton();
+    }
   }
   
   state.selectedGymId = numericId; // Store numeric ID for API requests
@@ -22756,7 +22763,7 @@ function renderConfirmationView() {
   const isFreeTrialFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
 
   if (freetrialActivationChangeCta && freetrialActivationChangeLink) {
-    const supportEmail = 'medlem@boulders.dm';
+    const supportEmail = 'medlem@boulders.dk';
     const supportSubject = encodeURIComponent('Change of activation date - Free Trial');
     const supportBody = encodeURIComponent([
       'Hi Boulders team,',
