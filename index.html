@@ -27,6 +27,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- The page background. Referenced only from styles.css, it was not
+         discovered until the stylesheet had been parsed, so the request did
+         not start until ~120-240ms in. Preconnecting the host and preloading
+         the image starts it with the document instead. -->
+    <link rel="preconnect" href="https://storage.googleapis.com">
+    <link rel="preload" as="image" href="https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png" fetchpriority="high">
+
     <link rel="stylesheet" href="./styles.css">
 
     <!-- Cookiebot - Must load first to set consent before GTM/tracking -->

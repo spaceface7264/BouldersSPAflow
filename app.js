@@ -7120,13 +7120,60 @@ function init() {
   hideLoadingOverlay();
 }
 
+// The page background, kept in sync with body::before in styles.css.
+const BACKGROUND_IMAGE_URL = 'https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png';
+
+// How long the loading overlay may linger waiting for the background. Past
+// this the page is revealed regardless and the gradient fades up on its own -
+// a slow or dead CDN must never hold the signup flow hostage.
+const BACKGROUND_REVEAL_MAX_WAIT_MS = 600;
+
+// Resolves once the background image has decoded (or failed). Adding
+// .bg-ready fades body::before up; without it the gradient would hard-cut
+// into place, because background-image cannot be transitioned.
+let backgroundReadyPromise = null;
+function whenBackgroundReady() {
+  if (backgroundReadyPromise) return backgroundReadyPromise;
+
+  backgroundReadyPromise = new Promise((resolve) => {
+    const markReady = () => {
+      document.body.classList.add('bg-ready');
+      resolve();
+    };
+    const img = new Image();
+    // Resolve on error too: a missing background should degrade to the flat
+    // charcoal base, not block the reveal.
+    img.onload = markReady;
+    img.onerror = markReady;
+    img.src = BACKGROUND_IMAGE_URL;
+    // Already in the cache (the <link rel="preload"> in index.html usually
+    // wins this race), in which case no event fires.
+    if (img.complete) markReady();
+  });
+
+  return backgroundReadyPromise;
+}
+
+// Kick the load off as the module evaluates so it overlaps with init().
+whenBackgroundReady();
+
 // Hide loading overlay and show main content
 function hideLoadingOverlay() {
   const loadingOverlay = document.getElementById('loadingOverlay');
   const mainContent = document.getElementById('mainContent');
   const headerContent = document.getElementById('headerContent');
   
-  if (loadingOverlay) {
+  if (!loadingOverlay) return;
+
+  // Hold the overlay until the background is actually there, so the fade-out
+  // is a crossfade onto the finished gradient rather than a reveal of flat
+  // #1a1a1a that the gradient then snaps into. Capped - see the constant.
+  const backgroundSettled = Promise.race([
+    whenBackgroundReady(),
+    new Promise((resolve) => setTimeout(resolve, BACKGROUND_REVEAL_MAX_WAIT_MS))
+  ]);
+
+  backgroundSettled.then(() => {
     // Show header and main content
     if (headerContent) {
       headerContent.style.display = '';
@@ -7139,17 +7186,31 @@ function hideLoadingOverlay() {
         initFAQ();
       }, 100);
     }
-    
+
     // Hide loading overlay with fade out
     loadingOverlay.classList.add('hidden');
-    
-    // Remove from DOM after animation completes
-    setTimeout(() => {
+
+    // Remove once the fade has actually finished. The previous fixed 300ms
+    // timer raced the transition and fired regardless of whether it ran (it
+    // does not, for instance, in a backgrounded tab).
+    let removed = false;
+    const removeOverlay = () => {
+      if (removed) return;
+      removed = true;
+      clearTimeout(fallbackTimer);
+      loadingOverlay.removeEventListener('transitionend', onTransitionEnd);
       if (loadingOverlay.parentNode) {
         loadingOverlay.remove();
       }
-    }, 300);
-  }
+    };
+    const onTransitionEnd = (event) => {
+      if (event.target === loadingOverlay && event.propertyName === 'opacity') {
+        removeOverlay();
+      }
+    };
+    loadingOverlay.addEventListener('transitionend', onTransitionEnd);
+    const fallbackTimer = setTimeout(removeOverlay, 600);
+  });
 }
 
 
