@@ -7120,6 +7120,29 @@ function init() {
   hideLoadingOverlay();
 }
 
+// Publish the fixed header's real height as --header-height, which
+// styles.css uses for html { scroll-padding-top }. Measured rather than
+// hardcoded: the header is 45px / 51px / 57px across the breakpoints and
+// changes with font loading, so a literal in CSS would drift.
+let headerHeightObserver = null;
+function syncHeaderHeight() {
+  const header = document.querySelector('.header');
+  if (!header) return;
+
+  const height = Math.round(header.getBoundingClientRect().height);
+  // The header starts as display:none and measures 0 until it is revealed;
+  // writing that would put the scroll padding at zero, which is the bug this
+  // exists to fix.
+  if (height > 0) {
+    document.documentElement.style.setProperty('--header-height', `${height}px`);
+  }
+
+  if (!headerHeightObserver && typeof ResizeObserver !== 'undefined') {
+    headerHeightObserver = new ResizeObserver(() => syncHeaderHeight());
+    headerHeightObserver.observe(header);
+  }
+}
+
 // The page background, kept in sync with body::before in styles.css.
 const BACKGROUND_IMAGE_URL = 'https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png';
 
@@ -7177,6 +7200,8 @@ function hideLoadingOverlay() {
     // Show header and main content
     if (headerContent) {
       headerContent.style.display = '';
+      // Now that it has a box, measure it for --header-height.
+      syncHeaderHeight();
     }
     if (mainContent && !document.body.classList.contains('password-reset-route')) {
       mainContent.style.display = '';

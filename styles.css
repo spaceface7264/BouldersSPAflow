@@ -680,6 +680,10 @@
   }
   
   :root {
+      /* Height of the fixed .header, rewritten at runtime by
+         syncHeaderHeight() in app.js. The fallback is the desktop header, so
+         a render before that first measurement is still sane. */
+      --header-height: 57px;
       --color-text-primary: #1F2837;
       --color-text-white: #FFFFFF;
       --color-brand-accent: #F0F;
@@ -727,6 +731,16 @@ html {
     height: 100%;
     width: 100%;
     max-width: 100vw;
+}
+
+/* The header is position: fixed, so it sits over the top of the scrollport.
+   Without this, scrollIntoView({ block: 'start' }) - and the browser's own
+   focus-scrolling - aligns the target to the top of the viewport, i.e. behind
+   the header. scroll-padding-top on the scroll container shrinks the "optimal
+   viewing region" so every scroll of this kind lands flush underneath it,
+   including anchor jumps and any future call sites. */
+html {
+    scroll-padding-top: calc(var(--header-height) + 12px);
 }
 
 /* Prevent overflow from negative margins */
