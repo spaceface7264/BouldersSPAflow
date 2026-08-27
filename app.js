@@ -4682,10 +4682,12 @@ function renderProductsFromAPI() {
           <i data-lucide="chevron-down" class="category-icon"></i>
         </div>
         <div class="category-content">
-          <div class="category-description">
-            <p>Prøv Boulders gratis i 15 dage. Fuld adgang + lejesko inkluderet.</p>
+          <div class="category-content-inner">
+            <div class="category-description">
+              <p>Prøv Boulders gratis i 15 dage. Fuld adgang + lejesko inkluderet.</p>
+            </div>
+            <div class="plans-list"></div>
           </div>
-          <div class="plans-list"></div>
         </div>
       `);
       categoryList.prepend(categoryItem);
@@ -4711,10 +4713,12 @@ function renderProductsFromAPI() {
           <i data-lucide="chevron-down" class="category-icon"></i>
         </div>
         <div class="category-content">
-          <div class="category-description">
-            <p data-i18n-key="firstclimb.category.description">${description}</p>
+          <div class="category-content-inner">
+            <div class="category-description">
+              <p data-i18n-key="firstclimb.category.description">${description}</p>
+            </div>
+            <div class="plans-list"></div>
           </div>
-          <div class="plans-list"></div>
         </div>
       `);
       categoryList.prepend(categoryItem);
@@ -5155,40 +5159,50 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
       }
     }
     
-    // Animate reordering using FLIP technique
+    // Animate reordering using FLIP technique.
+    // Reads and writes are kept in separate passes. Interleaving them (measure
+    // one item, style it, read its offsetHeight, measure the next...) forced a
+    // synchronous layout per moved item, so a reorder of the full gym list cost
+    // one layout pass per gym. Now: measure everything, then style everything,
+    // then flush once.
     if (existingItems.length > 0) {
       requestAnimationFrame(() => {
+        // Pass 1 - read. No style writes in this loop.
+        const moves = [];
         newItems.forEach(({ item, index }) => {
           const gymId = item.getAttribute('data-gym-id');
           const existingData = existingPositions.get(gymId);
-          
-          if (existingData && existingData.oldIndex !== index) {
-            // Calculate new position
-            const newRect = item.getBoundingClientRect();
-            const oldRect = existingData.rect;
-            
-            // Calculate transform
-            const deltaX = oldRect.left - newRect.left;
-            const deltaY = oldRect.top - newRect.top;
-            
-            // Apply initial transform
-            item.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-            item.style.transition = 'none';
-            
-            // Trigger reflow
-            item.offsetHeight;
-            
-            // Animate to final position with staggered delay
-            requestAnimationFrame(() => {
-              item.style.transform = '';
-              item.style.transition = `transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)`;
-              // Add slight delay based on distance moved
-              const delay = Math.min(Math.abs(index - existingData.oldIndex) * 0.03, 0.2);
-              if (delay > 0) {
-                item.style.transitionDelay = `${delay}s`;
-              }
-            });
-          }
+          if (!existingData || existingData.oldIndex === index) return;
+
+          const newRect = item.getBoundingClientRect();
+          const oldRect = existingData.rect;
+          moves.push({
+            item,
+            deltaX: oldRect.left - newRect.left,
+            deltaY: oldRect.top - newRect.top,
+            // Slight delay based on how far the item moved in the list
+            delay: Math.min(Math.abs(index - existingData.oldIndex) * 0.03, 0.2)
+          });
+        });
+
+        if (moves.length === 0) return;
+
+        // Pass 2 - write. Park every item at its old position.
+        moves.forEach(({ item, deltaX, deltaY }) => {
+          item.style.transition = 'none';
+          item.style.transitionDelay = '';
+          item.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+        });
+
+        // Single forced reflow for the whole batch, so the parked transforms
+        // are committed before the transition is re-enabled below.
+        void document.body.offsetHeight;
+
+        // Pass 3 - write. Release them to their new positions.
+        moves.forEach(({ item, delay }) => {
+          item.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+          item.style.transitionDelay = delay > 0 ? `${delay}s` : '';
+          item.style.transform = '';
         });
       });
     }

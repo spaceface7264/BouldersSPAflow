@@ -2678,30 +2678,45 @@ body {
     color: #f0f;
 }
 
+/* Expand/collapse animates grid-template-rows (0fr -> 1fr) rather than
+   max-height. max-height had to be given an arbitrary ceiling
+   (calc(100vh - 200px)); since real content is usually well short of that,
+   the easing curve was spent on distance the element never travelled - the
+   panel reached its full height in roughly the first third of the duration
+   and then sat still for the rest, which read as "snap, then wait". The fr
+   interpolation runs against the content's actual height, so the curve lands
+   where it looks like it should. It also removes a per-frame layout pass
+   against a viewport-relative value. */
 .category-content {
-    max-height: 0;
+    display: grid;
+    grid-template-rows: 0fr;
     overflow: hidden;
     opacity: 0;
     transform: translateY(-10px);
-    transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+    transition: grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1) 0.04s,
                 transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) 0.04s;
     padding-bottom: 0;
 }
 
-.category-item.expanded .category-content {
-    max-height: calc(100vh - 200px); /* Use max-height instead of min-height for smooth animation */
-    opacity: 1;
-    transform: translateY(0);
-    overflow: visible; /* Don't scroll category-content itself */
+/* The single grid row. min-height: 0 lets the row actually collapse to 0fr,
+   and the flex column carries the layout .category-content used to own. */
+.category-content-inner {
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+.category-item.expanded .category-content {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
     padding-bottom: 0; /* Remove bottom padding to prevent purple area */
     outline: none; /* Remove default focus outline */
 }
 
-.category-item.expanded.selected .category-content {
-    max-height: none; /* Remove max-height constraint for selected items to show all content */
+.category-item.expanded.selected .category-content-inner {
     flex: 1; /* Allow content to grow to fill available space */
 }
 
