@@ -5615,6 +5615,11 @@ function setupGymEventListeners() {
 }
 
 
+// How long a selection stays on screen before the flow auto-advances to the
+// next step. Long enough to register the .selected state (which paints
+// immediately on click), short enough that it does not read as lag.
+const AUTO_ADVANCE_DELAY_MS = 180;
+
 // Track pending navigation timeouts to prevent double-clicks and stale state
 const pendingNavigationTimeouts = {
   gym: null,
@@ -12488,7 +12493,7 @@ function handleGymSelection(item) {
       // Navigate to step 2 (next step after gym selection)
       nextStep(1);
     }
-  }, 500);
+  }, AUTO_ADVANCE_DELAY_MS);
 }
 
 // Update gym heads-up display
@@ -12572,24 +12577,14 @@ function syncPunchCardQuantityUI(card, planId) {
 
 // Scroll to top function with multiple approaches
 function scrollToTop() {
-  // Method 1: Direct scroll to top
+  // One instant write. The previous version also queued a *smooth* scrollTo(0)
+  // in a rAF and a second hard reset on a 50ms timer: the smooth scroll was a
+  // no-op against a page already at 0, and the extra writes landed in the
+  // middle of the step panel's fade-in, which showed up as jank.
+  // 'instant' keeps this immune to `scroll-behavior: smooth` on the root.
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
-  
-  // Method 2: Smooth scroll with requestAnimationFrame
-  requestAnimationFrame(() => {
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: 'smooth'
-    });
-  });
-  
-  // Method 3: Force scroll after a brief delay
-  setTimeout(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, 50);
 }
 
 
@@ -13761,7 +13756,7 @@ function setupNewAccessStep() {
               if (state.currentStep === 2) {
                 nextStep();
               }
-            }, 500);
+            }, AUTO_ADVANCE_DELAY_MS);
           }
         }
     });
@@ -14689,7 +14684,7 @@ function selectMembershipPlan(planId) {
   updateCartSummary();
   updateCheckoutButton();
   if (state.currentStep === 2) {
-    setTimeout(() => nextStep(), 300);
+    setTimeout(() => nextStep(), AUTO_ADVANCE_DELAY_MS);
   }
   showToast(`${selectedPlan?.name ?? 'Membership'} selected.`, 'success');
   // Do not pre-create order on plan selection; wait for explicit checkout.
