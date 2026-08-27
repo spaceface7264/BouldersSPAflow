@@ -33,6 +33,7 @@
 - [x] **Logout** - Can log out successfully
 - [ ] **User context cleared** - After logout, Sentry user context should be cleared
 - [x] **Account creation** - Can create new account
+- [ ] **Password reset** - Mail button lands on `/reset-password/?token=…` (URL keeps the path, not `/?token=`). Form sets a new password; login on join works with it.
 
 ### 4. Error Handling ✅
 - [x] **Network errors** - App handles API failures gracefully (no Sentry spam)

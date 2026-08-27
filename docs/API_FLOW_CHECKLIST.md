@@ -98,7 +98,7 @@
 - [ ] Tokens valideres ved app reload (`POST /api/auth/validate`)
 - [ ] Udløbet access token refreshes automatisk hvis refresh token findes
 - [ ] Session clears hvis refresh fejler
-- [ ] Password reset flow virker (`POST /api/auth/reset-password`)
+- [ ] Password reset: request `POST /api/ver3/auth/resetpassword` (appId 416); complete on `/reset-password` via `PUT /api/ver3/customers/{id}` with the mail JWT
 - [ ] HTTP helper inkluderer automatisk tokens i requests
 - [ ] Token expiration håndteres gracefully
 

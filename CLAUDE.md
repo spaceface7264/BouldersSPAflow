@@ -38,6 +38,8 @@ What actually runs in production:
 
 Landing routes live inside `app.js` in `LANDING_ROUTE_CONFIG`: `/freetrial`, `/membership-offer`, `/99kr` (firstclimb day-ticket). They are SPA routes handled by `app.js` — there is no router library.
 
+Password reset is a separate early-return route, not a landing variant: `/reset-password` and `/resetPassword`. `init()` shows `#passwordResetPage` and skips the signup chrome. Forgot-password **request** is `POST /api/ver3/auth/resetpassword` with GoActive `appId` 416 (required so BRP mints a usable JWT). **Complete** is `PUT /api/ver3/customers/{id}` with `Authorization: Bearer <token>` from `?token=`. The BRP email template rewrites `$url` from `boulders.goactivebooking.com` to `join.boulders.dk`; rollback is restoring `href="$!url"`. `_redirects` must 308 the no-slash path to the trailing-slash path, then 200-rewrite `/reset-password/` to `index.html`. A 200 rewrite of `/reset-password` → `/index.html` is canonicalized to `/` and the form never shows.
+
 ### 2. The TypeScript/React scaffold (in progress, not yet the shipped flow)
 
 A parallel React app is being built but is not what users see in production yet:
@@ -64,7 +66,7 @@ In production (Cloudflare Pages), `functions/api-proxy/index.ts` is the CORS-val
   - everything else → `https://api-join.boulders.dk/*`
 - 1 MB body cap. `Authorization` and `Accept-Language` are forwarded.
 
-`functions/api/referrals/` holds additional Pages Functions. `vite.config.ts` has a `copyFunctionsPlugin` that copies `functions/` (and `postal-codes-dk.js`, `_headers`) into `dist/` at build close — Pages then deploys them.
+`functions/api/referrals/` holds additional Pages Functions. `vite.config.ts` has a `copyFunctionsPlugin` that copies `functions/` (and `postal-codes-dk.js`, `_headers`, `_redirects`) into `dist/` at build close — Pages then deploys them.
 
 ### Build details worth knowing
 

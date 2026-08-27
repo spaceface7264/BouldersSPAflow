@@ -57,6 +57,9 @@ import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
 import confetti from 'canvas-confetti';
 
+/** GoActive / BRP app id for Boulders. Required so reset emails link to boulders.goactivebooking.com/resetPassword. */
+const BOULDERS_GOACTIVE_APP_ID = 416;
+
 /**
  * Gets today's date in YYYY-MM-DD format using local time (not UTC).
  * This ensures we always send the user's local "today" date to the backend.
@@ -534,6 +537,8 @@ const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
   '/membership-offer',
   '/99kr',
+  '/reset-password',
+  '/resetpassword',
 ]));
 
 function normalizePathname(pathname) {
@@ -541,6 +546,29 @@ function normalizePathname(pathname) {
   if (!raw || raw === '/') return '/';
   const withoutTrailingSlash = raw.replace(/\/+$/, '');
   return withoutTrailingSlash || '/';
+}
+
+function isPasswordResetRoute(pathname = window.location.pathname) {
+  const path = normalizePathname(pathname);
+  return path === '/reset-password' || path === '/resetpassword';
+}
+
+function parsePasswordResetToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const padded = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4));
+    const payload = JSON.parse(atob(padded + pad));
+    const customerId = Number(payload.sub);
+    if (!Number.isFinite(customerId) || customerId <= 0) return null;
+    if (payload.resetPassword !== true) return null;
+    if (payload.exp && payload.exp * 1000 < Date.now()) return null;
+    return { customerId, token };
+  } catch {
+    return null;
+  }
 }
 
 function resolveLandingRouteConfig(pathname = window.location.pathname) {
@@ -1132,8 +1160,10 @@ const REQUIRED_FIELDS = [
   'dateOfBirth',
   'streetAddress',
   'postalCode',
+  'city',
   'email',
   'countryCode',
+  'phoneNumber',
   'password',
   'primaryGym',
 ];
@@ -1143,8 +1173,10 @@ const PARENT_REQUIRED_FIELDS = [
   'parentDateOfBirth',
   'parentStreetAddress',
   'parentPostalCode',
+  'parentCity',
   'parentEmail',
   'parentCountryCode',
+  'parentPhoneNumber',
   'parentPassword',
   'parentPrimaryGym',
 ];
@@ -1668,7 +1700,7 @@ class ReferenceDataAPI {
           
           // Try local lookup if available
           if (typeof lookupCityByPostalCode === 'function') {
-            const localCity = lookupCityByPostalCode(cleanPostalCode);
+            const localCity = normalizeLookedUpCity(lookupCityByPostalCode(cleanPostalCode));
             if (localCity) {
               console.log('[PostalCode] Found city in local lookup:', localCity);
               return localCity;
@@ -1689,7 +1721,8 @@ class ReferenceDataAPI {
       
       // Extract city name from response
       // API might return: { city: "Copenhagen" } or { address: { city: "Copenhagen" } }
-      const city = data?.city || data?.address?.city || data?.name || null;
+      const rawCity = data?.city || data?.address?.city || data?.name || null;
+      const city = normalizeLookedUpCity(rawCity);
       
       if (city) {
         console.log('[PostalCode] Found city:', city, 'for postal code:', cleanPostalCode);
@@ -1707,7 +1740,7 @@ class ReferenceDataAPI {
         // Try local lookup if available
         if (typeof lookupCityByPostalCode === 'function') {
           const cleanPostalCode = postalCode.trim().replace(/\s+/g, '');
-          const localCity = lookupCityByPostalCode(cleanPostalCode);
+          const localCity = normalizeLookedUpCity(lookupCityByPostalCode(cleanPostalCode));
           if (localCity) {
             console.log('[PostalCode] Found city in local lookup:', localCity);
             return localCity;
@@ -1997,17 +2030,14 @@ class AuthAPI {
 
   // Step 6: Password reset - Offer forgotten-password flow
   // Endpoint: POST /api/ver3/auth/resetpassword
-  // Base URL: https://boulders.brpsystems.com/apiserver (handled by proxy for ver3 endpoints)
-  // appId is optional - if not provided, BRP will use default setting for reset link
-  async resetPassword(email, appId = null) {
+  // appId 416 points the email link at Boulders' GoActive reset page.
+  async resetPassword(email) {
     try {
-      const url = this.useProxy
-        ? buildApiUrl({
-            baseUrl: this.baseUrl,
-            useProxy: this.useProxy,
-            path: '/api/ver3/auth/resetpassword',
-          })
-        : 'https://boulders.brpsystems.com/apiserver/api/ver3/auth/resetpassword';
+      const url = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: '/api/ver3/auth/resetpassword',
+      });
       
       devLog('[Step 6] Requesting password reset:', url);
       
@@ -2016,16 +2046,7 @@ class AuthAPI {
         'Content-Type': 'application/json',
       };
       
-      // Build payload - appId is optional
-      // If appId is provided, convert to number; otherwise omit it
-      const payload = { email };
-      if (appId !== null && appId !== undefined) {
-        const numericAppId = typeof appId === 'string' ? parseInt(appId, 10) : appId;
-        if (!isNaN(numericAppId)) {
-          payload.appId = numericAppId;
-        }
-      }
-      
+      const payload = { email, appId: BOULDERS_GOACTIVE_APP_ID };
       devLog('[Step 6] Password reset payload:', payload);
 
       let data;
@@ -2049,6 +2070,25 @@ class AuthAPI {
       console.error('[Step 6] Password reset error:', error);
       throw error;
     }
+  }
+
+  async completePasswordReset(customerId, password, token) {
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/customers/${customerId}`,
+    });
+    return requestJson({
+      url,
+      method: 'PUT',
+      headers: {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: { password },
+      expectJson: false,
+    });
   }
 
   // Step 6: Create customer - For new users
@@ -5401,16 +5441,7 @@ function updateCountryFlagIcon(selectElement) {
   } else {
     // Fallback: try to infer from phone code (common countries)
     const phoneCode = selectedValue.replace('+', '');
-    const commonFlags = {
-      '45': 'DK', // Denmark
-      '46': 'SE', // Sweden
-      '47': 'NO', // Norway
-      '358': 'FI', // Finland
-      '49': 'DE', // Germany
-      '33': 'FR', // France
-      '44': 'GB', // United Kingdom
-      '1': 'US', // United States
-    };
+    const commonFlags = PHONE_COUNTRY_TO_ALPHA2;
     
     const inferredAlpha2 = commonFlags[phoneCode];
     if (inferredAlpha2) {
@@ -6980,6 +7011,13 @@ function applyConditionalSteps() {
 
 function init() {
   applyRouteIndexingPolicy(window.location.pathname);
+  if (isPasswordResetRoute()) {
+    document.body.classList.add('password-reset-route');
+    initLanguageSwitcher();
+    initPasswordResetPage();
+    hideLoadingOverlay();
+    return;
+  }
   state.landingRouteConfig = resolveLandingRouteConfig(window.location.pathname);
   if (state.landingRouteConfig) {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
@@ -7082,7 +7120,7 @@ function hideLoadingOverlay() {
     if (headerContent) {
       headerContent.style.display = '';
     }
-    if (mainContent) {
+    if (mainContent && !document.body.classList.contains('password-reset-route')) {
       mainContent.style.display = '';
       // Update FAQ visibility after main is shown
       setTimeout(() => {
@@ -7122,20 +7160,32 @@ const translations = {
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
     'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
     'form.dateOfBirth': 'Fødselsdato*', 'form.streetAddress': 'Gade og husnummer*', 'form.streetAddress.placeholder': 'Gade og husnummer',
-    'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By', 'form.city.placeholder': 'Auto',
+    'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Indtast by',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Indtast din e-mail', 'form.country': 'Land', 'form.phoneNumber': 'Mobilnummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
     'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Opret profil',
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
     'form.parentDateOfBirth': 'Fødselsdato*', 'form.parentStreetAddress': 'Gade og husnummer*', 'form.parentStreetAddress.placeholder': 'Indtast gade og husnummer',
-    'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By', 'form.parentCity.placeholder': 'København',
+    'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By*', 'form.parentCity.placeholder': 'København',
     'form.parentEmail': 'E-mail*', 'form.parentEmail.placeholder': 'Indtast din e-mail', 'form.parentCountryCode': 'Land',
     'form.parentPhoneNumber': 'Mobilnummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Samme adresse og kontaktinformation',
     'form.error.firstName': 'Indtast venligst dit fornavn', 'form.error.lastName': 'Indtast venligst dit efternavn',
     'form.error.email': 'Indtast venligst en gyldig e-mailadresse',
-    'form.resetPassword': 'NULSTIL ADGANGSKODE', 'form.resetPassword.desc': 'Indtast din e-mailadresse, og vi sender dig instruktioner til at nulstille din adgangskode.',
-    'form.resetPassword.success': 'Nulstillingsinstruktioner er blevet sendt til din e-mail.', 'form.sendResetLink': 'SEND NULSTILLINGSLINK',
+    'form.resetPassword': 'Nulstil adgangskode', 'form.resetPassword.desc': 'Indtast e-mailen til din konto.',
+    'form.resetPassword.success': 'Tjek din indbakke og spam. Vi sender et link, hvis kontoen med {email} findes.', 'form.sendResetLink': 'Send link',
+    'page.resetPassword.title': 'Nulstil adgangskode',
+    'page.resetPassword.desc': 'Vælg en ny adgangskode til din konto.',
+    'page.resetPassword.new': 'Ny adgangskode',
+    'page.resetPassword.confirm': 'Bekræft ny adgangskode',
+    'page.resetPassword.submit': 'Gem ny adgangskode',
+    'page.resetPassword.submitting': 'Gemmer…',
+    'page.resetPassword.done': 'Adgangskoden er opdateret. Du kan nu logge ind med den nye adgangskode.',
+    'page.resetPassword.backToLogin': 'Tilbage til Join Boulders',
+    'page.resetPassword.invalid': 'Dette nulstillingslink er ugyldigt eller udløbet. Anmod om et nyt fra login.',
+    'page.resetPassword.mismatch': 'Adgangskoderne matcher ikke.',
+    'page.resetPassword.tooShort': 'Adgangskoden skal være mindst 6 tegn.',
+    'page.resetPassword.failed': 'Kunne ikke opdatere adgangskoden. Prøv igen.',
     'button.cancel': 'Annuller', 'button.close': 'Luk',
     'form.authSwitch.login': 'Log ind', 'form.authSwitch.createAccount': 'Opret konto',
     'cart.title': 'Kurv', 'cart.completeIn': 'Gennemfør inden', 'cart.offerExpiresIn': 'Tilbuddet udløber om', 'cart.timeLeft': 'Tid tilbage', 'cart.timeToComplete': 'Tid tilbage til at gennemføre:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Rabatkode', 'cart.discount.placeholder': 'Rabatkode', 'cart.discountAmount': 'Rabat', 'cart.discountAmountWithPercent': 'Rabat ({percent})', 'cart.discount.applied': 'Rabatkode anvendt!', 'cart.discount.removed': 'Rabatkode fjernet.', 'cart.discount.removeFailed': 'Kunne ikke fjerne rabatkoden. Prøv igen.', 'cart.discount.empty': 'Indtast en rabatkode', 'cart.discount.loginRequired': 'Log ind eller opret en konto for at bruge en rabatkode', 'cart.discount.locationRequired': 'Vælg en hal først', 'cart.discount.selectProduct': 'Vælg et medlemskab eller klippekort først', 'cart.discount.notFound': 'Rabatkoden blev ikke fundet. Tjek koden og prøv igen.', 'cart.discount.invalid': 'Ugyldig rabatkode. Tjek koden og prøv igen.', 'cart.discount.expired': 'Denne rabatkode er udløbet.', 'cart.discount.alreadyUsed': 'Denne rabatkode er allerede brugt.', 'cart.discount.notApplicable': 'Rabatkoden gælder ikke for denne ordre.', 'cart.discount.forbidden': 'Rabatkoden kan ikke bruges på denne ordre.', 'cart.discount.genericFailed': 'Kunne ikke anvende rabatkoden. Prøv igen.', 'cart.discount.noOrder': 'Ingen ordre fundet. Genindlæs siden og prøv igen.', 'cart.discount.methodNotSupported': 'Rabatkode kunne ikke anvendes. Kontakt support.', 'cart.discount.applying': 'Anvender…', 'cart.discount.creatingOrder': 'Opretter ordre…', 'cart.total': 'Total', 'cart.payNow': 'Betal nu', 'cart.monthlyFee': 'Månedlig pris', 'cart.firstMonth': 'Første måned', 'cart.validUntil': 'Gyldig indtil', 'cart.punch.one': '1 Klip', 'cart.punch.label': 'Klip',
@@ -7467,20 +7517,32 @@ const translations = {
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
     'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
     'form.dateOfBirth': 'Date of birth*', 'form.streetAddress': 'Street and house number*', 'form.streetAddress.placeholder': 'Street and house nr',
-    'form.postalCode': 'Postal code*', 'form.postalCode.placeholder': 'Zipcode', 'form.city': 'City', 'form.city.placeholder': 'Auto',
+    'form.postalCode': 'Postal code*', 'form.postalCode.placeholder': 'Zipcode', 'form.city': 'City*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Enter city',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Enter your email', 'form.country': 'Country', 'form.phoneNumber': 'Mobile number*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Password*', 'form.password.create.placeholder': 'Create a password',
     'form.confirmPassword': 'Confirm password*', 'form.confirmPassword.placeholder': 'Confirm your password', 'form.saveAccount': 'Save Account',
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
     'form.parentFullName': 'First and last name*', 'form.parentFullName.placeholder': 'Enter your full name',
     'form.parentDateOfBirth': 'Date of birth*', 'form.parentStreetAddress': 'Street and house number*', 'form.parentStreetAddress.placeholder': 'Enter street and house number',
-    'form.parentPostalCode': 'Postal code*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'City', 'form.parentCity.placeholder': 'Copenhagen',
+    'form.parentPostalCode': 'Postal code*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'City*', 'form.parentCity.placeholder': 'Copenhagen',
     'form.parentEmail': 'E-mail*', 'form.parentEmail.placeholder': 'Enter your email', 'form.parentCountryCode': 'Country',
     'form.parentPhoneNumber': 'Mobile number*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Same address and contact information',
     'form.error.firstName': 'Please enter your first name', 'form.error.lastName': 'Please enter your last name',
     'form.error.email': 'Please enter a valid email address',
-    'form.resetPassword': 'RESET PASSWORD', 'form.resetPassword.desc': 'Enter your email address and we\'ll send you instructions to reset your password.',
-    'form.resetPassword.success': 'Password reset instructions have been sent to your email.', 'form.sendResetLink': 'SEND RESET LINK',
+    'form.resetPassword': 'Reset password', 'form.resetPassword.desc': 'Enter the email for your account.',
+    'form.resetPassword.success': 'Check your inbox and spam. We\'ll send a link if the account with {email} exists.', 'form.sendResetLink': 'Send link',
+    'page.resetPassword.title': 'Reset password',
+    'page.resetPassword.desc': 'Choose a new password for your account.',
+    'page.resetPassword.new': 'New password',
+    'page.resetPassword.confirm': 'Confirm new password',
+    'page.resetPassword.submit': 'Set new password',
+    'page.resetPassword.submitting': 'Saving…',
+    'page.resetPassword.done': 'Your password has been updated. You can log in with the new password.',
+    'page.resetPassword.backToLogin': 'Back to Join Boulders',
+    'page.resetPassword.invalid': 'This reset link is invalid or has expired. Request a new one from login.',
+    'page.resetPassword.mismatch': 'Passwords do not match.',
+    'page.resetPassword.tooShort': 'Password must be at least 6 characters.',
+    'page.resetPassword.failed': 'Could not update the password. Try again.',
     'button.cancel': 'Cancel', 'button.close': 'Close',
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discountAmountWithPercent': 'Discount ({percent})', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.discount.empty': 'Enter a discount code', 'cart.discount.loginRequired': 'Log in or create an account to use a discount code', 'cart.discount.locationRequired': 'Select a gym first', 'cart.discount.selectProduct': 'Select a membership or punch card first', 'cart.discount.notFound': 'Discount code not found. Check the code and try again.', 'cart.discount.invalid': 'Invalid discount code. Check the code and try again.', 'cart.discount.expired': 'This discount code has expired.', 'cart.discount.alreadyUsed': 'This discount code has already been used.', 'cart.discount.notApplicable': 'This discount code does not apply to your order.', 'cart.discount.forbidden': 'This discount code cannot be used on this order.', 'cart.discount.genericFailed': 'Could not apply the discount code. Please try again.', 'cart.discount.noOrder': 'No order found. Refresh the page and try again.', 'cart.discount.methodNotSupported': 'Discount code could not be applied. Please contact support.', 'cart.discount.applying': 'Applying…', 'cart.discount.creatingOrder': 'Creating order…', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
@@ -7794,20 +7856,32 @@ const translations = {
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
     'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
     'form.dateOfBirth': 'Geburtsdatum*', 'form.streetAddress': 'Straße und Hausnummer*', 'form.streetAddress.placeholder': 'Straße und Hausnummer',
-    'form.postalCode': 'Postleitzahl*', 'form.postalCode.placeholder': 'Postleitzahl', 'form.city': 'Stadt', 'form.city.placeholder': 'Auto',
+    'form.postalCode': 'Postleitzahl*', 'form.postalCode.placeholder': 'Postleitzahl', 'form.city': 'Stadt*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Stadt eingeben',
     'form.email.create': 'E-Mail*', 'form.email.create.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.country': 'Land', 'form.phoneNumber': 'Handynummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Passwort*', 'form.password.create.placeholder': 'Erstellen Sie ein Passwort',
     'form.confirmPassword': 'Passwort bestätigen*', 'form.confirmPassword.placeholder': 'Bestätigen Sie Ihr Passwort', 'form.saveAccount': 'Profil erstellen',
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
     'form.parentFullName': 'Vorname und Nachname*', 'form.parentFullName.placeholder': 'Geben Sie Ihren vollständigen Namen ein',
     'form.parentDateOfBirth': 'Geburtsdatum*', 'form.parentStreetAddress': 'Straße und Hausnummer*', 'form.parentStreetAddress.placeholder': 'Geben Sie Straße und Hausnummer ein',
-    'form.parentPostalCode': 'Postleitzahl*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'Stadt', 'form.parentCity.placeholder': 'Kopenhagen',
+    'form.parentPostalCode': 'Postleitzahl*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'Stadt*', 'form.parentCity.placeholder': 'Kopenhagen',
     'form.parentEmail': 'E-Mail*', 'form.parentEmail.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.parentCountryCode': 'Land',
     'form.parentPhoneNumber': 'Handynummer*', 'form.parentPhoneNumber.placeholder': '12345678', 'form.sameAddress': 'Gleiche Adresse und Kontaktinformationen',
     'form.error.firstName': 'Bitte geben Sie Ihren Vornamen ein', 'form.error.lastName': 'Bitte geben Sie Ihren Nachnamen ein',
     'form.error.email': 'Bitte geben Sie eine gültige E-Mail-Adresse ein',
-    'form.resetPassword': 'PASSWORT ZURÜCKSETZEN', 'form.resetPassword.desc': 'Geben Sie Ihre E-Mail-Adresse ein und wir senden Ihnen Anweisungen zum Zurücksetzen Ihres Passworts.',
-    'form.resetPassword.success': 'Anweisungen zum Zurücksetzen wurden an Ihre E-Mail gesendet.', 'form.sendResetLink': 'ZURÜCKSETZLINK SENDEN',
+    'form.resetPassword': 'Passwort zurücksetzen', 'form.resetPassword.desc': 'Geben Sie die E-Mail Ihres Kontos ein.',
+    'form.resetPassword.success': 'Prüfen Sie Posteingang und Spam. Wir senden einen Link, wenn das Konto mit {email} existiert.', 'form.sendResetLink': 'Link senden',
+    'page.resetPassword.title': 'Passwort zurücksetzen',
+    'page.resetPassword.desc': 'Wählen Sie ein neues Passwort für Ihr Konto.',
+    'page.resetPassword.new': 'Neues Passwort',
+    'page.resetPassword.confirm': 'Neues Passwort bestätigen',
+    'page.resetPassword.submit': 'Neues Passwort speichern',
+    'page.resetPassword.submitting': 'Wird gespeichert…',
+    'page.resetPassword.done': 'Ihr Passwort wurde aktualisiert. Sie können sich mit dem neuen Passwort anmelden.',
+    'page.resetPassword.backToLogin': 'Zurück zu Join Boulders',
+    'page.resetPassword.invalid': 'Dieser Link ist ungültig oder abgelaufen. Fordern Sie unter Login einen neuen an.',
+    'page.resetPassword.mismatch': 'Die Passwörter stimmen nicht überein.',
+    'page.resetPassword.tooShort': 'Das Passwort muss mindestens 6 Zeichen lang sein.',
+    'page.resetPassword.failed': 'Passwort konnte nicht aktualisiert werden. Versuchen Sie es erneut.',
     'button.cancel': 'Abbrechen', 'button.close': 'Schließen',
     'form.authSwitch.login': 'Anmelden', 'form.authSwitch.createAccount': 'Konto erstellen',
     'firstclimb.category.title': 'Dein erster Kletterbesuch',
@@ -8413,19 +8487,15 @@ function updateFormTranslations() {
   }
   
   // Forgot password modal
-  const resetPasswordTitle = document.querySelector('#forgotPasswordModal .info-section-title[data-i18n-key="form.resetPassword"]');
+  const resetPasswordTitle = document.querySelector('#forgotPasswordTitle');
   if (resetPasswordTitle) {
     resetPasswordTitle.textContent = t('form.resetPassword');
   }
   
   const resetPasswordDesc = document.querySelector('.forgot-password-description[data-i18n-key]');
-  if (resetPasswordDesc) {
-    resetPasswordDesc.textContent = t('form.resetPassword.desc');
-  }
-  
   const resetPasswordSuccess = document.querySelector('.forgot-password-success-message[data-i18n-key]');
-  if (resetPasswordSuccess) {
-    resetPasswordSuccess.textContent = t('form.resetPassword.success');
+  if (resetPasswordDesc || resetPasswordSuccess) {
+    renderForgotPasswordCopy();
   }
   
   const sendResetLinkBtn = document.querySelector('.login-btn[data-i18n-key="form.sendResetLink"]');
@@ -8442,6 +8512,8 @@ function updateFormTranslations() {
   if (closeBtn) {
     closeBtn.textContent = t('button.close');
   }
+
+  renderPasswordResetPageCopy();
 }
 
 // Update cart translations
@@ -9943,6 +10015,122 @@ async function handleLoginSubmit(event) {
   }
 }
 
+function forgotPasswordCopyHtml(key, email) {
+  let template = t(key);
+  if (!email) {
+    return template
+      .replace(' med {email}', '')
+      .replace(' with {email}', '')
+      .replace(' mit {email}', '');
+  }
+  const escaped = String(email)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return template.replaceAll('{email}', `<strong>${escaped}</strong>`);
+}
+
+function renderForgotPasswordCopy() {
+  const email = DOM.forgotPasswordEmail?.value.trim() || '';
+  const desc = document.querySelector('#forgotPasswordModal .forgot-password-description');
+  const success = document.querySelector('#forgotPasswordModal .forgot-password-success-message');
+  if (desc) desc.textContent = t('form.resetPassword.desc');
+  if (success) success.innerHTML = sanitizeHTML(forgotPasswordCopyHtml('form.resetPassword.success', email));
+}
+
+function renderPasswordResetPageCopy() {
+  const page = document.getElementById('passwordResetPage');
+  if (!page) return;
+  page.querySelectorAll('[data-i18n-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-key');
+    if (!key) return;
+    el.textContent = t(key);
+  });
+}
+
+function initPasswordResetPage() {
+  const page = document.getElementById('passwordResetPage');
+  const form = document.getElementById('passwordResetForm');
+  const invalid = document.getElementById('passwordResetInvalid');
+  const success = document.getElementById('passwordResetSuccess');
+  const errorEl = document.getElementById('passwordResetError');
+  const desc = document.getElementById('passwordResetDesc');
+  const newInput = document.getElementById('passwordResetNew');
+  const confirmInput = document.getElementById('passwordResetConfirm');
+  const submitButton = document.getElementById('passwordResetSubmit');
+  if (!page || !form || !invalid || !success) return;
+
+  renderPasswordResetPageCopy();
+
+  document.querySelectorAll('[data-action="go-to-step-1"]').forEach((el) => {
+    el.addEventListener('click', (event) => {
+      event.preventDefault();
+      window.location.assign('/');
+    });
+  });
+
+  const session = parsePasswordResetToken(new URLSearchParams(window.location.search).get('token') || '');
+  if (!session) {
+    form.hidden = true;
+    success.hidden = true;
+    if (desc) desc.hidden = true;
+    invalid.hidden = false;
+    return;
+  }
+
+  invalid.hidden = true;
+  success.hidden = true;
+  form.hidden = false;
+  if (desc) desc.hidden = false;
+  newInput?.focus();
+
+  const showError = (message) => {
+    if (!errorEl) return;
+    errorEl.hidden = !message;
+    errorEl.textContent = message || '';
+  };
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const password = newInput?.value || '';
+    const confirm = confirmInput?.value || '';
+    showError('');
+    newInput?.closest('.form-group')?.classList.remove('error');
+    confirmInput?.closest('.form-group')?.classList.remove('error');
+
+    if (password.length < 6) {
+      showError(t('page.resetPassword.tooShort'));
+      newInput?.closest('.form-group')?.classList.add('error');
+      return;
+    }
+    if (password !== confirm) {
+      showError(t('page.resetPassword.mismatch'));
+      confirmInput?.closest('.form-group')?.classList.add('error');
+      return;
+    }
+
+    const originalLabel = submitButton?.textContent || t('page.resetPassword.submit');
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = t('page.resetPassword.submitting');
+    }
+
+    try {
+      await authAPI.completePasswordReset(session.customerId, password, session.token);
+      form.hidden = true;
+      if (desc) desc.hidden = true;
+      success.hidden = false;
+    } catch (error) {
+      console.error('[Password Reset] Complete failed:', error.status || error);
+      showError(t('page.resetPassword.failed'));
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = originalLabel;
+      }
+    }
+  });
+}
+
 function openForgotPasswordModal() {
   if (!DOM.forgotPasswordModal) return;
   
@@ -9954,6 +10142,14 @@ function openForgotPasswordModal() {
   DOM.forgotPasswordModal.style.display = 'flex';
   DOM.forgotPasswordForm.style.display = 'block';
   DOM.forgotPasswordSuccess.style.display = 'none';
+  const resetDesc = document.querySelector('.forgot-password-description');
+  if (resetDesc) resetDesc.style.display = '';
+  const submitButton = DOM.forgotPasswordForm?.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = t('form.sendResetLink') || 'Send link';
+  }
+  renderForgotPasswordCopy();
   document.body.classList.add('modal-open');
   
   // Focus on email input
@@ -9967,6 +10163,7 @@ function closeForgotPasswordModal() {
   
   DOM.forgotPasswordModal.style.display = 'none';
   document.body.classList.remove('modal-open');
+  DOM.forgotPasswordLink?.focus();
   
   // Reset form
   if (DOM.forgotPasswordForm) {
@@ -11170,11 +11367,11 @@ async function handleForgotPasswordSubmit(event) {
     console.log('[Forgot Password] Requesting password reset for:', email);
     await authAPI.resetPassword(email);
     
-    // Show success message
     DOM.forgotPasswordForm.style.display = 'none';
     DOM.forgotPasswordSuccess.style.display = 'block';
-    
-    showToast('Password reset instructions have been sent to your email.', 'success');
+    const resetDesc = document.querySelector('.forgot-password-description');
+    if (resetDesc) resetDesc.style.display = 'none';
+    renderForgotPasswordCopy();
     
     console.log('[Forgot Password] Password reset request successful');
   } catch (error) {
@@ -11617,10 +11814,11 @@ async function handleSaveAccount() {
     
     // Get address fields
     const streetAddress = payload.customer?.address?.street || document.getElementById('streetAddress')?.value?.trim() || payload.customer?.address;
-    const city = payload.customer?.address?.city || document.getElementById('city')?.value?.trim() || payload.customer?.city;
+    const city = normalizeLookedUpCity(
+      payload.customer?.address?.city || document.getElementById('city')?.value?.trim() || payload.customer?.city
+    );
     const postalCode = payload.customer?.address?.postalCode || document.getElementById('postalCode')?.value?.trim() || payload.customer?.postalCode;
-    // Country is always Denmark (DK) for this application
-    const country = 'DK';
+    const country = resolveAddressCountryAlpha2(phoneCountryCode, postalCode);
     
     // Build shippingAddress object if we have address data (API expects shippingAddress)
     let shippingAddress = null;
@@ -11629,7 +11827,7 @@ async function handleSaveAccount() {
       if (streetAddress) shippingAddress.street = streetAddress;
       if (city) shippingAddress.city = city;
       if (postalCode) shippingAddress.postalCode = postalCode;
-      shippingAddress.country = country; // Always DK
+      shippingAddress.country = country;
     }
     
     // Get privacy/terms consent timestamp for acceptedRegistrationTerms
@@ -11662,7 +11860,7 @@ async function handleSaveAccount() {
       address: streetAddress, // Keep for backward compatibility
       city: city, // Keep for backward compatibility
       postalCode: postalCode, // Keep for backward compatibility - ensure it's always included
-      country: country, // Always DK
+      country,
       primaryGym: payload.customer?.primaryGym || state.selectedBusinessUnit,
       password: payload.customer?.password || document.getElementById('password')?.value,
       customerType: 1, // Required by API
@@ -12065,6 +12263,7 @@ function checkSaveAccountButtonState() {
     'dateOfBirth',
     'streetAddress',
     'postalCode',
+    'city',
     'email',
     'phoneNumber',
     'password',
@@ -12073,7 +12272,17 @@ function checkSaveAccountButtonState() {
   let allFieldsFilled = true;
   requiredFields.forEach(fieldId => {
     const input = document.getElementById(fieldId);
-    if (!input || !input.value.trim()) {
+    if (!input) {
+      allFieldsFilled = false;
+      return;
+    }
+    if (fieldId === 'city') {
+      if (!normalizeLookedUpCity(input.value)) {
+        allFieldsFilled = false;
+      }
+      return;
+    }
+    if (!input.value.trim()) {
       allFieldsFilled = false;
     }
   });
@@ -12366,6 +12575,13 @@ function handleGymSelection(item) {
   if (previousBusinessUnit !== numericId) {
     state.referenceData = {};
     state.referenceDataLoaded = false;
+    if (previousBusinessUnit) {
+      resetOrderStateForProductChange('gym-change');
+      state.membershipPlanId = null;
+      state.selectedProductId = null;
+      state.selectedProductType = null;
+      updateCheckoutButton();
+    }
   }
   
   state.selectedGymId = numericId; // Store numeric ID for API requests
@@ -15163,295 +15379,232 @@ let postalCodeLookupTimers = {
   parent: null,
 };
 
+/** Danish postal codes are exactly 4 digits. Foreign codes (e.g. DE 5-digit) must allow manual city entry. */
+function isDanishPostalCodeFormat(postalCode) {
+  return /^\d{4}$/.test(String(postalCode || '').trim());
+}
+
+/** Reject empty / bogus lookup values like the literal string "null" or transient "Loading...". */
+function normalizeLookedUpCity(city) {
+  if (city == null) return null;
+  if (typeof city !== 'string') {
+    if (typeof city === 'number' && Number.isFinite(city)) {
+      return String(city);
+    }
+    return null;
+  }
+  const trimmed = city.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (lower === 'null' || lower === 'undefined' || lower === 'nan' || lower === 'loading...') return null;
+  return trimmed;
+}
+
+const PHONE_COUNTRY_TO_ALPHA2 = Object.freeze({
+  '45': 'DK',
+  '46': 'SE',
+  '47': 'NO',
+  '358': 'FI',
+  '49': 'DE',
+  '33': 'FR',
+  '44': 'GB',
+  '1': 'US',
+});
+
+/** Infer ISO alpha-2 for shipping address: DK postcodes stay DK; foreign postcodes follow phone country. */
+function resolveAddressCountryAlpha2(phoneCountryCode, postalCode) {
+  if (isDanishPostalCodeFormat(postalCode)) {
+    return 'DK';
+  }
+
+  const normalizedPhone = String(phoneCountryCode || '+45').trim();
+  const fromMap = countryDataMap.get(normalizedPhone)?.alpha2;
+  if (fromMap) {
+    return String(fromMap).toUpperCase();
+  }
+
+  const phoneDigits = normalizedPhone.replace(/^\+/, '');
+  return PHONE_COUNTRY_TO_ALPHA2[phoneDigits] || 'DK';
+}
+
+function syncCopiedCityField(sourceCityField, targetCityField, sourcePostalField) {
+  if (!targetCityField) return false;
+
+  const postalCode = sourcePostalField?.value?.trim() || '';
+  const normalizedCity = normalizeLookedUpCity(sourceCityField?.value);
+
+  if (!postalCode || !isDanishPostalCodeFormat(postalCode)) {
+    if (normalizedCity) {
+      setCityFieldEditable(targetCityField, { clearValue: false });
+      targetCityField.value = normalizedCity;
+    } else {
+      setCityFieldEditable(targetCityField);
+    }
+    return false;
+  }
+
+  if (normalizedCity) {
+    setCityFieldReadonly(targetCityField, normalizedCity);
+    return true;
+  }
+
+  setCityFieldEditable(targetCityField);
+  return false;
+}
+
+function isPostalLookupStillValid(postalInput, requestedPostalCode) {
+  const currentPostal = postalInput?.value?.trim() || '';
+  return currentPostal === requestedPostalCode && isDanishPostalCodeFormat(currentPostal);
+}
+
+function getManualCityPlaceholder() {
+  return t('form.city.manualPlaceholder', 'Enter city');
+}
+
+function setCityFieldReadonly(cityField, value = '') {
+  if (!cityField) return;
+  cityField.value = value || '';
+  cityField.setAttribute('readonly', 'readonly');
+  cityField.removeAttribute('placeholder');
+  cityField.style.opacity = '1';
+  cityField.style.cursor = 'default';
+}
+
+function setCityFieldEditable(cityField, { clearValue = true } = {}) {
+  if (!cityField) return;
+  if (clearValue) cityField.value = '';
+  cityField.removeAttribute('readonly');
+  cityField.placeholder = getManualCityPlaceholder();
+  cityField.style.opacity = '1';
+  cityField.style.cursor = 'text';
+}
+
+function setCityFieldLoading(cityField) {
+  if (!cityField) return;
+  cityField.value = 'Loading...';
+  cityField.style.opacity = '0.6';
+}
+
+function applyPostalCodeCityLookupResult(cityField, result, postalCode, { logPrefix = 'PostalCode' } = {}) {
+  if (!cityField) return;
+
+  if (result && typeof result === 'object' && result.unavailable) {
+    setCityFieldEditable(cityField);
+    console.log(`[${logPrefix}] API unavailable - city field is now editable`);
+    return;
+  }
+
+  const city = normalizeLookedUpCity(typeof result === 'string' ? result : null);
+  if (city) {
+    setCityFieldReadonly(cityField, city);
+    console.log(`[${logPrefix}] Auto-filled city:`, city, 'for postal code:', postalCode);
+    return;
+  }
+
+  // City not found (or bogus "null" string) — allow manual entry
+  setCityFieldEditable(cityField);
+  console.log(`[${logPrefix}] No city found for postal code:`, postalCode, '- city field is now editable');
+}
+
+async function lookupAndApplyCity(referenceAPI, postalInput, cityField, postalCode, { logPrefix = 'PostalCode' } = {}) {
+  setCityFieldLoading(cityField);
+  try {
+    const result = await referenceAPI.lookupCityByPostalCode(postalCode);
+    if (!isPostalLookupStillValid(postalInput, postalCode)) {
+      if (!isDanishPostalCodeFormat(postalInput?.value?.trim() || '')) {
+        setCityFieldEditable(cityField, { clearValue: cityField.value === 'Loading...' });
+      }
+      return;
+    }
+    applyPostalCodeCityLookupResult(cityField, result, postalCode, { logPrefix });
+  } catch (error) {
+    console.error(`[${logPrefix}] Error looking up city:`, error);
+    if (!isPostalLookupStillValid(postalInput, postalCode)) {
+      if (!isDanishPostalCodeFormat(postalInput?.value?.trim() || '')) {
+        setCityFieldEditable(cityField, { clearValue: cityField.value === 'Loading...' });
+      }
+      return;
+    }
+    // Don't lock the field on errors — user must still be able to type a city
+    setCityFieldEditable(cityField);
+  }
+}
+
 function setupPostalCodeAutoFill() {
   const referenceAPI = new ReferenceDataAPI();
-  
-  // Setup for customer postal code field
-  if (DOM.postalCode && DOM.city) {
-    DOM.postalCode.addEventListener('input', (e) => {
+
+  const bindPostalCityPair = ({ postalInput, cityField, timerKey, logPrefix }) => {
+    if (!postalInput || !cityField) return;
+
+    postalInput.addEventListener('input', (e) => {
       const postalCode = e.target.value.trim();
-      
-      // Clear existing timer
-      if (postalCodeLookupTimers.customer) {
-        clearTimeout(postalCodeLookupTimers.customer);
+
+      if (postalCodeLookupTimers[timerKey]) {
+        clearTimeout(postalCodeLookupTimers[timerKey]);
       }
-      
-      // Clear city field if postal code is empty and revert to readonly
-      if (!postalCode || postalCode.length === 0) {
-        if (DOM.city) {
-          DOM.city.value = '';
-          DOM.city.setAttribute('readonly', 'readonly');
-          DOM.city.removeAttribute('placeholder');
-          DOM.city.style.opacity = '1';
-          DOM.city.style.cursor = 'default';
+
+      if (!postalCode) {
+        setCityFieldReadonly(cityField, '');
+        return;
+      }
+
+      // Non-Danish formats (e.g. German 5-digit PLZ): unlock city immediately for manual entry.
+      // Previously this path forced readonly, which blocked foreign addresses entirely.
+      if (!isDanishPostalCodeFormat(postalCode)) {
+        setCityFieldEditable(cityField);
+        return;
+      }
+
+      postalCodeLookupTimers[timerKey] = setTimeout(async () => {
+        await lookupAndApplyCity(referenceAPI, postalInput, cityField, postalCode, { logPrefix });
+      }, 500);
+    });
+
+    postalInput.addEventListener('blur', async (e) => {
+      const postalCode = e.target.value.trim();
+
+      if (postalCodeLookupTimers[timerKey]) {
+        clearTimeout(postalCodeLookupTimers[timerKey]);
+        postalCodeLookupTimers[timerKey] = null;
+      }
+
+      if (!postalCode) {
+        setCityFieldReadonly(cityField, '');
+        return;
+      }
+
+      if (!isDanishPostalCodeFormat(postalCode)) {
+        // Keep any city the user already typed; just ensure the field is editable
+        setCityFieldEditable(cityField, { clearValue: false });
+        if (!cityField.value || cityField.value === 'Loading...') {
+          cityField.value = '';
+          cityField.placeholder = getManualCityPlaceholder();
         }
         return;
       }
-      
-      // Debounce: wait 500ms after user stops typing
-      postalCodeLookupTimers.customer = setTimeout(async () => {
-        // Check if postal code is valid format (4 digits for Danish postal codes)
-        if (/^\d{4}$/.test(postalCode)) {
-          try {
-            // Show loading state
-            if (DOM.city) {
-              DOM.city.value = 'Loading...';
-              DOM.city.style.opacity = '0.6';
-            }
-            
-            const result = await referenceAPI.lookupCityByPostalCode(postalCode);
-            
-            if (result && typeof result === 'object' && result.unavailable) {
-              // API endpoint not available - make city field editable
-              if (DOM.city) {
-                DOM.city.removeAttribute('readonly');
-                DOM.city.placeholder = 'Enter city name';
-                DOM.city.value = '';
-                DOM.city.style.opacity = '1';
-                DOM.city.style.cursor = 'text';
-                console.log('[PostalCode] API unavailable - city field is now editable');
-              }
-            } else if (result && typeof result === 'string') {
-              // City found - auto-fill and set readonly
-              if (DOM.city) {
-                DOM.city.value = result;
-                DOM.city.setAttribute('readonly', 'readonly');
-                DOM.city.removeAttribute('placeholder');
-                DOM.city.style.opacity = '1';
-                DOM.city.style.cursor = 'default';
-                console.log('[PostalCode] Auto-filled city:', result, 'for postal code:', postalCode);
-              }
-            } else {
-              // City not found - make field editable so user can enter city manually
-              if (DOM.city) {
-                DOM.city.value = '';
-                DOM.city.removeAttribute('readonly');
-                DOM.city.placeholder = 'Enter city name';
-                DOM.city.style.opacity = '1';
-                DOM.city.style.cursor = 'text';
-                console.log('[PostalCode] No city found for postal code:', postalCode, '- city field is now editable');
-              }
-            }
-          } catch (error) {
-            console.error('[PostalCode] Error looking up city:', error);
-            if (DOM.city) {
-              DOM.city.value = '';
-              DOM.city.setAttribute('readonly', 'readonly');
-              DOM.city.removeAttribute('placeholder');
-              DOM.city.style.opacity = '1';
-              DOM.city.style.cursor = 'default';
-            }
-          }
-        } else {
-          // Invalid format - clear city field and revert to readonly
-          if (DOM.city) {
-            DOM.city.value = '';
-            DOM.city.setAttribute('readonly', 'readonly');
-            DOM.city.removeAttribute('placeholder');
-            DOM.city.style.opacity = '1';
-            DOM.city.style.cursor = 'default';
-          }
-        }
-      }, 500);
-    });
-    
-    // Also handle blur event for immediate lookup when user leaves field
-    DOM.postalCode.addEventListener('blur', async (e) => {
-      const postalCode = e.target.value.trim();
-      
-      // Clear any pending timer
-      if (postalCodeLookupTimers.customer) {
-        clearTimeout(postalCodeLookupTimers.customer);
-        postalCodeLookupTimers.customer = null;
-      }
-      
-      // Only lookup if postal code is valid and city is empty
-      if (postalCode && /^\d{4}$/.test(postalCode) && (!DOM.city || !DOM.city.value || DOM.city.value === 'Loading...')) {
-        try {
-          if (DOM.city) {
-            DOM.city.value = 'Loading...';
-            DOM.city.style.opacity = '0.6';
-          }
-          
-          const result = await referenceAPI.lookupCityByPostalCode(postalCode);
-          
-          if (result && typeof result === 'object' && result.unavailable) {
-            // API endpoint not available - make city field editable
-            if (DOM.city) {
-              DOM.city.removeAttribute('readonly');
-              DOM.city.placeholder = 'Enter city name';
-              DOM.city.value = '';
-              DOM.city.style.opacity = '1';
-              DOM.city.style.cursor = 'text';
-            }
-          } else if (result && typeof result === 'string') {
-            // City found - auto-fill
-            if (DOM.city) {
-              DOM.city.value = result;
-              DOM.city.style.opacity = '1';
-            }
-          } else if (DOM.city) {
-            DOM.city.value = '';
-            DOM.city.style.opacity = '1';
-          }
-        } catch (error) {
-          console.error('[PostalCode] Error looking up city on blur:', error);
-          if (DOM.city) {
-            DOM.city.value = '';
-            DOM.city.style.opacity = '1';
-          }
-        }
-      }
-    });
-  }
-  
-  // Setup for parent/guardian postal code field
-  if (DOM.parentPostalCode && DOM.parentCity) {
-    DOM.parentPostalCode.addEventListener('input', (e) => {
-      const postalCode = e.target.value.trim();
-      
-      // Clear existing timer
-      if (postalCodeLookupTimers.parent) {
-        clearTimeout(postalCodeLookupTimers.parent);
-      }
-      
-      // Clear city field if postal code is empty and revert to readonly
-      if (!postalCode || postalCode.length === 0) {
-        if (DOM.parentCity) {
-          DOM.parentCity.value = '';
-          DOM.parentCity.setAttribute('readonly', 'readonly');
-          DOM.parentCity.removeAttribute('placeholder');
-          DOM.parentCity.style.opacity = '1';
-          DOM.parentCity.style.cursor = 'default';
-        }
+
+      const currentCity = cityField.value?.trim();
+      if (currentCity && currentCity !== 'Loading...' && normalizeLookedUpCity(currentCity)) {
         return;
       }
-      
-      // Debounce: wait 500ms after user stops typing
-      postalCodeLookupTimers.parent = setTimeout(async () => {
-        // Check if postal code is valid format (4 digits for Danish postal codes)
-        if (/^\d{4}$/.test(postalCode)) {
-          try {
-            // Show loading state
-            if (DOM.parentCity) {
-              DOM.parentCity.value = 'Loading...';
-              DOM.parentCity.style.opacity = '0.6';
-            }
-            
-            const result = await referenceAPI.lookupCityByPostalCode(postalCode);
-            
-            if (result && typeof result === 'object' && result.unavailable) {
-              // API endpoint not available - make city field editable
-              if (DOM.parentCity) {
-                DOM.parentCity.removeAttribute('readonly');
-                DOM.parentCity.placeholder = 'Enter city name';
-                DOM.parentCity.value = '';
-                DOM.parentCity.style.opacity = '1';
-                DOM.parentCity.style.cursor = 'text';
-                console.log('[PostalCode] API unavailable - parent city field is now editable');
-              }
-            } else if (result && typeof result === 'string') {
-              // City found - auto-fill and set readonly
-              if (DOM.parentCity) {
-                DOM.parentCity.value = result;
-                DOM.parentCity.setAttribute('readonly', 'readonly');
-                DOM.parentCity.removeAttribute('placeholder');
-                DOM.parentCity.style.opacity = '1';
-                DOM.parentCity.style.cursor = 'default';
-                console.log('[PostalCode] Auto-filled parent city:', result, 'for postal code:', postalCode);
-              }
-            } else {
-              // City not found - make field editable so user can enter city manually
-              if (DOM.parentCity) {
-                DOM.parentCity.value = '';
-                DOM.parentCity.removeAttribute('readonly');
-                DOM.parentCity.placeholder = 'Enter city name';
-                DOM.parentCity.style.opacity = '1';
-                DOM.parentCity.style.cursor = 'text';
-                console.log('[PostalCode] No city found for parent postal code:', postalCode, '- city field is now editable');
-              }
-            }
-          } catch (error) {
-            console.error('[PostalCode] Error looking up parent city:', error);
-            if (DOM.parentCity) {
-              DOM.parentCity.value = '';
-              DOM.parentCity.setAttribute('readonly', 'readonly');
-              DOM.parentCity.removeAttribute('placeholder');
-              DOM.parentCity.style.opacity = '1';
-              DOM.parentCity.style.cursor = 'default';
-            }
-          }
-        } else {
-          // Invalid format - clear city field and revert to readonly
-          if (DOM.parentCity) {
-            DOM.parentCity.value = '';
-            DOM.parentCity.setAttribute('readonly', 'readonly');
-            DOM.parentCity.removeAttribute('placeholder');
-            DOM.parentCity.style.opacity = '1';
-            DOM.parentCity.style.cursor = 'default';
-          }
-        }
-      }, 500);
+
+      await lookupAndApplyCity(referenceAPI, postalInput, cityField, postalCode, { logPrefix });
     });
-    
-    // Also handle blur event for immediate lookup when user leaves field
-    DOM.parentPostalCode.addEventListener('blur', async (e) => {
-      const postalCode = e.target.value.trim();
-      
-      // Clear any pending timer
-      if (postalCodeLookupTimers.parent) {
-        clearTimeout(postalCodeLookupTimers.parent);
-        postalCodeLookupTimers.parent = null;
-      }
-      
-      // Only lookup if postal code is valid and city is empty
-      if (postalCode && /^\d{4}$/.test(postalCode) && (!DOM.parentCity || !DOM.parentCity.value || DOM.parentCity.value === 'Loading...')) {
-        try {
-          if (DOM.parentCity) {
-            DOM.parentCity.value = 'Loading...';
-            DOM.parentCity.style.opacity = '0.6';
-          }
-          
-          const result = await referenceAPI.lookupCityByPostalCode(postalCode);
-          
-          if (result && typeof result === 'object' && result.unavailable) {
-            // API endpoint not available - make city field editable
-            if (DOM.parentCity) {
-              DOM.parentCity.removeAttribute('readonly');
-              DOM.parentCity.placeholder = 'Enter city name';
-              DOM.parentCity.value = '';
-              DOM.parentCity.style.opacity = '1';
-              DOM.parentCity.style.cursor = 'text';
-            }
-          } else if (result && typeof result === 'string') {
-            // City found - auto-fill and set readonly
-            if (DOM.parentCity) {
-              DOM.parentCity.value = result;
-              DOM.parentCity.setAttribute('readonly', 'readonly');
-              DOM.parentCity.removeAttribute('placeholder');
-              DOM.parentCity.style.opacity = '1';
-              DOM.parentCity.style.cursor = 'default';
-            }
-          } else {
-            // City not found - make field editable so user can enter city manually
-            if (DOM.parentCity) {
-              DOM.parentCity.value = '';
-              DOM.parentCity.removeAttribute('readonly');
-              DOM.parentCity.placeholder = 'Enter city name';
-              DOM.parentCity.style.opacity = '1';
-              DOM.parentCity.style.cursor = 'text';
-            }
-          }
-        } catch (error) {
-          console.error('[PostalCode] Error looking up parent city on blur:', error);
-          if (DOM.parentCity) {
-            DOM.parentCity.value = '';
-            DOM.parentCity.style.opacity = '1';
-          }
-        }
-      }
-    });
-  }
+  };
+
+  bindPostalCityPair({
+    postalInput: DOM.postalCode,
+    cityField: DOM.city,
+    timerKey: 'customer',
+    logPrefix: 'PostalCode',
+  });
+
+  bindPostalCityPair({
+    postalInput: DOM.parentPostalCode,
+    cityField: DOM.parentCity,
+    timerKey: 'parent',
+    logPrefix: 'PostalCode/parent',
+  });
 }
 
 async function handleApplyDiscount() {
@@ -15952,6 +16105,15 @@ function copyAddressAndContactInfo() {
     const source = document.getElementById(sourceId);
     const target = document.getElementById(targetId);
     if (!source || !target) return;
+
+    if (sourceId === 'city' && targetId === 'parentCity') {
+      const isReadonly = syncCopiedCityField(source, target, document.getElementById('postalCode'));
+      if (isReadonly) {
+        target.classList.add('readonly-field');
+      }
+      return;
+    }
+
     target.value = source.value;
     target.readOnly = true;
     if (target.tagName === 'SELECT') {
@@ -18690,10 +18852,9 @@ async function handleCheckout() {
         
         // Get address fields
         const streetAddress = payload.customer?.address?.street || payload.customer?.address;
-        const city = payload.customer?.address?.city || payload.customer?.city;
+        const city = normalizeLookedUpCity(payload.customer?.address?.city || payload.customer?.city);
         const postalCode = payload.customer?.address?.postalCode || payload.customer?.postalCode;
-        // Country is always Denmark (DK) for this application
-        const country = 'DK';
+        const country = resolveAddressCountryAlpha2(phoneCountryCode, postalCode);
         
         // Build shippingAddress object if we have address data (API expects shippingAddress)
         let shippingAddress = null;
@@ -18702,7 +18863,7 @@ async function handleCheckout() {
           if (streetAddress) shippingAddress.street = streetAddress;
           if (city) shippingAddress.city = city;
           if (postalCode) shippingAddress.postalCode = postalCode;
-          shippingAddress.country = country; // Always DK
+          shippingAddress.country = country;
         }
         
         // Get privacy/terms consent timestamp for acceptedRegistrationTerms
@@ -21152,17 +21313,19 @@ function buildStoredCheckoutCustomer(payloadCustomer = {}) {
     payloadCustomer.shippingAddress?.postalCode ||
     null;
   const city =
-    payloadCustomer.address?.city ||
-    payloadCustomer.city ||
-    payloadCustomer.shippingAddress?.city ||
-    null;
+    normalizeLookedUpCity(
+      payloadCustomer.address?.city ||
+      payloadCustomer.city ||
+      payloadCustomer.shippingAddress?.city
+    );
+  const resolvedCountry = resolveAddressCountryAlpha2(phoneCountryCode, postalCode);
   const shippingAddress =
     streetAddress || city || postalCode
       ? {
           ...(streetAddress ? { street: streetAddress } : {}),
           ...(city ? { city } : {}),
           ...(postalCode ? { postalCode } : {}),
-          country: 'DK',
+          country: resolvedCountry,
         }
       : (payloadCustomer.shippingAddress || null);
 
@@ -23187,7 +23350,7 @@ function renderConfirmationView() {
   const isFreeTrialFlow = state.landingRouteConfig?.componentName === 'LandingFreeTrial';
 
   if (freetrialActivationChangeCta && freetrialActivationChangeLink) {
-    const supportEmail = 'medlem@boulders.dm';
+    const supportEmail = 'medlem@boulders.dk';
     const supportSubject = encodeURIComponent('Change of activation date - Free Trial');
     const supportBody = encodeURIComponent([
       'Hi Boulders team,',
@@ -24255,7 +24418,13 @@ function validateForm(animate = false) {
   if (!skipPersonalValidation) {
     REQUIRED_FIELDS.forEach((fieldId) => {
       const field = document.getElementById(fieldId);
-      if (field && !field.value.trim()) {
+      if (!field) return;
+
+      const isEmpty = fieldId === 'city' || fieldId === 'parentCity'
+        ? !normalizeLookedUpCity(field.value)
+        : !field.value.trim();
+
+      if (isEmpty) {
         isValid = false;
         errors.push(`Missing required field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
@@ -24266,7 +24435,13 @@ function validateForm(animate = false) {
   if (!skipPersonalValidation && DOM.parentGuardianForm && DOM.parentGuardianForm.style.display !== 'none') {
     PARENT_REQUIRED_FIELDS.forEach((fieldId) => {
       const field = document.getElementById(fieldId);
-      if (field && !field.value.trim()) {
+      if (!field) return;
+
+      const isEmpty = fieldId === 'parentCity'
+        ? !normalizeLookedUpCity(field.value)
+        : !field.value.trim();
+
+      if (isEmpty) {
         isValid = false;
         errors.push(`Missing parent/guardian field: ${fieldId}`);
         highlightFieldError(fieldId, animate);
