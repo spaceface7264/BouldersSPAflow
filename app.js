@@ -4477,7 +4477,44 @@ async function loadProductsFromAPI() {
 }
 
 // Step 5: Render products from API data into the UI
-function renderProductsFromAPI() {
+// Signature of everything that affects what renderProductsFromAPI() produces.
+// If it has not changed since the last render, rebuilding the cards is pure
+// churn: it destroys and recreates every .plan-card node, which restarts their
+// entrance animation and reads as a flicker.
+let lastProductsRenderKey = null;
+
+function getProductsRenderKey() {
+  const ids = (list) => (Array.isArray(list) ? list.map((p) => p?.id).join(',') : '');
+  return [
+    state.selectedBusinessUnit,
+    state.language,
+    normalizePathname(window.location.pathname),
+    ids(state.subscriptions),
+    ids(state.dayPassSubscriptions),
+    ids(state.valueCards),
+  ].join('|');
+}
+
+// True when the DOM already reflects `key`. The children check is a safety
+// net: if something emptied the lists since, re-render regardless of the key.
+function productsAlreadyRendered(key) {
+  if (key === null || key !== lastProductsRenderKey) return false;
+  return Array.from(document.querySelectorAll('.plans-list'))
+    .some((list) => list.children.length > 0);
+}
+
+function renderProductsFromAPI({ force = false } = {}) {
+  // showStep(2) re-renders on a 100ms timer after landing on the step, which
+  // lands ~30ms after loadProductsFromAPI() has already rendered the same
+  // products - two full card rebuilds a couple of frames apart. Skip the
+  // second one when nothing that feeds the render has changed.
+  const renderKey = getProductsRenderKey();
+  if (!force && productsAlreadyRendered(renderKey)) {
+    devLog('[Products] Render skipped - DOM already matches current state');
+    return;
+  }
+  lastProductsRenderKey = renderKey;
+
   // Helper function to render a subscription product card
   const renderSubscriptionCard = (product, category) => {
     const planCard = document.createElement('div');
@@ -5186,6 +5223,19 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         });
 
         if (moves.length === 0) return;
+
+        // The reduced-motion rule for .gym-item in styles.css cannot win against
+        // the inline transitions written below, so honour the preference here
+        // instead: leave the items where they already are, at their new
+        // positions, with no reorder animation at all.
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+          moves.forEach(({ item }) => {
+            item.style.transition = '';
+            item.style.transitionDelay = '';
+            item.style.transform = '';
+          });
+          return;
+        }
 
         // Pass 2 - write. Park every item at its old position.
         moves.forEach(({ item, deltaX, deltaY }) => {
@@ -12691,8 +12741,13 @@ function scrollToTop() {
   // in a rAF and a second hard reset on a 50ms timer: the smooth scroll was a
   // no-op against a page already at 0, and the extra writes landed in the
   // middle of the step panel's fade-in, which showed up as jank.
-  // 'instant' keeps this immune to `scroll-behavior: smooth` on the root.
-  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  // 'auto', not 'instant': the "instant" enum value postdates some engines we
+  // still serve (iOS Safari < 15.4), where the dictionary conversion throws a
+  // TypeError - and as the first statement here that would skip the fallbacks
+  // below and unwind into every caller. The root has no scroll-behavior:
+  // smooth (the only one in the sheet is on .plan-options, a carousel), so
+  // 'auto' scrolls instantly here anyway.
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
 }
@@ -13624,15 +13679,18 @@ function setupNewAccessStep() {
     });
   });
 
-  // Plan selection
-  // Re-clone cards before binding to avoid duplicate listeners when setup runs multiple times
+  // Plan selection.
+  // This used to clone each card and swap it for the original, as a way of
+  // dropping previously-attached listeners when setup runs more than once
   // (e.g. immediate + requestAnimationFrame after render/language updates).
-  Array.from(document.querySelectorAll('.plan-card')).forEach((originalCard) => {
-    const clonedCard = originalCard.cloneNode(true);
-    if (originalCard.parentNode) {
-      originalCard.parentNode.replaceChild(clonedCard, originalCard);
-    }
-    const card = clonedCard;
+  // Replacing the node restarts its CSS entrance animation, so every rebind
+  // made the cards flash. A bind-once marker achieves the same thing without
+  // touching the DOM: cards created by a fresh render arrive without the
+  // marker and get bound, cards that survive a rebind keep their single
+  // listener.
+  Array.from(document.querySelectorAll('.plan-card')).forEach((card) => {
+    if (card.dataset.listenersBound === 'true') return;
+    card.dataset.listenersBound = 'true';
     card.addEventListener('click', async (e) => {
       // Don't handle clicks inside the quantity panel - its buttons have their own global handlers.
       // This prevents clicks on +/- and Continue from toggling/deselecting the card.
