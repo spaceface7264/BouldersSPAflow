@@ -601,11 +601,12 @@
     left: 0;
     width: 100%;
     height: 100%;
+    /* Flat scrim. It used to repeat the gradient so the hand-off to the page
+       looked seamless, but that only held when the image had already loaded -
+       otherwise both overlay and page were flat #1a1a1a and the gradient
+       snapped in afterwards. The overlay now stays opaque charcoal and the
+       gradient fades up behind it, so the fade-out is a real crossfade. */
     background: #1a1a1a;
-    background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -679,6 +680,10 @@
   }
   
   :root {
+      /* Height of the fixed .header, rewritten at runtime by
+         syncHeaderHeight() in app.js. The fallback is the desktop header, so
+         a render before that first measurement is still sane. */
+      --header-height: 57px;
       --color-text-primary: #1F2837;
       --color-text-white: #FFFFFF;
       --color-brand-accent: #F0F;
@@ -728,6 +733,16 @@ html {
     max-width: 100vw;
 }
 
+/* The header is position: fixed, so it sits over the top of the scrollport.
+   Without this, scrollIntoView({ block: 'start' }) - and the browser's own
+   focus-scrolling - aligns the target to the top of the viewport, i.e. behind
+   the header. scroll-padding-top on the scroll container shrinks the "optimal
+   viewing region" so every scroll of this kind lands flush underneath it,
+   including anchor jumps and any future call sites. */
+html {
+    scroll-padding-top: calc(var(--header-height) + 12px);
+}
+
 /* Prevent overflow from negative margins */
 body > * {
     max-width: 100vw;
@@ -741,27 +756,46 @@ body > .header {
 
 body {
     background-color: #1a1a1a;
-    background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
     width: 100%;
     max-width: 100vw;
     overflow-x: hidden;
     overflow-y: auto;
-    background-size: cover;
-    background-position: center center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
     min-height: 100vh; /* Ensures body is at least viewport height */
     display: flex;
     flex-direction: column;
     color: white;
     font-family: 'Inter', system-ui, sans-serif;
     /* Remove height: 100% to allow natural growth beyond viewport */
-    /* Ensure fixed background works across all browsers */
-    -webkit-background-attachment: fixed;
-    -moz-background-attachment: fixed;
-    -o-background-attachment: fixed;
-    /* Optimize for mobile performance */
-    will-change: auto;
+}
+
+/* The gradient lives on its own fixed layer rather than on body.
+   Two reasons:
+   1. background-image is not an animatable property. When the image arrived
+      after the loading overlay had gone (the common case on a slow
+      connection) it hard-cut into place. On a layer we can fade its opacity.
+   2. It replaces background-attachment: fixed, which repaints on every
+      scroll frame on mobile and which iOS Safari does not honour properly.
+      A position: fixed layer stays put by construction and costs nothing to
+      scroll past.
+   The three -webkit-/-moz-/-o-background-attachment declarations that used
+   to sit here were never real properties in any browser and are dropped. */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image: url('https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png');
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 0.5s ease-out;
+    pointer-events: none;
+}
+
+/* Set once the image has actually decoded - see markBackgroundReady() */
+body.bg-ready::before {
+    opacity: 1;
 }
 
 /* =================================
@@ -1395,22 +1429,29 @@ body {
     inset: -3px;
     border-radius: 50%;
     padding: 2px;
+    /* Softness is baked into the gradient stops instead of filter: blur().
+       A blur filter forces a full repaint of the layer on every frame of the
+       spin; the extra colour stops give the same falloff for free. */
     background: conic-gradient(
         from 0deg,
-        transparent 0deg,
-        rgba(244, 1, 245, 0.1) 90deg,
-        rgba(244, 1, 245, 0.3) 180deg,
-        rgba(244, 1, 245, 0.6) 270deg,
-        #f0f 350deg,
-        #f0f 360deg
+        rgba(244, 1, 245, 0) 0deg,
+        rgba(244, 1, 245, 0.08) 60deg,
+        rgba(244, 1, 245, 0.2) 120deg,
+        rgba(244, 1, 245, 0.42) 190deg,
+        rgba(255, 92, 255, 0.72) 260deg,
+        rgba(255, 140, 255, 1) 320deg,
+        #ff6cff 352deg,
+        rgba(244, 1, 245, 0) 360deg
     );
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask-composite: exclude;
-    animation: spin 1.5s linear infinite, beam-fade-in 0.5s ease forwards;
+    /* Finite: the ring is decorative orientation, not a loading state. It spins
+       while the user takes in the step, then settles into a static gradient
+       instead of burning frames for the whole time they are choosing. */
+    animation: spin 1.5s linear 6, beam-fade-in 0.5s ease forwards;
     z-index: 0;
-    filter: blur(2px) brightness(1.5);
     pointer-events: none;
     opacity: 1;
 }
@@ -1527,7 +1568,8 @@ body {
     width: 100%;
     height: 100%;
     background: rgba(244, 1, 245, 0.5);
-    animation: connector-hint-fill 2s ease-in-out infinite;
+    /* Finite: a hint, not a permanent loop competing with entrance animations. */
+    animation: connector-hint-fill 2s ease-in-out 3;
     transform-origin: left;
 }
 
@@ -1623,7 +1665,7 @@ body {
 
 .step-panel {
     display: none;
-    animation: fadeIn 0.3s ease-in-out;
+    animation: fadeIn 0.22s ease-out;
 }
 
 .step-panel.active {
@@ -1631,7 +1673,7 @@ body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
@@ -2659,7 +2701,7 @@ body {
     width: 20px;
     height: 20px;
     color: var(--color-text-subtle);
-    transition: all 0.3s ease;
+    transition: transform 0.3s ease, color 0.3s ease;
     flex-shrink: 0;
     position: absolute; /* Position icon absolutely so it doesn't affect centering */
     right: 16px; /* Position from right edge */
@@ -2670,30 +2712,45 @@ body {
     color: #f0f;
 }
 
+/* Expand/collapse animates grid-template-rows (0fr -> 1fr) rather than
+   max-height. max-height had to be given an arbitrary ceiling
+   (calc(100vh - 200px)); since real content is usually well short of that,
+   the easing curve was spent on distance the element never travelled - the
+   panel reached its full height in roughly the first third of the duration
+   and then sat still for the rest, which read as "snap, then wait". The fr
+   interpolation runs against the content's actual height, so the curve lands
+   where it looks like it should. It also removes a per-frame layout pass
+   against a viewport-relative value. */
 .category-content {
-    max-height: 0;
+    display: grid;
+    grid-template-rows: 0fr;
     overflow: hidden;
     opacity: 0;
     transform: translateY(-10px);
-    transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s,
-                transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
+    transition: grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1) 0.04s,
+                transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) 0.04s;
     padding-bottom: 0;
 }
 
-.category-item.expanded .category-content {
-    max-height: calc(100vh - 200px); /* Use max-height instead of min-height for smooth animation */
-    opacity: 1;
-    transform: translateY(0);
-    overflow: visible; /* Don't scroll category-content itself */
+/* The single grid row. min-height: 0 lets the row actually collapse to 0fr,
+   and the flex column carries the layout .category-content used to own. */
+.category-content-inner {
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+.category-item.expanded .category-content {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
     padding-bottom: 0; /* Remove bottom padding to prevent purple area */
     outline: none; /* Remove default focus outline */
 }
 
-.category-item.expanded.selected .category-content {
-    max-height: none; /* Remove max-height constraint for selected items to show all content */
+.category-item.expanded.selected .category-content-inner {
     flex: 1; /* Allow content to grow to fill available space */
 }
 
@@ -2708,7 +2765,7 @@ body {
     flex-shrink: 0; /* Keep description fixed, don't shrink */
     opacity: 0;
     transform: translateY(-5px);
-    transition: opacity 0.3s ease-out 0.15s, transform 0.3s ease-out 0.15s;
+    transition: opacity 0.24s ease-out 0.06s, transform 0.24s ease-out 0.06s;
 }
 
 .category-item.expanded .category-description {
@@ -2775,7 +2832,7 @@ body {
     max-height: calc(100vh - 250px); /* Increased max-height to match category-content min-height */
     opacity: 0;
     transform: translateY(10px);
-    transition: opacity 0.4s ease-out 0.2s, transform 0.4s ease-out 0.2s;
+    transition: opacity 0.26s ease-out 0.08s, transform 0.26s ease-out 0.08s;
 }
 
 .category-item.expanded .plans-list {
@@ -3113,7 +3170,10 @@ body {
     border-top: 1px solid var(--color-item-border);
     border-bottom: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -3123,62 +3183,53 @@ body {
     height: 100%; /* Fill container height */
     min-height: auto; /* Allow content to determine minimum height */
     opacity: 0;
-    transform: translateY(15px) scale(0.95);
+    transform: translateY(10px) scale(0.97);
 }
 
 /* Reset cards when category is not expanded */
 .category-item:not(.expanded) .plan-card {
     opacity: 0;
-    transform: translateY(15px) scale(0.95);
+    transform: translateY(10px) scale(0.97);
     animation: none;
 }
 
 /* Only animate cards when category is expanded */
 .category-item.expanded .plan-card {
-    animation: fadeInCard 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation: fadeInCard 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-/* Staggered animation delays for each card */
+/* Staggered animation delays for each card.
+   30ms step, capped from the 6th card on: past that the stagger stops reading
+   as a cascade and just delays the bottom of the list. Last card now lands at
+   ~0.49s instead of ~1.05s. */
 .category-item.expanded .plan-card:nth-child(1) {
-    animation-delay: 0.25s;
+    animation-delay: 0.1s;
 }
 
 .category-item.expanded .plan-card:nth-child(2) {
-    animation-delay: 0.3s;
+    animation-delay: 0.13s;
 }
 
 .category-item.expanded .plan-card:nth-child(3) {
-    animation-delay: 0.35s;
+    animation-delay: 0.16s;
 }
 
 .category-item.expanded .plan-card:nth-child(4) {
-    animation-delay: 0.4s;
+    animation-delay: 0.19s;
 }
 
 .category-item.expanded .plan-card:nth-child(5) {
-    animation-delay: 0.45s;
+    animation-delay: 0.22s;
 }
 
-.category-item.expanded .plan-card:nth-child(6) {
-    animation-delay: 0.5s;
-}
-
-.category-item.expanded .plan-card:nth-child(7) {
-    animation-delay: 0.55s;
-}
-
-.category-item.expanded .plan-card:nth-child(8) {
-    animation-delay: 0.6s;
-}
-
-.category-item.expanded .plan-card:nth-child(n+9) {
-    animation-delay: 0.65s;
+.category-item.expanded .plan-card:nth-child(n+6) {
+    animation-delay: 0.24s;
 }
 
 @keyframes fadeInCard {
     from {
         opacity: 0;
-        transform: translateY(15px) scale(0.95);
+        transform: translateY(10px) scale(0.97);
     }
     to {
         opacity: 1;
@@ -3195,12 +3246,12 @@ body {
     padding: 40px 20px;
     text-align: center;
     opacity: 0;
-    transform: translateY(15px) scale(0.95);
+    transform: translateY(10px) scale(0.97);
 }
 
 .category-item.expanded .no-products-message {
-    animation: fadeInCard 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    animation-delay: 0.25s;
+    animation: fadeInCard 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 0.1s;
 }
 
 .no-products-content {
@@ -6141,27 +6192,6 @@ body.password-reset-route .global-footer {
                    inset 0 0 18px rgba(244, 1, 245, 0.15);
     }
     
-    .step-circle.active::before {
-        inset: -3px;
-        padding: 2px;
-        background: conic-gradient(
-            from 0deg,
-            transparent 0deg,
-            rgba(244, 1, 245, 0.1) 90deg,
-            rgba(244, 1, 245, 0.3) 180deg,
-            rgba(244, 1, 245, 0.6) 270deg,
-            #f0f 350deg,
-            #f0f 360deg
-        );
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        mask-composite: exclude;
-        animation: spin 1.5s linear infinite, beam-fade-in 0.5s ease forwards;
-        filter: blur(2px) brightness(1.5);
-        opacity: 1;
-    }
-    
     .step-circle .checkmark {
         width: 20px;
         height: 20px;
@@ -6306,27 +6336,6 @@ body.password-reset-route .global-footer {
     .step-circle.active {
         box-shadow: 0 0 30px rgba(244, 1, 245, 0.6),
                    inset 0 0 20px rgba(244, 1, 245, 0.15);
-    }
-    
-    .step-circle.active::before {
-        inset: -3px;
-        padding: 2px;
-        background: conic-gradient(
-            from 0deg,
-            transparent 0deg,
-            rgba(244, 1, 245, 0.1) 90deg,
-            rgba(244, 1, 245, 0.3) 180deg,
-            rgba(244, 1, 245, 0.6) 270deg,
-            #f0f 350deg,
-            #f0f 360deg
-        );
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        mask-composite: exclude;
-        animation: spin 1.5s linear infinite, beam-fade-in 0.5s ease forwards;
-        filter: blur(2px) brightness(1.5);
-        opacity: 1;
     }
     
     .step-circle .checkmark {
@@ -9611,7 +9620,7 @@ main {
     }
 
     /* Mobile background positioning - focal point more to the left */
-    body {
+    body::before {
         background-position: 30% center;
     }
 }
@@ -9936,27 +9945,6 @@ main {
         border-width: 2px;
         box-shadow: 0 0 20px rgba(244, 1, 245, 0.6),
                    inset 0 0 15px rgba(244, 1, 245, 0.15);
-    }
-    
-    .step-circle.active::before {
-        inset: -3px;
-        padding: 2px;
-        background: conic-gradient(
-            from 0deg,
-            transparent 0deg,
-            rgba(244, 1, 245, 0.1) 90deg,
-            rgba(244, 1, 245, 0.3) 180deg,
-            rgba(244, 1, 245, 0.6) 270deg,
-            #f0f 350deg,
-            #f0f 360deg
-        );
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        mask-composite: exclude;
-        animation: spin 1.5s linear infinite, beam-fade-in 0.5s ease forwards;
-        filter: blur(2px) brightness(1.5);
-        opacity: 1;
     }
     
     .step-circle .checkmark {
@@ -11256,5 +11244,83 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
 
     #step-4 .apply-discount-btn {
         flex-shrink: 0;
+    }
+}
+
+/* ==========================================================================
+   Reduced motion
+   Entrance animations in the 1-2-3 step flow are decoration: the content is
+   fully usable without them. For users who ask for reduced motion we skip the
+   travel and the staggering entirely (content appears at its final position)
+   and stop the decorative loops on the step indicator. Functional spinners
+   that communicate "work in progress" are deliberately left running.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+    /* Step panel transitions */
+    .step-panel {
+        animation: none;
+    }
+
+    /* Step indicator decoration */
+    .step-circle.active {
+        animation: none;
+    }
+
+    .step-circle.active::before,
+    .step.active + .step-connector::before,
+    .step.active + .step-connector + .step + .step-connector::before,
+    .step-connector.animating::after {
+        animation: none;
+    }
+
+    .step-circle.active::before {
+        opacity: 1;
+    }
+
+    /* Category accordion: show content, skip the cascade */
+    .category-content,
+    .category-description,
+    .plans-list {
+        transition: none;
+    }
+
+    /* Keep the colour feedback on selection/hover (that is not motion), but
+       drop transform from the transition list so cards snap to their resting
+       position instead of sliding into it. */
+    .plan-card {
+        transition: background-color 0.3s ease,
+                    border-color 0.3s ease,
+                    box-shadow 0.3s ease;
+    }
+
+    .category-item.expanded .plan-card,
+    .category-item.expanded .no-products-message {
+        animation: none;
+        animation-delay: 0s;
+        opacity: 1;
+        transform: none;
+    }
+
+    .plan-section[data-state="entering"],
+    .plan-section[data-state="leaving"],
+    .plan-section[data-state="entering"] .plan-options,
+    .plan-section[data-state="leaving"] .plan-options {
+        animation: none;
+    }
+
+    /* Gym list entrance / reorder */
+    .gym-item,
+    .gym-item.reordering {
+        transition: none;
+    }
+
+    .gym-item.fade-in {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .gym-item:hover {
+        transform: none;
     }
 }

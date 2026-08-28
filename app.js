@@ -4682,10 +4682,12 @@ function renderProductsFromAPI() {
           <i data-lucide="chevron-down" class="category-icon"></i>
         </div>
         <div class="category-content">
-          <div class="category-description">
-            <p>Prøv Boulders gratis i 15 dage. Fuld adgang + lejesko inkluderet.</p>
+          <div class="category-content-inner">
+            <div class="category-description">
+              <p>Prøv Boulders gratis i 15 dage. Fuld adgang + lejesko inkluderet.</p>
+            </div>
+            <div class="plans-list"></div>
           </div>
-          <div class="plans-list"></div>
         </div>
       `);
       categoryList.prepend(categoryItem);
@@ -4711,10 +4713,12 @@ function renderProductsFromAPI() {
           <i data-lucide="chevron-down" class="category-icon"></i>
         </div>
         <div class="category-content">
-          <div class="category-description">
-            <p data-i18n-key="firstclimb.category.description">${description}</p>
+          <div class="category-content-inner">
+            <div class="category-description">
+              <p data-i18n-key="firstclimb.category.description">${description}</p>
+            </div>
+            <div class="plans-list"></div>
           </div>
-          <div class="plans-list"></div>
         </div>
       `);
       categoryList.prepend(categoryItem);
@@ -5155,40 +5159,50 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
       }
     }
     
-    // Animate reordering using FLIP technique
+    // Animate reordering using FLIP technique.
+    // Reads and writes are kept in separate passes. Interleaving them (measure
+    // one item, style it, read its offsetHeight, measure the next...) forced a
+    // synchronous layout per moved item, so a reorder of the full gym list cost
+    // one layout pass per gym. Now: measure everything, then style everything,
+    // then flush once.
     if (existingItems.length > 0) {
       requestAnimationFrame(() => {
+        // Pass 1 - read. No style writes in this loop.
+        const moves = [];
         newItems.forEach(({ item, index }) => {
           const gymId = item.getAttribute('data-gym-id');
           const existingData = existingPositions.get(gymId);
-          
-          if (existingData && existingData.oldIndex !== index) {
-            // Calculate new position
-            const newRect = item.getBoundingClientRect();
-            const oldRect = existingData.rect;
-            
-            // Calculate transform
-            const deltaX = oldRect.left - newRect.left;
-            const deltaY = oldRect.top - newRect.top;
-            
-            // Apply initial transform
-            item.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-            item.style.transition = 'none';
-            
-            // Trigger reflow
-            item.offsetHeight;
-            
-            // Animate to final position with staggered delay
-            requestAnimationFrame(() => {
-              item.style.transform = '';
-              item.style.transition = `transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)`;
-              // Add slight delay based on distance moved
-              const delay = Math.min(Math.abs(index - existingData.oldIndex) * 0.03, 0.2);
-              if (delay > 0) {
-                item.style.transitionDelay = `${delay}s`;
-              }
-            });
-          }
+          if (!existingData || existingData.oldIndex === index) return;
+
+          const newRect = item.getBoundingClientRect();
+          const oldRect = existingData.rect;
+          moves.push({
+            item,
+            deltaX: oldRect.left - newRect.left,
+            deltaY: oldRect.top - newRect.top,
+            // Slight delay based on how far the item moved in the list
+            delay: Math.min(Math.abs(index - existingData.oldIndex) * 0.03, 0.2)
+          });
+        });
+
+        if (moves.length === 0) return;
+
+        // Pass 2 - write. Park every item at its old position.
+        moves.forEach(({ item, deltaX, deltaY }) => {
+          item.style.transition = 'none';
+          item.style.transitionDelay = '';
+          item.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+        });
+
+        // Single forced reflow for the whole batch, so the parked transforms
+        // are committed before the transition is re-enabled below.
+        void document.body.offsetHeight;
+
+        // Pass 3 - write. Release them to their new positions.
+        moves.forEach(({ item, delay }) => {
+          item.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+          item.style.transitionDelay = delay > 0 ? `${delay}s` : '';
+          item.style.transform = '';
         });
       });
     }
@@ -5614,6 +5628,11 @@ function setupGymEventListeners() {
   });
 }
 
+
+// How long a selection stays on screen before the flow auto-advances to the
+// next step. Long enough to register the .selected state (which paints
+// immediately on click), short enough that it does not read as lag.
+const AUTO_ADVANCE_DELAY_MS = 180;
 
 // Track pending navigation timeouts to prevent double-clicks and stale state
 const pendingNavigationTimeouts = {
@@ -7101,16 +7120,98 @@ function init() {
   hideLoadingOverlay();
 }
 
+// Publish the fixed header's real height as --header-height, which
+// styles.css uses for html { scroll-padding-top }. Measured rather than
+// hardcoded: the header is 45px / 51px / 57px across the breakpoints and
+// changes with font loading, so a literal in CSS would drift.
+let headerHeightObserver = null;
+function syncHeaderHeight() {
+  const header = document.querySelector('.header');
+  if (!header) return;
+
+  const height = Math.round(header.getBoundingClientRect().height);
+  // The header starts as display:none and measures 0 until it is revealed;
+  // writing that would put the scroll padding at zero, which is the bug this
+  // exists to fix.
+  if (height > 0) {
+    document.documentElement.style.setProperty('--header-height', `${height}px`);
+  }
+
+  if (!headerHeightObserver && typeof ResizeObserver !== 'undefined') {
+    headerHeightObserver = new ResizeObserver(() => syncHeaderHeight());
+    headerHeightObserver.observe(header);
+  }
+}
+
+// The page background, kept in sync with body::before in styles.css.
+const BACKGROUND_IMAGE_URL = 'https://storage.googleapis.com/boulderscss/signup-bg-gradient-pink.png';
+
+// How long the loading overlay may linger waiting for the background. Past
+// this the page is revealed regardless and the gradient fades up on its own -
+// a slow or dead CDN must never hold the signup flow hostage.
+const BACKGROUND_REVEAL_MAX_WAIT_MS = 600;
+
+// Resolves once the background image has decoded (or failed). Adding
+// .bg-ready fades body::before up; without it the gradient would hard-cut
+// into place, because background-image cannot be transitioned.
+let backgroundReadyPromise = null;
+function whenBackgroundReady() {
+  if (backgroundReadyPromise) return backgroundReadyPromise;
+
+  backgroundReadyPromise = new Promise((resolve) => {
+    const markReady = () => {
+      document.body.classList.add('bg-ready');
+      resolve();
+    };
+    const img = new Image();
+    // Resolve on error too: a missing background should degrade to the flat
+    // charcoal base, not block the reveal.
+    img.onload = markReady;
+    img.onerror = markReady;
+    img.src = BACKGROUND_IMAGE_URL;
+    // Already in the cache (the <link rel="preload"> in index.html usually
+    // wins this race), in which case no event fires.
+    if (img.complete) markReady();
+  });
+
+  return backgroundReadyPromise;
+}
+
+// Kick the load off as the module evaluates so it overlaps with init().
+whenBackgroundReady();
+
+// Measure the header as soon as it has a box, independently of the loading
+// overlay. hideLoadingOverlay() also calls this, but it returns early when the
+// overlay is already gone, and --header-height must not depend on that path.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', syncHeaderHeight, { once: true });
+} else {
+  syncHeaderHeight();
+}
+window.addEventListener('load', syncHeaderHeight, { once: true });
+
 // Hide loading overlay and show main content
 function hideLoadingOverlay() {
   const loadingOverlay = document.getElementById('loadingOverlay');
   const mainContent = document.getElementById('mainContent');
   const headerContent = document.getElementById('headerContent');
   
-  if (loadingOverlay) {
+  if (!loadingOverlay) return;
+
+  // Hold the overlay until the background is actually there, so the fade-out
+  // is a crossfade onto the finished gradient rather than a reveal of flat
+  // #1a1a1a that the gradient then snaps into. Capped - see the constant.
+  const backgroundSettled = Promise.race([
+    whenBackgroundReady(),
+    new Promise((resolve) => setTimeout(resolve, BACKGROUND_REVEAL_MAX_WAIT_MS))
+  ]);
+
+  backgroundSettled.then(() => {
     // Show header and main content
     if (headerContent) {
       headerContent.style.display = '';
+      // Now that it has a box, measure it for --header-height.
+      syncHeaderHeight();
     }
     if (mainContent && !document.body.classList.contains('password-reset-route')) {
       mainContent.style.display = '';
@@ -7120,17 +7221,31 @@ function hideLoadingOverlay() {
         initFAQ();
       }, 100);
     }
-    
+
     // Hide loading overlay with fade out
     loadingOverlay.classList.add('hidden');
-    
-    // Remove from DOM after animation completes
-    setTimeout(() => {
+
+    // Remove once the fade has actually finished. The previous fixed 300ms
+    // timer raced the transition and fired regardless of whether it ran (it
+    // does not, for instance, in a backgrounded tab).
+    let removed = false;
+    const removeOverlay = () => {
+      if (removed) return;
+      removed = true;
+      clearTimeout(fallbackTimer);
+      loadingOverlay.removeEventListener('transitionend', onTransitionEnd);
       if (loadingOverlay.parentNode) {
         loadingOverlay.remove();
       }
-    }, 300);
-  }
+    };
+    const onTransitionEnd = (event) => {
+      if (event.target === loadingOverlay && event.propertyName === 'opacity') {
+        removeOverlay();
+      }
+    };
+    loadingOverlay.addEventListener('transitionend', onTransitionEnd);
+    const fallbackTimer = setTimeout(removeOverlay, 600);
+  });
 }
 
 
@@ -12488,7 +12603,7 @@ function handleGymSelection(item) {
       // Navigate to step 2 (next step after gym selection)
       nextStep(1);
     }
-  }, 500);
+  }, AUTO_ADVANCE_DELAY_MS);
 }
 
 // Update gym heads-up display
@@ -12572,24 +12687,14 @@ function syncPunchCardQuantityUI(card, planId) {
 
 // Scroll to top function with multiple approaches
 function scrollToTop() {
-  // Method 1: Direct scroll to top
+  // One instant write. The previous version also queued a *smooth* scrollTo(0)
+  // in a rAF and a second hard reset on a 50ms timer: the smooth scroll was a
+  // no-op against a page already at 0, and the extra writes landed in the
+  // middle of the step panel's fade-in, which showed up as jank.
+  // 'instant' keeps this immune to `scroll-behavior: smooth` on the root.
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
-  
-  // Method 2: Smooth scroll with requestAnimationFrame
-  requestAnimationFrame(() => {
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: 'smooth'
-    });
-  });
-  
-  // Method 3: Force scroll after a brief delay
-  setTimeout(() => {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  }, 50);
 }
 
 
@@ -13761,7 +13866,7 @@ function setupNewAccessStep() {
               if (state.currentStep === 2) {
                 nextStep();
               }
-            }, 500);
+            }, AUTO_ADVANCE_DELAY_MS);
           }
         }
     });
@@ -14689,7 +14794,7 @@ function selectMembershipPlan(planId) {
   updateCartSummary();
   updateCheckoutButton();
   if (state.currentStep === 2) {
-    setTimeout(() => nextStep(), 300);
+    setTimeout(() => nextStep(), AUTO_ADVANCE_DELAY_MS);
   }
   showToast(`${selectedPlan?.name ?? 'Membership'} selected.`, 'success');
   // Do not pre-create order on plan selection; wait for explicit checkout.
