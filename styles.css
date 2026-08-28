@@ -1568,8 +1568,12 @@ body.bg-ready::before {
     width: 100%;
     height: 100%;
     background: rgba(244, 1, 245, 0.5);
-    /* Finite: a hint, not a permanent loop competing with entrance animations. */
-    animation: connector-hint-fill 2s ease-in-out 3;
+    /* Finite: a hint, not a permanent loop competing with entrance animations.
+       'forwards' is required: without it the pseudo-element reverts to its
+       declared style when the last iteration ends - a full-width, fully opaque
+       magenta bar, i.e. exactly the .completed look - so connectors for steps
+       the user has not reached would read as already done. */
+    animation: connector-hint-fill 2s ease-in-out 3 forwards;
     transform-origin: left;
 }
 
@@ -2474,6 +2478,26 @@ body.bg-ready::before {
 .category-list .category-item.expanded.selected {
     flex: 1;
     min-height: 0; /* Allow content to determine height */
+}
+
+/* Landing routes surface exactly one category. hideNonLandingCategories() sets
+   this up in JS, but it can only run once the products request resolves; until
+   then the four static categories in index.html were all on screen (~440ms
+   measured), so the page showed the ordinary list and then collapsed to the
+   campaign. The marker on <html> is set from the URL during init, so the
+   categories this route does not use are never painted.
+
+   These rules only cover the gap: once hideNonLandingCategories() runs it sets
+   inline display on each item, which wins over anything here, and the two agree
+   on the outcome. */
+html[data-landing-route] .category-item {
+    display: none;
+}
+
+html[data-landing-route="LandingFirstMonthFree"] .category-item[data-category="campaign"],
+html[data-landing-route="LandingFreeTrial"] .category-item[data-category="freetrial"],
+html[data-landing-route="LandingFirstClimb"] .category-item[data-category="firstclimb"] {
+    display: block;
 }
 
 .category-item {
