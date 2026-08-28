@@ -2480,6 +2480,26 @@ body.bg-ready::before {
     min-height: 0; /* Allow content to determine height */
 }
 
+/* Landing routes surface exactly one category. hideNonLandingCategories() sets
+   this up in JS, but it can only run once the products request resolves; until
+   then the four static categories in index.html were all on screen (~440ms
+   measured), so the page showed the ordinary list and then collapsed to the
+   campaign. The marker on <html> is set from the URL during init, so the
+   categories this route does not use are never painted.
+
+   These rules only cover the gap: once hideNonLandingCategories() runs it sets
+   inline display on each item, which wins over anything here, and the two agree
+   on the outcome. */
+html[data-landing-route] .category-item {
+    display: none;
+}
+
+html[data-landing-route="LandingFirstMonthFree"] .category-item[data-category="campaign"],
+html[data-landing-route="LandingFreeTrial"] .category-item[data-category="freetrial"],
+html[data-landing-route="LandingFirstClimb"] .category-item[data-category="firstclimb"] {
+    display: block;
+}
+
 .category-item {
     background: var(--color-item-bg);
     border: 2px solid var(--color-item-border);

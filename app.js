@@ -547,6 +547,19 @@ function normalizePathname(pathname) {
   return withoutTrailingSlash || '/';
 }
 
+// Mirrors the active landing route onto <html> so CSS can collapse the static
+// category list to the one this route uses, before any product data exists.
+// Cleared on a non-landing route so client-side navigation back to / restores
+// the full list.
+function applyLandingRouteMarker(config = state?.landingRouteConfig) {
+  const componentName = config?.componentName;
+  if (componentName) {
+    document.documentElement.dataset.landingRoute = componentName;
+  } else {
+    delete document.documentElement.dataset.landingRoute;
+  }
+}
+
 function isPasswordResetRoute(pathname = window.location.pathname) {
   const path = normalizePathname(pathname);
   return path === '/reset-password' || path === '/resetpassword';
@@ -7083,6 +7096,15 @@ function init() {
   if (state.landingRouteConfig) {
     devLog('[Landing Route] Active config:', state.landingRouteConfig.componentName, state.landingRouteConfig.labelKey);
   }
+
+  // Publish the route so styles.css can hide the categories this route does not
+  // use. hideNonLandingCategories() already does that, but it lives inside
+  // renderProductsFromAPI() and so cannot run until the products request comes
+  // back - which left step 2 showing the full four-category list from
+  // index.html for the length of that request (~440ms measured) before it
+  // collapsed to the one category the route actually offers. The route is known
+  // synchronously from the URL, so nothing needs to wait for the network.
+  applyLandingRouteMarker();
 
   // firstclimb: block navigation/checkout until eligibility is verified for
   // authenticated arrivals. Non-authenticated users get a no-op promise; checkout
