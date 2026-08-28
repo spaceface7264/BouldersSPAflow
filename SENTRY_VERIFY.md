@@ -2,85 +2,57 @@
 
 ## Current Setup
 
-Your project is using **Sentry Loader Script** (not SDK import), which is already configured in `index.html`:
+Production Sentry is initialized inline in `index.html` from the **CDN bundle**
+`bundle.tracing.replay.feedback.min.js` (v10.x), not the old Loader Script and not
+`sentry.config.js` (that module is unused by the shipped app).
 
 ```html
 <script
-  src="https://js-de.sentry-cdn.com/1cc58b6b7d525b61ce37f528a8ddf2ed.min.js"
+  src="https://browser.sentry-cdn.com/10.69.0/bundle.tracing.replay.feedback.min.js"
+  integrity="sha384-…"
   crossorigin="anonymous"
 ></script>
 ```
 
-This loader script automatically initializes Sentry and makes it available as `window.Sentry`.
+`window.Sentry` is assigned after `Sentry.init(...)`. Helpers in `app.js` call
+`captureException` / `setUser` against that global.
 
-## Difference: Loader Script vs SDK Import
+## What is enabled
 
-### Loader Script (Current Setup) ✅
-- **Pros:** Loads early, captures errors from page load, smaller bundle
-- **Cons:** Configuration done in Sentry dashboard, not in code
-- **Status:** Already configured and working
+| Signal | Behavior |
+|---|---|
+| Errors | Captured; noise filtered via `ignoreErrors` / `beforeSend` in `index.html` |
+| Tracing | 10% in production, 100% locally |
+| User Feedback | Floating bug button + footer “Report a problem” |
+| Session Replay | Buffer mode after Cookiebot **statistics** consent; attaches to feedback (and can flush on error). Not full-session recording. |
 
-### SDK Import (What Sentry Dashboard Shows)
-- **Pros:** More control, configuration in code
-- **Cons:** Larger bundle, needs to be imported
-- **Status:** Not needed - loader script is sufficient
-
-## Verification Test
-
-Since you're using the loader script, you can verify it's working with this test:
-
-### Quick Test (Copy into browser console):
+## Quick verification
 
 ```javascript
-// Test 1: Check if Sentry is loaded
+// 1) SDK present
 console.log('Sentry loaded?', typeof window.Sentry !== 'undefined');
 
-// Test 2: Run the verification snippet from Sentry dashboard
-myUndefinedFunction();
+// 2) Built-in test helper
+window.testSentry();
+// Check Sentry Issues in 5–10s
+
+// 3) Feedback UI
+window.openProblemReport();
+// Or click the bottom-right bug icon / footer Support → Report a problem
+
+// 4) Replay buffering (dev / after statistics consent)
+window.syncSentryReplayWithConsent?.();
+console.log('Replay id', window.Sentry?.getReplay?.()?.getReplayId?.());
 ```
 
-This will throw an error that Sentry should capture automatically.
+## What to expect
 
-### Full Test Suite
+- **Errors:** new Issues with stack + URL + browser info
+- **Feedback:** Sentry → **User Feedback** (`issue.category:feedback`), with signup tags and (when consented) a linked Replay
+- **Console:** `[Sentry] ✅ Initialized in … mode` in non-production
 
-Run the comprehensive test from `TEST_SENTRY.js`:
+## Notes
 
-1. Open your preview site
-2. Open browser console
-3. Copy and paste the entire contents of `TEST_SENTRY.js`
-4. Wait 5-10 seconds
-5. Check Sentry dashboard for errors
-
-## What to Expect
-
-After running the test:
-1. **In Console:** You'll see an error: `ReferenceError: myUndefinedFunction is not defined`
-2. **In Sentry Dashboard:** Within 5-10 seconds, you should see:
-   - A new error/issue
-   - Stack trace showing where the error occurred
-   - Browser/device information
-   - URL where error occurred
-
-## If Sentry Dashboard Shows SDK Import Instructions
-
-The Sentry dashboard shows SDK import instructions by default, but since you're using the loader script:
-
-1. **You can ignore the SDK import code** - it's not needed
-2. **The loader script is already configured** - it uses the same DSN
-3. **Just run the verification test** - `myUndefinedFunction()` will work
-
-## Configuration
-
-Since you're using the loader script, all configuration is done in the Sentry dashboard:
-- Go to **Settings > Projects > join-bouldersdk**
-- Configure error sample rates, performance monitoring, etc.
-- The loader script automatically applies these settings
-
-## Next Steps
-
-1. ✅ Loader script is already in `index.html`
-2. ✅ Run verification test: `myUndefinedFunction()` in console
-3. ✅ Check Sentry dashboard for the error
-4. ✅ Verify error appears with stack trace and context
-
-No code changes needed - the loader script approach is already set up and working!
+- Do not follow dashboard “install via npm” snippets for this app — the live path is the CDN init in `index.html`.
+- `sentry.config.js` is a leftover npm-style helper; changing it does not change production behavior.
+- Source maps upload only when `SENTRY_AUTH_TOKEN` is set at build time (see `vite.config.ts`).
