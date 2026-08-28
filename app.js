@@ -7180,6 +7180,16 @@ function whenBackgroundReady() {
 // Kick the load off as the module evaluates so it overlaps with init().
 whenBackgroundReady();
 
+// Measure the header as soon as it has a box, independently of the loading
+// overlay. hideLoadingOverlay() also calls this, but it returns early when the
+// overlay is already gone, and --header-height must not depend on that path.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', syncHeaderHeight, { once: true });
+} else {
+  syncHeaderHeight();
+}
+window.addEventListener('load', syncHeaderHeight, { once: true });
+
 // Hide loading overlay and show main content
 function hideLoadingOverlay() {
   const loadingOverlay = document.getElementById('loadingOverlay');
