@@ -1568,8 +1568,12 @@ body.bg-ready::before {
     width: 100%;
     height: 100%;
     background: rgba(244, 1, 245, 0.5);
-    /* Finite: a hint, not a permanent loop competing with entrance animations. */
-    animation: connector-hint-fill 2s ease-in-out 3;
+    /* Finite: a hint, not a permanent loop competing with entrance animations.
+       'forwards' is required: without it the pseudo-element reverts to its
+       declared style when the last iteration ends - a full-width, fully opaque
+       magenta bar, i.e. exactly the .completed look - so connectors for steps
+       the user has not reached would read as already done. */
+    animation: connector-hint-fill 2s ease-in-out 3 forwards;
     transform-origin: left;
 }
 
