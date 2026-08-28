@@ -55,6 +55,7 @@ import {
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
 import { sanitizeHTML } from './sanitize.js';
+import confetti from 'canvas-confetti';
 
 /** GoActive / BRP app id for Boulders. Required so reset emails link to boulders.goactivebooking.com/resetPassword. */
 const BOULDERS_GOACTIVE_APP_ID = 416;
@@ -579,6 +580,11 @@ function isFirstClimbRoute() {
   const active = (typeof state !== 'undefined' && state?.landingRouteConfig) || resolveLandingRouteConfig();
   return active?.componentName === 'LandingFirstClimb';
 }
+
+const FIRST_SESSION_VIDEO_ID = 'W-4skXhGWM0';
+const FIRST_SESSION_VIDEO_URL = `https://www.youtube.com/watch?v=${FIRST_SESSION_VIDEO_ID}&t=1s`;
+const APP_STORE_DOWNLOAD_URL = 'https://apps.apple.com/dk/app/boulders/id6482294468';
+const GOOGLE_PLAY_DOWNLOAD_URL = 'https://play.google.com/store/apps/details?id=se.brpsystems.boulders';
 
 const TIKTOK_ATTRIBUTION_COUPON = 'TIKTOK';
 
@@ -5726,6 +5732,7 @@ const state = {
   paymentFailed: false, // Flag to track if payment failed (prevents success page from showing)
   paymentPending: false, // Flag to track if payment is pending (prevents success page from showing)
   paymentConfirmed: false, // Flag to track if payment is confirmed (allows success page to show)
+  successAnimationPlayed: false, // Guard so the confetti+checkmark only fires once per success visit
   authenticatedEmail: null,
   authenticatedCustomer: null, // Full customer profile data from API
   checkoutInProgress: false, // Flag to prevent duplicate checkout attempts
@@ -5758,6 +5765,7 @@ const state = {
   subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
   // 15-day pass: activation date (null = today, or YYYY-MM-DD string for future start)
   subscriptionStartDate: null,
+  lastReferralLinkGeneratedEventKey: null,
   checkoutConfirmAccepted: false,
   checkoutConfirmPreviousFocus: null,
   checkoutConfirmPendingAfterEdit: false,
@@ -7315,7 +7323,7 @@ const translations = {
     'activationConfirm.today': 'I dag',
     'activationConfirm.continue': 'Fortsæt til betaling',
     'activationConfirm.continue.freetrial': 'Aktivér prøveperiode',
-    'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Medlemsnavn:',
+    'cart.membershipDetails': 'Medlemskabsdetaljer', 'cart.membershipNumber': 'Medlemsnummer:', 'cart.membershipActivation': 'Medlemskabet er aktiveret med automatisk fornyelse', 'cart.memberName': 'Navn',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Vælg betalingsmetode', 'cart.paymentRedirect': 'Du vil blive omdirigeret til vores sikre betalingsudbyder for at gennemføre din betaling.',
     'cart.consent.terms': 'Jeg accepterer <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og Betingelser</a>.*',
     'cart.consent.terms.firstclimb': 'Jeg forstår, at jeg skal underskrive <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">ansvarsfraskrivelsen</a> ved indløsning af billetten.*',
@@ -7334,16 +7342,41 @@ const translations = {
     'message.noProducts.membership': 'Ingen medlemskabsmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.punchcard': 'Ingen klippekortmuligheder tilgængelig på nuværende tidspunkt.',
     'message.noProducts.15daypass': 'Ingen 15-dages muligheder tilgængelig på nuværende tidspunkt.',
-    'confirmation.title': 'SUCCES!',
-    'confirmation.message': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.membership': 'Dit medlemskab er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.15daypass': 'Din 15-dages prøveperiode er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.punchcard': 'Dit klippekort er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
-    'confirmation.message.firstclimb': 'Din første klatretur er klar! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.title': 'You\'re in!',
+    'confirmation.title.withName': 'Du er med, {name}!',
+    'confirmation.message': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.appDownload.eyebrow': 'Download vores app',
+    'confirmation.appDownload.title': 'Hav Boulders i lommen',
+    'confirmation.appDownload.subtitle': 'Administrér dit medlemskab, tjek hurtigt ind, og hold styr på din næste klatretur.',
+    'confirmation.appDownload.cta.ios': 'Download i App Store',
+    'confirmation.appDownload.cta.android': 'Hent i Google Play',
+    'confirmation.appDownload.note': 'Fås til iPhone og Android.',
+    'confirmation.appDownload.note.membership': 'Brug appen til at se og bruge dit Loyalitetsprogram direkte i hallen.',
+    'confirmation.appDownload.aria.ios': 'Download Boulders-appen i App Store (åbner i nyt vindue)',
+    'confirmation.appDownload.aria.android': 'Download Boulders-appen i Google Play (åbner i nyt vindue)',
+    'confirmation.message.membership': 'Bekræftelsesmail er på vej. Udforsk fordelene nedenfor, eller mød op i hallen, når det passer dig.',
+    'confirmation.message.15daypass': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.message.punchcard': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
+    'confirmation.message.firstclimb': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.nextStep2.firstclimb': 'Din dagsbillet er klar — kig forbi hallen, når det passer dig (inden for en måned).',
     'confirmation.nextStep3.firstclimb': 'Når du kommer: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk. Husk at du skal underskrive ansvarsfraskrivelsen.',
-    'confirmation.message.generic': 'Din ordre er blevet bekræftet! Du modtager en e-mail med alle detaljerne snart.',
+    'confirmation.message.generic': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.orderDetails': 'Ordredetaljer',
+    'confirmation.orderSummary': 'Ordreoversigt',
+    'confirmation.viewOrderDetails': 'Se ordredetaljer',
+    'confirmation.orderDetailsFull': 'Ordredetaljer',
+    'confirmation.yourOrder': 'Din ordre',
+    'confirmation.eyebrow.membership': 'Dit medlemskab',
+    'confirmation.eyebrow.15daypass': 'Dit prøvepas',
+    'confirmation.eyebrow.punchcard': 'Dit klippekort',
+    'confirmation.eyebrow.firstclimb': 'Din billet',
+    'confirmation.perMonthShort': '/md.',
+    'confirmation.totalToday': 'Total i dag',
+    'confirmation.thenPerMonthPrefix': 'Derefter',
+    'confirmation.perMonth': 'pr. måned',
+    'confirmation.primaryGymInline': 'Primær hal:',
+    'confirmation.phoneNumber': 'Telefonnr.',
+    'confirmation.orderMetaOrder': 'Ordre',
     'confirmation.orderNumber': 'Ordrenummer:',
     'confirmation.date': 'Dato:',
     'confirmation.total': 'Total:',
@@ -7376,6 +7409,26 @@ const translations = {
     'confirmation.passType': 'Pastype:',
     'confirmation.validFrom': 'Gyldig fra:',
     'confirmation.validUntil': 'Gyldig til:',
+    'confirmation.validity': 'Gyldighed',
+    'confirmation.validityIntro.15daypass': 'Dit pas er gyldigt fra',
+    'confirmation.membershipIntro': 'Du er nu medlem hos',
+    'confirmation.onboarding.title': 'Udforsk dit medlemskab',
+    'confirmation.onboarding.lead': 'Fordele, hold og fællesskab. Vælg det, der passer dig.',
+    'confirmation.onboarding.bloclife.title': 'Bloc Life-fordele',
+    'confirmation.onboarding.bloclife.desc': 'Loyalitetsfordele fra dag ét. Grej, café og mere.',
+    'confirmation.onboarding.bloclife.aria': 'Se Bloc Life-fordele (åbner i nyt vindue)',
+    'confirmation.onboarding.classes.title': 'Book et hold',
+    'confirmation.onboarding.classes.desc': 'Introhold er gratis for medlemmer. Reservér din plads.',
+    'confirmation.onboarding.classes.aria': 'Book introhold (åbner i nyt vindue)',
+    'confirmation.onboarding.communities.title': 'Sociale sessions',
+    'confirmation.onboarding.communities.desc': 'Temaaftener. Mød bare op, når det passer dig.',
+    'confirmation.onboarding.communities.aria': 'Se sociale sessions (åbner i nyt vindue)',
+    'confirmation.firstSession.eyebrow': 'Godt at vide',
+    'confirmation.firstSession.title': 'Din første session',
+    'confirmation.firstSession.desc': 'Kort guide til, hvad du skal vide, inden du klatrer i hallen.',
+    'confirmation.firstSession.cta': 'Se videoen',
+    'confirmation.firstSession.duration': '4 min',
+    'confirmation.firstSession.aria': 'Se video om din første session hos Boulders (åbner YouTube i nyt vindue)',
     'confirmation.punchCardDetails': 'Klippekort detaljer',
     'confirmation.name': 'Navn:',
     'confirmation.cardType': 'Korttype:',
@@ -7395,8 +7448,13 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.freetrial.changeActivationCta': 'Har du brug for at ændre aktiveringsdato? Klik her.',
-    'invite.title': 'Giv dine venner 2 ugers gratis prøveperiode',
+    'invite.title': 'Invitér dine venner!',
     'invite.subtitle': 'Del dit link – når dine venner melder sig ind, får de en 2-ugers gratis prøveperiode.',
+    'invite.15daypass.subtitle': 'Klatring er sjovere sammen. Del linket, så en ven også kan prøve det.',
+    'invite.15daypass.shareMessage': 'Hej! {name} her – jeg har lige købt et 15-dages prøvepas hos Boulders. Kom og klatre med mig:',
+    'invite.punchcard.subtitle': 'Klippekortet er perfekt at dele. Inviter en ven til en klatretur næste gang.',
+    'invite.punchcard.shareMessage': 'Hej! {name} her – jeg har lige købt et klippekort hos Boulders. Kom og klatre med mig:',
+    'invite.general.shareMessage': 'Hej! {name} her – kom og klatre med mig hos Boulders:',
     'invite.copyLink': 'Kopiér link',
     'invite.copied': 'Kopieret!',
     'invite.copiedToast': 'Linket er kopieret – del det med dine venner!',
@@ -7408,8 +7466,9 @@ const translations = {
     'invite.share.more': 'Mere',
     'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
+    'invite.general.shareSubject': 'Kom og klatre med mig hos Boulders',
     'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
-    'invite.firstclimb.title': 'Del dette med dine venner',
+    'invite.firstclimb.title': 'Invitér dine venner!',
     'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko og kalk er for alle, der ikke har prøvet det før. Send linket til dine venner.',
     'invite.firstclimb.footnote': 'Tilbuddet kan kun bruges én gang pr. person.',
     'invite.firstclimb.shareMessage': 'Klatre med mig hos Boulders! Få din første dag for 99 kr inkl. lejesko og kalk:',
@@ -7603,7 +7662,7 @@ const translations = {
     'form.authSwitch.login': 'Login', 'form.authSwitch.createAccount': 'Create Account',
     'cart.title': 'Cart', 'cart.completeIn': 'Complete in', 'cart.offerExpiresIn': 'Offer expires in', 'cart.timeLeft': 'Time left', 'cart.timeToComplete': 'Time left to complete:', 'cart.subtotal': 'Subtotal', 'cart.discount': 'Discount code', 'cart.discount.placeholder': 'Discount code', 'cart.discountAmount': 'Discount', 'cart.discountAmountWithPercent': 'Discount ({percent})', 'cart.discount.applied': 'Discount code applied successfully!', 'cart.discount.removed': 'Discount code removed.', 'cart.discount.removeFailed': 'Failed to remove coupon. Please try again.', 'cart.discount.empty': 'Enter a discount code', 'cart.discount.loginRequired': 'Log in or create an account to use a discount code', 'cart.discount.locationRequired': 'Select a gym first', 'cart.discount.selectProduct': 'Select a membership or punch card first', 'cart.discount.notFound': 'Discount code not found. Check the code and try again.', 'cart.discount.invalid': 'Invalid discount code. Check the code and try again.', 'cart.discount.expired': 'This discount code has expired.', 'cart.discount.alreadyUsed': 'This discount code has already been used.', 'cart.discount.notApplicable': 'This discount code does not apply to your order.', 'cart.discount.forbidden': 'This discount code cannot be used on this order.', 'cart.discount.genericFailed': 'Could not apply the discount code. Please try again.', 'cart.discount.noOrder': 'No order found. Refresh the page and try again.', 'cart.discount.methodNotSupported': 'Discount code could not be applied. Please contact support.', 'cart.discount.applying': 'Applying…', 'cart.discount.creatingOrder': 'Creating order…', 'cart.total': 'Total', 'cart.payNow': 'Pay now', 'cart.monthlyFee': 'Monthly payment', 'cart.firstMonth': 'First month', 'cart.validUntil': 'Valid until', 'cart.punch.one': '1 punch', 'cart.punch.label': 'punches',
     'quantity.label': 'Choose quantity',
-    'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Member Name:',
+    'cart.membershipDetails': 'Membership Details', 'cart.membershipNumber': 'Membership Number:', 'cart.membershipActivation': 'Membership activation & auto-renewal setup', 'cart.memberName': 'Name',
     'cart.period': 'Period', 'cart.paymentMethod': 'Choose payment method', 'cart.paymentRedirect': 'You will be redirected to our secure payment provider to complete your payment.',
     'cart.consent.terms': 'I accept the <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and Conditions</a>.*',
     'cart.consent.terms.firstclimb': 'I understand that I will sign the <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">liability waiver</a> when redeeming the ticket.*',
@@ -7622,16 +7681,41 @@ const translations = {
     'message.noProducts.membership': 'No membership options available at this time.',
     'message.noProducts.punchcard': 'No punch card options available at this time.',
     'message.noProducts.15daypass': 'No 15-Day Trial Pass options available at this time.',
-    'confirmation.title': 'SUCCESS!',
-    'confirmation.message': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.membership': 'Your membership has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.15daypass': 'Your 15-Day Trial Period has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.punchcard': 'Your punch card has been confirmed! You\'ll receive an email with all the details shortly.',
-    'confirmation.message.firstclimb': 'Your first climb is ready! You\'ll receive an email with all the details shortly.',
+    'confirmation.title': 'You\'re in!',
+    'confirmation.title.withName': 'You’re in, {name}!',
+    'confirmation.message': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.appDownload.eyebrow': 'Download our app',
+    'confirmation.appDownload.title': 'Keep Boulders in your pocket',
+    'confirmation.appDownload.subtitle': 'Manage your account, check in fast, and stay ready for your next climb.',
+    'confirmation.appDownload.cta.ios': 'Download on the App Store',
+    'confirmation.appDownload.cta.android': 'Get it on Google Play',
+    'confirmation.appDownload.note': 'Available for iPhone and Android.',
+    'confirmation.appDownload.note.membership': 'View and use your Loyalty Program directly in the app.',
+    'confirmation.appDownload.aria.ios': 'Download the Boulders app on the App Store (opens in a new window)',
+    'confirmation.appDownload.aria.android': 'Download the Boulders app on Google Play (opens in a new window)',
+    'confirmation.message.membership': 'Confirmation email on its way. Explore your perks below, or visit the gym whenever you\'re ready.',
+    'confirmation.message.15daypass': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.message.punchcard': 'Welcome to the Boulders community. Visit any gym to start climbing!',
+    'confirmation.message.firstclimb': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.nextStep2.firstclimb': 'Your day ticket is ready — drop by the gym whenever it suits you (within one month).',
     'confirmation.nextStep3.firstclimb': 'When you arrive: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes and chalk. Remember you\'ll need to sign the liability waiver.',
-    'confirmation.message.generic': 'Your order has been confirmed! You\'ll receive an email with all the details shortly.',
+    'confirmation.message.generic': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.orderDetails': 'Order Details',
+    'confirmation.orderSummary': 'Order summary',
+    'confirmation.viewOrderDetails': 'View order details',
+    'confirmation.orderDetailsFull': 'Order details',
+    'confirmation.yourOrder': 'Your order',
+    'confirmation.eyebrow.membership': 'Your membership',
+    'confirmation.eyebrow.15daypass': 'Your trial pass',
+    'confirmation.eyebrow.punchcard': 'Your punch card',
+    'confirmation.eyebrow.firstclimb': 'Your ticket',
+    'confirmation.perMonthShort': '/mo.',
+    'confirmation.totalToday': 'Total today',
+    'confirmation.thenPerMonthPrefix': 'Then',
+    'confirmation.perMonth': 'per month',
+    'confirmation.primaryGymInline': 'Primary gym:',
+    'confirmation.phoneNumber': 'Phone no.',
+    'confirmation.orderMetaOrder': 'Order',
     'confirmation.orderNumber': 'Order Number:',
     'confirmation.date': 'Date:',
     'confirmation.total': 'Total:',
@@ -7664,6 +7748,26 @@ const translations = {
     'confirmation.passType': 'Pass Type:',
     'confirmation.validFrom': 'Valid From:',
     'confirmation.validUntil': 'Valid Until:',
+    'confirmation.validity': 'Valid',
+    'confirmation.validityIntro.15daypass': 'Your pass is valid from',
+    'confirmation.membershipIntro': "You're now a member at",
+    'confirmation.onboarding.title': 'Explore your membership',
+    'confirmation.onboarding.lead': 'Perks, classes, and community. Start with whichever feels right.',
+    'confirmation.onboarding.bloclife.title': 'Bloc Life perks',
+    'confirmation.onboarding.bloclife.desc': 'Loyalty rewards from day one. Gear, café, and more.',
+    'confirmation.onboarding.bloclife.aria': 'View Bloc Life perks (opens in a new tab)',
+    'confirmation.onboarding.classes.title': 'Book a class',
+    'confirmation.onboarding.classes.desc': 'Intro courses are free for members. Reserve your spot.',
+    'confirmation.onboarding.classes.aria': 'Book an intro class (opens in a new tab)',
+    'confirmation.onboarding.communities.title': 'Join a community',
+    'confirmation.onboarding.communities.desc': 'Social Sessions. Themed nights, drop in anytime.',
+    'confirmation.onboarding.communities.aria': 'View Social Sessions schedule (opens in a new tab)',
+    'confirmation.firstSession.eyebrow': 'Good to know',
+    'confirmation.firstSession.title': 'Your first visit',
+    'confirmation.firstSession.desc': 'A quick guide to what to know before you climb at the gym.',
+    'confirmation.firstSession.cta': 'Watch video',
+    'confirmation.firstSession.duration': '4 min',
+    'confirmation.firstSession.aria': 'Watch the first-session guide (opens YouTube in a new tab)',
     'confirmation.punchCardDetails': 'Punch Card Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Card Type:',
@@ -7683,8 +7787,13 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'When your trial starts, visit the gym to connect your access card to your account. Share your phone number with staff and they will help you set everything up.',
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
     'confirmation.freetrial.changeActivationCta': 'Need to change activation day? Click here.',
-    'invite.title': 'Give your friends 2 weeks free',
+    'invite.title': 'Invite your friends!',
     'invite.subtitle': 'Share your link — when your friends sign up, they get a free 2-week trial.',
+    'invite.15daypass.subtitle': 'Climbing is more fun together. Share the link so a friend can give it a try too.',
+    'invite.15daypass.shareMessage': 'Hey! {name} here — I just grabbed a 15-day trial pass at Boulders. Come climb with me:',
+    'invite.punchcard.subtitle': 'Punch cards are made for sharing. Bring a friend along for your next climb.',
+    'invite.punchcard.shareMessage': 'Hey! {name} here — I just picked up a punch card at Boulders. Come climb with me:',
+    'invite.general.shareMessage': 'Hey! {name} here — come climb with me at Boulders:',
     'invite.copyLink': 'Copy link',
     'invite.copied': 'Copied!',
     'invite.copiedToast': 'Link copied — share it with your friends!',
@@ -7695,7 +7804,8 @@ const translations = {
     'invite.share.email': 'Email',
     'invite.share.more': 'More',
     'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
-    'invite.firstclimb.title': 'Share this with your friends',
+    'invite.general.shareSubject': 'Come climb with me at Boulders',
+    'invite.firstclimb.title': 'Invite your friends!',
     'invite.firstclimb.subtitle': 'Our 99 kr day ticket including rental shoes and chalk is open to anyone who hasn’t tried it yet. Send the link to your friends.',
     'invite.firstclimb.footnote': 'The offer can only be used once per person.',
     'invite.firstclimb.shareMessage': 'Come climb with me at Boulders! Get your first day for 99 kr including rental shoes and chalk:',
@@ -7910,7 +8020,7 @@ const translations = {
     'faq.firstclimb.afterDay.a': 'Bleib dran! Du kannst direkt vor Ort auf eine Mitgliedschaft, ein 15-Tage-Ticket oder eine Stempelkarte upgraden — oder online, wenn du bereit bist.',
     'cart.title': 'Warenkorb', 'cart.completeIn': 'Abschließen in', 'cart.offerExpiresIn': 'Angebot endet in', 'cart.timeLeft': 'Verbleibende Zeit', 'cart.timeToComplete': 'Verbleibende Zeit zum Abschließen:', 'cart.subtotal': 'Zwischensumme', 'cart.discount': 'Rabattcode', 'cart.discount.placeholder': 'Rabattcode', 'cart.discountAmount': 'Rabatt', 'cart.discountAmountWithPercent': 'Rabatt ({percent})', 'cart.discount.applied': 'Rabattcode angewendet!', 'cart.discount.removed': 'Rabattcode entfernt.', 'cart.discount.removeFailed': 'Rabattcode konnte nicht entfernt werden. Bitte versuchen Sie es erneut.', 'cart.discount.empty': 'Geben Sie einen Rabattcode ein', 'cart.discount.loginRequired': 'Melden Sie sich an oder erstellen Sie ein Konto, um einen Rabattcode zu verwenden', 'cart.discount.locationRequired': 'Wählen Sie zuerst eine Halle', 'cart.discount.selectProduct': 'Wählen Sie zuerst eine Mitgliedschaft oder eine Stempelkarte', 'cart.discount.notFound': 'Rabattcode nicht gefunden. Überprüfen Sie den Code und versuchen Sie es erneut.', 'cart.discount.invalid': 'Ungültiger Rabattcode. Überprüfen Sie den Code und versuchen Sie es erneut.', 'cart.discount.expired': 'Dieser Rabattcode ist abgelaufen.', 'cart.discount.alreadyUsed': 'Dieser Rabattcode wurde bereits verwendet.', 'cart.discount.notApplicable': 'Dieser Rabattcode gilt nicht für diese Bestellung.', 'cart.discount.forbidden': 'Dieser Rabattcode kann für diese Bestellung nicht verwendet werden.', 'cart.discount.genericFailed': 'Rabattcode konnte nicht angewendet werden. Bitte versuchen Sie es erneut.', 'cart.discount.noOrder': 'Keine Bestellung gefunden. Laden Sie die Seite neu und versuchen Sie es erneut.', 'cart.discount.methodNotSupported': 'Rabattcode konnte nicht angewendet werden. Bitte kontaktieren Sie den Support.', 'cart.discount.applying': 'Wird angewendet…', 'cart.discount.creatingOrder': 'Bestellung wird erstellt…', 'cart.total': 'Gesamt', 'cart.payNow': 'Jetzt bezahlen', 'cart.monthlyFee': 'Monatliche Zahlung', 'cart.firstMonth': 'Erster Monat', 'cart.validUntil': 'Gültig bis', 'cart.punch.one': '1 Stempel', 'cart.punch.label': 'Stempel',
     'quantity.label': 'Menge wählen',
-    'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Mitgliedsname:',
+    'cart.membershipDetails': 'Mitgliedschaftsdetails', 'cart.membershipNumber': 'Mitgliedsnummer:', 'cart.membershipActivation': 'Mitgliedschaftsaktivierung und automatische Verlängerung', 'cart.memberName': 'Name',
     'cart.period': 'Periode', 'cart.paymentMethod': 'Zahlungsmethode wählen', 'cart.paymentRedirect': 'Sie werden zu unserem sicheren Zahlungsanbieter weitergeleitet, um Ihre Zahlung abzuschließen.',
     'cart.consent.terms': 'Ich akzeptiere die <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Allgemeinen Geschäftsbedingungen</a>.*',
     'cart.consent.terms.firstclimb': 'Ich verstehe, dass ich beim Einlösen des Tickets den <a href="#" data-action="open-terms" data-terms-type="liability-waiver" onclick="event.preventDefault();">Haftungsausschluss</a> unterschreiben werde.*',
@@ -7977,16 +8087,41 @@ const translations = {
     'modal.campaignRejection.message': 'Dieses Angebot ist für Ihr Konto nicht verfügbar. Dies kann auf bestehende Abonnements oder Kampagnenberechtigungsregeln zurückzuführen sein. Sie können sich für eine reguläre Mitgliedschaft anmelden. Wenn Sie glauben, dass dies ein Fehler ist, kontaktieren Sie den Support.',
     'modal.campaignRejection.option1': 'Reguläre Mitgliedschaft',
     'modal.campaignRejection.option2': 'Support kontaktieren',
-    'confirmation.title': 'ERFOLG!',
-    'confirmation.message': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
-    'confirmation.message.membership': 'Ihre Mitgliedschaft wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
-    'confirmation.message.15daypass': 'Ihr 15-Tage-Pass wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
-    'confirmation.message.punchcard': 'Ihre Stempelkarte wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
-    'confirmation.message.firstclimb': 'Dein erster Kletterbesuch ist bereit! Du erhältst in Kürze eine E-Mail mit allen Details.',
+    'confirmation.title': 'You\'re in!',
+    'confirmation.title.withName': 'Du bist dabei, {name}!',
+    'confirmation.message': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.appDownload.eyebrow': 'Lade unsere App herunter',
+    'confirmation.appDownload.title': 'Boulders in deiner Tasche',
+    'confirmation.appDownload.subtitle': 'Verwalte deine Mitgliedschaft, checke schneller ein und bleib bereit fur deine nachste Session.',
+    'confirmation.appDownload.cta.ios': 'Im App Store laden',
+    'confirmation.appDownload.cta.android': 'Bei Google Play laden',
+    'confirmation.appDownload.note': 'Verfugbar fur iPhone und Android.',
+    'confirmation.appDownload.note.membership': 'Sieh und nutze dein Loyalitatsprogramm direkt in der App.',
+    'confirmation.appDownload.aria.ios': 'Boulders-App im App Store herunterladen (offnet in neuem Fenster)',
+    'confirmation.appDownload.aria.android': 'Boulders-App bei Google Play herunterladen (offnet in neuem Fenster)',
+    'confirmation.message.membership': 'Die Bestätigungs-E-Mail ist unterwegs. Entdecke unten deine Vorteile oder komm vorbei, wann es dir passt.',
+    'confirmation.message.15daypass': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.message.punchcard': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
+    'confirmation.message.firstclimb': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.nextStep2.firstclimb': 'Deine Tageskarte ist bereit — komm vorbei, wann es dir passt (innerhalb eines Monats).',
     'confirmation.nextStep3.firstclimb': 'Wenn du ankommst: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe und Chalk aus. Denk daran, dass du den Haftungsausschluss unterschreiben musst.',
-    'confirmation.message.generic': 'Ihre Bestellung wurde bestätigt! Sie erhalten in Kürze eine E-Mail mit allen Details.',
+    'confirmation.message.generic': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.orderDetails': 'Bestelldetails',
+    'confirmation.orderSummary': 'Bestellübersicht',
+    'confirmation.viewOrderDetails': 'Bestelldetails anzeigen',
+    'confirmation.orderDetailsFull': 'Bestelldetails',
+    'confirmation.yourOrder': 'Deine Bestellung',
+    'confirmation.eyebrow.membership': 'Deine Mitgliedschaft',
+    'confirmation.eyebrow.15daypass': 'Dein Testpass',
+    'confirmation.eyebrow.punchcard': 'Deine Stempelkarte',
+    'confirmation.eyebrow.firstclimb': 'Dein Ticket',
+    'confirmation.perMonthShort': '/Mon.',
+    'confirmation.totalToday': 'Heute gesamt',
+    'confirmation.thenPerMonthPrefix': 'Danach',
+    'confirmation.perMonth': 'pro Monat',
+    'confirmation.primaryGymInline': 'Heimhalle:',
+    'confirmation.phoneNumber': 'Telefon-Nr.',
+    'confirmation.orderMetaOrder': 'Bestellung',
     'confirmation.orderNumber': 'Bestellnummer:',
     'confirmation.date': 'Datum:',
     'confirmation.total': 'Gesamt:',
@@ -8019,6 +8154,26 @@ const translations = {
     'confirmation.passType': 'Passtyp:',
     'confirmation.validFrom': 'Gültig von:',
     'confirmation.validUntil': 'Gültig bis:',
+    'confirmation.validity': 'Gültig',
+    'confirmation.validityIntro.15daypass': 'Ihr Pass ist gültig ab',
+    'confirmation.membershipIntro': 'Du bist jetzt Mitglied bei',
+    'confirmation.onboarding.title': 'Deine Mitgliedschaft entdecken',
+    'confirmation.onboarding.lead': 'Vorteile, Kurse und Community. Wähle, womit du starten möchtest.',
+    'confirmation.onboarding.bloclife.title': 'Bloc Life Vorteile',
+    'confirmation.onboarding.bloclife.desc': 'Treuevorteile ab Tag eins. Ausrüstung, Café und mehr.',
+    'confirmation.onboarding.bloclife.aria': 'Bloc Life Vorteile ansehen (öffnet in neuem Tab)',
+    'confirmation.onboarding.classes.title': 'Kurs buchen',
+    'confirmation.onboarding.classes.desc': 'Intro-Kurse sind für Mitglieder kostenlos. Platz reservieren.',
+    'confirmation.onboarding.classes.aria': 'Intro-Kurs buchen (öffnet in neuem Tab)',
+    'confirmation.onboarding.communities.title': 'Community beitreten',
+    'confirmation.onboarding.communities.desc': 'Social Sessions. Themenabende, einfach vorbeikommen.',
+    'confirmation.onboarding.communities.aria': 'Social Sessions ansehen (öffnet in neuem Tab)',
+    'confirmation.firstSession.eyebrow': 'Gut zu wissen',
+    'confirmation.firstSession.title': 'Dein erster Besuch',
+    'confirmation.firstSession.desc': 'Kurzer Guide: Was du vor dem Klettern in der Halle wissen solltest.',
+    'confirmation.firstSession.cta': 'Video ansehen',
+    'confirmation.firstSession.duration': '4 Min.',
+    'confirmation.firstSession.aria': 'Video zum ersten Besuch ansehen (öffnet YouTube in neuem Tab)',
     'confirmation.punchCardDetails': 'Stempelkarten-Details',
     'confirmation.name': 'Name:',
     'confirmation.cardType': 'Kartentyp:',
@@ -8035,8 +8190,13 @@ const translations = {
     'confirmation.nextStep3.freetrial.today': 'Besuchen Sie die Halle heute, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.nextStep3.freetrial.future': 'Sobald Ihre Probezeit startet, besuchen Sie die Halle, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.freetrial.changeActivationCta': 'Müssen Sie den Aktivierungstag ändern? Klicken Sie hier',
-    'invite.title': 'Schenk deinen Freunden 2 Wochen gratis',
+    'invite.title': 'Lade deine Freunde ein!',
     'invite.subtitle': 'Teile deinen Link – wenn sich deine Freunde anmelden, bekommen sie 2 Wochen gratis Probezeit.',
+    'invite.15daypass.subtitle': 'Klettern macht gemeinsam mehr Spaß. Teile den Link, damit ein Freund es auch ausprobieren kann.',
+    'invite.15daypass.shareMessage': 'Hey! Hier ist {name} – ich habe gerade einen 15-Tage-Probepass bei Boulders gekauft. Komm und klettere mit mir:',
+    'invite.punchcard.subtitle': 'Die Stempelkarte ist perfekt zum Teilen. Bring einen Freund mit zum nächsten Klettertag.',
+    'invite.punchcard.shareMessage': 'Hey! Hier ist {name} – ich habe gerade eine Stempelkarte bei Boulders gekauft. Komm und klettere mit mir:',
+    'invite.general.shareMessage': 'Hey! Hier ist {name} – komm und klettere mit mir bei Boulders:',
     'invite.copyLink': 'Link kopieren',
     'invite.copied': 'Kopiert!',
     'invite.copiedToast': 'Link kopiert – teile ihn mit deinen Freunden!',
@@ -8047,7 +8207,8 @@ const translations = {
     'invite.share.email': 'E-Mail',
     'invite.share.more': 'Mehr',
     'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
-    'invite.firstclimb.title': 'Teile das mit deinen Freunden',
+    'invite.general.shareSubject': 'Komm und klettere mit mir bei Boulders',
+    'invite.firstclimb.title': 'Lade deine Freunde ein!',
     'invite.firstclimb.subtitle': 'Unsere Tageskarte für 99 kr inkl. Leihschuhe und Chalk ist für alle, die sie noch nicht ausprobiert haben. Schick deinen Freunden den Link.',
     'invite.firstclimb.footnote': 'Das Angebot kann pro Person nur einmal eingelöst werden.',
     'invite.firstclimb.shareMessage': 'Klettere mit mir bei Boulders! Hol dir deinen ersten Tag für 99 kr inkl. Leihschuhe und Chalk:',
@@ -8146,7 +8307,13 @@ function updatePageTranslations() {
     }
 
     // Simple placeholder substitution for dynamic translations.
-    // Currently supports `{date}` when element provides `data-i18n-date-iso="YYYY-MM-DD"`.
+    if (translation && translation.includes('{name}')) {
+      const name = element.getAttribute('data-i18n-name');
+      if (name) {
+        translation = translation.replaceAll('{name}', name);
+      }
+    }
+    // Supports `{date}` when element provides `data-i18n-date-iso="YYYY-MM-DD"`.
     if (translation && translation.includes('{date}')) {
       const dateIso = element.getAttribute('data-i18n-date-iso');
       if (dateIso && /^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
@@ -8214,6 +8381,16 @@ function updatePageTranslations() {
     const translation = t(key);
     if (translation && translation !== key) {
       element.placeholder = translation;
+    }
+  });
+
+  // Keep aria-label keys synced when language changes.
+  document.querySelectorAll('[data-i18n-aria-key]').forEach((element) => {
+    const key = element.getAttribute('data-i18n-aria-key');
+    if (!key) return;
+    const translation = t(key);
+    if (translation && translation !== key) {
+      element.setAttribute('aria-label', translation);
     }
   });
   
@@ -8709,6 +8886,11 @@ async function changeLanguage(languageCode) {
   if (state.currentStep === 1) {
     console.log('[Language] Reloading gyms with language:', languageCode);
     await loadGymsFromAPI();
+  }
+
+  // Re-render confirmation summary in active locale (dates/meta are formatted in render).
+  if (state.currentStep === 5) {
+    renderConfirmationView();
   }
 }
 
@@ -9347,13 +9529,14 @@ function cacheDom() {
   DOM.parentPostalCode = document.getElementById('parentPostalCode');
   DOM.parentCity = document.getElementById('parentCity');
   DOM.confirmationFields = {
-    orderNumber: document.querySelector('[data-summary-field="order-number"]'),
-    orderDate: document.querySelector('[data-summary-field="order-date"]'),
-    orderTotal: document.querySelector('[data-summary-field="order-total"]'),
-    memberName: document.querySelector('[data-summary-field="member-name"]'),
-    membershipType: document.querySelector('[data-summary-field="membership-type"]'),
-    primaryGym: document.querySelector('[data-summary-field="primary-gym"]'),
-    membershipPrice: document.querySelector('[data-summary-field="membership-price"]'),
+    orderNumber: document.querySelector('#confirmationOrderSection [data-summary-field="order-number"]'),
+    orderDate: document.querySelector('#confirmationOrderSection [data-summary-field="order-date"]'),
+    orderTotal: document.querySelector('#confirmationOrderSection [data-summary-field="order-total"]'),
+    memberName: document.querySelector('#confirmationOrderSection [data-summary-field="member-name"]'),
+    memberPhone: document.querySelector('#confirmationOrderSection [data-summary-field="member-phone"]'),
+    membershipType: document.querySelector('#confirmationMembershipSection [data-summary-field="membership-type"]'),
+    primaryGym: document.querySelector('#confirmationOrderSection [data-summary-field="primary-gym"]'),
+    membershipPrice: document.querySelector('#confirmationMembershipSection [data-summary-field="membership-price"]'),
   };
 
   refreshLoginUI();
@@ -9785,6 +9968,9 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Mobile drawer: enable swipe-down-to-dismiss on the receipt modal.
+  attachReceiptDrawerSwipe();
 }
 
 function setLoginLoadingState(isLoading) {
@@ -12370,6 +12556,7 @@ function handleLogout() {
   state.paymentFailed = false;
   state.paymentPending = false;
   state.paymentConfirmed = false;
+  state.successAnimationPlayed = false;
 
   // IMPORTANT: Reset checkout/order context so a new user never reuses
   // a previous user's order/customer snapshot after logout.
@@ -14254,6 +14441,25 @@ function handleGlobalClick(event) {
       scrollToFAQ();
       break;
     }
+    case 'scroll-to-order-details': {
+      event.preventDefault();
+      const orderDetails = document.getElementById('confirmationOrderDetails');
+      if (orderDetails) {
+        orderDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        orderDetails.focus({ preventScroll: true });
+      }
+      break;
+    }
+    case 'first-session-video': {
+      try {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+          event: 'first_session_video_click',
+          product_type: determineProductTypeFromOrder(),
+        });
+      } catch (_) { /* GTM optional */ }
+      break;
+    }
     case 'invite-copy-link': {
       event.preventDefault();
       handleInviteCopyLink(actionable);
@@ -14287,6 +14493,14 @@ function handleGlobalClick(event) {
     case 'invite-share-native': {
       event.preventDefault();
       handleInviteShare('native');
+      break;
+    }
+    case 'download-app-ios': {
+      trackAppDownloadClick('ios');
+      break;
+    }
+    case 'download-app-android': {
+      trackAppDownloadClick('android');
       break;
     }
     default:
@@ -14428,6 +14642,7 @@ function logReferralAttributionToSheet(data) {
 // Invite Friends helpers
 // ===========================
 const INVITE_SHARE_URL_BASE = 'https://join.boulders.dk/freetrial';
+const INVITE_SHARE_URL_GENERAL = 'https://join.boulders.dk';
 
 // Resolve the current user's customer ID for use as the recruiter ID in the
 // shared link. Reads from multiple sources because `state.customerId` is
@@ -14458,7 +14673,19 @@ function getCurrentRecruiterId() {
 // Personalized share URL: appends ?ref=<recruiter customer ID> when we know
 // who the sharer is. Falls back to the plain base URL for anonymous shares
 // (e.g. logged-out test mode) so existing behavior is preserved.
-function buildInviteShareUrl() {
+function resolveInviteProductType() {
+  const detected = determineProductTypeFromOrder();
+  if (detected === '15daypass' || detected === 'punch-card' || detected === 'membership') {
+    return detected;
+  }
+  const summaryType = String(state?.order?.productType || '').toLowerCase();
+  if (summaryType === '15daypass' || summaryType === 'punch-card' || summaryType === 'membership') {
+    return summaryType;
+  }
+  return 'membership';
+}
+
+function buildInviteShareUrl(productType = resolveInviteProductType()) {
   // /99kr invites point at the offer landing page itself, with no referral
   // query param — this is an offer share, not a recruiter link.
   if (isFirstClimbRoute()) {
@@ -14468,22 +14695,55 @@ function buildInviteShareUrl() {
       return `${INVITE_SHARE_URL_BASE.replace(/\/+$/, '')}/99kr`;
     }
   }
+  if (productType === '15daypass' || productType === 'punch-card') {
+    return INVITE_SHARE_URL_GENERAL;
+  }
   if (!REFERRAL_TRACKING_ENABLED) return INVITE_SHARE_URL_BASE;
   const recruiterId = getCurrentRecruiterId();
   if (!recruiterId) return INVITE_SHARE_URL_BASE;
   return `${INVITE_SHARE_URL_BASE}?${REFERRAL_QUERY_PARAM}=${recruiterId}`;
 }
 
-function getInviteFirstName() {
-  const fullName = String(state?.order?.memberName || '').trim();
+function resolveConfirmationFirstName(apiOrder = null) {
+  const order = apiOrder || state.fullOrder || state.order || null;
+  const customer = order?.customer || state.authenticatedCustomer || null;
+  let formCustomer = null;
+  try {
+    const payload = buildCheckoutPayload();
+    formCustomer = payload?.customer || null;
+  } catch (_) { /* form may be unavailable */ }
+
+  if (customer?.firstName) {
+    return String(customer.firstName).trim();
+  }
+  if (formCustomer?.firstName) {
+    return String(formCustomer.firstName).trim();
+  }
+
+  const fullName = String(
+    order?.memberName
+    || customer?.fullName
+    || (customer?.firstName && customer?.lastName ? `${customer.firstName} ${customer.lastName}` : null)
+    || customer?.name
+    || '',
+  ).trim();
   if (!fullName || fullName === '—') return '';
   const first = fullName.split(/\s+/)[0];
   return first && first !== '—' ? first : '';
 }
 
+function getInviteFirstName() {
+  return resolveConfirmationFirstName();
+}
+
 function getInviteShareMessage() {
   const firstName = getInviteFirstName();
-  const templateKey = isFirstClimbRoute() ? 'invite.firstclimb.shareMessage' : 'invite.shareMessage';
+  const productType = resolveInviteProductType();
+  const shareUrl = buildInviteShareUrl(productType);
+  const hasReferralLink = shareUrl.includes(`${REFERRAL_QUERY_PARAM}=`);
+  let templateKey = 'invite.shareMessage';
+  if (isFirstClimbRoute()) templateKey = 'invite.firstclimb.shareMessage';
+  else if (!hasReferralLink) templateKey = 'invite.general.shareMessage';
   const template = t(templateKey) || 'Hey! Climb with me at Boulders:';
   const withName = firstName
     ? template.replace('{name}', firstName)
@@ -14492,20 +14752,33 @@ function getInviteShareMessage() {
 }
 
 function getInviteShareText() {
-  return `${getInviteShareMessage()} ${buildInviteShareUrl()}`;
+  const productType = resolveInviteProductType();
+  return `${getInviteShareMessage()} ${buildInviteShareUrl(productType)}`;
 }
 
 function trackInviteShare(method) {
+  const productType = resolveInviteProductType();
   try {
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({
       event: 'invite_share',
       method,
-      share_url: buildInviteShareUrl(),
+      share_url: buildInviteShareUrl(productType),
     });
   } catch (err) {
     console.warn('[Invite] Failed to push GTM event:', err);
   }
+}
+
+function trackAppDownloadClick(platform) {
+  try {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: 'app_download_click',
+      platform,
+      product_type: determineProductTypeFromOrder(),
+    });
+  } catch (_) { /* GTM optional */ }
 }
 
 function isMobileUserAgent() {
@@ -14513,59 +14786,100 @@ function isMobileUserAgent() {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
 }
 
+function renderFirstSessionVideo(productType) {
+  const section = document.getElementById('firstSessionVideoSection');
+  if (!section) return;
+
+  section.style.display = '';
+
+  const link = document.getElementById('firstSessionVideoLink');
+  if (link) link.href = FIRST_SESSION_VIDEO_URL;
+
+  const thumbImg = section.querySelector('.first-session-video-thumb-img');
+  if (thumbImg && !thumbImg.dataset.fallbackBound) {
+    thumbImg.dataset.fallbackBound = 'true';
+    thumbImg.addEventListener('error', () => {
+      thumbImg.src = `https://i.ytimg.com/vi/${FIRST_SESSION_VIDEO_ID}/hqdefault.jpg`;
+    }, { once: true });
+  }
+
+  section.querySelectorAll('[data-i18n-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-key');
+    if (key) el.textContent = t(key);
+  });
+
+  section.querySelectorAll('[data-i18n-aria-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-aria-key');
+    if (key) el.setAttribute('aria-label', t(key));
+  });
+}
+
+function renderMemberOnboarding(productType) {
+  const section = document.getElementById('memberOnboardingSection');
+  if (!section) return;
+
+  const show = productType === 'membership';
+  section.style.display = show ? '' : 'none';
+
+  if (!show) return;
+
+  section.querySelectorAll('[data-i18n-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-key');
+    if (key) el.textContent = t(key);
+  });
+
+  section.querySelectorAll('[data-i18n-aria-key]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-aria-key');
+    if (key) el.setAttribute('aria-label', t(key));
+  });
+}
+
 function renderInviteFriends(productType) {
   const section = document.getElementById('inviteFriendsSection');
   if (!section) return;
 
-  // Drive a layout-level flag so CSS can reorder mobile siblings only when the
-  // invite card is actually visible (avoids changing layout for other flows).
-  const layout = document.querySelector('#step-5 .confirmation-layout');
+  // Pick the variant: firstclimb wins over productType because the 99kr flow
+  // uses its own offer-specific copy and footnote.
+  let variant = 'membership';
+  if (isFirstClimbRoute()) variant = 'firstclimb';
+  else if (productType === '15daypass') variant = '15daypass';
+  else if (productType === 'punch-card') variant = 'punchcard';
 
-  const firstclimbVariant = isFirstClimbRoute();
-  // Show the invite-friends card for full memberships and for the firstclimb
-  // success page. Other product types stay hidden.
-  if (productType !== 'membership' && !firstclimbVariant) {
-    section.style.display = 'none';
-    section.removeAttribute('data-variant');
-    if (layout) layout.removeAttribute('data-with-invite');
-    return;
-  }
   section.style.display = '';
-  if (layout) layout.setAttribute('data-with-invite', 'true');
+  section.setAttribute('data-variant', variant);
 
-  // Swap the localized copy on the card for the firstclimb success page.
-  // Membership flow keeps its existing keys via data-i18n-key. We override the
-  // DOM text and the keys so a later language switch picks the right variant.
+  // Per-variant i18n keys. Title is unified across variants; subtitle and
+  // footnote differ. Variants without a referral reward (15daypass, punchcard)
+  // hide the footnote since there's nothing structural to disclose.
+  const titleKey = variant === 'firstclimb' ? 'invite.firstclimb.title' : 'invite.title';
+  const subtitleKey = variant === 'firstclimb' ? 'invite.firstclimb.subtitle'
+    : variant === '15daypass' ? 'invite.15daypass.subtitle'
+    : variant === 'punchcard' ? 'invite.punchcard.subtitle'
+    : 'invite.subtitle';
+  const footnoteKey = variant === 'firstclimb' ? 'invite.firstclimb.footnote'
+    : variant === 'membership' ? 'invite.footnote'
+    : null;
+
   const titleEl = section.querySelector('.invite-friends-title');
   const subtitleEl = section.querySelector('.invite-friends-subtitle');
   const footnoteEl = section.querySelector('.invite-friends-footnote');
-  if (firstclimbVariant) {
-    section.setAttribute('data-variant', 'firstclimb');
-    if (titleEl) {
-      titleEl.setAttribute('data-i18n-key', 'invite.firstclimb.title');
-      titleEl.textContent = t('invite.firstclimb.title');
-    }
-    if (subtitleEl) {
-      subtitleEl.setAttribute('data-i18n-key', 'invite.firstclimb.subtitle');
-      subtitleEl.textContent = t('invite.firstclimb.subtitle');
-    }
-    if (footnoteEl) {
-      footnoteEl.setAttribute('data-i18n-key', 'invite.firstclimb.footnote');
-      footnoteEl.textContent = t('invite.firstclimb.footnote');
-    }
-  } else {
-    section.removeAttribute('data-variant');
-    if (titleEl) {
-      titleEl.setAttribute('data-i18n-key', 'invite.title');
-      titleEl.textContent = t('invite.title');
-    }
-    if (subtitleEl) {
-      subtitleEl.setAttribute('data-i18n-key', 'invite.subtitle');
-      subtitleEl.textContent = t('invite.subtitle');
-    }
-    if (footnoteEl) {
-      footnoteEl.setAttribute('data-i18n-key', 'invite.footnote');
-      footnoteEl.textContent = t('invite.footnote');
+  if (titleEl) {
+    titleEl.setAttribute('data-i18n-key', titleKey);
+    titleEl.textContent = t(titleKey);
+  }
+  if (subtitleEl) {
+    subtitleEl.setAttribute('data-i18n-key', subtitleKey);
+    subtitleEl.textContent = t(subtitleKey);
+  }
+  if (footnoteEl) {
+    if (footnoteKey) {
+      footnoteEl.style.display = '';
+      footnoteEl.setAttribute('data-i18n-key', footnoteKey);
+      footnoteEl.textContent = t(footnoteKey);
+    } else {
+      footnoteEl.style.display = 'none';
+      footnoteEl.removeAttribute('data-i18n-key');
+      footnoteEl.textContent = '';
     }
   }
 
@@ -14576,13 +14890,20 @@ function renderInviteFriends(productType) {
   // same as attribution success (see test mode `?testSuccess=true`).
   if (REFERRAL_TRACKING_ENABLED) {
     const recruiterId = getCurrentRecruiterId();
-    if (recruiterId) {
+    const shareUrl = buildInviteShareUrl(productType);
+    const hasReferralLink = shareUrl.includes(`${REFERRAL_QUERY_PARAM}=`);
+    if (recruiterId && hasReferralLink) {
+      const orderKey = state.fullOrder?.number || state.fullOrder?.id || state.order?.orderNumber || state.order?.orderId || 'unknown';
+      const eventKey = `${orderKey}:${recruiterId}`;
       try {
-        window.dataLayer = window.dataLayer || [];
-        window.dataLayer.push({
-          event: 'referral_link_generated',
-          referrer_id: recruiterId,
-        });
+        if (state.lastReferralLinkGeneratedEventKey !== eventKey) {
+          window.dataLayer = window.dataLayer || [];
+          window.dataLayer.push({
+            event: 'referral_link_generated',
+            referrer_id: recruiterId,
+          });
+          state.lastReferralLinkGeneratedEventKey = eventKey;
+        }
       } catch (_) { /* GTM optional */ }
     }
   }
@@ -14674,12 +14995,17 @@ async function copyTextToClipboard(text) {
 }
 
 async function handleInviteShare(method) {
-  const shareUrl = buildInviteShareUrl();
+  const productType = resolveInviteProductType();
+  const shareUrl = buildInviteShareUrl(productType);
   const message = getInviteShareMessage();
   const shareText = getInviteShareText();
+  const hasReferralLink = shareUrl.includes(`${REFERRAL_QUERY_PARAM}=`);
+  const shareSubject = hasReferralLink
+    ? (t('invite.shareSubject') || '2 weeks of free climbing at Boulders')
+    : (t('invite.general.shareSubject') || 'Come climb with me at Boulders');
   const encodedText = encodeURIComponent(shareText);
   const encodedUrl = encodeURIComponent(shareUrl);
-  const encodedSubject = encodeURIComponent(t('invite.shareSubject') || '2 weeks of free climbing at Boulders');
+  const encodedSubject = encodeURIComponent(shareSubject);
 
   switch (method) {
     case 'whatsapp':
@@ -14730,7 +15056,7 @@ async function handleInviteShare(method) {
       try {
         if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
           await navigator.share({
-            title: t('invite.shareSubject') || '2 weeks of free climbing at Boulders',
+            title: shareSubject,
             text: message,
             url: shareUrl,
           });
@@ -22456,8 +22782,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
     // These should only be shown when payment is successful
     // Use multiple methods to ensure they stay hidden
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
-    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
-    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    const confirmationFlow = step5Panel.querySelector('.confirmation-flow');
     
     const hideConfirmationSections = () => {
       if (confirmationLayout) {
@@ -22465,15 +22790,10 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
         confirmationLayout.style.visibility = 'hidden';
         confirmationLayout.setAttribute('data-payment-failed', 'true');
       }
-      if (confirmationLeft) {
-        confirmationLeft.style.display = 'none';
-        confirmationLeft.style.visibility = 'hidden';
-        confirmationLeft.setAttribute('data-payment-failed', 'true');
-      }
-      if (confirmationRight) {
-        confirmationRight.style.display = 'none';
-        confirmationRight.style.visibility = 'hidden';
-        confirmationRight.setAttribute('data-payment-failed', 'true');
+      if (confirmationFlow) {
+        confirmationFlow.style.display = 'none';
+        confirmationFlow.style.visibility = 'hidden';
+        confirmationFlow.setAttribute('data-payment-failed', 'true');
       }
     };
     
@@ -22502,7 +22822,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
         });
       });
       
-      [confirmationLayout, confirmationLeft, confirmationRight].forEach((el) => {
+      [confirmationLayout, confirmationFlow].forEach((el) => {
         if (el) {
           observer.observe(el, { attributes: true, attributeFilter: ['style'] });
         }
@@ -22571,8 +22891,7 @@ function showPaymentPendingMessage(order, orderId) {
     // Mark step 5 panel as payment pending for CSS targeting
     step5Panel.setAttribute('data-payment-pending', 'true');
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
-    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
-    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    const confirmationFlow = step5Panel.querySelector('.confirmation-flow');
     
     const hideConfirmationSections = () => {
       if (confirmationLayout) {
@@ -22580,15 +22899,10 @@ function showPaymentPendingMessage(order, orderId) {
         confirmationLayout.style.visibility = 'hidden';
         confirmationLayout.setAttribute('data-payment-pending', 'true');
       }
-      if (confirmationLeft) {
-        confirmationLeft.style.display = 'none';
-        confirmationLeft.style.visibility = 'hidden';
-        confirmationLeft.setAttribute('data-payment-pending', 'true');
-      }
-      if (confirmationRight) {
-        confirmationRight.style.display = 'none';
-        confirmationRight.style.visibility = 'hidden';
-        confirmationRight.setAttribute('data-payment-pending', 'true');
+      if (confirmationFlow) {
+        confirmationFlow.style.display = 'none';
+        confirmationFlow.style.visibility = 'hidden';
+        confirmationFlow.setAttribute('data-payment-pending', 'true');
       }
     };
     
@@ -22761,6 +23075,268 @@ function determineProductTypeFromOrder() {
   return 'membership';
 }
 
+let successPingAudioContext = null;
+
+/**
+ * Soft two-note chime via Web Audio — no asset to load.
+ * Timed to the checkmark stroke landing (~520ms), not page entry.
+ */
+function playSuccessPing(delayMs = 520) {
+  setTimeout(() => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!successPingAudioContext) {
+        successPingAudioContext = new AudioCtx();
+      }
+      const ctx = successPingAudioContext;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      const t0 = ctx.currentTime;
+      const C5 = 523.25;
+      const C6 = 1046.5;
+
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.0001, t0);
+      master.gain.exponentialRampToValueAtTime(0.38, t0 + 0.006);
+      master.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+      master.connect(ctx.destination);
+
+      const playNote = (freq, start, peakGain, attackSec, decaySec) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(peakGain, start + attackSec);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + decaySec);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(start);
+        osc.stop(start + decaySec + 0.02);
+      };
+
+      // C5 punch — tight lead
+      playNote(C5, t0, 0.9, 0.004, 0.09);
+      // C6 resolve — bright octave pop on checkmark land
+      playNote(C6, t0 + 0.048, 1, 0.003, 0.32);
+    } catch (err) {
+      if (window.DEBUG_LOGS === true) console.warn('[success-ping] failed', err);
+    }
+  }, delayMs);
+}
+
+function playSuccessAnimation() {
+  if (state.successAnimationPlayed) return;
+  const badge = document.querySelector('#step-5 .success-badge');
+  const header = document.querySelector('#step-5 .confirmation-header');
+  const panel = document.getElementById('step-5');
+  if (!badge || !header || !panel) return;
+
+  if (panel.getAttribute('data-payment-failed') === 'true') return;
+  if (panel.getAttribute('data-payment-pending') === 'true') return;
+
+  state.successAnimationPlayed = true;
+
+  // Restart the CSS animations even if classes are already present (safe re-entry guard)
+  badge.classList.remove('is-animating');
+  header.classList.remove('is-animating');
+  panel.classList.remove('is-revealing');
+  // Force reflow so re-adding the class restarts the animation
+  void badge.offsetWidth;
+  badge.classList.add('is-animating');
+  header.classList.add('is-animating');
+  panel.classList.add('is-revealing');
+
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (reducedMotion) return;
+
+  // Chime on check-land (synced with CSS stroke-draw delay on .success-badge__check)
+  playSuccessPing(520);
+
+  const rect = badge.getBoundingClientRect();
+  const origin = {
+    x: (rect.left + rect.width / 2) / window.innerWidth,
+    y: (rect.top + rect.height / 2) / window.innerHeight,
+  };
+  // Brand-coded palette: magenta accent + success greens + highlights.
+  const colors = ['#F401F5', '#ff6cff', '#10B981', '#34D399', '#059669', '#F8FAFC'];
+
+  const fire = (delay, opts) => {
+    setTimeout(() => {
+      try {
+        confetti({
+          origin,
+          colors,
+          particleCount: 70,
+          spread: 65,
+          startVelocity: 34,
+          scalar: 0.9,
+          ticks: 220,
+          disableForReducedMotion: true,
+          ...opts,
+        });
+      } catch (err) {
+        // Confetti is non-critical; never let it break the success page
+        if (window.DEBUG_LOGS === true) console.warn('[confetti] failed', err);
+      }
+    }, delay);
+  };
+
+  // Ring draw → wide burst → check-land sparkle
+  fire(180, { particleCount: 95, spread: 72, startVelocity: 40, scalar: 0.95 });
+  fire(320, { particleCount: 55, spread: 108, startVelocity: 30, scalar: 0.88 });
+  fire(560, { particleCount: 38, spread: 58, startVelocity: 24, scalar: 0.75, ticks: 190 });
+}
+
+const CONFIRMATION_SKELETON_HTML = {
+  sm: '<span class="confirmation-skeleton confirmation-skeleton--sm" aria-hidden="true"></span>',
+  number: '<span class="confirmation-skeleton confirmation-skeleton--number" aria-hidden="true"></span>',
+  name: '<span class="confirmation-skeleton confirmation-skeleton--name" aria-hidden="true"></span>',
+};
+
+function syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder) {
+  const summaryRoot = document.getElementById('confirmationOrderSummary');
+  if (!summaryRoot) return;
+
+  const productEl = summaryRoot.querySelector('[data-summary-field="summary-product-name"]');
+  const totalEl = summaryRoot.querySelector('[data-summary-field="summary-order-total"]');
+  const metaEl = summaryRoot.querySelector('[data-summary-field="summary-meta"]');
+  const ctaEl = summaryRoot.querySelector('.confirmation-order-summary-cta');
+
+  let productName = null;
+  if (isFirstClimbFlow) {
+    productName = document.querySelector('[data-summary-field="firstclimb-product-name"]')?.textContent?.trim() || null;
+  } else if (productType === 'membership') {
+    productName = apiOrder?.subscriptionItems?.[0]?.product?.name
+      || document.querySelector('#confirmationMembershipSection [data-summary-field="membership-type"]')?.textContent?.trim()
+      || null;
+  } else if (productType === '15daypass') {
+    productName = apiOrder?.subscriptionItems?.[0]?.product?.name
+      || document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-type"]')?.textContent?.trim()
+      || null;
+  } else if (productType === 'punch-card') {
+    productName = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]')?.textContent?.trim() || null;
+  }
+
+  let totalLabel = document.querySelector('#confirmationOrderSection [data-summary-field="order-total"]')?.textContent?.trim() || null;
+  if (!totalLabel || totalLabel === '—' || totalLabel.includes('confirmation-skeleton')) {
+    let totalValue = null;
+    if (apiOrder?.price?.amount !== undefined && apiOrder?.price?.amount !== null) {
+      const amount = apiOrder.price.amount;
+      totalValue = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.total !== undefined && apiOrder?.total !== null) {
+      totalValue = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
+    } else if (state.order?.total != null) {
+      totalValue = Number(state.order.total);
+    }
+    if (totalValue != null) {
+      totalLabel = formatCurrencyHalfKrone(totalValue);
+    }
+  }
+
+  const orderNumber = apiOrder?.number || apiOrder?.id || null;
+  let formattedDate = null;
+  if (apiOrder?.createdAt || apiOrder?.created || apiOrder?.date) {
+    const rawDate = apiOrder.createdAt || apiOrder.created || apiOrder.date;
+    const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+    const confirmationDateLocale = langCode === 'en' ? 'en-US' : langCode === 'de' ? 'de-DE' : 'da-DK';
+    formattedDate = new Intl.DateTimeFormat(confirmationDateLocale, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date(rawDate));
+  }
+
+  if (productEl) setConfirmationSummaryField(productEl, productName, 'name');
+  if (totalEl) setConfirmationSummaryField(totalEl, totalLabel, 'number');
+
+  if (metaEl) {
+    const metaParts = [];
+    if (orderNumber) metaParts.push(`${t('confirmation.orderMetaOrder')} #${orderNumber}`);
+    if (formattedDate) metaParts.push(formattedDate);
+    if (metaParts.length > 0) {
+      metaEl.textContent = metaParts.join(' · ');
+      metaEl.hidden = false;
+    } else {
+      metaEl.textContent = '';
+      metaEl.hidden = true;
+    }
+  }
+
+  if (ctaEl) {
+    ctaEl.textContent = t('confirmation.viewOrderDetails');
+  }
+}
+
+function setConfirmationSummaryField(el, value, skeletonKind = 'number') {
+  if (!el) return;
+  const isEmpty = value == null || value === '' || value === '—';
+  if (isEmpty) {
+    if (!el.querySelector('.confirmation-skeleton')) {
+      el.innerHTML = CONFIRMATION_SKELETON_HTML[skeletonKind] || CONFIRMATION_SKELETON_HTML.number;
+    }
+    return;
+  }
+  el.textContent = value;
+}
+
+function resolveConfirmationPhone(customer, apiOrder) {
+  let formCustomer = null;
+  try {
+    formCustomer = buildCheckoutPayload()?.customer;
+  } catch {
+    // Form may not be ready on success page
+  }
+
+  const phoneSource =
+    customer?.mobilePhone ||
+    customer?.phone ||
+    customer?.phoneNumber ||
+    apiOrder?.customer?.mobilePhone ||
+    apiOrder?.customer?.phone ||
+    apiOrder?.customer?.phoneNumber ||
+    formCustomer?.phone;
+  const phoneCountryCodeSource =
+    customer?.phoneCountryCode ||
+    customer?.phoneCountry ||
+    apiOrder?.customer?.phoneCountryCode ||
+    apiOrder?.customer?.phoneCountry ||
+    formCustomer?.phone?.countryCode;
+
+  if (phoneSource) {
+    if (typeof phoneSource === 'string') {
+      return phoneSource;
+    }
+    if (phoneSource.number) {
+      const countryCode = phoneSource.countryCode || phoneCountryCodeSource || '';
+      return countryCode ? `${countryCode} ${phoneSource.number}` : phoneSource.number;
+    }
+  }
+  if (formCustomer?.phoneNumber && formCustomer?.countryCode) {
+    return `${formCustomer.countryCode} ${formCustomer.phoneNumber}`;
+  }
+  return null;
+}
+
+function renderSuccessAppDownloadSection(productType) {
+  const iosLink = document.getElementById('downloadAppStoreBtn');
+  const androidLink = document.getElementById('downloadGooglePlayBtn');
+  const note = document.querySelector('.success-app-download-note');
+  if (iosLink) iosLink.href = APP_STORE_DOWNLOAD_URL;
+  if (androidLink) androidLink.href = GOOGLE_PLAY_DOWNLOAD_URL;
+  if (note) {
+    const noteKey = productType === 'membership'
+      ? 'confirmation.appDownload.note.membership'
+      : 'confirmation.appDownload.note';
+    note.setAttribute('data-i18n-key', noteKey);
+    note.textContent = t(noteKey);
+  }
+}
+
 function renderConfirmationView() {
   // CRITICAL: Don't render success page if payment failed or is pending (unless in test mode)
   if (!state.testMode && state.paymentFailed === true) {
@@ -22805,8 +23381,7 @@ function renderConfirmationView() {
     }
     
     const confirmationLayout = step5Panel.querySelector('.confirmation-layout');
-    const confirmationLeft = step5Panel.querySelector('.confirmation-left');
-    const confirmationRight = step5Panel.querySelector('.confirmation-right');
+    const confirmationFlow = step5Panel.querySelector('.confirmation-flow');
     
     // Remove data attributes and show sections
     const showConfirmationSections = () => {
@@ -22816,17 +23391,11 @@ function renderConfirmationView() {
         confirmationLayout.removeAttribute('data-payment-failed');
         confirmationLayout.removeAttribute('data-payment-pending');
       }
-      if (confirmationLeft) {
-        confirmationLeft.style.display = '';
-        confirmationLeft.style.visibility = '';
-        confirmationLeft.removeAttribute('data-payment-failed');
-        confirmationLeft.removeAttribute('data-payment-pending');
-      }
-      if (confirmationRight) {
-        confirmationRight.style.display = '';
-        confirmationRight.style.visibility = '';
-        confirmationRight.removeAttribute('data-payment-failed');
-        confirmationRight.removeAttribute('data-payment-pending');
+      if (confirmationFlow) {
+        confirmationFlow.style.display = '';
+        confirmationFlow.style.visibility = '';
+        confirmationFlow.removeAttribute('data-payment-failed');
+        confirmationFlow.removeAttribute('data-payment-pending');
       }
     };
     
@@ -22846,8 +23415,25 @@ function renderConfirmationView() {
     productLabels: state.fullOrder?.subscriptionItems?.[0]?.product?.productLabels
   });
 
-  // Update success message based on product type (use translation keys so language switch works)
   const isFirstClimbFlow = isFirstClimbRoute();
+  const apiOrder = state.fullOrder || state.order || null;
+
+  const successTitle = document.querySelector('.success-title');
+  if (successTitle) {
+    const firstName = resolveConfirmationFirstName(apiOrder);
+    if (firstName) {
+      const titleKey = 'confirmation.title.withName';
+      successTitle.setAttribute('data-i18n-key', titleKey);
+      successTitle.setAttribute('data-i18n-name', firstName);
+      successTitle.textContent = t(titleKey).replaceAll('{name}', firstName);
+    } else {
+      successTitle.setAttribute('data-i18n-key', 'confirmation.title');
+      successTitle.removeAttribute('data-i18n-name');
+      successTitle.textContent = t('confirmation.title');
+    }
+  }
+
+  // Update success message based on product type (use translation keys so language switch works)
   const successMessage = document.querySelector('.success-message');
   if (successMessage) {
     const messageKey = isFirstClimbFlow ? 'confirmation.message.firstclimb'
@@ -22858,6 +23444,7 @@ function renderConfirmationView() {
     successMessage.setAttribute('data-i18n-key', messageKey);
     successMessage.textContent = t(messageKey);
   }
+  renderSuccessAppDownloadSection(productType);
 
   // Update "What happens next?" steps based on product type (use translation keys)
   const nextStep1 = document.getElementById('nextStep1');
@@ -22895,7 +23482,9 @@ function renderConfirmationView() {
     nextStep1.textContent = t('confirmation.nextStep1');
   }
 
-  // Render the invite-friends section (membership only; UA-aware buttons + copy state reset)
+  // First-session video + membership onboarding + invite-friends
+  renderFirstSessionVideo(productType);
+  renderMemberOnboarding(productType);
   renderInviteFriends(productType);
   
   if (nextStep2 && nextStep3) {
@@ -22915,116 +23504,108 @@ function renderConfirmationView() {
     nextStep3.textContent = t(step3Key);
   }
 
-  // Hide all sections first - use !important to override any CSS
+  const orderSection = document.getElementById('confirmationOrderSection');
   const membershipSection = document.getElementById('confirmationMembershipSection');
   const dayPassSection = document.getElementById('confirmation15DayPassSection');
   const punchCardSection = document.getElementById('confirmationPunchCardSection');
-  
-  if (membershipSection) {
-    membershipSection.style.display = 'none';
-    membershipSection.style.setProperty('display', 'none', 'important');
-  }
-  if (dayPassSection) {
-    dayPassSection.style.display = 'none';
-    dayPassSection.style.setProperty('display', 'none', 'important');
-  }
-  if (punchCardSection) {
-    punchCardSection.style.display = 'none';
-    punchCardSection.style.setProperty('display', 'none', 'important');
+  const firstClimbSection = document.getElementById('confirmationFirstClimbSection');
+  const memberZone = document.getElementById('confirmationMemberZone');
+  const recurringNote = orderSection?.querySelector('[data-recurring-note]');
+  const effectiveProductType = isFirstClimbFlow ? 'firstclimb' : productType;
+
+  if (orderSection) {
+    orderSection.dataset.productType = effectiveProductType;
   }
 
-  // Show appropriate section based on product type - only ONE section should be visible
-  if (productType === 'membership' && membershipSection) {
-    console.log('[Confirmation] Showing membership section');
-    membershipSection.style.display = 'block';
-    membershipSection.style.setProperty('display', 'block', 'important');
-  } else if (productType === '15daypass' && dayPassSection) {
-    console.log('[Confirmation] Showing 15-Day Trial Pass section');
-    dayPassSection.style.display = 'block';
-    dayPassSection.style.setProperty('display', 'block', 'important');
-  } else if (productType === 'punch-card' && punchCardSection) {
-    // /99kr is technically a value-card/punch-card under the hood, but the
-    // "Punch Card Details" panel (name / card type / quantity / valid until)
-    // doesn't carry any user-meaningful info for a single-use day ticket —
-    // the "What happens next?" block already covers everything. Hide it.
-    if (isFirstClimbFlow) {
-      console.log('[Confirmation] firstclimb flow — hiding punch card details section');
-    } else {
-      console.log('[Confirmation] Showing punch card section');
-      punchCardSection.style.display = 'block';
-      punchCardSection.style.setProperty('display', 'block', 'important');
-    }
-  } else {
-    console.warn('[Confirmation] Unknown product type or section not found:', productType);
+  orderSection?.querySelectorAll('[data-product-eyebrow]').forEach((el) => {
+    el.hidden = el.getAttribute('data-product-eyebrow') !== effectiveProductType;
+  });
+
+  if (membershipSection) membershipSection.hidden = productType !== 'membership';
+  if (dayPassSection) dayPassSection.hidden = productType !== '15daypass';
+  if (punchCardSection) punchCardSection.hidden = !(productType === 'punch-card' && !isFirstClimbFlow);
+  if (firstClimbSection) firstClimbSection.hidden = !isFirstClimbFlow;
+
+  if (memberZone) {
+    memberZone.hidden = isFirstClimbFlow;
+    memberZone.querySelector('[data-member-field="phone"]')?.toggleAttribute('hidden', false);
+    memberZone.querySelector('[data-member-field="punch-card"]')?.toggleAttribute('hidden', productType !== 'punch-card' || isFirstClimbFlow);
+    memberZone.querySelector('[data-member-field="punch-card-expiry"]')?.toggleAttribute('hidden', productType !== 'punch-card' || isFirstClimbFlow);
+    memberZone.querySelector('[data-member-field="15daypass"]')?.toggleAttribute('hidden', productType !== '15daypass' || isFirstClimbFlow);
+  }
+
+  if (recurringNote) {
+    recurringNote.hidden = productType !== 'membership';
   }
   
-  const { orderNumber, orderDate, orderTotal, memberName, membershipType, primaryGym, membershipPrice } = DOM.confirmationFields;
+  const { orderNumber, orderDate, orderTotal, memberName, memberPhone, membershipType } = DOM.confirmationFields;
 
-  // Prefer API order data, but fall back to summary order so success page is never blank.
-  const apiOrder = state.fullOrder || state.order || null;
-  
+  const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
+  const confirmationDateLocale = langCode === 'en' ? 'en-US' : langCode === 'de' ? 'de-DE' : 'da-DK';
+
   // Order number - from API only
   if (orderNumber) {
-    const number = apiOrder?.number || apiOrder?.id || '—';
-    orderNumber.textContent = number;
+    const number = apiOrder?.number || apiOrder?.id || null;
+    setConfirmationSummaryField(orderNumber, number, 'sm');
   }
-  
-  // Order date - from API only
+
+  // Order date - from API only (meta footer)
   if (orderDate) {
+    let formattedDate = null;
     if (apiOrder?.createdAt || apiOrder?.created || apiOrder?.date) {
       const rawDate = apiOrder.createdAt || apiOrder.created || apiOrder.date;
       const date = new Date(rawDate);
-      orderDate.textContent = new Intl.DateTimeFormat('en-US', {
+      formattedDate = new Intl.DateTimeFormat(confirmationDateLocale, {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       }).format(date);
-    } else {
-      orderDate.textContent = '—';
     }
+    setConfirmationSummaryField(orderDate, formattedDate, 'sm');
   }
-  
-  // Order total - from API only
+
+  // Order total - from API only (today's charge)
   if (orderTotal) {
+    let totalValue = null;
     if (apiOrder?.price?.amount !== undefined && apiOrder?.price?.amount !== null) {
       const amount = apiOrder.price.amount;
-      const total = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
-      orderTotal.textContent = formatCurrencyHalfKrone(total);
+      totalValue = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
     } else if (apiOrder?.total !== undefined && apiOrder?.total !== null) {
-      const total = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
-      orderTotal.textContent = formatCurrencyHalfKrone(total);
-    } else {
-      orderTotal.textContent = '—';
+      totalValue = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
     }
+    setConfirmationSummaryField(
+      orderTotal,
+      totalValue != null ? formatCurrencyHalfKrone(totalValue) : null,
+      'number',
+    );
   }
-  
+
   // Member name - from API only
   if (memberName) {
-    let name = '—';
+    let name = null;
     if (apiOrder?.customer) {
       const customer = apiOrder.customer;
-      name = customer.fullName || 
+      name = customer.fullName ||
             (customer.firstName && customer.lastName ? `${customer.firstName} ${customer.lastName}` : null) ||
             customer.name ||
-            '—';
+            null;
     } else if (apiOrder?.memberName) {
       name = apiOrder.memberName;
     }
-    memberName.textContent = name;
-    // Also update in other sections
-    const dayPassMemberName = document.querySelector('#confirmation15DayPassSection [data-summary-field="member-name"]');
-    const punchCardMemberName = document.querySelector('#confirmationPunchCardSection [data-summary-field="member-name"]');
-    if (dayPassMemberName) dayPassMemberName.textContent = name;
-    if (punchCardMemberName) punchCardMemberName.textContent = name;
+    setConfirmationSummaryField(memberName, name, 'name');
   }
-  
+  if (memberPhone) {
+    const customer = apiOrder?.customer || state.authenticatedCustomer || null;
+    setConfirmationSummaryField(memberPhone, resolveConfirmationPhone(customer, apiOrder), 'number');
+  }
+
   if (membershipType) {
-    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || apiOrder?.membershipType || '—';
-    membershipType.textContent = type;
+    const type = apiOrder?.subscriptionItems?.[0]?.product?.name || apiOrder?.membershipType || null;
+    setConfirmationSummaryField(membershipType, type, 'name');
   }
-  
-  if (primaryGym) {
-    let gym = '—';
+
+  {
+    let gym = null;
     if (apiOrder?.customer?.primaryGym) {
       gym = resolveGymLabel(apiOrder.customer.primaryGym);
     } else if (apiOrder?.businessUnit?.name) {
@@ -23032,32 +23613,115 @@ function renderConfirmationView() {
     } else if (apiOrder?.primaryGym) {
       gym = apiOrder.primaryGym;
     }
-    primaryGym.textContent = gym;
-    // Also update in other sections
-    const dayPassGym = document.querySelector('#confirmation15DayPassSection [data-summary-field="primary-gym"]');
-    if (dayPassGym) dayPassGym.textContent = gym;
+    orderSection?.querySelectorAll('[data-summary-field="primary-gym"]').forEach((el) => {
+      setConfirmationSummaryField(el, gym, 'name');
+    });
   }
-  
-  if (membershipPrice) {
-    let price = null;
+
+  if (productType === 'membership') {
+    let recurringPrice = null;
     if (apiOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount) {
       const amount = apiOrder.subscriptionItems[0].payRecurring.price.amount;
-      price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      recurringPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
     } else if (apiOrder?.subscriptionItems?.[0]?.price?.amount) {
       const amount = apiOrder.subscriptionItems[0].price.amount;
-      price = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      recurringPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
     }
-    
-    if (price !== null) {
-      const formatted = formatCurrencyHalfKrone(roundToHalfKrone(price));
-      membershipPrice.textContent = productType === '15daypass' ? formatted : `${formatted}/month`;
-    } else {
-      membershipPrice.textContent = '—';
+
+    const formattedRecurring = recurringPrice != null
+      ? formatCurrencyHalfKrone(roundToHalfKrone(recurringPrice))
+      : null;
+
+    membershipSection?.querySelectorAll('[data-summary-field="membership-price"]').forEach((el) => {
+      setConfirmationSummaryField(el, formattedRecurring, 'number');
+    });
+    orderSection?.querySelectorAll('[data-summary-field="order-recurring-price"]').forEach((el) => {
+      setConfirmationSummaryField(el, formattedRecurring, 'number');
+    });
+    if (recurringNote) {
+      recurringNote.hidden = !formattedRecurring;
+    }
+  } else {
+    membershipSection?.querySelectorAll('[data-summary-field="membership-price"]').forEach((el) => {
+      setConfirmationSummaryField(el, null, 'number');
+    });
+    orderSection?.querySelectorAll('[data-summary-field="order-recurring-price"]').forEach((el) => {
+      setConfirmationSummaryField(el, null, 'number');
+    });
+    if (recurringNote) {
+      recurringNote.hidden = true;
+    }
+
+    if (productType === '15daypass' && apiOrder?.subscriptionItems?.[0]?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].price.amount;
+      const passPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+      const formattedPassPrice = formatCurrencyHalfKrone(roundToHalfKrone(passPrice));
+      dayPassSection?.querySelectorAll('[data-summary-field="membership-price"]').forEach((el) => {
+        setConfirmationSummaryField(el, formattedPassPrice, 'number');
+      });
     }
   }
   
+  // Hide header highlight pills by default; product branches below re-enable them.
+  const defaultMembershipPill = document.getElementById('successMembershipPill');
+  const defaultValidityPill = document.getElementById('successValidityPill');
+  if (defaultMembershipPill) defaultMembershipPill.style.display = 'none';
+  if (defaultValidityPill) defaultValidityPill.style.display = 'none';
+  step5Panel?.classList.remove('has-header-pill');
+
+  // Membership header highlight — home gym + monthly price under the subheading.
+  if (productType === 'membership') {
+    const membershipPill = document.getElementById('successMembershipPill');
+    const headerGym = document.querySelector('[data-summary-field="header-primary-gym"]');
+    const headerPrice = document.querySelector('[data-summary-field="header-membership-price"]');
+
+    let gymLabel = '—';
+    if (apiOrder?.customer?.primaryGym) {
+      gymLabel = resolveGymLabel(apiOrder.customer.primaryGym);
+    } else if (apiOrder?.businessUnit?.name) {
+      gymLabel = apiOrder.businessUnit.name;
+    } else if (apiOrder?.primaryGym) {
+      gymLabel = apiOrder.primaryGym;
+    } else if (state.selectedGymName) {
+      gymLabel = state.selectedGymName;
+    }
+
+    let priceLabel = '—';
+    let recurringPrice = null;
+    if (apiOrder?.subscriptionItems?.[0]?.payRecurring?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].payRecurring.price.amount;
+      recurringPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.subscriptionItems?.[0]?.price?.amount) {
+      const amount = apiOrder.subscriptionItems[0].price.amount;
+      recurringPrice = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+    } else if (apiOrder?.membershipPrice != null) {
+      recurringPrice = Number(apiOrder.membershipPrice);
+    }
+
+    if (recurringPrice != null && !Number.isNaN(recurringPrice)) {
+      const formatted = formatCurrencyHalfKrone(roundToHalfKrone(recurringPrice));
+      priceLabel = `${formatted}${t('confirmation.perMonthShort', '/month')}`;
+    }
+
+    const hasMembershipHighlight = gymLabel !== '—';
+    if (headerGym) headerGym.textContent = gymLabel;
+    if (headerPrice) headerPrice.textContent = priceLabel;
+    if (membershipPill) {
+      membershipPill.style.display = hasMembershipHighlight ? 'block' : 'none';
+    }
+    if (hasMembershipHighlight) {
+      step5Panel?.classList.add('has-header-pill');
+    }
+  }
+
   // 15-Day Trial Pass specific fields - from API only
   if (productType === '15daypass') {
+    const passTypeField = dayPassSection?.querySelector('[data-summary-field="pass-type"]');
+    if (passTypeField) {
+      const passName = apiOrder?.subscriptionItems?.[0]?.product?.name || null;
+      setConfirmationSummaryField(passTypeField, passName, 'name');
+    }
+
     const passStartDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-start-date"]');
     const passEndDate = document.querySelector('#confirmation15DayPassSection [data-summary-field="pass-end-date"]');
     
@@ -23080,25 +23744,42 @@ function renderConfirmationView() {
       parsedEnd = computedEnd;
     }
 
-    const langCode = (state.language || DEFAULT_LANGUAGE).split('-')[0];
-    const locale = langCode === 'en' ? 'en-US' : 'da-DK';
-    const formatLongDate = (date) => new Intl.DateTimeFormat(locale, {
+    const formatLongDate = (date) => new Intl.DateTimeFormat(confirmationDateLocale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     }).format(date);
 
     if (passStartDate) {
-      passStartDate.textContent = (parsedStart && !isNaN(parsedStart.getTime()))
-        ? formatLongDate(parsedStart)
-        : '—';
+      setConfirmationSummaryField(
+        passStartDate,
+        (parsedStart && !isNaN(parsedStart.getTime())) ? formatLongDate(parsedStart) : null,
+        'sm',
+      );
     }
 
     if (passEndDate) {
-      passEndDate.textContent = (parsedEnd && !isNaN(parsedEnd.getTime()))
-        ? formatLongDate(parsedEnd)
-        : '—';
+      const endLabel = (parsedEnd && !isNaN(parsedEnd.getTime())) ? formatLongDate(parsedEnd) : null;
+      setConfirmationSummaryField(passEndDate, endLabel, 'sm');
+      const passEndDisplay = document.querySelector('[data-summary-field="pass-end-date-display"]');
+      setConfirmationSummaryField(passEndDisplay, endLabel, 'name');
     }
+
+    // Surface the validity window directly under the success subheading.
+    const validityPill = document.getElementById('successValidityPill');
+    const headerPassStart = document.querySelector('[data-summary-field="header-pass-start-date"]');
+    const headerPassEnd = document.querySelector('[data-summary-field="header-pass-end-date"]');
+    const hasValidDates =
+      parsedStart && !isNaN(parsedStart.getTime()) &&
+      parsedEnd && !isNaN(parsedEnd.getTime());
+    if (validityPill) {
+      validityPill.style.display = hasValidDates ? 'block' : 'none';
+    }
+    if (hasValidDates) {
+      step5Panel?.classList.add('has-header-pill');
+    }
+    if (headerPassStart && hasValidDates) headerPassStart.textContent = formatLongDate(parsedStart);
+    if (headerPassEnd && hasValidDates) headerPassEnd.textContent = formatLongDate(parsedEnd);
 
     // Update "what happens next" step 2 to reflect future activation
     if (nextStep2 && parsedStart && !isNaN(parsedStart.getTime())) {
@@ -23137,7 +23818,11 @@ function renderConfirmationView() {
       }
     }
   }
-  
+
+  // Play the celebratory animation on the transition into the success view.
+  // The function guards against re-runs (modal opens, language switches, etc.).
+  requestAnimationFrame(() => playSuccessAnimation());
+
 // Helper function to create purchase item element if template not available
 function createPurchaseItemElement() {
   const item = document.createElement('div');
@@ -23154,8 +23839,8 @@ function createPurchaseItemElement() {
   // Show aggregate info for all punch cards if multiple, or single card details
   if (productType === 'punch-card') {
     const punchCardType = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-type"]');
-    const punchCardQuantity = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-quantity"]');
-    const punchCardExpiry = document.querySelector('#confirmationPunchCardSection [data-summary-field="punch-card-expiry"]');
+    const punchCardQuantity = document.querySelector('#confirmationMemberZone [data-summary-field="punch-card-quantity"]');
+    const punchCardExpiry = document.querySelector('#confirmationMemberZone [data-summary-field="punch-card-expiry"]');
     
     // Use API valueCardItems data - aggregate if multiple cards
     const valueCardItems = apiOrder?.valueCardItems || [];
@@ -23170,18 +23855,37 @@ function createPurchaseItemElement() {
         firstCardName = firstCardName.replace(/\s*\(\d+\)\s*$/, '');
         
         if (valueCardItems.length === 1) {
-          punchCardType.textContent = firstCardName;
+          setConfirmationSummaryField(punchCardType, firstCardName, 'name');
         } else {
-          // Multiple cards - show first card name with count
-          punchCardType.textContent = `${firstCardName} (${valueCardItems.length} kort)`;
+          setConfirmationSummaryField(punchCardType, `${firstCardName} (${valueCardItems.length} kort)`, 'name');
         }
       } else {
-        punchCardType.textContent = '—';
+        setConfirmationSummaryField(punchCardType, null, 'name');
       }
     }
-    
+
+    const productLinePrice = document.querySelector('#confirmationOrderSection [data-summary-field="product-line-price"]');
+    if (productLinePrice && valueCardItems.length > 0) {
+      const itemTotal = valueCardItems.reduce((sum, item) => {
+        if (!item?.price?.amount) return sum;
+        const amount = typeof item.price.amount === 'object'
+          ? item.price.amount.amount / 100
+          : item.price.amount / 100;
+        return sum + amount;
+      }, 0);
+      setConfirmationSummaryField(
+        productLinePrice,
+        itemTotal > 0 ? formatCurrencyHalfKrone(roundToHalfKrone(itemTotal)) : null,
+        'number',
+      );
+    }
+
     if (punchCardQuantity) {
-      punchCardQuantity.textContent = totalQuantity > 0 ? totalQuantity.toString() : '—';
+      setConfirmationSummaryField(
+        punchCardQuantity,
+        totalQuantity > 0 ? totalQuantity.toString() : null,
+        'number',
+      );
     }
     
     if (punchCardExpiry) {
@@ -23201,13 +23905,17 @@ function createPurchaseItemElement() {
       
       // Display expiry date from API, or show '—' if not available
       if (expiryDate && !isNaN(expiryDate.getTime())) {
-        punchCardExpiry.textContent = new Intl.DateTimeFormat('da-DK', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }).format(expiryDate);
+        setConfirmationSummaryField(
+          punchCardExpiry,
+          new Intl.DateTimeFormat(confirmationDateLocale, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }).format(expiryDate),
+          'sm',
+        );
       } else {
-        punchCardExpiry.textContent = '—';
+        setConfirmationSummaryField(punchCardExpiry, null, 'sm');
       }
     }
   }
@@ -23395,8 +24103,28 @@ function createPurchaseItemElement() {
         membershipPlanId: state.membershipPlanId
       });
     }
+
+    if (isFirstClimbFlow) {
+      const firstItem = DOM.confirmationItems?.querySelector('[data-confirmation-item]');
+      const firstName = firstItem?.querySelector('[data-element="name"]')?.textContent?.trim();
+      const firstPrice = firstItem?.querySelector('[data-element="price"]')?.textContent?.trim();
+      setConfirmationSummaryField(
+        document.querySelector('[data-summary-field="firstclimb-product-name"]'),
+        firstName || null,
+        'name',
+      );
+      setConfirmationSummaryField(
+        document.querySelector('[data-summary-field="firstclimb-product-price"]'),
+        firstPrice || null,
+        'number',
+      );
+    }
   }
+
+  syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder);
 }
+
+let receiptCloseTimeoutId = null;
 
 async function showDetailedReceipt() {
   if (!state.fullOrder && !state.order) {
@@ -23406,6 +24134,10 @@ async function showDetailedReceipt() {
   
   const modal = document.getElementById('detailedReceiptModal');
   if (!modal) return;
+  if (receiptCloseTimeoutId) {
+    clearTimeout(receiptCloseTimeoutId);
+    receiptCloseTimeoutId = null;
+  }
   
   const order = state.fullOrder || state.order;
   
@@ -23678,34 +24410,107 @@ async function showDetailedReceipt() {
     document.body.appendChild(modal);
   }
   
-  // Prevent background scrolling - save current scroll position
-  const scrollY = window.scrollY;
+  // Prevent background scrolling - preserve an existing locked offset if close
+  // animation is still pending and the modal is reopened.
+  let scrollY = window.scrollY;
+  if (document.body.style.position === 'fixed') {
+    const lockedTop = parseInt(document.body.style.top || '0', 10);
+    if (!Number.isNaN(lockedTop)) {
+      scrollY = Math.abs(lockedTop);
+    }
+  }
   document.body.style.position = 'fixed';
   document.body.style.top = `-${scrollY}px`;
   document.body.style.width = '100%';
   document.body.style.overflow = 'hidden';
-  
-  // Show modal
+
+  // Show the modal: set display first, then add the open class on the next
+  // frame so the transition runs (fade+scale on desktop, slide-up on mobile).
   modal.style.display = 'flex';
+  requestAnimationFrame(() => {
+    modal.classList.add('is-open');
+  });
 }
 
 function closeDetailedReceipt() {
   const modal = document.getElementById('detailedReceiptModal');
-  if (modal) {
+  if (!modal) return;
+  if (receiptCloseTimeoutId) {
+    clearTimeout(receiptCloseTimeoutId);
+    receiptCloseTimeoutId = null;
+  }
+
+  modal.classList.remove('is-open');
+  const scrollY = document.body.style.top;
+
+  // After the slide/fade transition completes, hide entirely. Also clear any
+  // transform/transition the swipe-to-dismiss handler may have left behind.
+  const finalize = () => {
+    receiptCloseTimeoutId = null;
     modal.style.display = 'none';
-    
-    // Restore background scrolling - restore scroll position
-    const scrollY = document.body.style.top;
+    const content = modal.querySelector('.receipt-modal-content');
+    if (content) {
+      content.style.transform = '';
+      content.style.transition = '';
+    }
+    // Restore background scrolling only when close animation has completed.
     document.body.style.position = '';
     document.body.style.top = '';
     document.body.style.width = '';
     document.body.style.overflow = '';
-    
-    // Restore scroll position
+
     if (scrollY) {
-      window.scrollTo(0, parseInt(scrollY || '0') * -1);
+      window.scrollTo(0, parseInt(scrollY || '0', 10) * -1);
     }
-  }
+  };
+  // 360ms covers the longest transition (mobile slide = 320ms) with headroom.
+  receiptCloseTimeoutId = setTimeout(finalize, 360);
+}
+
+// Mobile drawer: drag down on the content to dismiss. The handler is no-op on
+// desktop (>768px) and when the content is scrolled past the top, so it never
+// fights normal scrolling.
+function attachReceiptDrawerSwipe() {
+  const modal = document.getElementById('detailedReceiptModal');
+  if (!modal) return;
+  const content = modal.querySelector('.receipt-modal-content');
+  if (!content) return;
+
+  let startY = null;
+  let dy = 0;
+  let tracking = false;
+
+  content.addEventListener('touchstart', (e) => {
+    if (window.innerWidth > 768) return;
+    if (content.scrollTop > 0) return;
+    if (e.touches.length !== 1) return;
+    startY = e.touches[0].clientY;
+    dy = 0;
+    tracking = true;
+    content.style.transition = 'none';
+  }, { passive: true });
+
+  content.addEventListener('touchmove', (e) => {
+    if (!tracking || startY === null) return;
+    dy = e.touches[0].clientY - startY;
+    content.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+  }, { passive: true });
+
+  const release = () => {
+    if (!tracking) return;
+    tracking = false;
+    content.style.transition = '';
+    if (dy > 90) {
+      closeDetailedReceipt();
+    } else {
+      content.style.transform = '';
+    }
+    startY = null;
+    dy = 0;
+  };
+
+  content.addEventListener('touchend', release, { passive: true });
+  content.addEventListener('touchcancel', release, { passive: true });
 }
 
 
