@@ -2311,13 +2311,12 @@ body.bg-ready::before {
         font-size: var(--font-size-sm);
     }
     
-    /* Remove padding-bottom from plan-card in plans-list */
     .plans-list .plan-card {
         padding-bottom: 20px !important;
     }
     
     .plans-list .plan-card:last-child {
-        padding-bottom: 0;
+        padding-bottom: 28px !important;
     }
 }
 
@@ -2750,8 +2749,14 @@ body.bg-ready::before {
     outline: none; /* Remove default focus outline */
 }
 
+.category-item.expanded.selected .category-content {
+    flex: 1;
+    min-height: 0;
+}
+
 .category-item.expanded.selected .category-content-inner {
     flex: 1; /* Allow content to grow to fill available space */
+    min-height: 0;
 }
 
 .category-item.expanded .category-content:focus {
@@ -2824,8 +2829,9 @@ body.bg-ready::before {
     display: flex;
     flex-direction: column;
     gap: 0px;
-    padding-bottom: 0;
+    padding-bottom: 12px;
     flex: 1; /* Take remaining space */
+    min-height: 0; /* Allow this flex child to shrink so overflow-y can scroll */
     overflow-y: auto; /* Make plans-list scrollable */
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
@@ -2835,13 +2841,18 @@ body.bg-ready::before {
     transition: opacity 0.26s ease-out 0.08s, transform 0.26s ease-out 0.08s;
 }
 
+.plans-list > .plan-card {
+    height: auto; /* Do not stretch each card to the list viewport */
+    flex-shrink: 0;
+}
+
 .category-item.expanded .plans-list {
     opacity: 1;
     transform: translateY(0);
 }
 
 .category-item.expanded.selected .plans-list {
-    max-height: none; /* Remove max-height constraint for selected items to show all content */
+    max-height: none; /* Flex parent bounds height; keep overflow-y scrolling */
 }
 
 /* 15-day pass: activation date section */
@@ -3238,7 +3249,7 @@ body.bg-ready::before {
 }
 
 .plan-card:last-child:not(.addon-card) {
-    padding-bottom: 24px; /* Extra bottom padding for last card */
+    padding-bottom: 28px; /* Keep last description line clear of the category edge + fade */
 }
 
 /* No products available message */
