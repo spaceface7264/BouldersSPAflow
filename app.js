@@ -23444,7 +23444,8 @@ function renderConfirmationView() {
     successMessage.setAttribute('data-i18n-key', messageKey);
     successMessage.textContent = t(messageKey);
   }
-  renderSuccessAppDownloadSection(productType);
+  // App download card temporarily commented out in index.html
+  // renderSuccessAppDownloadSection(productType);
 
   // Update "What happens next?" steps based on product type (use translation keys)
   const nextStep1 = document.getElementById('nextStep1');
