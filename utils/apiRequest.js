@@ -8,6 +8,22 @@ export function buildApiUrl({ baseUrl = '', useProxy = false, path = '' } = {}) 
   return `${baseUrl}${normalizedPath}`;
 }
 
+function extractRetryAfterSeconds(payload, response) {
+  if (payload && typeof payload === 'object') {
+    const fromBody = payload.retryAfter ?? payload.error?.retryAfter;
+    const parsed = parseInt(fromBody, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  const header = response?.headers?.get?.('Retry-After');
+  if (header) {
+    const asInt = parseInt(header, 10);
+    if (!Number.isNaN(asInt) && asInt > 0) return asInt;
+  }
+
+  return null;
+}
+
 export async function requestJson({
   url,
   method = 'GET',
@@ -29,6 +45,11 @@ export async function requestJson({
     const error = new Error(`HTTP error! status: ${response.status}`);
     error.status = response.status;
     error.payload = payload;
+    // Surface retryAfter for callers (no auto-retry — unsafe for non-idempotent POSTs).
+    const retryAfter = extractRetryAfterSeconds(payload, response);
+    if (retryAfter != null) {
+      error.retryAfter = retryAfter;
+    }
     throw error;
   }
 
