@@ -7470,7 +7470,7 @@ const translations = {
     'addons.skipConfirm.message': 'Du har ikke valgt ekstraudstyr. Vil du fortsætte uden?',
     'addons.skipConfirm.goBack': 'Tilbage',
     'addons.skipConfirm.skipAnyway': 'Fortsæt uden',
-    'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
+    'terms.tab.membership': 'Medlemskab / Prøveperiode', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'homeGym.tooltip.title.fitness': 'Fitness Medlemskab gælder kun i Aalborg.',
     'homeGym.tooltip.desc.fitness': 'Du har adgang til styrketræningsområdet i Boulders Aalborg. Klatring og andre haller er ikke inkluderet.',
@@ -10173,7 +10173,7 @@ const termsContent = {
 <h3>Indholdsfortegnelse</h3>
 <ul>
 <li>§1. Generelt</li>
-<li>§2. Ændring af medlemsbetingelser og priser</li>
+<li>§2. Ændring af medlemsbetingelser, priser og lukning af medlemskab</li>
 <li>§3. Indmeldelse</li>
 <li>§4. Kampagne/tilbud/prisreduceret medlemskab</li>
 <li>§5. Medlemskaber og Medlemskort</li>
@@ -10199,11 +10199,11 @@ const termsContent = {
 
 <p>Henvendelser om medlemskab, herunder spørgsmål til medlemskaber og betingelser skal rettes til medlem@boulders.dk. Kun skriftlige svar herfra kan betragtes som værende fuldgyldige.</p>
 
-<h3>§2 Ændring af medlemsbetingelser og priser</h3>
-<p>Boulders forbeholder sig retten til løbende at ændre regelsættet, gebyrer, betingelser, åbningstider og priser, herunder prisen for dit medlemskab. De til enhver tid gældende priser og regelsæt vil altid kunne findes på Boulders.dk.</p>
+<h3>§2 Ændring af medlemsbetingelser, priser og lukning af medlemskab</h3>
+<p>Boulders forbeholder sig retten til løbende at ændre regelsættet, gebyrer, betingelser, åbningstider og priser, herunder prisen for dit medlemskab. Boulders forbeholder sig retten til at ændre eller lukke medlemskabstyper med varsel på løbende måned + 1 måned. De til enhver tid gældende priser og regelsæt vil altid kunne findes på Boulders.dk.</p>
 <p>Ændringer kan forekomme i følgende situationer: En rabataftale, som er tilknyttet dit medlemskab, bortfalder. Boulders foretager investeringer til forbedring af din brugeroplevelse, fx. ansættelse af mere personale eller renovation og modernisering af faciliteter samt udvidelse med flere klatrecentre.</p>
 <p>Priserne reguleres som følge af markedsforholdene og samfundsudviklingen, herunder forøgede omkostninger og inflation, indførelsen af nye lovgivningsmæssige krav og lignende situationer. Niveauet af prisstigningen vil blive fastsat forholdsmæssigt ud fra Boulders forøgede omkostninger.</p>
-<p>Væsentlige ændringer af priser og regelsæt vil blive varslet pr. e-mail minimum 60 dage inden disse træder i kraft. Såfremt du ikke ønsker at fortsætte dit medlemskab, skal du opsige dette jævnfør §8. Vær opmærksom på opsigelsesfristen!</p>
+<p>Væsentlige ændringer af priser og regelsæt vil blive varslet pr. e-mail minimum 60 dage inden disse træder i kraft. Lukning eller ændring af en medlemskabstype varsles pr. e-mail med løbende måned + 1 måned. Såfremt du ikke ønsker at fortsætte dit medlemskab, eller ikke ønsker at fortsætte på en anden medlemskabstype, skal du opsige dette jævnfør §8. Vær opmærksom på opsigelsesfristen!</p>
 
 <h3>§3 Indmeldelse</h3>
 <p>Dit medlemskab i Boulders er et løbende abonnement med automatisk fornyelse, der starter på købsdagen og fortsætter indtil det opsiges efter §8.</p>
@@ -10323,7 +10323,7 @@ const termsContent = {
 <h3>Table of Contents</h3>
 <ul>
 <li>§1. General Provisions</li>
-<li>§2. Changes to Membership Terms and Prices</li>
+<li>§2. Changes to Membership Terms, Prices, and Closure of Memberships</li>
 <li>§3. Membership Registration</li>
 <li>§4. Promotional/Discounted Memberships</li>
 <li>§5. Memberships and Membership Cards</li>
@@ -10349,13 +10349,13 @@ const termsContent = {
 
 <p>Inquiries about memberships, including questions regarding memberships and terms, should be directed to medlem@boulders.dk. Only written responses from this email address can be considered valid.</p>
 
-<h3>§2 Changes to Membership Terms and Prices</h3>
-<p>Boulders reserves the right to make ongoing changes to the rules, fees, terms, opening hours, and prices, including the price of your membership. The current prices and rules will always be available on Boulders.dk. Changes may occur in the following situations:</p>
+<h3>§2 Changes to Membership Terms, Prices, and Closure of Memberships</h3>
+<p>Boulders reserves the right to make ongoing changes to the rules, fees, terms, opening hours, and prices, including the price of your membership. Boulders reserves the right to change or discontinue membership types with notice of the current month + 1 month. The current prices and rules will always be available on Boulders.dk. Changes may occur in the following situations:</p>
 <p>A discount agreement linked to your membership expires.</p>
 <p>Boulders invests in improving your user experience, e.g., hiring more staff, renovating or modernizing facilities, or expanding with more climbing centers.</p>
 <p>Prices are adjusted due to market conditions and societal developments, including increased costs, inflation, the introduction of new legislative requirements, and similar situations.</p>
 <p>The level of price increases will be set proportionally based on Boulders' increased costs.</p>
-<p>Significant changes to prices and rules will be notified via email at least 60 days before they take effect. If you do not wish to continue your membership, you must cancel it according to §8. Note the cancellation period!</p>
+<p>Significant changes to prices and rules will be notified via email at least 60 days before they take effect. Closure or change of a membership type will be notified by email with notice of the current month + 1 month. If you do not wish to continue your membership, or do not wish to continue on another membership type, you must cancel it according to §8. Note the cancellation period!</p>
 
 <h3>§3 Membership Registration</h3>
 <p>Your membership at Boulders is a recurring subscription with automatic renewal, starting on the date of purchase and continuing until it is canceled in accordance with §8. See also §4 if you have signed up for a promotional/discounted membership.</p>
