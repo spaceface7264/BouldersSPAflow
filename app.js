@@ -7400,7 +7400,7 @@ const translations = {
     'confirmation.receipt.email': 'E-mail:',
     'confirmation.receipt.customerInfo': 'Kundens informationer',
     'confirmation.receipt.customerName': 'Kundens navn:',
-    'confirmation.receipt.valueCardsPurchased': 'Købte værdikort',
+    'confirmation.receipt.productDetails': 'Produktdetaljer',
     'confirmation.receipt.close': 'LUK',
     'confirmation.primaryGym': 'Hjemmehal:',
     'confirmation.membershipType': 'Type:',
@@ -7739,7 +7739,7 @@ const translations = {
     'confirmation.receipt.email': 'Email:',
     'confirmation.receipt.customerInfo': 'Customer information',
     'confirmation.receipt.customerName': 'Customer name:',
-    'confirmation.receipt.valueCardsPurchased': 'Value cards purchased',
+    'confirmation.receipt.productDetails': 'Product details',
     'confirmation.receipt.close': 'CLOSE',
     'confirmation.primaryGym': 'Primary Gym:',
     'confirmation.membershipType': 'Type:',
@@ -8145,7 +8145,7 @@ const translations = {
     'confirmation.receipt.email': 'E-Mail:',
     'confirmation.receipt.customerInfo': 'Kundeninformationen',
     'confirmation.receipt.customerName': 'Kundenname:',
-    'confirmation.receipt.valueCardsPurchased': 'Gekaufte Wertkarten',
+    'confirmation.receipt.productDetails': 'Produktdetails',
     'confirmation.receipt.close': 'SCHLIESSEN',
     'confirmation.primaryGym': 'Heimhalle:',
     'confirmation.membershipType': 'Typ:',
@@ -24339,12 +24339,11 @@ async function showDetailedReceipt() {
     if (receiptSellerEmail) receiptSellerEmail.textContent = 'medlem@boulders.dk';
   }
   
-  // Populate purchased items
+  // Populate purchased items — all product types under one "Product details" heading
   const receiptItems = document.getElementById('receiptItems');
   if (receiptItems) {
     receiptItems.innerHTML = '';
-    
-    // Add header row
+
     const headerRow = document.createElement('div');
     headerRow.className = 'receipt-item receipt-item-header';
     headerRow.innerHTML = sanitizeHTML(`
@@ -24353,55 +24352,77 @@ async function showDetailedReceipt() {
       <div>TOTALT</div>
     `);
     receiptItems.appendChild(headerRow);
-    
-    // Add items from order - per OrderOut schema
-    if (order.valueCardItems && order.valueCardItems.length > 0) {
-      // Per ValueCardItemOut schema: price is total for all quantity, quantity is amount of cards
-      order.valueCardItems.forEach(item => {
-        const itemRow = document.createElement('div');
-        itemRow.className = 'receipt-item';
+
+    const appendReceiptLine = (name, quantity, totalKr) => {
+      const itemRow = document.createElement('div');
+      itemRow.className = 'receipt-item';
+      itemRow.innerHTML = sanitizeHTML(`
+        <div>${name}</div>
+        <div>${quantity}</div>
+        <div>${formatCurrencyHalfKrone(totalKr)}</div>
+      `);
+      receiptItems.appendChild(itemRow);
+    };
+
+    const priceToKr = (price) => {
+      if (!price?.amount && price?.amount !== 0) return 0;
+      const amount = price.amount;
+      return typeof amount === 'object' ? (amount.amount || 0) / 100 : amount / 100;
+    };
+
+    let listedAnyApiItems = false;
+
+    // Memberships + day passes / trial subscriptions
+    if (order.subscriptionItems?.length) {
+      listedAnyApiItems = true;
+      order.subscriptionItems.forEach((item) => {
+        appendReceiptLine(
+          item.product?.name || 'Medlemskab',
+          item.quantity || 1,
+          priceToKr(item.price),
+        );
+      });
+    }
+
+    // Punch cards / value cards
+    if (order.valueCardItems?.length) {
+      listedAnyApiItems = true;
+      order.valueCardItems.forEach((item) => {
         let itemName = item.product?.name || 'Klippekort';
         // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
         itemName = itemName.replace(/\s*\(\d+\)\s*$/, '');
-        const itemQuantity = item.quantity || 1;
-        // Per ValueCardItemOut: price.amount is total price for all quantity (not per unit)
-        const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
-        
-        itemRow.innerHTML = sanitizeHTML(`
-          <div>${itemName}</div>
-          <div>${itemQuantity}</div>
-          <div>${formatCurrencyHalfKrone(itemTotal)}</div>
-        `);
-        receiptItems.appendChild(itemRow);
+        appendReceiptLine(itemName, item.quantity || 1, priceToKr(item.price));
       });
-    } else if (order.subscriptionItems && order.subscriptionItems.length > 0) {
-      // Per SubscriptionItemOut schema: price is total for all quantity, quantity is amount of subscriptions
-      order.subscriptionItems.forEach(item => {
-        const itemRow = document.createElement('div');
-        itemRow.className = 'receipt-item';
-        const itemName = item.product?.name || 'Medlemskab';
-        const itemQuantity = item.quantity || 1;
-        // Per SubscriptionItemOut: price.amount is total price for all quantity
-        const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
+    }
 
-        itemRow.innerHTML = sanitizeHTML(`
-          <div>${itemName}</div>
-          <div>${itemQuantity}</div>
-          <div>${formatCurrencyHalfKrone(itemTotal)}</div>
-        `);
-        receiptItems.appendChild(itemRow);
+    // Add-ons / articles
+    if (order.articleItems?.length) {
+      listedAnyApiItems = true;
+      order.articleItems.forEach((item) => {
+        appendReceiptLine(
+          item.product?.name || item.name || 'Tilbehør',
+          item.quantity || 1,
+          priceToKr(item.price),
+        );
       });
-    } else if (state.order?.items && state.order.items.length > 0) {
-      // Fallback to state.order.items
-      state.order.items.forEach(item => {
-        const itemRow = document.createElement('div');
-        itemRow.className = 'receipt-item';
-        itemRow.innerHTML = sanitizeHTML(`
-          <div>${item.name || 'Item'}</div>
-          <div>${item.quantity || 1}</div>
-          <div>${formatCurrencyHalfKrone(item.amount || 0)}</div>
-        `);
-        receiptItems.appendChild(itemRow);
+    }
+
+    // Day tickets / entries
+    if (order.entryItems?.length) {
+      listedAnyApiItems = true;
+      order.entryItems.forEach((item) => {
+        appendReceiptLine(
+          item.product?.name || item.name || 'Dagsbillet',
+          item.quantity || 1,
+          priceToKr(item.price),
+        );
+      });
+    }
+
+    // Fallback for test mode / partial order snapshots
+    if (!listedAnyApiItems && state.order?.items?.length) {
+      state.order.items.forEach((item) => {
+        appendReceiptLine(item.name || 'Item', item.quantity || 1, item.amount || 0);
       });
     }
   }
