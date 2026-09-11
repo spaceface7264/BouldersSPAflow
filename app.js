@@ -6912,15 +6912,6 @@ function isFitnessMembership(product) {
   return labels.some((label) => String(label?.name || '').toLowerCase().includes('fitness'));
 }
 
-function catalogHasFitnessMembership() {
-  const pools = [
-    ...(state.subscriptions || []),
-    ...(state.campaignSubscriptions || []),
-    ...(state.dayPassSubscriptions || []),
-  ];
-  return pools.some(isFitnessMembership);
-}
-
 function isFitnessMembershipSelected() {
   if (isFitnessMembership(resolveSelectedAccessProduct())) return true;
   if (isFitnessMembership(state.fullOrder?.subscriptionItems?.[0]?.product)) return true;
@@ -25946,7 +25937,8 @@ const FREE_TRIAL_EXTRA_FAQS = [
 
 /**
  * Determine which FAQ categories should be shown based on current step and cart.
- * Step 1: gyms only. Step 2–3: product choice (help choose product). Step 4: contextual to cart.
+ * Step 1: gyms only. Step 2–3: product choice (help choose product). Step 4 (Send):
+ * contextual to cart. Fitness answers only appear on Send when Fitness is in the cart.
  * @returns {string[]} Array of FAQ category keys to display
  */
 function getActiveFAQs() {
@@ -25964,10 +25956,10 @@ function getActiveFAQs() {
 
   // Step 2 or 3: help users choose the right product (differences between membership, 15-day pass, punch card)
   if (step === 2 || step === 3) {
-    return catalogHasFitnessMembership() ? ['productChoice', 'fitness'] : ['productChoice'];
+    return ['productChoice'];
   }
 
-  // Step 4 (cart): only FAQs for the selected product type (no gyms)
+  // Step 4 (Send / cart): only FAQs for the selected product type (no gyms)
   if (step === 4) {
     const productType = determineProductTypeFromOrder();
     if (productType === '15daypass') return ['15daypass'];
