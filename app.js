@@ -4538,7 +4538,7 @@ function renderProductsFromAPI() {
 
     const campaignIntroPriceDisplay = category === 'campaign' ? resolveCampaignIntroPriceDisplay(product) : null;
     const isFirstMonthCampaignPricing = category === 'campaign' && campaignIntroPriceDisplay !== null;
-    const productOriginalPriceDKK = !isFirstMonthCampaignPricing
+    const productOriginalPriceDKK = !isFirstMonthCampaignPricing && !isFitnessMembership(product)
       ? getPlanCardOriginalPrice(product, price)
       : null;
     const hasDiscountedPlanPrice = !isFirstMonthCampaignPricing
@@ -6904,6 +6904,31 @@ function has15DayPassLabel(product) {
   });
 }
 
+function isFitnessMembership(product) {
+  if (!product) return false;
+  const name = String(product.name || '').toLowerCase();
+  if (name.includes('fitness')) return true;
+  const labels = Array.isArray(product.productLabels) ? product.productLabels : [];
+  return labels.some((label) => String(label?.name || '').toLowerCase().includes('fitness'));
+}
+
+function catalogHasFitnessMembership() {
+  const pools = [
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+  ];
+  return pools.some(isFitnessMembership);
+}
+
+function isFitnessMembershipSelected() {
+  if (isFitnessMembership(resolveSelectedAccessProduct())) return true;
+  if (isFitnessMembership(state.fullOrder?.subscriptionItems?.[0]?.product)) return true;
+  const cartItem = (state.cartItems || []).find((item) => item.type === 'membership');
+  if (cartItem && /fitness/i.test(`${cartItem.productName || ''} ${cartItem.name || ''}`)) return true;
+  return /fitness/i.test(String(state.order?.membershipType || ''));
+}
+
 // Load and filter products with boost labels for the selected plan
 async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
@@ -7456,6 +7481,8 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Fortsæt uden',
     'terms.tab.membership': 'Medlemskab / 15 Dage', 'terms.tab.punchcard': 'Klippekort',
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
+    'homeGym.tooltip.title.fitness': 'Fitness Medlemskab gælder kun i Aalborg.',
+    'homeGym.tooltip.desc.fitness': 'Du har adgang til styrketræningsområdet i Boulders Aalborg. Klatring og andre haller er ikke inkluderet.',
     'homeGym.tooltip.title.firstclimb': 'Din billet gælder i alle Boulders.',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
@@ -7492,6 +7519,22 @@ const translations = {
     'faq.membership.freeze.a': 'Ja, du kan fryse dit medlemskab i 1–3 måneder af gangen, op til 3 gange om året for 49 kr pr. gang. Du betaler ikke, mens du er i bero, og genaktivering er gratis. Frysning kan ikke aktiveres i bindingsperiode.',
     'faq.membership.cancellation.q': 'Hvordan opsiger jeg mit medlemskab?',
     'faq.membership.cancellation.a': 'Du kan opsige dit medlemskab når som helst med en kort varsel, som er resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
+    'faq.fitness.included.q': 'Hvad er inkluderet i Fitness Medlemskab?',
+    'faq.fitness.included.a': 'Fitness Medlemskab giver adgang til styrketræningsområdet i Boulders Aalborg. Klatring er ikke inkluderet, og det samme gælder medlemsfordele som Bloc Life, introhold og gæstepas.',
+    'faq.fitness.climbing.q': 'Kan jeg klatre med Fitness Medlemskab?',
+    'faq.fitness.climbing.a': 'Nej. Fitness Medlemskab dækker kun styrketræningsområdet. Hvis du vil klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
+    'faq.fitness.where.q': 'Hvor kan jeg bruge Fitness Medlemskab?',
+    'faq.fitness.where.a': 'Fitness Medlemskab gælder kun i Boulders Aalborg og kun i styrketræningsområdet. Det kan ikke bruges i andre Boulders-haller.',
+    'faq.fitness.benefits.q': 'Får jeg medlemsfordele og Bloc Life?',
+    'faq.fitness.benefits.a': 'Nej. Fitness Medlemskab inkluderer ikke Bloc Life, introhold, gæstepas eller andre medlemsfordele. De følger kun med et almindeligt Boulders-medlemskab.',
+    'faq.fitness.terms.q': 'Hvad er vilkårene og betingelserne?',
+    'faq.fitness.terms.a': 'Fitness Medlemskab er et løbende abonnement med automatisk månedlig fornyelse. Der er ingen tilmeldings- eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden plus 1 måned. Du kan læse de fulde vilkår og betingelser ved at klikke på linket i kurven.',
+    'faq.fitness.bindingPeriod.q': 'Er der bindingsperiode?',
+    'faq.fitness.bindingPeriod.a': 'Nej. Der er ingen bindingsperiode på Fitness Medlemskab. Du kan opsige når som helst med varsel på løbende måned plus en måned.',
+    'faq.fitness.cancellation.q': 'Hvordan opsiger jeg Fitness Medlemskab?',
+    'faq.fitness.cancellation.a': 'Du kan opsige når som helst med varsel på resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
+    'faq.productChoice.fitnessBest.q': 'Hvornår vælger jeg Fitness Medlemskab?',
+    'faq.productChoice.fitnessBest.a': 'Vælg Fitness Medlemskab hvis du kun vil træne i styrkeområdet i Boulders Aalborg. Det inkluderer ikke klatring eller medlemsfordele. Vil du klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
     'faq.15daypass.howItWorks.q': 'Hvordan virker 15-dages kortet?',
     'faq.15daypass.howItWorks.a': '15-dages kortet giver dig 15 dages ubegrænset adgang til alle Boulders haller fra den dag, du aktiverer det. Det er perfekt til at prøve klatring eller et kortvarigt besøg.',
     'faq.15daypass.validity.q': 'Hvor længe er kortet gyldigt?',
@@ -7744,6 +7787,8 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Continue without',
     'terms.tab.membership': 'Membership/Trial', 'terms.tab.punchcard': 'Punch Card',
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
+    'homeGym.tooltip.title.fitness': 'Fitness Membership is valid in Aalborg only.',
+    'homeGym.tooltip.desc.fitness': 'You get access to the strength-training area at Boulders Aalborg. Climbing and other gyms are not included.',
     'homeGym.tooltip.title.firstclimb': 'Your ticket is valid at any Boulders.',
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
@@ -7779,6 +7824,22 @@ const translations = {
     'faq.membership.freeze.a': 'Yes. You can freeze your membership for 1–3 months at a time, up to 3 times a year, for 49 kr per freeze. You are not charged while frozen, and reactivation is free. Freezing cannot be activated during a commitment period.',
     'faq.membership.cancellation.q': 'How do I cancel my membership?',
     'faq.membership.cancellation.a': 'You can cancel your membership at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
+    'faq.fitness.included.q': 'What is included in Fitness Membership?',
+    'faq.fitness.included.a': 'Fitness Membership gives access to the strength-training area at Boulders Aalborg. Climbing is not included, and neither are membership benefits such as Bloc Life, intro class, and guest passes.',
+    'faq.fitness.climbing.q': 'Can I climb with Fitness Membership?',
+    'faq.fitness.climbing.a': 'No. Fitness Membership covers the strength-training area only. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
+    'faq.fitness.where.q': 'Where can I use Fitness Membership?',
+    'faq.fitness.where.a': 'Fitness Membership is valid only at Boulders Aalborg, and only in the strength-training area. It cannot be used at other Boulders gyms.',
+    'faq.fitness.benefits.q': 'Do I get membership benefits and Bloc Life?',
+    'faq.fitness.benefits.a': 'No. Fitness Membership does not include Bloc Life, intro class, guest passes, or other membership benefits. Those come with a regular Boulders membership.',
+    'faq.fitness.terms.q': 'What are the terms and conditions?',
+    'faq.fitness.terms.a': 'Fitness Membership is an ongoing subscription with automatic monthly renewal. There are no signup or cancellation fees. Notice period is the rest of the month plus 1 month. You can read the full terms and conditions by clicking the link in the cart.',
+    'faq.fitness.bindingPeriod.q': 'Is there a commitment period?',
+    'faq.fitness.bindingPeriod.a': 'No. There is no commitment period on Fitness Membership. You can cancel anytime with notice for the rest of the current month plus one month.',
+    'faq.fitness.cancellation.q': 'How do I cancel Fitness Membership?',
+    'faq.fitness.cancellation.a': 'You can cancel at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
+    'faq.productChoice.fitnessBest.q': 'When should I choose Fitness Membership?',
+    'faq.productChoice.fitnessBest.a': 'Choose Fitness Membership if you only want to train in the strength area at Boulders Aalborg. It does not include climbing or membership benefits. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
     'faq.15daypass.howItWorks.q': 'How does the 15-Day  Trial Pass work?',
     'faq.15daypass.howItWorks.a': 'The 15-Day Trial Pass gives you 15 days of unlimited access to all Boulders gyms from the day you activate it. It\'s perfect for trying out climbing or a short-term visit.',
     'faq.15daypass.validity.q': 'How long is the pass valid?',
@@ -7969,6 +8030,8 @@ const translations = {
     'addons.skipConfirm.skipAnyway': 'Ohne fortfahren',
     'terms.tab.membership': 'Mitgliedschaft / 15 Tage', 'terms.tab.punchcard': 'Stempelkarte',
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
+    'homeGym.tooltip.title.fitness': 'Fitness-Mitgliedschaft gilt nur in Aalborg.',
+    'homeGym.tooltip.desc.fitness': 'Sie haben Zugang zum Krafttrainingsbereich in Boulders Aalborg. Klettern und andere Hallen sind nicht enthalten.',
     'homeGym.tooltip.title.firstclimb': 'Dein Ticket gilt in allen Boulders.',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
     'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
@@ -16357,8 +16420,17 @@ function renderCartItems() {
     // Create tooltip — firstclimb (/99kr) is a single-day ticket valid at any
     // Boulders, so only the headline is needed; skip the supporting paragraph.
     const isFirstClimb = isFirstClimbRoute();
-    const tooltipTitle = t(isFirstClimb ? 'homeGym.tooltip.title.firstclimb' : 'homeGym.tooltip.title');
-    const tooltipDesc = isFirstClimb ? '' : `<p>${t('homeGym.tooltip.desc')}</p>`;
+    const isFitness = isFitnessMembershipSelected();
+    const tooltipTitle = t(
+      isFirstClimb
+        ? 'homeGym.tooltip.title.firstclimb'
+        : isFitness
+          ? 'homeGym.tooltip.title.fitness'
+          : 'homeGym.tooltip.title'
+    );
+    const tooltipDesc = isFirstClimb
+      ? ''
+      : `<p>${t(isFitness ? 'homeGym.tooltip.desc.fitness' : 'homeGym.tooltip.desc')}</p>`;
     const tooltip = document.createElement('div');
     tooltip.className = 'home-gym-tooltip';
     tooltip.innerHTML = sanitizeHTML(`
@@ -16997,7 +17069,7 @@ function updatePaymentOverview() {
   };
 
   const getStaticPriceWarrantyFallbackDKK = (sourceProduct) => {
-    if (!sourceProduct) return 0;
+    if (!sourceProduct || isFitnessMembership(sourceProduct)) return 0;
     const text = [
       sourceProduct?.name,
       sourceProduct?.externalDescription,
@@ -17041,7 +17113,7 @@ function updatePaymentOverview() {
   };
 
   const looksLikeIntroOfferPlan = (sourceProduct) => {
-    if (!sourceProduct) return false;
+    if (!sourceProduct || isFitnessMembership(sourceProduct)) return false;
     const text = [
       sourceProduct?.name,
       sourceProduct?.externalDescription,
@@ -17139,7 +17211,7 @@ function updatePaymentOverview() {
   };
 
   const getPostWarrantyMonthlyPriceDKK = (sourceProduct) => {
-    if (!sourceProduct) return 0;
+    if (!sourceProduct || isFitnessMembership(sourceProduct)) return 0;
 
     const dynamicNodes = collectWarrantyNodes(sourceProduct);
     for (const node of dynamicNodes) {
@@ -25593,7 +25665,7 @@ function getBoostProductDiscountPercent(product) {
 }
 
 function getPlanCardOriginalPrice(product, discountedPriceDKK) {
-  if (!product) return null;
+  if (!product || isFitnessMembership(product)) return null;
   const discounted = Number(discountedPriceDKK);
   if (!Number.isFinite(discounted) || discounted <= 0) return null;
 
@@ -25645,7 +25717,7 @@ function getPlanCardOriginalPrice(product, discountedPriceDKK) {
 }
 
 function getPlanCardOriginalPriceFallbackDKK(product) {
-  if (!product) return 0;
+  if (!product || isFitnessMembership(product)) return 0;
   const text = [
     product?.name,
     product?.externalDescription,
@@ -25837,6 +25909,16 @@ const FAQ_DATA = {
     { q: 'faq.membership.freeze.q', a: 'faq.membership.freeze.a' },
     { q: 'faq.membership.cancellation.q', a: 'faq.membership.cancellation.a' }
   ],
+  fitness: [
+    { q: 'faq.productChoice.fitnessBest.q', a: 'faq.productChoice.fitnessBest.a' },
+    { q: 'faq.fitness.included.q', a: 'faq.fitness.included.a' },
+    { q: 'faq.fitness.climbing.q', a: 'faq.fitness.climbing.a' },
+    { q: 'faq.fitness.where.q', a: 'faq.fitness.where.a' },
+    { q: 'faq.fitness.benefits.q', a: 'faq.fitness.benefits.a' },
+    { q: 'faq.fitness.terms.q', a: 'faq.fitness.terms.a' },
+    { q: 'faq.fitness.bindingPeriod.q', a: 'faq.fitness.bindingPeriod.a' },
+    { q: 'faq.fitness.cancellation.q', a: 'faq.fitness.cancellation.a' }
+  ],
   '15daypass': [
     { q: 'faq.15daypass.howItWorks.q', a: 'faq.15daypass.howItWorks.a' },
     { q: 'faq.15daypass.validity.q', a: 'faq.15daypass.validity.a' },
@@ -25882,13 +25964,14 @@ function getActiveFAQs() {
 
   // Step 2 or 3: help users choose the right product (differences between membership, 15-day pass, punch card)
   if (step === 2 || step === 3) {
-    return ['productChoice'];
+    return catalogHasFitnessMembership() ? ['productChoice', 'fitness'] : ['productChoice'];
   }
 
   // Step 4 (cart): only FAQs for the selected product type (no gyms)
   if (step === 4) {
     const productType = determineProductTypeFromOrder();
     if (productType === '15daypass') return ['15daypass'];
+    if (isFitnessMembershipSelected()) return ['fitness'];
     if (productType === 'membership') return ['membership'];
     if (productType === 'punch-card') return ['punch-card'];
     return [];
