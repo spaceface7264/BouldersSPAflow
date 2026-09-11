@@ -8359,6 +8359,8 @@ function updatePageTranslations() {
       translation = t('landing.fitness.subtitle');
     } else if (isFitnessLanding && key === 'category.membership.desc') {
       translation = t('landing.fitness.desc');
+    } else if (isFitnessLanding && key === 'main.subtitle.step2.secondary') {
+      translation = t('landing.fitness.step2.secondary');
     }
 
     // Simple placeholder substitution for dynamic translations.
@@ -8463,12 +8465,17 @@ function updatePageTranslations() {
   Object.entries(categoryTitles).forEach(([category, key]) => {
     const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
     const isOfferLanding = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
+    const isFitnessLanding = activeLandingRoute?.componentName === 'LandingFitness';
     const resolvedTitleKey = (isOfferLanding && category === 'campaign')
       ? 'offer.membership.title'
-      : key;
+      : (isFitnessLanding && category === 'membership')
+        ? 'landing.fitness.title'
+        : key;
     const resolvedDescKey = (isOfferLanding && category === 'campaign')
       ? 'offer.membership.description'
-      : `${key}.desc`;
+      : (isFitnessLanding && category === 'membership')
+        ? 'landing.fitness.desc'
+        : `${key}.desc`;
 
     const titleEl = document.querySelector(`[data-category="${category}"] .category-title`);
     if (titleEl) {
@@ -25130,7 +25137,9 @@ function updateMainSubtitle() {
   DOM.mainSubtitle.textContent = subtitles[state.currentStep] ?? t('main.subtitle.step2');
   
   // Update secondary subtitle for current step
-  const secondarySubtitle = document.querySelector('.secondary-subtitle');
+  const secondarySubtitle = state.currentStep === 2
+    ? document.querySelector('#step-2 .secondary-subtitle')
+    : document.querySelector('.secondary-subtitle');
   if (secondarySubtitle) {
     if (state.currentStep === 1) {
       secondarySubtitle.textContent = t('main.subtitle.step1.secondary');
