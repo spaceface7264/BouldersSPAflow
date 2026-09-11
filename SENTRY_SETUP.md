@@ -1,349 +1,126 @@
 # Sentry Error Monitoring Setup
 
-This document describes how Sentry error monitoring is configured for production error tracking and alerting.
+How Sentry is configured for production error tracking, User Feedback (“Report a problem”),
+and consent-gated Session Replay on `join.boulders.dk`.
+
+Day-to-day smoke checks: [SENTRY_VERIFY.md](./SENTRY_VERIFY.md).
 
 ## Overview
 
-Sentry is configured using the **Loader Script** approach to capture:
-- Uncaught JavaScript errors (from page load onwards)
-- Unhandled promise rejections
-- Critical payment and authentication errors
-- Performance metrics (configured in Sentry project settings)
+Production Sentry is initialized from a **CDN bundle** in `index.html` (not the Loader Script,
+and not `sentry.config.js`). The live bundle is `bundle.tracing.replay.feedback.min.js` and covers:
 
-## Implementation Approach
+- Uncaught JavaScript errors and unhandled promise rejections (from page load onwards)
+- Performance traces (sampled)
+- **User Feedback** via a floating bug button + footer “Report a problem” link
+- **Session Replay** in buffer mode after Cookiebot statistics consent (attached to feedback;
+  not full-session recording of every visitor)
 
-We use Sentry's **Loader Script** (CDN-hosted) which:
-- Loads immediately when HTML parses (before JavaScript)
-- Captures errors that happen before app.js loads
-- Auto-configured via Sentry project settings
-- Reduces bundle size (no Sentry SDK in bundle)
-
-## Setup Instructions
-
-### 1. Create Sentry Account and Project
-
-1. Go to [sentry.io](https://sentry.io) and create an account
-2. Create a new project:
-   - Platform: **JavaScript - Browser**
-   - Framework: **Nope, Vanilla**
-   - Project name: `join-boulders-dk` (or your preferred name)
-3. You'll see setup instructions with a **Loader Script**
-
-### 2. Copy Loader Script to HTML
-
-The loader script is already added to `index.html` (line 19-22):
+## Implementation
 
 ```html
 <script
-  src="https://js-de.sentry-cdn.com/1cc58b6b7d525b61ce37f528a8ddf2ed.min.js"
+  src="https://browser.sentry-cdn.com/10.69.0/bundle.tracing.replay.feedback.min.js"
+  integrity="sha384-…"
   crossorigin="anonymous"
 ></script>
 ```
 
-**Note:** This URL is specific to your Sentry project. If you create a new project, update this URL with the new loader script from Sentry's setup instructions.
+Inline `Sentry.init({…})` in `index.html` sets DSN, environment, integrations
+(`browserTracingIntegration`, `replayIntegration`, `feedbackIntegration`), `ignoreErrors`, and
+`beforeSend`. `window.Sentry` is assigned for `app.js` helpers (`captureException`, `setUser`).
 
-### 3. Configure Project Settings in Sentry Dashboard
+**`sentry.config.js` is unused by the shipped app.** Changing it does not change production.
 
-Since we're using the loader script (not environment variables), configuration is done in the Sentry web UI:
+### Environment
 
-1. Go to **Settings > Projects > [your-project] > Client Keys (DSN)**
-2. The loader script URL contains your project's DSN
-3. Configure settings in **Settings > Projects > [your-project] > Settings**:
-   - **Environment**: Set based on domain (production for join.boulders.dk)
-   - **Release Tracking**: Optional
-   - **Sample Rates**: Configure error and performance sampling
+- `production` when hostname is `join.boulders.dk`
+- `development` everywhere else
+- Traces: 10% production, 100% local
+- Errors: 100% sample; expected noise (rate limits, auth failures, extensions) filtered in code
 
-### 4. Verify Installation
+### Report a problem (User Feedback)
 
-After deploying with the loader script:
+| Piece | Detail |
+|---|---|
+| UI | `#reportProblemButton` (bottom-right bug icon) + footer Support → Report a problem |
+| Open | `window.openProblemReport()` — single form (no stacking); cleaned up on close/submit |
+| Triage | Sentry → **User Feedback** (`issue.category:feedback`) |
+| Tags | Feedback-only via `getProblemReportTags()` in `app.js` (not global `setTag`) |
+| Success UX | Floating button briefly shows thank-you copy, then reverts |
 
-1. Open your deployed site
-2. Open browser console
-3. Run: `throw new Error('Test Sentry error')`
-4. Check Sentry dashboard - error should appear within seconds
+Optional: create a Sentry alert on new `issue.category:feedback` (Slack/email).
 
-## Configuration in Sentry Dashboard
+### Session Replay
 
-All Sentry configuration is done through the web UI:
+- Sample rates stay `0` for automatic full-session capture
+- Buffering: `Sentry.getReplay().startBuffering()` after Cookiebot **statistics** consent
+  (`syncSentryReplayWithConsent`); always allowed in non-production for local testing
+- Privacy: `maskAllText`, `maskAllInputs`, `blockAllMedia`, `networkCaptureBodies: false`
+- CSP in `_headers`: `worker-src 'self' blob:` and `child-src 'self' blob:` (older Safari)
 
-### Error Monitoring Settings
+## Setup / rotate DSN
 
-**Settings > Projects > [your-project] > Error Monitoring**
+1. Create a Browser JavaScript project in Sentry (e.g. `join-boulders-dk`)
+2. Put the DSN in `Sentry.init({ dsn: … })` in `index.html`
+3. When bumping the CDN bundle, update **both** the `src` URL and the `integrity` hash together
+4. Optional source maps: set `SENTRY_AUTH_TOKEN` (and optionally `SENTRY_ORG` /
+   `SENTRY_PROJECT` / `VITE_SENTRY_RELEASE`) at build time — see `vite.config.ts`
 
-- **Error Sample Rate**: 100% (capture all errors) - recommended
-- **Filters**: Configure to ignore browser extensions, network errors, etc.
-- **Data Scrubbing**: Enable to remove sensitive data from errors
+## Dashboard configuration worth keeping
 
-### Performance Monitoring
+**Alerts > Create Alert Rule** (recommended):
 
-**Settings > Projects > [your-project] > Performance**
+1. High error rate (> 10 errors in 5 minutes)
+2. New / first-seen errors
+3. Checkout / auth tagged errors (`flow:checkout`, `flow:authentication`)
+4. New User Feedback (`issue.category:feedback`)
 
-- **Traces Sample Rate**: 10% recommended (or adjust based on traffic)
-- **Enable Performance Monitoring**: Toggle on/off
+Also useful: inbound filters, data scrubbing, release tracking if source maps are uploaded.
 
-### Alerts
+## Features in app code
 
-**Alerts > Create Alert Rule**
+### Manual / contextual capture
 
-Recommended alerts:
-1. **High Error Rate**: > 10 errors in 5 minutes
-2. **New Error**: First time an error occurs
-3. **Critical Errors**: Errors tagged with `flow:checkout` or `flow:authentication`
+`app.js` wraps `window.Sentry` and captures high-value failures with tags (e.g. checkout /
+authentication). Expected 400/401/429 outcomes are excluded so they do not spam Issues.
 
-## Features Implemented
+### User context
 
-### 1. Sentry Loader Script
+On successful login, `setUser({ id, email })` is called so Issues and Feedback can show who was
+affected. Cleared on logout.
 
-**File:** `index.html:19-22`
+## Testing
 
-The loader script automatically:
-- Initializes Sentry on page load
-- Captures uncaught JavaScript errors
-- Captures unhandled promise rejections
-- Sends errors to Sentry dashboard
-- Applies project configuration from Sentry UI
-
-### 2. Manual Error Tracking
-
-Our app.js captures specific errors that need additional context:
-
-**Payment Errors** (`app.js:12464-12474`)
-- Captures payment link generation failures
-- Tags: `flow:checkout`, `error_type:payment_link_generation`
-- Includes order ID and subscription items for debugging
-
-**Login Errors** (`app.js:643-656`)
-- Captures server errors during login (excludes user input errors)
-- Tags: `flow:authentication`, `error_type:login_failed`
-- Excludes: 400 (bad request), 401 (unauthorized), 429 (rate limits)
-
-### 3. User Context
-
-**File:** `app.js:622-628`
-
-When users log in successfully, we set user context in Sentry:
-- User ID (from token)
-- Email address
-
-This helps identify which users are experiencing errors.
-
-### 4. Configuration
-
-All Sentry configuration is managed through the Sentry web UI:
-- **Error filtering**: Settings > Processing > Inbound Filters
-- **Data scrubbing**: Settings > Security & Privacy
-- **Sample rates**: Settings > Performance or Error Monitoring
-- **Alerts**: Alerts > Create Alert Rule
-- **Releases**: Settings > Releases (if using source maps)
-
-## Testing Sentry Integration
-
-### Test 1: Verify Loader Script Loaded
-
-1. Open your deployed site
-2. Open browser console
-3. Check that `window.Sentry` exists:
-   ```javascript
-   console.log(window.Sentry); // Should show Sentry SDK object
-   ```
-
-### Test 2: Trigger Test Errors
-
-Open browser console and run:
+Prefer [SENTRY_VERIFY.md](./SENTRY_VERIFY.md). Short version:
 
 ```javascript
-// Test uncaught error
-throw new Error('Test Sentry error from console');
-
-// Test promise rejection
-Promise.reject(new Error('Test promise rejection'));
-
-// Test manual capture
-Sentry.captureException(new Error('Manual test error'));
+window.testSentry();           // error + message → Issues
+window.openProblemReport();    // feedback form → User Feedback
+window.syncSentryReplayWithConsent?.();
+window.Sentry?.getReplay?.()?.getReplayId?.();
 ```
 
-### Test 3: Check Sentry Dashboard
+## Files that matter
 
-1. Go to Sentry.io → Issues
-2. You should see the test errors appear within seconds
-3. Click on an error to see:
-   - Stack trace with line numbers
-   - User context (if logged in)
-   - Breadcrumbs (user actions before error)
-   - Device/browser info
-   - Environment (should show your configured environment)
+| File | Role |
+|---|---|
+| `index.html` | CDN script + `Sentry.init`, feedback helpers, Replay consent sync |
+| `app.js` | `captureException` / `setUser`, i18n + `getProblemReportTags` |
+| `styles.css` | Floating report button + success state |
+| `_headers` | CSP including Replay `worker-src` / `child-src` |
+| `vite.config.ts` | Optional source-map upload plugin |
+| `sentry.config.js` | Unused leftover — ignore for production |
 
-### Test 4: Test Real Application Errors
+## Notes
 
-1. **Payment Flow:**
-   - Complete a checkout to trigger any payment errors
-   - Check Sentry for errors tagged with `flow:checkout`
+- Do not follow Sentry dashboard “install via npm / Loader Script” snippets for this app unless
+  you intentionally migrate the init path.
+- Source maps upload only when `SENTRY_AUTH_TOKEN` is present at build time.
+- Always smoke-test after deploy: `testSentry()` + one feedback submission.
 
-2. **Login Flow:**
-   - Try logging in with wrong credentials (should NOT appear - 401 excluded)
-   - Cause a server error if possible (should appear with `flow:authentication` tag)
+## References
 
-3. **User Context:**
-   - Log in successfully
-   - Trigger an error
-   - Error in Sentry should show your user email
-
-## Monitoring and Alerts
-
-### Setting Up Alerts
-
-1. Go to **Sentry.io → Alerts**
-2. Click **Create Alert Rule**
-3. Recommended alerts:
-   - **High Error Rate:** Alert when >10 errors in 5 minutes
-   - **Payment Failures:** Alert on any `flow:checkout` errors
-   - **Auth Issues:** Alert on any `flow:authentication` errors
-
-### Alert Destinations
-
-Configure where alerts go:
-- Email
-- Slack
-- PagerDuty
-- Discord
-- Webhooks
-
-## Performance Monitoring
-
-Current configuration:
-- **Error Sample Rate:** 100% (all errors captured)
-- **Performance Sample Rate:** 10% (10% of transactions tracked)
-
-To adjust, edit `sentry.config.js:46-49`
-
-## Quotas and Limits
-
-Sentry free tier includes:
-- 5,000 errors/month
-- 10,000 performance transactions/month
-
-If you exceed limits:
-- Errors will be dropped
-- Consider upgrading or reducing sample rates
-
-## Troubleshooting
-
-### Sentry not capturing errors
-
-1. **Check DSN is set:**
-   ```bash
-   echo $VITE_SENTRY_DSN
-   ```
-
-2. **Check browser console:**
-   - Should see: `[Sentry] Initialized in production mode (enabled: true)`
-   - If disabled: `[Sentry] DSN not configured`
-
-3. **Verify environment:**
-   - Sentry only enables in production by default
-   - Set `VITE_SENTRY_ENVIRONMENT=production` to force enable
-
-### Source maps not working
-
-1. **Check auth token is set:**
-   ```bash
-   echo $SENTRY_AUTH_TOKEN
-   ```
-
-2. **Check build logs:**
-   - Should see: `[Vite] Sentry plugin enabled - source maps will be uploaded`
-
-3. **Verify release version:**
-   - Errors in Sentry should show the same release version
-   - Set `VITE_SENTRY_RELEASE` to track releases
-
-### Errors not filtered properly
-
-Edit filter rules in `sentry.config.js:68-83`:
-
-```javascript
-ignoreErrors: [
-  'Your error pattern here',
-  /regex pattern/,
-],
-```
-
-## Files Modified
-
-- `index.html:19-22` - Sentry loader script (CDN-hosted)
-- `app.js:38-48` - Sentry helper functions (captureException, setUser)
-- `app.js:622-628` - User context tracking on login
-- `app.js:643-656` - Login error tracking
-- `app.js:12464-12474` - Payment error tracking
-- `vite.config.ts:176` - Source map generation (optional)
-- `package.json` - Sentry Vite plugin for source maps (optional)
-
-## Manual Error Capture
-
-The Sentry SDK is loaded globally and available via `window.Sentry`:
-
-```javascript
-// Capture an error with context
-Sentry.captureException(new Error('Something went wrong'), {
-  tags: {
-    flow: 'checkout',
-    error_type: 'payment_failed'
-  },
-  extra: {
-    orderId: '12345',
-    amount: 299
-  },
-  level: 'error' // or 'warning', 'info'
-});
-
-// Capture a message (not an error)
-Sentry.captureMessage('User completed checkout', {
-  level: 'info',
-  tags: { flow: 'checkout' }
-});
-
-// Set user context (done automatically on login in app.js)
-Sentry.setUser({
-  id: 'user-123',
-  email: 'user@example.com'
-});
-
-// Clear user context (on logout)
-Sentry.setUser(null);
-
-// Add breadcrumb for debugging
-Sentry.addBreadcrumb({
-  message: 'User clicked checkout button',
-  category: 'user-action',
-  data: {
-    buttonId: 'checkout',
-    cartTotal: 299
-  },
-  level: 'info'
-});
-```
-
-**Note:** Our app.js already handles payment errors, login errors, and user context automatically. Manual capture is only needed for additional custom tracking.
-
-## Next Steps
-
-1. ✅ Sentry loader script is already added to `index.html`
-2. Deploy to production - Sentry will start capturing errors immediately
-3. Test error capture using browser console
-4. Configure alerts for critical errors in Sentry dashboard
-5. Set up filters for noise (browser extensions, etc.)
-6. Monitor Sentry dashboard regularly
-7. Adjust sample rates in Sentry settings based on quota usage
-
-## Important Notes
-
-- **Loader Script URL**: The current loader script URL in `index.html` is specific to the `join-boulders` Sentry project. If you create a new Sentry project, update the URL.
-- **No Environment Variables Needed**: Configuration is done through Sentry web UI, not environment variables
-- **Source Maps**: Optional - requires `SENTRY_AUTH_TOKEN` environment variable in build pipeline
-- **Testing**: Always test in browser console after deployment to verify Sentry is capturing errors
-
-## Support
-
-- Sentry Loader Script Docs: https://docs.sentry.io/platforms/javascript/install/loader/
-- Sentry Browser SDK: https://docs.sentry.io/platforms/javascript/
-- Sentry Configuration: https://docs.sentry.io/platforms/javascript/configuration/
+- [User Feedback](https://docs.sentry.io/platforms/javascript/user-feedback/)
+- [Session Replay](https://docs.sentry.io/platforms/javascript/session-replay/)
+- [CDN install](https://docs.sentry.io/platforms/javascript/install/cdn/)

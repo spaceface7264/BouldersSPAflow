@@ -29,12 +29,12 @@ This repo is **two apps coexisting in one tree** — be careful which one you ar
 
 What actually runs in production:
 
-- `index.html` — the entry point Vite builds. Contains Cookiebot, Google Consent Mode, GTM, and inline Sentry init bootstrap.
+- `index.html` — the entry point Vite builds. Contains Cookiebot, Google Consent Mode, GTM, and inline Sentry init bootstrap (errors, tracing, User Feedback “Report a problem”, consent-gated Session Replay buffer).
 - `app.js` — ~24k lines of vanilla JS. This is the real signup flow. It owns global `state`, route handling, all step rendering, BRP API calls, cart math, coupon/discount logic, payment-link generation, and the landing-page variants.
 - `styles.css` — ~10k lines of hand-written CSS (no Tailwind output despite `tailwind.config.js`).
 - `utils/*.js` — ES module helpers imported by `app.js` (`apiRequest.js`, `apiConfig.js`, `format.js`, `geo.js`, `geolocation.js`, `tokenStorage.js`, `input.js`, `validation.js`, `errors.js`, `toast.js`, `dom.js`, `string.js`, `date.js`, `locale.js`).
 - `sanitize.js`, `gtm-utils.js`, `postal-codes-dk.js` — additional root-level modules.
-- `sentry.config.js` — Sentry SDK config (Sentry itself is loaded from CDN in `index.html`).
+- `sentry.config.js` — unused npm-style Sentry helpers; **production Sentry is the CDN init in `index.html`**, not this file.
 
 Landing routes live inside `app.js` in `LANDING_ROUTE_CONFIG`: `/freetrial`, `/membership-offer`, `/99kr` (firstclimb day-ticket). They are SPA routes handled by `app.js` — there is no router library.
 

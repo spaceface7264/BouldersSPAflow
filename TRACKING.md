@@ -160,6 +160,15 @@ matching the whole header gives a false pass.
 browser blocks the tag **before any request leaves** — GTM and the ad platform both report success,
 so the failure is silent. This has bitten twice: TikTok (PR #127) and Google Ads (PR #128).
 
+Sentry Session Replay (User Feedback / error buffer) also needs compression workers in CSP:
+
+```
+worker-src 'self' blob:;
+child-src 'self' blob:;   /* older Safari */
+```
+
+Do not drop those when tightening `_headers`, or Replay may fail / send uncompressed payloads.
+
 Google Ads needs, per [Google's CSP reference](https://developers.google.com/tag-platform/security/guides/csp):
 `www.googleadservices.com`, `www.google.com`, `pagead2.googlesyndication.com` and
 `tagmanager.google.com` in `script-src`; `google.com` / `www.google.dk` in `connect-src`;
