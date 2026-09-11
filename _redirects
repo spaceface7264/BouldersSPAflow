@@ -8,3 +8,8 @@
 # Redirect /hero to /hero/ so hero landing page loads
 /hero    /hero/    302
 /firstmonthfree    /firstmonthfree/    302
+
+# /fitness: keep the path. A 200 rewrite of /fitness → /index.html is
+# canonicalized to / by Pages, which would drop the landing route.
+/fitness    /fitness/    302
+/fitness/   /index.html  200

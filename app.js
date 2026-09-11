@@ -531,6 +531,14 @@ const LANDING_ROUTE_CONFIG = Object.freeze({
     labelKey: 'firstclimb',
     mode: 'single',
   }),
+  '/fitness': Object.freeze({
+    componentName: 'LandingFitness',
+    // Fitness Medlemskab has no dedicated BRP campaign label (Public only).
+    // Matching is by product name via isFitnessMembership(), not labelKey.
+    labelKey: '',
+    mode: 'single',
+    businessUnitId: 13, // Boulders Aalborg — the only gym that sells it
+  }),
 });
 const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
@@ -578,6 +586,14 @@ function resolveLandingRouteConfig(pathname = window.location.pathname) {
 function isFirstClimbRoute() {
   const active = (typeof state !== 'undefined' && state?.landingRouteConfig) || resolveLandingRouteConfig();
   return active?.componentName === 'LandingFirstClimb';
+}
+
+// Fitness Medlemskab is Aalborg-only (BRP business unit 13).
+const FITNESS_LANDING_BUSINESS_UNIT_ID = 13;
+
+function isFitnessLandingRoute() {
+  const active = (typeof state !== 'undefined' && state?.landingRouteConfig) || resolveLandingRouteConfig();
+  return active?.componentName === 'LandingFitness';
 }
 
 const TIKTOK_ATTRIBUTION_COUPON = 'TIKTOK';
@@ -1146,6 +1162,27 @@ function applyOfferLandingCategoryCopy() {
   }
   if (countdown) countdown.style.display = 'none';
   stopCampaignCountdown();
+}
+
+function applyFitnessLandingCategoryCopy() {
+  if (!isFitnessLandingRoute()) return;
+  const targetCategory = document.querySelector('[data-category="membership"]');
+  const title = targetCategory?.querySelector('.category-title');
+  const subtitle = targetCategory?.querySelector('.category-subtitle');
+  const description = targetCategory?.querySelector('.category-description p');
+
+  if (title) {
+    title.textContent = t('landing.fitness.title');
+    title.setAttribute('data-i18n-key', 'landing.fitness.title');
+  }
+  if (subtitle) {
+    subtitle.textContent = t('landing.fitness.subtitle');
+    subtitle.setAttribute('data-i18n-key', 'landing.fitness.subtitle');
+  }
+  if (description) {
+    description.textContent = t('landing.fitness.desc');
+    description.setAttribute('data-i18n-key', 'landing.fitness.desc');
+  }
 }
 
 const REQUIRED_FIELDS = [
@@ -4442,7 +4479,11 @@ async function loadProductsFromAPI() {
           return `${candidateKind}:${candidateId}` === identity;
         }) === index;
       });
-      const matched = getDisplayableRouteMatchedProducts(uniqueDisplayCandidates, activeLandingRoute.labelKey, displayLabelOptions)
+      const matched = (
+        activeLandingRoute.componentName === 'LandingFitness'
+          ? uniqueDisplayCandidates.filter(isFitnessMembership)
+          : getDisplayableRouteMatchedProducts(uniqueDisplayCandidates, activeLandingRoute.labelKey, displayLabelOptions)
+      )
         .filter((product) => hasRequiredLabels(product, requiredLandingLabels))
         .sort(byPriceHighToLow);
       state.landingMatchedProducts = activeLandingRoute.mode === 'single'
@@ -4754,9 +4795,15 @@ function renderProductsFromAPI() {
     if (targetCategory) {
       targetCategory.style.display = '';
       targetCategory.classList.add('expanded', 'selected');
+      if (activeLandingRoute?.componentName === 'LandingFitness') {
+        targetCategory.dataset.landingLocked = 'true';
+      }
     }
     if (activeLandingRoute?.componentName === 'LandingFirstMonthFree') {
       applyOfferLandingCategoryCopy();
+    }
+    if (activeLandingRoute?.componentName === 'LandingFitness') {
+      applyFitnessLandingCategoryCopy();
     }
   };
   const renderLandingCards = (products) => {
@@ -4770,9 +4817,12 @@ function renderProductsFromAPI() {
     if (strictlyMatchedProducts.length === 0) {
       const emptyEl = document.createElement('div');
       emptyEl.className = 'no-products-message';
+      const emptyText = isFitnessLandingRoute()
+        ? t('landing.fitness.empty')
+        : 'No offers are available for this campaign right now.';
       emptyEl.innerHTML = sanitizeHTML(`
         <div class="no-products-content">
-          <p>No offers are available for this campaign right now.</p>
+          <p>${emptyText}</p>
         </div>
       `);
       plansList.appendChild(emptyEl);
@@ -4804,6 +4854,11 @@ function renderProductsFromAPI() {
     renderLandingCards((products || []).slice(0, 1));
     devLog('[Landing Route] Rendering LandingFirstClimb');
   };
+  const LandingFitness = (products) => {
+    hideNonLandingCategories();
+    renderLandingCards((products || []).slice(0, 1));
+    devLog('[Landing Route] Rendering LandingFitness');
+  };
   if (shouldRenderLandingRoute) {
     if (activeLandingRoute.componentName === 'LandingFreeTrial') {
       LandingFreeTrial(landingMatchedProducts);
@@ -4811,6 +4866,8 @@ function renderProductsFromAPI() {
       LandingFirstMonthFree(landingMatchedProducts);
     } else if (activeLandingRoute.componentName === 'LandingFirstClimb') {
       LandingFirstClimb(landingMatchedProducts);
+    } else if (activeLandingRoute.componentName === 'LandingFitness') {
+      LandingFitness(landingMatchedProducts);
     } else {
       devWarn('[Landing Route] Unknown component name:', activeLandingRoute.componentName);
     }
@@ -5011,6 +5068,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
       });
       setupGymEventListeners();
+      applyFitnessLandingGymPrefill();
     }
     return;
   }
@@ -5209,6 +5267,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
     
     // Re-setup event listeners for new gym items
     setupGymEventListeners();
+    applyFitnessLandingGymPrefill();
     
     // Re-render FAQ when on step 1 so opening hours table uses API gym list (and API opening hours if present)
     if (state.currentStep === 1) {
@@ -5237,6 +5296,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
       });
       setupGymEventListeners();
+      applyFitnessLandingGymPrefill();
       if (noResults) noResults.classList.add('hidden');
       scheduleGymListRecovery(error);
       return;
@@ -5704,6 +5764,8 @@ const state = {
   selectedGymName: null, // Store selected gym name for display
   landingRouteConfig: null, // Active landing route config for path-specific product surfacing
   landingMatchedProducts: [], // Products matched by active landing route label
+  fitnessLandingSelectTracked: false, // Avoid double select_item when /fitness rebinds step 2
+  fitnessLandingGymPrefillDone: false, // Auto-select Aalborg once on /fitness
   firstclimbGuardPromise: null, // Resolves when /99kr eligibility check completes (blocks navigation until done)
   isPaymentReturnFlow: false, // True when this page load is a return from the payment provider / success render — skips only the automatic /99kr eligibility check on load (the just-bought product would otherwise misfire the blocker on the confirmation page). Checkout-time guards are unaffected.
   currentAuthMode: null, // Track current auth mode (login/create)
@@ -5790,6 +5852,7 @@ function scheduleAccessStepRebind() {
     try {
       setupNewAccessStep();
       updatePageTranslations();
+      applyFitnessLandingPlanPreselection();
     } catch (e) {
       console.warn('[Step 2] setupNewAccessStep failed (scheduled):', e);
     }
@@ -6929,6 +6992,71 @@ function isFitnessMembershipSelected() {
   return /fitness/i.test(String(state.order?.membershipType || ''));
 }
 
+function applyFitnessLandingGymPrefill() {
+  if (!isFitnessLandingRoute()) return;
+  if (state.isPaymentReturnFlow) return;
+  if (state.currentStep !== 1) return;
+  if (state.fitnessLandingGymPrefillDone) return;
+
+  const item = document.querySelector(`[data-gym-id="gym-${FITNESS_LANDING_BUSINESS_UNIT_ID}"]`);
+  if (!item) return;
+
+  state.fitnessLandingGymPrefillDone = true;
+  if (String(state.selectedBusinessUnit) === String(FITNESS_LANDING_BUSINESS_UNIT_ID)) {
+    item.classList.add('selected');
+    nextStep(1);
+    return;
+  }
+
+  handleGymSelection(item);
+}
+
+function applyFitnessLandingPlanPreselection() {
+  if (!isFitnessLandingRoute()) return;
+  if (state.isPaymentReturnFlow) return;
+  if (state.currentStep !== 2) return;
+
+  const card = document.querySelector('[data-category="membership"] .plan-card[data-product-id]');
+  if (!card) return;
+
+  const productId = card.dataset.productId;
+  const planId = card.dataset.plan;
+  const alreadySelected = card.classList.contains('selected')
+    && String(state.selectedProductId) === String(productId);
+
+  card.classList.add('selected');
+  state.membershipPlanId = planId;
+  state.selectedProductId = productId;
+  state.selectedProductType = 'membership';
+
+  const selectBtn = card.querySelector('[data-action="select-plan"]');
+  if (selectBtn) {
+    selectBtn.textContent = t('button.continue');
+    selectBtn.setAttribute('data-i18n-key', 'button.continue');
+  }
+
+  try { updateCartSummary(); } catch (_) {}
+  try { updateCheckoutButton(); } catch (_) {}
+  try { updateFAQVisibility(); } catch (_) {}
+  try { applyConditionalSteps(); } catch (_) {}
+
+  if (!alreadySelected && productId) {
+    loadSubscriptionAdditions(productId);
+    if (!state.fitnessLandingSelectTracked) {
+      state.fitnessLandingSelectTracked = true;
+      const product = (state.landingMatchedProducts || []).find((item) => String(item.id) === String(productId))
+        || (state.subscriptions || []).find((item) => String(item.id) === String(productId));
+      trackSelectItemEvent({
+        product,
+        productId,
+        category: 'membership',
+        type: 'membership',
+        card,
+      });
+    }
+  }
+}
+
 // Load and filter products with boost labels for the selected plan
 async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
@@ -7076,6 +7204,9 @@ function init() {
   // /99kr: tag the body so route-scoped CSS rules can target this flow.
   if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
     try { document.body.classList.add('firstclimb-flow'); } catch (_) {}
+  }
+  if (state.landingRouteConfig?.componentName === 'LandingFitness') {
+    try { document.body.classList.add('fitness-flow'); } catch (_) {}
   }
 
   // Capture ?ref=<recruiter customer ID> early so it's stored before any
@@ -7483,6 +7614,11 @@ const translations = {
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'homeGym.tooltip.title.fitness': 'Fitness Medlemskab gælder kun i Aalborg.',
     'homeGym.tooltip.desc.fitness': 'Du har adgang til styrketræningsområdet i Boulders Aalborg. Klatring og andre haller er ikke inkluderet.',
+    'landing.fitness.title': 'Fitness Medlemskab',
+    'landing.fitness.subtitle': 'Adgang til styrketræningsområdet i Boulders Aalborg.',
+    'landing.fitness.desc': 'Løbende abonnement. Opsigelsesvarsel er resten af måneden + 1 måned. Klatring og medlemsfordele er ikke inkluderet.',
+    'landing.fitness.empty': 'Fitness Medlemskab er kun tilgængeligt i Boulders Aalborg. Vælg Aalborg for at fortsætte.',
+    'landing.fitness.step2.secondary': 'Klatring og andre haller er ikke inkluderet. Fortsæt for at oprette konto.',
     'homeGym.tooltip.title.firstclimb': 'Din billet gælder i alle Boulders.',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
@@ -7789,6 +7925,11 @@ const translations = {
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'homeGym.tooltip.title.fitness': 'Fitness Membership is valid in Aalborg only.',
     'homeGym.tooltip.desc.fitness': 'You get access to the strength-training area at Boulders Aalborg. Climbing and other gyms are not included.',
+    'landing.fitness.title': 'Fitness Membership',
+    'landing.fitness.subtitle': 'Access to the strength-training area at Boulders Aalborg.',
+    'landing.fitness.desc': 'Ongoing subscription. Notice period is the rest of the month + 1 month. Climbing and membership benefits are not included.',
+    'landing.fitness.empty': 'Fitness Membership is only available at Boulders Aalborg. Choose Aalborg to continue.',
+    'landing.fitness.step2.secondary': 'Climbing and other gyms are not included. Continue to create your account.',
     'homeGym.tooltip.title.firstclimb': 'Your ticket is valid at any Boulders.',
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
@@ -8032,6 +8173,11 @@ const translations = {
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
     'homeGym.tooltip.title.fitness': 'Fitness-Mitgliedschaft gilt nur in Aalborg.',
     'homeGym.tooltip.desc.fitness': 'Sie haben Zugang zum Krafttrainingsbereich in Boulders Aalborg. Klettern und andere Hallen sind nicht enthalten.',
+    'landing.fitness.title': 'Fitness-Mitgliedschaft',
+    'landing.fitness.subtitle': 'Zugang zum Krafttrainingsbereich in Boulders Aalborg.',
+    'landing.fitness.desc': 'Laufendes Abonnement. Kündigungsfrist ist der Rest des Monats + 1 Monat. Klettern und Mitgliedschaftsvorteile sind nicht enthalten.',
+    'landing.fitness.empty': 'Fitness-Mitgliedschaft ist nur in Boulders Aalborg verfügbar. Wählen Sie Aalborg, um fortzufahren.',
+    'landing.fitness.step2.secondary': 'Klettern und andere Hallen sind nicht enthalten. Weiter, um ein Konto zu erstellen.',
     'homeGym.tooltip.title.firstclimb': 'Dein Ticket gilt in allen Boulders.',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
     'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
@@ -8202,10 +8348,17 @@ function updatePageTranslations() {
     let translation = t(key);
     const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
     const isOfferLanding = activeLandingRoute?.componentName === 'LandingFirstMonthFree';
+    const isFitnessLanding = activeLandingRoute?.componentName === 'LandingFitness';
     if (isOfferLanding && key === 'category.campaign') {
       translation = t('offer.membership.title');
     } else if (isOfferLanding && key === 'category.campaign.desc') {
       translation = t('offer.membership.description');
+    } else if (isFitnessLanding && key === 'category.membership') {
+      translation = t('landing.fitness.title');
+    } else if (isFitnessLanding && key === 'category.membership.subtitle') {
+      translation = t('landing.fitness.subtitle');
+    } else if (isFitnessLanding && key === 'category.membership.desc') {
+      translation = t('landing.fitness.desc');
     }
 
     // Simple placeholder substitution for dynamic translations.
@@ -8283,6 +8436,7 @@ function updatePageTranslations() {
   // Update addon modal translations
   updateAddonModalTranslations();
   applyOfferLandingCategoryCopy();
+  applyFitnessLandingCategoryCopy();
 
   // Keep Sentry "Report a problem" floating trigger labels in sync with language
   if (typeof window.refreshSentryFeedbackWidget === 'function') {
@@ -12571,6 +12725,7 @@ function handleGymSelection(item) {
       state.membershipPlanId = null;
       state.selectedProductId = null;
       state.selectedProductType = null;
+      state.fitnessLandingSelectTracked = false;
       updateCheckoutButton();
     }
   }
@@ -13711,6 +13866,13 @@ function setupNewAccessStep() {
       
       // Check if this card is already selected
       const isAlreadySelected = card.classList.contains('selected');
+
+      // /fitness preselects the only product. A second click confirms and continues
+      // instead of toggling the membership off.
+      if (isAlreadySelected && isFitnessLandingRoute()) {
+        if (state.currentStep === 2) nextStep();
+        return;
+      }
       
       // Clear ALL selections across ALL categories first
       document.querySelectorAll('.plan-card').forEach(c => {
@@ -24109,6 +24271,7 @@ function nextStep(fromStep) {
     updateStepIndicator();
     updateNavigationButtons();
     updateMainSubtitle();
+    applyFitnessLandingPlanPreselection();
 
     // Step 5: Load products when step 2 (access type selection) is shown
     if (state.selectedBusinessUnit) {
@@ -24972,7 +25135,9 @@ function updateMainSubtitle() {
     if (state.currentStep === 1) {
       secondarySubtitle.textContent = t('main.subtitle.step1.secondary');
     } else if (state.currentStep === 2) {
-      secondarySubtitle.textContent = t('main.subtitle.step2.secondary');
+      secondarySubtitle.textContent = isFitnessLandingRoute()
+        ? t('landing.fitness.step2.secondary')
+        : t('main.subtitle.step2.secondary');
     }
   }
   
@@ -25955,6 +26120,11 @@ function getActiveFAQs() {
   // firstclimb landing route: dedicated FAQ on every visible step.
   if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
     return ['firstclimb'];
+  }
+
+  if (isFitnessLandingRoute()) {
+    if (step === 1) return ['gyms'];
+    return ['fitness'];
   }
 
   // Step 1: gym info only
