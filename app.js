@@ -7367,7 +7367,7 @@ const translations = {
     'confirmation.receipt.email': 'E-mail:',
     'confirmation.receipt.customerInfo': 'Kundens informationer',
     'confirmation.receipt.customerName': 'Kundens navn:',
-    'confirmation.receipt.valueCardsPurchased': 'Købte værdikort',
+    'confirmation.receipt.productDetails': 'Produktdetaljer',
     'confirmation.receipt.close': 'LUK',
     'confirmation.primaryGym': 'Hjemmehal:',
     'confirmation.membershipType': 'Type:',
@@ -7655,7 +7655,7 @@ const translations = {
     'confirmation.receipt.email': 'Email:',
     'confirmation.receipt.customerInfo': 'Customer information',
     'confirmation.receipt.customerName': 'Customer name:',
-    'confirmation.receipt.valueCardsPurchased': 'Value cards purchased',
+    'confirmation.receipt.productDetails': 'Product details',
     'confirmation.receipt.close': 'CLOSE',
     'confirmation.primaryGym': 'Primary Gym:',
     'confirmation.membershipType': 'Type:',
@@ -8010,7 +8010,7 @@ const translations = {
     'confirmation.receipt.email': 'E-Mail:',
     'confirmation.receipt.customerInfo': 'Kundeninformationen',
     'confirmation.receipt.customerName': 'Kundenname:',
-    'confirmation.receipt.valueCardsPurchased': 'Gekaufte Wertkarten',
+    'confirmation.receipt.productDetails': 'Produktdetails',
     'confirmation.receipt.close': 'SCHLIESSEN',
     'confirmation.primaryGym': 'Heimhalle:',
     'confirmation.membershipType': 'Typ:',
@@ -23398,6 +23398,33 @@ function createPurchaseItemElement() {
   }
 }
 
+function collectReceiptLineItems(order, fallbackItems = []) {
+  const lines = [];
+  const pushFrom = (items, fallbackName, { stripCardNumber = false } = {}) => {
+    (items || []).forEach((item) => {
+      let name = item.product?.name || item.name || fallbackName;
+      if (stripCardNumber && typeof name === 'string') {
+        name = name.replace(/\s*\(\d+\)\s*$/, '');
+      }
+      lines.push({
+        name,
+        quantity: item.quantity || 1,
+        totalKr: extractCurrencyOutKr(item.price?.amount ?? item.price ?? item.amount),
+      });
+    });
+  };
+
+  pushFrom(order?.subscriptionItems, 'Medlemskab');
+  pushFrom(order?.valueCardItems, 'Klippekort', { stripCardNumber: true });
+  pushFrom(order?.articleItems, 'Add-on');
+  pushFrom(order?.entryItems, 'Day ticket');
+
+  if (lines.length === 0) {
+    pushFrom(fallbackItems, 'Item');
+  }
+  return lines;
+}
+
 async function showDetailedReceipt() {
   if (!state.fullOrder && !state.order) {
     console.warn('[Receipt] No order data available');
@@ -23606,12 +23633,11 @@ async function showDetailedReceipt() {
     if (receiptSellerEmail) receiptSellerEmail.textContent = 'medlem@boulders.dk';
   }
   
-  // Populate purchased items
+  // Populate purchased items (memberships, punch cards, add-ons, entries)
   const receiptItems = document.getElementById('receiptItems');
   if (receiptItems) {
     receiptItems.innerHTML = '';
-    
-    // Add header row
+
     const headerRow = document.createElement('div');
     headerRow.className = 'receipt-item receipt-item-header';
     headerRow.innerHTML = sanitizeHTML(`
@@ -23620,57 +23646,17 @@ async function showDetailedReceipt() {
       <div>TOTALT</div>
     `);
     receiptItems.appendChild(headerRow);
-    
-    // Add items from order - per OrderOut schema
-    if (order.valueCardItems && order.valueCardItems.length > 0) {
-      // Per ValueCardItemOut schema: price is total for all quantity, quantity is amount of cards
-      order.valueCardItems.forEach(item => {
-        const itemRow = document.createElement('div');
-        itemRow.className = 'receipt-item';
-        let itemName = item.product?.name || 'Klippekort';
-        // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
-        itemName = itemName.replace(/\s*\(\d+\)\s*$/, '');
-        const itemQuantity = item.quantity || 1;
-        // Per ValueCardItemOut: price.amount is total price for all quantity (not per unit)
-        const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
-        
-        itemRow.innerHTML = sanitizeHTML(`
-          <div>${itemName}</div>
-          <div>${itemQuantity}</div>
-          <div>${formatCurrencyHalfKrone(itemTotal)}</div>
-        `);
-        receiptItems.appendChild(itemRow);
-      });
-    } else if (order.subscriptionItems && order.subscriptionItems.length > 0) {
-      // Per SubscriptionItemOut schema: price is total for all quantity, quantity is amount of subscriptions
-      order.subscriptionItems.forEach(item => {
-        const itemRow = document.createElement('div');
-        itemRow.className = 'receipt-item';
-        const itemName = item.product?.name || 'Medlemskab';
-        const itemQuantity = item.quantity || 1;
-        // Per SubscriptionItemOut: price.amount is total price for all quantity
-        const itemTotal = item.price?.amount ? (typeof item.price.amount === 'object' ? item.price.amount.amount / 100 : item.price.amount / 100) : 0;
 
-        itemRow.innerHTML = sanitizeHTML(`
-          <div>${itemName}</div>
-          <div>${itemQuantity}</div>
-          <div>${formatCurrencyHalfKrone(itemTotal)}</div>
-        `);
-        receiptItems.appendChild(itemRow);
-      });
-    } else if (state.order?.items && state.order.items.length > 0) {
-      // Fallback to state.order.items
-      state.order.items.forEach(item => {
-        const itemRow = document.createElement('div');
-        itemRow.className = 'receipt-item';
-        itemRow.innerHTML = sanitizeHTML(`
-          <div>${item.name || 'Item'}</div>
-          <div>${item.quantity || 1}</div>
-          <div>${formatCurrencyHalfKrone(item.amount || 0)}</div>
-        `);
-        receiptItems.appendChild(itemRow);
-      });
-    }
+    collectReceiptLineItems(order, state.order?.items).forEach(({ name, quantity, totalKr }) => {
+      const itemRow = document.createElement('div');
+      itemRow.className = 'receipt-item';
+      itemRow.innerHTML = sanitizeHTML(`
+        <div>${name}</div>
+        <div>${quantity}</div>
+        <div>${formatCurrencyHalfKrone(totalKr)}</div>
+      `);
+      receiptItems.appendChild(itemRow);
+    });
   }
   
   // Move modal to body to escape any parent stacking contexts
