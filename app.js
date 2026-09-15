@@ -5835,6 +5835,7 @@ const state = {
   // Test mode for success page
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
+  testFitnessMembership: false, // Fitness Membership success-page preview (?testProductType=fitness)
 };
 
 let orderCreationPromise = null;
@@ -9240,17 +9241,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const testSuccess = urlParams.get('testSuccess') === 'true';
   const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
-  const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
+  const rawTestProductType = urlParams.get('testProductType') || 'membership'; // membership, fitness, 15daypass, punch-card
+  const testFitnessMembership = urlParams.get('testFitness') === 'true' || rawTestProductType === 'fitness';
+  const testProductType = rawTestProductType === 'fitness' ? 'membership' : rawTestProductType;
   const testStartDateParam = String(urlParams.get('testStartDate') || '').trim();
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
   const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
   
   if (testSuccess) {
-    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType);
+    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType, testFitnessMembership ? '(fitness)' : '');
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
+    state.testFitnessMembership = testFitnessMembership;
   }
   
   if (testPaymentFailed) {
@@ -9421,15 +9425,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }]
       };
     } else {
-      // Default to membership
+      // Default to membership (regular or Fitness)
+      const isFitness = state.testFitnessMembership === true;
+      const membershipName = isFitness ? 'Fitness Membership' : 'Medlemskab';
       state.selectedProductType = 'membership';
-      state.membershipPlanId = 'membership-123';
+      state.membershipPlanId = isFitness ? 'fitness-membership-123' : 'membership-123';
+      state.order.items = [{ name: membershipName, amount: 469 }];
+      state.order.membershipType = membershipName;
+      state.order.primaryGym = isFitness ? 'Boulders Aalborg' : 'Boulders Aarhus Nord';
       // Mock subscription items with price
       state.fullOrder = {
         subscriptionItems: [{
           product: {
-            name: 'Medlemskab',
-            productLabels: [{ name: 'Public' }]
+            name: membershipName,
+            productLabels: isFitness ? [{ name: 'fitness' }] : [{ name: 'Public' }]
           },
           price: { amount: 46900 } // 469.00 DKK in cents
         }]
@@ -9440,6 +9449,7 @@ document.addEventListener('DOMContentLoaded', () => {
       productType: productType,
       selectedProductType: state.selectedProductType,
       membershipPlanId: state.membershipPlanId,
+      isFitnessMembership: state.testFitnessMembership === true,
       hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
       hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
     });
@@ -14924,6 +14934,12 @@ function renderFirstSessionVideo(productType) {
   const section = document.getElementById('firstSessionVideoSection');
   if (!section) return;
 
+  // Fitness Membership has no climbing intro — hide the "Good to know" card.
+  if (isFitnessMembershipSelected()) {
+    section.style.display = 'none';
+    return;
+  }
+
   section.style.display = '';
 
   const link = document.getElementById('firstSessionVideoLink');
@@ -14956,6 +14972,15 @@ function renderMemberOnboarding(productType) {
   section.style.display = show ? '' : 'none';
 
   if (!show) return;
+
+  // Fitness Membership excludes Bloc Life and intro classes — keep community only.
+  const isFitness = isFitnessMembershipSelected();
+  section.querySelectorAll('[data-onboarding-item="bloclife"], [data-onboarding-item="classes"]').forEach((el) => {
+    el.hidden = isFitness;
+  });
+  section.querySelectorAll('[data-onboarding-item="community"]').forEach((el) => {
+    el.hidden = false;
+  });
 
   section.querySelectorAll('[data-i18n-key]').forEach((el) => {
     const key = el.getAttribute('data-i18n-key');
@@ -25138,21 +25163,25 @@ function nextStep(fromStep) {
     if ((state.order && state.orderId && (state.paymentConfirmed !== false || testMode)) || testMode) {
       if (testMode) {
         // Use test product type from state if available, otherwise from URL
-        const productType = state.testProductType || testProductType;
-        console.log('[Test Mode] Creating mock order data for testing:', productType);
+        const rawProductType = state.testProductType || testProductType;
+        const isFitness = state.testFitnessMembership === true
+          || urlParams.get('testFitness') === 'true'
+          || rawProductType === 'fitness';
+        const productType = rawProductType === 'fitness' ? 'membership' : rawProductType;
+        console.log('[Test Mode] Creating mock order data for testing:', productType, isFitness ? '(fitness)' : '');
         
         // Create mock order data for testing
         state.order = {
           number: 'TEST-12345',
           date: new Date(),
           items: [
-            { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
+            { name: productType === 'membership' ? (isFitness ? 'Fitness Membership' : 'Membership') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
           ],
           total: 469,
           memberName: 'Test User',
           membershipNumber: 'TEST-12345',
-          membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
-          primaryGym: 'Boulders Aarhus Nord',
+          membershipType: productType === 'membership' ? (isFitness ? 'Fitness Membership' : 'Medlemskab') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
+          primaryGym: isFitness ? 'Boulders Aalborg' : 'Boulders Aarhus Nord',
           membershipPrice: 469,
         };
         state.orderId = 'TEST-12345';
@@ -25160,6 +25189,7 @@ function nextStep(fromStep) {
         // Set product type for test mode - ensure state is set correctly
         state.testMode = true;
         state.testProductType = productType;
+        state.testFitnessMembership = isFitness;
         state.paymentConfirmed = true; // Set payment confirmed for test mode
         state.paymentFailed = false;
         state.paymentPending = false;
@@ -25190,15 +25220,16 @@ function nextStep(fromStep) {
             }]
           };
         } else {
-          // Default to membership
+          // Default to membership (regular or Fitness)
+          const membershipName = isFitness ? 'Fitness Membership' : 'Medlemskab';
           state.selectedProductType = 'membership';
-          state.membershipPlanId = 'membership-123';
+          state.membershipPlanId = isFitness ? 'fitness-membership-123' : 'membership-123';
           // Mock subscription items with price
           state.fullOrder = {
             subscriptionItems: [{
               product: {
-                name: 'Medlemskab',
-                productLabels: [{ name: 'Public' }]
+                name: membershipName,
+                productLabels: isFitness ? [{ name: 'fitness' }] : [{ name: 'Public' }]
               },
               price: { amount: 46900 } // 469.00 DKK in cents
             }]
@@ -25209,6 +25240,7 @@ function nextStep(fromStep) {
           productType: productType,
           selectedProductType: state.selectedProductType,
           membershipPlanId: state.membershipPlanId,
+          isFitnessMembership: isFitness,
           hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
           hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
         });
@@ -25217,7 +25249,7 @@ function nextStep(fromStep) {
     } else {
       // If we somehow ended up on step 5 without an order, go back to step 1
       console.warn('[Navigation] Attempted to show success page without order data or payment not confirmed. Not rendering success page.');
-      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|15daypass|punch-card to URL');
+      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|fitness|15daypass|punch-card to URL');
       // Don't redirect - let the payment failed/pending handlers show the appropriate message
     }
   }
