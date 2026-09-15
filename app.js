@@ -24188,6 +24188,42 @@ function createPurchaseItemElement() {
   syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder);
 }
 
+function collectReceiptLineItems(order, fallbackItems = []) {
+  const lines = [];
+  const pushFrom = (items, fallbackName, { stripCardNumber = false } = {}) => {
+    (items || []).forEach((item) => {
+      let name = item.product?.name || item.name || fallbackName;
+      if (stripCardNumber && typeof name === 'string') {
+        name = name.replace(/\s*\(\d+\)\s*$/, '');
+      }
+      lines.push({
+        name,
+        quantity: item.quantity || 1,
+        totalKr: extractCurrencyOutKr(item.price?.amount ?? item.price),
+      });
+    });
+  };
+
+  pushFrom(order?.subscriptionItems, 'Medlemskab');
+  pushFrom(order?.valueCardItems, 'Klippekort', { stripCardNumber: true });
+  pushFrom(order?.articleItems, 'Add-on');
+  pushFrom(order?.entryItems, 'Day ticket');
+
+  // Test-mode / partial snapshots store amounts in kroner, not øre.
+  if (lines.length === 0) {
+    (fallbackItems || []).forEach((item) => {
+      lines.push({
+        name: item.name || 'Item',
+        quantity: item.quantity || 1,
+        totalKr: typeof item.amount === 'number'
+          ? roundToHalfKrone(item.amount)
+          : extractCurrencyOutKr(item.price?.amount ?? item.price),
+      });
+    });
+  }
+  return lines;
+}
+
 let receiptCloseTimeoutId = null;
 
 async function showDetailedReceipt() {
@@ -24416,7 +24452,7 @@ async function showDetailedReceipt() {
     `);
     receiptItems.appendChild(headerRow);
 
-    const appendReceiptLine = (name, quantity, totalKr) => {
+    collectReceiptLineItems(order, state.order?.items).forEach(({ name, quantity, totalKr }) => {
       const itemRow = document.createElement('div');
       itemRow.className = 'receipt-item';
       itemRow.innerHTML = sanitizeHTML(`
@@ -24425,69 +24461,7 @@ async function showDetailedReceipt() {
         <div>${formatCurrencyHalfKrone(totalKr)}</div>
       `);
       receiptItems.appendChild(itemRow);
-    };
-
-    const priceToKr = (price) => {
-      if (!price?.amount && price?.amount !== 0) return 0;
-      const amount = price.amount;
-      return typeof amount === 'object' ? (amount.amount || 0) / 100 : amount / 100;
-    };
-
-    let listedAnyApiItems = false;
-
-    // Memberships + day passes / trial subscriptions
-    if (order.subscriptionItems?.length) {
-      listedAnyApiItems = true;
-      order.subscriptionItems.forEach((item) => {
-        appendReceiptLine(
-          item.product?.name || 'Medlemskab',
-          item.quantity || 1,
-          priceToKr(item.price),
-        );
-      });
-    }
-
-    // Punch cards / value cards
-    if (order.valueCardItems?.length) {
-      listedAnyApiItems = true;
-      order.valueCardItems.forEach((item) => {
-        let itemName = item.product?.name || 'Klippekort';
-        // Remove card number from product name (e.g., "Klippekort: 10 Klip (400117054549)" -> "Klippekort: 10 Klip")
-        itemName = itemName.replace(/\s*\(\d+\)\s*$/, '');
-        appendReceiptLine(itemName, item.quantity || 1, priceToKr(item.price));
-      });
-    }
-
-    // Add-ons / articles
-    if (order.articleItems?.length) {
-      listedAnyApiItems = true;
-      order.articleItems.forEach((item) => {
-        appendReceiptLine(
-          item.product?.name || item.name || 'Tilbehør',
-          item.quantity || 1,
-          priceToKr(item.price),
-        );
-      });
-    }
-
-    // Day tickets / entries
-    if (order.entryItems?.length) {
-      listedAnyApiItems = true;
-      order.entryItems.forEach((item) => {
-        appendReceiptLine(
-          item.product?.name || item.name || 'Dagsbillet',
-          item.quantity || 1,
-          priceToKr(item.price),
-        );
-      });
-    }
-
-    // Fallback for test mode / partial order snapshots
-    if (!listedAnyApiItems && state.order?.items?.length) {
-      state.order.items.forEach((item) => {
-        appendReceiptLine(item.name || 'Item', item.quantity || 1, item.amount || 0);
-      });
-    }
+    });
   }
   
   // Move modal to body to escape any parent stacking contexts
