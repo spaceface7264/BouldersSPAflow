@@ -2866,8 +2866,45 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
 }
 
 .plans-list > .plan-card {
-    height: auto; /* Do not stretch each card to the list viewport */
+    height: auto !important; /* Do not stretch each card to the list viewport */
+    min-height: 0;
+    flex-grow: 0;
     flex-shrink: 0;
+}
+
+.plans-list > .plan-card .plan-info {
+    height: auto;
+    min-height: 0;
+    flex: 0 1 auto;
+}
+
+.plan-list-separator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 24px 10px;
+    flex-shrink: 0;
+}
+
+.plan-list-separator::before,
+.plan-list-separator::after {
+    content: "";
+    height: 1px;
+    flex: 1 1 auto;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.plan-list-separator-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9CA3AF;
+    white-space: nowrap;
+}
+
+.plan-list-separator + .plan-card {
+    border-top-color: transparent;
 }
 
 .category-item.expanded .plans-list {
@@ -3205,10 +3242,9 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     border-top: 1px solid var(--color-item-border);
     border-bottom: 1px solid transparent;
     cursor: pointer;
-    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+                border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+                box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -3300,11 +3336,40 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     color: #94a3b8;
 }
 
-.plan-card:hover:not(.disabled):not(.selected):not(.addon-card) {
-    transform: scale(1.02);
-    background: #151a24;
-    border-top-color: var(--color-item-border); /* Keep original border color */
-    border-bottom-color: transparent; /* Keep transparent bottom border */
+.plan-card:not(.addon-card)::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #F401F5;
+    transform: scaleY(0);
+    transform-origin: center center;
+    pointer-events: none;
+    z-index: 2;
+    transition: transform 280ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .plan-card:hover:not(.disabled):not(.selected):not(.addon-card) {
+        background: #1a222c;
+        box-shadow: inset 0 0 0 1px rgba(244, 1, 245, 0.18);
+    }
+
+    .plan-card:hover:not(.disabled):not(.selected):not(.addon-card)::before {
+        transform: scaleY(1);
+    }
+
+    .plan-card:hover:not(.disabled):not(.selected):not(.addon-card) .select-btn {
+        box-shadow: 0 3px 14px rgba(244, 1, 245, 0.5);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .plan-card:not(.addon-card)::before {
+        transition: none;
+    }
 }
 
 .plan-card:active:not(.addon-card) {
@@ -3341,6 +3406,14 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     min-height: 0;
 }
 
+.plan-type-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    max-width: calc(100% - 96px);
+}
+
 .plan-type {
     font-size: var(--font-size-md);
     font-weight: 600;
@@ -3349,6 +3422,15 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     line-height: 1.4;
     margin: 0;
     margin-bottom: 0;
+}
+
+.plan-new-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
+    text-transform: uppercase;
+    color: #F401F5;
 }
 
 .plan-content-right {
@@ -3619,11 +3701,6 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     .plan-content-left {
         justify-content: space-between;
         min-height: 100%;
-    }
-
-
-    .plan-card:hover:not(.addon-card) {
-        border-color: #f0f;
     }
 
     .category-item:hover {
@@ -11512,8 +11589,12 @@ main {
     }
 
     /* Prevent title text from flowing underneath the top-right select button */
-    .plan-card:not(.addon-card) .plan-type {
+    .plan-card:not(.addon-card) .plan-type-row {
         max-width: calc(100% - 96px);
+    }
+
+    .plan-card:not(.addon-card) .plan-type {
+        max-width: none;
     }
 
     /* Keep text readable on mobile while still leaving slight room for the select button */
@@ -11534,11 +11615,14 @@ main {
         margin-top: 40px;
     }
     
-    /* Ensure plan cards expand to fit content on mobile */
-    .plan-card:not(.addon-card) {
-        height: 100% !important; /* Fill container height */
+    /* Carousel cards fill the snap slide. List cards stay content-sized. */
+    .plan-options .plan-card:not(.addon-card) {
+        height: 100% !important;
         min-height: auto !important;
         align-items: stretch;
+    }
+
+    .plan-card:not(.addon-card) {
         padding: 20px 22px; /* Comfortable padding for mobile */
     }
 
