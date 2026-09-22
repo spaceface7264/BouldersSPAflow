@@ -1418,7 +1418,13 @@ body.bg-ready::before {
 
 .step-circle.active {
     background-color: transparent;
-    border: 2px solid transparent;
+    background-image: radial-gradient(
+        circle at 50% 50%,
+        rgba(244, 1, 245, 0.28) 0%,
+        rgba(244, 1, 245, 0.08) 52%,
+        transparent 70%
+    );
+    border: 2px solid rgba(244, 1, 245, 0.38);
     color: white;
     animation: border-to-active 0.5s ease forwards;
 }
@@ -1426,42 +1432,39 @@ body.bg-ready::before {
 .step-circle.active::before {
     content: '';
     position: absolute;
-    inset: -3px;
+    inset: -4px;
     border-radius: 50%;
-    padding: 2px;
-    /* Softness is baked into the gradient stops instead of filter: blur().
-       A blur filter forces a full repaint of the layer on every frame of the
-       spin; the extra colour stops give the same falloff for free. */
+    padding: 3px;
+    pointer-events: none;
+    z-index: 0;
+    /* Softness lives in the gradient stops. Do not add filter: blur() —
+       it forces a full-layer paint on every spin frame. */
     background: conic-gradient(
         from 0deg,
         rgba(244, 1, 245, 0) 0deg,
-        rgba(244, 1, 245, 0.08) 60deg,
-        rgba(244, 1, 245, 0.2) 120deg,
-        rgba(244, 1, 245, 0.42) 190deg,
-        rgba(255, 92, 255, 0.72) 260deg,
-        rgba(255, 140, 255, 1) 320deg,
-        #ff6cff 352deg,
+        rgba(244, 1, 245, 0.06) 80deg,
+        rgba(244, 1, 245, 0.2) 165deg,
+        rgba(244, 1, 245, 0.5) 235deg,
+        rgba(255, 80, 255, 0.9) 292deg,
+        #ffc2ff 318deg,
+        #fff 332deg,
+        #ff5cff 346deg,
         rgba(244, 1, 245, 0) 360deg
     );
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask-composite: exclude;
-    /* Finite: the ring is decorative orientation, not a loading state. It spins
-       while the user takes in the step, then settles into a static gradient
-       instead of burning frames for the whole time they are choosing. */
-    animation: spin 1.5s linear 6, beam-fade-in 0.5s ease forwards;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 1;
+    will-change: transform;
+    animation: step-ring-spin 1.15s linear infinite, beam-fade-in 0.45s ease forwards;
 }
 
 @keyframes border-to-active {
     0% {
-        border-color: white;
+        border-color: rgba(255, 255, 255, 0.7);
     }
     100% {
-        border-color: transparent;
+        border-color: rgba(244, 1, 245, 0.38);
     }
 }
 
@@ -1474,26 +1477,32 @@ body.bg-ready::before {
     }
 }
 
+@keyframes step-ring-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 @keyframes spin {
-    100% { 
-        transform: rotate(360deg); 
+    100% {
+        transform: rotate(360deg);
     }
 }
 
 @keyframes electric-spin {
-    from { 
+    from {
         transform: rotate(0deg);
     }
-    to { 
+    to {
         transform: rotate(360deg);
     }
 }
 
 @keyframes pulse-glow {
-    0%, 100% { 
+    0%, 100% {
         filter: drop-shadow(0 0 8px rgba(244, 1, 245, 0.6));
     }
-    50% { 
+    50% {
         filter: drop-shadow(0 0 16px rgba(244, 1, 245, 1));
     }
 }
@@ -1558,37 +1567,37 @@ body.bg-ready::before {
     background-color: #f0f;
 }
 
-/* Pink hint animation for connectors after active step */
+/* Traveling gleam on connectors after the active step — a hint of
+   direction, never a full fill (that would read as already completed). */
 .step.active + .step-connector::before,
 .step.active + .step-connector + .step + .step-connector::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
+    width: 55%;
     height: 100%;
-    background: rgba(244, 1, 245, 0.5);
-    /* Finite: a hint, not a permanent loop competing with entrance animations.
-       'forwards' is required: without it the pseudo-element reverts to its
-       declared style when the last iteration ends - a full-width, fully opaque
-       magenta bar, i.e. exactly the .completed look - so connectors for steps
-       the user has not reached would read as already done. */
-    animation: connector-hint-fill 2s ease-in-out 3 forwards;
-    transform-origin: left;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(244, 1, 245, 0.12) 30%,
+        rgba(255, 170, 255, 0.95) 50%,
+        rgba(244, 1, 245, 0.12) 70%,
+        transparent 100%
+    );
+    animation: connector-gleam 1.8s linear infinite;
 }
 
-@keyframes connector-hint-fill {
+.step.active + .step-connector + .step + .step-connector::before {
+    animation-delay: 0.4s;
+}
+
+@keyframes connector-gleam {
     0% {
-        transform: scaleX(0);
-        opacity: 0;
-    }
-    50% {
-        transform: scaleX(1);
-        opacity: 0.6;
+        transform: translateX(-130%);
     }
     100% {
-        transform: scaleX(1);
-        opacity: 0;
+        transform: translateX(230%);
     }
 }
 
