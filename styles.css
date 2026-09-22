@@ -8477,6 +8477,14 @@ main {
     letter-spacing: -0.01em;
 }
 
+.success-header-pill-note {
+    margin: 0 0 6px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    line-height: 1.4;
+}
+
 .success-header-pill-meta {
     margin: 0;
     color: rgba(255, 255, 255, 0.75);
@@ -8588,7 +8596,7 @@ main {
     transform-origin: 32px 32px;
     animation:
         success-stroke-draw 360ms cubic-bezier(0.16, 1, 0.3, 1) 520ms both,
-        success-badge-check-pop 480ms cubic-bezier(0.34, 1.45, 0.64, 1) 860ms both;
+        success-badge-check-pop 480ms cubic-bezier(0.16, 1, 0.3, 1) 860ms both;
 }
 
 .confirmation-header.is-animating .success-title {
@@ -8644,9 +8652,6 @@ main {
 #step-5.is-revealing .step-item:nth-child(3) { animation-delay: 1140ms; }
 
 /* When a header pill is shown, push the flow cascade back */
-#step-5.is-revealing.has-header-pill .confirmation-order-summary {
-    animation-delay: 1060ms;
-}
 #step-5.is-revealing.has-header-pill .success-app-download-section {
     animation-delay: 1120ms;
 }
@@ -9274,8 +9279,9 @@ main {
     align-items: center;
     justify-content: center;
     width: 100%;
+    min-height: 44px;
     margin-top: 16px;
-    padding: 11px 16px;
+    padding: 12px 16px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
     background: transparent;
@@ -9289,6 +9295,10 @@ main {
 .confirmation-order-summary-cta:hover {
     background: rgba(255, 255, 255, 0.04);
     border-color: rgba(255, 255, 255, 0.18);
+}
+
+.confirmation-order-summary-cta:active {
+    background: rgba(255, 255, 255, 0.07);
 }
 
 .confirmation-order-summary-cta:focus-visible {
@@ -9491,6 +9501,12 @@ main {
     font-weight: 600;
 }
 
+/* Author display rules beat the UA [hidden] stylesheet. Keep omitted
+   receipt rows actually omitted. */
+#step-5 [hidden] {
+    display: none !important;
+}
+
 .confirmation-order-zone--member {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -9687,6 +9703,40 @@ main {
 .receipt-btn:focus-visible {
     outline: 2px solid rgba(244, 1, 245, 0.75);
     outline-offset: 3px;
+}
+
+.receipt-btn.is-highlighted {
+    transition: none;
+    animation: receipt-btn-highlight 1.35s cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+@keyframes receipt-btn-highlight {
+    0% {
+        background-color: transparent;
+        color: #F401F5;
+        box-shadow: 0 0 0 0 rgba(244, 1, 245, 0);
+    }
+    18% {
+        background-color: #F401F5;
+        color: #fff;
+        box-shadow: 0 0 0 6px rgba(244, 1, 245, 0.28);
+    }
+    52% {
+        background-color: #F401F5;
+        color: #fff;
+        box-shadow: 0 0 0 4px rgba(244, 1, 245, 0.16);
+    }
+    100% {
+        background-color: transparent;
+        color: #F401F5;
+        box-shadow: 0 0 0 0 rgba(244, 1, 245, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .receipt-btn.is-highlighted {
+        animation: none;
+    }
 }
 
 /* Detailed Receipt Modal — fade+scale on desktop, bottom-sheet drawer on mobile.
@@ -10561,11 +10611,10 @@ main {
     z-index: 1;
     padding: 3px 8px;
     border-radius: 999px;
-    background: rgba(10, 10, 10, 0.78);
+    background: rgba(10, 10, 10, 0.86);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(6px);
     color: rgba(255, 255, 255, 0.92);
-    font-size: 0.6875rem;
+    font-size: var(--font-size-xs);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.03em;
@@ -10583,7 +10632,7 @@ main {
 
 .first-session-video-eyebrow {
     display: block;
-    font-size: 0.6875rem;
+    font-size: var(--font-size-xs);
     font-weight: 700;
     letter-spacing: 0.04em;
     color: #ff6cff;
@@ -10787,49 +10836,17 @@ main {
     line-height: 1.5;
 }
 
-/* Membership onboarding — own card above "What happens next?" */
+/* Membership onboarding — quieter than the invite card so the ask stays unique */
 .member-onboarding-section {
     width: 100%;
 }
 
 .member-onboarding-panel {
-    --invite-angle: 0deg;
     position: relative;
-    padding: 24px;
-    border: 1.5px solid transparent;
-    border-radius: 14px;
-    background:
-        radial-gradient(circle at 50% -10%, rgba(244, 1, 245, 0.22) 0%, rgba(244, 1, 245, 0) 60%) padding-box,
-        linear-gradient(180deg, #1d1320 0%, #161018 100%) padding-box,
-        conic-gradient(
-            from var(--invite-angle),
-            #F401F5 0deg,
-            #ff6cff 60deg,
-            #ffffff 120deg,
-            #c803c9 200deg,
-            #F401F5 300deg,
-            #F401F5 360deg
-        ) border-box;
-    overflow: hidden;
-    animation: invite-border-spin 6s linear infinite;
-    transition: transform 0.25s ease;
-}
-
-.member-onboarding-panel:hover {
-    transform: translateY(-2px);
-}
-
-.member-onboarding-panel::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 65%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 0%, #ffffff 50%, transparent 100%);
-    opacity: 0.6;
-    pointer-events: none;
+    padding: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    background: #18181b;
 }
 
 .member-onboarding-title {
@@ -10877,6 +10894,11 @@ main {
     transform: translateY(-1px);
 }
 
+.member-onboarding-link:focus-visible {
+    outline: 2px solid rgba(244, 1, 245, 0.55);
+    outline-offset: 2px;
+}
+
 .member-onboarding-icon {
     width: 34px;
     height: 34px;
@@ -10904,12 +10926,6 @@ main {
     color: #F8FAFC;
     border-color: rgba(255, 255, 255, 0.2);
     background: #333;
-}
-
-.member-onboarding-link--community:hover .member-onboarding-icon {
-    color: #F401F5;
-    border-color: rgba(244, 1, 245, 0.35);
-    background: #2e1f30;
 }
 
 .member-onboarding-copy {
@@ -10946,10 +10962,6 @@ main {
 .member-onboarding-link:hover .member-onboarding-chevron {
     color: rgba(255, 255, 255, 0.55);
     transform: translateX(2px);
-}
-
-.member-onboarding-link--community:hover .member-onboarding-chevron {
-    color: #F401F5;
 }
 
 /* Gym (membership) lives in the header pill; hide the duplicate gym line in the card */
@@ -12117,6 +12129,15 @@ main {
     .member-onboarding-panel {
         animation: none;
     }
+
+    .invite-friends-card:hover,
+    .member-onboarding-panel:hover,
+    .member-onboarding-link:hover,
+    .member-onboarding-link:hover .member-onboarding-chevron,
+    .invite-share-btn:hover .invite-share-icon,
+    .invite-share-btn:active .invite-share-icon {
+        transform: none;
+    }
 }
 
 .invite-friends-card::before {
@@ -12147,6 +12168,31 @@ main {
     box-shadow: 0 0 20px rgba(244, 1, 245, 0.18);
 }
 
+.invite-friends-offer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin: 0 0 10px;
+    line-height: 1;
+}
+
+.invite-friends-offer-label {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(255, 214, 255, 0.82);
+}
+
+.invite-friends-offer-value {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: #F401F5;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+}
+
 .invite-friends-title {
     font-size: var(--font-size-xl);
     font-weight: 700;
@@ -12157,7 +12203,7 @@ main {
 }
 
 .invite-friends-subtitle {
-    color: #9CA3AF;
+    color: rgba(255, 214, 255, 0.82);
     font-size: var(--font-size-sm);
     margin: 0 auto 20px;
     max-width: 360px;
@@ -12177,10 +12223,11 @@ main {
     flex-direction: column;
     align-items: center;
     gap: 8px;
+    min-width: 44px;
     background: transparent;
     border: none;
     cursor: pointer;
-    color: #9CA3AF;
+    color: rgba(255, 214, 255, 0.72);
     padding: 4px;
     font-family: inherit;
     transition: color 0.15s ease;
@@ -12217,7 +12264,9 @@ main {
 }
 
 .invite-share-btn:focus-visible {
-    outline: none;
+    outline: 2px solid rgba(244, 1, 245, 0.7);
+    outline-offset: 3px;
+    border-radius: 10px;
 }
 
 .invite-share-btn:focus-visible .invite-share-icon {
@@ -12225,9 +12274,9 @@ main {
 }
 
 .invite-share-label {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
-    line-height: 1;
+    line-height: 1.2;
     letter-spacing: 0.01em;
 }
 
@@ -12264,8 +12313,8 @@ main {
 }
 
 .invite-friends-footnote {
-    font-size: 12px;
-    color: #6b7280;
+    font-size: var(--font-size-sm);
+    color: rgba(255, 196, 255, 0.62);
     margin: 0;
     line-height: 1.5;
 }
