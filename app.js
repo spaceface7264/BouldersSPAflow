@@ -4970,6 +4970,7 @@ function renderProductsFromAPI({ force = false } = {}) {
       const messageP = noProductsMessage.querySelector('p[data-i18n-key]');
       if (messageP) messageP.textContent = t('message.noProducts.membership');
     }
+    updateMembershipCategorySubtitle();
   }
 
   // Render 15-Day Trial Pass subscriptions into the 15daypass category
@@ -7030,6 +7031,20 @@ function createMembershipLimitedAccessSeparator() {
   return separator;
 }
 
+function hasLimitedMembershipProducts() {
+  return (state.subscriptions || []).some((product) => membershipAccessGroup(product) > 0);
+}
+
+function updateMembershipCategorySubtitle() {
+  const subtitle = document.querySelector('[data-category="membership"] .category-subtitle');
+  if (!subtitle) return;
+  const key = hasLimitedMembershipProducts()
+    ? 'category.membership.subtitle.limited'
+    : 'category.membership.subtitle';
+  subtitle.setAttribute('data-i18n-key', key);
+  subtitle.textContent = t(key);
+}
+
 function isFitnessMembershipSelected() {
   if (state.testFitnessMembership === true) return true;
   if (isFitnessMembership(resolveSelectedAccessProduct())) return true;
@@ -7397,7 +7412,7 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Medlemskabskampagne', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Start nu og spar stort! Kun 3 måneders binding. Ingen skjulte gebyrer. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og betingelser</a> gælder.', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15-Dages Prøveperiode', 'category.15daypass.subtitle': 'Prøv Boulders med 15 dages ubegrænset klatring inkl. sko. Start når det passer dig.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Medlemskabskampagne', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Start nu og spar stort! Kun 3 måneders binding. Ingen skjulte gebyrer. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og betingelser</a> gælder.', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.membership.subtitle.limited': 'Løbende abonnement med automatisk betaling.', 'category.15daypass': '15-Dages Prøveperiode', 'category.15daypass.subtitle': 'Prøv Boulders med 15 dages ubegrænset klatring inkl. sko. Start når det passer dig.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
     'membership.limitedAccess': 'Begrænset adgang',
     'membership.newBadge': 'Nyhed',
@@ -7759,7 +7774,7 @@ const translations = {
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Membership Campaign', 'category.campaign.desc': 'Limited membership campaign, expires April 8, 2026. Get the offer before it expires. Can only be used by people who have not been members at Boulders within the last 6 months.', 'category.campaign.subtitle': 'Start now and save big! Only 3 months commitment. No hidden fees. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and conditions</a> apply.', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15-Day Trial Pass', 'category.15daypass.subtitle': 'Try Boulders with 15 days of unlimited climbing incl. shoes. Start whenever it suits you.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
+    'category.campaign': 'Membership Campaign', 'category.campaign.desc': 'Limited membership campaign, expires April 8, 2026. Get the offer before it expires. Can only be used by people who have not been members at Boulders within the last 6 months.', 'category.campaign.subtitle': 'Start now and save big! Only 3 months commitment. No hidden fees. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and conditions</a> apply.', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.membership.subtitle.limited': 'Ongoing subscription with automatic payment.', 'category.15daypass': '15-Day Trial Pass', 'category.15daypass.subtitle': 'Try Boulders with 15 days of unlimited climbing incl. shoes. Start whenever it suits you.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
     'membership.limitedAccess': 'Limited access',
     'membership.newBadge': 'New',
@@ -8123,7 +8138,7 @@ const translations = {
   },
   'de-DE': {
     'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.campaign.endsIn': 'Endet in', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.campaign.endsIn': 'Endet in', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.membership.subtitle.limited': 'Laufendes Abonnement mit automatischer Zahlung.', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
     'category.membership.desc': 'Mitgliedschaft ist ein laufendes Abonnement mit automatischer Verlängerung. Keine Anmelde- oder Kündigungsgebühren. Kündigungsfrist ist der Rest des Monats + 1 Monat.',
     'membership.limitedAccess': 'Eingeschränkter Zugang',
     'membership.newBadge': 'Neu',
