@@ -2535,8 +2535,14 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     z-index: 1;
 }
 
-/* Campaign category - match other categories but with green border stroke and glow */
+/* Campaign category - match other categories but with green border stroke and glow.
+   Hidden until renderProductsFromAPI() finds a PublicCampaign product and sets
+   an inline display. The static card in index.html would otherwise paint on
+   step 2 and then vanish once the product request returned empty.
+   /membership-offer overrides this (higher specificity) so that route's
+   campaign card is visible before products load. */
 .category-item[data-category="campaign"] {
+    display: none;
     background: var(--color-item-bg);
     border: 2px solid rgba(34, 197, 94, 0.4);
     box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
