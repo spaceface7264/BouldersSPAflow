@@ -1418,7 +1418,13 @@ body.bg-ready::before {
 
 .step-circle.active {
     background-color: transparent;
-    border: 2px solid transparent;
+    background-image: radial-gradient(
+        circle at 50% 50%,
+        rgba(244, 1, 245, 0.28) 0%,
+        rgba(244, 1, 245, 0.08) 52%,
+        transparent 70%
+    );
+    border: 2px solid rgba(244, 1, 245, 0.38);
     color: white;
     animation: border-to-active 0.5s ease forwards;
 }
@@ -1426,42 +1432,39 @@ body.bg-ready::before {
 .step-circle.active::before {
     content: '';
     position: absolute;
-    inset: -3px;
+    inset: -4px;
     border-radius: 50%;
-    padding: 2px;
-    /* Softness is baked into the gradient stops instead of filter: blur().
-       A blur filter forces a full repaint of the layer on every frame of the
-       spin; the extra colour stops give the same falloff for free. */
+    padding: 3px;
+    pointer-events: none;
+    z-index: 0;
+    /* Softness lives in the gradient stops. Do not add filter: blur() —
+       it forces a full-layer paint on every spin frame. */
     background: conic-gradient(
         from 0deg,
         rgba(244, 1, 245, 0) 0deg,
-        rgba(244, 1, 245, 0.08) 60deg,
-        rgba(244, 1, 245, 0.2) 120deg,
-        rgba(244, 1, 245, 0.42) 190deg,
-        rgba(255, 92, 255, 0.72) 260deg,
-        rgba(255, 140, 255, 1) 320deg,
-        #ff6cff 352deg,
+        rgba(244, 1, 245, 0.06) 80deg,
+        rgba(244, 1, 245, 0.2) 165deg,
+        rgba(244, 1, 245, 0.5) 235deg,
+        rgba(255, 80, 255, 0.9) 292deg,
+        #ffc2ff 318deg,
+        #fff 332deg,
+        #ff5cff 346deg,
         rgba(244, 1, 245, 0) 360deg
     );
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask-composite: exclude;
-    /* Finite: the ring is decorative orientation, not a loading state. It spins
-       while the user takes in the step, then settles into a static gradient
-       instead of burning frames for the whole time they are choosing. */
-    animation: spin 1.5s linear 6, beam-fade-in 0.5s ease forwards;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 1;
+    will-change: transform;
+    animation: step-ring-spin 1.15s linear infinite, beam-fade-in 0.45s ease forwards;
 }
 
 @keyframes border-to-active {
     0% {
-        border-color: white;
+        border-color: rgba(255, 255, 255, 0.7);
     }
     100% {
-        border-color: transparent;
+        border-color: rgba(244, 1, 245, 0.38);
     }
 }
 
@@ -1474,26 +1477,32 @@ body.bg-ready::before {
     }
 }
 
+@keyframes step-ring-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 @keyframes spin {
-    100% { 
-        transform: rotate(360deg); 
+    100% {
+        transform: rotate(360deg);
     }
 }
 
 @keyframes electric-spin {
-    from { 
+    from {
         transform: rotate(0deg);
     }
-    to { 
+    to {
         transform: rotate(360deg);
     }
 }
 
 @keyframes pulse-glow {
-    0%, 100% { 
+    0%, 100% {
         filter: drop-shadow(0 0 8px rgba(244, 1, 245, 0.6));
     }
-    50% { 
+    50% {
         filter: drop-shadow(0 0 16px rgba(244, 1, 245, 1));
     }
 }
@@ -1558,37 +1567,37 @@ body.bg-ready::before {
     background-color: #f0f;
 }
 
-/* Pink hint animation for connectors after active step */
+/* Traveling gleam on connectors after the active step — a hint of
+   direction, never a full fill (that would read as already completed). */
 .step.active + .step-connector::before,
 .step.active + .step-connector + .step + .step-connector::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
+    width: 55%;
     height: 100%;
-    background: rgba(244, 1, 245, 0.5);
-    /* Finite: a hint, not a permanent loop competing with entrance animations.
-       'forwards' is required: without it the pseudo-element reverts to its
-       declared style when the last iteration ends - a full-width, fully opaque
-       magenta bar, i.e. exactly the .completed look - so connectors for steps
-       the user has not reached would read as already done. */
-    animation: connector-hint-fill 2s ease-in-out 3 forwards;
-    transform-origin: left;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(244, 1, 245, 0.12) 30%,
+        rgba(255, 170, 255, 0.95) 50%,
+        rgba(244, 1, 245, 0.12) 70%,
+        transparent 100%
+    );
+    animation: connector-gleam 1.8s linear infinite;
 }
 
-@keyframes connector-hint-fill {
+.step.active + .step-connector + .step + .step-connector::before {
+    animation-delay: 0.4s;
+}
+
+@keyframes connector-gleam {
     0% {
-        transform: scaleX(0);
-        opacity: 0;
-    }
-    50% {
-        transform: scaleX(1);
-        opacity: 0.6;
+        transform: translateX(-130%);
     }
     100% {
-        transform: scaleX(1);
-        opacity: 0;
+        transform: translateX(230%);
     }
 }
 
@@ -2526,8 +2535,14 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     z-index: 1;
 }
 
-/* Campaign category - match other categories but with green border stroke and glow */
+/* Campaign category - match other categories but with green border stroke and glow.
+   Hidden until renderProductsFromAPI() finds a PublicCampaign product and sets
+   an inline display. The static card in index.html would otherwise paint on
+   step 2 and then vanish once the product request returned empty.
+   /membership-offer overrides this (higher specificity) so that route's
+   campaign card is visible before products load. */
 .category-item[data-category="campaign"] {
+    display: none;
     background: var(--color-item-bg);
     border: 2px solid rgba(34, 197, 94, 0.4);
     box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
@@ -2866,8 +2881,45 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
 }
 
 .plans-list > .plan-card {
-    height: auto; /* Do not stretch each card to the list viewport */
+    height: auto !important; /* Do not stretch each card to the list viewport */
+    min-height: 0;
+    flex-grow: 0;
     flex-shrink: 0;
+}
+
+.plans-list > .plan-card .plan-info {
+    height: auto;
+    min-height: 0;
+    flex: 0 1 auto;
+}
+
+.plan-list-separator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 24px 10px;
+    flex-shrink: 0;
+}
+
+.plan-list-separator::before,
+.plan-list-separator::after {
+    content: "";
+    height: 1px;
+    flex: 1 1 auto;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.plan-list-separator-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9CA3AF;
+    white-space: nowrap;
+}
+
+.plan-list-separator + .plan-card {
+    border-top-color: transparent;
 }
 
 .category-item.expanded .plans-list {
@@ -3205,10 +3257,9 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     border-top: 1px solid var(--color-item-border);
     border-bottom: 1px solid transparent;
     cursor: pointer;
-    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+                border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+                box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -3300,11 +3351,40 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     color: #94a3b8;
 }
 
-.plan-card:hover:not(.disabled):not(.selected):not(.addon-card) {
-    transform: scale(1.02);
-    background: #151a24;
-    border-top-color: var(--color-item-border); /* Keep original border color */
-    border-bottom-color: transparent; /* Keep transparent bottom border */
+.plan-card:not(.addon-card)::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: #F401F5;
+    transform: scaleY(0);
+    transform-origin: center center;
+    pointer-events: none;
+    z-index: 2;
+    transition: transform 280ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .plan-card:hover:not(.disabled):not(.selected):not(.addon-card) {
+        background: #1a222c;
+        box-shadow: inset 0 0 0 1px rgba(244, 1, 245, 0.18);
+    }
+
+    .plan-card:hover:not(.disabled):not(.selected):not(.addon-card)::before {
+        transform: scaleY(1);
+    }
+
+    .plan-card:hover:not(.disabled):not(.selected):not(.addon-card) .select-btn {
+        box-shadow: 0 3px 14px rgba(244, 1, 245, 0.5);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .plan-card:not(.addon-card)::before {
+        transition: none;
+    }
 }
 
 .plan-card:active:not(.addon-card) {
@@ -3341,6 +3421,14 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     min-height: 0;
 }
 
+.plan-type-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    max-width: calc(100% - 96px);
+}
+
 .plan-type {
     font-size: var(--font-size-md);
     font-weight: 600;
@@ -3349,6 +3437,15 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     line-height: 1.4;
     margin: 0;
     margin-bottom: 0;
+}
+
+.plan-new-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
+    text-transform: uppercase;
+    color: #F401F5;
 }
 
 .plan-content-right {
@@ -3619,11 +3716,6 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     .plan-content-left {
         justify-content: space-between;
         min-height: 100%;
-    }
-
-
-    .plan-card:hover:not(.addon-card) {
-        border-color: #f0f;
     }
 
     .category-item:hover {
@@ -8477,6 +8569,14 @@ main {
     letter-spacing: -0.01em;
 }
 
+.success-header-pill-note {
+    margin: 0 0 6px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    line-height: 1.4;
+}
+
 .success-header-pill-meta {
     margin: 0;
     color: rgba(255, 255, 255, 0.75);
@@ -8588,7 +8688,7 @@ main {
     transform-origin: 32px 32px;
     animation:
         success-stroke-draw 360ms cubic-bezier(0.16, 1, 0.3, 1) 520ms both,
-        success-badge-check-pop 480ms cubic-bezier(0.34, 1.45, 0.64, 1) 860ms both;
+        success-badge-check-pop 480ms cubic-bezier(0.16, 1, 0.3, 1) 860ms both;
 }
 
 .confirmation-header.is-animating .success-title {
@@ -8644,9 +8744,6 @@ main {
 #step-5.is-revealing .step-item:nth-child(3) { animation-delay: 1140ms; }
 
 /* When a header pill is shown, push the flow cascade back */
-#step-5.is-revealing.has-header-pill .confirmation-order-summary {
-    animation-delay: 1060ms;
-}
 #step-5.is-revealing.has-header-pill .success-app-download-section {
     animation-delay: 1120ms;
 }
@@ -9274,8 +9371,9 @@ main {
     align-items: center;
     justify-content: center;
     width: 100%;
+    min-height: 44px;
     margin-top: 16px;
-    padding: 11px 16px;
+    padding: 12px 16px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
     background: transparent;
@@ -9289,6 +9387,10 @@ main {
 .confirmation-order-summary-cta:hover {
     background: rgba(255, 255, 255, 0.04);
     border-color: rgba(255, 255, 255, 0.18);
+}
+
+.confirmation-order-summary-cta:active {
+    background: rgba(255, 255, 255, 0.07);
 }
 
 .confirmation-order-summary-cta:focus-visible {
@@ -9491,6 +9593,12 @@ main {
     font-weight: 600;
 }
 
+/* Author display rules beat the UA [hidden] stylesheet. Keep omitted
+   receipt rows actually omitted. */
+#step-5 [hidden] {
+    display: none !important;
+}
+
 .confirmation-order-zone--member {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -9687,6 +9795,40 @@ main {
 .receipt-btn:focus-visible {
     outline: 2px solid rgba(244, 1, 245, 0.75);
     outline-offset: 3px;
+}
+
+.receipt-btn.is-highlighted {
+    transition: none;
+    animation: receipt-btn-highlight 1.35s cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+@keyframes receipt-btn-highlight {
+    0% {
+        background-color: transparent;
+        color: #F401F5;
+        box-shadow: 0 0 0 0 rgba(244, 1, 245, 0);
+    }
+    18% {
+        background-color: #F401F5;
+        color: #fff;
+        box-shadow: 0 0 0 6px rgba(244, 1, 245, 0.28);
+    }
+    52% {
+        background-color: #F401F5;
+        color: #fff;
+        box-shadow: 0 0 0 4px rgba(244, 1, 245, 0.16);
+    }
+    100% {
+        background-color: transparent;
+        color: #F401F5;
+        box-shadow: 0 0 0 0 rgba(244, 1, 245, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .receipt-btn.is-highlighted {
+        animation: none;
+    }
 }
 
 /* Detailed Receipt Modal — fade+scale on desktop, bottom-sheet drawer on mobile.
@@ -10561,11 +10703,10 @@ main {
     z-index: 1;
     padding: 3px 8px;
     border-radius: 999px;
-    background: rgba(10, 10, 10, 0.78);
+    background: rgba(10, 10, 10, 0.86);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(6px);
     color: rgba(255, 255, 255, 0.92);
-    font-size: 0.6875rem;
+    font-size: var(--font-size-xs);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.03em;
@@ -10583,7 +10724,7 @@ main {
 
 .first-session-video-eyebrow {
     display: block;
-    font-size: 0.6875rem;
+    font-size: var(--font-size-xs);
     font-weight: 700;
     letter-spacing: 0.04em;
     color: #ff6cff;
@@ -10787,49 +10928,17 @@ main {
     line-height: 1.5;
 }
 
-/* Membership onboarding — own card above "What happens next?" */
+/* Membership onboarding — quieter than the invite card so the ask stays unique */
 .member-onboarding-section {
     width: 100%;
 }
 
 .member-onboarding-panel {
-    --invite-angle: 0deg;
     position: relative;
-    padding: 24px;
-    border: 1.5px solid transparent;
-    border-radius: 14px;
-    background:
-        radial-gradient(circle at 50% -10%, rgba(244, 1, 245, 0.22) 0%, rgba(244, 1, 245, 0) 60%) padding-box,
-        linear-gradient(180deg, #1d1320 0%, #161018 100%) padding-box,
-        conic-gradient(
-            from var(--invite-angle),
-            #F401F5 0deg,
-            #ff6cff 60deg,
-            #ffffff 120deg,
-            #c803c9 200deg,
-            #F401F5 300deg,
-            #F401F5 360deg
-        ) border-box;
-    overflow: hidden;
-    animation: invite-border-spin 6s linear infinite;
-    transition: transform 0.25s ease;
-}
-
-.member-onboarding-panel:hover {
-    transform: translateY(-2px);
-}
-
-.member-onboarding-panel::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 65%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 0%, #ffffff 50%, transparent 100%);
-    opacity: 0.6;
-    pointer-events: none;
+    padding: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    background: #18181b;
 }
 
 .member-onboarding-title {
@@ -10877,6 +10986,11 @@ main {
     transform: translateY(-1px);
 }
 
+.member-onboarding-link:focus-visible {
+    outline: 2px solid rgba(244, 1, 245, 0.55);
+    outline-offset: 2px;
+}
+
 .member-onboarding-icon {
     width: 34px;
     height: 34px;
@@ -10904,12 +11018,6 @@ main {
     color: #F8FAFC;
     border-color: rgba(255, 255, 255, 0.2);
     background: #333;
-}
-
-.member-onboarding-link--community:hover .member-onboarding-icon {
-    color: #F401F5;
-    border-color: rgba(244, 1, 245, 0.35);
-    background: #2e1f30;
 }
 
 .member-onboarding-copy {
@@ -10946,10 +11054,6 @@ main {
 .member-onboarding-link:hover .member-onboarding-chevron {
     color: rgba(255, 255, 255, 0.55);
     transform: translateX(2px);
-}
-
-.member-onboarding-link--community:hover .member-onboarding-chevron {
-    color: #F401F5;
 }
 
 /* Gym (membership) lives in the header pill; hide the duplicate gym line in the card */
@@ -11500,8 +11604,12 @@ main {
     }
 
     /* Prevent title text from flowing underneath the top-right select button */
-    .plan-card:not(.addon-card) .plan-type {
+    .plan-card:not(.addon-card) .plan-type-row {
         max-width: calc(100% - 96px);
+    }
+
+    .plan-card:not(.addon-card) .plan-type {
+        max-width: none;
     }
 
     /* Keep text readable on mobile while still leaving slight room for the select button */
@@ -11522,11 +11630,14 @@ main {
         margin-top: 40px;
     }
     
-    /* Ensure plan cards expand to fit content on mobile */
-    .plan-card:not(.addon-card) {
-        height: 100% !important; /* Fill container height */
+    /* Carousel cards fill the snap slide. List cards stay content-sized. */
+    .plan-options .plan-card:not(.addon-card) {
+        height: 100% !important;
         min-height: auto !important;
         align-items: stretch;
+    }
+
+    .plan-card:not(.addon-card) {
         padding: 20px 22px; /* Comfortable padding for mobile */
     }
 
@@ -12117,6 +12228,15 @@ main {
     .member-onboarding-panel {
         animation: none;
     }
+
+    .invite-friends-card:hover,
+    .member-onboarding-panel:hover,
+    .member-onboarding-link:hover,
+    .member-onboarding-link:hover .member-onboarding-chevron,
+    .invite-share-btn:hover .invite-share-icon,
+    .invite-share-btn:active .invite-share-icon {
+        transform: none;
+    }
 }
 
 .invite-friends-card::before {
@@ -12147,6 +12267,31 @@ main {
     box-shadow: 0 0 20px rgba(244, 1, 245, 0.18);
 }
 
+.invite-friends-offer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin: 0 0 10px;
+    line-height: 1;
+}
+
+.invite-friends-offer-label {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(255, 214, 255, 0.82);
+}
+
+.invite-friends-offer-value {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: #F401F5;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+}
+
 .invite-friends-title {
     font-size: var(--font-size-xl);
     font-weight: 700;
@@ -12157,7 +12302,7 @@ main {
 }
 
 .invite-friends-subtitle {
-    color: #9CA3AF;
+    color: rgba(255, 214, 255, 0.82);
     font-size: var(--font-size-sm);
     margin: 0 auto 20px;
     max-width: 360px;
@@ -12177,10 +12322,11 @@ main {
     flex-direction: column;
     align-items: center;
     gap: 8px;
+    min-width: 44px;
     background: transparent;
     border: none;
     cursor: pointer;
-    color: #9CA3AF;
+    color: rgba(255, 214, 255, 0.72);
     padding: 4px;
     font-family: inherit;
     transition: color 0.15s ease;
@@ -12217,7 +12363,9 @@ main {
 }
 
 .invite-share-btn:focus-visible {
-    outline: none;
+    outline: 2px solid rgba(244, 1, 245, 0.7);
+    outline-offset: 3px;
+    border-radius: 10px;
 }
 
 .invite-share-btn:focus-visible .invite-share-icon {
@@ -12225,9 +12373,9 @@ main {
 }
 
 .invite-share-label {
-    font-size: 12px;
+    font-size: var(--font-size-sm);
     font-weight: 500;
-    line-height: 1;
+    line-height: 1.2;
     letter-spacing: 0.01em;
 }
 
@@ -12264,8 +12412,8 @@ main {
 }
 
 .invite-friends-footnote {
-    font-size: 12px;
-    color: #6b7280;
+    font-size: var(--font-size-sm);
+    color: rgba(255, 196, 255, 0.62);
     margin: 0;
     line-height: 1.5;
 }

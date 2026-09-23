@@ -4424,7 +4424,11 @@ async function loadProductsFromAPI() {
     const byPriceHighToLow = (a, b) => getProductPriceCents(b) - getProductPriceCents(a);
     campaignSubscriptions.sort(byPriceHighToLow);
     campaignValueCards.sort(byPriceHighToLow);
-    membershipSubscriptions.sort(byPriceHighToLow);
+    membershipSubscriptions.sort((a, b) => {
+      const groupDiff = membershipAccessGroup(a) - membershipAccessGroup(b);
+      if (groupDiff !== 0) return groupDiff;
+      return byPriceHighToLow(a, b);
+    });
     dayPassSubscriptions.sort(byPriceHighToLow);
     regularValueCards.sort(byPriceHighToLow);
 
@@ -4630,10 +4634,15 @@ function renderProductsFromAPI({ force = false } = {}) {
           .replace(/\n/g, '<br>')
       : '';
     
+    const showNewBadge = isFitnessMembership(product);
+    
     planCard.innerHTML = sanitizeHTML(`
       <div class="plan-info">
         <div class="plan-content-left">
-          <div class="plan-type">${product.name || 'Membership'}</div>
+          <div class="plan-type-row">
+            ${showNewBadge ? `<span class="plan-new-badge" data-i18n-key="membership.newBadge">${t('membership.newBadge')}</span>` : ''}
+            <div class="plan-type">${product.name || 'Membership'}</div>
+          </div>
           <div class="plan-price ${(isFirstMonthCampaignPricing || hasDiscountedPlanPrice) ? 'plan-price--campaign' : ''}">
             <span class="price-amount">${effectiveDisplayPrice}</span>
             ${showPriceUnit ? `<span class="price-unit">${priceUnit}</span>` : ''}
@@ -4904,8 +4913,9 @@ function renderProductsFromAPI({ force = false } = {}) {
       campaignCategoryItem.style.display = 'none';
       stopCampaignCountdown();
     } else {
-      // Show category and render products
-      campaignCategoryItem.style.display = '';
+      // Inline display wins over the stylesheet's display:none, which keeps
+      // the static placeholder hidden until a real campaign product exists.
+      campaignCategoryItem.style.display = 'block';
       startCampaignCountdown();
       if (campaignPlansList) {
         campaignPlansList.innerHTML = '';
@@ -4937,7 +4947,12 @@ function renderProductsFromAPI({ force = false } = {}) {
     membershipPlansList.innerHTML = '';
     
     if (state.subscriptions.length > 0) {
-      state.subscriptions.forEach((product) => {
+      state.subscriptions.forEach((product, index, list) => {
+        const previousGroup = index > 0 ? membershipAccessGroup(list[index - 1]) : 0;
+        const currentGroup = membershipAccessGroup(product);
+        if (index > 0 && currentGroup > 0 && previousGroup === 0) {
+          membershipPlansList.appendChild(createMembershipLimitedAccessSeparator());
+        }
         const planCard = renderSubscriptionCard(product, 'membership');
         // Event listeners will be set up by setupNewAccessStep()
         membershipPlansList.appendChild(planCard);
@@ -5835,6 +5850,7 @@ const state = {
   // Test mode for success page
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
+  testFitnessMembership: false, // Fitness Membership success-page preview (?testProductType=fitness)
 };
 
 let orderCreationPromise = null;
@@ -6983,7 +6999,40 @@ function isFitnessMembership(product) {
   return labels.some((label) => String(label?.name || '').toLowerCase().includes('fitness'));
 }
 
+function compactProductToken(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function isSingleGymMembership(product) {
+  if (!product) return false;
+  if (compactProductToken(product.name).includes('singlegym')) return true;
+  const labels = Array.isArray(product.productLabels) ? product.productLabels : [];
+  return labels.some((label) => compactProductToken(label?.name).includes('singlegym'));
+}
+
+function membershipAccessGroup(product) {
+  if (isFitnessMembership(product)) return 2;
+  if (isSingleGymMembership(product)) return 1;
+  return 0;
+}
+
+function createMembershipLimitedAccessSeparator() {
+  const separator = document.createElement('div');
+  separator.className = 'plan-list-separator';
+  separator.setAttribute('role', 'separator');
+  const label = document.createElement('span');
+  label.className = 'plan-list-separator-label';
+  label.setAttribute('data-i18n-key', 'membership.limitedAccess');
+  label.textContent = t('membership.limitedAccess');
+  separator.appendChild(label);
+  return separator;
+}
+
 function isFitnessMembershipSelected() {
+  if (state.testFitnessMembership === true) return true;
   if (isFitnessMembership(resolveSelectedAccessProduct())) return true;
   if (isFitnessMembership(state.fullOrder?.subscriptionItems?.[0]?.product)) return true;
   const cartItem = (state.cartItems || []).find((item) => item.type === 'membership');
@@ -7349,8 +7398,10 @@ function hideLoadingOverlay() {
 const translations = {
   'da-DK': {
     'step.homeGym': 'Hjemmehal', 'step.access': 'Adgang', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Medlemskabskampagne', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Start nu og spar stort! Kun 3 måneders binding. Ingen skjulte gebyrer. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og betingelser</a> gælder.', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.15daypass': '15-Dages Prøveperiode', 'category.15daypass.subtitle': 'Prøv Boulders med 15 dages ubegrænset klatring inkl. sko. Start når det passer dig.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Klatrer du en gang imellem eller et par gange om måneden? Så er klippekortet til dig.',
+    'category.campaign': 'Medlemskabskampagne', 'category.campaign.desc': 'Begrænset medlemskampagne, udløber 8. april 2026. Køb tilbuddet inden det udløber. Kan kun bruges af personer der ikke har været medlem i Boulders de seneste 6 måneder.', 'category.campaign.subtitle': 'Start nu og spar stort! Kun 3 måneders binding. Ingen skjulte gebyrer. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Vilkår og betingelser</a> gælder.', 'category.campaign.endsIn': 'Udløber om', 'category.membership': 'Medlemskab', 'category.membership.subtitle': 'Ubegrænset adgang i alle Boulders + loyalitetsprogram + ekstra medlemsfordele.', 'category.membership.subtitle.limited': 'Løbende abonnement med automatisk betaling.', 'category.15daypass': 'Prøveperiode', 'category.15daypass.subtitle': '15 dages ubegrænset adgang. Klatresko inkluderet.', 'category.punchcard': 'Klippekort', 'category.punchcard.subtitle': 'Fast lav pris pr. indgang. Kan deles med andre.',
     'category.membership.desc': 'Medlemskab er et løbende abonnement med automatisk fornyelse. Ingen tilmelding eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden + 1 måned.',
+    'membership.limitedAccess': 'Begrænset adgang',
+    'membership.newBadge': 'Nyhed',
     'category.15daypass.desc': 'Prøv Boulders af med 15 dages adgang til alle haller og faciliteter. Klatersko inkluderet.',
     'category.punchcard.desc': 'Hver indgang koster 1 klip, og giver adgang til alle haller og faciliteter. Genopfyld inden for 14 dage efter dit sidste klip og få 100 kr rabat i hallen. Kan konverteres til medlemskab senere.',
     'header.selectedGym': 'Valgt hal:', 'gym.headsUp': 'Hjemmehal valgt:', 'access.headsUp': 'Adgangstype valgt:',
@@ -7446,7 +7497,7 @@ const translations = {
     'confirmation.message.15daypass': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.message.punchcard': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.message.firstclimb': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
-    'confirmation.nextStep2.firstclimb': 'Din dagsbillet er klar — kig forbi hallen, når det passer dig (inden for en måned).',
+    'confirmation.nextStep2.firstclimb': 'Din dagsbillet er klar. Kig forbi hallen, når det passer dig (inden for en måned).',
     'confirmation.nextStep3.firstclimb': 'Når du kommer: oplys dit telefonnummer eller email, så aktiverer vi din billet og udleverer lejesko og kalk. Husk at du skal underskrive ansvarsfraskrivelsen.',
     'confirmation.message.generic': 'Velkommen til Boulders-fællesskabet. Besøg en hal og kom i gang med at klatre!',
     'confirmation.orderDetails': 'Ordredetaljer',
@@ -7499,18 +7550,17 @@ const translations = {
     'confirmation.validUntil': 'Gyldig til:',
     'confirmation.validity': 'Gyldighed',
     'confirmation.validityIntro.15daypass': 'Dit pas er gyldigt fra',
-    'confirmation.membershipIntro': 'Du er nu medlem hos',
+    'confirmation.membershipIntro': 'Din hjemmehal',
+    'confirmation.membershipAllGyms': 'Du kan klatre i alle Boulders-haller',
     'confirmation.onboarding.title': 'Udforsk dit medlemskab',
-    'confirmation.onboarding.lead': 'Fordele, hold og fællesskab. Vælg det, der passer dig.',
+    'confirmation.onboarding.lead': 'Fordele og hold. Vælg det, der passer dig.',
+    'confirmation.onboarding.lead.fitness': 'Bloc Life fra dag ét.',
     'confirmation.onboarding.bloclife.title': 'Bloc Life-fordele',
     'confirmation.onboarding.bloclife.desc': 'Loyalitetsfordele fra dag ét. Grej, café og mere.',
     'confirmation.onboarding.bloclife.aria': 'Se Bloc Life-fordele (åbner i nyt vindue)',
     'confirmation.onboarding.classes.title': 'Book et hold',
     'confirmation.onboarding.classes.desc': 'Introhold er gratis for medlemmer. Reservér din plads.',
     'confirmation.onboarding.classes.aria': 'Book introhold (åbner i nyt vindue)',
-    'confirmation.onboarding.communities.title': 'Sociale sessions',
-    'confirmation.onboarding.communities.desc': 'Temaaftener. Mød bare op, når det passer dig.',
-    'confirmation.onboarding.communities.aria': 'Se sociale sessions (åbner i nyt vindue)',
     'confirmation.firstSession.eyebrow': 'Godt at vide',
     'confirmation.firstSession.title': 'Din første session',
     'confirmation.firstSession.desc': 'Kort guide til, hvad du skal vide, inden du klatrer i hallen.',
@@ -7530,33 +7580,37 @@ const translations = {
     'confirmation.nextStep2.freetrial.future': 'Din prøveperiode starter den {date}. Vi aktiverer den automatisk.',
     'confirmation.nextStep2.punchcard': 'Dit klippekort er klar til brug',
     'confirmation.nextStep3.membership': 'Hent dit medlemskort i Boulders',
-    'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge ditn 15-Dages Prøveperiode',
+    'confirmation.nextStep3.15daypass': 'Besøg centeret for at begynde at bruge din 15-Dages Prøveperiode',
     'confirmation.nextStep3.freetrial': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.freetrial.today': 'Mød op i hallen i dag og kobl dit adgangskort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.freetrial.future': 'Når din prøveperiode starter, skal du møde op i hallen og koble dit kort til din konto. Oplys dit telefonnummer til personalet, så hjælper de dig i gang.',
     'confirmation.nextStep3.punchcard': 'Besøg centeret for at begynde at bruge dine klip',
     'confirmation.freetrial.changeActivationCta': 'Har du brug for at ændre aktiveringsdato? Klik her.',
     'invite.title': 'Invitér dine venner!',
-    'invite.subtitle': 'Del dit link – når dine venner melder sig ind, får de en 2-ugers gratis prøveperiode.',
+    'invite.offer.label': '2 uger gratis',
+    'invite.offer.value': '350 kr',
+    'invite.subtitle': 'Del dit link. Når dine venner melder sig ind, får de en 2-ugers gratis prøveperiode til en værdi af 350 kr.',
     'invite.15daypass.subtitle': 'Klatring er sjovere sammen. Del linket, så en ven også kan prøve det.',
-    'invite.15daypass.shareMessage': 'Hej! {name} her – jeg har lige købt et 15-dages prøvepas hos Boulders. Kom og klatre med mig:',
+    'invite.15daypass.shareMessage': 'Hej! {name} her. Jeg har lige købt et 15-dages prøvepas hos Boulders. Kom og klatre med mig:',
     'invite.punchcard.subtitle': 'Klippekortet er perfekt at dele. Inviter en ven til en klatretur næste gang.',
-    'invite.punchcard.shareMessage': 'Hej! {name} her – jeg har lige købt et klippekort hos Boulders. Kom og klatre med mig:',
-    'invite.general.shareMessage': 'Hej! {name} her – kom og klatre med mig hos Boulders:',
+    'invite.punchcard.shareMessage': 'Hej! {name} her. Jeg har lige købt et klippekort hos Boulders. Kom og klatre med mig:',
+    'invite.general.shareMessage': 'Hej! {name} her. Kom og klatre med mig hos Boulders:',
     'invite.copyLink': 'Kopiér link',
     'invite.copied': 'Kopieret!',
-    'invite.copiedToast': 'Linket er kopieret – del det med dine venner!',
+    'invite.copiedToast': 'Linket er kopieret. Del det med dine venner!',
     'invite.copyFailed': 'Kunne ikke kopiere linket. Kopiér det manuelt.',
-    'invite.instagramToast': 'Linket er kopieret – sæt det ind i din Instagram-DM eller story!',
+    'invite.instagramToast': 'Linket er kopieret. Sæt det ind i din Instagram-DM eller story!',
     'invite.shareVia': 'eller del via',
     'invite.share.sms': 'Beskeder',
     'invite.share.email': 'E-mail',
     'invite.share.more': 'Mere',
-    'invite.shareMessage': 'Hej! {name} her – jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
+    'invite.shareMessage': 'Hej! {name} her. Jeg har lige meldt mig ind hos Boulders. Klatre med mig og få 2 ugers gratis prøveperiode på min konto:',
     'invite.shareSubject': '2 ugers gratis klatring hos Boulders',
     'invite.general.shareSubject': 'Kom og klatre med mig hos Boulders',
     'invite.footnote': 'Dine venner får 2 ugers gratis adgang og lejesko. Intet betalingskort kræves for at starte. Tilbuddet kan kun benyttes af personer, der ikke tidligere har benyttet et prøvepas.',
     'invite.firstclimb.title': 'Invitér dine venner!',
+    'invite.firstclimb.offer.label': 'Første dag',
+    'invite.firstclimb.offer.value': '99 kr',
     'invite.firstclimb.subtitle': 'Dagsbilletten på 99 kr inkl. lejesko og kalk er for alle, der ikke har prøvet det før. Send linket til dine venner.',
     'invite.firstclimb.footnote': 'Tilbuddet kan kun bruges én gang pr. person.',
     'invite.firstclimb.shareMessage': 'Klatre med mig hos Boulders! Få din første dag for 99 kr inkl. lejesko og kalk:',
@@ -7642,13 +7696,13 @@ const translations = {
     'faq.membership.cancellation.q': 'Hvordan opsiger jeg mit medlemskab?',
     'faq.membership.cancellation.a': 'Du kan opsige dit medlemskab når som helst med en kort varsel, som er resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
     'faq.fitness.included.q': 'Hvad er inkluderet i Fitness Medlemskab?',
-    'faq.fitness.included.a': 'Fitness Medlemskab giver adgang til styrketræningsområdet i Boulders Aalborg. Klatring er ikke inkluderet, og det samme gælder medlemsfordele som Bloc Life, introhold og gæstepas.',
+    'faq.fitness.included.a': 'Fitness Medlemskab giver adgang til styrketræningsområdet i Boulders Aalborg og inkluderer Bloc Life-loyalitetsprogrammet. Klatring, introhold og gæstepas er ikke inkluderet.',
     'faq.fitness.climbing.q': 'Kan jeg klatre med Fitness Medlemskab?',
     'faq.fitness.climbing.a': 'Nej. Fitness Medlemskab dækker kun styrketræningsområdet. Hvis du vil klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
     'faq.fitness.where.q': 'Hvor kan jeg bruge Fitness Medlemskab?',
     'faq.fitness.where.a': 'Fitness Medlemskab gælder kun i Boulders Aalborg og kun i styrketræningsområdet. Det kan ikke bruges i andre Boulders-haller.',
     'faq.fitness.benefits.q': 'Får jeg medlemsfordele og Bloc Life?',
-    'faq.fitness.benefits.a': 'Nej. Fitness Medlemskab inkluderer ikke Bloc Life, introhold, gæstepas eller andre medlemsfordele. De følger kun med et almindeligt Boulders-medlemskab.',
+    'faq.fitness.benefits.a': 'Ja. Fitness Medlemskab inkluderer Bloc Life-loyalitetsprogrammet. Introhold og gæstepas følger kun med et almindeligt Boulders-medlemskab.',
     'faq.fitness.terms.q': 'Hvad er vilkårene og betingelserne?',
     'faq.fitness.terms.a': 'Fitness Medlemskab er et løbende abonnement med automatisk månedlig fornyelse. Der er ingen tilmeldings- eller opsigelsesgebyrer. Opsigelsesvarsel er resten af måneden plus 1 måned. Du kan læse de fulde vilkår og betingelser ved at klikke på linket i kurven.',
     'faq.fitness.bindingPeriod.q': 'Er der bindingsperiode?',
@@ -7656,7 +7710,7 @@ const translations = {
     'faq.fitness.cancellation.q': 'Hvordan opsiger jeg Fitness Medlemskab?',
     'faq.fitness.cancellation.a': 'Du kan opsige når som helst med varsel på resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
     'faq.productChoice.fitnessBest.q': 'Hvornår vælger jeg Fitness Medlemskab?',
-    'faq.productChoice.fitnessBest.a': 'Vælg Fitness Medlemskab hvis du kun vil træne i styrkeområdet i Boulders Aalborg. Det inkluderer ikke klatring eller medlemsfordele. Vil du klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
+    'faq.productChoice.fitnessBest.a': 'Vælg Fitness Medlemskab hvis du kun vil træne i styrkeområdet i Boulders Aalborg. Du får Bloc Life, men ikke klatring. Vil du klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
     'faq.15daypass.howItWorks.q': 'Hvordan virker 15-dages kortet?',
     'faq.15daypass.howItWorks.a': '15-dages kortet giver dig 15 dages ubegrænset adgang til alle Boulders haller fra den dag, du aktiverer det. Det er perfekt til at prøve klatring eller et kortvarigt besøg.',
     'faq.15daypass.validity.q': 'Hvor længe er kortet gyldigt?',
@@ -7706,8 +7760,10 @@ const translations = {
   },
   'en-GB': {
     'step.homeGym': 'Home Gym', 'step.access': 'Access', 'step.boost': 'Boost', 'step.send': 'Send',
-    'category.campaign': 'Membership Campaign', 'category.campaign.desc': 'Limited membership campaign, expires April 8, 2026. Get the offer before it expires. Can only be used by people who have not been members at Boulders within the last 6 months.', 'category.campaign.subtitle': 'Start now and save big! Only 3 months commitment. No hidden fees. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and conditions</a> apply.', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.15daypass': '15-Day Trial Pass', 'category.15daypass.subtitle': 'Try Boulders with 15 days of unlimited climbing incl. shoes. Start whenever it suits you.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Climb once in a while or a couple times a month? The punch card is for you.',
+    'category.campaign': 'Membership Campaign', 'category.campaign.desc': 'Limited membership campaign, expires April 8, 2026. Get the offer before it expires. Can only be used by people who have not been members at Boulders within the last 6 months.', 'category.campaign.subtitle': 'Start now and save big! Only 3 months commitment. No hidden fees. <a href="#" data-action="open-terms" data-terms-type="terms" onclick="event.preventDefault();">Terms and conditions</a> apply.', 'category.campaign.endsIn': 'Ends in', 'category.membership': 'Membership', 'category.membership.subtitle': 'Unlimited access at all Boulders + loyalty program + extra member benefits.', 'category.membership.subtitle.limited': 'Ongoing subscription with automatic payment.', 'category.15daypass': 'Trial Pass', 'category.15daypass.subtitle': '15 days unlimited access. Rental shoes included.', 'category.punchcard': 'Punch Card', 'category.punchcard.subtitle': 'Fixed low price per entry. Can be shared with others.',
     'category.membership.desc': 'Membership is an ongoing subscription with automatic renewal. No signup or cancellation fees. Notice period is the rest of the month + 1 month.',
+    'membership.limitedAccess': 'Limited access',
+    'membership.newBadge': 'New',
     'category.15daypass.desc': 'Get 15 days of unlimited access to all gyms. Perfect for trying out climbing or a short-term visit.',
     'category.punchcard.desc': 'Each entry costs 1 punch, and gives access to all gyms and facilities. Refill within 14 days after your last punch and get 100 kr discount at the gym. Can be converted to membership later.',
     'activationDate.label': 'When do you want your trial period to start?',
@@ -7803,7 +7859,7 @@ const translations = {
     'confirmation.message.15daypass': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.message.punchcard': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.message.firstclimb': 'Welcome to the Boulders community. Visit any gym to start climbing!',
-    'confirmation.nextStep2.firstclimb': 'Your day ticket is ready — drop by the gym whenever it suits you (within one month).',
+    'confirmation.nextStep2.firstclimb': 'Your day ticket is ready. Drop by the gym whenever it suits you (within one month).',
     'confirmation.nextStep3.firstclimb': 'When you arrive: give your phone number or email, and we\'ll activate the ticket and hand you rental shoes and chalk. Remember you\'ll need to sign the liability waiver.',
     'confirmation.message.generic': 'Welcome to the Boulders community. Visit any gym to start climbing!',
     'confirmation.orderDetails': 'Order Details',
@@ -7856,18 +7912,17 @@ const translations = {
     'confirmation.validUntil': 'Valid Until:',
     'confirmation.validity': 'Valid',
     'confirmation.validityIntro.15daypass': 'Your pass is valid from',
-    'confirmation.membershipIntro': "You're now a member at",
+    'confirmation.membershipIntro': 'Your home gym',
+    'confirmation.membershipAllGyms': 'You can climb at every Boulders gym',
     'confirmation.onboarding.title': 'Explore your membership',
-    'confirmation.onboarding.lead': 'Perks, classes, and community. Start with whichever feels right.',
+    'confirmation.onboarding.lead': 'Perks and classes. Start with whichever feels right.',
+    'confirmation.onboarding.lead.fitness': 'Bloc Life from day one.',
     'confirmation.onboarding.bloclife.title': 'Bloc Life perks',
     'confirmation.onboarding.bloclife.desc': 'Loyalty rewards from day one. Gear, café, and more.',
     'confirmation.onboarding.bloclife.aria': 'View Bloc Life perks (opens in a new tab)',
     'confirmation.onboarding.classes.title': 'Book a class',
     'confirmation.onboarding.classes.desc': 'Intro courses are free for members. Reserve your spot.',
     'confirmation.onboarding.classes.aria': 'Book an intro class (opens in a new tab)',
-    'confirmation.onboarding.communities.title': 'Join a community',
-    'confirmation.onboarding.communities.desc': 'Social Sessions. Themed nights, drop in anytime.',
-    'confirmation.onboarding.communities.aria': 'View Social Sessions schedule (opens in a new tab)',
     'confirmation.firstSession.eyebrow': 'Good to know',
     'confirmation.firstSession.title': 'Your first visit',
     'confirmation.firstSession.desc': 'A quick guide to what to know before you climb at the gym.',
@@ -7894,24 +7949,28 @@ const translations = {
     'confirmation.nextStep3.punchcard': 'Visit the gym to start using your punches',
     'confirmation.freetrial.changeActivationCta': 'Need to change activation day? Click here.',
     'invite.title': 'Invite your friends!',
-    'invite.subtitle': 'Share your link — when your friends sign up, they get a free 2-week trial.',
+    'invite.offer.label': '2 weeks free',
+    'invite.offer.value': '350 kr',
+    'invite.subtitle': 'Share your link. When your friends sign up, they get a free 2-week trial worth 350 kr.',
     'invite.15daypass.subtitle': 'Climbing is more fun together. Share the link so a friend can give it a try too.',
-    'invite.15daypass.shareMessage': 'Hey! {name} here — I just grabbed a 15-day trial pass at Boulders. Come climb with me:',
+    'invite.15daypass.shareMessage': 'Hey! {name} here. I just grabbed a 15-day trial pass at Boulders. Come climb with me:',
     'invite.punchcard.subtitle': 'Punch cards are made for sharing. Bring a friend along for your next climb.',
-    'invite.punchcard.shareMessage': 'Hey! {name} here — I just picked up a punch card at Boulders. Come climb with me:',
-    'invite.general.shareMessage': 'Hey! {name} here — come climb with me at Boulders:',
+    'invite.punchcard.shareMessage': 'Hey! {name} here. I just picked up a punch card at Boulders. Come climb with me:',
+    'invite.general.shareMessage': 'Hey! {name} here. Come climb with me at Boulders:',
     'invite.copyLink': 'Copy link',
     'invite.copied': 'Copied!',
-    'invite.copiedToast': 'Link copied — share it with your friends!',
+    'invite.copiedToast': 'Link copied. Share it with your friends!',
     'invite.copyFailed': 'Could not copy link. Please copy it manually.',
-    'invite.instagramToast': 'Link copied — paste it into your Instagram DM or story!',
+    'invite.instagramToast': 'Link copied. Paste it into your Instagram DM or story!',
     'invite.shareVia': 'or share via',
     'invite.share.sms': 'Messages',
     'invite.share.email': 'Email',
     'invite.share.more': 'More',
-    'invite.shareMessage': 'Hey! {name} here — I just joined Boulders. Climb with me and get a free 2-week trial on me:',
+    'invite.shareMessage': 'Hey! {name} here. I just joined Boulders. Climb with me and get a free 2-week trial on me:',
     'invite.general.shareSubject': 'Come climb with me at Boulders',
     'invite.firstclimb.title': 'Invite your friends!',
+    'invite.firstclimb.offer.label': 'First day',
+    'invite.firstclimb.offer.value': '99 kr',
     'invite.firstclimb.subtitle': 'Our 99 kr day ticket including rental shoes and chalk is open to anyone who hasn’t tried it yet. Send the link to your friends.',
     'invite.firstclimb.footnote': 'The offer can only be used once per person.',
     'invite.firstclimb.shareMessage': 'Come climb with me at Boulders! Get your first day for 99 kr including rental shoes and chalk:',
@@ -7998,13 +8057,13 @@ const translations = {
     'faq.membership.cancellation.q': 'How do I cancel my membership?',
     'faq.membership.cancellation.a': 'You can cancel your membership at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
     'faq.fitness.included.q': 'What is included in Fitness Membership?',
-    'faq.fitness.included.a': 'Fitness Membership gives access to the strength-training area at Boulders Aalborg. Climbing is not included, and neither are membership benefits such as Bloc Life, intro class, and guest passes.',
+    'faq.fitness.included.a': 'Fitness Membership gives access to the strength-training area at Boulders Aalborg and includes the Bloc Life loyalty programme. Climbing, intro class, and guest passes are not included.',
     'faq.fitness.climbing.q': 'Can I climb with Fitness Membership?',
     'faq.fitness.climbing.a': 'No. Fitness Membership covers the strength-training area only. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
     'faq.fitness.where.q': 'Where can I use Fitness Membership?',
     'faq.fitness.where.a': 'Fitness Membership is valid only at Boulders Aalborg, and only in the strength-training area. It cannot be used at other Boulders gyms.',
     'faq.fitness.benefits.q': 'Do I get membership benefits and Bloc Life?',
-    'faq.fitness.benefits.a': 'No. Fitness Membership does not include Bloc Life, intro class, guest passes, or other membership benefits. Those come with a regular Boulders membership.',
+    'faq.fitness.benefits.a': 'Yes. Fitness Membership includes the Bloc Life loyalty programme. Intro class and guest passes come with a regular Boulders membership.',
     'faq.fitness.terms.q': 'What are the terms and conditions?',
     'faq.fitness.terms.a': 'Fitness Membership is an ongoing subscription with automatic monthly renewal. There are no signup or cancellation fees. Notice period is the rest of the month plus 1 month. You can read the full terms and conditions by clicking the link in the cart.',
     'faq.fitness.bindingPeriod.q': 'Is there a commitment period?',
@@ -8012,7 +8071,7 @@ const translations = {
     'faq.fitness.cancellation.q': 'How do I cancel Fitness Membership?',
     'faq.fitness.cancellation.a': 'You can cancel at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
     'faq.productChoice.fitnessBest.q': 'When should I choose Fitness Membership?',
-    'faq.productChoice.fitnessBest.a': 'Choose Fitness Membership if you only want to train in the strength area at Boulders Aalborg. It does not include climbing or membership benefits. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
+    'faq.productChoice.fitnessBest.a': 'Choose Fitness Membership if you only want to train in the strength area at Boulders Aalborg. You get Bloc Life, but not climbing. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
     'faq.15daypass.howItWorks.q': 'How does the 15-Day  Trial Pass work?',
     'faq.15daypass.howItWorks.a': 'The 15-Day Trial Pass gives you 15 days of unlimited access to all Boulders gyms from the day you activate it. It\'s perfect for trying out climbing or a short-term visit.',
     'faq.15daypass.validity.q': 'How long is the pass valid?',
@@ -8065,8 +8124,10 @@ const translations = {
   },
   'de-DE': {
     'step.homeGym': 'Heimhalle', 'step.access': 'Zugang', 'step.boost': 'Boost', 'step.send': 'Senden',
-    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.campaign.endsIn': 'Endet in', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
+    'category.campaign': 'Kampagne', 'category.campaign.desc': 'Spezielle Werbeangebote und zeitlich begrenzte Kampagnen. Nutzen Sie diese exklusiven Angebote, solange sie verfügbar sind.', 'category.campaign.subtitle': 'Zeitlich begrenzte Angebote', 'category.campaign.endsIn': 'Endet in', 'category.membership': 'Mitgliedschaft', 'category.membership.subtitle': 'Laufendes Abonnement, unbegrenzter Zugang', 'category.membership.subtitle.limited': 'Laufendes Abonnement mit automatischer Zahlung.', 'category.15daypass': '15-Tage-Pass', 'category.15daypass.subtitle': 'Zeitweiliger Zugangspass', 'category.punchcard': 'Stempelkarte', 'category.punchcard.subtitle': '10 Eintritte, teilbare physische Karte',
     'category.membership.desc': 'Mitgliedschaft ist ein laufendes Abonnement mit automatischer Verlängerung. Keine Anmelde- oder Kündigungsgebühren. Kündigungsfrist ist der Rest des Monats + 1 Monat.',
+    'membership.limitedAccess': 'Eingeschränkter Zugang',
+    'membership.newBadge': 'Neu',
     'category.15daypass.desc': 'Erhalten Sie 15 Tage unbegrenzten Zugang zu allen Hallen. Perfekt zum Ausprobieren des Kletterns oder für einen kurzen Besuch.',
     'category.punchcard.desc': 'Sie können jeweils 1 Art von Stempelkarte kaufen. Jeder Eintritt verwendet einen Stempel auf Ihrer Stempelkarte. Die Karte ist 5 Jahre gültig und beinhaltet keine Mitgliedschaftsvorteile. Füllen Sie innerhalb von 14 Tagen nach Ihrem letzten Stempel nach und erhalten Sie 100 kr Rabatt in der Halle.',
     'activationDate.label': 'Wann möchten Sie Ihren Pass aktivieren?',
@@ -8229,7 +8290,7 @@ const translations = {
     'confirmation.message.15daypass': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.message.punchcard': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.message.firstclimb': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
-    'confirmation.nextStep2.firstclimb': 'Deine Tageskarte ist bereit — komm vorbei, wann es dir passt (innerhalb eines Monats).',
+    'confirmation.nextStep2.firstclimb': 'Deine Tageskarte ist bereit. Komm vorbei, wann es dir passt (innerhalb eines Monats).',
     'confirmation.nextStep3.firstclimb': 'Wenn du ankommst: nenne deine Telefonnummer oder E-Mail, dann aktivieren wir die Karte und händigen dir Leihschuhe und Chalk aus. Denk daran, dass du den Haftungsausschluss unterschreiben musst.',
     'confirmation.message.generic': 'Willkommen in der Boulders-Community. Besuche eine Halle und fang an zu klettern!',
     'confirmation.orderDetails': 'Bestelldetails',
@@ -8282,18 +8343,17 @@ const translations = {
     'confirmation.validUntil': 'Gültig bis:',
     'confirmation.validity': 'Gültig',
     'confirmation.validityIntro.15daypass': 'Ihr Pass ist gültig ab',
-    'confirmation.membershipIntro': 'Du bist jetzt Mitglied bei',
+    'confirmation.membershipIntro': 'Deine Heimhalle',
+    'confirmation.membershipAllGyms': 'Du kannst in allen Boulders-Hallen klettern',
     'confirmation.onboarding.title': 'Deine Mitgliedschaft entdecken',
-    'confirmation.onboarding.lead': 'Vorteile, Kurse und Community. Wähle, womit du starten möchtest.',
+    'confirmation.onboarding.lead': 'Vorteile und Kurse. Wähle, womit du starten möchtest.',
+    'confirmation.onboarding.lead.fitness': 'Bloc Life ab dem ersten Tag.',
     'confirmation.onboarding.bloclife.title': 'Bloc Life Vorteile',
     'confirmation.onboarding.bloclife.desc': 'Treuevorteile ab Tag eins. Ausrüstung, Café und mehr.',
     'confirmation.onboarding.bloclife.aria': 'Bloc Life Vorteile ansehen (öffnet in neuem Tab)',
     'confirmation.onboarding.classes.title': 'Kurs buchen',
     'confirmation.onboarding.classes.desc': 'Intro-Kurse sind für Mitglieder kostenlos. Platz reservieren.',
     'confirmation.onboarding.classes.aria': 'Intro-Kurs buchen (öffnet in neuem Tab)',
-    'confirmation.onboarding.communities.title': 'Community beitreten',
-    'confirmation.onboarding.communities.desc': 'Social Sessions. Themenabende, einfach vorbeikommen.',
-    'confirmation.onboarding.communities.aria': 'Social Sessions ansehen (öffnet in neuem Tab)',
     'confirmation.firstSession.eyebrow': 'Gut zu wissen',
     'confirmation.firstSession.title': 'Dein erster Besuch',
     'confirmation.firstSession.desc': 'Kurzer Guide: Was du vor dem Klettern in der Halle wissen solltest.',
@@ -8317,24 +8377,28 @@ const translations = {
     'confirmation.nextStep3.freetrial.future': 'Sobald Ihre Probezeit startet, besuchen Sie die Halle, um Ihre Zugangskarte mit Ihrem Konto zu verknüpfen. Geben Sie dem Personal Ihre Telefonnummer, dann helfen sie Ihnen beim Start.',
     'confirmation.freetrial.changeActivationCta': 'Müssen Sie den Aktivierungstag ändern? Klicken Sie hier',
     'invite.title': 'Lade deine Freunde ein!',
-    'invite.subtitle': 'Teile deinen Link – wenn sich deine Freunde anmelden, bekommen sie 2 Wochen gratis Probezeit.',
+    'invite.offer.label': '2 Wochen gratis',
+    'invite.offer.value': '350 kr',
+    'invite.subtitle': 'Teile deinen Link. Wenn sich deine Freunde anmelden, bekommen sie 2 Wochen gratis Probezeit im Wert von 350 kr.',
     'invite.15daypass.subtitle': 'Klettern macht gemeinsam mehr Spaß. Teile den Link, damit ein Freund es auch ausprobieren kann.',
-    'invite.15daypass.shareMessage': 'Hey! Hier ist {name} – ich habe gerade einen 15-Tage-Probepass bei Boulders gekauft. Komm und klettere mit mir:',
+    'invite.15daypass.shareMessage': 'Hey! Hier ist {name}. Ich habe gerade einen 15-Tage-Probepass bei Boulders gekauft. Komm und klettere mit mir:',
     'invite.punchcard.subtitle': 'Die Stempelkarte ist perfekt zum Teilen. Bring einen Freund mit zum nächsten Klettertag.',
-    'invite.punchcard.shareMessage': 'Hey! Hier ist {name} – ich habe gerade eine Stempelkarte bei Boulders gekauft. Komm und klettere mit mir:',
-    'invite.general.shareMessage': 'Hey! Hier ist {name} – komm und klettere mit mir bei Boulders:',
+    'invite.punchcard.shareMessage': 'Hey! Hier ist {name}. Ich habe gerade eine Stempelkarte bei Boulders gekauft. Komm und klettere mit mir:',
+    'invite.general.shareMessage': 'Hey! Hier ist {name}. Komm und klettere mit mir bei Boulders:',
     'invite.copyLink': 'Link kopieren',
     'invite.copied': 'Kopiert!',
-    'invite.copiedToast': 'Link kopiert – teile ihn mit deinen Freunden!',
+    'invite.copiedToast': 'Link kopiert. Teile ihn mit deinen Freunden!',
     'invite.copyFailed': 'Link konnte nicht kopiert werden. Bitte kopiere ihn manuell.',
-    'invite.instagramToast': 'Link kopiert – füge ihn in deine Instagram-DM oder Story ein!',
+    'invite.instagramToast': 'Link kopiert. Füge ihn in deine Instagram-DM oder Story ein!',
     'invite.shareVia': 'oder teilen über',
     'invite.share.sms': 'Nachrichten',
     'invite.share.email': 'E-Mail',
     'invite.share.more': 'Mehr',
-    'invite.shareMessage': 'Hey! Hier ist {name} – ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
+    'invite.shareMessage': 'Hey! Hier ist {name}. Ich habe mich gerade bei Boulders angemeldet. Klettere mit mir und hol dir 2 Wochen Probezeit auf mich:',
     'invite.general.shareSubject': 'Komm und klettere mit mir bei Boulders',
     'invite.firstclimb.title': 'Lade deine Freunde ein!',
+    'invite.firstclimb.offer.label': 'Erster Tag',
+    'invite.firstclimb.offer.value': '99 kr',
     'invite.firstclimb.subtitle': 'Unsere Tageskarte für 99 kr inkl. Leihschuhe und Chalk ist für alle, die sie noch nicht ausprobiert haben. Schick deinen Freunden den Link.',
     'invite.firstclimb.footnote': 'Das Angebot kann pro Person nur einmal eingelöst werden.',
     'invite.firstclimb.shareMessage': 'Klettere mit mir bei Boulders! Hol dir deinen ersten Tag für 99 kr inkl. Leihschuhe und Chalk:',
@@ -9240,17 +9304,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const testSuccess = urlParams.get('testSuccess') === 'true';
   const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
-  const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
+  const rawTestProductType = urlParams.get('testProductType') || 'membership'; // membership, fitness, 15daypass, punch-card
+  const testFitnessMembership = urlParams.get('testFitness') === 'true' || rawTestProductType === 'fitness';
+  const testProductType = rawTestProductType === 'fitness' ? 'membership' : rawTestProductType;
   const testStartDateParam = String(urlParams.get('testStartDate') || '').trim();
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
   const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
   
   if (testSuccess) {
-    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType);
+    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType, testFitnessMembership ? '(fitness)' : '');
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
+    state.testFitnessMembership = testFitnessMembership;
   }
   
   if (testPaymentFailed) {
@@ -9421,15 +9488,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }]
       };
     } else {
-      // Default to membership
+      // Default to membership (regular or Fitness)
+      const isFitness = state.testFitnessMembership === true;
+      const membershipName = isFitness ? 'Fitness Membership' : 'Medlemskab';
       state.selectedProductType = 'membership';
-      state.membershipPlanId = 'membership-123';
+      state.membershipPlanId = isFitness ? 'fitness-membership-123' : 'membership-123';
+      state.order.items = [{ name: membershipName, amount: 469 }];
+      state.order.membershipType = membershipName;
+      state.order.primaryGym = isFitness ? 'Boulders Aalborg' : 'Boulders Aarhus Nord';
       // Mock subscription items with price
       state.fullOrder = {
         subscriptionItems: [{
           product: {
-            name: 'Medlemskab',
-            productLabels: [{ name: 'Public' }]
+            name: membershipName,
+            productLabels: isFitness ? [{ name: 'fitness' }] : [{ name: 'Public' }]
           },
           price: { amount: 46900 } // 469.00 DKK in cents
         }]
@@ -9440,6 +9512,7 @@ document.addEventListener('DOMContentLoaded', () => {
       productType: productType,
       selectedProductType: state.selectedProductType,
       membershipPlanId: state.membershipPlanId,
+      isFitnessMembership: state.testFitnessMembership === true,
       hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
       hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
     });
@@ -14582,6 +14655,7 @@ function handleGlobalClick(event) {
         orderDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
         orderDetails.focus({ preventScroll: true });
       }
+      highlightDetailedReceiptButton();
       break;
     }
     case 'first-session-video': {
@@ -14924,6 +14998,12 @@ function renderFirstSessionVideo(productType) {
   const section = document.getElementById('firstSessionVideoSection');
   if (!section) return;
 
+  // Fitness Membership has no climbing intro — hide the "Good to know" card.
+  if (isFitnessMembershipSelected()) {
+    section.style.display = 'none';
+    return;
+  }
+
   section.style.display = '';
 
   const link = document.getElementById('firstSessionVideoLink');
@@ -14952,10 +15032,19 @@ function renderMemberOnboarding(productType) {
   const section = document.getElementById('memberOnboardingSection');
   if (!section) return;
 
+  const isFitness = isFitnessMembershipSelected();
   const show = productType === 'membership';
   section.style.display = show ? '' : 'none';
 
   if (!show) return;
+
+  const classesItem = section.querySelector('.member-onboarding-link--classes')?.closest('.member-onboarding-item');
+  if (classesItem) classesItem.hidden = isFitness;
+
+  const lead = section.querySelector('[data-i18n-key="confirmation.onboarding.lead"], [data-i18n-key="confirmation.onboarding.lead.fitness"]');
+  if (lead) {
+    lead.setAttribute('data-i18n-key', isFitness ? 'confirmation.onboarding.lead.fitness' : 'confirmation.onboarding.lead');
+  }
 
   section.querySelectorAll('[data-i18n-key]').forEach((el) => {
     const key = el.getAttribute('data-i18n-key');
@@ -14972,13 +15061,22 @@ function renderInviteFriends(productType) {
   const section = document.getElementById('inviteFriendsSection');
   if (!section) return;
 
+  // Punch cards have no referrer reward. Keep the card for membership,
+  // 15-day, and /99kr (firstclimb uses punch-card as the underlying type).
+  // Fitness Membership is not a climbing referral offer.
+  if ((productType === 'punch-card' && !isFirstClimbRoute()) || isFitnessMembershipSelected()) {
+    section.hidden = true;
+    section.style.display = 'none';
+    return;
+  }
+
   // Pick the variant: firstclimb wins over productType because the 99kr flow
   // uses its own offer-specific copy and footnote.
   let variant = 'membership';
   if (isFirstClimbRoute()) variant = 'firstclimb';
   else if (productType === '15daypass') variant = '15daypass';
-  else if (productType === 'punch-card') variant = 'punchcard';
 
+  section.hidden = false;
   section.style.display = '';
   section.setAttribute('data-variant', variant);
 
@@ -14988,7 +15086,6 @@ function renderInviteFriends(productType) {
   const titleKey = variant === 'firstclimb' ? 'invite.firstclimb.title' : 'invite.title';
   const subtitleKey = variant === 'firstclimb' ? 'invite.firstclimb.subtitle'
     : variant === '15daypass' ? 'invite.15daypass.subtitle'
-    : variant === 'punchcard' ? 'invite.punchcard.subtitle'
     : 'invite.subtitle';
   const footnoteKey = variant === 'firstclimb' ? 'invite.firstclimb.footnote'
     : variant === 'membership' ? 'invite.footnote'
@@ -14997,9 +15094,27 @@ function renderInviteFriends(productType) {
   const titleEl = section.querySelector('.invite-friends-title');
   const subtitleEl = section.querySelector('.invite-friends-subtitle');
   const footnoteEl = section.querySelector('.invite-friends-footnote');
+  const offerEl = section.querySelector('[data-invite-offer]');
+  const offerLabelEl = section.querySelector('.invite-friends-offer-label');
+  const offerValueEl = section.querySelector('.invite-friends-offer-value');
   if (titleEl) {
     titleEl.setAttribute('data-i18n-key', titleKey);
     titleEl.textContent = t(titleKey);
+  }
+  if (offerEl) {
+    const showOffer = variant === 'membership' || variant === 'firstclimb';
+    offerEl.hidden = !showOffer;
+    if (showOffer) {
+      const offerPrefix = variant === 'firstclimb' ? 'invite.firstclimb.offer' : 'invite.offer';
+      if (offerLabelEl) {
+        offerLabelEl.setAttribute('data-i18n-key', `${offerPrefix}.label`);
+        offerLabelEl.textContent = t(`${offerPrefix}.label`);
+      }
+      if (offerValueEl) {
+        offerValueEl.setAttribute('data-i18n-key', `${offerPrefix}.value`);
+        offerValueEl.textContent = t(`${offerPrefix}.value`);
+      }
+    }
   }
   if (subtitleEl) {
     subtitleEl.setAttribute('data-i18n-key', subtitleKey);
@@ -15069,7 +15184,7 @@ async function handleInviteCopyLink(button) {
   }
 
   trackInviteShare('copy_link');
-  showToast(t('invite.copiedToast') || 'Link copied — share it with your friends!', 'success');
+  showToast(t('invite.copiedToast') || 'Link copied. Share it with your friends!', 'success');
 
   if (!button) return;
   button.classList.add('is-copied');
@@ -15169,7 +15284,7 @@ async function handleInviteShare(method) {
       //   the login page and lands the user in DMs after authentication.
       await copyTextToClipboard(shareText);
       showToast(
-        t('invite.instagramToast') || 'Link copied — paste it into your Instagram DM or story!',
+        t('invite.instagramToast') || 'Link copied. Paste it into your Instagram DM or story!',
         'success'
       );
       if (isMobileUserAgent()) {
@@ -23356,6 +23471,8 @@ function syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder) {
   } else if (productType === 'membership') {
     productName = apiOrder?.subscriptionItems?.[0]?.product?.name
       || document.querySelector('#confirmationMembershipSection [data-summary-field="membership-type"]')?.textContent?.trim()
+      || apiOrder?.membershipType
+      || apiOrder?.items?.[0]?.name
       || null;
   } else if (productType === '15daypass') {
     productName = apiOrder?.subscriptionItems?.[0]?.product?.name
@@ -23415,16 +23532,84 @@ function syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder) {
   }
 }
 
+function isConfirmationValueEmpty(value) {
+  if (value == null) return true;
+  const text = String(value).trim();
+  return text === '' || text === '—' || text === '-';
+}
+
+function mergeConfirmationOrder(apiOrder) {
+  const sessionOrder = state.order || {};
+  if (!apiOrder) return sessionOrder;
+  if (apiOrder === sessionOrder) return apiOrder;
+  return { ...sessionOrder, ...apiOrder };
+}
+
 function setConfirmationSummaryField(el, value, skeletonKind = 'number') {
   if (!el) return;
-  const isEmpty = value == null || value === '' || value === '—';
+  const isEmpty = isConfirmationValueEmpty(value);
+  const field = el.closest('.confirmation-order-field');
+  const gymLine = el.closest('.confirmation-order-gym-line');
+
   if (isEmpty) {
-    if (!el.querySelector('.confirmation-skeleton')) {
-      el.innerHTML = CONFIRMATION_SKELETON_HTML[skeletonKind] || CONFIRMATION_SKELETON_HTML.number;
-    }
+    el.textContent = '';
+    if (field) field.hidden = true;
+    if (gymLine) gymLine.hidden = true;
     return;
   }
-  el.textContent = value;
+
+  el.textContent = String(value);
+  if (field) field.hidden = false;
+  if (gymLine) gymLine.hidden = false;
+}
+
+function syncConfirmationMemberZone(memberZone, hideZone = false) {
+  if (!memberZone) return;
+  if (hideZone) {
+    memberZone.hidden = true;
+    return;
+  }
+  const fields = [...memberZone.querySelectorAll('.confirmation-order-field')];
+  memberZone.hidden = fields.length > 0 && fields.every((field) => field.hidden);
+}
+
+function syncConfirmationMetaLine() {
+  const footer = document.querySelector('#confirmationOrderSection .confirmation-order-zone--meta');
+  const line = footer?.querySelector('.confirmation-order-meta-line');
+  if (!footer || !line) return;
+
+  const numberEl = line.querySelector('[data-summary-field="order-number"]');
+  const dateEl = line.querySelector('[data-summary-field="order-date"]');
+  const hashEl = line.querySelector('[data-order-meta="hash"]');
+  const labelEl = line.querySelector('[data-order-meta="label"]');
+  const sepEl = line.querySelector('.confirmation-order-meta-sep');
+  const hasNumber = numberEl && !isConfirmationValueEmpty(numberEl.textContent);
+  const hasDate = dateEl && !isConfirmationValueEmpty(dateEl.textContent);
+
+  if (numberEl) numberEl.hidden = !hasNumber;
+  if (hashEl) hashEl.hidden = !hasNumber;
+  if (labelEl) labelEl.hidden = !hasNumber;
+  if (dateEl) dateEl.hidden = !hasDate;
+  if (sepEl) sepEl.hidden = !(hasNumber && hasDate);
+  footer.hidden = !hasNumber && !hasDate;
+}
+
+function resolveConfirmationOrderTotal(apiOrder) {
+  const apiSource = state.fullOrder || {};
+  if (apiSource.price?.amount !== undefined && apiSource.price?.amount !== null) {
+    const amount = apiSource.price.amount;
+    return typeof amount === 'object' ? amount.amount / 100 : amount / 100;
+  }
+  if (apiSource.total != null && typeof apiSource.total === 'object') {
+    const amount = apiSource.total.amount ?? apiSource.total;
+    return amount / 100;
+  }
+  if (typeof apiSource.total === 'number') {
+    return apiSource.total / 100;
+  }
+  if (state.order?.total != null) return Number(state.order.total);
+  if (typeof apiOrder?.total === 'number') return Number(apiOrder.total);
+  return null;
 }
 
 function resolveConfirmationPhone(customer, apiOrder) {
@@ -23559,7 +23744,7 @@ function renderConfirmationView() {
   });
 
   const isFirstClimbFlow = isFirstClimbRoute();
-  const apiOrder = state.fullOrder || state.order || null;
+  const apiOrder = mergeConfirmationOrder(state.fullOrder || state.order || null);
 
   const successTitle = document.querySelector('.success-title');
   if (successTitle) {
@@ -23707,19 +23892,15 @@ function renderConfirmationView() {
     }
     setConfirmationSummaryField(orderDate, formattedDate, 'sm');
   }
+  syncConfirmationMetaLine();
 
-  // Order total - from API only (today's charge)
+  // Order total: API first, then the session cart total so a confirmed
+  // success page never sits on a skeleton bar.
   if (orderTotal) {
-    let totalValue = null;
-    if (apiOrder?.price?.amount !== undefined && apiOrder?.price?.amount !== null) {
-      const amount = apiOrder.price.amount;
-      totalValue = typeof amount === 'object' ? amount.amount / 100 : amount / 100;
-    } else if (apiOrder?.total !== undefined && apiOrder?.total !== null) {
-      totalValue = typeof apiOrder.total === 'object' ? apiOrder.total.amount / 100 : apiOrder.total / 100;
-    }
+    const totalValue = resolveConfirmationOrderTotal(apiOrder);
     setConfirmationSummaryField(
       orderTotal,
-      totalValue != null ? formatCurrencyHalfKrone(totalValue) : null,
+      totalValue != null && !Number.isNaN(totalValue) ? formatCurrencyHalfKrone(totalValue) : null,
       'number',
     );
   }
@@ -23756,6 +23937,8 @@ function renderConfirmationView() {
       gym = apiOrder.businessUnit.name;
     } else if (apiOrder?.primaryGym) {
       gym = apiOrder.primaryGym;
+    } else if (state.selectedGymName) {
+      gym = state.selectedGymName;
     }
     orderSection?.querySelectorAll('[data-summary-field="primary-gym"]').forEach((el) => {
       setConfirmationSummaryField(el, gym, 'name');
@@ -23850,6 +24033,11 @@ function renderConfirmationView() {
     const hasMembershipHighlight = gymLabel !== '—';
     if (headerGym) headerGym.textContent = gymLabel;
     if (headerPrice) headerPrice.textContent = priceLabel;
+    const allGymsNote = membershipPill?.querySelector('.success-header-pill-note');
+    if (allGymsNote) {
+      // Fitness is Aalborg-only and does not include climbing.
+      allGymsNote.hidden = isFitnessMembershipSelected();
+    }
     if (membershipPill) {
       membershipPill.style.display = hasMembershipHighlight ? 'block' : 'none';
     }
@@ -24265,6 +24453,8 @@ function createPurchaseItemElement() {
     }
   }
 
+  syncConfirmationMemberZone(memberZone, isFirstClimbFlow);
+  syncConfirmationMetaLine();
   syncConfirmationOrderSummary(productType, isFirstClimbFlow, apiOrder);
 }
 
@@ -25117,7 +25307,8 @@ function nextStep(fromStep) {
     // Check URL parameters for test mode
     const urlParams = new URLSearchParams(window.location.search);
     const testMode = urlParams.get('testSuccess') === 'true';
-    const testProductType = urlParams.get('testProductType') || 'membership'; // membership, 15daypass, punch-card
+    const rawTestProductType = urlParams.get('testProductType') || 'membership'; // membership, fitness, 15daypass, punch-card
+    const testProductType = rawTestProductType === 'fitness' ? 'membership' : rawTestProductType;
     
     // CRITICAL: Check if payment is actually confirmed before showing success page
     // Don't show success page if payment failed (401 error) or payment is pending
@@ -25136,23 +25327,27 @@ function nextStep(fromStep) {
     // Only render confirmation if we have order data AND (payment is confirmed OR we're in test mode)
     // This prevents showing success page when user hasn't completed purchase (unless in test mode)
     if ((state.order && state.orderId && (state.paymentConfirmed !== false || testMode)) || testMode) {
-      if (testMode) {
+      if (testMode && !state.fullOrder) {
         // Use test product type from state if available, otherwise from URL
-        const productType = state.testProductType || testProductType;
-        console.log('[Test Mode] Creating mock order data for testing:', productType);
+        const rawProductType = state.testProductType || rawTestProductType;
+        const isFitness = state.testFitnessMembership === true
+          || urlParams.get('testFitness') === 'true'
+          || rawProductType === 'fitness';
+        const productType = rawProductType === 'fitness' ? 'membership' : rawProductType;
+        console.log('[Test Mode] Creating mock order data for testing:', productType, isFitness ? '(fitness)' : '');
         
         // Create mock order data for testing
         state.order = {
           number: 'TEST-12345',
           date: new Date(),
           items: [
-            { name: productType === 'membership' ? 'Membership' : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
+            { name: productType === 'membership' ? (isFitness ? 'Fitness Membership' : 'Membership') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
           ],
           total: 469,
           memberName: 'Test User',
           membershipNumber: 'TEST-12345',
-          membershipType: productType === 'membership' ? 'Medlemskab' : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
-          primaryGym: 'Boulders Aarhus Nord',
+          membershipType: productType === 'membership' ? (isFitness ? 'Fitness Membership' : 'Medlemskab') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
+          primaryGym: isFitness ? 'Boulders Aalborg' : 'Boulders Aarhus Nord',
           membershipPrice: 469,
         };
         state.orderId = 'TEST-12345';
@@ -25160,6 +25355,7 @@ function nextStep(fromStep) {
         // Set product type for test mode - ensure state is set correctly
         state.testMode = true;
         state.testProductType = productType;
+        state.testFitnessMembership = isFitness;
         state.paymentConfirmed = true; // Set payment confirmed for test mode
         state.paymentFailed = false;
         state.paymentPending = false;
@@ -25190,15 +25386,16 @@ function nextStep(fromStep) {
             }]
           };
         } else {
-          // Default to membership
+          // Default to membership (regular or Fitness)
+          const membershipName = isFitness ? 'Fitness Membership' : 'Medlemskab';
           state.selectedProductType = 'membership';
-          state.membershipPlanId = 'membership-123';
+          state.membershipPlanId = isFitness ? 'fitness-membership-123' : 'membership-123';
           // Mock subscription items with price
           state.fullOrder = {
             subscriptionItems: [{
               product: {
-                name: 'Medlemskab',
-                productLabels: [{ name: 'Public' }]
+                name: membershipName,
+                productLabels: isFitness ? [{ name: 'fitness' }] : [{ name: 'Public' }]
               },
               price: { amount: 46900 } // 469.00 DKK in cents
             }]
@@ -25209,6 +25406,7 @@ function nextStep(fromStep) {
           productType: productType,
           selectedProductType: state.selectedProductType,
           membershipPlanId: state.membershipPlanId,
+          isFitnessMembership: isFitness,
           hasValueCardItems: !!(state.fullOrder?.valueCardItems?.length),
           hasSubscriptionItems: !!(state.fullOrder?.subscriptionItems?.length)
         });
@@ -25217,7 +25415,7 @@ function nextStep(fromStep) {
     } else {
       // If we somehow ended up on step 5 without an order, go back to step 1
       console.warn('[Navigation] Attempted to show success page without order data or payment not confirmed. Not rendering success page.');
-      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|15daypass|punch-card to URL');
+      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|fitness|15daypass|punch-card to URL');
       // Don't redirect - let the payment failed/pending handlers show the appropriate message
     }
   }
@@ -26933,6 +27131,64 @@ function updateFAQVisibility() {
     // Render FAQ when showing
     renderFAQ();
   }
+}
+
+let receiptHighlightTeardown = null;
+
+function highlightDetailedReceiptButton() {
+  const receiptBtn = document.getElementById('showDetailedReceiptBtn');
+  if (!receiptBtn) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  if (typeof receiptHighlightTeardown === 'function') {
+    receiptHighlightTeardown();
+    receiptHighlightTeardown = null;
+  }
+
+  let observer = null;
+  let fallbackId = 0;
+
+  const onAnimationEnd = (event) => {
+    if (event.animationName && event.animationName !== 'receipt-btn-highlight') return;
+    receiptBtn.classList.remove('is-highlighted');
+    receiptBtn.removeEventListener('animationend', onAnimationEnd);
+  };
+
+  const play = () => {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    if (fallbackId) {
+      window.clearTimeout(fallbackId);
+      fallbackId = 0;
+    }
+    receiptBtn.removeEventListener('animationend', onAnimationEnd);
+    receiptBtn.classList.remove('is-highlighted');
+    void receiptBtn.offsetWidth;
+    receiptBtn.addEventListener('animationend', onAnimationEnd);
+    receiptBtn.classList.add('is-highlighted');
+  };
+
+  receiptHighlightTeardown = () => {
+    if (observer) observer.disconnect();
+    if (fallbackId) window.clearTimeout(fallbackId);
+    receiptBtn.removeEventListener('animationend', onAnimationEnd);
+    receiptBtn.classList.remove('is-highlighted');
+  };
+
+  const rect = receiptBtn.getBoundingClientRect();
+  const inView = rect.top < window.innerHeight * 0.92 && rect.bottom > 48;
+  if (inView) {
+    play();
+    return;
+  }
+
+  observer = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) play();
+  }, { threshold: 0.45 });
+  observer.observe(receiptBtn);
+  fallbackId = window.setTimeout(play, 900);
 }
 
 /**
