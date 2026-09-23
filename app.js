@@ -7335,8 +7335,56 @@ if (document.readyState === 'loading') {
 }
 window.addEventListener('load', syncHeaderHeight, { once: true });
 
+// Payment return lands on a fresh document whose first panel is step 1.
+// The order check that decides success vs failed vs pending is async, so
+// revealing the page in init() paints step 1 for a frame. Hold the overlay
+// until that decision is on screen.
+let suppressLoadingOverlayReveal = false;
+let paymentReturnOverlayTimer = null;
+
+function holdLoadingOverlayForPaymentReturn() {
+  suppressLoadingOverlayReveal = true;
+  clearTimeout(paymentReturnOverlayTimer);
+  // If the order request never settles, reveal whatever is parked underneath
+  // rather than leaving the spinner up forever.
+  paymentReturnOverlayTimer = setTimeout(() => {
+    releasePaymentReturnOverlay();
+  }, 15000);
+}
+
+function releasePaymentReturnOverlay() {
+  if (!suppressLoadingOverlayReveal) return;
+  suppressLoadingOverlayReveal = false;
+  clearTimeout(paymentReturnOverlayTimer);
+  paymentReturnOverlayTimer = null;
+  hideLoadingOverlay();
+}
+
+// Step 1 is the active panel in index.html. Swap to confirmation before
+// anything can reveal the page, so a completed purchase never paints the gym step.
+function parkOnConfirmationStep() {
+  state.currentStep = TOTAL_STEPS;
+  document.querySelectorAll('.step-panel').forEach((panel) => {
+    const isConfirmation = panel.id === 'step-5';
+    panel.classList.toggle('active', isConfirmation);
+    panel.style.display = isConfirmation ? 'block' : 'none';
+    panel.style.visibility = isConfirmation ? 'visible' : 'hidden';
+    panel.style.opacity = isConfirmation ? '1' : '0';
+  });
+  const stepIndicator = document.querySelector('.step-indicator');
+  if (stepIndicator) stepIndicator.classList.add('hidden');
+  const stepContent = document.querySelector('.step-content');
+  if (stepContent) {
+    stepContent.classList.add('success-page-active');
+    stepContent.style.marginTop = '0';
+    stepContent.style.flex = 'none';
+  }
+}
+
 // Hide loading overlay and show main content
 function hideLoadingOverlay() {
+  if (suppressLoadingOverlayReveal) return;
+
   const loadingOverlay = document.getElementById('loadingOverlay');
   const mainContent = document.getElementById('mainContent');
   const headerContent = document.getElementById('headerContent');
@@ -7352,6 +7400,8 @@ function hideLoadingOverlay() {
   ]);
 
   backgroundSettled.then(() => {
+    if (suppressLoadingOverlayReveal) return;
+
     // Show header and main content
     if (headerContent) {
       headerContent.style.display = '';
@@ -9351,32 +9401,21 @@ document.addEventListener('DOMContentLoaded', () => {
     clearStoredOrderData('page-refresh');
   }
   
-  // CRITICAL: Check for payment errors BEFORE init() to prevent step 1 from showing
+  // Park on confirmation BEFORE init() reveals the page. Step 1 is the
+  // default active panel, and the order fetch that confirms payment is async,
+  // so without this the gym step flashes between the payment window and success.
   if (orderId && (paymentReturn === 'return' || hasReceiptParam)) {
-    // We're returning from payment - check for errors first
     console.log('[Payment Return] Detected payment return for order:', orderId);
-    
-    // Set order ID in state if available
     state.orderId = parseInt(orderId, 10);
-    
-    // If there's a payment error, go directly to payment failed page
+    holdLoadingOverlayForPaymentReturn();
+    parkOnConfirmationStep();
+
     const hasPaymentError = paymentError || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
     if (hasPaymentError) {
-      console.log('[Payment Return] Payment error detected - preventing step 1 from showing');
-      // Set step to 5 immediately to prevent step 1 from showing
-      state.currentStep = TOTAL_STEPS;
+      console.log('[Payment Return] Payment error detected - staying on confirmation until the failed state is ready');
       state.paymentFailed = true;
       state.paymentConfirmed = false;
       state.paymentPending = false;
-      
-      // CRITICAL: Hide step 1 immediately before init() runs
-      // This prevents the flash of step 1
-      const step1Panel = document.getElementById('step-1');
-      if (step1Panel) {
-        step1Panel.style.display = 'none';
-        step1Panel.style.visibility = 'hidden';
-        step1Panel.style.opacity = '0';
-      }
     }
   }
   
@@ -22024,6 +22063,7 @@ async function loadOrderForConfirmation(orderId) {
           updateMainSubtitle();
           trackConfirmedPurchase({ order: summaryOrder, orderId, storedOrder, storedCustomer });
           renderConfirmationView();
+          releasePaymentReturnOverlay();
           return;
         }
 
@@ -22044,6 +22084,7 @@ async function loadOrderForConfirmation(orderId) {
         state.paymentFailed = true;
         state.currentStep = TOTAL_STEPS;
         showStep(TOTAL_STEPS);
+        releasePaymentReturnOverlay();
         return;
       }
     }
@@ -22075,12 +22116,15 @@ async function loadOrderForConfirmation(orderId) {
       return; // Don't continue with success page logic
     }
     
-    // Payment is confirmed - navigate to step 5 and show success
+    // Payment is confirmed - navigate to step 5 and show success.
+    // Reveal now, before finalize/polling, so the success page is what
+    // replaces the payment window. Step 1 was never shown.
     state.currentStep = TOTAL_STEPS;
     showStep(TOTAL_STEPS);
     updateStepIndicator();
     updateNavigationButtons();
     updateMainSubtitle();
+    releasePaymentReturnOverlay();
     
     // DETAILED LOGGING: Check order status and structure to diagnose membership creation issue
     const diagnosticTime = Date.now();
@@ -22646,6 +22690,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
     const confirmationHeader = step5Panel.querySelector('.confirmation-header');
     if (!confirmationHeader) {
       console.error('[Payment Failed] Confirmation header not found');
+      releasePaymentReturnOverlay();
       return;
     }
     
@@ -23095,6 +23140,7 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
   updateMainSubtitle();
   
   console.log('[Payment Failed] ✅ Payment failed page displayed');
+  releasePaymentReturnOverlay();
 }
 
 function showPaymentPendingMessage(order, orderId) {
@@ -23177,7 +23223,8 @@ function showPaymentPendingMessage(order, orderId) {
   
   // Show a message that the page will auto-refresh
   console.log('[Payment Pending] Showing payment pending message. Page will check payment status automatically.');
-  
+  releasePaymentReturnOverlay();
+
   // Only start polling if we have an orderId
   if (!orderId) {
     console.warn('[Payment Pending] No orderId provided, cannot poll for payment status');
