@@ -17975,13 +17975,15 @@ function updatePaymentOverview() {
             // Use calculated correct price
             payNowAmount = expectedPrice.amountInDKK;
             
-            // Set billing period to today - end of month
+            // The amount includes next month from the 16th, so the label has to as well.
             const currentMonth = today.getMonth();
             const currentYear = today.getFullYear();
-            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+            const periodEnd = expectedPrice.includesNextMonth
+              ? new Date(currentMonth === 11 ? currentYear + 1 : currentYear, (currentMonth === 11 ? 0 : currentMonth + 1) + 1, 0)
+              : new Date(currentYear, currentMonth + 1, 0);
             billingPeriod = {
               start: today,
-              end: lastDayOfMonth
+              end: periodEnd
             };
             console.log('[Payment Overview] ✅ Using client-calculated correct price:', payNowAmount, 'DKK');
             console.warn('[Payment Overview] ⚠️ NOTE: Using calculated price - verify against backend order price');
@@ -18065,7 +18067,6 @@ function updatePaymentOverview() {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const startDateStr = getTodayLocalDateString();
-          const dayOfMonth = today.getDate();
           if (orderAPI && orderAPI._calculateExpectedPartialMonthPrice) {
           // Try to use the helper function if available
             const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(membership.id, startDateStr);
@@ -18075,7 +18076,6 @@ function updatePaymentOverview() {
               // Set billing period based on whether next month is included
               const currentMonth = today.getMonth();
               const currentYear = today.getFullYear();
-              const dayOfMonth = today.getDate();
               
               if (expectedPrice.includesNextMonth) {
                 // Billing period extends to end of next month
