@@ -727,7 +727,10 @@
 }
 
 html {
+    /* clip, not hidden. overflow-x: hidden on the scroll root makes iOS Safari
+       freeze transform animations in the page, including the whole step indicator. */
     overflow-x: hidden;
+    overflow-x: clip;
     height: 100%;
     width: 100%;
     max-width: 100vw;
@@ -747,6 +750,7 @@ html {
 body > * {
     max-width: 100vw;
     overflow-x: hidden;
+    overflow-x: clip;
 }
 
 /* Ensure header can use sticky positioning */
@@ -758,8 +762,11 @@ body {
     background-color: #1a1a1a;
     width: 100%;
     max-width: 100vw;
+    /* y stays visible so x can stay clip. auto on y forces clip back to hidden,
+       which is the value that freezes transform animations on iOS. */
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-x: clip;
+    overflow-y: visible;
     min-height: 100vh; /* Ensures body is at least viewport height */
     display: flex;
     flex-direction: column;
@@ -1429,37 +1436,35 @@ body.bg-ready::before {
     animation: border-to-active 0.5s ease forwards;
 }
 
-.step-circle.active::before {
-    content: '';
+.step-marker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* Real element, no mask. A masked pseudo-element freezes the whole indicator
+   layer on iOS, so the comet and the connector gleams stop together. */
+.step-ring {
     position: absolute;
-    /* Explicit box, not inset alone. iOS Safari sizes a masked pseudo-element
-       from width/height; inset-only boxes paint as empty, so the comet never shows. */
-    top: -4px;
-    left: -4px;
-    width: calc(100% + 8px);
-    height: calc(100% + 8px);
+    top: -5px;
+    left: -5px;
+    width: calc(100% + 10px);
+    height: calc(100% + 10px);
     border-radius: 50%;
+    box-sizing: border-box;
+    border: 3px solid rgba(244, 1, 245, 0.08);
+    border-top-color: #fff;
+    border-right-color: #ff5cff;
+    border-bottom-color: rgba(244, 1, 245, 0.45);
+    border-left-color: rgba(244, 1, 245, 0);
     pointer-events: none;
-    z-index: 0;
-    /* Softness lives in the gradient stops. Do not add filter: blur() —
-       it forces a full-layer paint on every spin frame. */
-    background: conic-gradient(
-        from 0deg,
-        rgba(244, 1, 245, 0) 0deg,
-        rgba(244, 1, 245, 0.06) 80deg,
-        rgba(244, 1, 245, 0.2) 165deg,
-        rgba(244, 1, 245, 0.5) 235deg,
-        rgba(255, 80, 255, 0.9) 292deg,
-        #ffc2ff 318deg,
-        #fff 332deg,
-        #ff5cff 346deg,
-        rgba(244, 1, 245, 0) 360deg
-    );
-    /* One mask image. The two-layer mask-composite donut does not paint on
-       iOS, and a finite fade sharing this element stops the infinite spin
-       when the fade ends (WebKit drops every animation on that element). */
-    -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 3px), #000 0);
-    mask: radial-gradient(farthest-side, #0000 calc(100% - 3px), #000 0);
+    opacity: 0;
+}
+
+.step.active .step-ring {
+    opacity: 1;
     animation: step-ring-spin 1.15s linear infinite;
 }
 
@@ -1564,13 +1569,13 @@ body.bg-ready::before {
 }
 
 /* Traveling gleam on connectors after the active step — a hint of
-   direction, never a full fill (that would read as already completed). */
-.step.active + .step-connector::before,
-.step.active + .step-connector + .step + .step-connector::before {
-    content: '';
+   direction, never a full fill (that would read as already completed).
+   Animate `left`, not transform: iOS does not run transform animations
+   inside this connector's overflow:hidden. */
+.step-gleam {
     position: absolute;
     top: 0;
-    left: 0;
+    left: -55%;
     width: 55%;
     height: 100%;
     background: linear-gradient(
@@ -1581,20 +1586,23 @@ body.bg-ready::before {
         rgba(244, 1, 245, 0.12) 70%,
         transparent 100%
     );
+    pointer-events: none;
+    opacity: 0;
+}
+
+.step.active + .step-connector .step-gleam,
+.step.active + .step-connector + .step + .step-connector .step-gleam {
+    opacity: 1;
     animation: connector-gleam 1.8s linear infinite;
 }
 
-.step.active + .step-connector + .step + .step-connector::before {
+.step.active + .step-connector + .step + .step-connector .step-gleam {
     animation-delay: 0.4s;
 }
 
 @keyframes connector-gleam {
-    0% {
-        transform: translateX(-130%);
-    }
-    100% {
-        transform: translateX(230%);
-    }
+    from { left: -55%; }
+    to { left: 110%; }
 }
 
 .step-connector.animating::after {
@@ -12889,14 +12897,14 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
         animation: none;
     }
 
-    .step-circle.active::before,
-    .step.active + .step-connector::before,
-    .step.active + .step-connector + .step + .step-connector::before,
+    .step.active .step-ring,
+    .step.active + .step-connector .step-gleam,
+    .step.active + .step-connector + .step + .step-connector .step-gleam,
     .step-connector.animating::after {
         animation: none;
     }
 
-    .step-circle.active::before {
+    .step.active .step-ring {
         opacity: 1;
     }
 
