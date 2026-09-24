@@ -1420,6 +1420,7 @@ body.bg-ready::before {
     overflow: visible; /* Ensure pseudo-elements aren't clipped */
     flex-shrink: 0; /* Prevent circle from shrinking */
     margin: 0 auto; /* Center the circle */
+    z-index: 1; /* Keep the number above the spinning ring */
 }
 
 .step-circle.active {
@@ -1435,11 +1436,26 @@ body.bg-ready::before {
     animation: border-to-active 0.5s ease forwards;
 }
 
-.step-circle.active::before {
-    content: '';
+.step-marker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* iPhone Safari does not run a transform animation on a masked layer, so a
+   rotating ::before stays frozen while desktop and iPad keep spinning.
+   Turn the gradient angle instead. @property is required or the angle
+   does not interpolate and the ring never moves. */
+@property --step-ring-angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+}
+
+.step-ring {
     position: absolute;
-    /* Explicit box, not inset alone. iOS Safari sizes a masked pseudo-element
-       from width/height; inset-only boxes paint as empty, so the comet never shows. */
     top: -4px;
     left: -4px;
     width: calc(100% + 8px);
@@ -1447,10 +1463,9 @@ body.bg-ready::before {
     border-radius: 50%;
     pointer-events: none;
     z-index: 0;
-    /* Softness lives in the gradient stops. Do not add filter: blur() —
-       it forces a full-layer paint on every spin frame. */
+    opacity: 0;
     background: conic-gradient(
-        from 0deg,
+        from var(--step-ring-angle),
         rgba(244, 1, 245, 0) 0deg,
         rgba(244, 1, 245, 0.06) 80deg,
         rgba(244, 1, 245, 0.2) 165deg,
@@ -1461,11 +1476,12 @@ body.bg-ready::before {
         #ff5cff 346deg,
         rgba(244, 1, 245, 0) 360deg
     );
-    /* One mask image. The two-layer mask-composite donut does not paint on
-       iOS, and a finite fade sharing this element stops the infinite spin
-       when the fade ends (WebKit drops every animation on that element). */
     -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 3px), #000 0);
     mask: radial-gradient(farthest-side, #0000 calc(100% - 3px), #000 0);
+}
+
+.step.active .step-ring {
+    opacity: 1;
     animation: step-ring-spin 1.15s linear infinite;
 }
 
@@ -1480,8 +1496,7 @@ body.bg-ready::before {
 
 @keyframes step-ring-spin {
     to {
-        -webkit-transform: rotate(360deg);
-        transform: rotate(360deg);
+        --step-ring-angle: 360deg;
     }
 }
 
@@ -12893,14 +12908,14 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
         animation: none;
     }
 
-    .step-circle.active::before,
+    .step.active .step-ring,
     .step.active + .step-connector::before,
     .step.active + .step-connector + .step + .step-connector::before,
     .step-connector.animating::after {
         animation: none;
     }
 
-    .step-circle.active::before {
+    .step.active .step-ring {
         opacity: 1;
     }
 
