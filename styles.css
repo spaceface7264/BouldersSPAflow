@@ -1432,9 +1432,13 @@ body.bg-ready::before {
 .step-circle.active::before {
     content: '';
     position: absolute;
-    inset: -4px;
+    /* Explicit box, not inset alone. iOS Safari sizes a masked pseudo-element
+       from width/height; inset-only boxes paint as empty, so the comet never shows. */
+    top: -4px;
+    left: -4px;
+    width: calc(100% + 8px);
+    height: calc(100% + 8px);
     border-radius: 50%;
-    padding: 3px;
     pointer-events: none;
     z-index: 0;
     /* Softness lives in the gradient stops. Do not add filter: blur() —
@@ -1451,12 +1455,12 @@ body.bg-ready::before {
         #ff5cff 346deg,
         rgba(244, 1, 245, 0) 360deg
     );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask-composite: exclude;
-    will-change: transform;
-    animation: step-ring-spin 1.15s linear infinite, beam-fade-in 0.45s ease forwards;
+    /* One mask image. The two-layer mask-composite donut does not paint on
+       iOS, and a finite fade sharing this element stops the infinite spin
+       when the fade ends (WebKit drops every animation on that element). */
+    -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 3px), #000 0);
+    mask: radial-gradient(farthest-side, #0000 calc(100% - 3px), #000 0);
+    animation: step-ring-spin 1.15s linear infinite;
 }
 
 @keyframes border-to-active {
@@ -1468,17 +1472,9 @@ body.bg-ready::before {
     }
 }
 
-@keyframes beam-fade-in {
-    0% {
-        opacity: 0;
-    }
-    100% {
-        opacity: 1;
-    }
-}
-
 @keyframes step-ring-spin {
     to {
+        -webkit-transform: rotate(360deg);
         transform: rotate(360deg);
     }
 }
