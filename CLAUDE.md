@@ -9,7 +9,7 @@ npm run dev                # Vite dev server on :5173 (HTTPS if key.pem/cert.pem
 npm run build              # tsc + vite build → dist/
 npm run lint               # ESLint on .ts/.tsx, max-warnings 0
 npm run preview            # Preview the production build
-npm run deploy             # Build + wrangler pages deploy to bouldersspaflow
+npm run deploy             # Build → ./dist, then wrangler pages deploy (manual prod; auto-deploy off)
 npm run deploy:cloudflare  # Build + wrangler deploy --assets=./dist (Workers)
 ```
 
