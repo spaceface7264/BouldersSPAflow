@@ -1,13 +1,15 @@
 // Cloudflare Pages Function: live sales ledger for the Boulders Conversion Dashboard.
 //
-// The browser sends { orderId, landingPath, attribution } plus the customer's
-// Bearer token right after a confirmed purchase. We do NOT trust the browser's
-// product data: this function fetches the order from BRP with that token and
-// stores what BRP says. A fake call cannot create a sale that BRP doesn't have.
+// The browser sends { orderId, landingPath, attribution, attributionFirst }
+// plus the customer's Bearer token right after a confirmed purchase. We do NOT
+// trust the browser's product data: this function fetches the order from BRP
+// with that token and stores what BRP says. A fake call cannot create a sale
+// that BRP doesn't have.
 //
 // Privacy: only order-level, non-personal fields are stored (order id, gym,
-// products, amounts, status, landing path, UTM). Never names, emails, phone
-// numbers, customer ids or click ids.
+// products, amounts, status, landing path, UTM / click-id *type*). Never names,
+// emails, phone numbers, customer ids or click-id values.
+// attribution = last touch (7-day lookback); attributionFirst = first touch.
 //
 // IMPORTANT: This is a non-blocking ledger, NOT a source of truth.
 // Failures here must NEVER affect checkout. The client fires this with
@@ -38,15 +40,22 @@ interface Env {
   ENVIRONMENT?: string;
 }
 
+interface AttributionTouch {
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  click_id_type?: string | null;
+}
+
 interface LogPayload {
   orderId?: number | string;
   landingPath?: string | null;
-  attribution?: {
-    utm_source?: string | null;
-    utm_medium?: string | null;
-    utm_campaign?: string | null;
-    click_id_type?: string | null;
-  } | null;
+  attribution?: AttributionTouch | null;
+  attributionFirst?: AttributionTouch | null;
+}
+
+function normalizeClickIdType(value: unknown): string | null {
+  return ['gclid', 'fbclid', 'ttclid'].includes(String(value)) ? String(value) : null;
 }
 
 function validateOrigin(origin: string | null): string | null {
@@ -218,18 +227,21 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
 
   const now = new Date();
   const attribution = body.attribution || {};
-  const clickIdType = ['gclid', 'fbclid', 'ttclid'].includes(String(attribution.click_id_type))
-    ? String(attribution.click_id_type) : null;
+  const attributionFirst = body.attributionFirst || {};
+  const clickIdType = normalizeClickIdType(attribution.click_id_type);
+  const firstClickIdType = normalizeClickIdType(attributionFirst.click_id_type);
   const environment = env.ENVIRONMENT ||
     (origin && origin.endsWith('.pages.dev') ? 'preview' : origin?.includes('localhost') ? 'dev' : 'production');
 
   const db = env.SALES_DB;
   const statements: D1PreparedStatement[] = [
     // Idempotent: first call inserts; later calls only refresh status/paid.
+    // utm_* = last touch; first_* = first touch within the 7-day browser window.
     db.prepare(
       `INSERT INTO live_sales (order_id, logged_at, sale_date, gym_id, gym_name, status_id, status_name, paid,
-         total_kr, is_first_climb, landing_path, utm_source, utm_medium, utm_campaign, click_id_type, environment)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+         total_kr, is_first_climb, landing_path, utm_source, utm_medium, utm_campaign, click_id_type, environment,
+         first_utm_source, first_utm_medium, first_utm_campaign, first_click_id_type)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
        ON CONFLICT(order_id) DO UPDATE SET
          status_id = excluded.status_id,
          status_name = excluded.status_name,
@@ -251,6 +263,10 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
       clamp(attribution.utm_campaign, 150),
       clickIdType,
       environment,
+      clamp(attributionFirst.utm_source, 100),
+      clamp(attributionFirst.utm_medium, 100),
+      clamp(attributionFirst.utm_campaign, 150),
+      firstClickIdType,
     ),
     ...items.map((it, i) =>
       db.prepare(
