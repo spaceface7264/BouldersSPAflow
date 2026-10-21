@@ -17,7 +17,7 @@ Numbers are preliminary. The morning BRP pull is the official source.
 2. Create the tables:
    `npx wrangler d1 execute boulders-sales --remote --file=migrations/0001_live_sales.sql`
 3. Bind it to the Pages project: Cloudflare dashboard → Workers & Pages →
-   boulders-membership-flow → Settings → Bindings → Add → D1 database →
+   bouldersspaflow → Settings → Bindings → Add → D1 database →
    variable name `SALES_DB`, database `boulders-sales`. Do it for Production and Preview.
 4. Deploy as usual. Until step 3 is done the endpoint answers `not-configured` and does nothing.
 

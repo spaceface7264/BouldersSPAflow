@@ -140,8 +140,8 @@ Three copies of this app are published. They are not equivalent.
 `_headers` is a Cloudflare Pages feature. The GitHub Pages copy ignores it and publishes the full
 signup and checkout flow with no security headers. Retiring that workflow is an open decision.
 
-`npm run deploy` in `package.json` is **stale** — it targets `--project-name=boulders-membership-flow`,
-which no longer resolves, and deploys the repo root rather than `./dist`. Do not rely on it.
+`npm run deploy` in `package.json` targets `--project-name=bouldersspaflow` (join.boulders.dk).
+It deploys the repo root rather than `./dist` — confirm that matches your Pages asset layout before using it.
 
 ### Verify a deploy
 

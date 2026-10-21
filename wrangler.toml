@@ -1,5 +1,11 @@
-name = "boulders-membership-flow"
+name = "bouldersspaflow"
 compatibility_date = "2026-01-02"
+
+# Shared with dashboard.boulders.dk (boulders-dashboard Pages project).
+[[d1_databases]]
+binding = "SALES_DB"
+database_name = "boulders-sales"
+database_id = "da4055a2-e96b-4611-99a3-b4132d18ed72"
 
 # RECOMMENDED: Use Cloudflare Pages (not Workers)
 # Deploy command: npx wrangler pages deploy ./dist
