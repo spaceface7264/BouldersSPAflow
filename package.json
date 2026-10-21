@@ -1,5 +1,5 @@
 {
-  "name": "boulders-membership-flow",
+  "name": "bouldersspaflow",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "prod": "npx tsc && npx vite build",
     "lint": "npx eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "npx vite preview",
-    "deploy": "npm run build && npx wrangler pages deploy . --project-name=boulders-membership-flow",
+    "deploy": "npm run build && npx wrangler pages deploy . --project-name=bouldersspaflow",
     "deploy:worker": "npx wrangler deploy --assets=./dist",
     "deploy:cloudflare": "npm run build && npx wrangler deploy --assets=./dist"
   },
