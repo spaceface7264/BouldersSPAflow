@@ -21850,27 +21850,215 @@ function isFirstClimbPurchase(order = null, storedOrder = null) {
 // ===========================
 // Live sales ledger (Conversion Dashboard)
 // ===========================
-// First-touch attribution for this browser session: UTM fields and which click
-// id type was present. The click id value itself is never stored or sent.
+// Attribution: UTM / click-id *type* / referrer-derived organic. Click-id values
+// are never stored. With Cookiebot statistics consent we keep first+last touch
+// in localStorage for 7 days; without it we fall back to sessionStorage
+// first-touch only (same tab/session as before, plus referrer fill).
 const SALES_ATTRIBUTION_KEY = 'boulders_sales_attribution';
+const SALES_ATTRIBUTION_LS_KEY = 'boulders_sales_attribution_v2';
 const SALES_LOGGED_KEY = 'boulders_sales_logged';
-(function captureSalesAttribution() {
+const SALES_ATTRIBUTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function hasSalesStatisticsConsent() {
   try {
-    if (sessionStorage.getItem(SALES_ATTRIBUTION_KEY)) return;
+    if (window.Cookiebot && window.Cookiebot.consent) {
+      return !!window.Cookiebot.consent.statistics;
+    }
+  } catch (_) { /* ignore */ }
+  return false;
+}
+
+function touchHasSignal(touch) {
+  return !!(touch && (touch.utm_source || touch.utm_medium || touch.utm_campaign || touch.click_id_type));
+}
+
+function isOwnSalesHost(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  if (!h) return true;
+  if (h === 'join.boulders.dk' || h.endsWith('.join.boulders.dk')) return true;
+  if (h === 'boulders.dk' || h === 'www.boulders.dk') return true;
+  if (h === 'localhost' || h === '127.0.0.1') return true;
+  if (h.endsWith('.pages.dev') && h.includes('bouldersspaflow')) return true;
+  return false;
+}
+
+function referrerTouchFromDocument() {
+  try {
+    const raw = document.referrer;
+    if (!raw) return null;
+    const url = new URL(raw);
+    if (isOwnSalesHost(url.hostname)) return null;
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    let source = null;
+    let medium = 'organic';
+    if (/(^|\.)google\./.test(host)) source = 'google';
+    else if (/(^|\.)bing\./.test(host)) source = 'bing';
+    else if (/(^|\.)yahoo\./.test(host)) source = 'yahoo';
+    else if (/(^|\.)duckduckgo\./.test(host)) source = 'duckduckgo';
+    else if (/(^|\.)instagram\./.test(host)) source = 'instagram';
+    else if (/(^|\.)facebook\./.test(host) || /(^|\.)fb\./.test(host) || host === 'm.facebook.com' || host === 'l.facebook.com') {
+      source = 'facebook';
+    } else if (/(^|\.)tiktok\./.test(host)) source = 'tiktok';
+    else {
+      source = host.slice(0, 100);
+      medium = 'referral';
+    }
+    return {
+      utm_source: source,
+      utm_medium: medium,
+      utm_campaign: null,
+      click_id_type: null,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function buildSalesTouch() {
+  try {
     const params = new URLSearchParams(window.location.search);
     const pick = (k) => (params.get(k) || '').trim().slice(0, 150) || null;
     const clickIdType = ['gclid', 'fbclid', 'ttclid'].find((k) => params.has(k)) || null;
-    const attribution = {
+    const fromUtm = {
       utm_source: pick('utm_source'),
       utm_medium: pick('utm_medium'),
       utm_campaign: pick('utm_campaign'),
       click_id_type: clickIdType,
     };
-    if (attribution.utm_source || attribution.utm_medium || attribution.utm_campaign || clickIdType) {
-      sessionStorage.setItem(SALES_ATTRIBUTION_KEY, JSON.stringify(attribution));
+    if (touchHasSignal(fromUtm)) return fromUtm;
+    return referrerTouchFromDocument();
+  } catch (_) {
+    return null;
+  }
+}
+
+function readDurableSalesAttribution() {
+  try {
+    const raw = localStorage.getItem(SALES_ATTRIBUTION_LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      localStorage.removeItem(SALES_ATTRIBUTION_LS_KEY);
+      return null;
     }
-  } catch (_) { /* storage blocked: skip */ }
+    if (!parsed.expiresAt || Date.now() > Number(parsed.expiresAt)) {
+      localStorage.removeItem(SALES_ATTRIBUTION_LS_KEY);
+      return null;
+    }
+    return parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeDurableSalesAttribution(store) {
+  try {
+    localStorage.setItem(SALES_ATTRIBUTION_LS_KEY, JSON.stringify(store));
+  } catch (_) { /* storage blocked */ }
+}
+
+function clearDurableSalesAttribution() {
+  try {
+    localStorage.removeItem(SALES_ATTRIBUTION_LS_KEY);
+  } catch (_) { /* ignore */ }
+}
+
+function readSessionSalesAttribution() {
+  try {
+    return JSON.parse(sessionStorage.getItem(SALES_ATTRIBUTION_KEY) || 'null');
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeSessionSalesAttribution(touch) {
+  try {
+    if (!touchHasSignal(touch)) return;
+    if (sessionStorage.getItem(SALES_ATTRIBUTION_KEY)) return;
+    sessionStorage.setItem(SALES_ATTRIBUTION_KEY, JSON.stringify(touch));
+  } catch (_) { /* storage blocked */ }
+}
+
+function upsertDurableSalesAttribution(touch) {
+  if (!touchHasSignal(touch)) return;
+  const now = Date.now();
+  const existing = readDurableSalesAttribution();
+  const expiresAt = now + SALES_ATTRIBUTION_TTL_MS;
+  if (!existing || !touchHasSignal(existing.first)) {
+    writeDurableSalesAttribution({ first: touch, last: touch, expiresAt });
+    return;
+  }
+  writeDurableSalesAttribution({
+    first: existing.first,
+    last: touch,
+    expiresAt,
+  });
+}
+
+function migrateSessionTouchToDurable() {
+  const sessionTouch = readSessionSalesAttribution();
+  if (touchHasSignal(sessionTouch)) {
+    upsertDurableSalesAttribution(sessionTouch);
+  }
+}
+
+function captureSalesAttribution() {
+  const touch = buildSalesTouch();
+  if (!touchHasSignal(touch)) return;
+
+  if (hasSalesStatisticsConsent()) {
+    upsertDurableSalesAttribution(touch);
+    // Keep a session copy too so a mid-session consent revoke still has a fallback.
+    try {
+      if (!sessionStorage.getItem(SALES_ATTRIBUTION_KEY)) {
+        sessionStorage.setItem(SALES_ATTRIBUTION_KEY, JSON.stringify(touch));
+      }
+    } catch (_) { /* ignore */ }
+    return;
+  }
+
+  writeSessionSalesAttribution(touch);
+}
+
+function syncSalesAttributionWithConsent() {
+  if (hasSalesStatisticsConsent()) {
+    migrateSessionTouchToDurable();
+    captureSalesAttribution();
+  } else {
+    clearDurableSalesAttribution();
+  }
+}
+
+(function initSalesAttribution() {
+  captureSalesAttribution();
+  const events = [
+    'CookiebotOnConsentReady',
+    'CookiebotOnAccept',
+    'CookiebotOnAcceptAll',
+    'CookiebotOnDecline',
+    'CookiebotOnDeclineAll',
+  ];
+  for (const name of events) {
+    window.addEventListener(name, syncSalesAttributionWithConsent);
+  }
 })();
+
+function resolveSalesAttributionForLog() {
+  if (hasSalesStatisticsConsent()) {
+    const durable = readDurableSalesAttribution();
+    if (durable && touchHasSignal(durable.last)) {
+      return {
+        attribution: durable.last,
+        attributionFirst: touchHasSignal(durable.first) ? durable.first : null,
+      };
+    }
+  }
+  const sessionTouch = readSessionSalesAttribution();
+  if (touchHasSignal(sessionTouch)) {
+    return { attribution: sessionTouch, attributionFirst: sessionTouch };
+  }
+  return { attribution: null, attributionFirst: null };
+}
 
 // Fire-and-forget: tell our own ledger an order completed. The server verifies
 // the order with BRP before storing it. Never blocks or throws.
@@ -21885,8 +22073,7 @@ function logLiveSale(orderId) {
     const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
     if (!accessToken) return;
 
-    let attribution = null;
-    try { attribution = JSON.parse(sessionStorage.getItem(SALES_ATTRIBUTION_KEY) || 'null'); } catch (_) {}
+    const { attribution, attributionFirst } = resolveSalesAttributionForLog();
 
     fetch('/api/sales/log', {
       method: 'POST',
@@ -21898,6 +22085,7 @@ function logLiveSale(orderId) {
         orderId: key,
         landingPath: normalizePathname(window.location.pathname),
         attribution,
+        attributionFirst,
       }),
       keepalive: true,
     })
