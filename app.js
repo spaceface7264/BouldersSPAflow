@@ -21847,11 +21847,80 @@ function isFirstClimbPurchase(order = null, storedOrder = null) {
   return false;
 }
 
+// ===========================
+// Live sales ledger (Conversion Dashboard)
+// ===========================
+// First-touch attribution for this browser session: UTM fields and which click
+// id type was present. The click id value itself is never stored or sent.
+const SALES_ATTRIBUTION_KEY = 'boulders_sales_attribution';
+const SALES_LOGGED_KEY = 'boulders_sales_logged';
+(function captureSalesAttribution() {
+  try {
+    if (sessionStorage.getItem(SALES_ATTRIBUTION_KEY)) return;
+    const params = new URLSearchParams(window.location.search);
+    const pick = (k) => (params.get(k) || '').trim().slice(0, 150) || null;
+    const clickIdType = ['gclid', 'fbclid', 'ttclid'].find((k) => params.has(k)) || null;
+    const attribution = {
+      utm_source: pick('utm_source'),
+      utm_medium: pick('utm_medium'),
+      utm_campaign: pick('utm_campaign'),
+      click_id_type: clickIdType,
+    };
+    if (attribution.utm_source || attribution.utm_medium || attribution.utm_campaign || clickIdType) {
+      sessionStorage.setItem(SALES_ATTRIBUTION_KEY, JSON.stringify(attribution));
+    }
+  } catch (_) { /* storage blocked: skip */ }
+})();
+
+// Fire-and-forget: tell our own ledger an order completed. The server verifies
+// the order with BRP before storing it. Never blocks or throws.
+function logLiveSale(orderId) {
+  try {
+    if (!orderId) return;
+    const key = String(orderId);
+    let logged = [];
+    try { logged = JSON.parse(sessionStorage.getItem(SALES_LOGGED_KEY) || '[]'); } catch (_) {}
+    if (logged.includes(key)) return;
+
+    const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+    if (!accessToken) return;
+
+    let attribution = null;
+    try { attribution = JSON.parse(sessionStorage.getItem(SALES_ATTRIBUTION_KEY) || 'null'); } catch (_) {}
+
+    fetch('/api/sales/log', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        orderId: key,
+        landingPath: normalizePathname(window.location.pathname),
+        attribution,
+      }),
+      keepalive: true,
+    })
+      .then((resp) => resp.json().catch(() => null))
+      .then((result) => {
+        if (result?.ok) {
+          try { sessionStorage.setItem(SALES_LOGGED_KEY, JSON.stringify([...logged, key].slice(-20))); } catch (_) {}
+        }
+        devLog('[SalesLog]', result);
+      })
+      .catch((err) => devWarn('[SalesLog] failed (non-blocking):', err?.message || err));
+  } catch (err) {
+    devWarn('[SalesLog] threw (suppressed):', err);
+  }
+}
+
 function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCustomer = null } = {}) {
   if (!orderId) {
     devWarn('[GTM] purchase not tracked: missing orderId');
     return false;
   }
+
+  logLiveSale(orderId);
 
   if (isPurchaseAlreadyTracked(orderId)) {
     devLog('[GTM] purchase already tracked for order', orderId);
