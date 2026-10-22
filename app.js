@@ -21872,11 +21872,27 @@ function touchHasSignal(touch) {
   return !!(touch && (touch.utm_source || touch.utm_medium || touch.utm_campaign || touch.click_id_type));
 }
 
+// Payment, 3-D Secure and login hosts the customer passes through mid-checkout.
+// A referrer from these is never a marketing source.
+const SALES_IGNORED_REFERRER_HOSTS = /(^|\.)(brpsystems\.com|nets\.eu|netseasy\.|dibspayment\.(eu|com)|mobilepay\.(dk|com|fi)|vipps\.no|quickpay\.net|adyen\.com|stripe\.com|checkout\.com|klarna\.com|paypal\.com|cardinalcommerce\.com|arcot\.com|3dsecure|securecode|mitid\.dk|nemid\.nu|signicat\.com|bankid\.)/i;
+
+function isPaymentReturnPage() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const hasReceipt = ['receiptid', 'receiptId', 'receiptuuid', 'receiptUuid'].some((k) => p.has(k));
+    return p.get('payment') === 'return' || hasReceipt;
+  } catch (_) {
+    return false;
+  }
+}
+
 function isOwnSalesHost(hostname) {
   const h = String(hostname || '').toLowerCase();
   if (!h) return true;
   if (h === 'join.boulders.dk' || h.endsWith('.join.boulders.dk')) return true;
   if (h === 'boulders.dk' || h === 'www.boulders.dk') return true;
+  if (h === 'api-join.boulders.dk') return true;
+  if (SALES_IGNORED_REFERRER_HOSTS.test(h)) return true;
   if (h === 'localhost' || h === '127.0.0.1') return true;
   if (h.endsWith('.pages.dev') && h.includes('bouldersspaflow')) return true;
   return false;
@@ -21884,6 +21900,8 @@ function isOwnSalesHost(hostname) {
 
 function referrerTouchFromDocument() {
   try {
+    // Coming back from the payment provider: the referrer is the checkout, not a source.
+    if (isPaymentReturnPage()) return null;
     const raw = document.referrer;
     if (!raw) return null;
     const url = new URL(raw);
