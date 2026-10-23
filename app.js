@@ -1778,30 +1778,33 @@ class AuthAPI {
   }
 
   // Step 6: Login - Submit login credentials and store tokens
-  async login(email, password, options = {}) {
+  // username may be email, customer number, card number, or person number (BRP-configurable).
+  // Join backend (/api/auth/login) requires email; non-email identifiers use BRP /api/ver3/auth/login.
+  async login(username, password, options = {}) {
     try {
       const { saveTokens = true } = options;
+      const useBrpLogin = !looksLikeEmail(username);
+      const authProvider = useBrpLogin ? 'brp' : 'join';
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: '/api/auth/login',
+        path: useBrpLogin ? '/api/ver3/auth/login' : '/api/auth/login',
       });
       
-      devLog('[Step 6] Logging in:', url);
+      devLog('[Step 6] Logging in:', url, `(provider=${authProvider})`);
       
       const headers = {
         'Accept-Language': getAcceptLanguageHeader(),
         'Content-Type': 'application/json',
       };
       
-      // API expects username field (which is the email)
       let data;
       try {
         data = await requestJson({
           url,
           method: 'POST',
           headers,
-          body: { username: email, password },
+          body: { username, password },
         });
       } catch (error) {
         const errorPayload = error?.payload;
@@ -1856,27 +1859,32 @@ class AuthAPI {
       let expiresAt = tokenPayload.expiresAt || tokenPayload.expires_at;
       const expiresIn = tokenPayload.expiresIn || tokenPayload.expires_in;
       if (!expiresAt && expiresIn) {
-        const expiresInMs = Number(expiresIn) * 1000;
+        // BRP documents expires_in as milliseconds; join backend uses seconds.
+        const raw = Number(expiresIn);
+        const expiresInMs = useBrpLogin ? raw : raw * 1000;
         expiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
       }
+
+      const resolvedEmail = tokenPayload.email || (looksLikeEmail(username) ? username : null);
       
       if (accessToken && refreshToken) {
         if (typeof window.saveTokens === 'function') {
           if (saveTokens) {
             const metadata = {
               username: tokenPayload.username || tokenPayload.userName,
-              email: tokenPayload.email || email,
+              email: resolvedEmail,
               roles: tokenPayload.roles || [],
               tokenType: tokenPayload.tokenType || tokenPayload.token_type,
               expiresIn: tokenPayload.expiresIn || tokenPayload.expires_in,
+              authProvider,
             };
             window.saveTokens(accessToken, refreshToken, expiresAt, metadata);
             console.log('[Step 6] ✅ Tokens saved successfully');
 
             // Set user context in Sentry for error tracking
             setUser({
-              id: tokenPayload.sub || tokenPayload.userId,
-              email: tokenPayload.email || email,
+              id: tokenPayload.sub || tokenPayload.userId || tokenPayload.username,
+              email: resolvedEmail || undefined,
             });
           }
         } else {
@@ -1921,10 +1929,12 @@ class AuthAPI {
   // Step 6: Validate token - Keep tokens fresh when app reloads
   async validateToken() {
     try {
+      const metadata = getTokenMetadata();
+      const useBrpAuth = metadata?.authProvider === 'brp';
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: '/api/auth/validate',
+        path: useBrpAuth ? '/api/ver3/auth/validate' : '/api/auth/validate',
       });
       
       devLog('[Step 6] Validating token:', url);
@@ -1945,11 +1955,12 @@ class AuthAPI {
         'Authorization': `Bearer ${accessToken}`,
       };
       
+      // BRP validate uses Authorization header only; join expects accessToken in the body.
       const data = await requestJson({
         url,
         method: 'POST',
         headers,
-        body: { accessToken },
+        body: useBrpAuth ? undefined : { accessToken },
       });
       devLog('[Step 6] Token validation response:', data);
       return data;
@@ -1962,10 +1973,12 @@ class AuthAPI {
   // Step 6: Refresh token - Refresh expired tokens
   async refreshToken() {
     try {
+      const existingMetadata = getTokenMetadata() || {};
+      const useBrpAuth = existingMetadata.authProvider === 'brp';
       const url = buildApiUrl({
         baseUrl: this.baseUrl,
         useProxy: this.useProxy,
-        path: '/api/auth/refresh',
+        path: useBrpAuth ? '/api/ver3/auth/refresh' : '/api/auth/refresh',
       });
       
       devLog('[Step 6] Refreshing token:', url);
@@ -2010,7 +2023,8 @@ class AuthAPI {
       let newExpiresAt = tokenPayload.expiresAt || tokenPayload.expires_at;
       const expiresIn = tokenPayload.expiresIn || tokenPayload.expires_in;
       if (!newExpiresAt && expiresIn) {
-        const expiresInMs = Number(expiresIn) * 1000;
+        const raw = Number(expiresIn);
+        const expiresInMs = useBrpAuth ? raw : raw * 1000;
         newExpiresAt = Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 0);
       }
       
@@ -2022,6 +2036,7 @@ class AuthAPI {
           roles: tokenPayload.roles || data.roles,
           tokenType: tokenPayload.tokenType || tokenPayload.token_type || data.tokenType || data.token_type,
           expiresIn: expiresIn,
+          authProvider: existingMetadata.authProvider || (useBrpAuth ? 'brp' : 'join'),
         };
         window.saveTokens(newAccessToken, newRefreshToken, newExpiresAt, metadata);
         
@@ -2293,6 +2308,20 @@ class AuthAPI {
         'Authorization': `Bearer ${accessToken}`,
       };
 
+      const ver3CustomerUrl = buildApiUrl({
+        baseUrl: this.baseUrl,
+        useProxy: this.useProxy,
+        path: `/api/ver3/customers/${customerId}`,
+      });
+      const preferVer3 = getTokenMetadata()?.authProvider === 'brp';
+
+      // BRP-issued tokens (customer-number login) should hit ver3 directly.
+      if (preferVer3) {
+        const data = await requestJson({ url: ver3CustomerUrl, headers });
+        devLog('[Step 6] Get customer response (ver3):', data);
+        return data;
+      }
+
       try {
         const data = await requestJson({ url, headers });
         devLog('[Step 6] Get customer response:', data);
@@ -2308,30 +2337,18 @@ class AuthAPI {
         );
 
         if (!hasProfileDetails) {
-          const fallbackUrl = this.useProxy
-            ? buildApiUrl({
-                baseUrl: this.baseUrl,
-                useProxy: this.useProxy,
-                path: `/api/ver3/customers/${customerId}`,
-              })
-            : `https://boulders.brpsystems.com/apiserver/api/ver3/customers/${customerId}`;
-          devWarn('[Step 6] Customer profile missing details. Retrying with ver3:', fallbackUrl);
-          const fallbackData = await requestJson({ url: fallbackUrl, headers });
+          devWarn('[Step 6] Customer profile missing details. Retrying with ver3:', ver3CustomerUrl);
+          const fallbackData = await requestJson({ url: ver3CustomerUrl, headers });
           devLog('[Step 6] Get customer response (ver3):', fallbackData);
           return fallbackData;
         }
 
         return data;
       } catch (error) {
-        if (error.status === 404 && this.useProxy) {
-          // Fallback to ver3 endpoint if legacy customer profile requires it
-          const fallbackUrl = buildApiUrl({
-            baseUrl: this.baseUrl,
-            useProxy: this.useProxy,
-            path: `/api/ver3/customers/${customerId}`,
-          });
-          devWarn('[Step 6] Customer profile not found on /api/customers. Retrying:', fallbackUrl);
-          const data = await requestJson({ url: fallbackUrl, headers });
+        if (error.status === 404 || error.status === 401) {
+          // Fallback to ver3 (join may reject BRP tokens or lack the profile)
+          devWarn('[Step 6] Customer profile unavailable on /api/customers. Retrying:', ver3CustomerUrl);
+          const data = await requestJson({ url: ver3CustomerUrl, headers });
           devLog('[Step 6] Get customer response (ver3):', data);
           return data;
         }
@@ -5973,7 +5990,8 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
     state.customerId = String(resolvedUsername);
   }
 
-  if (resolvedEmail) {
+  // Only store as authenticatedEmail when it is actually an email (login may use customer number)
+  if (resolvedEmail && looksLikeEmail(resolvedEmail)) {
     state.authenticatedEmail = resolvedEmail;
   }
 
@@ -5997,6 +6015,9 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
     try {
       const customerData = await authAPI.getCustomer(state.customerId);
       state.authenticatedCustomer = customerData;
+      if (customerData?.email && looksLikeEmail(customerData.email)) {
+        state.authenticatedEmail = customerData.email;
+      }
       console.log('[Auth] Customer profile loaded:', customerData);
       // Refresh UI after loading profile to show all fields
       refreshLoginUI();
@@ -7460,7 +7481,10 @@ const translations = {
     'main.subtitle.step3': 'Vil du have pommes frites med?', 'main.subtitle.step4': 'Send',
     'button.next': 'Næste', 'button.back': 'Tilbage', 'button.continue': 'Fortsæt', 'button.skip': 'Spring over', 'button.complete': 'Færdig', 'button.edit': 'Rediger', 'button.select': 'Vælg', 'button.addToCart': 'Tilføj til kurv', 'button.added': 'Tilføjet!',
     'button.findNearest': 'Find nærmeste hal', 'button.searchGyms': 'Søg haller...', 'button.apply': 'Anvend', 'button.removeCoupon': 'Fjern', 'gym.nearest': 'Nærmeste',
-    'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
+    'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail',
+    'form.loginUsername': 'E-mail eller kundenummer*', 'form.loginUsername.placeholder': 'E-mail eller kundenummer',
+    'form.login.credentialsRequired': 'Indtast e-mail/kundenummer og adgangskode.',
+    'form.password': 'Adgangskode*', 'form.password.placeholder': 'Adgangskode',
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
     'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
     'form.dateOfBirth': 'Fødselsdato*', 'form.streetAddress': 'Gade og husnummer*', 'form.streetAddress.placeholder': 'Gade og husnummer',
@@ -7840,7 +7864,10 @@ const translations = {
     'main.subtitle.step3': 'Would you like fries with that?', 'main.subtitle.step4': 'Send',
     'button.next': 'Next', 'button.back': 'Back', 'button.continue': 'Continue', 'button.skip': 'Skip', 'button.complete': 'Complete', 'button.edit': 'Edit', 'button.select': 'Select', 'button.addToCart': 'Add to cart', 'button.added': 'Added!',
     'button.findNearest': 'Find nearest gym', 'button.searchGyms': 'Search gyms...', 'button.apply': 'Apply', 'button.removeCoupon': 'Remove', 'gym.nearest': 'Nearest',
-    'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail', 'form.password': 'Password*', 'form.password.placeholder': 'Password',
+    'form.email': 'E-mail*', 'form.email.placeholder': 'E-mail',
+    'form.loginUsername': 'Email or customer number*', 'form.loginUsername.placeholder': 'Email or customer number',
+    'form.login.credentialsRequired': 'Please enter email/customer number and password.',
+    'form.password': 'Password*', 'form.password.placeholder': 'Password',
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
     'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
     'form.dateOfBirth': 'Date of birth*', 'form.streetAddress': 'Street and house number*', 'form.streetAddress.placeholder': 'Street and house nr',
@@ -8202,7 +8229,10 @@ const translations = {
     'main.subtitle.step3': 'Möchten Sie Pommes dazu?', 'main.subtitle.step4': 'Senden',
     'button.next': 'Weiter', 'button.back': 'Zurück', 'button.continue': 'Fortsetzen', 'button.skip': 'Überspringen', 'button.complete': 'Fertig', 'button.edit': 'Bearbeiten', 'button.select': 'Auswählen', 'button.addToCart': 'In den Warenkorb', 'button.added': 'Hinzugefügt!',
     'button.findNearest': 'Nächste Halle finden', 'button.searchGyms': 'Hallen suchen...', 'button.apply': 'Anwenden', 'button.removeCoupon': 'Entfernen', 'gym.nearest': 'Nächste',
-    'form.email': 'E-Mail*', 'form.email.placeholder': 'E-Mail', 'form.password': 'Passwort*', 'form.password.placeholder': 'Passwort',
+    'form.email': 'E-Mail*', 'form.email.placeholder': 'E-Mail',
+    'form.loginUsername': 'E-Mail oder Kundennummer*', 'form.loginUsername.placeholder': 'E-Mail oder Kundennummer',
+    'form.login.credentialsRequired': 'Bitte E-Mail/Kundennummer und Passwort eingeben.',
+    'form.password': 'Passwort*', 'form.password.placeholder': 'Passwort',
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
     'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
     'form.dateOfBirth': 'Geburtsdatum*', 'form.streetAddress': 'Straße und Hausnummer*', 'form.streetAddress.placeholder': 'Straße und Hausnummer',
@@ -8718,17 +8748,37 @@ function updatePageTranslations() {
   console.log('[Translations] Page translations updated for language:', lang);
 }
 
+function looksLikeEmail(value) {
+  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function resolveAuthenticatedDisplayId({
+  authenticatedEmail = state.authenticatedEmail,
+  customer = state.authenticatedCustomer,
+  metadata = null,
+  fallback = 'Account',
+} = {}) {
+  const meta = metadata || (typeof getTokenMetadata === 'function' ? getTokenMetadata() : null);
+  if (looksLikeEmail(authenticatedEmail)) return authenticatedEmail;
+  if (customer?.email) return customer.email;
+  if (meta?.email && looksLikeEmail(meta.email)) return meta.email;
+  if (customer?.customerNumber) return String(customer.customerNumber);
+  if (authenticatedEmail) return authenticatedEmail;
+  if (meta?.username || meta?.userName) return String(meta.username || meta.userName);
+  return fallback;
+}
+
 // Update form translations
 function updateFormTranslations() {
   // Login form
   const emailLabel = document.querySelector('label[for="loginEmail"]');
   if (emailLabel && emailLabel.hasAttribute('data-i18n-key')) {
-    emailLabel.textContent = t('form.email');
+    emailLabel.textContent = t('form.loginUsername');
   }
   
   const emailInput = document.getElementById('loginEmail');
   if (emailInput && emailInput.hasAttribute('data-i18n-placeholder')) {
-    emailInput.placeholder = t('form.email.placeholder');
+    emailInput.placeholder = t('form.loginUsername.placeholder');
   }
   
   const passwordLabel = document.querySelector('label[for="loginPassword"]');
@@ -10239,12 +10289,12 @@ async function handleLoginSubmit(event) {
     return;
   }
 
-  const email = DOM.loginEmail?.value?.trim() || '';
+  const identifier = DOM.loginEmail?.value?.trim() || '';
   const password = DOM.loginPassword?.value || '';
 
-  if (!email || !password) {
-    showToast('Please enter both email and password.', 'error');
-    if (!email) {
+  if (!identifier || !password) {
+    showToast(t('form.login.credentialsRequired') || 'Please enter email/customer number and password.', 'error');
+    if (!identifier) {
       DOM.loginEmail?.closest('.form-group')?.classList.add('error');
     }
     if (!password) {
@@ -10257,16 +10307,17 @@ async function handleLoginSubmit(event) {
   setLoginLoadingState(true);
 
   try {
-    const response = await authAPI.login(email, password);
+    const response = await authAPI.login(identifier, password);
     const payload = response?.data ?? response;
-    const username = payload?.username || email;
-    state.authenticatedEmail = email;
+    const username = payload?.username || identifier;
+    const loginEmail = looksLikeEmail(identifier) ? identifier : null;
+    state.authenticatedEmail = loginEmail;
 
     // /99kr: inspect product history — block only if they've held a product
     // carrying a blocking label (see FIRSTCLIMB_BLOCKING_LABELS).
     if (isFirstClimbRoute()) {
       try {
-        await syncAuthenticatedCustomerState(username, email);
+        await syncAuthenticatedCustomerState(username, loginEmail);
       } catch (syncErr) {
         console.warn('[login] customer state sync failed before firstclimb history check:', syncErr);
       }
@@ -10275,7 +10326,7 @@ async function handleLoginSubmit(event) {
     }
 
     // Sync customer state and fetch profile
-    await syncAuthenticatedCustomerState(username, email);
+    await syncAuthenticatedCustomerState(username, loginEmail);
     
     // Always fetch full customer profile to ensure we have complete data
     try {
@@ -10283,10 +10334,17 @@ async function handleLoginSubmit(event) {
       if (customerId) {
         const customerData = await authAPI.getCustomer(customerId);
         state.authenticatedCustomer = customerData;
+        if (customerData?.email && looksLikeEmail(customerData.email)) {
+          state.authenticatedEmail = customerData.email;
+        }
         console.log('[login] Customer profile loaded:', customerData);
         
         // Get display name for toast
-        let displayName = email;
+        let displayName = resolveAuthenticatedDisplayId({
+          authenticatedEmail: state.authenticatedEmail,
+          customer: customerData,
+          fallback: identifier,
+        });
         if (customerData?.firstName && customerData?.lastName) {
           displayName = `${customerData.firstName} ${customerData.lastName}`;
         } else if (customerData?.firstName) {
@@ -10304,7 +10362,7 @@ async function handleLoginSubmit(event) {
           window.dispatchEvent(new Event('auth-state-changed'));
         }
       } else {
-        showToast(`Logged in as ${email}.`, 'success');
+        showToast(`Logged in as ${resolveAuthenticatedDisplayId({ fallback: identifier })}.`, 'success');
       }
       
       // Dispatch event to notify React components
@@ -10314,7 +10372,7 @@ async function handleLoginSubmit(event) {
     } catch (profileError) {
       console.warn('[login] Could not fetch customer profile:', profileError);
       // Continue even if profile fetch fails - refresh UI with whatever data we have
-      showToast(`Logged in as ${email}.`, 'success');
+      showToast(`Logged in as ${resolveAuthenticatedDisplayId({ fallback: identifier })}.`, 'success');
       refreshLoginUI();
       
       // Dispatch event to notify React components
@@ -10487,9 +10545,10 @@ function initPasswordResetPage() {
 function openForgotPasswordModal() {
   if (!DOM.forgotPasswordModal) return;
   
-  // Pre-fill email if user has entered it in login form
-  if (DOM.loginEmail?.value) {
-    DOM.forgotPasswordEmail.value = DOM.loginEmail.value;
+  // Pre-fill only when the login field looks like an email (not a customer number)
+  const loginIdentifier = DOM.loginEmail?.value?.trim() || '';
+  if (looksLikeEmail(loginIdentifier)) {
+    DOM.forgotPasswordEmail.value = loginIdentifier;
   }
   
   DOM.forgotPasswordModal.style.display = 'flex';
@@ -11760,10 +11819,15 @@ function refreshHeaderAuthIndicator() {
     return;
   }
   
-  // Get email from various sources
+  // Prefer real email; fall back to customer number / login username
   const metadata = getTokenMetadata();
   const customer = state.authenticatedCustomer;
-  const emailDisplay = state.authenticatedEmail || customer?.email || metadata?.email || metadata?.username || 'User';
+  const emailDisplay = resolveAuthenticatedDisplayId({
+    authenticatedEmail: state.authenticatedEmail,
+    customer,
+    metadata,
+    fallback: 'User',
+  });
   
   // Update email display
   if (headerAuthEmail) {
@@ -11816,8 +11880,13 @@ function refreshLoginUI() {
   }
   const formCustomer = formData?.customer;
   
-  // Determine display values
-  const emailDisplay = state.authenticatedEmail || customer?.email || metadata?.email || metadata?.username || 'Account';
+  // Prefer real email; fall back to customer number / login username
+  const emailDisplay = resolveAuthenticatedDisplayId({
+    authenticatedEmail: state.authenticatedEmail,
+    customer,
+    metadata,
+    fallback: 'Account',
+  });
   
   // Get full name from customer data or form data
   let nameDisplay = null;
