@@ -156,7 +156,10 @@ export async function onRequest(context: { request: Request; env: Env }): Promis
   const requestOrigin = request.headers.get('Origin');
   const origin = validateOrigin(requestOrigin);
 
-  if (requestOrigin && !origin) {
+  // This route attaches the integrator token and answers whether an email or
+  // phone is registered. A missing Origin must not reach that lookup. Browser
+  // POSTs from the allowlisted signup origins send Origin.
+  if (!origin) {
     return jsonResponse({ error: 'Origin not allowed' }, 403, null);
   }
   if (request.method === 'OPTIONS') {
