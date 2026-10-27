@@ -54,6 +54,16 @@ import {
   isGeolocationAvailable,
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
+import {
+  normalizePhone,
+  classifyIdentityCheck,
+  productKind,
+  ageInYears,
+  membershipAgeRoute,
+  buildOtherUserBody,
+  buildOrderIdentity,
+  memberKey,
+} from './utils/registrationIdentity.js';
 import { sanitizeHTML } from './sanitize.js';
 import confetti from 'canvas-confetti';
 
