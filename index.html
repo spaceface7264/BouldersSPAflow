@@ -971,94 +971,56 @@
                                 <div class="save-account-message" id="saveAccountMessage" style="display: none;"></div>
                             </div>
                     </form>
-                        
-                        <!-- Parent/Guardian Registration Form -->
-                        <div class="parent-guardian-form" id="parentGuardianForm" style="display: none;">
-                            <h4 class="parent-form-title" data-i18n-key="form.parentGuardian">Parent/Guardian Information</h4>
-
-                            
-                            <!-- Same Address Toggle -->
-                            <div class="same-address-toggle">
-                                <label class="toggle-label">
-                                    <input type="checkbox" class="toggle-input" id="sameAddressToggle" data-api-field="guardian.sameAddressAsCustomer">
-                                    <span class="toggle-slider"></span>
-                                    <span data-i18n-key="form.sameAddress">Same address and contact information</span>
-                                </label>
-            </div>
-            
-                            <form class="registration-form">
-                                <div class="form-group">
-                                    <label for="parentFullName" data-i18n-key="form.parentFullName">First and last name*</label>
-                                    <input type="text" id="parentFullName" name="parentFullName" placeholder="" data-i18n-placeholder="form.parentFullName.placeholder" data-api-field="guardian.fullName" required>
-            </div>
-            
-                                <div class="form-group">
-                                    <label for="parentDateOfBirth" data-i18n-key="form.parentDateOfBirth">Date of birth*</label>
-                                    <div class="date-input-container">
-                                        <input type="date" id="parentDateOfBirth" name="parentDateOfBirth" class="date-input" data-api-field="guardian.dateOfBirth" required>
-                                       
-                                    </div>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="parentStreetAddress" data-i18n-key="form.parentStreetAddress">Street and house number*</label>
-                                    <input type="text" id="parentStreetAddress" name="parentStreetAddress" placeholder="" data-i18n-placeholder="form.parentStreetAddress.placeholder" data-api-field="guardian.address.street" required>
-                                </div>
-                                
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="parentPostalCode" data-i18n-key="form.parentPostalCode">Postal code*</label>
-                                        <input type="text" id="parentPostalCode" name="parentPostalCode" placeholder="" data-i18n-placeholder="form.parentPostalCode.placeholder" data-api-field="guardian.address.postalCode" required>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label for="parentCity" data-i18n-key="form.parentCity">City</label>
-                                        <input type="text" id="parentCity" name="parentCity" placeholder="" data-i18n-placeholder="form.parentCity.placeholder" data-api-field="guardian.address.city" readonly>
-                                    </div>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="parentEmail" data-i18n-key="form.parentEmail">E-mail*</label>
-                                    <input type="email" id="parentEmail" name="parentEmail" placeholder="" data-i18n-placeholder="form.parentEmail.placeholder" data-api-field="guardian.email" required>
-                                </div>
-                                
-                                <div class="form-row">
-                                    <div class="form-group phone-country">
-                                        <div class="country-selector">
-                                            <span class="flag-icon">🇩🇰</span>
-                                            <select id="parentCountryCode" name="parentCountryCode" data-api-field="guardian.phone.countryCode" required>
-                                                <option value="+45">Denmark +45</option>
-                                            </select>
-                                            <span class="dropdown-arrow">▼</span>
+                    </div>
+                            </div>
+                            <div class="parent-guardian-form" id="parentGuardianForm" hidden style="display: none;">
+                                <h4 class="parent-form-title" data-i18n-key="form.member.title">Child / junior member</h4>
+                                <div id="existingMemberList" hidden></div>
+                                <button type="button" id="addAnotherMember" hidden>Add another child</button>
+                                <div class="registration-form">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="memberFirstName" data-i18n-key="form.firstName">First name*</label>
+                                            <input type="text" id="memberFirstName" name="memberFirstName" autocomplete="off" placeholder="" data-i18n-placeholder="form.firstName.placeholder" data-member-field="firstName">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="memberLastName" data-i18n-key="form.lastName">Last name*</label>
+                                            <input type="text" id="memberLastName" name="memberLastName" autocomplete="off" placeholder="" data-i18n-placeholder="form.lastName.placeholder" data-member-field="lastName">
                                         </div>
                                     </div>
-                                    
-                                    <div class="form-group phone-number">
-                                        <label for="parentPhoneNumber" data-i18n-key="form.parentPhoneNumber">Mobile number*</label>
-                                        <input type="tel" id="parentPhoneNumber" name="parentPhoneNumber" placeholder="" data-i18n-placeholder="form.parentPhoneNumber.placeholder" data-api-field="guardian.phone.number">
+                                    <div class="form-group">
+                                        <label for="memberDateOfBirth" data-i18n-key="form.dateOfBirth">Date of birth*</label>
+                                        <div class="date-input-container">
+                                            <input type="date" id="memberDateOfBirth" name="memberDateOfBirth" class="date-input" autocomplete="off" data-member-field="dateOfBirth">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="memberEmail" data-i18n-key="form.email">E-mail</label>
+                                        <input type="email" id="memberEmail" name="memberEmail" autocomplete="off" placeholder="" data-i18n-placeholder="form.email.placeholder" data-member-field="email">
+                                        <p class="member-email-hint" data-i18n-key="form.member.emailHint">Email and mobile are optional. Fill them in only if they are the child's own.</p>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group phone-country">
+                                            <div class="country-selector">
+                                                <span class="flag-icon">🇩🇰</span>
+                                                <select id="memberCountryCode" name="memberCountryCode" autocomplete="off" data-member-field="countryCode">
+                                                    <option value="+45">Denmark +45</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="form-group phone-number">
+                                            <label for="memberPhoneNumber" data-i18n-key="form.phoneNumber">Mobile number</label>
+                                            <input type="tel" id="memberPhoneNumber" name="memberPhoneNumber" autocomplete="off" placeholder="" data-i18n-placeholder="form.phoneNumber.placeholder" data-member-field="phoneNumber">
+                                        </div>
+                                    </div>
+                                    <div class="form-group form-group-consent">
+                                        <label class="consent-checkbox">
+                                            <input type="checkbox" id="memberGuardianConsent" data-member-field="guardianConsent">
+                                            <span class="checkmark"></span>
+                                            <span class="consent-text" data-i18n-key="form.member.consent">I am the child's guardian and I accept the membership on the child's behalf.</span>
+                                        </label>
                                     </div>
                                 </div>
-                                
-                                <div class="form-group">
-                                    <label for="parentPassword" data-i18n-key="form.password.create">Password*</label>
-                                   <input type="password" id="parentPassword" name="parentPassword" placeholder="" data-i18n-placeholder="form.password.create.placeholder" data-api-field="guardian.password" required minlength="6">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="parentPrimaryGym">Primary Boulders gym / Pick-up point*</label>
-                                    <div class="select-container">
-                                        <select id="parentPrimaryGym" name="parentPrimaryGym" data-api-field="guardian.primaryGym" required>
-                                            <option value="">Select a gym</option>
-                                            <option value="boulders-copenhagen">Boulders Copenhagen</option>
-                                            <option value="boulders-aarhus">Boulders Aarhus</option>
-                                            <option value="boulders-odense">Boulders Odense</option>
-                                        </select>
-                                        <span class="dropdown-arrow">▼</span>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
                             </div>
                         </div>
                         

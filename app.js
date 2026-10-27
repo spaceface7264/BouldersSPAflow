@@ -1192,16 +1192,7 @@ const REQUIRED_FIELDS = [
 ];
 
 const PARENT_REQUIRED_FIELDS = [
-  'parentFullName',
-  'parentDateOfBirth',
-  'parentStreetAddress',
-  'parentPostalCode',
-  'parentCity',
-  'parentEmail',
-  'parentCountryCode',
-  'parentPhoneNumber',
-  'parentPassword',
-  'parentPrimaryGym',
+  'memberGuardianConsent',
 ];
 
 const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
@@ -5059,6 +5050,7 @@ function renderProductsFromAPI({ force = false } = {}) {
   
   // Re-setup event listeners and translations in one batched frame to avoid visible double-render.
   scheduleAccessStepRebind();
+  updateMemberFormVisibility();
 }
 
 // Step 5: Load add-ons when a membership is selected
@@ -5440,11 +5432,11 @@ async function loadCountriesFromAPI() {
     
     // Populate both country code selectors
     const countryCodeSelect = document.getElementById('countryCode');
-    const parentCountryCodeSelect = document.getElementById('parentCountryCode');
+    const memberCountryCodeSelect = document.getElementById('memberCountryCode');
     
-    devLog('[Countries] Found selectors - countryCode:', !!countryCodeSelect, 'parentCountryCode:', !!parentCountryCodeSelect);
+    devLog('[Countries] Found selectors - countryCode:', !!countryCodeSelect, 'memberCountryCode:', !!memberCountryCodeSelect);
     
-    if (!countryCodeSelect && !parentCountryCodeSelect) {
+    if (!countryCodeSelect && !memberCountryCodeSelect) {
       devWarn('[Countries] Neither selector found in DOM. Retrying in 500ms...');
       // Retry after a delay in case DOM isn't ready yet (only retry once)
       if (!loadCountriesFromAPI.retryAttempted) {
@@ -5470,15 +5462,14 @@ async function loadCountriesFromAPI() {
       devWarn('[Countries] countryCode selector not found in DOM');
     }
     
-    if (parentCountryCodeSelect) {
-      populateCountrySelector(parentCountryCodeSelect, sortedCountries);
-      devLog('[Countries] Populated parentCountryCode selector with', parentCountryCodeSelect.options.length, 'options');
-      // Add event listener to update flag when selection changes
-      parentCountryCodeSelect.addEventListener('change', () => {
-        updateCountryFlagIcon(parentCountryCodeSelect);
+    if (memberCountryCodeSelect) {
+      populateCountrySelector(memberCountryCodeSelect, sortedCountries);
+      devLog('[Countries] Populated memberCountryCode selector with', memberCountryCodeSelect.options.length, 'options');
+      memberCountryCodeSelect.addEventListener('change', () => {
+        updateCountryFlagIcon(memberCountryCodeSelect);
       });
     } else {
-      devWarn('[Countries] parentCountryCode selector not found in DOM');
+      devWarn('[Countries] memberCountryCode selector not found in DOM');
     }
     
     devLog('[Countries] Country selectors populated successfully');
@@ -5874,6 +5865,9 @@ const state = {
   subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
   // 15-day pass: activation date (null = today, or YYYY-MM-DD string for future start)
   subscriptionStartDate: null,
+  subscriptionUserId: null,
+  orderIsOtherPayer: null,
+  orderMemberKey: null,
   lastReferralLinkGeneratedEventKey: null,
   checkoutConfirmAccepted: false,
   checkoutConfirmPreviousFocus: null,
@@ -7521,6 +7515,9 @@ const translations = {
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
     'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Opret profil',
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
+    'form.member.title': 'Barn / juniormedlem',
+    'form.member.emailHint': 'E-mail og mobil er valgfri. Udfyld dem kun, hvis de er barnets egne.',
+    'form.member.consent': 'Jeg er barnets værge og accepterer medlemskabet på barnets vegne.',
     'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
     'form.parentDateOfBirth': 'Fødselsdato*', 'form.parentStreetAddress': 'Gade og husnummer*', 'form.parentStreetAddress.placeholder': 'Indtast gade og husnummer',
     'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By*', 'form.parentCity.placeholder': 'København',
@@ -7916,6 +7913,9 @@ const translations = {
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Password*', 'form.password.create.placeholder': 'Create a password',
     'form.confirmPassword': 'Confirm password*', 'form.confirmPassword.placeholder': 'Confirm your password', 'form.saveAccount': 'Save Account',
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
+    'form.member.title': 'Child / junior member',
+    'form.member.emailHint': 'Email and mobile are optional. Fill them in only if they are the child\'s own.',
+    'form.member.consent': 'I am the child\'s guardian and I accept the membership on the child\'s behalf.',
     'form.parentFullName': 'First and last name*', 'form.parentFullName.placeholder': 'Enter your full name',
     'form.parentDateOfBirth': 'Date of birth*', 'form.parentStreetAddress': 'Street and house number*', 'form.parentStreetAddress.placeholder': 'Enter street and house number',
     'form.parentPostalCode': 'Postal code*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'City*', 'form.parentCity.placeholder': 'Copenhagen',
@@ -8293,6 +8293,9 @@ const translations = {
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Passwort*', 'form.password.create.placeholder': 'Erstellen Sie ein Passwort',
     'form.confirmPassword': 'Passwort bestätigen*', 'form.confirmPassword.placeholder': 'Bestätigen Sie Ihr Passwort', 'form.saveAccount': 'Profil erstellen',
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
+    'form.member.title': 'Kind / Juniormitglied',
+    'form.member.emailHint': 'E-Mail und Mobilnummer sind freiwillig. Fülle sie nur aus, wenn sie dem Kind gehören.',
+    'form.member.consent': 'Ich bin der Vormund des Kindes und akzeptiere die Mitgliedschaft im Namen des Kindes.',
     'form.parentFullName': 'Vorname und Nachname*', 'form.parentFullName.placeholder': 'Geben Sie Ihren vollständigen Namen ein',
     'form.parentDateOfBirth': 'Geburtsdatum*', 'form.parentStreetAddress': 'Straße und Hausnummer*', 'form.parentStreetAddress.placeholder': 'Geben Sie Straße und Hausnummer ein',
     'form.parentPostalCode': 'Postleitzahl*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'Stadt*', 'form.parentCity.placeholder': 'Kopenhagen',
@@ -8875,19 +8878,15 @@ function updateFormTranslations() {
     }
   });
   
-  // Parent/Guardian form fields
-  const parentFields = [
-    { id: 'parentFullName', labelKey: 'form.parentFullName', placeholderKey: 'form.parentFullName.placeholder' },
-    { id: 'parentDateOfBirth', labelKey: 'form.parentDateOfBirth' },
-    { id: 'parentStreetAddress', labelKey: 'form.parentStreetAddress', placeholderKey: 'form.parentStreetAddress.placeholder' },
-    { id: 'parentPostalCode', labelKey: 'form.parentPostalCode', placeholderKey: 'form.parentPostalCode.placeholder' },
-    { id: 'parentCity', labelKey: 'form.parentCity', placeholderKey: 'form.parentCity.placeholder' },
-    { id: 'parentEmail', labelKey: 'form.parentEmail', placeholderKey: 'form.parentEmail.placeholder' },
-    { id: 'parentPhoneNumber', labelKey: 'form.parentPhoneNumber', placeholderKey: 'form.parentPhoneNumber.placeholder' },
-    { id: 'parentPassword', labelKey: 'form.password.create', placeholderKey: 'form.password.create.placeholder' },
+  const memberFields = [
+    { id: 'memberFirstName', labelKey: 'form.firstName', placeholderKey: 'form.firstName.placeholder' },
+    { id: 'memberLastName', labelKey: 'form.lastName', placeholderKey: 'form.lastName.placeholder' },
+    { id: 'memberDateOfBirth', labelKey: 'form.dateOfBirth' },
+    { id: 'memberEmail', labelKey: 'form.email', placeholderKey: 'form.email.placeholder' },
+    { id: 'memberPhoneNumber', labelKey: 'form.phoneNumber', placeholderKey: 'form.phoneNumber.placeholder' },
   ];
   
-  parentFields.forEach(field => {
+  memberFields.forEach(field => {
     const label = document.querySelector(`label[for="${field.id}"]`);
     if (label && label.hasAttribute('data-i18n-key')) {
       label.textContent = t(field.labelKey);
@@ -9363,6 +9362,7 @@ function handleRejectionOption1() {
   state.membershipPlanId = null;
   state.selectedProductId = null;
   state.selectedProductType = null;
+  clearStoredJuniorMember();
   
   // Clear value card quantities
   state.valueCardQuantities.clear();
@@ -9803,10 +9803,7 @@ function cacheDom() {
   DOM.backFromAddonsBtn = document.getElementById('backFromAddons');
   DOM.paymentOptions = Array.from(document.querySelectorAll('input[name="paymentMethod"]'));
   DOM.cardPaymentForm = document.getElementById('cardPaymentForm');
-  DOM.parentGuardianToggle = document.getElementById('parentGuardian');
   DOM.parentGuardianForm = document.getElementById('parentGuardianForm');
-  DOM.parentGuardianReminder = document.querySelector('[data-role="parent-guardian-reminder"]');
-  DOM.sameAddressToggle = document.getElementById('sameAddressToggle');
   DOM.loginForm = document.querySelector('.login-form');
   DOM.loginEmail = document.getElementById('loginEmail');
   DOM.loginPassword = document.getElementById('loginPassword');
@@ -9902,8 +9899,8 @@ function setupEventListeners() {
       handleApplyDiscount();
     }
   });
-  DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
-  DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
+  document.getElementById('dateOfBirth')?.addEventListener('change', updateMemberFormVisibility);
+  document.getElementById('dateOfBirth')?.addEventListener('input', updateMemberFormVisibility);
   DOM.privacyConsent?.addEventListener('change', () => {
     // Save privacy consent to localStorage with timestamp
     if (DOM.privacyConsent.checked) {
@@ -12150,6 +12147,8 @@ function refreshLoginUI() {
     }
     // Create section will be shown/hidden by switchAuthMode based on active tab
   }
+
+  updateMemberFormVisibility();
 }
 
 const PHONE_ALREADY_EXISTS_MESSAGE =
@@ -12331,20 +12330,6 @@ async function handleSaveAccount() {
   if (passwordInput && passwordInput.value && passwordInput.value.length < 6) {
     showSaveAccountMessage('Password must be at least 6 characters long.', 'error');
     highlightFieldError('password', true);
-    const saveBtn = document.querySelector('[data-action="save-account"]');
-    if (saveBtn) {
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Save Account';
-    }
-    return;
-  }
-  
-  // Validate parent password length if parent form is visible
-  const parentPasswordInput = document.getElementById('parentPassword');
-  const parentForm = document.getElementById('parentGuardianForm');
-  if (parentPasswordInput && parentForm && parentForm.style.display !== 'none' && parentPasswordInput.value && parentPasswordInput.value.length < 6) {
-    showSaveAccountMessage('Parent/Guardian password must be at least 6 characters long.', 'error');
-    highlightFieldError('parentPassword', true);
     const saveBtn = document.querySelector('[data-action="save-account"]');
     if (saveBtn) {
       saveBtn.disabled = false;
@@ -13056,6 +13041,7 @@ function handleLogout() {
   state.selectedProductType = null;
   state.selectedProductId = null;
   state.membershipPlanId = null;
+  clearStoredJuniorMember();
   state.addonIds.clear();
   state.valueCardQuantities.clear();
   state.createdEmails.clear();
@@ -13187,6 +13173,8 @@ function handleGymSelection(item) {
       state.membershipPlanId = null;
       state.selectedProductId = null;
       state.selectedProductType = null;
+      clearStoredJuniorMember();
+      updateMemberFormVisibility();
       updateCheckoutButton();
     }
   }
@@ -14086,6 +14074,8 @@ async function handlePlanSelection(selectedCard) {
     state.membershipPlanId = null;
     state.selectedProductId = null;
     state.selectedProductType = null;
+    clearStoredJuniorMember();
+    updateMemberFormVisibility();
     updateCartSummary();
     updateCheckoutButton();
     return;
@@ -14099,6 +14089,7 @@ async function handlePlanSelection(selectedCard) {
   if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
     resetOrderStateForProductChange('plan-selection');
   }
+  updateMemberFormVisibility();
   
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
   
@@ -14285,7 +14276,9 @@ function setupNewAccessStep() {
       state.membershipPlanId = null;
       state.selectedProductId = null;
       state.selectedProductType = null;
+      clearStoredJuniorMember();
       resetOrderStateForProductChange('category-switch');
+      updateMemberFormVisibility();
       
       // Clear all punch card quantities when switching categories (but not when just re-initializing)
       // Only clear if user is actually switching categories, not during language change re-render
@@ -14397,6 +14390,8 @@ function setupNewAccessStep() {
         state.membershipPlanId = null;
         state.selectedProductId = null;
         state.selectedProductType = null;
+        clearStoredJuniorMember();
+        updateMemberFormVisibility();
         updateCartSummary();
         updateCheckoutButton();
         return;
@@ -14412,6 +14407,7 @@ function setupNewAccessStep() {
       if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
         resetOrderStateForProductChange('plan-selection');
       }
+      updateMemberFormVisibility();
 
       // GTM: Track select_item for API-driven plan cards
       // Include both subscriptions and value cards for campaign category
@@ -14680,6 +14676,7 @@ function switchAuthMode(mode, email = null) {
     // Check button state when switching to create account mode
     setTimeout(() => checkSaveAccountButtonState(), 100);
   }
+  updateMemberFormVisibility();
 }
 
 function setupSaveAccountButtonValidation() {
@@ -16074,31 +16071,6 @@ function resolveAddressCountryAlpha2(phoneCountryCode, postalCode) {
   return PHONE_COUNTRY_TO_ALPHA2[phoneDigits] || 'DK';
 }
 
-function syncCopiedCityField(sourceCityField, targetCityField, sourcePostalField) {
-  if (!targetCityField) return false;
-
-  const postalCode = sourcePostalField?.value?.trim() || '';
-  const normalizedCity = normalizeLookedUpCity(sourceCityField?.value);
-
-  if (!postalCode || !isDanishPostalCodeFormat(postalCode)) {
-    if (normalizedCity) {
-      setCityFieldEditable(targetCityField, { clearValue: false });
-      targetCityField.value = normalizedCity;
-    } else {
-      setCityFieldEditable(targetCityField);
-    }
-    return false;
-  }
-
-  if (normalizedCity) {
-    setCityFieldReadonly(targetCityField, normalizedCity);
-    return true;
-  }
-
-  setCityFieldEditable(targetCityField);
-  return false;
-}
-
 function isPostalLookupStillValid(postalInput, requestedPostalCode) {
   const currentPostal = postalInput?.value?.trim() || '';
   return currentPostal === requestedPostalCode && isDanishPostalCodeFormat(currentPostal);
@@ -16725,79 +16697,6 @@ function clearDiscountMessage() {
   if (existingMessage) {
     existingMessage.remove();
   }
-}
-
-function handleSameAddressToggle(event) {
-  if (event.target.checked) {
-    copyAddressAndContactInfo();
-  } else {
-    clearParentFormFields();
-  }
-}
-
-function handleParentGuardianToggle(event) {
-  if (!DOM.parentGuardianForm) return;
-  const isChecked = event.target.checked;
-
-  DOM.parentGuardianForm.style.display = isChecked ? 'block' : 'none';
-  if (DOM.parentGuardianReminder) {
-    DOM.parentGuardianReminder.hidden = !isChecked;
-  }
-
-  clearParentFormFields();
-}
-
-function copyAddressAndContactInfo() {
-  const mappings = [
-    ['streetAddress', 'parentStreetAddress'],
-    ['postalCode', 'parentPostalCode'],
-    ['city', 'parentCity'],
-    ['email', 'parentEmail'],
-    ['countryCode', 'parentCountryCode'],
-    ['phoneNumber', 'parentPhoneNumber'],
-  ];
-
-  mappings.forEach(([sourceId, targetId]) => {
-    const source = document.getElementById(sourceId);
-    const target = document.getElementById(targetId);
-    if (!source || !target) return;
-
-    if (sourceId === 'city' && targetId === 'parentCity') {
-      const isReadonly = syncCopiedCityField(source, target, document.getElementById('postalCode'));
-      if (isReadonly) {
-        target.classList.add('readonly-field');
-      }
-      return;
-    }
-
-    target.value = source.value;
-    target.readOnly = true;
-    if (target.tagName === 'SELECT') {
-      target.value = source.value;
-      target.disabled = true;
-    }
-    target.classList.add('readonly-field');
-  });
-}
-
-function clearParentFormFields() {
-  const parentFields = [
-    'parentStreetAddress',
-    'parentPostalCode',
-    'parentCity',
-    'parentEmail',
-    'parentCountryCode',
-    'parentPhoneNumber',
-  ];
-
-  parentFields.forEach((fieldId) => {
-    const field = document.getElementById(fieldId);
-    if (!field) return;
-    field.value = '';
-    field.readOnly = false;
-    field.disabled = false;
-    field.classList.remove('readonly-field');
-  });
 }
 
 // Helper function to check if cart contains a campaign
@@ -19132,6 +19031,61 @@ function routeCurrentMembership() {
     buyerAge,
     productKind: productKind(resolveSelectedAccessProduct()),
   });
+}
+
+const CHECKOUT_MEMBER_STORAGE_KEY = 'boulders_checkout_member';
+
+function clearStoredJuniorMember() {
+  state.subscriptionUserId = null;
+  state.orderIsOtherPayer = null;
+  state.orderMemberKey = null;
+  try {
+    sessionStorage.removeItem(CHECKOUT_MEMBER_STORAGE_KEY);
+  } catch (error) {
+    devWarn('[member] Could not clear checkout member:', error);
+  }
+}
+
+/** 'junior' | 'other' | 'unknown' | 'none'. Unknown means the id is set but the product is not loaded yet. */
+function selectedJuniorStatus() {
+  if (state.selectedProductId == null || state.selectedProductId === '') return 'none';
+  if (Number(state.selectedProductId) === 56) return 'junior';
+  const product = resolveSelectedAccessProduct();
+  if (!product) return 'unknown';
+  return productKind(product) === 'junior' ? 'junior' : 'other';
+}
+
+function readMemberForm() {
+  const text = (id) => {
+    const field = document.getElementById(id);
+    return typeof field?.value === 'string' ? field.value.trim() : '';
+  };
+  const countryCode = text('memberCountryCode');
+  const phoneNumber = text('memberPhoneNumber');
+  return {
+    firstName: text('memberFirstName'),
+    lastName: text('memberLastName'),
+    birthDate: text('memberDateOfBirth'),
+    email: text('memberEmail'),
+    countryCode,
+    phoneNumber,
+    phone: phoneNumber ? { countryCode, number: phoneNumber } : null,
+    guardianConsent: Boolean(document.getElementById('memberGuardianConsent')?.checked),
+  };
+}
+
+function updateMemberFormVisibility() {
+  const form = DOM.parentGuardianForm || document.getElementById('parentGuardianForm');
+  const show = routeCurrentMembership()?.action === 'junior_member_form';
+  if (form) {
+    form.hidden = !show;
+    form.style.display = show ? 'block' : 'none';
+  }
+  const consent = document.getElementById('memberGuardianConsent');
+  if (consent) consent.required = Boolean(show);
+  if (selectedJuniorStatus() === 'other') {
+    clearStoredJuniorMember();
+  }
 }
 
 function membershipAgeMessage(reason) {
@@ -25609,21 +25563,12 @@ function validateForm(animate = false) {
     });
   }
 
-  if (!skipPersonalValidation && DOM.parentGuardianForm && DOM.parentGuardianForm.style.display !== 'none') {
-    PARENT_REQUIRED_FIELDS.forEach((fieldId) => {
-      const field = document.getElementById(fieldId);
-      if (!field) return;
-
-      const isEmpty = fieldId === 'parentCity'
-        ? !normalizeLookedUpCity(field.value)
-        : !field.value.trim();
-
-      if (isEmpty) {
-        isValid = false;
-        errors.push(`Missing parent/guardian field: ${fieldId}`);
-        highlightFieldError(fieldId, animate);
-      }
-    });
+  const memberForm = DOM.parentGuardianForm;
+  const memberFormVisible = memberForm && !memberForm.hidden && memberForm.style.display !== 'none';
+  if (memberFormVisible && !document.getElementById('memberGuardianConsent')?.checked) {
+    isValid = false;
+    errors.push('Missing guardian consent');
+    highlightFieldError('memberGuardianConsent', animate);
   }
 
   // Re-cache consent elements in case they weren't found initially
@@ -26465,6 +26410,7 @@ function showStep(stepNumber) {
       if (state.orderId && state.fullOrder) {
         updatePaymentOverview();
       }
+      updateMemberFormVisibility();
     }, 100);
   } else {
     // When leaving step 2, reset main content margin
@@ -26478,8 +26424,9 @@ function showStep(stepNumber) {
   if (stepNumber === 4) {
     // Ensure countries are loaded (in case they weren't loaded on init)
     const countryCodeSelect = document.getElementById('countryCode');
-    const parentCountryCodeSelect = document.getElementById('parentCountryCode');
-    if (countryCodeSelect && countryCodeSelect.options.length <= 1) {
+    const memberCountryCodeSelect = document.getElementById('memberCountryCode');
+    if ((countryCodeSelect && countryCodeSelect.options.length <= 1) ||
+        (memberCountryCodeSelect && memberCountryCodeSelect.options.length <= 1)) {
       // Only one option (the default +45), so countries haven't been loaded yet
       const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       if (isDevelopment) {

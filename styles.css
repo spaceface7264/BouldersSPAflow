@@ -4892,6 +4892,7 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
 }
 
 .form-group label[for="dateOfBirth"],
+.form-group label[for="memberDateOfBirth"],
 .form-group label[for="parentDateOfBirth"] {
     display: block;
     margin-bottom: 4px;
@@ -5071,6 +5072,14 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     margin-bottom: 24px;
     color: white;
     text-align: center;
+}
+
+.member-email-hint {
+    display: block;
+    margin: 8px 0 0;
+    color: #D1D5DB;
+    font-size: var(--font-size-sm);
+    line-height: 1.45;
 }
 
 .parent-guardian-reminder {
@@ -11757,15 +11766,6 @@ main {
     line-height: 1.5;
     margin: 0;
     flex: 1;
-}
-
-/* Hide parent/guardian toggle section */
-.toggle-container:has(#parentGuardian) {
-    display: none;
-}
-
-.parent-guardian-reminder {
-    display: none !important;
 }
 
 /* Cookie Consent Banner */
