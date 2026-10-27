@@ -7511,6 +7511,11 @@ const translations = {
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
     'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
     'form.dateOfBirth': 'Fødselsdato*', 'form.streetAddress': 'Gade og husnummer*', 'form.streetAddress.placeholder': 'Gade og husnummer',
+    'form.membershipAge.buyer_under_18': 'Du skal være 18 år for at gennemføre tilmeldingen.',
+    'form.membershipAge.choose_student_youth': 'Vælg student- og ungdomsmedlemskabet. En værge skal gennemføre tilmeldingen.',
+    'form.membershipAge.choose_junior': 'Junior købes af en forælder eller værge, som skal være 18 år.',
+    'form.membershipAge.student_youth_age': 'Student- og ungdomsmedlemskabet er til 16–20 år.',
+    'form.membershipAge.invalid': 'Udfyld fødselsdato.',
     'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Indtast by',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Indtast din e-mail', 'form.country': 'Land', 'form.phoneNumber': 'Mobilnummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
@@ -7901,6 +7906,11 @@ const translations = {
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
     'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
     'form.dateOfBirth': 'Date of birth*', 'form.streetAddress': 'Street and house number*', 'form.streetAddress.placeholder': 'Street and house nr',
+    'form.membershipAge.buyer_under_18': 'You must be 18 to complete signup.',
+    'form.membershipAge.choose_student_youth': 'Choose the student and youth membership. A guardian has to complete signup.',
+    'form.membershipAge.choose_junior': 'Junior is bought by a parent or guardian, who must be 18.',
+    'form.membershipAge.student_youth_age': 'The student and youth membership is for ages 16–20.',
+    'form.membershipAge.invalid': 'Enter a date of birth.',
     'form.postalCode': 'Postal code*', 'form.postalCode.placeholder': 'Zipcode', 'form.city': 'City*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Enter city',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Enter your email', 'form.country': 'Country', 'form.phoneNumber': 'Mobile number*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Password*', 'form.password.create.placeholder': 'Create a password',
@@ -8273,6 +8283,11 @@ const translations = {
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
     'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
     'form.dateOfBirth': 'Geburtsdatum*', 'form.streetAddress': 'Straße und Hausnummer*', 'form.streetAddress.placeholder': 'Straße und Hausnummer',
+    'form.membershipAge.buyer_under_18': 'Du musst 18 Jahre alt sein, um die Anmeldung abzuschließen.',
+    'form.membershipAge.choose_student_youth': 'Wähle die Studenten- und Jugendmitgliedschaft. Eine Erziehungsberechtigte Person muss die Anmeldung abschließen.',
+    'form.membershipAge.choose_junior': 'Junior wird von einem Elternteil oder Vormund gekauft, der 18 Jahre alt sein muss.',
+    'form.membershipAge.student_youth_age': 'Die Studenten- und Jugendmitgliedschaft ist für 16–20 Jahre.',
+    'form.membershipAge.invalid': 'Gib ein Geburtsdatum ein.',
     'form.postalCode': 'Postleitzahl*', 'form.postalCode.placeholder': 'Postleitzahl', 'form.city': 'Stadt*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Stadt eingeben',
     'form.email.create': 'E-Mail*', 'form.email.create.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.country': 'Land', 'form.phoneNumber': 'Handynummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Passwort*', 'form.password.create.placeholder': 'Erstellen Sie ein Passwort',
@@ -12368,6 +12383,11 @@ async function handleSaveAccount() {
   messageDiv.style.display = 'none';
   
   try {
+    // Stop before createCustomer when this membership requires an 18+ buyer.
+    if (blockMembershipAgeGate('saveAccount')) {
+      return;
+    }
+
     // Build customer data from form
     const payload = buildCheckoutPayload();
     
@@ -19050,6 +19070,98 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   }
 }
 
+const MEMBERSHIP_AGE_FALLBACKS = {
+  buyer_under_18: 'Du skal være 18 år for at gennemføre tilmeldingen.',
+  choose_student_youth: 'Vælg student- og ungdomsmedlemskabet. En værge skal gennemføre tilmeldingen.',
+  choose_junior: 'Junior købes af en forælder eller værge, som skal være 18 år.',
+  student_youth_age: 'Student- og ungdomsmedlemskabet er til 16–20 år.',
+  invalid: 'Udfyld fødselsdato.',
+};
+
+function normalizeBuyerBirthDate(value) {
+  if (typeof value === 'string') {
+    const match = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+  }
+  if (value && typeof value === 'object') {
+    const year = Number(value.year);
+    const month = Number(value.month);
+    const day = Number(value.day);
+    if (!year || !month || !day) return null;
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+/** Birth date already on the logged-in profile. No extra fetch. */
+function loggedInBuyerBirthDate() {
+  const customer = state.authenticatedCustomer;
+  if (!customer || typeof customer !== 'object') return null;
+  return normalizeBuyerBirthDate(customer.birthDate) || normalizeBuyerBirthDate(customer.dateOfBirth);
+}
+
+function isBuyerFormHidden() {
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  if (createSection && createSection.style.display === 'none') return true;
+  if (DOM.loginFormContainerWrapper && DOM.loginFormContainerWrapper.style.display === 'none') return true;
+  return false;
+}
+
+/**
+ * Age route for the selected membership.
+ * Reads #dateOfBirth while the buyer form is visible. When that field is missing
+ * or the form is hidden, uses state.authenticatedCustomer.birthDate / dateOfBirth.
+ * Module scope so this calls the imported productKind, not a local shadow.
+ */
+function routeCurrentMembership() {
+  const dateField = document.getElementById('dateOfBirth');
+  const birthDate = !dateField || isBuyerFormHidden()
+    ? loggedInBuyerBirthDate()
+    : normalizeBuyerBirthDate(dateField.value);
+  const buyerAge = ageInYears(birthDate, getTodayLocalDateString());
+  return membershipAgeRoute({
+    buyerAge,
+    productKind: productKind(resolveSelectedAccessProduct()),
+  });
+}
+
+function membershipAgeMessage(reason) {
+  const fallback = MEMBERSHIP_AGE_FALLBACKS[reason] || MEMBERSHIP_AGE_FALLBACKS.invalid;
+  return t(`form.membershipAge.${reason}`, fallback);
+}
+
+/**
+ * Returns true when the caller must stop before create and before payment.
+ * Runs only when isCheckoutSubscriptionPlan() is true.
+ * Punch cards and the /99kr day ticket are excluded: selectedProductType
+ * punch-card, and isFirstClimbRoute().
+ */
+function blockMembershipAgeGate(surface) {
+  if (state.selectedProductType === 'punch-card') return false;
+  if (isFirstClimbRoute()) return false;
+  if (!isCheckoutSubscriptionPlan()) return false;
+
+  const route = routeCurrentMembership();
+  if (!route || route.action === 'continue' || route.action === 'junior_member_form') {
+    return false;
+  }
+
+  const reason = route.action === 'guardian_handoff' ? 'buyer_under_18' : (route.reason || 'invalid');
+  const message = membershipAgeMessage(reason);
+
+  if (surface === 'saveAccount') {
+    showSaveAccountMessage(message, 'error');
+    showToast(message, 'error');
+    return true;
+  }
+
+  showToast(message, 'error');
+  setCheckoutLoadingState(false);
+  state.checkoutInProgress = false;
+  updateFAQVisibility();
+  return true;
+}
+
 /** True when cart selection is a subscription product (membership, campaign, 15-day pass, free trial), not punch-cards. */
 function isCheckoutSubscriptionPlan() {
   const planId = state.membershipPlanId;
@@ -19417,6 +19529,12 @@ async function handleCheckout() {
     }
   }
   
+  // Age gate before checkout is marked in progress, so a block never creates
+  // a customer, never calls ensureOrderCreated, and does not emit begin_checkout.
+  if (blockMembershipAgeGate('checkout')) {
+    return;
+  }
+
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
   
