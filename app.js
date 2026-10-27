@@ -12137,6 +12137,129 @@ function refreshLoginUI() {
   }
 }
 
+const PHONE_ALREADY_EXISTS_MESSAGE =
+  'This mobile number is already registered. Log in, or use a different number.';
+
+function isRegistrationLoginRateLimit(error) {
+  if (!error) return false;
+  if (error.status === 429) return true;
+  const message = typeof error.message === 'string' ? error.message : '';
+  return message.startsWith('Rate limit exceeded. Please wait');
+}
+
+function readIdentityCheckFields(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  if (data.unavailable === true) return { unavailable: true };
+  if (typeof data.emailMatch === 'boolean' && typeof data.phoneMatch === 'boolean') {
+    return {
+      emailMatch: data.emailMatch,
+      phoneMatch: data.phoneMatch,
+      unavailable: false,
+    };
+  }
+  return null;
+}
+
+// POST /api/registration/check. Never send the password. A thrown fetch, a non-OK
+// response, a non-JSON body, or any other shape is unavailable so signup can still create.
+async function checkRegistrationIdentity(email, countryCode, number) {
+  let fields = { unavailable: true };
+  try {
+    const response = await fetch('/api/registration/check', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        mobilePhone: {
+          countryCode,
+          number,
+        },
+      }),
+    });
+    if (response.ok) {
+      const parsed = readIdentityCheckFields(await response.json());
+      if (parsed) fields = parsed;
+    }
+  } catch (error) {
+    devWarn('[registration] Identity check unavailable:', error?.message || error);
+  }
+  const classification = classifyIdentityCheck(fields);
+  devLog('[registration] Identity check:', classification);
+  return classification;
+}
+
+// Login used when the check says the email is already registered.
+// A missing password is a failure and does not call login.
+async function reuseExistingAccount(email, password) {
+  if (!email || !password) {
+    return { ok: false, error: null };
+  }
+  try {
+    await authAPI.login(email, password, { saveTokens: true });
+  } catch (error) {
+    return { ok: false, error };
+  }
+  try {
+    await syncAuthenticatedCustomerState(undefined, email);
+  } catch (syncErr) {
+    devWarn('[registration] Customer sync failed after reusing account:', syncErr);
+  }
+  return { ok: true, error: null };
+}
+
+function showPhoneAlreadyRegistered(surface) {
+  highlightFieldError('phoneNumber', true);
+  if (surface === 'saveAccount') {
+    showSaveAccountMessage(PHONE_ALREADY_EXISTS_MESSAGE, 'error');
+    showToast(PHONE_ALREADY_EXISTS_MESSAGE, 'error');
+    return;
+  }
+  showToast(PHONE_ALREADY_EXISTS_MESSAGE, 'error');
+}
+
+function showDuplicateEmailLogin(email, surface) {
+  const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
+  if (surface === 'saveAccount') {
+    showSaveAccountMessage(duplicateMessage, 'error');
+    showToast('Account already exists. Please log in.', 'error');
+  } else {
+    showToast(duplicateMessage, 'error');
+  }
+  const emailInput = document.getElementById('email');
+  if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+  if (email) switchAuthMode('login', email);
+  else switchAuthMode('login');
+}
+
+function showRegistrationRateLimit(error, surface) {
+  const message = typeof error?.message === 'string' ? error.message : String(error?.message || error || '');
+  if (surface === 'saveAccount') {
+    showSaveAccountMessage(message, 'error');
+    showToast(message, 'error');
+    return;
+  }
+  showToast(message, 'error');
+}
+
+function stopCheckoutForIdentity() {
+  setCheckoutLoadingState(false);
+  state.checkoutInProgress = false;
+}
+
+async function finishSaveAccountAsExistingCustomer() {
+  if (isFirstClimbRoute()) {
+    const guard = await runFirstclimbGuard('saveAccount-preCheck');
+    if (guard.blocked) return;
+  }
+  try { refreshLoginUI(); } catch (_) {}
+  showSaveAccountMessage('Welcome back! You can proceed to checkout.', 'success');
+  showToast('Logged in successfully.', 'success');
+  if (state.currentStep === 4) updatePaymentOverview();
+}
+
 async function handleSaveAccount() {
   const saveBtn = document.querySelector('[data-action="save-account"]');
   const messageDiv = document.getElementById('saveAccountMessage');
@@ -12387,43 +12510,48 @@ async function handleSaveAccount() {
       console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
 
-    // /99kr defensive existing-customer pre-check. BRP doesn't always reject duplicate
-    // emails on the create endpoint, so we attempt login with the typed credentials.
-    // If login succeeds, we inspect the customer's product history — only block if
-    // they've held a product carrying the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS).
-    // Otherwise (abandoned-but-empty profile, never-bought-anything customer) we
-    // treat them as eligible: keep the tokens, sync state, skip create-customer.
-    if (isFirstClimbRoute()) {
-      const candidateEmail = customerData.email;
-      const candidatePassword = customerData.password;
-      if (candidateEmail && candidatePassword) {
-        let preCheckLoggedIn = false;
-        try {
-          await authAPI.login(candidateEmail, candidatePassword, { saveTokens: true });
-          preCheckLoggedIn = true;
-        } catch (preCheckErr) {
-          // Expected for genuinely new customers. Fall through to normal create.
-          console.log('[Save Account] firstclimb pre-check login failed (expected for new customer):', preCheckErr?.message || preCheckErr);
-        }
-        if (preCheckLoggedIn) {
-          try {
-            await syncAuthenticatedCustomerState(undefined, candidateEmail);
-          } catch (syncErr) {
-            console.warn('[Save Account] customer state sync failed before history check:', syncErr);
-          }
+    // One login before create. The old /99kr pre-check login lived here; it is not
+    // repeated below, so a successful match does not call authAPI.login twice.
+    // runFirstclimbGuard still runs on that success when this is /99kr.
+    const identityPassword = customerData.password || document.getElementById('password')?.value;
+    const identity = await checkRegistrationIdentity(email, phoneCountryCode, phoneNumber);
 
-          const guard = await runFirstclimbGuard('saveAccount-preCheck');
-          if (guard.blocked) return;
+    if (identity === 'phone_exists') {
+      showPhoneAlreadyRegistered('saveAccount');
+      return;
+    }
 
-          // Clean history → treat the existing-customer login as the sign-in for
-          // this purchase. No create-customer POST is needed; the user is ready
-          // to proceed to Til Kassen.
-          try { refreshLoginUI(); } catch (_) {}
-          showSaveAccountMessage('Welcome back! You can proceed to checkout.', 'success');
-          showToast('Logged in successfully.', 'success');
-          if (state.currentStep === 4) updatePaymentOverview();
+    if (identity === 'email_exists') {
+      const reused = await reuseExistingAccount(email, identityPassword);
+      if (!reused.ok) {
+        if (isRegistrationLoginRateLimit(reused.error)) {
+          showRegistrationRateLimit(reused.error, 'saveAccount');
           return;
         }
+        showDuplicateEmailLogin(email, 'saveAccount');
+        return;
+      }
+      await finishSaveAccountAsExistingCustomer();
+      return;
+    }
+
+    if (email && identityPassword) {
+      try {
+        await authAPI.login(email, identityPassword, { saveTokens: true });
+        try {
+          await syncAuthenticatedCustomerState(undefined, email);
+        } catch (syncErr) {
+          devWarn('[Save Account] Customer sync failed after identity login:', syncErr);
+        }
+        await finishSaveAccountAsExistingCustomer();
+        return;
+      } catch (loginErr) {
+        if (isRegistrationLoginRateLimit(loginErr)) {
+          showRegistrationRateLimit(loginErr, 'saveAccount');
+          return;
+        }
+        // 401 and any other non-429 failure: the account is not this password, so create.
+        devLog('[Save Account] Identity login did not match; creating customer:', loginErr?.status || loginErr?.message);
       }
     }
 
@@ -19320,6 +19448,7 @@ async function handleCheckout() {
     // Step 1: Create or authenticate customer
     let customer = null;
     let customerId = state.customerId ?? null;
+    let loggedInBeforeCreate = false;
     
     // Check if user is already logged in
     const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
@@ -19450,6 +19579,7 @@ async function handleCheckout() {
         console.log('[checkout] Customer data prepared:', JSON.stringify(customerData, null, 2));
         // Pre-check: Don't create account if user is already logged in with this email
         const email = customerData.email?.toLowerCase().trim();
+        let skipCreate = false;
         if (email) {
           const authenticatedEmail = state.authenticatedEmail || 
             (typeof window.getTokenMetadata === 'function' && window.getTokenMetadata()?.email);
@@ -19460,11 +19590,68 @@ async function handleCheckout() {
             if (customerId) {
               state.customerId = String(customerId);
             }
-            // Skip account creation and proceed
-          } else {
+            skipCreate = true;
+          }
+        }
+
+        if (!skipCreate) {
+          const identityPassword = customerData.password;
+          const identity = await checkRegistrationIdentity(email, phoneCountryCode, phoneNumber);
+          let reusedAccount = false;
+
+          if (identity === 'phone_exists') {
+            showPhoneAlreadyRegistered('checkout');
+            stopCheckoutForIdentity();
+            return;
+          }
+
+          if (identity === 'email_exists') {
+            const reused = await reuseExistingAccount(email, identityPassword);
+            if (!reused.ok) {
+              if (isRegistrationLoginRateLimit(reused.error)) {
+                showRegistrationRateLimit(reused.error, 'checkout');
+              } else {
+                showDuplicateEmailLogin(email, 'checkout');
+              }
+              stopCheckoutForIdentity();
+              return;
+            }
+            reusedAccount = true;
+          } else if (email && identityPassword) {
+            try {
+              await authAPI.login(email, identityPassword, { saveTokens: true });
+              try {
+                await syncAuthenticatedCustomerState(undefined, email);
+              } catch (syncErr) {
+                devWarn('[checkout] Customer sync failed after identity login:', syncErr);
+              }
+              reusedAccount = true;
+            } catch (loginErr) {
+              if (isRegistrationLoginRateLimit(loginErr)) {
+                showRegistrationRateLimit(loginErr, 'checkout');
+                stopCheckoutForIdentity();
+                return;
+              }
+              // 401 and any other non-429 failure fall through to createCustomer.
+              devLog('[checkout] Identity login did not match; creating customer:', loginErr?.status || loginErr?.message);
+            }
+          }
+
+          if (reusedAccount) {
+            loggedInBeforeCreate = true;
+            customerId = state.customerId || getTokenMetadata()?.username || getTokenMetadata()?.userName;
+            if (customerId) state.customerId = String(customerId);
+            if (isFirstClimbRoute()) {
+              const guard = await runFirstclimbGuard('checkout-reuse');
+              if (guard.blocked) {
+                stopCheckoutForIdentity();
+                return;
+              }
+            }
+          } else if (email) {
             console.log('[checkout] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
             customer = await authAPI.createCustomer(customerData);
-            
+
             // Track this email as used
             state.createdEmails.add(email);
             try {
@@ -19476,9 +19663,9 @@ async function handleCheckout() {
             } catch (e) {
               console.warn('[checkout] Could not store email in localStorage:', e);
             }
+          } else {
+            customer = await authAPI.createCustomer(customerData);
           }
-        } else {
-          customer = await authAPI.createCustomer(customerData);
         }
         
         // Extract customer ID from response - API returns {success: true, data: {id: ...}}
@@ -19544,8 +19731,9 @@ async function handleCheckout() {
         const isTokenExpired = typeof window.isTokenExpired === 'function' ? window.isTokenExpired() : false;
         const hasValidTokens = existingAccessToken && existingRefreshToken && !isTokenExpired;
         
-        // If no tokens from customer creation, try to use existing tokens or login
-        if (!hasTokens && payload.customer?.email && payload.customer?.password) {
+        // If no tokens from customer creation, try to use existing tokens or login.
+        // Skip when the identity pre-check already logged in, so checkout does not login twice.
+        if (!hasTokens && !loggedInBeforeCreate && payload.customer?.email && payload.customer?.password) {
           if (hasValidTokens) {
             console.log('[checkout] Using existing valid authentication tokens (skipping login to avoid rate limits)');
             // Tokens already exist and are valid, no need to login again
