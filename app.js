@@ -7516,6 +7516,8 @@ const translations = {
     'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Opret profil',
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.member.title': 'Barn / juniormedlem',
+    'form.member.email': 'E-mail',
+    'form.member.phoneNumber': 'Mobilnummer',
     'form.member.emailHint': 'E-mail og mobil er valgfri. Udfyld dem kun, hvis de er barnets egne.',
     'form.member.consent': 'Jeg er barnets værge og accepterer medlemskabet på barnets vegne.',
     'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
@@ -7914,6 +7916,8 @@ const translations = {
     'form.confirmPassword': 'Confirm password*', 'form.confirmPassword.placeholder': 'Confirm your password', 'form.saveAccount': 'Save Account',
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
     'form.member.title': 'Child / junior member',
+    'form.member.email': 'E-mail',
+    'form.member.phoneNumber': 'Mobile number',
     'form.member.emailHint': 'Email and mobile are optional. Fill them in only if they are the child\'s own.',
     'form.member.consent': 'I am the child\'s guardian and I accept the membership on the child\'s behalf.',
     'form.parentFullName': 'First and last name*', 'form.parentFullName.placeholder': 'Enter your full name',
@@ -8294,6 +8298,8 @@ const translations = {
     'form.confirmPassword': 'Passwort bestätigen*', 'form.confirmPassword.placeholder': 'Bestätigen Sie Ihr Passwort', 'form.saveAccount': 'Profil erstellen',
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
     'form.member.title': 'Kind / Juniormitglied',
+    'form.member.email': 'E-Mail',
+    'form.member.phoneNumber': 'Handynummer',
     'form.member.emailHint': 'E-Mail und Mobilnummer sind freiwillig. Fülle sie nur aus, wenn sie dem Kind gehören.',
     'form.member.consent': 'Ich bin der Vormund des Kindes und akzeptiere die Mitgliedschaft im Namen des Kindes.',
     'form.parentFullName': 'Vorname und Nachname*', 'form.parentFullName.placeholder': 'Geben Sie Ihren vollständigen Namen ein',
@@ -8882,8 +8888,8 @@ function updateFormTranslations() {
     { id: 'memberFirstName', labelKey: 'form.firstName', placeholderKey: 'form.firstName.placeholder' },
     { id: 'memberLastName', labelKey: 'form.lastName', placeholderKey: 'form.lastName.placeholder' },
     { id: 'memberDateOfBirth', labelKey: 'form.dateOfBirth' },
-    { id: 'memberEmail', labelKey: 'form.email', placeholderKey: 'form.email.placeholder' },
-    { id: 'memberPhoneNumber', labelKey: 'form.phoneNumber', placeholderKey: 'form.phoneNumber.placeholder' },
+    { id: 'memberEmail', labelKey: 'form.member.email', placeholderKey: 'form.email.placeholder' },
+    { id: 'memberPhoneNumber', labelKey: 'form.member.phoneNumber', placeholderKey: 'form.phoneNumber.placeholder' },
   ];
   
   memberFields.forEach(field => {
