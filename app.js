@@ -16290,7 +16290,12 @@ async function handleApplyDiscount() {
         if (!state.selectedBusinessUnit) {
           throw new Error('Please select a gym location first');
         }
-        
+
+        if (blockMembershipAgeGate('checkout')) {
+          endApplyDiscountLoading();
+          return;
+        }
+
         // Create order first
         const ensuredOrderId = await ensureOrderCreated('discount-application');
         if (!ensuredOrderId) {
@@ -16414,6 +16419,10 @@ async function handleApplyDiscount() {
           console.warn('[Discount] Existing order is not accessible. Creating a new order.');
           state.orderId = null;
           state.subscriptionAttachedOrderId = null;
+          if (blockMembershipAgeGate('checkout')) {
+            endApplyDiscountLoading();
+            return;
+          }
           const ensuredOrderId = await ensureOrderCreated('discount-application');
           if (!ensuredOrderId) {
             throw new Error('Failed to create order for coupon application');
