@@ -7505,17 +7505,22 @@ const translations = {
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
     'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
     'form.dateOfBirth': 'Fødselsdato*', 'form.streetAddress': 'Gade og husnummer*', 'form.streetAddress.placeholder': 'Gade og husnummer',
-    'form.membershipAge.buyer_under_18': 'Du skal være 18 år for at gennemføre tilmeldingen.',
-    'form.membershipAge.choose_student_youth': 'Vælg student- og ungdomsmedlemskabet. En værge skal gennemføre tilmeldingen.',
-    'form.membershipAge.choose_junior': 'Junior købes af en forælder eller værge, som skal være 18 år.',
-    'form.membershipAge.student_youth_age': 'Student- og ungdomsmedlemskabet er til 16–20 år.',
-    'form.membershipAge.invalid': 'Udfyld fødselsdato.',
+    'form.membershipAge.buyer_under_18': 'Du skal være 18 år for at betale for medlemskabet.',
+    'form.membershipAge.choose_student_youth': 'Du er under 18 år. Skift til student- og ungdomsmedlemskabet. En værge skal gennemføre tilmeldingen.',
+    'form.membershipAge.choose_junior': 'Du er under 16 år. Skift til juniormedlemskabet. En forælder eller værge på 18 år skal købe det.',
+    'form.membershipAge.switchToJunior': 'Skift til junior',
+    'form.membershipAge.juniorUnavailable': 'Juniormedlemskabet findes ikke for denne hal.',
+    'form.membershipAge.student_youth_age': 'Student- og ungdomsmedlemskabet er til 16–20 år. Skift til et voksent medlemskab.',
+    'form.membershipAge.invalid': 'Angiv fødselsdato.',
     'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Indtast by',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Indtast din e-mail', 'form.country': 'Land', 'form.phoneNumber': 'Mobilnummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
     'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Opret profil',
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
-    'form.member.title': 'Barn / juniormedlem',
+    'form.buyerRole.title': 'Forælder eller værge',
+    'form.buyerRole.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
+    'form.member.title': 'Barnet',
+    'form.member.roleHint': 'Barnets egne oplysninger. Medlemskabet gælder barnet, ikke dig.',
     'form.member.email': 'E-mail',
     'form.member.phoneNumber': 'Mobilnummer',
     'form.member.emailHint': 'E-mail og mobil er valgfri. Udfyld dem kun, hvis de er barnets egne.',
@@ -7905,17 +7910,22 @@ const translations = {
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
     'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
     'form.dateOfBirth': 'Date of birth*', 'form.streetAddress': 'Street and house number*', 'form.streetAddress.placeholder': 'Street and house nr',
-    'form.membershipAge.buyer_under_18': 'You must be 18 to complete signup.',
-    'form.membershipAge.choose_student_youth': 'Choose the student and youth membership. A guardian has to complete signup.',
-    'form.membershipAge.choose_junior': 'Junior is bought by a parent or guardian, who must be 18.',
-    'form.membershipAge.student_youth_age': 'The student and youth membership is for ages 16–20.',
-    'form.membershipAge.invalid': 'Enter a date of birth.',
+    'form.membershipAge.buyer_under_18': 'You must be 18 to pay for the membership.',
+    'form.membershipAge.choose_student_youth': 'You\'re under 18. Switch to the student and youth membership. A guardian has to complete signup.',
+    'form.membershipAge.choose_junior': 'You\'re under 16. Switch to the junior membership. A parent or guardian aged 18 has to buy it.',
+    'form.membershipAge.switchToJunior': 'Switch to junior',
+    'form.membershipAge.juniorUnavailable': 'This gym has no junior membership.',
+    'form.membershipAge.student_youth_age': 'The student and youth membership is for ages 16–20. Switch to an adult membership.',
+    'form.membershipAge.invalid': 'Enter your date of birth.',
     'form.postalCode': 'Postal code*', 'form.postalCode.placeholder': 'Zipcode', 'form.city': 'City*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Enter city',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Enter your email', 'form.country': 'Country', 'form.phoneNumber': 'Mobile number*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Password*', 'form.password.create.placeholder': 'Create a password',
     'form.confirmPassword': 'Confirm password*', 'form.confirmPassword.placeholder': 'Confirm your password', 'form.saveAccount': 'Save Account',
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
-    'form.member.title': 'Child / junior member',
+    'form.buyerRole.title': 'Parent or guardian',
+    'form.buyerRole.hint': 'Your account. You must be 18, and you pay for the membership.',
+    'form.member.title': 'The child',
+    'form.member.roleHint': 'The child\'s own details. The membership is for the child, not for you.',
     'form.member.email': 'E-mail',
     'form.member.phoneNumber': 'Mobile number',
     'form.member.emailHint': 'Email and mobile are optional. Fill them in only if they are the child\'s own.',
@@ -8287,17 +8297,22 @@ const translations = {
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
     'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
     'form.dateOfBirth': 'Geburtsdatum*', 'form.streetAddress': 'Straße und Hausnummer*', 'form.streetAddress.placeholder': 'Straße und Hausnummer',
-    'form.membershipAge.buyer_under_18': 'Du musst 18 Jahre alt sein, um die Anmeldung abzuschließen.',
-    'form.membershipAge.choose_student_youth': 'Wähle die Studenten- und Jugendmitgliedschaft. Eine Erziehungsberechtigte Person muss die Anmeldung abschließen.',
-    'form.membershipAge.choose_junior': 'Junior wird von einem Elternteil oder Vormund gekauft, der 18 Jahre alt sein muss.',
-    'form.membershipAge.student_youth_age': 'Die Studenten- und Jugendmitgliedschaft ist für 16–20 Jahre.',
-    'form.membershipAge.invalid': 'Gib ein Geburtsdatum ein.',
+    'form.membershipAge.buyer_under_18': 'Du musst 18 Jahre alt sein, um die Mitgliedschaft zu bezahlen.',
+    'form.membershipAge.choose_student_youth': 'Du bist unter 18. Wechsle zur Studenten- und Jugendmitgliedschaft. Ein Erziehungsberechtigter muss die Anmeldung abschließen.',
+    'form.membershipAge.choose_junior': 'Du bist unter 16. Wechsle zur Juniormitgliedschaft. Ein Elternteil oder Vormund ab 18 Jahren muss sie kaufen.',
+    'form.membershipAge.switchToJunior': 'Zu Junior wechseln',
+    'form.membershipAge.juniorUnavailable': 'Für diese Halle gibt es keine Juniormitgliedschaft.',
+    'form.membershipAge.student_youth_age': 'Die Studenten- und Jugendmitgliedschaft ist für 16–20 Jahre. Wechsle zu einer Erwachsenenmitgliedschaft.',
+    'form.membershipAge.invalid': 'Gib dein Geburtsdatum an.',
     'form.postalCode': 'Postleitzahl*', 'form.postalCode.placeholder': 'Postleitzahl', 'form.city': 'Stadt*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Stadt eingeben',
     'form.email.create': 'E-Mail*', 'form.email.create.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.country': 'Land', 'form.phoneNumber': 'Handynummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Passwort*', 'form.password.create.placeholder': 'Erstellen Sie ein Passwort',
     'form.confirmPassword': 'Passwort bestätigen*', 'form.confirmPassword.placeholder': 'Bestätigen Sie Ihr Passwort', 'form.saveAccount': 'Profil erstellen',
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
-    'form.member.title': 'Kind / Juniormitglied',
+    'form.buyerRole.title': 'Elternteil oder Vormund',
+    'form.buyerRole.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
+    'form.member.title': 'Das Kind',
+    'form.member.roleHint': 'Die eigenen Angaben des Kindes. Die Mitgliedschaft gilt für das Kind, nicht für dich.',
     'form.member.email': 'E-Mail',
     'form.member.phoneNumber': 'Handynummer',
     'form.member.emailHint': 'E-Mail und Mobilnummer sind freiwillig. Fülle sie nur aus, wenn sie dem Kind gehören.',
@@ -12827,13 +12842,22 @@ async function handleSaveAccount() {
   }
 }
 
+function setSwitchToJuniorOffer(visible) {
+  const button = document.getElementById('switchToJuniorButton');
+  if (!button) return;
+  button.hidden = !visible;
+}
+
 function showSaveAccountMessage(message, type = 'success') {
   const messageDiv = document.getElementById('saveAccountMessage');
   if (!messageDiv) return;
-  
-  messageDiv.textContent = message;
+
+  const text = document.getElementById('saveAccountMessageText');
+  if (text) text.textContent = message;
+  else messageDiv.textContent = message;
   messageDiv.className = `save-account-message ${type}`;
   messageDiv.style.display = 'block';
+  setSwitchToJuniorOffer(false);
   
   // Auto-hide success messages after 5 seconds
   if (type === 'success') {
@@ -14917,6 +14941,11 @@ function handleGlobalClick(event) {
     case 'save-account': {
       event.preventDefault();
       handleSaveAccount();
+      break;
+    }
+    case 'switch-to-junior': {
+      event.preventDefault();
+      switchToJuniorMembership();
       break;
     }
     case 'edit-gym': {
@@ -18985,11 +19014,11 @@ function resetOrderStateForProductChange(reason = 'product-change') {
 }
 
 const MEMBERSHIP_AGE_FALLBACKS = {
-  buyer_under_18: 'Du skal være 18 år for at gennemføre tilmeldingen.',
-  choose_student_youth: 'Vælg student- og ungdomsmedlemskabet. En værge skal gennemføre tilmeldingen.',
-  choose_junior: 'Junior købes af en forælder eller værge, som skal være 18 år.',
-  student_youth_age: 'Student- og ungdomsmedlemskabet er til 16–20 år.',
-  invalid: 'Udfyld fødselsdato.',
+  buyer_under_18: 'Du skal være 18 år for at betale for medlemskabet.',
+  choose_student_youth: 'Du er under 18 år. Skift til student- og ungdomsmedlemskabet. En værge skal gennemføre tilmeldingen.',
+  choose_junior: 'Du er under 16 år. Skift til juniormedlemskabet. En forælder eller værge på 18 år skal købe det.',
+  student_youth_age: 'Student- og ungdomsmedlemskabet er til 16–20 år. Skift til et voksent medlemskab.',
+  invalid: 'Angiv fødselsdato.',
 };
 
 function normalizeBuyerBirthDate(value) {
@@ -19080,6 +19109,50 @@ function readMemberForm() {
   };
 }
 
+function restoreProfileSubmitButton(button) {
+  button.dataset.action = 'save-account';
+  button.setAttribute('data-i18n-key', 'form.saveAccount');
+  button.classList.add('save-account-btn');
+  button.classList.remove('checkout-btn');
+  button.disabled = false;
+  if (!button.dataset.saving) {
+    const label = t('form.saveAccount');
+    button.textContent = label && label !== 'form.saveAccount' ? label : 'Opret profil';
+  }
+}
+
+function placeJuniorFormSubmit(show) {
+  const juniorActions = document.getElementById('juniorFormActions');
+  const home = document.getElementById('saveAccountActions');
+  const button = document.getElementById('saveAccountButton');
+  const message = document.getElementById('saveAccountMessage');
+  if (!juniorActions || !home || !button || !message) return;
+
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  const createVisible = !!(createSection && createSection.style.display !== 'none');
+
+  if (show) {
+    juniorActions.append(button, message);
+    home.hidden = true;
+    if (!createVisible) {
+      button.dataset.action = 'submit-checkout';
+      button.setAttribute('data-i18n-key', 'cart.checkout');
+      button.classList.remove('save-account-btn');
+      button.classList.add('checkout-btn');
+      const label = t('cart.checkout');
+      button.textContent = label && label !== 'cart.checkout' ? label : 'Til kassen';
+      if (DOM.checkoutBtn) button.disabled = DOM.checkoutBtn.disabled;
+      return;
+    }
+    restoreProfileSubmitButton(button);
+    return;
+  }
+
+  home.hidden = false;
+  if (button.parentElement !== home) home.append(button, message);
+  restoreProfileSubmitButton(button);
+}
+
 function updateMemberFormVisibility() {
   const form = DOM.parentGuardianForm || document.getElementById('parentGuardianForm');
   const show = routeCurrentMembership()?.action === 'junior_member_form';
@@ -19089,9 +19162,23 @@ function updateMemberFormVisibility() {
   }
   const consent = document.getElementById('memberGuardianConsent');
   if (consent) consent.required = Boolean(show);
+  placeJuniorFormSubmit(show);
+  setJuniorRoleLabels(show);
   if (selectedJuniorStatus() === 'other') {
     clearStoredJuniorMember();
   }
+}
+
+function setJuniorRoleLabels(show) {
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  const createVisible = !!(createSection && createSection.style.display !== 'none');
+  const bothVisible = Boolean(show && createVisible);
+  const buyerRole = document.getElementById('buyerRole');
+  const profileTitle = document.getElementById('createProfileTitle');
+  const memberStep = document.getElementById('memberRoleStep');
+  if (buyerRole) buyerRole.hidden = !bothVisible;
+  if (profileTitle) profileTitle.hidden = bothVisible;
+  if (memberStep) memberStep.hidden = !bothVisible;
 }
 
 function membershipAgeMessage(reason) {
@@ -19117,10 +19204,18 @@ function blockMembershipAgeGate(surface) {
 
   const reason = route.action === 'guardian_handoff' ? 'buyer_under_18' : (route.reason || 'invalid');
   const message = membershipAgeMessage(reason);
+  const offerJunior = reason === 'choose_junior';
 
-  if (surface === 'saveAccount') {
+  if (surface === 'saveAccount' || offerJunior) {
     showSaveAccountMessage(message, 'error');
+    setSwitchToJuniorOffer(offerJunior);
     showToast(message, 'error');
+    if (surface !== 'saveAccount') {
+      setCheckoutLoadingState(false);
+      state.checkoutInProgress = false;
+      updateFAQVisibility();
+      document.getElementById('saveAccountMessage')?.scrollIntoView({ block: 'nearest' });
+    }
     return true;
   }
 
@@ -19129,6 +19224,73 @@ function blockMembershipAgeGate(surface) {
   state.checkoutInProgress = false;
   updateFAQVisibility();
   return true;
+}
+
+function juniorPlanFromPool(products, category) {
+  const product = (products || []).find((item) => item && productKind(item) === 'junior');
+  if (!product || product.id == null) return null;
+  return { product, category, planId: `${category}-${product.id}` };
+}
+
+function findJuniorSwitchTarget() {
+  const onCampaign = typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('campaign-');
+  const pools = onCampaign
+    ? [['campaign', state.campaignSubscriptions], ['membership', state.subscriptions]]
+    : [['membership', state.subscriptions], ['campaign', state.campaignSubscriptions]];
+  for (const [category, products] of pools) {
+    const target = juniorPlanFromPool(products, category);
+    if (target) return target;
+  }
+  return null;
+}
+
+function switchToJuniorMembership() {
+  const target = findJuniorSwitchTarget();
+  if (!target) {
+    showToast(t('form.membershipAge.juniorUnavailable', 'Juniormedlemskabet findes ikke for denne hal.'), 'error');
+    return;
+  }
+  if (String(state.membershipPlanId) === target.planId) return;
+
+  document.querySelectorAll('.plan-card').forEach((card) => {
+    card.classList.remove('selected', 'has-quantity', 'disabled');
+    const panel = card.querySelector('.quantity-panel');
+    if (panel) {
+      panel.classList.remove('show');
+      panel.style.display = 'none';
+    }
+  });
+  const card = document.querySelector(`.plan-card[data-plan="${target.planId}"]`);
+  if (card) card.classList.add('selected');
+
+  const previousProductId = state.selectedProductId;
+  const previousPlanId = state.membershipPlanId;
+  state.membershipPlanId = target.planId;
+  state.selectedProductId = target.product.id;
+  state.selectedProductType = 'membership';
+  state.valueCardQuantities?.clear();
+
+  if ((previousProductId && String(previousProductId) !== String(target.product.id)) || (previousPlanId && previousPlanId !== target.planId)) {
+    resetOrderStateForProductChange('junior-switch');
+  }
+  updateMemberFormVisibility();
+  updateCartSummary();
+  updateCheckoutButton();
+  if (state.currentStep === 4) updatePaymentOverview();
+  if (target.product.id) loadSubscriptionAdditions(target.product.id);
+  trackSelectItemEvent({
+    product: target.product,
+    productId: target.product.id,
+    category: target.category,
+    type: 'membership',
+    card,
+  });
+
+  if (!blockMembershipAgeGate('saveAccount')) {
+    const messageDiv = document.getElementById('saveAccountMessage');
+    if (messageDiv) messageDiv.style.display = 'none';
+    setSwitchToJuniorOffer(false);
+  }
 }
 
 /** True when cart selection is a subscription product (membership, campaign, 15-day pass, free trial), not punch-cards. */
@@ -25761,6 +25923,10 @@ function updateCheckoutButton() {
   // Payment method no longer required from UI - card is used by default
   const hasProduct = hasMembership || hasPunchCards || hasAddons;
   DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
+  const juniorSubmit = document.getElementById('saveAccountButton');
+  if (juniorSubmit && juniorSubmit.dataset.action === 'submit-checkout') {
+    juniorSubmit.disabled = DOM.checkoutBtn.disabled;
+  }
   const { isFreeTrialSelected, isZeroTotal, isFreeFlow } = applyFreeFlowCartUi();
   
   const consentsSection = document.querySelector('.consents-section');

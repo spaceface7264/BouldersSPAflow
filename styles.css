@@ -5056,6 +5056,56 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     color: white;
 }
 
+.profile-role {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0 0 20px;
+    padding-right: 112px;
+    text-align: left;
+}
+
+#parentGuardianForm .profile-role {
+    padding-right: 0;
+}
+
+.profile-role[hidden],
+.profile-role-step[hidden] {
+    display: none;
+}
+
+.profile-role-step {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    margin-top: 1px;
+    border-radius: 999px;
+    background: #F401F5;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-role-title,
+.profile-role .parent-form-title {
+    margin: 0;
+    text-align: left;
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+}
+
+.profile-role-hint {
+    margin: 6px 0 0;
+    color: #D1D5DB;
+    font-size: var(--font-size-sm);
+    line-height: 1.45;
+}
+
 /* Parent/Guardian Form */
 .parent-guardian-form {
     margin-top: 32px;
@@ -5273,6 +5323,28 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
 .save-account-message.error {
     background-color: #EF4444;
     color: white;
+}
+
+.switch-to-junior-button {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 14px;
+    border: 0;
+    border-radius: 6px;
+    background: #fff;
+    color: #111;
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+}
+
+.switch-to-junior-button[hidden] {
+    display: none;
+}
+
+.switch-to-junior-button:hover {
+    background: #f3f4f6;
 }
 
 /* Forgot Password Link */
@@ -12769,6 +12841,10 @@ body.firstclimb-flow:has(#step-5.step-panel.active) .firstclimb-banner {
         min-height: 44px;
         margin: 0 0 12px auto;
         display: flex;
+    }
+
+    #step-4 .profile-role {
+        padding-right: 0;
     }
 
     #step-4 .auth-mode-switch-text {
