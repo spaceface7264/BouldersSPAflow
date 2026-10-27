@@ -4500,6 +4500,10 @@ async function loadProductsFromAPI() {
     // Re-render the membership plans with API data
     renderProductsFromAPI();
     updateCartSummary();
+    // Access-step FAQ mentions Single Gym and Fitness only when those products are in the catalog.
+    if (state.currentStep === 2 || state.currentStep === 3) {
+      renderFAQ();
+    }
 
     // Prewarm boost modal resources in the background so first open feels instant.
     prewarmBoostModalResources();
@@ -7061,6 +7065,15 @@ function isFitnessMembershipSelected() {
   return /fitness/i.test(String(state.order?.membershipType || ''));
 }
 
+function isSingleGymMembershipSelected() {
+  if (isSingleGymMembership(resolveSelectedAccessProduct())) return true;
+  if (isSingleGymMembership(state.fullOrder?.subscriptionItems?.[0]?.product)) return true;
+  const cartItem = (state.cartItems || []).find((item) => item.type === 'membership');
+  const cartName = compactProductToken(`${cartItem?.productName || ''} ${cartItem?.name || ''}`);
+  if (cartItem && cartName.includes('singlegym')) return true;
+  return compactProductToken(state.order?.membershipType).includes('singlegym');
+}
+
 // Load and filter products with boost labels for the selected plan
 async function loadBoostProducts(selectedPlanProduct = null) {
   const boostProducts = [];
@@ -7769,12 +7782,16 @@ const translations = {
     'faq.membership.freeze.a': 'Ja, du kan fryse dit medlemskab i 1–3 måneder af gangen, op til 3 gange om året for 49 kr pr. gang. Du betaler ikke, mens du er i bero, og genaktivering er gratis. Frysning kan ikke aktiveres i bindingsperiode.',
     'faq.membership.cancellation.q': 'Hvordan opsiger jeg mit medlemskab?',
     'faq.membership.cancellation.a': 'Du kan opsige dit medlemskab når som helst med en kort varsel, som er resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
+    'faq.singleGym.included.q': 'Hvad er inkluderet i Single Gym medlemskab?',
+    'faq.singleGym.included.a': 'Single Gym medlemskab giver ubegrænset klatreadgang i Boulders Aalborg. Du har ikke adgang til andre Boulders-haller. Vil du have adgang til en anden hal, skal du købe et almindeligt medlemskab. Gratis introhold, Bloc Life og gæstepas følger med.',
+    'faq.singleGym.where.q': 'Hvor kan jeg bruge Single Gym medlemskab?',
+    'faq.singleGym.where.a': 'Kun i Boulders Aalborg. Single Gym medlemskab kan ikke bruges i andre Boulders-haller. Vil du have adgang til en anden hal, skal du købe et almindeligt medlemskab.',
     'faq.fitness.included.q': 'Hvad er inkluderet i Fitness Medlemskab?',
-    'faq.fitness.included.a': 'Fitness Medlemskab giver adgang til styrketræningsområdet i Boulders Aalborg og inkluderer Bloc Life-loyalitetsprogrammet. Klatring, introhold og gæstepas er ikke inkluderet.',
+    'faq.fitness.included.a': 'Fitness Medlemskab giver adgang til fitnessområdet i Boulders Aalborg og inkluderer Bloc Life-loyalitetsprogrammet. Klatring, introhold og gæstepas er ikke inkluderet. Det kan ikke bruges i andre Boulders-haller.',
     'faq.fitness.climbing.q': 'Kan jeg klatre med Fitness Medlemskab?',
-    'faq.fitness.climbing.a': 'Nej. Fitness Medlemskab dækker kun styrketræningsområdet. Hvis du vil klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
+    'faq.fitness.climbing.a': 'Nej. Fitness Medlemskab dækker kun fitnessområdet i Boulders Aalborg. Hvis du vil klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
     'faq.fitness.where.q': 'Hvor kan jeg bruge Fitness Medlemskab?',
-    'faq.fitness.where.a': 'Fitness Medlemskab gælder kun i Boulders Aalborg og kun i styrketræningsområdet. Det kan ikke bruges i andre Boulders-haller.',
+    'faq.fitness.where.a': 'Fitness Medlemskab gælder kun i fitnessområdet i Boulders Aalborg. Det kan ikke bruges til klatring eller i andre Boulders-haller.',
     'faq.fitness.benefits.q': 'Får jeg medlemsfordele og Bloc Life?',
     'faq.fitness.benefits.a': 'Ja. Fitness Medlemskab inkluderer Bloc Life-loyalitetsprogrammet. Introhold og gæstepas følger kun med et almindeligt Boulders-medlemskab.',
     'faq.fitness.terms.q': 'Hvad er vilkårene og betingelserne?',
@@ -7783,8 +7800,10 @@ const translations = {
     'faq.fitness.bindingPeriod.a': 'Nej. Der er ingen bindingsperiode på Fitness Medlemskab. Du kan opsige når som helst med varsel på løbende måned plus en måned.',
     'faq.fitness.cancellation.q': 'Hvordan opsiger jeg Fitness Medlemskab?',
     'faq.fitness.cancellation.a': 'Du kan opsige når som helst med varsel på resten af den aktuelle måned plus 1 måned. Kontakt medlem@boulders.dk eller log ind på din konto for at opsige.',
+    'faq.productChoice.singleGymBest.q': 'Hvornår vælger jeg Single Gym medlemskab?',
+    'faq.productChoice.singleGymBest.a': 'Vælg Single Gym medlemskab hvis du kun klatrer i Boulders Aalborg. Du får klatreadgang der, og ikke i andre haller. Vil du have adgang til andre haller, skal du købe et almindeligt medlemskab.',
     'faq.productChoice.fitnessBest.q': 'Hvornår vælger jeg Fitness Medlemskab?',
-    'faq.productChoice.fitnessBest.a': 'Vælg Fitness Medlemskab hvis du kun vil træne i styrkeområdet i Boulders Aalborg. Du får Bloc Life, men ikke klatring. Vil du klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
+    'faq.productChoice.fitnessBest.a': 'Vælg Fitness Medlemskab hvis du kun vil træne i fitnessområdet i Boulders Aalborg. Du får Bloc Life. Klatring og andre haller er ikke inkluderet. Vil du klatre, skal du vælge et almindeligt medlemskab, 15-dages kort eller klippekort.',
     'faq.15daypass.howItWorks.q': 'Hvordan virker 15-dages kortet?',
     'faq.15daypass.howItWorks.a': '15-dages kortet giver dig 15 dages ubegrænset adgang til alle Boulders haller fra den dag, du aktiverer det. Det er perfekt til at prøve klatring eller et kortvarigt besøg.',
     'faq.15daypass.validity.q': 'Hvor længe er kortet gyldigt?',
@@ -7827,6 +7846,7 @@ const translations = {
     'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 12 måneder og kan deles med andre.',
     'faq.productChoice.membershipBest.q': 'Hvornår vælger jeg medlemskab?',
     'faq.productChoice.membershipBest.a': 'Vælg medlemskab hvis du klatrer mindst én gang om ugen. Du får ubegrænset adgang til alle haller, ingen tilmeldings- eller opsigelsesgebyrer, og du kan opsige når som helst med kort varsel.',
+    'faq.productChoice.membershipBest.limited.a': 'Vælg et almindeligt medlemskab hvis du klatrer mindst én gang om ugen. Du får ubegrænset adgang til alle haller. Single Gym medlemskab er klatring kun i Boulders Aalborg. Fitness Medlemskab er fitnessområdet i Boulders Aalborg, uden klatring og uden andre haller.',
     'faq.productChoice.15daypassBest.q': 'Hvornår skal jeg vælge 15-dages kortet?',
     'faq.productChoice.15daypassBest.a': 'Vælg 15-dages kortet hvis du vil prøve klatring eller kun har brug for adgang i en kort periode. Du får 15 dages ubegrænset adgang til alle haller + lejesko, fra den dag, du aktiverer det.',
     'faq.productChoice.punchcardBest.q': 'Hvornår vælger jeg klippekort?',
@@ -8133,12 +8153,16 @@ const translations = {
     'faq.membership.freeze.a': 'Yes. You can freeze your membership for 1–3 months at a time, up to 3 times a year, for 49 kr per freeze. You are not charged while frozen, and reactivation is free. Freezing cannot be activated during a commitment period.',
     'faq.membership.cancellation.q': 'How do I cancel my membership?',
     'faq.membership.cancellation.a': 'You can cancel your membership at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
+    'faq.singleGym.included.q': 'What is included in Single Gym Membership?',
+    'faq.singleGym.included.a': 'Single Gym Membership gives unlimited climbing access at Boulders Aalborg. It cannot be used at other Boulders gyms. If you want access to any other gym, buy a regular membership. A free intro class, Bloc Life, and guest passes are included.',
+    'faq.singleGym.where.q': 'Where can I use Single Gym Membership?',
+    'faq.singleGym.where.a': 'Only at Boulders Aalborg. Single Gym Membership cannot be used at other Boulders gyms. If you want access to any other gym, buy a regular membership.',
     'faq.fitness.included.q': 'What is included in Fitness Membership?',
-    'faq.fitness.included.a': 'Fitness Membership gives access to the strength-training area at Boulders Aalborg and includes the Bloc Life loyalty programme. Climbing, intro class, and guest passes are not included.',
+    'faq.fitness.included.a': 'Fitness Membership gives access to the fitness area at Boulders Aalborg and includes the Bloc Life loyalty programme. Climbing, intro class, and guest passes are not included. It cannot be used at other Boulders gyms.',
     'faq.fitness.climbing.q': 'Can I climb with Fitness Membership?',
-    'faq.fitness.climbing.a': 'No. Fitness Membership covers the strength-training area only. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
+    'faq.fitness.climbing.a': 'No. Fitness Membership covers the fitness area at Boulders Aalborg only. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
     'faq.fitness.where.q': 'Where can I use Fitness Membership?',
-    'faq.fitness.where.a': 'Fitness Membership is valid only at Boulders Aalborg, and only in the strength-training area. It cannot be used at other Boulders gyms.',
+    'faq.fitness.where.a': 'Fitness Membership is valid only in the fitness area at Boulders Aalborg. It cannot be used for climbing or at other Boulders gyms.',
     'faq.fitness.benefits.q': 'Do I get membership benefits and Bloc Life?',
     'faq.fitness.benefits.a': 'Yes. Fitness Membership includes the Bloc Life loyalty programme. Intro class and guest passes come with a regular Boulders membership.',
     'faq.fitness.terms.q': 'What are the terms and conditions?',
@@ -8147,8 +8171,10 @@ const translations = {
     'faq.fitness.bindingPeriod.a': 'No. There is no commitment period on Fitness Membership. You can cancel anytime with notice for the rest of the current month plus one month.',
     'faq.fitness.cancellation.q': 'How do I cancel Fitness Membership?',
     'faq.fitness.cancellation.a': 'You can cancel at any time. The cancellation notice period is the rest of the current month plus 1 month. Contact medlem@boulders.dk or log into your account to cancel.',
+    'faq.productChoice.singleGymBest.q': 'When should I choose Single Gym Membership?',
+    'faq.productChoice.singleGymBest.a': 'Choose Single Gym Membership if you only climb at Boulders Aalborg. You get climbing access there, and not at other gyms. If you want access to any other gym, buy a regular membership.',
     'faq.productChoice.fitnessBest.q': 'When should I choose Fitness Membership?',
-    'faq.productChoice.fitnessBest.a': 'Choose Fitness Membership if you only want to train in the strength area at Boulders Aalborg. You get Bloc Life, but not climbing. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
+    'faq.productChoice.fitnessBest.a': 'Choose Fitness Membership if you only want to train in the fitness area at Boulders Aalborg. You get Bloc Life. Climbing and other gyms are not included. If you want to climb, choose a regular membership, 15-Day Trial Pass, or punch card.',
     'faq.15daypass.howItWorks.q': 'How does the 15-Day  Trial Pass work?',
     'faq.15daypass.howItWorks.a': 'The 15-Day Trial Pass gives you 15 days of unlimited access to all Boulders gyms from the day you activate it. It\'s perfect for trying out climbing or a short-term visit.',
     'faq.15daypass.validity.q': 'How long is the pass valid?',
@@ -8194,6 +8220,7 @@ const translations = {
     'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15-Day Trial Pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 12 months, and can be shared with others.',
     'faq.productChoice.membershipBest.q': 'When should I choose membership?',
     'faq.productChoice.membershipBest.a': 'Choose membership if you plan to climb at least once a week. You get unlimited access to all gyms, no signup or cancellation fees, and you can cancel anytime with short notice.',
+    'faq.productChoice.membershipBest.limited.a': 'Choose a standard membership if you plan to climb at least once a week. You get unlimited access to every gym. Single Gym Membership is climbing at Boulders Aalborg only. Fitness Membership is the fitness area at Boulders Aalborg, with no climbing and no other gyms.',
     'faq.productChoice.15daypassBest.q': 'When should I choose the 15-Day Trial Pass?',
     'faq.productChoice.15daypassBest.a': 'Choose the 15-Day Trial Pass if you want to try climbing or only need short-term access. You get 15 days of unlimited access to all gyms from the day you activate it. The pass is valid for 15 days from the activation date.',
     'faq.productChoice.punchcardBest.q': 'When should I choose a punch card?',
@@ -27370,6 +27397,15 @@ const FAQ_DATA = {
     { q: 'faq.membership.freeze.q', a: 'faq.membership.freeze.a' },
     { q: 'faq.membership.cancellation.q', a: 'faq.membership.cancellation.a' }
   ],
+  singleGym: [
+    { q: 'faq.singleGym.included.q', a: 'faq.singleGym.included.a' },
+    { q: 'faq.singleGym.where.q', a: 'faq.singleGym.where.a' },
+    { q: 'faq.membership.blocLife.q', a: 'faq.membership.blocLife.a' },
+    { q: 'faq.membership.terms.q', a: 'faq.membership.terms.a' },
+    { q: 'faq.membership.bindingPeriod.q', a: 'faq.membership.bindingPeriod.a' },
+    { q: 'faq.membership.freeze.q', a: 'faq.membership.freeze.a' },
+    { q: 'faq.membership.cancellation.q', a: 'faq.membership.cancellation.a' }
+  ],
   fitness: [
     { q: 'faq.productChoice.fitnessBest.q', a: 'faq.productChoice.fitnessBest.a' },
     { q: 'faq.fitness.included.q', a: 'faq.fitness.included.a' },
@@ -27405,10 +27441,46 @@ const FREE_TRIAL_EXTRA_FAQS = [
   { q: 'faq.freetrial.creditCard.q', a: 'faq.freetrial.creditCard.a' },
 ];
 
+function catalogHasSingleGymMembership() {
+  return (state.subscriptions || []).some(isSingleGymMembership);
+}
+
+function catalogHasFitnessMembership() {
+  return (state.subscriptions || []).some(isFitnessMembership);
+}
+
+/**
+ * Product-choice answers on Access. Single Gym and Fitness questions appear
+ * only when that product is in the current gym's membership catalog.
+ * @returns {{ q: string, a: string }[]}
+ */
+function getProductChoiceFAQs() {
+  const hasSingleGym = catalogHasSingleGymMembership();
+  const hasFitness = catalogHasFitnessMembership();
+  const faqs = FAQ_DATA.productChoice.map((faq) => {
+    if ((hasSingleGym || hasFitness) && faq.a === 'faq.productChoice.membershipBest.a') {
+      return { q: faq.q, a: 'faq.productChoice.membershipBest.limited.a' };
+    }
+    return faq;
+  });
+  const membershipIndex = faqs.findIndex((faq) => faq.q === 'faq.productChoice.membershipBest.q');
+  const insertAt = membershipIndex >= 0 ? membershipIndex + 1 : faqs.length;
+  const limited = [];
+  if (hasSingleGym) {
+    limited.push({ q: 'faq.productChoice.singleGymBest.q', a: 'faq.productChoice.singleGymBest.a' });
+  }
+  if (hasFitness) {
+    limited.push({ q: 'faq.productChoice.fitnessBest.q', a: 'faq.productChoice.fitnessBest.a' });
+  }
+  faqs.splice(insertAt, 0, ...limited);
+  return faqs;
+}
+
 /**
  * Determine which FAQ categories should be shown based on current step and cart.
  * Step 1: gyms only. Step 2–3: product choice (help choose product). Step 4 (Send):
- * contextual to cart. Fitness answers only appear on Send when Fitness is in the cart.
+ * contextual to cart. Fitness and Single Gym answers appear on Send when that
+ * membership is selected.
  * @returns {string[]} Array of FAQ category keys to display
  */
 function getActiveFAQs() {
@@ -27434,6 +27506,7 @@ function getActiveFAQs() {
     const productType = determineProductTypeFromOrder();
     if (productType === '15daypass') return ['15daypass'];
     if (isFitnessMembershipSelected()) return ['fitness'];
+    if (productType === 'membership' && isSingleGymMembershipSelected()) return ['singleGym'];
     if (productType === 'membership') return ['membership'];
     if (productType === 'punch-card') return ['punch-card'];
     return [];
@@ -27466,9 +27539,11 @@ function renderFAQ() {
     const categoryFAQs = FAQ_DATA[categoryKey];
     if (!categoryFAQs) return;
 
-    const faqsToRender = (categoryKey === '15daypass' && isFreeTrialFaqFlow)
-      ? [...categoryFAQs, ...FREE_TRIAL_EXTRA_FAQS]
-      : categoryFAQs;
+    const faqsToRender = categoryKey === 'productChoice'
+      ? getProductChoiceFAQs()
+      : (categoryKey === '15daypass' && isFreeTrialFaqFlow)
+        ? [...categoryFAQs, ...FREE_TRIAL_EXTRA_FAQS]
+        : categoryFAQs;
 
     faqsToRender.forEach(faq => {
       const faqItem = document.createElement('div');
