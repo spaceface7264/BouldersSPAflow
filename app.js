@@ -19153,9 +19153,15 @@ function placeJuniorFormSubmit(show) {
   restoreProfileSubmitButton(button);
 }
 
+function juniorMemberFormVisible() {
+  if (selectedJuniorStatus() !== 'junior') return false;
+  const route = routeCurrentMembership();
+  return !(route?.action === 'block' && route.reason === 'buyer_under_18');
+}
+
 function updateMemberFormVisibility() {
   const form = DOM.parentGuardianForm || document.getElementById('parentGuardianForm');
-  const show = routeCurrentMembership()?.action === 'junior_member_form';
+  const show = juniorMemberFormVisible();
   if (form) {
     form.hidden = !show;
     form.style.display = show ? 'block' : 'none';
