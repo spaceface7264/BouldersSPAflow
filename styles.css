@@ -5124,6 +5124,42 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     text-align: center;
 }
 
+.existing-member-list:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 0 16px;
+}
+
+.existing-member-option {
+    text-align: left;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #374151;
+    background: #111;
+    color: #fff;
+    cursor: pointer;
+}
+
+.existing-member-option.selected {
+    border-color: #fff;
+}
+
+#addAnotherMember:not([hidden]) {
+    display: inline-block;
+    margin: 0 0 16px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: #fff;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+#parentGuardianForm.member-existing-selected #memberNewFields {
+    display: none;
+}
+
 .member-email-hint {
     display: block;
     margin: 8px 0 0;

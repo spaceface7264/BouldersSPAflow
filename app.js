@@ -2451,6 +2451,28 @@ class AuthAPI {
       throw error;
     }
   }
+
+  // Other-payer child. BRP returns { id, created }. Do not send { otherUserId, role }.
+  async createOtherUser(payerId, body) {
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/customers/${payerId}/otheruser`,
+    });
+    const accessToken = typeof window.getAccessToken === 'function'
+      ? window.getAccessToken()
+      : null;
+    return requestJson({
+      url,
+      method: 'POST',
+      headers: {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body,
+    });
+  }
 }
 
 // Step 6: Token Management Functions
@@ -2587,6 +2609,7 @@ class AuthAPI {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);
       sessionStorage.removeItem('boulders_checkout_customer');
       sessionStorage.removeItem('boulders_checkout_order');
+      sessionStorage.removeItem('boulders_checkout_member');
     } catch (error) {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
@@ -2767,7 +2790,7 @@ class OrderAPI {
         throw new Error(`Missing or invalid subscription product ID: ${productId}`);
       }
       
-      const subscriberId = state.customerId ? Number(state.customerId) : null;
+      const subscriberId = subscriptionSubscriberId();
       const birthDate = getSubscriberBirthDate();
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
@@ -2923,7 +2946,10 @@ class OrderAPI {
           ? errorPayload
           : JSON.stringify(errorPayload);
         console.error(`[Step 7] Add subscription item error (${error.status || 'unknown'}):`, payloadText || error);
-        throw new Error(`Add subscription item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        const wrapped = new Error(`Add subscription item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        wrapped.status = error.status;
+        wrapped.payload = errorData || errorPayload;
+        throw wrapped;
       }
       console.log('[Step 7] Add subscription item response:', data);
 
@@ -3935,9 +3961,22 @@ class PaymentAPI {
   }
 }
 
+function subscriptionSubscriberId() {
+  if (state.orderIsOtherPayer === true && state.subscriptionUserId != null) {
+    const memberId = Number(state.subscriptionUserId);
+    return Number.isFinite(memberId) ? memberId : null;
+  }
+  return state.customerId ? Number(state.customerId) : null;
+}
+
 function getSubscriberBirthDate() {
   try {
-    const dateField = document.getElementById('dateOfBirth');
+    const dateField = state.orderIsOtherPayer === true
+      ? document.getElementById('memberDateOfBirth')
+      : document.getElementById('dateOfBirth');
+    if (state.orderIsOtherPayer === true && state.memberBirthDate && (!dateField || !dateField.value)) {
+      return state.memberBirthDate;
+    }
     if (!dateField || !dateField.value) {
       return null;
     }
@@ -5430,14 +5469,13 @@ async function loadCountriesFromAPI() {
       return nameA.localeCompare(nameB);
     });
     
-    // Populate both country code selectors
+    // Populate the buyer country code selector
     const countryCodeSelect = document.getElementById('countryCode');
-    const memberCountryCodeSelect = document.getElementById('memberCountryCode');
     
-    devLog('[Countries] Found selectors - countryCode:', !!countryCodeSelect, 'memberCountryCode:', !!memberCountryCodeSelect);
+    devLog('[Countries] Found selectors - countryCode:', !!countryCodeSelect);
     
-    if (!countryCodeSelect && !memberCountryCodeSelect) {
-      devWarn('[Countries] Neither selector found in DOM. Retrying in 500ms...');
+    if (!countryCodeSelect) {
+      devWarn('[Countries] countryCode selector not found in DOM. Retrying in 500ms...');
       // Retry after a delay in case DOM isn't ready yet (only retry once)
       if (!loadCountriesFromAPI.retryAttempted) {
         loadCountriesFromAPI.retryAttempted = true;
@@ -5462,16 +5500,7 @@ async function loadCountriesFromAPI() {
       devWarn('[Countries] countryCode selector not found in DOM');
     }
     
-    if (memberCountryCodeSelect) {
-      populateCountrySelector(memberCountryCodeSelect, sortedCountries);
-      devLog('[Countries] Populated memberCountryCode selector with', memberCountryCodeSelect.options.length, 'options');
-      memberCountryCodeSelect.addEventListener('change', () => {
-        updateCountryFlagIcon(memberCountryCodeSelect);
-      });
-    } else {
-      devWarn('[Countries] memberCountryCode selector not found in DOM');
-    }
-    
+     
     devLog('[Countries] Country selectors populated successfully');
   } catch (error) {
     devWarn('[Countries] Error loading countries from API:', error);
@@ -5868,6 +5897,16 @@ const state = {
   subscriptionUserId: null,
   orderIsOtherPayer: null,
   orderMemberKey: null,
+  pickedMemberId: null,
+  memberBirthDate: null,
+  guardianHandoffActive: false,
+  juniorCustomerTypeId: null,
+  studentYouthCustomerTypeId: null,
+  businessUnitSettings: null,
+  businessUnitSettingsId: null,
+  ageAvoidParentalConsent: null,
+  studentYouthProductIds: [],
+  memberCheckoutBlocked: false,
   lastReferralLinkGeneratedEventKey: null,
   checkoutConfirmAccepted: false,
   checkoutConfirmPreviousFocus: null,
@@ -7521,10 +7560,25 @@ const translations = {
     'form.buyerRole.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
     'form.member.title': 'Barnet',
     'form.member.roleHint': 'Barnets egne oplysninger. Medlemskabet gælder barnet, ikke dig.',
-    'form.member.email': 'E-mail',
-    'form.member.phoneNumber': 'Mobilnummer',
-    'form.member.emailHint': 'E-mail og mobil er valgfri. Udfyld dem kun, hvis de er barnets egne.',
     'form.member.consent': 'Jeg er barnets værge og accepterer medlemskabet på barnets vegne.',
+    'form.member.required': 'Udfyld barnets navn, fødselsdato og værgesamtykke.',
+    'form.member.under16': 'Junior er til børn under 16 år.',
+    'form.member.ownEmail': 'Barnets e-mail skal være barnets egen.',
+    'form.member.unavailable': 'Junior kan ikke købes online lige nu.',
+    'form.member.noJuniorType': 'Junior kan ikke oprettes lige nu.',
+    'form.member.noYouthType': 'Student- og ungdomsmedlemskabet kan ikke oprettes lige nu.',
+    'form.member.createFailed': 'Barnet kunne ikke oprettes. Prøv igen.',
+    'form.member.addAnother': 'Tilføj et andet barn',
+    'form.member.youthTitle': 'Den unge',
+    'form.member.youthAge': 'Værgen kan kun gennemføre for en 16- eller 17-årig.',
+    'form.member.email': 'E-mail*',
+    'form.member.emailRequired': 'E-mailen skal være den unges egen.',
+    'form.member.emailOwn': 'E-mailen skal være den unges egen, ikke værgens.',
+    'form.member.ageTooYoung': 'Alderen skal være mindst {age} år.',
+    'form.member.ageTooOld': 'Alderen må højst være {age} år.',
+    'form.guardian.title': 'Værge',
+    'form.guardian.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
+    'form.guardian.prompt': 'Udfyld værgens oplysninger. Medlemskabet gælder den unge.',
     'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
     'form.parentDateOfBirth': 'Fødselsdato*', 'form.parentStreetAddress': 'Gade og husnummer*', 'form.parentStreetAddress.placeholder': 'Indtast gade og husnummer',
     'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By*', 'form.parentCity.placeholder': 'København',
@@ -7926,10 +7980,25 @@ const translations = {
     'form.buyerRole.hint': 'Your account. You must be 18, and you pay for the membership.',
     'form.member.title': 'The child',
     'form.member.roleHint': 'The child\'s own details. The membership is for the child, not for you.',
-    'form.member.email': 'E-mail',
-    'form.member.phoneNumber': 'Mobile number',
-    'form.member.emailHint': 'Email and mobile are optional. Fill them in only if they are the child\'s own.',
     'form.member.consent': 'I am the child\'s guardian and I accept the membership on the child\'s behalf.',
+    'form.member.required': 'Enter the child\'s name, date of birth, and guardian consent.',
+    'form.member.under16': 'Junior is for children under 16.',
+    'form.member.ownEmail': 'The child\'s email has to be their own.',
+    'form.member.unavailable': 'Junior can\'t be bought online right now.',
+    'form.member.noJuniorType': 'Junior can\'t be created right now.',
+    'form.member.noYouthType': 'The student and youth membership can\'t be created right now.',
+    'form.member.createFailed': 'The child could not be created. Try again.',
+    'form.member.addAnother': 'Add another child',
+    'form.member.youthTitle': 'The young person',
+    'form.member.youthAge': 'A guardian can only complete this for a 16- or 17-year-old.',
+    'form.member.email': 'Email*',
+    'form.member.emailRequired': 'The email has to be the young person\'s own.',
+    'form.member.emailOwn': 'The email has to be the young person\'s own, not the guardian\'s.',
+    'form.member.ageTooYoung': 'Age must be at least {age}.',
+    'form.member.ageTooOld': 'Age must be no more than {age}.',
+    'form.guardian.title': 'Guardian',
+    'form.guardian.hint': 'Your account. You must be 18, and you pay for the membership.',
+    'form.guardian.prompt': 'Enter the guardian\'s details. The membership is for the young person.',
     'form.parentFullName': 'First and last name*', 'form.parentFullName.placeholder': 'Enter your full name',
     'form.parentDateOfBirth': 'Date of birth*', 'form.parentStreetAddress': 'Street and house number*', 'form.parentStreetAddress.placeholder': 'Enter street and house number',
     'form.parentPostalCode': 'Postal code*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'City*', 'form.parentCity.placeholder': 'Copenhagen',
@@ -8313,10 +8382,25 @@ const translations = {
     'form.buyerRole.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
     'form.member.title': 'Das Kind',
     'form.member.roleHint': 'Die eigenen Angaben des Kindes. Die Mitgliedschaft gilt für das Kind, nicht für dich.',
-    'form.member.email': 'E-Mail',
-    'form.member.phoneNumber': 'Handynummer',
-    'form.member.emailHint': 'E-Mail und Mobilnummer sind freiwillig. Fülle sie nur aus, wenn sie dem Kind gehören.',
     'form.member.consent': 'Ich bin der Vormund des Kindes und akzeptiere die Mitgliedschaft im Namen des Kindes.',
+    'form.member.required': 'Gib den Namen und das Geburtsdatum des Kindes an und bestätige die Vormundschaft.',
+    'form.member.under16': 'Junior ist für Kinder unter 16 Jahren.',
+    'form.member.ownEmail': 'Die E-Mail des Kindes muss dem Kind gehören.',
+    'form.member.unavailable': 'Junior kann gerade nicht online gekauft werden.',
+    'form.member.noJuniorType': 'Junior kann gerade nicht angelegt werden.',
+    'form.member.noYouthType': 'Die Studenten- und Jugendmitgliedschaft kann gerade nicht angelegt werden.',
+    'form.member.createFailed': 'Das Kind konnte nicht angelegt werden. Versuch es erneut.',
+    'form.member.addAnother': 'Weiteres Kind hinzufügen',
+    'form.member.youthTitle': 'Die junge Person',
+    'form.member.youthAge': 'Ein Vormund kann das nur für eine 16- oder 17-jährige Person abschließen.',
+    'form.member.email': 'E-Mail*',
+    'form.member.emailRequired': 'Die E-Mail muss der jungen Person gehören.',
+    'form.member.emailOwn': 'Die E-Mail muss der jungen Person gehören, nicht dem Vormund.',
+    'form.member.ageTooYoung': 'Das Alter muss mindestens {age} Jahre sein.',
+    'form.member.ageTooOld': 'Das Alter darf höchstens {age} Jahre sein.',
+    'form.guardian.title': 'Vormund',
+    'form.guardian.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
+    'form.guardian.prompt': 'Gib die Angaben des Vormunds ein. Die Mitgliedschaft gilt für die junge Person.',
     'form.parentFullName': 'Vorname und Nachname*', 'form.parentFullName.placeholder': 'Geben Sie Ihren vollständigen Namen ein',
     'form.parentDateOfBirth': 'Geburtsdatum*', 'form.parentStreetAddress': 'Straße und Hausnummer*', 'form.parentStreetAddress.placeholder': 'Geben Sie Straße und Hausnummer ein',
     'form.parentPostalCode': 'Postleitzahl*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'Stadt*', 'form.parentCity.placeholder': 'Kopenhagen',
@@ -8903,8 +8987,6 @@ function updateFormTranslations() {
     { id: 'memberFirstName', labelKey: 'form.firstName', placeholderKey: 'form.firstName.placeholder' },
     { id: 'memberLastName', labelKey: 'form.lastName', placeholderKey: 'form.lastName.placeholder' },
     { id: 'memberDateOfBirth', labelKey: 'form.dateOfBirth' },
-    { id: 'memberEmail', labelKey: 'form.member.email', placeholderKey: 'form.email.placeholder' },
-    { id: 'memberPhoneNumber', labelKey: 'form.member.phoneNumber', placeholderKey: 'form.phoneNumber.placeholder' },
   ];
   
   memberFields.forEach(field => {
@@ -12390,6 +12472,7 @@ async function handleSaveAccount() {
   
   try {
     // Stop before createCustomer when this membership requires an 18+ buyer.
+    await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
     if (blockMembershipAgeGate('saveAccount')) {
       return;
     }
@@ -13211,6 +13294,7 @@ function handleGymSelection(item) {
   
   state.selectedGymId = numericId; // Store numeric ID for API requests
   state.selectedBusinessUnit = numericId; // Also store as businessUnit for clarity
+  void loadBusinessUnitSignupSettings(numericId);
   
   // Store gym name for display - try multiple selectors
   let gymNameText = null;
@@ -14948,6 +15032,16 @@ function handleGlobalClick(event) {
       switchToJuniorMembership();
       break;
     }
+    case 'pick-existing-member': {
+      event.preventDefault();
+      pickExistingMember(actionable.dataset.memberId, actionable.dataset.birthDate || '');
+      break;
+    }
+    case 'add-another-member': {
+      event.preventDefault();
+      addAnotherMember();
+      break;
+    }
     case 'edit-gym': {
       event.preventDefault();
       handleBackToGym();
@@ -15119,7 +15213,7 @@ function clearReferral(reason) {
 function getRecruitedByForPayload() {
   const entry = getActiveReferral();
   if (!entry) return null;
-  const subscriberId = state.customerId ? Number(state.customerId) : null;
+  const subscriberId = subscriptionSubscriberId();
   if (subscriberId && subscriberId === entry.ref) {
     devWarn('[Referral] Self-referral detected, dropping ref:', entry.ref);
     clearReferral('self-referral');
@@ -16298,6 +16392,7 @@ async function handleApplyDiscount() {
           throw new Error('Please select a gym location first');
         }
 
+        await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
         if (blockMembershipAgeGate('checkout')) {
           endApplyDiscountLoading();
           return;
@@ -16426,6 +16521,7 @@ async function handleApplyDiscount() {
           console.warn('[Discount] Existing order is not accessible. Creating a new order.');
           state.orderId = null;
           state.subscriptionAttachedOrderId = null;
+          await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
           if (blockMembershipAgeGate('checkout')) {
             endApplyDiscountLoading();
             return;
@@ -19062,10 +19158,13 @@ function routeCurrentMembership() {
     ? loggedInBuyerBirthDate()
     : normalizeBuyerBirthDate(dateField.value);
   const buyerAge = ageInYears(birthDate, getTodayLocalDateString());
-  return membershipAgeRoute({
-    buyerAge,
-    productKind: productKind(resolveSelectedAccessProduct()),
-  });
+  const kind = productKind(resolveSelectedAccessProduct());
+  if (state.guardianHandoffActive && kind === 'studentYouth') {
+    if (buyerAge == null) return { action: 'block', reason: 'invalid' };
+    if (buyerAge < 18) return { action: 'block', reason: 'buyer_under_18' };
+    return { action: 'continue' };
+  }
+  return membershipAgeRoute({ buyerAge, productKind: kind });
 }
 
 const CHECKOUT_MEMBER_STORAGE_KEY = 'boulders_checkout_member';
@@ -19074,6 +19173,11 @@ function clearStoredJuniorMember() {
   state.subscriptionUserId = null;
   state.orderIsOtherPayer = null;
   state.orderMemberKey = null;
+  state.pickedMemberId = null;
+  state.memberBirthDate = null;
+  state.guardianHandoffActive = false;
+  state.existingMembersLoadedFor = null;
+  document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
   try {
     sessionStorage.removeItem(CHECKOUT_MEMBER_STORAGE_KEY);
   } catch (error) {
@@ -19107,6 +19211,522 @@ function readMemberForm() {
     phone: phoneNumber ? { countryCode, number: phoneNumber } : null,
     guardianConsent: Boolean(document.getElementById('memberGuardianConsent')?.checked),
   };
+}
+
+function payerContact() {
+  const emailField = document.getElementById('email');
+  const email = (
+    (emailField && !isBuyerFormHidden() ? emailField.value : '')
+    || state.authenticatedEmail
+    || state.authenticatedCustomer?.email
+    || ''
+  ).trim().toLowerCase();
+  const customer = state.authenticatedCustomer || {};
+  const country = document.getElementById('countryCode')?.value
+    || customer.mobilePhone?.countryCode
+    || customer.phoneCountryCode
+    || '';
+  const number = document.getElementById('phoneNumber')?.value
+    || customer.mobilePhone?.number
+    || customer.phone
+    || '';
+  return { email, phone: normalizePhone(country, number) };
+}
+
+function currentMemberKey() {
+  if (state.pickedMemberId != null) {
+    return memberKey({ memberId: state.pickedMemberId });
+  }
+  const form = readMemberForm();
+  return memberKey({
+    payerId: state.customerId,
+    firstName: form.firstName,
+    lastName: form.lastName,
+    birthDate: form.birthDate,
+  });
+}
+
+function readStoredMember() {
+  try {
+    const raw = sessionStorage.getItem(CHECKOUT_MEMBER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    devWarn('[member] Could not read checkout member:', error);
+    return null;
+  }
+}
+
+function writeStoredMember(record) {
+  state.subscriptionUserId = record.memberId;
+  state.orderMemberKey = record.memberKey;
+  try {
+    sessionStorage.setItem(CHECKOUT_MEMBER_STORAGE_KEY, JSON.stringify(record));
+  } catch (error) {
+    devWarn('[member] Could not store checkout member:', error);
+  }
+}
+
+function restoreStoredMemberForPayer(payerId) {
+  const stored = readStoredMember();
+  if (!stored || stored.memberId == null) return;
+  if (String(stored.payerId) !== String(payerId)) return;
+  state.subscriptionUserId = stored.memberId;
+  state.orderMemberKey = stored.memberKey || null;
+  state.orderIsOtherPayer = true;
+}
+
+let memberBlockNoticeAt = 0;
+
+function notifyMemberBlock(message) {
+  state.memberCheckoutBlocked = true;
+  const now = Date.now();
+  if (now - memberBlockNoticeAt < 1500) return;
+  memberBlockNoticeAt = now;
+  showSaveAccountMessage(message, 'error');
+  showToast(message, 'error');
+}
+
+function otherPayerPurchasesEnabled(settings) {
+  if (!settings || typeof settings !== 'object') return true;
+  if (settings.buySubscriptionsForOtherUsersInMobility === false) return false;
+  if (settings.buySubscriptionsForOtherUsersOnMobility === false) return false;
+  return true;
+}
+
+function accessProductPools() {
+  return [
+    ...(state.allRawProducts || []),
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || []),
+  ];
+}
+
+function recordStudentYouthProductIds() {
+  const ids = [];
+  accessProductPools().forEach((product) => {
+    if (!product || product.id == null || productKind(product) !== 'studentYouth') return;
+    const id = Number(product.id);
+    if (Number.isFinite(id) && !ids.includes(id)) ids.push(id);
+  });
+  const signature = ids.join(',');
+  if (signature === state.studentYouthProductIdsKey) return ids;
+  state.studentYouthProductIds = ids;
+  state.studentYouthProductIdsKey = signature;
+  originalConsoleLog('[signup] student/youth product ids', ids);
+  return ids;
+}
+
+async function loadBusinessUnitSignupSettings(businessUnitId) {
+  const id = Number(businessUnitId);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  if (state.businessUnitSettings && state.businessUnitSettingsId === id) {
+    recordStudentYouthProductIds();
+    return state.businessUnitSettings;
+  }
+  const url = buildApiUrl({
+    baseUrl: businessUnitsAPI.baseUrl,
+    useProxy: businessUnitsAPI.useProxy,
+    path: '/api/ver3/businessunits',
+  });
+  try {
+    const list = await requestJson({
+      url,
+      headers: {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+      },
+    });
+    const unit = (Array.isArray(list) ? list : []).find((item) => Number(item?.id) === id);
+    const settings = unit?.settings && typeof unit.settings === 'object' ? unit.settings : null;
+    state.businessUnitSettings = settings;
+    state.businessUnitSettingsId = id;
+    const age = Number(settings?.ageAvoidParentalConsent);
+    state.ageAvoidParentalConsent = Number.isFinite(age) ? age : null;
+    recordStudentYouthProductIds();
+    originalConsoleLog(
+      '[signup] ageAvoidParentalConsent',
+      state.ageAvoidParentalConsent,
+      'businessUnit',
+      id,
+      'studentYouthProductIds',
+      state.studentYouthProductIds,
+    );
+    return settings;
+  } catch (error) {
+    devWarn('[signup] Could not read business unit settings:', error);
+    state.businessUnitSettings = null;
+    state.businessUnitSettingsId = id;
+    state.ageAvoidParentalConsent = null;
+    return null;
+  }
+}
+
+function bearerHeaders() {
+  const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+  return {
+    'Accept-Language': getAcceptLanguageHeader(),
+    'Content-Type': 'application/json',
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
+}
+
+function cacheCustomerTypeId(cacheKey, businessUnitId, id) {
+  state[cacheKey] = id;
+  state[`${cacheKey}BusinessUnit`] = Number(businessUnitId);
+}
+
+async function resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey) {
+  if (state[cacheKey] != null && state[`${cacheKey}BusinessUnit`] === Number(businessUnitId)) {
+    return state[cacheKey];
+  }
+  const url = buildApiUrl({
+    baseUrl: authAPI.baseUrl,
+    useProxy: authAPI.useProxy,
+    path: `/api/ver3/customertypes?businessUnit=${encodeURIComponent(businessUnitId)}`,
+  });
+  const data = await requestJson({ url, headers: bearerHeaders() });
+  const list = Array.isArray(data) ? data : [];
+  state.customerTypeCatalogueEmpty = list.length === 0;
+  const match = list.find((item) => predicate(String(item?.name || '')));
+  const id = match?.id != null ? Number(match.id) : null;
+  if (id != null) cacheCustomerTypeId(cacheKey, businessUnitId, id);
+  return id;
+}
+
+// The name catalogue is empty on this tenant. A type still prices the product:
+// GET .../products/subscriptions?customerType={id} returns the product only when
+// that type's price list includes it. Use the id when exactly one type does.
+async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) {
+  const product = Number(productId);
+  if (!Number.isFinite(product)) return null;
+  const matches = [];
+  for (let typeId = 1; typeId <= 30; typeId += 1) {
+    const url = buildApiUrl({
+      baseUrl: authAPI.baseUrl,
+      useProxy: authAPI.useProxy,
+      path: `/api/ver3/products/subscriptions?businessUnit=${encodeURIComponent(businessUnitId)}&customerType=${typeId}`,
+    });
+    let data;
+    try {
+      data = await requestJson({ url, headers: bearerHeaders() });
+    } catch (error) {
+      if (error?.status === 403 || error?.status === 400) break;
+      throw error;
+    }
+    const products = Array.isArray(data) ? data : [];
+    if (products.some((item) => Number(item?.id) === product)) matches.push(typeId);
+  }
+  if (matches.length !== 1) {
+    originalConsoleLog('[other-payer] customer type price probe', { product, matches });
+    return null;
+  }
+  cacheCustomerTypeId(cacheKey, businessUnitId, matches[0]);
+  originalConsoleLog('[other-payer] customer type from product price', { id: matches[0], product });
+  return matches[0];
+}
+
+async function resolveCustomerTypeId(businessUnitId, predicate, cacheKey) {
+  const named = await resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey);
+  if (named != null) return named;
+  if (!state.customerTypeCatalogueEmpty) return null;
+  return resolvePricedCustomerTypeId(businessUnitId, state.selectedProductId, cacheKey);
+}
+
+function resolveJuniorCustomerTypeId(businessUnitId) {
+  return resolveCustomerTypeId(
+    businessUnitId,
+    (name) => /junior/i.test(name),
+    'juniorCustomerTypeId',
+  );
+}
+
+function resolveStudentYouthCustomerTypeId(businessUnitId) {
+  return resolveCustomerTypeId(
+    businessUnitId,
+    (name) => /student|youth|ungdom/i.test(name) && !/junior/i.test(name),
+    'studentYouthCustomerTypeId',
+  );
+}
+
+function otherPayerMode() {
+  if (state.guardianHandoffActive) return 'guardian';
+  if (state.selectedProductType === 'punch-card' || isFirstClimbRoute()) return null;
+  if (!isCheckoutSubscriptionPlan() && selectedJuniorStatus() !== 'junior') return null;
+  return juniorMemberFormVisible() ? 'junior' : null;
+}
+
+function dropOrderForMemberChange() {
+  state.subscriptionUserId = null;
+  state.orderId = null;
+  state.subscriptionAttachedOrderId = null;
+  state.orderIsOtherPayer = null;
+  state.orderMemberKey = null;
+  state.fullOrder = null;
+  state.order = null;
+}
+
+let memberEnsureInflight = null;
+
+async function ensureMemberCustomer() {
+  if (memberEnsureInflight) return memberEnsureInflight;
+  memberEnsureInflight = ensureMemberCustomerOnce();
+  try {
+    return await memberEnsureInflight;
+  } finally {
+    memberEnsureInflight = null;
+  }
+}
+
+async function ensureMemberCustomerOnce() {
+  const mode = otherPayerMode();
+  const payerId = Number(state.customerId);
+  if (!mode || !Number.isFinite(payerId)) return null;
+
+  const settings = await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
+  if (!otherPayerPurchasesEnabled(settings)) {
+    notifyMemberBlock(t('form.member.unavailable', 'Junior kan ikke købes online lige nu.'));
+    return null;
+  }
+
+  const key = currentMemberKey();
+  const stored = readStoredMember();
+  if (stored && String(stored.payerId) === String(payerId) && stored.memberKey === key && stored.memberId != null) {
+    state.subscriptionUserId = stored.memberId;
+    state.orderMemberKey = key;
+    return stored.memberId;
+  }
+  if (stored && stored.memberKey && stored.memberKey !== key) {
+    dropOrderForMemberChange();
+  }
+
+  if (state.pickedMemberId != null) {
+    const memberId = Number(state.pickedMemberId);
+    writeStoredMember({ payerId, memberId, memberKey: key });
+    return memberId;
+  }
+
+  const form = readMemberForm();
+  if (!form.firstName || !form.lastName || !form.birthDate || !form.guardianConsent) {
+    notifyMemberBlock(t('form.member.required', 'Udfyld barnets navn, fødselsdato og værgesamtykke.'));
+    return null;
+  }
+
+  const memberAge = ageInYears(form.birthDate, getTodayLocalDateString());
+  if (mode === 'junior' && (memberAge == null || memberAge >= 16)) {
+    notifyMemberBlock(t('form.member.under16', 'Junior er til børn under 16 år.'));
+    return null;
+  }
+  if (mode === 'guardian' && (memberAge == null || memberAge < 16 || memberAge > 17)) {
+    notifyMemberBlock(t('form.member.youthAge', 'Værgen kan kun gennemføre for en 16- eller 17-årig.'));
+    return null;
+  }
+  if (mode === 'guardian' && !form.email) {
+    notifyMemberBlock(t('form.member.emailRequired', 'E-mailen skal være den unges egen.'));
+    return null;
+  }
+
+  const payer = payerContact();
+  if (form.email && payer.email && form.email.toLowerCase() === payer.email) {
+    notifyMemberBlock(mode === 'guardian'
+      ? t('form.member.emailOwn', 'E-mailen skal være den unges egen, ikke værgens.')
+      : t('form.member.ownEmail', 'Barnets e-mail skal være barnets egen.'));
+    return null;
+  }
+
+  let phone = null;
+  const memberPhone = normalizePhone(form.countryCode, form.phoneNumber);
+  if (memberPhone && !(payer.phone && payer.phone.country === memberPhone.country && payer.phone.number === memberPhone.number)) {
+    phone = memberPhone;
+  }
+
+  const customerType = mode === 'guardian'
+    ? await resolveStudentYouthCustomerTypeId(state.selectedBusinessUnit)
+    : await resolveJuniorCustomerTypeId(state.selectedBusinessUnit);
+  if (customerType == null) {
+    notifyMemberBlock(mode === 'guardian'
+      ? t('form.member.noYouthType', 'Student- og ungdomsmedlemskabet kan ikke oprettes lige nu.')
+      : t('form.member.noJuniorType', 'Junior kan ikke oprettes lige nu.'));
+    return null;
+  }
+
+  const body = buildOtherUserBody({
+    member: {
+      firstName: form.firstName,
+      lastName: form.lastName,
+      birthDate: form.birthDate,
+      email: form.email,
+      phone,
+    },
+    businessUnit: Number(state.selectedBusinessUnit),
+    customerType,
+    appId: BOULDERS_GOACTIVE_APP_ID,
+    otherUserType: 'CHILD',
+  });
+  delete body.password;
+  if (body.email && payer.email && body.email.toLowerCase() === payer.email) delete body.email;
+  if (body.mobilePhone && payer.phone && String(body.mobilePhone.number) === payer.phone.number) {
+    delete body.mobilePhone;
+  }
+
+  const created = await authAPI.createOtherUser(payerId, body);
+  const memberId = created?.id != null ? Number(created.id) : null;
+  if (memberId == null) {
+    notifyMemberBlock(t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
+    return null;
+  }
+  originalConsoleLog('[other-payer] otheruser', { id: memberId, created: created?.created === true, mode });
+  state.memberBirthDate = form.birthDate;
+  writeStoredMember({ payerId, memberId, memberKey: key });
+  return memberId;
+}
+
+function renderExistingMembers(users) {
+  const list = document.getElementById('existingMemberList');
+  const addButton = document.getElementById('addAnotherMember');
+  if (!list) return;
+  list.replaceChildren();
+  const people = (Array.isArray(users) ? users : []).filter((person) => {
+    return person && person.id != null && String(person.id) !== String(state.customerId);
+  });
+  if (!people.length) {
+    list.hidden = true;
+    if (addButton && state.pickedMemberId == null) addButton.hidden = true;
+    return;
+  }
+  people.forEach((person) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'existing-member-option';
+    if (String(state.pickedMemberId) === String(person.id)) button.classList.add('selected');
+    button.dataset.action = 'pick-existing-member';
+    button.dataset.memberId = String(person.id);
+    const birthDate = normalizeBuyerBirthDate(person.birthDate);
+    if (birthDate) button.dataset.birthDate = birthDate;
+    const name = [person.firstName, person.lastName].filter(Boolean).join(' ').trim();
+    button.textContent = name || String(person.id);
+    list.appendChild(button);
+  });
+  list.hidden = false;
+}
+
+async function loadExistingMembers(payerId) {
+  if (!payerId || !isUserAuthenticated() || !juniorMemberFormVisible()) {
+    renderExistingMembers([]);
+    return;
+  }
+  if (String(state.existingMembersLoadedFor) === String(payerId)) return;
+  const url = buildApiUrl({
+    baseUrl: authAPI.baseUrl,
+    useProxy: authAPI.useProxy,
+    path: `/api/ver3/customers/${payerId}/subscriptions/users?forPayerSubscriptionsOnly=true`,
+  });
+  try {
+    const users = await requestJson({ url, headers: bearerHeaders() });
+    state.existingMembersLoadedFor = payerId;
+    renderExistingMembers(users);
+  } catch (error) {
+    devWarn('[member] Could not list existing members:', error);
+    renderExistingMembers([]);
+  }
+}
+
+function pickExistingMember(memberId, birthDate) {
+  state.pickedMemberId = Number(memberId);
+  if (birthDate) {
+    state.memberBirthDate = birthDate;
+    const field = document.getElementById('memberDateOfBirth');
+    if (field) field.value = birthDate;
+  }
+  document.getElementById('parentGuardianForm')?.classList.add('member-existing-selected');
+  const addButton = document.getElementById('addAnotherMember');
+  if (addButton) addButton.hidden = false;
+  document.querySelectorAll('.existing-member-option').forEach((button) => {
+    button.classList.toggle('selected', button.dataset.memberId === String(memberId));
+  });
+}
+
+function addAnotherMember() {
+  state.pickedMemberId = null;
+  state.memberBirthDate = null;
+  document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
+  const addButton = document.getElementById('addAnotherMember');
+  if (addButton) addButton.hidden = true;
+  document.querySelectorAll('.existing-member-option.selected').forEach((button) => {
+    button.classList.remove('selected');
+  });
+}
+
+function beginGuardianHandoff() {
+  const read = (id) => document.getElementById(id)?.value?.trim() || '';
+  const write = (id, value) => {
+    const field = document.getElementById(id);
+    if (field) field.value = value;
+  };
+  write('memberFirstName', read('firstName'));
+  write('memberLastName', read('lastName'));
+  write('memberDateOfBirth', read('dateOfBirth'));
+  write('memberEmail', read('email'));
+  write('email', '');
+  write('password', '');
+  write('firstName', '');
+  write('lastName', '');
+  write('dateOfBirth', '');
+  state.guardianHandoffActive = true;
+  state.pickedMemberId = null;
+  updateMemberFormVisibility();
+  const message = t('form.guardian.prompt', 'Udfyld værgens oplysninger. Medlemskabet gælder den unge.');
+  showSaveAccountMessage(message, 'info');
+  showToast(message, 'info');
+  document.getElementById('firstName')?.focus();
+}
+
+function membershipDateAgeMessage(error) {
+  const payloads = [];
+  if (error?.payload != null) payloads.push(error.payload);
+  if (error?.originalError != null) payloads.push(error.originalError);
+  if (typeof error?.message === 'string') {
+    const match = error.message.match(/\{[\s\S]*\}/);
+    if (match) {
+      try { payloads.push(JSON.parse(match[0])); } catch (_) { /* not json */ }
+    }
+  }
+  for (const payload of payloads) {
+    let body = payload;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (_) { body = null; }
+    }
+    if (!body || typeof body !== 'object') continue;
+    const entries = [body, ...(Array.isArray(body.fieldErrors) ? body.fieldErrors : [])];
+    for (const entry of entries) {
+      const code = String(entry?.errorCode || '').toUpperCase();
+      if (code === 'DATE_AGE_TOO_YOUNG') {
+        const age = entry.minAge ?? body.minAge;
+        const template = t('form.member.ageTooYoung', 'Alderen skal være mindst {age} år.');
+        return age != null ? template.replace('{age}', String(age)) : template.replace(' {age}', '').replace('{age}', '');
+      }
+      if (code === 'DATE_AGE_TOO_OLD') {
+        const age = entry.maxAge ?? body.maxAge;
+        const template = t('form.member.ageTooOld', 'Alderen må højst være {age} år.');
+        return age != null ? template.replace('{age}', String(age)) : template.replace(' {age}', '').replace('{age}', '');
+      }
+    }
+  }
+  return null;
+}
+
+function logOtherPayerOrder(stage, order) {
+  if (!order || state.orderIsOtherPayer !== true) return;
+  const item = order.subscriptionItems?.[0];
+  originalConsoleLog('[other-payer]', stage, {
+    buySubscriptionForOtherUser: order.buySubscriptionForOtherUser === true,
+    subscriptionUser: order.subscriptionUser?.id ?? order.subscriptionUser ?? null,
+    customerId: order.customer?.id ?? order.customer ?? null,
+    subscriber: item?.subscriber?.id ?? item?.subscriber ?? null,
+    birthDate: item?.birthDate ?? null,
+  });
 }
 
 function restoreProfileSubmitButton(button) {
@@ -19160,19 +19780,34 @@ function juniorMemberFormVisible() {
 }
 
 function updateMemberFormVisibility() {
+  const kind = productKind(resolveSelectedAccessProduct());
+  if (state.guardianHandoffActive && kind !== 'studentYouth' && resolveSelectedAccessProduct()) {
+    clearStoredJuniorMember();
+  }
   const form = DOM.parentGuardianForm || document.getElementById('parentGuardianForm');
-  const show = juniorMemberFormVisible();
+  const showJunior = juniorMemberFormVisible();
+  const show = showJunior || state.guardianHandoffActive === true;
   if (form) {
     form.hidden = !show;
     form.style.display = show ? 'block' : 'none';
   }
   const consent = document.getElementById('memberGuardianConsent');
-  if (consent) consent.required = Boolean(show);
+  if (consent) consent.required = Boolean(show && state.pickedMemberId == null);
+  const emailGroup = document.getElementById('memberEmailGroup');
+  const emailField = document.getElementById('memberEmail');
+  if (emailGroup) emailGroup.hidden = state.guardianHandoffActive !== true;
+  if (emailField) emailField.required = state.guardianHandoffActive === true;
   placeJuniorFormSubmit(show);
   setJuniorRoleLabels(show);
-  if (selectedJuniorStatus() === 'other') {
+  if (selectedJuniorStatus() === 'other' && state.guardianHandoffActive !== true) {
     clearStoredJuniorMember();
   }
+  if (showJunior && isUserAuthenticated() && state.customerId) {
+    void loadExistingMembers(state.customerId);
+  } else if (!showJunior) {
+    renderExistingMembers([]);
+  }
+  recordStudentYouthProductIds();
 }
 
 function setJuniorRoleLabels(show) {
@@ -19185,6 +19820,25 @@ function setJuniorRoleLabels(show) {
   if (buyerRole) buyerRole.hidden = !bothVisible;
   if (profileTitle) profileTitle.hidden = bothVisible;
   if (memberStep) memberStep.hidden = !bothVisible;
+  const handoff = state.guardianHandoffActive === true;
+  const title = document.querySelector('#buyerRole .profile-role-title');
+  const hint = document.querySelector('#buyerRole .profile-role-hint');
+  const memberTitle = document.querySelector('#parentGuardianForm .parent-form-title');
+  if (title) {
+    const key = handoff ? 'form.guardian.title' : 'form.buyerRole.title';
+    title.setAttribute('data-i18n-key', key);
+    title.textContent = t(key);
+  }
+  if (hint) {
+    const key = handoff ? 'form.guardian.hint' : 'form.buyerRole.hint';
+    hint.setAttribute('data-i18n-key', key);
+    hint.textContent = t(key);
+  }
+  if (memberTitle) {
+    const key = handoff ? 'form.member.youthTitle' : 'form.member.title';
+    memberTitle.setAttribute('data-i18n-key', key);
+    memberTitle.textContent = t(key);
+  }
 }
 
 function membershipAgeMessage(reason) {
@@ -19206,6 +19860,14 @@ function blockMembershipAgeGate(surface) {
   const route = routeCurrentMembership();
   if (!route || route.action === 'continue' || route.action === 'junior_member_form') {
     return false;
+  }
+
+  if (route.action === 'guardian_handoff') {
+    const consentAge = Number(state.ageAvoidParentalConsent);
+    if (Number.isFinite(consentAge) && consentAge >= 18 && !isUserAuthenticated()) {
+      beginGuardianHandoff();
+      return true;
+    }
   }
 
   const reason = route.action === 'guardian_handoff' ? 'buyer_under_18' : (route.reason || 'invalid');
@@ -19381,7 +20043,32 @@ async function finalizePreliminaryZeroBalanceOrder(orderId, context = 'checkout-
   }
 }
 
+function orderEchoesOtherPayer(order) {
+  const sources = [order, order?.data, order?.order].filter((item) => item && typeof item === 'object');
+  return sources.some((item) => item.buySubscriptionForOtherUser === true);
+}
+
 async function ensureOrderCreated(context = 'auto') {
+  const mode = otherPayerMode();
+  if (mode) {
+    let memberId;
+    try {
+      memberId = await ensureMemberCustomer();
+    } catch (error) {
+      const ageMessage = membershipDateAgeMessage(error);
+      notifyMemberBlock(ageMessage || t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
+      devWarn('[member] otheruser failed:', error);
+      return null;
+    }
+    if (!memberId) return null;
+    const key = currentMemberKey();
+    if (state.orderId && (state.orderIsOtherPayer !== true || state.orderMemberKey !== key)) {
+      dropOrderForMemberChange();
+      state.subscriptionUserId = memberId;
+      state.orderMemberKey = key;
+    }
+  }
+
   if (state.orderId) {
     console.log(`[checkout] Reusing existing order ${state.orderId} (${context})`);
     persistOrderSnapshot(state.orderId);
@@ -19403,16 +20090,37 @@ async function ensureOrderCreated(context = 'auto') {
     return null;
   }
 
-  const orderData = {
-    customer: Number(state.customerId),
-    businessUnit: state.selectedBusinessUnit,
-    source: 'join.boulders.dk',
-  };
+  const orderData = mode
+    ? buildOrderIdentity({
+        payerId: Number(state.customerId),
+        businessUnit: state.selectedBusinessUnit,
+        memberId: state.subscriptionUserId,
+        forOther: true,
+      })
+    : {
+        customer: Number(state.customerId),
+        businessUnit: state.selectedBusinessUnit,
+        source: 'join.boulders.dk',
+      };
+  const memberKeyAtCreate = mode ? currentMemberKey() : null;
 
   orderCreationPromise = (async () => {
     console.log(`[checkout] Creating order (context: ${context})...`);
     const order = await orderAPI.createOrder(orderData);
-    state.orderId = order.id || order.orderId;
+    if (mode && currentMemberKey() !== memberKeyAtCreate) return null;
+    state.orderId = order.id || order.orderId || order.data?.id || order.data?.orderId;
+    if (mode) {
+      state.orderIsOtherPayer = true;
+      state.orderMemberKey = memberKeyAtCreate;
+      state.otherPayerFlagEchoed = orderEchoesOtherPayer(order);
+      logOtherPayerOrder('create', order.data && !order.customer ? order.data : order);
+      if (state.otherPayerFlagEchoed !== true) {
+        originalConsoleLog('[other-payer] create response did not echo buySubscriptionForOtherUser');
+      }
+    } else {
+      state.orderIsOtherPayer = null;
+      state.orderMemberKey = null;
+    }
     state.subscriptionAttachedOrderId = null;
     
     // Store full order object for payment overview
@@ -19494,6 +20202,7 @@ async function ensureSubscriptionAttached(context = 'auto') {
     // Store full order for payment overview - this now has the correct price
     state.fullOrder = updatedOrder;
     state.order = updatedOrder; // Also update state.order for backward compatibility
+    logOtherPayerOrder('subscription', updatedOrder);
     
     // CRITICAL: Store subscription item ID for linking addons via additionTo
     const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
@@ -19668,6 +20377,7 @@ async function handleCheckout() {
   
   // Age gate before checkout is marked in progress, so a block never creates
   // a customer, never calls ensureOrderCreated, and does not emit begin_checkout.
+  await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
   if (blockMembershipAgeGate('checkout')) {
     return;
   }
@@ -20188,6 +20898,12 @@ async function handleCheckout() {
       console.log('[checkout] Ensuring order exists before adding items...');
       const ensuredOrderId = await ensureOrderCreated('checkout-flow');
       if (!ensuredOrderId) {
+        if (state.memberCheckoutBlocked) {
+          state.memberCheckoutBlocked = false;
+          setCheckoutLoadingState(false);
+          state.checkoutInProgress = false;
+          return;
+        }
         throw new Error('Order ID missing after ensureOrderCreated');
       }
       state.orderId = ensuredOrderId;
@@ -20841,7 +21557,7 @@ async function handleCheckout() {
                     {
                       subscriptionProduct: productId,
                       startDate: startDateStr,
-                      ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
+                      ...(subscriptionSubscriberId() ? { subscriber: subscriptionSubscriberId() } : {}),
                       ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
                     },
                     productId,
@@ -21048,6 +21764,14 @@ async function handleCheckout() {
           }
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
+
+          const ageMessage = membershipDateAgeMessage(error);
+          if (ageMessage) {
+            showToast(ageMessage, 'error');
+            setCheckoutLoadingState(false);
+            state.checkoutInProgress = false;
+            return;
+          }
 
           // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
           const isProductNotAllowed = error.isProductNotAllowed || 
@@ -22803,6 +23527,7 @@ async function loadOrderForConfirmation(orderId) {
       if (customerData) {
         storedCustomer = JSON.parse(customerData);
         state.customerId = storedCustomer.id;
+        restoreStoredMemberForPayer(storedCustomer.id);
         console.log('[Payment Return] Restored customer from sessionStorage:', storedCustomer);
       }
       if (orderData) {
@@ -25739,7 +26464,7 @@ function validateForm(animate = false) {
 
   const memberForm = DOM.parentGuardianForm;
   const memberFormVisible = memberForm && !memberForm.hidden && memberForm.style.display !== 'none';
-  if (memberFormVisible && !document.getElementById('memberGuardianConsent')?.checked) {
+  if (memberFormVisible && state.pickedMemberId == null && !document.getElementById('memberGuardianConsent')?.checked) {
     isValid = false;
     errors.push('Missing guardian consent');
     highlightFieldError('memberGuardianConsent', animate);
@@ -26602,9 +27327,7 @@ function showStep(stepNumber) {
   if (stepNumber === 4) {
     // Ensure countries are loaded (in case they weren't loaded on init)
     const countryCodeSelect = document.getElementById('countryCode');
-    const memberCountryCodeSelect = document.getElementById('memberCountryCode');
-    if ((countryCodeSelect && countryCodeSelect.options.length <= 1) ||
-        (memberCountryCodeSelect && memberCountryCodeSelect.options.length <= 1)) {
+    if (countryCodeSelect && countryCodeSelect.options.length <= 1) {
       // Only one option (the default +45), so countries haven't been loaded yet
       const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       if (isDevelopment) {
