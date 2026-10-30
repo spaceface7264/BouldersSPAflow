@@ -540,11 +540,13 @@ const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/fitness',
   '/single-gym',
   '/singlegym',
+  '/single-gym-student-youth',
+  '/singlegym-student-youth',
   '/reset-password',
   '/resetpassword',
 ]));
 
-// Fitness and Single Gym exist only at Boulders Aalborg (BRP business unit 13).
+// Fitness, Single Gym, and Student & Youth Single Gym exist only at Boulders Aalborg (BRP business unit 13).
 const AALBORG_BUSINESS_UNIT_ID = '13';
 const AALBORG_GYM_NAME = 'Boulders Aalborg';
 const AALBORG_MEMBERSHIP_DEEPLINKS = Object.freeze([
@@ -563,11 +565,24 @@ const AALBORG_MEMBERSHIP_DEEPLINKS = Object.freeze([
     id: 'singlegym',
     paths: Object.freeze(['/single-gym', '/singlegym']),
     typeToken: 'singlegym',
-    matchesProduct: (product) => isSingleGymMembership(product) && !isFitnessMembership(product),
+    matchesProduct: (product) => isSingleGymMembership(product)
+      && !isFitnessMembership(product)
+      && !isStudentYouthSingleGymMembership(product),
     logLabel: 'Single Gym',
     unavailable: Object.freeze({
       en: 'Single Gym membership could not be loaded. Choose it under Membership.',
       da: 'Single Gym medlemskab kunne ikke indlæses. Vælg det under Medlemskab.',
+    }),
+  }),
+  Object.freeze({
+    id: 'singlegymstudentyouth',
+    paths: Object.freeze(['/single-gym-student-youth', '/singlegym-student-youth']),
+    typeToken: 'singlegymstudentyouth',
+    matchesProduct: (product) => isStudentYouthSingleGymMembership(product),
+    logLabel: 'Student & Youth Single Gym',
+    unavailable: Object.freeze({
+      en: 'Student & Youth Single Gym membership could not be loaded. Choose it under Membership.',
+      da: 'Student & Youth Single Gym medlemskab kunne ikke indlæses. Vælg det under Medlemskab.',
     }),
   }),
 ]);
@@ -1088,6 +1103,7 @@ async function advanceFirstClimbFromGym() {
 // Deeplink straight into the cart with Aalborg and one membership already chosen.
 // /fitness                          /?location=aalborg&type=fitness
 // /single-gym                       /?location=aalborg&type=single-gym
+// /single-gym-student-youth         /?location=aalborg&type=single-gym-student-youth
 function compactDeeplinkToken(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
@@ -7196,6 +7212,18 @@ function isSingleGymMembership(product) {
   if (compactProductToken(product.name).includes('singlegym')) return true;
   const labels = Array.isArray(product.productLabels) ? product.productLabels : [];
   return labels.some((label) => compactProductToken(label?.name).includes('singlegym'));
+}
+
+function isStudentYouthSingleGymMembership(product) {
+  if (!isSingleGymMembership(product)) return false;
+  const labels = Array.isArray(product.productLabels) ? product.productLabels : [];
+  const token = compactProductToken([
+    product.name,
+    ...labels.map((label) => label?.name),
+  ].join(' '));
+  const hasStudent = token.includes('student') || token.includes('studie');
+  const hasYouth = token.includes('youth') || token.includes('ungdom');
+  return hasStudent && hasYouth;
 }
 
 function membershipAccessGroup(product) {
@@ -17923,6 +17951,17 @@ function updatePaymentOverview() {
       .filter(Boolean)
       .join(' ')
       .toLowerCase();
+
+    // Student & Youth Single Gym is a regular price, not an intro offer.
+    // The student keyword below would otherwise invent 399 as the price after a campaign.
+    if (
+      isSingleGymMembership(sourceProduct) &&
+      /(student|studie)/i.test(text) &&
+      /(youth|ungdom)/i.test(text) &&
+      !/junior/i.test(text)
+    ) {
+      return 0;
+    }
 
     // Frontend fallback mapping (provided by business):
     // Adult: 469 DKK, Student: 399 DKK, Junior: 279 DKK.
