@@ -1,6 +1,6 @@
 # Tracking — current state and handover
 
-**Last updated:** 2026-08-04
+**Last updated:** 2026-10-30
 
 Living status of ad-platform tracking for `join.boulders.dk`. Read this before touching tracking
 code, CSP, or the GTM container. `docs/status/TRACKING_STATUS_REPORT.md` is a January 2026 snapshot
@@ -13,7 +13,7 @@ behind Consent Mode v2).
 
 | Platform | Status |
 |---|---|
-| GA4 | Firing via GTM (`select_item`, `add_to_cart`, `begin_checkout`, `purchase`, `purchase_99kr`, …) |
+| GA4 | Firing via GTM (`select_item`, `add_to_cart`, `begin_checkout`, `purchase`, `purchase_99kr`, …). `purchase_fitness` is emitted by the site as of 2026-10-30; the GTM tag for it is not published yet (see below). |
 | Meta / Facebook Pixel | Firing, with match-quality fields added 2026-07 |
 | TikTok Pixel | Firing (CSP unblocked in PR #127) |
 | Google Ads — `99 kr.` day ticket | **Live since 2026-08-04**, verified end to end |
@@ -65,6 +65,44 @@ conversion_async.js             : loaded
 window.google_trackConversion   : true
 CSP refusals                    : 0
 ```
+
+---
+
+## Fitness membership — `purchase_fitness`
+
+Fitness Membership (Aalborg only) dual-fires the same way the 99 kr day ticket does: the standard
+`purchase` event stays in revenue, and a dedicated `purchase_fitness` event is the conversion.
+
+`trackConfirmedPurchase()` emits it for every completed Fitness order, whether the customer used
+the deeplink or picked Aalborg → Medlemskab → Fitness by hand. Detection is the product itself
+(name or label contains "fitness"), plus `fitnessMembership: true` stored on the checkout snapshot
+so a payment-provider return still matches.
+
+```javascript
+{
+  event: 'purchase_fitness',
+  ecommerce: { transaction_id, value, currency: 'DKK', items },
+  event_id: 'purchase:<orderId>:fitness'
+}
+```
+
+The standard `purchase` on the same order keeps `event_id` `purchase:<orderId>`. Do not add
+`purchase` and `purchase_fitness` together. The existing GTM trigger `purchase - membership not 15`
+still matches Fitness, so Meta `purchase_membership` also fires until that trigger excludes it.
+
+### GTM (web container `GTM-KHB92N9P`) — not published yet
+
+Add, do not modify existing tags:
+
+1. Trigger `ce - purchase_fitness` — Custom Event, event name `purchase_fitness`.
+2. Tag `GA4 - Purchase fitness` — GA4 Event, event name `purchase_fitness`, ecommerce from the
+   event, same server-container forwarding as `GA4 - Purchase 99kr`.
+3. In GA4, mark `purchase_fitness` as a key event. Leave the standard `purchase` key event in place.
+4. Optional Meta tag `Facebook Pixel - purchase_fitness` — custom event `purchase_fitness`,
+   event ID `{{DLV - event_id}}` (the suffixed id, same pattern as `purchase_99kr`).
+5. Google Ads: create the conversion action in Ads first, then a `GAds -` tag on
+   `ce - purchase_fitness` with `user_data` = `{{UPD - Purchase}}`. There is no conversion label
+   for Fitness yet, so do not invent one.
 
 ---
 

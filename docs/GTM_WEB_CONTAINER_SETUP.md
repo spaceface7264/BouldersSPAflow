@@ -154,6 +154,31 @@ The `/99kr` day-ticket flow dual-fires: standard `purchase` (revenue) **and** `p
 
 7. **Google Ads conversion** for the same event (`AW-805899643`, conversion action `99 kr.`): see `docs/GOOGLE_ADS_99KR_CONVERSION_SETUP.md`.
 
+### 2.6 Purchase fitness Event Tag (distinct conversion)
+
+Fitness Membership dual-fires: standard `purchase` (revenue) **and** `purchase_fitness` (dedicated conversion). Same shape as `purchase_99kr`. The site emits this as of 2026-10-30; the tag below is not in the published container yet.
+
+1. **Go to Tags → New**
+2. **Tag Configuration:**
+   - Choose: **Google Analytics: GA4 Event**
+   - **Configuration Tag:** `GA4 - Configuration`
+   - **Event Name:** `purchase_fitness`
+   - **Ecommerce:** Enable "Use data from the ecommerce event"
+   - **Send to server container:** Enable
+   - **Server container URL:** Your Stape domain
+   - **Container ID:** `GTM-P8DL49HC`
+
+3. **Triggering:**
+   - Choose: **Custom Event**
+   - **Event name:** `purchase_fitness`
+
+4. **Name:** `GA4 - Purchase fitness`
+5. **Save**
+
+6. **In GA4** (Admin → Events / Key events): mark `purchase_fitness` as a key event. Do **not** remove the standard `purchase` key event.
+
+7. Google Ads needs a conversion action created in Ads first. There is no Fitness conversion label yet.
+
 ---
 
 ## Step 3: Server-Side Forwarding (Alternative Method)
@@ -173,7 +198,7 @@ If your GA4 tags don't have built-in forwarding, you can use a separate forwardi
        var lastEvent = window.dataLayer[window.dataLayer.length - 1];
        
        // Only forward ecommerce events
-       var ecommerceEvents = ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr'];
+       var ecommerceEvents = ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr', 'purchase_fitness'];
        if (lastEvent && lastEvent.event && ecommerceEvents.indexOf(lastEvent.event) !== -1) {
          // Forward to server-side container
          fetch('https://YOUR-STAPE-DOMAIN/collect', {
@@ -196,7 +221,7 @@ If your GA4 tags don't have built-in forwarding, you can use a separate forwardi
 
 3. **Triggering:**
    - Choose: **Custom Event**
-   - **Event name:** `select_item|add_to_cart|begin_checkout|purchase|purchase_99kr` (use regex)
+   - **Event name:** `select_item|add_to_cart|begin_checkout|purchase|purchase_99kr|purchase_fitness` (use regex)
 
 4. **Name:** `Server Container - Forward Events`
 5. **Save**
@@ -257,6 +282,7 @@ Create variables to easily access ecommerce data:
    - Click checkout → `begin_checkout` should fire
    - Complete purchase → `purchase` should fire
    - Complete a `/99kr` day-ticket purchase → **both** `purchase` and `purchase_99kr` should fire (same `transaction_id` / value)
+   - Complete a Fitness Membership purchase → **both** `purchase` and `purchase_fitness` should fire (same `transaction_id` / value)
 
 ### 5.2 Check DataLayer
 
@@ -266,7 +292,7 @@ In browser console:
 console.log(window.dataLayer);
 
 // Filter ecommerce events
-window.dataLayer.filter(e => e.event && ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr'].includes(e.event))
+window.dataLayer.filter(e => e.event && ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr', 'purchase_fitness'].includes(e.event))
 ```
 
 ### 5.3 GA4 DebugView
@@ -364,6 +390,7 @@ In each GA4 tag:
 | GA4 - Begin Checkout | begin_checkout | Custom Event: begin_checkout |
 | GA4 - Purchase | purchase | Custom Event: purchase |
 | GA4 - Purchase 99kr | purchase_99kr | Custom Event: purchase_99kr |
+| GA4 - Purchase fitness | purchase_fitness | Custom Event: purchase_fitness |
 
 ### DataLayer Event Structure
 
