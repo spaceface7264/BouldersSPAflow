@@ -537,9 +537,15 @@ const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
   '/membership-offer',
   '/99kr',
+  '/fitness',
   '/reset-password',
   '/resetpassword',
 ]));
+
+// Fitness Membership exists only at Boulders Aalborg (BRP business unit 13).
+const FITNESS_CART_PATH = '/fitness';
+const FITNESS_BUSINESS_UNIT_ID = '13';
+const FITNESS_GYM_NAME = 'Boulders Aalborg';
 
 function normalizePathname(pathname) {
   const raw = String(pathname || '/').trim().toLowerCase();
@@ -1052,6 +1058,129 @@ async function advanceFirstClimbFromGym() {
   try { updateCartSummary(); } catch (_) {}
   scrollToTop();
   setTimeout(() => scrollToTop(), 200);
+}
+
+// Deeplink straight into the cart with Aalborg + Fitness Membership already chosen.
+// /fitness
+// /?location=aalborg&type=fitness
+function isFitnessCartDeeplink(pathname = window.location.pathname, search = window.location.search) {
+  if (normalizePathname(pathname) === FITNESS_CART_PATH) return true;
+  try {
+    const params = new URLSearchParams(search);
+    const location = (params.get('location') || params.get('gym') || '').trim().toLowerCase();
+    const type = (params.get('type') || '').trim().toLowerCase();
+    const locationMatch = location === 'aalborg' || location === FITNESS_BUSINESS_UNIT_ID;
+    return locationMatch && type === 'fitness';
+  } catch (_) {
+    return false;
+  }
+}
+
+function shouldApplyFitnessCartDeeplink() {
+  if (state.isPaymentReturnFlow) return false;
+  if (isPaymentReturnPage()) return false;
+  return isFitnessCartDeeplink();
+}
+
+function findFitnessMembershipProduct() {
+  const pools = [
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.allRawProducts || []),
+  ];
+  return pools.find((product) => isFitnessMembership(product)) || null;
+}
+
+function highlightSelectedGymItem() {
+  if (state.selectedBusinessUnit == null) return;
+  const id = String(state.selectedBusinessUnit);
+  document.querySelectorAll('.gym-item').forEach((item) => {
+    const gymId = String(item.getAttribute('data-gym-id') || '').replace(/^gym-/, '');
+    item.classList.toggle('selected', gymId === id);
+  });
+}
+
+function markFitnessPlanSelected(productId) {
+  const category = document.querySelector('.category-item[data-category="membership"]');
+  if (category) category.classList.add('expanded', 'selected');
+  const card = document.querySelector(`.plan-card[data-product-id="${CSS.escape(String(productId))}"]`);
+  if (!card) return;
+  card.closest('.category-item')?.querySelectorAll('.plan-card').forEach((other) => {
+    other.classList.toggle('selected', other === card);
+  });
+}
+
+function parkFitnessCartStep() {
+  state.selectedGymId = FITNESS_BUSINESS_UNIT_ID;
+  state.selectedBusinessUnit = FITNESS_BUSINESS_UNIT_ID;
+  state.selectedGymName = FITNESS_GYM_NAME;
+  state.currentStep = 4;
+  showStep(4);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+}
+
+async function applyFitnessCartDeeplink() {
+  if (!shouldApplyFitnessCartDeeplink()) return;
+  if (state.fitnessDeeplinkApplied) return;
+  state.fitnessDeeplinkApplied = true;
+
+  // Keep the loading overlay up until the Fitness product is actually in the cart,
+  // so the gym step and an empty cart never flash.
+  holdLoadingOverlayForPaymentReturn();
+  parkFitnessCartStep();
+  highlightSelectedGymItem();
+  try { loadReferenceData(); } catch (_) {}
+
+  let product = null;
+  try {
+    await loadProductsFromAPI();
+    product = findFitnessMembershipProduct();
+  } catch (error) {
+    devWarn('[Fitness deeplink] product load failed', error);
+  }
+
+  try {
+    if (!product) {
+      devWarn('[Fitness deeplink] Fitness membership not in the Aalborg catalog');
+      state.currentStep = 2;
+      showStep(2);
+      updateStepIndicator();
+      updateNavigationButtons();
+      updateMainSubtitle();
+      try { updateSelectedGymDisplay(); } catch (_) {}
+      const category = document.querySelector('.category-item[data-category="membership"]');
+      if (category) category.classList.add('expanded', 'selected');
+      const unavailable = state.language === 'en'
+        ? 'Fitness membership could not be loaded. Choose it under Membership.'
+        : 'Fitness Medlemskab kunne ikke indlæses. Vælg det under Medlemskab.';
+      showToast(unavailable, 'error');
+      return;
+    }
+
+    state.membershipPlanId = `membership-${product.id}`;
+    state.selectedProductId = product.id;
+    state.selectedProductType = 'membership';
+    markFitnessPlanSelected(product.id);
+    try { loadSubscriptionAdditions(product.id); } catch (_) {}
+    trackSelectItemEvent({
+      product,
+      productId: product.id,
+      category: 'membership',
+      type: 'membership',
+    });
+    updateCartSummary();
+    applyConditionalSteps();
+    updateFAQVisibility();
+    try { renderFAQ(); } catch (_) {}
+    if (isUserAuthenticated()) {
+      try { switchAuthMode('login'); } catch (_) {}
+    }
+    devLog('[Fitness deeplink] cart ready', { productId: product.id, name: product.name });
+  } finally {
+    releasePaymentReturnOverlay();
+  }
 }
 
 // firstclimb is a one-per-customer offer. Block only when we have positive
@@ -5103,6 +5232,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
       });
       setupGymEventListeners();
+      highlightSelectedGymItem();
     }
     return;
   }
@@ -5314,6 +5444,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
     
     // Re-setup event listeners for new gym items
     setupGymEventListeners();
+    highlightSelectedGymItem();
     
     // Re-render FAQ when on step 1 so opening hours table uses API gym list (and API opening hours if present)
     if (state.currentStep === 1) {
@@ -5342,6 +5473,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
       });
       setupGymEventListeners();
+      highlightSelectedGymItem();
       if (noResults) noResults.classList.add('hidden');
       scheduleGymListRecovery(error);
       return;
@@ -5808,6 +5940,7 @@ const state = {
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
   landingRouteConfig: null, // Active landing route config for path-specific product surfacing
+  fitnessDeeplinkApplied: false, // /fitness or ?location=aalborg&type=fitness already ran
   landingMatchedProducts: [], // Products matched by active landing route label
   firstclimbGuardPromise: null, // Resolves when /99kr eligibility check completes (blocks navigation until done)
   isPaymentReturnFlow: false, // True when this page load is a return from the payment provider / success render — skips only the automatic /99kr eligibility check on load (the just-bought product would otherwise misfire the blocker on the confirmation page). Checkout-time guards are unaffected.
@@ -7276,6 +7409,12 @@ function init() {
   
   // Load gyms from API
   loadGymsFromAPI();
+
+  // /fitness and ?location=aalborg&type=fitness land in the cart with both set.
+  // Runs until its first await before the overlay hide below, so step 1 never paints.
+  if (shouldApplyFitnessCartDeeplink()) {
+    applyFitnessCartDeeplink();
+  }
   
   // Load countries from API and populate country code selectors
   // Use setTimeout to ensure DOM is fully ready
@@ -18831,6 +18970,7 @@ function persistOrderSnapshot(orderId) {
       discountApplied: state.discountApplied,
       // Durable offer signal for post-payment tracking (path alone can be unreliable)
       landingRoute,
+      fitnessMembership: isFitnessMembershipSelected(),
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -21934,6 +22074,17 @@ function orderHasFirstclimbBlockingProduct(order) {
   return false;
 }
 
+/** True when this completed order should dual-fire purchase_fitness. */
+function isFitnessPurchase(order = null, storedOrder = null) {
+  if (storedOrder?.fitnessMembership === true) return true;
+  const product = order?.subscriptionItems?.[0]?.product;
+  if (isFitnessMembership(product)) return true;
+  const cartItems = Array.isArray(storedOrder?.cartItems) ? storedOrder.cartItems : [];
+  return cartItems.some((item) => (
+    item?.type === 'membership' && /fitness/i.test(`${item.productName || ''} ${item.name || ''}`)
+  ));
+}
+
 /** True when this completed order should dual-fire purchase_99kr. */
 function isFirstClimbPurchase(order = null, storedOrder = null) {
   if (isFirstClimbRoute()) return true;
@@ -22248,6 +22399,7 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
   const transactionId = resolvePurchaseTransactionId(order, orderId);
   const metadata = resolvePurchaseTrackingMetadata(order, storedOrder, storedCustomer, transactionId);
   const dualFire99kr = isFirstClimbPurchase(order, storedOrder);
+  const dualFireFitness = !state.testMode && isFitnessPurchase(order, storedOrder);
 
   try {
     window.GTM.trackPurchase(
@@ -22274,12 +22426,28 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
         }
       );
     }
+    if (dualFireFitness) {
+      window.GTM.trackPurchase(
+        transactionId,
+        purchaseItems,
+        purchaseValue,
+        0,
+        0,
+        'DKK',
+        {
+          ...metadata,
+          eventName: 'purchase_fitness',
+          ...(metadata.event_id ? { event_id: `${metadata.event_id}:fitness` } : {}),
+        }
+      );
+    }
     markPurchaseTracked(orderId);
     devLog('[GTM] purchase tracked:', {
       transactionId,
       purchaseValue,
       itemCount: purchaseItems.length,
       purchase_99kr: dualFire99kr,
+      purchase_fitness: dualFireFitness,
     });
     trackTikTokAttributedPurchase(transactionId, purchaseItems, purchaseValue, order, storedOrder);
     return true;
