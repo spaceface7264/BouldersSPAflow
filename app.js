@@ -54,6 +54,16 @@ import {
   isGeolocationAvailable,
 } from './utils/geolocation.js';
 import { buildApiUrl, requestJson } from './utils/apiRequest.js';
+import {
+  normalizePhone,
+  classifyIdentityCheck,
+  productKind,
+  ageInYears,
+  membershipAgeRoute,
+  buildOtherUserBody,
+  buildOrderIdentity,
+  memberKey,
+} from './utils/registrationIdentity.js';
 import { sanitizeHTML } from './sanitize.js';
 import confetti from 'canvas-confetti';
 
@@ -1182,16 +1192,7 @@ const REQUIRED_FIELDS = [
 ];
 
 const PARENT_REQUIRED_FIELDS = [
-  'parentFullName',
-  'parentDateOfBirth',
-  'parentStreetAddress',
-  'parentPostalCode',
-  'parentCity',
-  'parentEmail',
-  'parentCountryCode',
-  'parentPhoneNumber',
-  'parentPassword',
-  'parentPrimaryGym',
+  'memberGuardianConsent',
 ];
 
 const CARD_FIELDS = ['cardNumber', 'expiryDate', 'cvv', 'cardholderName'];
@@ -2450,6 +2451,28 @@ class AuthAPI {
       throw error;
     }
   }
+
+  // Other-payer child. BRP returns { id, created }. Do not send { otherUserId, role }.
+  async createOtherUser(payerId, body) {
+    const url = buildApiUrl({
+      baseUrl: this.baseUrl,
+      useProxy: this.useProxy,
+      path: `/api/ver3/customers/${payerId}/otheruser`,
+    });
+    const accessToken = typeof window.getAccessToken === 'function'
+      ? window.getAccessToken()
+      : null;
+    return requestJson({
+      url,
+      method: 'POST',
+      headers: {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body,
+    });
+  }
 }
 
 // Step 6: Token Management Functions
@@ -2586,6 +2609,7 @@ class AuthAPI {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);
       sessionStorage.removeItem('boulders_checkout_customer');
       sessionStorage.removeItem('boulders_checkout_order');
+      sessionStorage.removeItem('boulders_checkout_member');
     } catch (error) {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
@@ -2766,7 +2790,7 @@ class OrderAPI {
         throw new Error(`Missing or invalid subscription product ID: ${productId}`);
       }
       
-      const subscriberId = state.customerId ? Number(state.customerId) : null;
+      const subscriberId = subscriptionSubscriberId();
       const birthDate = getSubscriberBirthDate();
       // Set start date: use override (e.g. 15-day pass future date) or today
       // Format: YYYY-MM-DD (ISO date format)
@@ -2922,7 +2946,10 @@ class OrderAPI {
           ? errorPayload
           : JSON.stringify(errorPayload);
         console.error(`[Step 7] Add subscription item error (${error.status || 'unknown'}):`, payloadText || error);
-        throw new Error(`Add subscription item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        const wrapped = new Error(`Add subscription item failed: ${error.status || 'unknown'} - ${payloadText || error.message}`);
+        wrapped.status = error.status;
+        wrapped.payload = errorData || errorPayload;
+        throw wrapped;
       }
       console.log('[Step 7] Add subscription item response:', data);
 
@@ -3934,9 +3961,22 @@ class PaymentAPI {
   }
 }
 
+function subscriptionSubscriberId() {
+  if (state.orderIsOtherPayer === true && state.subscriptionUserId != null) {
+    const memberId = Number(state.subscriptionUserId);
+    return Number.isFinite(memberId) ? memberId : null;
+  }
+  return state.customerId ? Number(state.customerId) : null;
+}
+
 function getSubscriberBirthDate() {
   try {
-    const dateField = document.getElementById('dateOfBirth');
+    const dateField = state.orderIsOtherPayer === true
+      ? document.getElementById('memberDateOfBirth')
+      : document.getElementById('dateOfBirth');
+    if (state.orderIsOtherPayer === true && state.memberBirthDate && (!dateField || !dateField.value)) {
+      return state.memberBirthDate;
+    }
     if (!dateField || !dateField.value) {
       return null;
     }
@@ -5049,6 +5089,7 @@ function renderProductsFromAPI({ force = false } = {}) {
   
   // Re-setup event listeners and translations in one batched frame to avoid visible double-render.
   scheduleAccessStepRebind();
+  updateMemberFormVisibility();
 }
 
 // Step 5: Load add-ons when a membership is selected
@@ -5428,14 +5469,13 @@ async function loadCountriesFromAPI() {
       return nameA.localeCompare(nameB);
     });
     
-    // Populate both country code selectors
+    // Populate the buyer country code selector
     const countryCodeSelect = document.getElementById('countryCode');
-    const parentCountryCodeSelect = document.getElementById('parentCountryCode');
     
-    devLog('[Countries] Found selectors - countryCode:', !!countryCodeSelect, 'parentCountryCode:', !!parentCountryCodeSelect);
+    devLog('[Countries] Found selectors - countryCode:', !!countryCodeSelect);
     
-    if (!countryCodeSelect && !parentCountryCodeSelect) {
-      devWarn('[Countries] Neither selector found in DOM. Retrying in 500ms...');
+    if (!countryCodeSelect) {
+      devWarn('[Countries] countryCode selector not found in DOM. Retrying in 500ms...');
       // Retry after a delay in case DOM isn't ready yet (only retry once)
       if (!loadCountriesFromAPI.retryAttempted) {
         loadCountriesFromAPI.retryAttempted = true;
@@ -5460,17 +5500,7 @@ async function loadCountriesFromAPI() {
       devWarn('[Countries] countryCode selector not found in DOM');
     }
     
-    if (parentCountryCodeSelect) {
-      populateCountrySelector(parentCountryCodeSelect, sortedCountries);
-      devLog('[Countries] Populated parentCountryCode selector with', parentCountryCodeSelect.options.length, 'options');
-      // Add event listener to update flag when selection changes
-      parentCountryCodeSelect.addEventListener('change', () => {
-        updateCountryFlagIcon(parentCountryCodeSelect);
-      });
-    } else {
-      devWarn('[Countries] parentCountryCode selector not found in DOM');
-    }
-    
+     
     devLog('[Countries] Country selectors populated successfully');
   } catch (error) {
     devWarn('[Countries] Error loading countries from API:', error);
@@ -5864,6 +5894,19 @@ const state = {
   subscriptionItemId: null, // Subscription item ID from order - used to link addons via additionTo
   // 15-day pass: activation date (null = today, or YYYY-MM-DD string for future start)
   subscriptionStartDate: null,
+  subscriptionUserId: null,
+  orderIsOtherPayer: null,
+  orderMemberKey: null,
+  pickedMemberId: null,
+  memberBirthDate: null,
+  guardianHandoffActive: false,
+  juniorCustomerTypeId: null,
+  studentYouthCustomerTypeId: null,
+  businessUnitSettings: null,
+  businessUnitSettingsId: null,
+  ageAvoidParentalConsent: null,
+  studentYouthProductIds: [],
+  memberCheckoutBlocked: false,
   lastReferralLinkGeneratedEventKey: null,
   checkoutConfirmAccepted: false,
   checkoutConfirmPreviousFocus: null,
@@ -7501,11 +7544,41 @@ const translations = {
     'form.forgotPassword': 'Glemt adgangskode?', 'form.login': 'Log ind', 'form.createAccount': 'Opret konto', 'form.loggedInAs': 'Logget ind som', 'form.address': 'Adresse:',
     'form.firstName': 'Fornavn*', 'form.firstName.placeholder': 'Fornavn', 'form.lastName': 'Efternavn*', 'form.lastName.placeholder': 'Efternavn',
     'form.dateOfBirth': 'Fødselsdato*', 'form.streetAddress': 'Gade og husnummer*', 'form.streetAddress.placeholder': 'Gade og husnummer',
+    'form.membershipAge.buyer_under_18': 'Du skal være 18 år for at betale for medlemskabet.',
+    'form.membershipAge.choose_student_youth': 'Du er under 18 år. Skift til student- og ungdomsmedlemskabet. En værge skal gennemføre tilmeldingen.',
+    'form.membershipAge.choose_junior': 'Du er under 16 år. Skift til juniormedlemskabet. En forælder eller værge på 18 år skal købe det.',
+    'form.membershipAge.switchToJunior': 'Skift til junior',
+    'form.membershipAge.juniorUnavailable': 'Juniormedlemskabet findes ikke for denne hal.',
+    'form.membershipAge.student_youth_age': 'Student- og ungdomsmedlemskabet er til 16–20 år. Skift til et voksent medlemskab.',
+    'form.membershipAge.invalid': 'Angiv fødselsdato.',
     'form.postalCode': 'Postnummer*', 'form.postalCode.placeholder': 'Postnummer', 'form.city': 'By*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Indtast by',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Indtast din e-mail', 'form.country': 'Land', 'form.phoneNumber': 'Mobilnummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Adgangskode*', 'form.password.create.placeholder': 'Opret en adgangskode',
     'form.confirmPassword': 'Bekræft adgangskode*', 'form.confirmPassword.placeholder': 'Bekræft din adgangskode', 'form.saveAccount': 'Opret profil',
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
+    'form.buyerRole.title': 'Forælder eller værge',
+    'form.buyerRole.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
+    'form.member.title': 'Barnet',
+    'form.member.roleHint': 'Barnets egne oplysninger. Medlemskabet gælder barnet, ikke dig.',
+    'form.member.consent': 'Jeg er barnets værge og accepterer medlemskabet på barnets vegne.',
+    'form.member.required': 'Udfyld barnets navn, fødselsdato og værgesamtykke.',
+    'form.member.under16': 'Junior er til børn under 16 år.',
+    'form.member.ownEmail': 'Barnets e-mail skal være barnets egen.',
+    'form.member.unavailable': 'Junior kan ikke købes online lige nu.',
+    'form.member.noJuniorType': 'Junior kan ikke oprettes lige nu.',
+    'form.member.noYouthType': 'Student- og ungdomsmedlemskabet kan ikke oprettes lige nu.',
+    'form.member.createFailed': 'Barnet kunne ikke oprettes. Prøv igen.',
+    'form.member.addAnother': 'Tilføj et andet barn',
+    'form.member.youthTitle': 'Den unge',
+    'form.member.youthAge': 'Værgen kan kun gennemføre for en 16- eller 17-årig.',
+    'form.member.email': 'E-mail*',
+    'form.member.emailRequired': 'E-mailen skal være den unges egen.',
+    'form.member.emailOwn': 'E-mailen skal være den unges egen, ikke værgens.',
+    'form.member.ageTooYoung': 'Alderen skal være mindst {age} år.',
+    'form.member.ageTooOld': 'Alderen må højst være {age} år.',
+    'form.guardian.title': 'Værge',
+    'form.guardian.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
+    'form.guardian.prompt': 'Udfyld værgens oplysninger. Medlemskabet gælder den unge.',
     'form.parentFullName': 'Fornavn og efternavn*', 'form.parentFullName.placeholder': 'Indtast dit fulde navn',
     'form.parentDateOfBirth': 'Fødselsdato*', 'form.parentStreetAddress': 'Gade og husnummer*', 'form.parentStreetAddress.placeholder': 'Indtast gade og husnummer',
     'form.parentPostalCode': 'Postnummer*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'By*', 'form.parentCity.placeholder': 'København',
@@ -7891,11 +7964,41 @@ const translations = {
     'form.forgotPassword': 'Forgot password?', 'form.login': 'Log in', 'form.createAccount': 'Create account', 'form.loggedInAs': 'Logged in as', 'form.address': 'Address:',
     'form.firstName': 'First name*', 'form.firstName.placeholder': 'First Name', 'form.lastName': 'Last name*', 'form.lastName.placeholder': 'Last name',
     'form.dateOfBirth': 'Date of birth*', 'form.streetAddress': 'Street and house number*', 'form.streetAddress.placeholder': 'Street and house nr',
+    'form.membershipAge.buyer_under_18': 'You must be 18 to pay for the membership.',
+    'form.membershipAge.choose_student_youth': 'You\'re under 18. Switch to the student and youth membership. A guardian has to complete signup.',
+    'form.membershipAge.choose_junior': 'You\'re under 16. Switch to the junior membership. A parent or guardian aged 18 has to buy it.',
+    'form.membershipAge.switchToJunior': 'Switch to junior',
+    'form.membershipAge.juniorUnavailable': 'This gym has no junior membership.',
+    'form.membershipAge.student_youth_age': 'The student and youth membership is for ages 16–20. Switch to an adult membership.',
+    'form.membershipAge.invalid': 'Enter your date of birth.',
     'form.postalCode': 'Postal code*', 'form.postalCode.placeholder': 'Zipcode', 'form.city': 'City*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Enter city',
     'form.email.create': 'E-mail*', 'form.email.create.placeholder': 'Enter your email', 'form.country': 'Country', 'form.phoneNumber': 'Mobile number*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Password*', 'form.password.create.placeholder': 'Create a password',
     'form.confirmPassword': 'Confirm password*', 'form.confirmPassword.placeholder': 'Confirm your password', 'form.saveAccount': 'Save Account',
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
+    'form.buyerRole.title': 'Parent or guardian',
+    'form.buyerRole.hint': 'Your account. You must be 18, and you pay for the membership.',
+    'form.member.title': 'The child',
+    'form.member.roleHint': 'The child\'s own details. The membership is for the child, not for you.',
+    'form.member.consent': 'I am the child\'s guardian and I accept the membership on the child\'s behalf.',
+    'form.member.required': 'Enter the child\'s name, date of birth, and guardian consent.',
+    'form.member.under16': 'Junior is for children under 16.',
+    'form.member.ownEmail': 'The child\'s email has to be their own.',
+    'form.member.unavailable': 'Junior can\'t be bought online right now.',
+    'form.member.noJuniorType': 'Junior can\'t be created right now.',
+    'form.member.noYouthType': 'The student and youth membership can\'t be created right now.',
+    'form.member.createFailed': 'The child could not be created. Try again.',
+    'form.member.addAnother': 'Add another child',
+    'form.member.youthTitle': 'The young person',
+    'form.member.youthAge': 'A guardian can only complete this for a 16- or 17-year-old.',
+    'form.member.email': 'Email*',
+    'form.member.emailRequired': 'The email has to be the young person\'s own.',
+    'form.member.emailOwn': 'The email has to be the young person\'s own, not the guardian\'s.',
+    'form.member.ageTooYoung': 'Age must be at least {age}.',
+    'form.member.ageTooOld': 'Age must be no more than {age}.',
+    'form.guardian.title': 'Guardian',
+    'form.guardian.hint': 'Your account. You must be 18, and you pay for the membership.',
+    'form.guardian.prompt': 'Enter the guardian\'s details. The membership is for the young person.',
     'form.parentFullName': 'First and last name*', 'form.parentFullName.placeholder': 'Enter your full name',
     'form.parentDateOfBirth': 'Date of birth*', 'form.parentStreetAddress': 'Street and house number*', 'form.parentStreetAddress.placeholder': 'Enter street and house number',
     'form.parentPostalCode': 'Postal code*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'City*', 'form.parentCity.placeholder': 'Copenhagen',
@@ -8263,11 +8366,41 @@ const translations = {
     'form.forgotPassword': 'Passwort vergessen?', 'form.login': 'Anmelden', 'form.createAccount': 'Konto erstellen', 'form.loggedInAs': 'Angemeldet als', 'form.address': 'Adresse:',
     'form.firstName': 'Vorname*', 'form.firstName.placeholder': 'Vorname', 'form.lastName': 'Nachname*', 'form.lastName.placeholder': 'Nachname',
     'form.dateOfBirth': 'Geburtsdatum*', 'form.streetAddress': 'Straße und Hausnummer*', 'form.streetAddress.placeholder': 'Straße und Hausnummer',
+    'form.membershipAge.buyer_under_18': 'Du musst 18 Jahre alt sein, um die Mitgliedschaft zu bezahlen.',
+    'form.membershipAge.choose_student_youth': 'Du bist unter 18. Wechsle zur Studenten- und Jugendmitgliedschaft. Ein Erziehungsberechtigter muss die Anmeldung abschließen.',
+    'form.membershipAge.choose_junior': 'Du bist unter 16. Wechsle zur Juniormitgliedschaft. Ein Elternteil oder Vormund ab 18 Jahren muss sie kaufen.',
+    'form.membershipAge.switchToJunior': 'Zu Junior wechseln',
+    'form.membershipAge.juniorUnavailable': 'Für diese Halle gibt es keine Juniormitgliedschaft.',
+    'form.membershipAge.student_youth_age': 'Die Studenten- und Jugendmitgliedschaft ist für 16–20 Jahre. Wechsle zu einer Erwachsenenmitgliedschaft.',
+    'form.membershipAge.invalid': 'Gib dein Geburtsdatum an.',
     'form.postalCode': 'Postleitzahl*', 'form.postalCode.placeholder': 'Postleitzahl', 'form.city': 'Stadt*', 'form.city.placeholder': 'Auto', 'form.city.manualPlaceholder': 'Stadt eingeben',
     'form.email.create': 'E-Mail*', 'form.email.create.placeholder': 'Geben Sie Ihre E-Mail ein', 'form.country': 'Land', 'form.phoneNumber': 'Handynummer*',
     'form.phoneNumber.placeholder': '12345678', 'form.password.create': 'Passwort*', 'form.password.create.placeholder': 'Erstellen Sie ein Passwort',
     'form.confirmPassword': 'Passwort bestätigen*', 'form.confirmPassword.placeholder': 'Bestätigen Sie Ihr Passwort', 'form.saveAccount': 'Profil erstellen',
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
+    'form.buyerRole.title': 'Elternteil oder Vormund',
+    'form.buyerRole.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
+    'form.member.title': 'Das Kind',
+    'form.member.roleHint': 'Die eigenen Angaben des Kindes. Die Mitgliedschaft gilt für das Kind, nicht für dich.',
+    'form.member.consent': 'Ich bin der Vormund des Kindes und akzeptiere die Mitgliedschaft im Namen des Kindes.',
+    'form.member.required': 'Gib den Namen und das Geburtsdatum des Kindes an und bestätige die Vormundschaft.',
+    'form.member.under16': 'Junior ist für Kinder unter 16 Jahren.',
+    'form.member.ownEmail': 'Die E-Mail des Kindes muss dem Kind gehören.',
+    'form.member.unavailable': 'Junior kann gerade nicht online gekauft werden.',
+    'form.member.noJuniorType': 'Junior kann gerade nicht angelegt werden.',
+    'form.member.noYouthType': 'Die Studenten- und Jugendmitgliedschaft kann gerade nicht angelegt werden.',
+    'form.member.createFailed': 'Das Kind konnte nicht angelegt werden. Versuch es erneut.',
+    'form.member.addAnother': 'Weiteres Kind hinzufügen',
+    'form.member.youthTitle': 'Die junge Person',
+    'form.member.youthAge': 'Ein Vormund kann das nur für eine 16- oder 17-jährige Person abschließen.',
+    'form.member.email': 'E-Mail*',
+    'form.member.emailRequired': 'Die E-Mail muss der jungen Person gehören.',
+    'form.member.emailOwn': 'Die E-Mail muss der jungen Person gehören, nicht dem Vormund.',
+    'form.member.ageTooYoung': 'Das Alter muss mindestens {age} Jahre sein.',
+    'form.member.ageTooOld': 'Das Alter darf höchstens {age} Jahre sein.',
+    'form.guardian.title': 'Vormund',
+    'form.guardian.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
+    'form.guardian.prompt': 'Gib die Angaben des Vormunds ein. Die Mitgliedschaft gilt für die junge Person.',
     'form.parentFullName': 'Vorname und Nachname*', 'form.parentFullName.placeholder': 'Geben Sie Ihren vollständigen Namen ein',
     'form.parentDateOfBirth': 'Geburtsdatum*', 'form.parentStreetAddress': 'Straße und Hausnummer*', 'form.parentStreetAddress.placeholder': 'Geben Sie Straße und Hausnummer ein',
     'form.parentPostalCode': 'Postleitzahl*', 'form.parentPostalCode.placeholder': '1234', 'form.parentCity': 'Stadt*', 'form.parentCity.placeholder': 'Kopenhagen',
@@ -8850,19 +8983,13 @@ function updateFormTranslations() {
     }
   });
   
-  // Parent/Guardian form fields
-  const parentFields = [
-    { id: 'parentFullName', labelKey: 'form.parentFullName', placeholderKey: 'form.parentFullName.placeholder' },
-    { id: 'parentDateOfBirth', labelKey: 'form.parentDateOfBirth' },
-    { id: 'parentStreetAddress', labelKey: 'form.parentStreetAddress', placeholderKey: 'form.parentStreetAddress.placeholder' },
-    { id: 'parentPostalCode', labelKey: 'form.parentPostalCode', placeholderKey: 'form.parentPostalCode.placeholder' },
-    { id: 'parentCity', labelKey: 'form.parentCity', placeholderKey: 'form.parentCity.placeholder' },
-    { id: 'parentEmail', labelKey: 'form.parentEmail', placeholderKey: 'form.parentEmail.placeholder' },
-    { id: 'parentPhoneNumber', labelKey: 'form.parentPhoneNumber', placeholderKey: 'form.parentPhoneNumber.placeholder' },
-    { id: 'parentPassword', labelKey: 'form.password.create', placeholderKey: 'form.password.create.placeholder' },
+  const memberFields = [
+    { id: 'memberFirstName', labelKey: 'form.firstName', placeholderKey: 'form.firstName.placeholder' },
+    { id: 'memberLastName', labelKey: 'form.lastName', placeholderKey: 'form.lastName.placeholder' },
+    { id: 'memberDateOfBirth', labelKey: 'form.dateOfBirth' },
   ];
   
-  parentFields.forEach(field => {
+  memberFields.forEach(field => {
     const label = document.querySelector(`label[for="${field.id}"]`);
     if (label && label.hasAttribute('data-i18n-key')) {
       label.textContent = t(field.labelKey);
@@ -9338,6 +9465,7 @@ function handleRejectionOption1() {
   state.membershipPlanId = null;
   state.selectedProductId = null;
   state.selectedProductType = null;
+  clearStoredJuniorMember();
   
   // Clear value card quantities
   state.valueCardQuantities.clear();
@@ -9778,10 +9906,7 @@ function cacheDom() {
   DOM.backFromAddonsBtn = document.getElementById('backFromAddons');
   DOM.paymentOptions = Array.from(document.querySelectorAll('input[name="paymentMethod"]'));
   DOM.cardPaymentForm = document.getElementById('cardPaymentForm');
-  DOM.parentGuardianToggle = document.getElementById('parentGuardian');
   DOM.parentGuardianForm = document.getElementById('parentGuardianForm');
-  DOM.parentGuardianReminder = document.querySelector('[data-role="parent-guardian-reminder"]');
-  DOM.sameAddressToggle = document.getElementById('sameAddressToggle');
   DOM.loginForm = document.querySelector('.login-form');
   DOM.loginEmail = document.getElementById('loginEmail');
   DOM.loginPassword = document.getElementById('loginPassword');
@@ -9877,8 +10002,8 @@ function setupEventListeners() {
       handleApplyDiscount();
     }
   });
-  DOM.sameAddressToggle?.addEventListener('change', handleSameAddressToggle);
-  DOM.parentGuardianToggle?.addEventListener('change', handleParentGuardianToggle);
+  document.getElementById('dateOfBirth')?.addEventListener('change', updateMemberFormVisibility);
+  document.getElementById('dateOfBirth')?.addEventListener('input', updateMemberFormVisibility);
   DOM.privacyConsent?.addEventListener('change', () => {
     // Save privacy consent to localStorage with timestamp
     if (DOM.privacyConsent.checked) {
@@ -12125,6 +12250,131 @@ function refreshLoginUI() {
     }
     // Create section will be shown/hidden by switchAuthMode based on active tab
   }
+
+  updateMemberFormVisibility();
+}
+
+const PHONE_ALREADY_EXISTS_MESSAGE =
+  'This mobile number is already registered. Log in, or use a different number.';
+
+function isRegistrationLoginRateLimit(error) {
+  if (!error) return false;
+  if (error.status === 429) return true;
+  const message = typeof error.message === 'string' ? error.message : '';
+  return message.startsWith('Rate limit exceeded. Please wait');
+}
+
+function readIdentityCheckFields(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  if (data.unavailable === true) return { unavailable: true };
+  if (typeof data.emailMatch === 'boolean' && typeof data.phoneMatch === 'boolean') {
+    return {
+      emailMatch: data.emailMatch,
+      phoneMatch: data.phoneMatch,
+      unavailable: false,
+    };
+  }
+  return null;
+}
+
+// POST /api/registration/check. Never send the password. A thrown fetch, a non-OK
+// response, a non-JSON body, or any other shape is unavailable so signup can still create.
+async function checkRegistrationIdentity(email, countryCode, number) {
+  let fields = { unavailable: true };
+  try {
+    const response = await fetch('/api/registration/check', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        mobilePhone: {
+          countryCode,
+          number,
+        },
+      }),
+    });
+    if (response.ok) {
+      const parsed = readIdentityCheckFields(await response.json());
+      if (parsed) fields = parsed;
+    }
+  } catch (error) {
+    devWarn('[registration] Identity check unavailable:', error?.message || error);
+  }
+  const classification = classifyIdentityCheck(fields);
+  devLog('[registration] Identity check:', classification);
+  return classification;
+}
+
+// Login used when the check says the email is already registered.
+// A missing password is a failure and does not call login.
+async function reuseExistingAccount(email, password) {
+  if (!email || !password) {
+    return { ok: false, error: null };
+  }
+  try {
+    await authAPI.login(email, password, { saveTokens: true });
+  } catch (error) {
+    return { ok: false, error };
+  }
+  try {
+    await syncAuthenticatedCustomerState(undefined, email);
+  } catch (syncErr) {
+    devWarn('[registration] Customer sync failed after reusing account:', syncErr);
+  }
+  return { ok: true, error: null };
+}
+
+function showPhoneAlreadyRegistered(surface) {
+  highlightFieldError('phoneNumber', true);
+  if (surface === 'saveAccount') {
+    showSaveAccountMessage(PHONE_ALREADY_EXISTS_MESSAGE, 'error');
+    showToast(PHONE_ALREADY_EXISTS_MESSAGE, 'error');
+    return;
+  }
+  showToast(PHONE_ALREADY_EXISTS_MESSAGE, 'error');
+}
+
+function showDuplicateEmailLogin(email, surface) {
+  const duplicateMessage = `An account with this email address${email ? ` (${email})` : ''} already exists. Please log in instead.`;
+  if (surface === 'saveAccount') {
+    showSaveAccountMessage(duplicateMessage, 'error');
+    showToast('Account already exists. Please log in.', 'error');
+  } else {
+    showToast(duplicateMessage, 'error');
+  }
+  const emailInput = document.getElementById('email');
+  if (emailInput) emailInput.closest('.form-group')?.classList.add('error');
+  if (email) switchAuthMode('login', email);
+  else switchAuthMode('login');
+}
+
+function showRegistrationRateLimit(error, surface) {
+  const message = typeof error?.message === 'string' ? error.message : String(error?.message || error || '');
+  if (surface === 'saveAccount') {
+    showSaveAccountMessage(message, 'error');
+    showToast(message, 'error');
+    return;
+  }
+  showToast(message, 'error');
+}
+
+function stopCheckoutForIdentity() {
+  setCheckoutLoadingState(false);
+  state.checkoutInProgress = false;
+}
+
+async function finishSaveAccountAsExistingCustomer() {
+  if (isFirstClimbRoute()) {
+    const guard = await runFirstclimbGuard('saveAccount-preCheck');
+    if (guard.blocked) return;
+  }
+  try { refreshLoginUI(); } catch (_) {}
+  showSaveAccountMessage('Welcome back! You can proceed to checkout.', 'success');
+  showToast('Logged in successfully.', 'success');
+  if (state.currentStep === 4) updatePaymentOverview();
 }
 
 async function handleSaveAccount() {
@@ -12191,20 +12441,6 @@ async function handleSaveAccount() {
     return;
   }
   
-  // Validate parent password length if parent form is visible
-  const parentPasswordInput = document.getElementById('parentPassword');
-  const parentForm = document.getElementById('parentGuardianForm');
-  if (parentPasswordInput && parentForm && parentForm.style.display !== 'none' && parentPasswordInput.value && parentPasswordInput.value.length < 6) {
-    showSaveAccountMessage('Parent/Guardian password must be at least 6 characters long.', 'error');
-    highlightFieldError('parentPassword', true);
-    const saveBtn = document.querySelector('[data-action="save-account"]');
-    if (saveBtn) {
-      saveBtn.disabled = false;
-      saveBtn.textContent = 'Save Account';
-    }
-    return;
-  }
-  
   if (missingFields.length > 0) {
     showSaveAccountMessage(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
     // Animate save account button with red flash and highlight missing fields
@@ -12235,6 +12471,12 @@ async function handleSaveAccount() {
   messageDiv.style.display = 'none';
   
   try {
+    // Stop before createCustomer when this membership requires an 18+ buyer.
+    await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
+    if (blockMembershipAgeGate('saveAccount')) {
+      return;
+    }
+
     // Build customer data from form
     const payload = buildCheckoutPayload();
     
@@ -12377,43 +12619,48 @@ async function handleSaveAccount() {
       console.log('[Save Account] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
     }
 
-    // /99kr defensive existing-customer pre-check. BRP doesn't always reject duplicate
-    // emails on the create endpoint, so we attempt login with the typed credentials.
-    // If login succeeds, we inspect the customer's product history — only block if
-    // they've held a product carrying the `Første Gang` label (see FIRSTCLIMB_BLOCKING_LABELS).
-    // Otherwise (abandoned-but-empty profile, never-bought-anything customer) we
-    // treat them as eligible: keep the tokens, sync state, skip create-customer.
-    if (isFirstClimbRoute()) {
-      const candidateEmail = customerData.email;
-      const candidatePassword = customerData.password;
-      if (candidateEmail && candidatePassword) {
-        let preCheckLoggedIn = false;
-        try {
-          await authAPI.login(candidateEmail, candidatePassword, { saveTokens: true });
-          preCheckLoggedIn = true;
-        } catch (preCheckErr) {
-          // Expected for genuinely new customers. Fall through to normal create.
-          console.log('[Save Account] firstclimb pre-check login failed (expected for new customer):', preCheckErr?.message || preCheckErr);
-        }
-        if (preCheckLoggedIn) {
-          try {
-            await syncAuthenticatedCustomerState(undefined, candidateEmail);
-          } catch (syncErr) {
-            console.warn('[Save Account] customer state sync failed before history check:', syncErr);
-          }
+    // One login before create. The old /99kr pre-check login lived here; it is not
+    // repeated below, so a successful match does not call authAPI.login twice.
+    // runFirstclimbGuard still runs on that success when this is /99kr.
+    const identityPassword = customerData.password || document.getElementById('password')?.value;
+    const identity = await checkRegistrationIdentity(email, phoneCountryCode, phoneNumber);
 
-          const guard = await runFirstclimbGuard('saveAccount-preCheck');
-          if (guard.blocked) return;
+    if (identity === 'phone_exists') {
+      showPhoneAlreadyRegistered('saveAccount');
+      return;
+    }
 
-          // Clean history → treat the existing-customer login as the sign-in for
-          // this purchase. No create-customer POST is needed; the user is ready
-          // to proceed to Til Kassen.
-          try { refreshLoginUI(); } catch (_) {}
-          showSaveAccountMessage('Welcome back! You can proceed to checkout.', 'success');
-          showToast('Logged in successfully.', 'success');
-          if (state.currentStep === 4) updatePaymentOverview();
+    if (identity === 'email_exists') {
+      const reused = await reuseExistingAccount(email, identityPassword);
+      if (!reused.ok) {
+        if (isRegistrationLoginRateLimit(reused.error)) {
+          showRegistrationRateLimit(reused.error, 'saveAccount');
           return;
         }
+        showDuplicateEmailLogin(email, 'saveAccount');
+        return;
+      }
+      await finishSaveAccountAsExistingCustomer();
+      return;
+    }
+
+    if (email && identityPassword) {
+      try {
+        await authAPI.login(email, identityPassword, { saveTokens: true });
+        try {
+          await syncAuthenticatedCustomerState(undefined, email);
+        } catch (syncErr) {
+          devWarn('[Save Account] Customer sync failed after identity login:', syncErr);
+        }
+        await finishSaveAccountAsExistingCustomer();
+        return;
+      } catch (loginErr) {
+        if (isRegistrationLoginRateLimit(loginErr)) {
+          showRegistrationRateLimit(loginErr, 'saveAccount');
+          return;
+        }
+        // 401 and any other non-429 failure: the account is not this password, so create.
+        devLog('[Save Account] Identity login did not match; creating customer:', loginErr?.status || loginErr?.message);
       }
     }
 
@@ -12678,13 +12925,22 @@ async function handleSaveAccount() {
   }
 }
 
+function setSwitchToJuniorOffer(visible) {
+  const button = document.getElementById('switchToJuniorButton');
+  if (!button) return;
+  button.hidden = !visible;
+}
+
 function showSaveAccountMessage(message, type = 'success') {
   const messageDiv = document.getElementById('saveAccountMessage');
   if (!messageDiv) return;
-  
-  messageDiv.textContent = message;
+
+  const text = document.getElementById('saveAccountMessageText');
+  if (text) text.textContent = message;
+  else messageDiv.textContent = message;
   messageDiv.className = `save-account-message ${type}`;
   messageDiv.style.display = 'block';
+  setSwitchToJuniorOffer(false);
   
   // Auto-hide success messages after 5 seconds
   if (type === 'success') {
@@ -12898,6 +13154,7 @@ function handleLogout() {
   state.selectedProductType = null;
   state.selectedProductId = null;
   state.membershipPlanId = null;
+  clearStoredJuniorMember();
   state.addonIds.clear();
   state.valueCardQuantities.clear();
   state.createdEmails.clear();
@@ -13029,12 +13286,15 @@ function handleGymSelection(item) {
       state.membershipPlanId = null;
       state.selectedProductId = null;
       state.selectedProductType = null;
+      clearStoredJuniorMember();
+      updateMemberFormVisibility();
       updateCheckoutButton();
     }
   }
   
   state.selectedGymId = numericId; // Store numeric ID for API requests
   state.selectedBusinessUnit = numericId; // Also store as businessUnit for clarity
+  void loadBusinessUnitSignupSettings(numericId);
   
   // Store gym name for display - try multiple selectors
   let gymNameText = null;
@@ -13928,6 +14188,8 @@ async function handlePlanSelection(selectedCard) {
     state.membershipPlanId = null;
     state.selectedProductId = null;
     state.selectedProductType = null;
+    clearStoredJuniorMember();
+    updateMemberFormVisibility();
     updateCartSummary();
     updateCheckoutButton();
     return;
@@ -13941,6 +14203,7 @@ async function handlePlanSelection(selectedCard) {
   if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
     resetOrderStateForProductChange('plan-selection');
   }
+  updateMemberFormVisibility();
   
   console.log('Selected plan:', planId, 'Product ID:', productId, 'Type:', state.selectedProductType);
   
@@ -14127,7 +14390,9 @@ function setupNewAccessStep() {
       state.membershipPlanId = null;
       state.selectedProductId = null;
       state.selectedProductType = null;
+      clearStoredJuniorMember();
       resetOrderStateForProductChange('category-switch');
+      updateMemberFormVisibility();
       
       // Clear all punch card quantities when switching categories (but not when just re-initializing)
       // Only clear if user is actually switching categories, not during language change re-render
@@ -14239,6 +14504,8 @@ function setupNewAccessStep() {
         state.membershipPlanId = null;
         state.selectedProductId = null;
         state.selectedProductType = null;
+        clearStoredJuniorMember();
+        updateMemberFormVisibility();
         updateCartSummary();
         updateCheckoutButton();
         return;
@@ -14254,6 +14521,7 @@ function setupNewAccessStep() {
       if ((previousProductId && String(previousProductId) !== String(productId)) || (previousPlanId && previousPlanId !== planId)) {
         resetOrderStateForProductChange('plan-selection');
       }
+      updateMemberFormVisibility();
 
       // GTM: Track select_item for API-driven plan cards
       // Include both subscriptions and value cards for campaign category
@@ -14522,6 +14790,7 @@ function switchAuthMode(mode, email = null) {
     // Check button state when switching to create account mode
     setTimeout(() => checkSaveAccountButtonState(), 100);
   }
+  updateMemberFormVisibility();
 }
 
 function setupSaveAccountButtonValidation() {
@@ -14758,6 +15027,21 @@ function handleGlobalClick(event) {
       handleSaveAccount();
       break;
     }
+    case 'switch-to-junior': {
+      event.preventDefault();
+      switchToJuniorMembership();
+      break;
+    }
+    case 'pick-existing-member': {
+      event.preventDefault();
+      pickExistingMember(actionable.dataset.memberId, actionable.dataset.birthDate || '');
+      break;
+    }
+    case 'add-another-member': {
+      event.preventDefault();
+      addAnotherMember();
+      break;
+    }
     case 'edit-gym': {
       event.preventDefault();
       handleBackToGym();
@@ -14929,7 +15213,7 @@ function clearReferral(reason) {
 function getRecruitedByForPayload() {
   const entry = getActiveReferral();
   if (!entry) return null;
-  const subscriberId = state.customerId ? Number(state.customerId) : null;
+  const subscriberId = subscriptionSubscriberId();
   if (subscriberId && subscriberId === entry.ref) {
     devWarn('[Referral] Self-referral detected, dropping ref:', entry.ref);
     clearReferral('self-referral');
@@ -15916,31 +16200,6 @@ function resolveAddressCountryAlpha2(phoneCountryCode, postalCode) {
   return PHONE_COUNTRY_TO_ALPHA2[phoneDigits] || 'DK';
 }
 
-function syncCopiedCityField(sourceCityField, targetCityField, sourcePostalField) {
-  if (!targetCityField) return false;
-
-  const postalCode = sourcePostalField?.value?.trim() || '';
-  const normalizedCity = normalizeLookedUpCity(sourceCityField?.value);
-
-  if (!postalCode || !isDanishPostalCodeFormat(postalCode)) {
-    if (normalizedCity) {
-      setCityFieldEditable(targetCityField, { clearValue: false });
-      targetCityField.value = normalizedCity;
-    } else {
-      setCityFieldEditable(targetCityField);
-    }
-    return false;
-  }
-
-  if (normalizedCity) {
-    setCityFieldReadonly(targetCityField, normalizedCity);
-    return true;
-  }
-
-  setCityFieldEditable(targetCityField);
-  return false;
-}
-
 function isPostalLookupStillValid(postalInput, requestedPostalCode) {
   const currentPostal = postalInput?.value?.trim() || '';
   return currentPostal === requestedPostalCode && isDanishPostalCodeFormat(currentPostal);
@@ -16132,7 +16391,13 @@ async function handleApplyDiscount() {
         if (!state.selectedBusinessUnit) {
           throw new Error('Please select a gym location first');
         }
-        
+
+        await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
+        if (blockMembershipAgeGate('checkout')) {
+          endApplyDiscountLoading();
+          return;
+        }
+
         // Create order first
         const ensuredOrderId = await ensureOrderCreated('discount-application');
         if (!ensuredOrderId) {
@@ -16256,6 +16521,11 @@ async function handleApplyDiscount() {
           console.warn('[Discount] Existing order is not accessible. Creating a new order.');
           state.orderId = null;
           state.subscriptionAttachedOrderId = null;
+          await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
+          if (blockMembershipAgeGate('checkout')) {
+            endApplyDiscountLoading();
+            return;
+          }
           const ensuredOrderId = await ensureOrderCreated('discount-application');
           if (!ensuredOrderId) {
             throw new Error('Failed to create order for coupon application');
@@ -16558,79 +16828,6 @@ function clearDiscountMessage() {
   if (existingMessage) {
     existingMessage.remove();
   }
-}
-
-function handleSameAddressToggle(event) {
-  if (event.target.checked) {
-    copyAddressAndContactInfo();
-  } else {
-    clearParentFormFields();
-  }
-}
-
-function handleParentGuardianToggle(event) {
-  if (!DOM.parentGuardianForm) return;
-  const isChecked = event.target.checked;
-
-  DOM.parentGuardianForm.style.display = isChecked ? 'block' : 'none';
-  if (DOM.parentGuardianReminder) {
-    DOM.parentGuardianReminder.hidden = !isChecked;
-  }
-
-  clearParentFormFields();
-}
-
-function copyAddressAndContactInfo() {
-  const mappings = [
-    ['streetAddress', 'parentStreetAddress'],
-    ['postalCode', 'parentPostalCode'],
-    ['city', 'parentCity'],
-    ['email', 'parentEmail'],
-    ['countryCode', 'parentCountryCode'],
-    ['phoneNumber', 'parentPhoneNumber'],
-  ];
-
-  mappings.forEach(([sourceId, targetId]) => {
-    const source = document.getElementById(sourceId);
-    const target = document.getElementById(targetId);
-    if (!source || !target) return;
-
-    if (sourceId === 'city' && targetId === 'parentCity') {
-      const isReadonly = syncCopiedCityField(source, target, document.getElementById('postalCode'));
-      if (isReadonly) {
-        target.classList.add('readonly-field');
-      }
-      return;
-    }
-
-    target.value = source.value;
-    target.readOnly = true;
-    if (target.tagName === 'SELECT') {
-      target.value = source.value;
-      target.disabled = true;
-    }
-    target.classList.add('readonly-field');
-  });
-}
-
-function clearParentFormFields() {
-  const parentFields = [
-    'parentStreetAddress',
-    'parentPostalCode',
-    'parentCity',
-    'parentEmail',
-    'parentCountryCode',
-    'parentPhoneNumber',
-  ];
-
-  parentFields.forEach((fieldId) => {
-    const field = document.getElementById(fieldId);
-    if (!field) return;
-    field.value = '';
-    field.readOnly = false;
-    field.disabled = false;
-    field.classList.remove('readonly-field');
-  });
 }
 
 // Helper function to check if cart contains a campaign
@@ -18912,6 +19109,858 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   }
 }
 
+const MEMBERSHIP_AGE_FALLBACKS = {
+  buyer_under_18: 'Du skal være 18 år for at betale for medlemskabet.',
+  choose_student_youth: 'Du er under 18 år. Skift til student- og ungdomsmedlemskabet. En værge skal gennemføre tilmeldingen.',
+  choose_junior: 'Du er under 16 år. Skift til juniormedlemskabet. En forælder eller værge på 18 år skal købe det.',
+  student_youth_age: 'Student- og ungdomsmedlemskabet er til 16–20 år. Skift til et voksent medlemskab.',
+  invalid: 'Angiv fødselsdato.',
+};
+
+function normalizeBuyerBirthDate(value) {
+  if (typeof value === 'string') {
+    const match = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+  }
+  if (value && typeof value === 'object') {
+    const year = Number(value.year);
+    const month = Number(value.month);
+    const day = Number(value.day);
+    if (!year || !month || !day) return null;
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+/** Birth date already on the logged-in profile. No extra fetch. */
+function loggedInBuyerBirthDate() {
+  const customer = state.authenticatedCustomer;
+  if (!customer || typeof customer !== 'object') return null;
+  return normalizeBuyerBirthDate(customer.birthDate) || normalizeBuyerBirthDate(customer.dateOfBirth);
+}
+
+function isBuyerFormHidden() {
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  if (createSection && createSection.style.display === 'none') return true;
+  if (DOM.loginFormContainerWrapper && DOM.loginFormContainerWrapper.style.display === 'none') return true;
+  return false;
+}
+
+/**
+ * Age route for the selected membership.
+ * Reads #dateOfBirth while the buyer form is visible. When that field is missing
+ * or the form is hidden, uses state.authenticatedCustomer.birthDate / dateOfBirth.
+ * Module scope so this calls the imported productKind, not a local shadow.
+ */
+function routeCurrentMembership() {
+  const dateField = document.getElementById('dateOfBirth');
+  const birthDate = !dateField || isBuyerFormHidden()
+    ? loggedInBuyerBirthDate()
+    : normalizeBuyerBirthDate(dateField.value);
+  const buyerAge = ageInYears(birthDate, getTodayLocalDateString());
+  const kind = productKind(resolveSelectedAccessProduct());
+  if (state.guardianHandoffActive && kind === 'studentYouth') {
+    if (buyerAge == null) return { action: 'block', reason: 'invalid' };
+    if (buyerAge < 18) return { action: 'block', reason: 'buyer_under_18' };
+    return { action: 'continue' };
+  }
+  return membershipAgeRoute({ buyerAge, productKind: kind });
+}
+
+const CHECKOUT_MEMBER_STORAGE_KEY = 'boulders_checkout_member';
+
+function clearStoredJuniorMember() {
+  state.subscriptionUserId = null;
+  state.orderIsOtherPayer = null;
+  state.orderMemberKey = null;
+  state.pickedMemberId = null;
+  state.memberBirthDate = null;
+  state.guardianHandoffActive = false;
+  state.existingMembersLoadedFor = null;
+  document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
+  try {
+    sessionStorage.removeItem(CHECKOUT_MEMBER_STORAGE_KEY);
+  } catch (error) {
+    devWarn('[member] Could not clear checkout member:', error);
+  }
+}
+
+/** 'junior' | 'other' | 'unknown' | 'none'. Unknown means the id is set but the product is not loaded yet. */
+function selectedJuniorStatus() {
+  if (state.selectedProductId == null || state.selectedProductId === '') return 'none';
+  if (Number(state.selectedProductId) === 56) return 'junior';
+  const product = resolveSelectedAccessProduct();
+  if (!product) return 'unknown';
+  return productKind(product) === 'junior' ? 'junior' : 'other';
+}
+
+function readMemberForm() {
+  const text = (id) => {
+    const field = document.getElementById(id);
+    return typeof field?.value === 'string' ? field.value.trim() : '';
+  };
+  const countryCode = text('memberCountryCode');
+  const phoneNumber = text('memberPhoneNumber');
+  return {
+    firstName: text('memberFirstName'),
+    lastName: text('memberLastName'),
+    birthDate: text('memberDateOfBirth'),
+    email: text('memberEmail'),
+    countryCode,
+    phoneNumber,
+    phone: phoneNumber ? { countryCode, number: phoneNumber } : null,
+    guardianConsent: Boolean(document.getElementById('memberGuardianConsent')?.checked),
+  };
+}
+
+function payerContact() {
+  const emailField = document.getElementById('email');
+  const email = (
+    (emailField && !isBuyerFormHidden() ? emailField.value : '')
+    || state.authenticatedEmail
+    || state.authenticatedCustomer?.email
+    || ''
+  ).trim().toLowerCase();
+  const customer = state.authenticatedCustomer || {};
+  const country = document.getElementById('countryCode')?.value
+    || customer.mobilePhone?.countryCode
+    || customer.phoneCountryCode
+    || '';
+  const number = document.getElementById('phoneNumber')?.value
+    || customer.mobilePhone?.number
+    || customer.phone
+    || '';
+  return { email, phone: normalizePhone(country, number) };
+}
+
+function currentMemberKey() {
+  if (state.pickedMemberId != null) {
+    return memberKey({ memberId: state.pickedMemberId });
+  }
+  const form = readMemberForm();
+  return memberKey({
+    payerId: state.customerId,
+    firstName: form.firstName,
+    lastName: form.lastName,
+    birthDate: form.birthDate,
+  });
+}
+
+function readStoredMember() {
+  try {
+    const raw = sessionStorage.getItem(CHECKOUT_MEMBER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    devWarn('[member] Could not read checkout member:', error);
+    return null;
+  }
+}
+
+function writeStoredMember(record) {
+  state.subscriptionUserId = record.memberId;
+  state.orderMemberKey = record.memberKey;
+  try {
+    sessionStorage.setItem(CHECKOUT_MEMBER_STORAGE_KEY, JSON.stringify(record));
+  } catch (error) {
+    devWarn('[member] Could not store checkout member:', error);
+  }
+}
+
+function restoreStoredMemberForPayer(payerId) {
+  const stored = readStoredMember();
+  if (!stored || stored.memberId == null) return;
+  if (String(stored.payerId) !== String(payerId)) return;
+  state.subscriptionUserId = stored.memberId;
+  state.orderMemberKey = stored.memberKey || null;
+  state.orderIsOtherPayer = true;
+}
+
+let memberBlockNoticeAt = 0;
+
+function notifyMemberBlock(message) {
+  state.memberCheckoutBlocked = true;
+  const now = Date.now();
+  if (now - memberBlockNoticeAt < 1500) return;
+  memberBlockNoticeAt = now;
+  showSaveAccountMessage(message, 'error');
+  showToast(message, 'error');
+}
+
+function otherPayerPurchasesEnabled(settings) {
+  if (!settings || typeof settings !== 'object') return true;
+  if (settings.buySubscriptionsForOtherUsersInMobility === false) return false;
+  if (settings.buySubscriptionsForOtherUsersOnMobility === false) return false;
+  return true;
+}
+
+function accessProductPools() {
+  return [
+    ...(state.allRawProducts || []),
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.dayPassSubscriptions || []),
+    ...(state.valueCards || []),
+    ...(state.campaignValueCards || []),
+  ];
+}
+
+function recordStudentYouthProductIds() {
+  const ids = [];
+  accessProductPools().forEach((product) => {
+    if (!product || product.id == null || productKind(product) !== 'studentYouth') return;
+    const id = Number(product.id);
+    if (Number.isFinite(id) && !ids.includes(id)) ids.push(id);
+  });
+  const signature = ids.join(',');
+  if (signature === state.studentYouthProductIdsKey) return ids;
+  state.studentYouthProductIds = ids;
+  state.studentYouthProductIdsKey = signature;
+  originalConsoleLog('[signup] student/youth product ids', ids);
+  return ids;
+}
+
+async function loadBusinessUnitSignupSettings(businessUnitId) {
+  const id = Number(businessUnitId);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  if (state.businessUnitSettings && state.businessUnitSettingsId === id) {
+    recordStudentYouthProductIds();
+    return state.businessUnitSettings;
+  }
+  const url = buildApiUrl({
+    baseUrl: businessUnitsAPI.baseUrl,
+    useProxy: businessUnitsAPI.useProxy,
+    path: '/api/ver3/businessunits',
+  });
+  try {
+    const list = await requestJson({
+      url,
+      headers: {
+        'Accept-Language': getAcceptLanguageHeader(),
+        'Content-Type': 'application/json',
+      },
+    });
+    const unit = (Array.isArray(list) ? list : []).find((item) => Number(item?.id) === id);
+    const settings = unit?.settings && typeof unit.settings === 'object' ? unit.settings : null;
+    state.businessUnitSettings = settings;
+    state.businessUnitSettingsId = id;
+    const age = Number(settings?.ageAvoidParentalConsent);
+    state.ageAvoidParentalConsent = Number.isFinite(age) ? age : null;
+    recordStudentYouthProductIds();
+    originalConsoleLog(
+      '[signup] ageAvoidParentalConsent',
+      state.ageAvoidParentalConsent,
+      'businessUnit',
+      id,
+      'studentYouthProductIds',
+      state.studentYouthProductIds,
+    );
+    return settings;
+  } catch (error) {
+    devWarn('[signup] Could not read business unit settings:', error);
+    state.businessUnitSettings = null;
+    state.businessUnitSettingsId = id;
+    state.ageAvoidParentalConsent = null;
+    return null;
+  }
+}
+
+function bearerHeaders() {
+  const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
+  return {
+    'Accept-Language': getAcceptLanguageHeader(),
+    'Content-Type': 'application/json',
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
+}
+
+function cacheCustomerTypeId(cacheKey, businessUnitId, id) {
+  state[cacheKey] = id;
+  state[`${cacheKey}BusinessUnit`] = Number(businessUnitId);
+}
+
+async function resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey) {
+  if (state[cacheKey] != null && state[`${cacheKey}BusinessUnit`] === Number(businessUnitId)) {
+    return state[cacheKey];
+  }
+  const url = buildApiUrl({
+    baseUrl: authAPI.baseUrl,
+    useProxy: authAPI.useProxy,
+    path: `/api/ver3/customertypes?businessUnit=${encodeURIComponent(businessUnitId)}`,
+  });
+  const data = await requestJson({ url, headers: bearerHeaders() });
+  const list = Array.isArray(data) ? data : [];
+  state.customerTypeCatalogueEmpty = list.length === 0;
+  const match = list.find((item) => predicate(String(item?.name || '')));
+  const id = match?.id != null ? Number(match.id) : null;
+  if (id != null) cacheCustomerTypeId(cacheKey, businessUnitId, id);
+  return id;
+}
+
+// The name catalogue is empty on this tenant. A type still prices the product:
+// GET .../products/subscriptions?customerType={id} returns the product only when
+// that type's price list includes it. Use the id when exactly one type does.
+async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) {
+  const product = Number(productId);
+  if (!Number.isFinite(product)) return null;
+  const matches = [];
+  for (let typeId = 1; typeId <= 30; typeId += 1) {
+    const url = buildApiUrl({
+      baseUrl: authAPI.baseUrl,
+      useProxy: authAPI.useProxy,
+      path: `/api/ver3/products/subscriptions?businessUnit=${encodeURIComponent(businessUnitId)}&customerType=${typeId}`,
+    });
+    let data;
+    try {
+      data = await requestJson({ url, headers: bearerHeaders() });
+    } catch (error) {
+      if (error?.status === 403 || error?.status === 400) break;
+      throw error;
+    }
+    const products = Array.isArray(data) ? data : [];
+    if (products.some((item) => Number(item?.id) === product)) matches.push(typeId);
+  }
+  if (matches.length !== 1) {
+    originalConsoleLog('[other-payer] customer type price probe', { product, matches });
+    return null;
+  }
+  cacheCustomerTypeId(cacheKey, businessUnitId, matches[0]);
+  originalConsoleLog('[other-payer] customer type from product price', { id: matches[0], product });
+  return matches[0];
+}
+
+async function resolveCustomerTypeId(businessUnitId, predicate, cacheKey) {
+  const named = await resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey);
+  if (named != null) return named;
+  if (!state.customerTypeCatalogueEmpty) return null;
+  return resolvePricedCustomerTypeId(businessUnitId, state.selectedProductId, cacheKey);
+}
+
+function resolveJuniorCustomerTypeId(businessUnitId) {
+  return resolveCustomerTypeId(
+    businessUnitId,
+    (name) => /junior/i.test(name),
+    'juniorCustomerTypeId',
+  );
+}
+
+function resolveStudentYouthCustomerTypeId(businessUnitId) {
+  return resolveCustomerTypeId(
+    businessUnitId,
+    (name) => /student|youth|ungdom/i.test(name) && !/junior/i.test(name),
+    'studentYouthCustomerTypeId',
+  );
+}
+
+function otherPayerMode() {
+  if (state.guardianHandoffActive) return 'guardian';
+  if (state.selectedProductType === 'punch-card' || isFirstClimbRoute()) return null;
+  if (!isCheckoutSubscriptionPlan() && selectedJuniorStatus() !== 'junior') return null;
+  return juniorMemberFormVisible() ? 'junior' : null;
+}
+
+function dropOrderForMemberChange() {
+  state.subscriptionUserId = null;
+  state.orderId = null;
+  state.subscriptionAttachedOrderId = null;
+  state.orderIsOtherPayer = null;
+  state.orderMemberKey = null;
+  state.fullOrder = null;
+  state.order = null;
+}
+
+let memberEnsureInflight = null;
+
+async function ensureMemberCustomer() {
+  if (memberEnsureInflight) return memberEnsureInflight;
+  memberEnsureInflight = ensureMemberCustomerOnce();
+  try {
+    return await memberEnsureInflight;
+  } finally {
+    memberEnsureInflight = null;
+  }
+}
+
+async function ensureMemberCustomerOnce() {
+  const mode = otherPayerMode();
+  const payerId = Number(state.customerId);
+  if (!mode || !Number.isFinite(payerId)) return null;
+
+  const settings = await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
+  if (!otherPayerPurchasesEnabled(settings)) {
+    notifyMemberBlock(t('form.member.unavailable', 'Junior kan ikke købes online lige nu.'));
+    return null;
+  }
+
+  const key = currentMemberKey();
+  const stored = readStoredMember();
+  if (stored && String(stored.payerId) === String(payerId) && stored.memberKey === key && stored.memberId != null) {
+    state.subscriptionUserId = stored.memberId;
+    state.orderMemberKey = key;
+    return stored.memberId;
+  }
+  if (stored && stored.memberKey && stored.memberKey !== key) {
+    dropOrderForMemberChange();
+  }
+
+  if (state.pickedMemberId != null) {
+    const memberId = Number(state.pickedMemberId);
+    writeStoredMember({ payerId, memberId, memberKey: key });
+    return memberId;
+  }
+
+  const form = readMemberForm();
+  if (!form.firstName || !form.lastName || !form.birthDate || !form.guardianConsent) {
+    notifyMemberBlock(t('form.member.required', 'Udfyld barnets navn, fødselsdato og værgesamtykke.'));
+    return null;
+  }
+
+  const memberAge = ageInYears(form.birthDate, getTodayLocalDateString());
+  if (mode === 'junior' && (memberAge == null || memberAge >= 16)) {
+    notifyMemberBlock(t('form.member.under16', 'Junior er til børn under 16 år.'));
+    return null;
+  }
+  if (mode === 'guardian' && (memberAge == null || memberAge < 16 || memberAge > 17)) {
+    notifyMemberBlock(t('form.member.youthAge', 'Værgen kan kun gennemføre for en 16- eller 17-årig.'));
+    return null;
+  }
+  if (mode === 'guardian' && !form.email) {
+    notifyMemberBlock(t('form.member.emailRequired', 'E-mailen skal være den unges egen.'));
+    return null;
+  }
+
+  const payer = payerContact();
+  if (form.email && payer.email && form.email.toLowerCase() === payer.email) {
+    notifyMemberBlock(mode === 'guardian'
+      ? t('form.member.emailOwn', 'E-mailen skal være den unges egen, ikke værgens.')
+      : t('form.member.ownEmail', 'Barnets e-mail skal være barnets egen.'));
+    return null;
+  }
+
+  let phone = null;
+  const memberPhone = normalizePhone(form.countryCode, form.phoneNumber);
+  if (memberPhone && !(payer.phone && payer.phone.country === memberPhone.country && payer.phone.number === memberPhone.number)) {
+    phone = memberPhone;
+  }
+
+  const customerType = mode === 'guardian'
+    ? await resolveStudentYouthCustomerTypeId(state.selectedBusinessUnit)
+    : await resolveJuniorCustomerTypeId(state.selectedBusinessUnit);
+  if (customerType == null) {
+    notifyMemberBlock(mode === 'guardian'
+      ? t('form.member.noYouthType', 'Student- og ungdomsmedlemskabet kan ikke oprettes lige nu.')
+      : t('form.member.noJuniorType', 'Junior kan ikke oprettes lige nu.'));
+    return null;
+  }
+
+  const body = buildOtherUserBody({
+    member: {
+      firstName: form.firstName,
+      lastName: form.lastName,
+      birthDate: form.birthDate,
+      email: form.email,
+      phone,
+    },
+    businessUnit: Number(state.selectedBusinessUnit),
+    customerType,
+    appId: BOULDERS_GOACTIVE_APP_ID,
+    otherUserType: 'CHILD',
+  });
+  delete body.password;
+  if (body.email && payer.email && body.email.toLowerCase() === payer.email) delete body.email;
+  if (body.mobilePhone && payer.phone && String(body.mobilePhone.number) === payer.phone.number) {
+    delete body.mobilePhone;
+  }
+
+  const created = await authAPI.createOtherUser(payerId, body);
+  const memberId = created?.id != null ? Number(created.id) : null;
+  if (memberId == null) {
+    notifyMemberBlock(t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
+    return null;
+  }
+  originalConsoleLog('[other-payer] otheruser', { id: memberId, created: created?.created === true, mode });
+  state.memberBirthDate = form.birthDate;
+  writeStoredMember({ payerId, memberId, memberKey: key });
+  return memberId;
+}
+
+function renderExistingMembers(users) {
+  const list = document.getElementById('existingMemberList');
+  const addButton = document.getElementById('addAnotherMember');
+  if (!list) return;
+  list.replaceChildren();
+  const people = (Array.isArray(users) ? users : []).filter((person) => {
+    return person && person.id != null && String(person.id) !== String(state.customerId);
+  });
+  if (!people.length) {
+    list.hidden = true;
+    if (addButton && state.pickedMemberId == null) addButton.hidden = true;
+    return;
+  }
+  people.forEach((person) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'existing-member-option';
+    if (String(state.pickedMemberId) === String(person.id)) button.classList.add('selected');
+    button.dataset.action = 'pick-existing-member';
+    button.dataset.memberId = String(person.id);
+    const birthDate = normalizeBuyerBirthDate(person.birthDate);
+    if (birthDate) button.dataset.birthDate = birthDate;
+    const name = [person.firstName, person.lastName].filter(Boolean).join(' ').trim();
+    button.textContent = name || String(person.id);
+    list.appendChild(button);
+  });
+  list.hidden = false;
+}
+
+async function loadExistingMembers(payerId) {
+  if (!payerId || !isUserAuthenticated() || !juniorMemberFormVisible()) {
+    renderExistingMembers([]);
+    return;
+  }
+  if (String(state.existingMembersLoadedFor) === String(payerId)) return;
+  const url = buildApiUrl({
+    baseUrl: authAPI.baseUrl,
+    useProxy: authAPI.useProxy,
+    path: `/api/ver3/customers/${payerId}/subscriptions/users?forPayerSubscriptionsOnly=true`,
+  });
+  try {
+    const users = await requestJson({ url, headers: bearerHeaders() });
+    state.existingMembersLoadedFor = payerId;
+    renderExistingMembers(users);
+  } catch (error) {
+    devWarn('[member] Could not list existing members:', error);
+    renderExistingMembers([]);
+  }
+}
+
+function pickExistingMember(memberId, birthDate) {
+  state.pickedMemberId = Number(memberId);
+  if (birthDate) {
+    state.memberBirthDate = birthDate;
+    const field = document.getElementById('memberDateOfBirth');
+    if (field) field.value = birthDate;
+  }
+  document.getElementById('parentGuardianForm')?.classList.add('member-existing-selected');
+  const addButton = document.getElementById('addAnotherMember');
+  if (addButton) addButton.hidden = false;
+  document.querySelectorAll('.existing-member-option').forEach((button) => {
+    button.classList.toggle('selected', button.dataset.memberId === String(memberId));
+  });
+}
+
+function addAnotherMember() {
+  state.pickedMemberId = null;
+  state.memberBirthDate = null;
+  document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
+  const addButton = document.getElementById('addAnotherMember');
+  if (addButton) addButton.hidden = true;
+  document.querySelectorAll('.existing-member-option.selected').forEach((button) => {
+    button.classList.remove('selected');
+  });
+}
+
+function beginGuardianHandoff() {
+  const read = (id) => document.getElementById(id)?.value?.trim() || '';
+  const write = (id, value) => {
+    const field = document.getElementById(id);
+    if (field) field.value = value;
+  };
+  write('memberFirstName', read('firstName'));
+  write('memberLastName', read('lastName'));
+  write('memberDateOfBirth', read('dateOfBirth'));
+  write('memberEmail', read('email'));
+  write('email', '');
+  write('password', '');
+  write('firstName', '');
+  write('lastName', '');
+  write('dateOfBirth', '');
+  state.guardianHandoffActive = true;
+  state.pickedMemberId = null;
+  updateMemberFormVisibility();
+  const message = t('form.guardian.prompt', 'Udfyld værgens oplysninger. Medlemskabet gælder den unge.');
+  showSaveAccountMessage(message, 'info');
+  showToast(message, 'info');
+  document.getElementById('firstName')?.focus();
+}
+
+function membershipDateAgeMessage(error) {
+  const payloads = [];
+  if (error?.payload != null) payloads.push(error.payload);
+  if (error?.originalError != null) payloads.push(error.originalError);
+  if (typeof error?.message === 'string') {
+    const match = error.message.match(/\{[\s\S]*\}/);
+    if (match) {
+      try { payloads.push(JSON.parse(match[0])); } catch (_) { /* not json */ }
+    }
+  }
+  for (const payload of payloads) {
+    let body = payload;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (_) { body = null; }
+    }
+    if (!body || typeof body !== 'object') continue;
+    const entries = [body, ...(Array.isArray(body.fieldErrors) ? body.fieldErrors : [])];
+    for (const entry of entries) {
+      const code = String(entry?.errorCode || '').toUpperCase();
+      if (code === 'DATE_AGE_TOO_YOUNG') {
+        const age = entry.minAge ?? body.minAge;
+        const template = t('form.member.ageTooYoung', 'Alderen skal være mindst {age} år.');
+        return age != null ? template.replace('{age}', String(age)) : template.replace(' {age}', '').replace('{age}', '');
+      }
+      if (code === 'DATE_AGE_TOO_OLD') {
+        const age = entry.maxAge ?? body.maxAge;
+        const template = t('form.member.ageTooOld', 'Alderen må højst være {age} år.');
+        return age != null ? template.replace('{age}', String(age)) : template.replace(' {age}', '').replace('{age}', '');
+      }
+    }
+  }
+  return null;
+}
+
+function logOtherPayerOrder(stage, order) {
+  if (!order || state.orderIsOtherPayer !== true) return;
+  const item = order.subscriptionItems?.[0];
+  originalConsoleLog('[other-payer]', stage, {
+    buySubscriptionForOtherUser: order.buySubscriptionForOtherUser === true,
+    subscriptionUser: order.subscriptionUser?.id ?? order.subscriptionUser ?? null,
+    customerId: order.customer?.id ?? order.customer ?? null,
+    subscriber: item?.subscriber?.id ?? item?.subscriber ?? null,
+    birthDate: item?.birthDate ?? null,
+  });
+}
+
+function restoreProfileSubmitButton(button) {
+  button.dataset.action = 'save-account';
+  button.setAttribute('data-i18n-key', 'form.saveAccount');
+  button.classList.add('save-account-btn');
+  button.classList.remove('checkout-btn');
+  button.disabled = false;
+  if (!button.dataset.saving) {
+    const label = t('form.saveAccount');
+    button.textContent = label && label !== 'form.saveAccount' ? label : 'Opret profil';
+  }
+}
+
+function placeJuniorFormSubmit(show) {
+  const juniorActions = document.getElementById('juniorFormActions');
+  const home = document.getElementById('saveAccountActions');
+  const button = document.getElementById('saveAccountButton');
+  const message = document.getElementById('saveAccountMessage');
+  if (!juniorActions || !home || !button || !message) return;
+
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  const createVisible = !!(createSection && createSection.style.display !== 'none');
+
+  if (show) {
+    juniorActions.append(button, message);
+    home.hidden = true;
+    if (!createVisible) {
+      button.dataset.action = 'submit-checkout';
+      button.setAttribute('data-i18n-key', 'cart.checkout');
+      button.classList.remove('save-account-btn');
+      button.classList.add('checkout-btn');
+      const label = t('cart.checkout');
+      button.textContent = label && label !== 'cart.checkout' ? label : 'Til kassen';
+      if (DOM.checkoutBtn) button.disabled = DOM.checkoutBtn.disabled;
+      return;
+    }
+    restoreProfileSubmitButton(button);
+    return;
+  }
+
+  home.hidden = false;
+  if (button.parentElement !== home) home.append(button, message);
+  restoreProfileSubmitButton(button);
+}
+
+function juniorMemberFormVisible() {
+  if (selectedJuniorStatus() !== 'junior') return false;
+  const route = routeCurrentMembership();
+  return !(route?.action === 'block' && route.reason === 'buyer_under_18');
+}
+
+function updateMemberFormVisibility() {
+  const kind = productKind(resolveSelectedAccessProduct());
+  if (state.guardianHandoffActive && kind !== 'studentYouth' && resolveSelectedAccessProduct()) {
+    clearStoredJuniorMember();
+  }
+  const form = DOM.parentGuardianForm || document.getElementById('parentGuardianForm');
+  const showJunior = juniorMemberFormVisible();
+  const show = showJunior || state.guardianHandoffActive === true;
+  if (form) {
+    form.hidden = !show;
+    form.style.display = show ? 'block' : 'none';
+  }
+  const consent = document.getElementById('memberGuardianConsent');
+  if (consent) consent.required = Boolean(show && state.pickedMemberId == null);
+  const emailGroup = document.getElementById('memberEmailGroup');
+  const emailField = document.getElementById('memberEmail');
+  if (emailGroup) emailGroup.hidden = state.guardianHandoffActive !== true;
+  if (emailField) emailField.required = state.guardianHandoffActive === true;
+  placeJuniorFormSubmit(show);
+  setJuniorRoleLabels(show);
+  if (selectedJuniorStatus() === 'other' && state.guardianHandoffActive !== true) {
+    clearStoredJuniorMember();
+  }
+  if (showJunior && isUserAuthenticated() && state.customerId) {
+    void loadExistingMembers(state.customerId);
+  } else if (!showJunior) {
+    renderExistingMembers([]);
+  }
+  recordStudentYouthProductIds();
+}
+
+function setJuniorRoleLabels(show) {
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  const createVisible = !!(createSection && createSection.style.display !== 'none');
+  const bothVisible = Boolean(show && createVisible);
+  const buyerRole = document.getElementById('buyerRole');
+  const profileTitle = document.getElementById('createProfileTitle');
+  const memberStep = document.getElementById('memberRoleStep');
+  if (buyerRole) buyerRole.hidden = !bothVisible;
+  if (profileTitle) profileTitle.hidden = bothVisible;
+  if (memberStep) memberStep.hidden = !bothVisible;
+  const handoff = state.guardianHandoffActive === true;
+  const title = document.querySelector('#buyerRole .profile-role-title');
+  const hint = document.querySelector('#buyerRole .profile-role-hint');
+  const memberTitle = document.querySelector('#parentGuardianForm .parent-form-title');
+  if (title) {
+    const key = handoff ? 'form.guardian.title' : 'form.buyerRole.title';
+    title.setAttribute('data-i18n-key', key);
+    title.textContent = t(key);
+  }
+  if (hint) {
+    const key = handoff ? 'form.guardian.hint' : 'form.buyerRole.hint';
+    hint.setAttribute('data-i18n-key', key);
+    hint.textContent = t(key);
+  }
+  if (memberTitle) {
+    const key = handoff ? 'form.member.youthTitle' : 'form.member.title';
+    memberTitle.setAttribute('data-i18n-key', key);
+    memberTitle.textContent = t(key);
+  }
+}
+
+function membershipAgeMessage(reason) {
+  const fallback = MEMBERSHIP_AGE_FALLBACKS[reason] || MEMBERSHIP_AGE_FALLBACKS.invalid;
+  return t(`form.membershipAge.${reason}`, fallback);
+}
+
+/**
+ * Returns true when the caller must stop before create and before payment.
+ * Runs only when isCheckoutSubscriptionPlan() is true.
+ * Punch cards and the /99kr day ticket are excluded: selectedProductType
+ * punch-card, and isFirstClimbRoute().
+ */
+function blockMembershipAgeGate(surface) {
+  if (state.selectedProductType === 'punch-card') return false;
+  if (isFirstClimbRoute()) return false;
+  if (!isCheckoutSubscriptionPlan()) return false;
+
+  const route = routeCurrentMembership();
+  if (!route || route.action === 'continue' || route.action === 'junior_member_form') {
+    return false;
+  }
+
+  if (route.action === 'guardian_handoff') {
+    const consentAge = Number(state.ageAvoidParentalConsent);
+    if (Number.isFinite(consentAge) && consentAge >= 18 && !isUserAuthenticated()) {
+      beginGuardianHandoff();
+      return true;
+    }
+  }
+
+  const reason = route.action === 'guardian_handoff' ? 'buyer_under_18' : (route.reason || 'invalid');
+  const message = membershipAgeMessage(reason);
+  const offerJunior = reason === 'choose_junior';
+
+  if (surface === 'saveAccount' || offerJunior) {
+    showSaveAccountMessage(message, 'error');
+    setSwitchToJuniorOffer(offerJunior);
+    showToast(message, 'error');
+    if (surface !== 'saveAccount') {
+      setCheckoutLoadingState(false);
+      state.checkoutInProgress = false;
+      updateFAQVisibility();
+      document.getElementById('saveAccountMessage')?.scrollIntoView({ block: 'nearest' });
+    }
+    return true;
+  }
+
+  showToast(message, 'error');
+  setCheckoutLoadingState(false);
+  state.checkoutInProgress = false;
+  updateFAQVisibility();
+  return true;
+}
+
+function juniorPlanFromPool(products, category) {
+  const product = (products || []).find((item) => item && productKind(item) === 'junior');
+  if (!product || product.id == null) return null;
+  return { product, category, planId: `${category}-${product.id}` };
+}
+
+function findJuniorSwitchTarget() {
+  const onCampaign = typeof state.membershipPlanId === 'string' && state.membershipPlanId.startsWith('campaign-');
+  const pools = onCampaign
+    ? [['campaign', state.campaignSubscriptions], ['membership', state.subscriptions]]
+    : [['membership', state.subscriptions], ['campaign', state.campaignSubscriptions]];
+  for (const [category, products] of pools) {
+    const target = juniorPlanFromPool(products, category);
+    if (target) return target;
+  }
+  return null;
+}
+
+function switchToJuniorMembership() {
+  const target = findJuniorSwitchTarget();
+  if (!target) {
+    showToast(t('form.membershipAge.juniorUnavailable', 'Juniormedlemskabet findes ikke for denne hal.'), 'error');
+    return;
+  }
+  if (String(state.membershipPlanId) === target.planId) return;
+
+  document.querySelectorAll('.plan-card').forEach((card) => {
+    card.classList.remove('selected', 'has-quantity', 'disabled');
+    const panel = card.querySelector('.quantity-panel');
+    if (panel) {
+      panel.classList.remove('show');
+      panel.style.display = 'none';
+    }
+  });
+  const card = document.querySelector(`.plan-card[data-plan="${target.planId}"]`);
+  if (card) card.classList.add('selected');
+
+  const previousProductId = state.selectedProductId;
+  const previousPlanId = state.membershipPlanId;
+  state.membershipPlanId = target.planId;
+  state.selectedProductId = target.product.id;
+  state.selectedProductType = 'membership';
+  state.valueCardQuantities?.clear();
+
+  if ((previousProductId && String(previousProductId) !== String(target.product.id)) || (previousPlanId && previousPlanId !== target.planId)) {
+    resetOrderStateForProductChange('junior-switch');
+  }
+  updateMemberFormVisibility();
+  updateCartSummary();
+  updateCheckoutButton();
+  if (state.currentStep === 4) updatePaymentOverview();
+  if (target.product.id) loadSubscriptionAdditions(target.product.id);
+  trackSelectItemEvent({
+    product: target.product,
+    productId: target.product.id,
+    category: target.category,
+    type: 'membership',
+    card,
+  });
+
+  if (!blockMembershipAgeGate('saveAccount')) {
+    const messageDiv = document.getElementById('saveAccountMessage');
+    if (messageDiv) messageDiv.style.display = 'none';
+    setSwitchToJuniorOffer(false);
+  }
+}
+
 /** True when cart selection is a subscription product (membership, campaign, 15-day pass, free trial), not punch-cards. */
 function isCheckoutSubscriptionPlan() {
   const planId = state.membershipPlanId;
@@ -18994,7 +20043,32 @@ async function finalizePreliminaryZeroBalanceOrder(orderId, context = 'checkout-
   }
 }
 
+function orderEchoesOtherPayer(order) {
+  const sources = [order, order?.data, order?.order].filter((item) => item && typeof item === 'object');
+  return sources.some((item) => item.buySubscriptionForOtherUser === true);
+}
+
 async function ensureOrderCreated(context = 'auto') {
+  const mode = otherPayerMode();
+  if (mode) {
+    let memberId;
+    try {
+      memberId = await ensureMemberCustomer();
+    } catch (error) {
+      const ageMessage = membershipDateAgeMessage(error);
+      notifyMemberBlock(ageMessage || t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
+      devWarn('[member] otheruser failed:', error);
+      return null;
+    }
+    if (!memberId) return null;
+    const key = currentMemberKey();
+    if (state.orderId && (state.orderIsOtherPayer !== true || state.orderMemberKey !== key)) {
+      dropOrderForMemberChange();
+      state.subscriptionUserId = memberId;
+      state.orderMemberKey = key;
+    }
+  }
+
   if (state.orderId) {
     console.log(`[checkout] Reusing existing order ${state.orderId} (${context})`);
     persistOrderSnapshot(state.orderId);
@@ -19016,16 +20090,37 @@ async function ensureOrderCreated(context = 'auto') {
     return null;
   }
 
-  const orderData = {
-    customer: Number(state.customerId),
-    businessUnit: state.selectedBusinessUnit,
-    source: 'join.boulders.dk',
-  };
+  const orderData = mode
+    ? buildOrderIdentity({
+        payerId: Number(state.customerId),
+        businessUnit: state.selectedBusinessUnit,
+        memberId: state.subscriptionUserId,
+        forOther: true,
+      })
+    : {
+        customer: Number(state.customerId),
+        businessUnit: state.selectedBusinessUnit,
+        source: 'join.boulders.dk',
+      };
+  const memberKeyAtCreate = mode ? currentMemberKey() : null;
 
   orderCreationPromise = (async () => {
     console.log(`[checkout] Creating order (context: ${context})...`);
     const order = await orderAPI.createOrder(orderData);
-    state.orderId = order.id || order.orderId;
+    if (mode && currentMemberKey() !== memberKeyAtCreate) return null;
+    state.orderId = order.id || order.orderId || order.data?.id || order.data?.orderId;
+    if (mode) {
+      state.orderIsOtherPayer = true;
+      state.orderMemberKey = memberKeyAtCreate;
+      state.otherPayerFlagEchoed = orderEchoesOtherPayer(order);
+      logOtherPayerOrder('create', order.data && !order.customer ? order.data : order);
+      if (state.otherPayerFlagEchoed !== true) {
+        originalConsoleLog('[other-payer] create response did not echo buySubscriptionForOtherUser');
+      }
+    } else {
+      state.orderIsOtherPayer = null;
+      state.orderMemberKey = null;
+    }
     state.subscriptionAttachedOrderId = null;
     
     // Store full order object for payment overview
@@ -19107,6 +20202,7 @@ async function ensureSubscriptionAttached(context = 'auto') {
     // Store full order for payment overview - this now has the correct price
     state.fullOrder = updatedOrder;
     state.order = updatedOrder; // Also update state.order for backward compatibility
+    logOtherPayerOrder('subscription', updatedOrder);
     
     // CRITICAL: Store subscription item ID for linking addons via additionTo
     const subscriptionItem = updatedOrder?.subscriptionItems?.[0];
@@ -19279,6 +20375,13 @@ async function handleCheckout() {
     }
   }
   
+  // Age gate before checkout is marked in progress, so a block never creates
+  // a customer, never calls ensureOrderCreated, and does not emit begin_checkout.
+  await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
+  if (blockMembershipAgeGate('checkout')) {
+    return;
+  }
+
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
   
@@ -19310,6 +20413,7 @@ async function handleCheckout() {
     // Step 1: Create or authenticate customer
     let customer = null;
     let customerId = state.customerId ?? null;
+    let loggedInBeforeCreate = false;
     
     // Check if user is already logged in
     const accessToken = typeof window.getAccessToken === 'function' ? window.getAccessToken() : null;
@@ -19440,6 +20544,7 @@ async function handleCheckout() {
         console.log('[checkout] Customer data prepared:', JSON.stringify(customerData, null, 2));
         // Pre-check: Don't create account if user is already logged in with this email
         const email = customerData.email?.toLowerCase().trim();
+        let skipCreate = false;
         if (email) {
           const authenticatedEmail = state.authenticatedEmail || 
             (typeof window.getTokenMetadata === 'function' && window.getTokenMetadata()?.email);
@@ -19450,11 +20555,68 @@ async function handleCheckout() {
             if (customerId) {
               state.customerId = String(customerId);
             }
-            // Skip account creation and proceed
-          } else {
+            skipCreate = true;
+          }
+        }
+
+        if (!skipCreate) {
+          const identityPassword = customerData.password;
+          const identity = await checkRegistrationIdentity(email, phoneCountryCode, phoneNumber);
+          let reusedAccount = false;
+
+          if (identity === 'phone_exists') {
+            showPhoneAlreadyRegistered('checkout');
+            stopCheckoutForIdentity();
+            return;
+          }
+
+          if (identity === 'email_exists') {
+            const reused = await reuseExistingAccount(email, identityPassword);
+            if (!reused.ok) {
+              if (isRegistrationLoginRateLimit(reused.error)) {
+                showRegistrationRateLimit(reused.error, 'checkout');
+              } else {
+                showDuplicateEmailLogin(email, 'checkout');
+              }
+              stopCheckoutForIdentity();
+              return;
+            }
+            reusedAccount = true;
+          } else if (email && identityPassword) {
+            try {
+              await authAPI.login(email, identityPassword, { saveTokens: true });
+              try {
+                await syncAuthenticatedCustomerState(undefined, email);
+              } catch (syncErr) {
+                devWarn('[checkout] Customer sync failed after identity login:', syncErr);
+              }
+              reusedAccount = true;
+            } catch (loginErr) {
+              if (isRegistrationLoginRateLimit(loginErr)) {
+                showRegistrationRateLimit(loginErr, 'checkout');
+                stopCheckoutForIdentity();
+                return;
+              }
+              // 401 and any other non-429 failure fall through to createCustomer.
+              devLog('[checkout] Identity login did not match; creating customer:', loginErr?.status || loginErr?.message);
+            }
+          }
+
+          if (reusedAccount) {
+            loggedInBeforeCreate = true;
+            customerId = state.customerId || getTokenMetadata()?.username || getTokenMetadata()?.userName;
+            if (customerId) state.customerId = String(customerId);
+            if (isFirstClimbRoute()) {
+              const guard = await runFirstclimbGuard('checkout-reuse');
+              if (guard.blocked) {
+                stopCheckoutForIdentity();
+                return;
+              }
+            }
+          } else if (email) {
             console.log('[checkout] Proceeding with account creation. Duplicate detection will be handled by API; on duplicate we try login and continue.');
             customer = await authAPI.createCustomer(customerData);
-            
+
             // Track this email as used
             state.createdEmails.add(email);
             try {
@@ -19466,9 +20628,9 @@ async function handleCheckout() {
             } catch (e) {
               console.warn('[checkout] Could not store email in localStorage:', e);
             }
+          } else {
+            customer = await authAPI.createCustomer(customerData);
           }
-        } else {
-          customer = await authAPI.createCustomer(customerData);
         }
         
         // Extract customer ID from response - API returns {success: true, data: {id: ...}}
@@ -19534,8 +20696,9 @@ async function handleCheckout() {
         const isTokenExpired = typeof window.isTokenExpired === 'function' ? window.isTokenExpired() : false;
         const hasValidTokens = existingAccessToken && existingRefreshToken && !isTokenExpired;
         
-        // If no tokens from customer creation, try to use existing tokens or login
-        if (!hasTokens && payload.customer?.email && payload.customer?.password) {
+        // If no tokens from customer creation, try to use existing tokens or login.
+        // Skip when the identity pre-check already logged in, so checkout does not login twice.
+        if (!hasTokens && !loggedInBeforeCreate && payload.customer?.email && payload.customer?.password) {
           if (hasValidTokens) {
             console.log('[checkout] Using existing valid authentication tokens (skipping login to avoid rate limits)');
             // Tokens already exist and are valid, no need to login again
@@ -19735,6 +20898,12 @@ async function handleCheckout() {
       console.log('[checkout] Ensuring order exists before adding items...');
       const ensuredOrderId = await ensureOrderCreated('checkout-flow');
       if (!ensuredOrderId) {
+        if (state.memberCheckoutBlocked) {
+          state.memberCheckoutBlocked = false;
+          setCheckoutLoadingState(false);
+          state.checkoutInProgress = false;
+          return;
+        }
         throw new Error('Order ID missing after ensureOrderCreated');
       }
       state.orderId = ensuredOrderId;
@@ -20388,7 +21557,7 @@ async function handleCheckout() {
                     {
                       subscriptionProduct: productId,
                       startDate: startDateStr,
-                      ...(state.customerId ? { subscriber: Number(state.customerId) } : {}),
+                      ...(subscriptionSubscriberId() ? { subscriber: subscriptionSubscriberId() } : {}),
                       ...(getSubscriberBirthDate() ? { birthDate: getSubscriberBirthDate() } : {}),
                     },
                     productId,
@@ -20595,6 +21764,14 @@ async function handleCheckout() {
           }
         } catch (error) {
           console.error('[checkout] Failed to add membership or generate payment link:', error);
+
+          const ageMessage = membershipDateAgeMessage(error);
+          if (ageMessage) {
+            showToast(ageMessage, 'error');
+            setCheckoutLoadingState(false);
+            state.checkoutInProgress = false;
+            return;
+          }
 
           // Check if this is a PRODUCT_NOT_ALLOWED error (campaign eligibility restriction)
           const isProductNotAllowed = error.isProductNotAllowed || 
@@ -22350,6 +23527,7 @@ async function loadOrderForConfirmation(orderId) {
       if (customerData) {
         storedCustomer = JSON.parse(customerData);
         state.customerId = storedCustomer.id;
+        restoreStoredMemberForPayer(storedCustomer.id);
         console.log('[Payment Return] Restored customer from sessionStorage:', storedCustomer);
       }
       if (orderData) {
@@ -25284,21 +26462,12 @@ function validateForm(animate = false) {
     });
   }
 
-  if (!skipPersonalValidation && DOM.parentGuardianForm && DOM.parentGuardianForm.style.display !== 'none') {
-    PARENT_REQUIRED_FIELDS.forEach((fieldId) => {
-      const field = document.getElementById(fieldId);
-      if (!field) return;
-
-      const isEmpty = fieldId === 'parentCity'
-        ? !normalizeLookedUpCity(field.value)
-        : !field.value.trim();
-
-      if (isEmpty) {
-        isValid = false;
-        errors.push(`Missing parent/guardian field: ${fieldId}`);
-        highlightFieldError(fieldId, animate);
-      }
-    });
+  const memberForm = DOM.parentGuardianForm;
+  const memberFormVisible = memberForm && !memberForm.hidden && memberForm.style.display !== 'none';
+  if (memberFormVisible && state.pickedMemberId == null && !document.getElementById('memberGuardianConsent')?.checked) {
+    isValid = false;
+    errors.push('Missing guardian consent');
+    highlightFieldError('memberGuardianConsent', animate);
   }
 
   // Re-cache consent elements in case they weren't found initially
@@ -25485,6 +26654,10 @@ function updateCheckoutButton() {
   // Payment method no longer required from UI - card is used by default
   const hasProduct = hasMembership || hasPunchCards || hasAddons;
   DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
+  const juniorSubmit = document.getElementById('saveAccountButton');
+  if (juniorSubmit && juniorSubmit.dataset.action === 'submit-checkout') {
+    juniorSubmit.disabled = DOM.checkoutBtn.disabled;
+  }
   const { isFreeTrialSelected, isZeroTotal, isFreeFlow } = applyFreeFlowCartUi();
   
   const consentsSection = document.querySelector('.consents-section');
@@ -26140,6 +27313,7 @@ function showStep(stepNumber) {
       if (state.orderId && state.fullOrder) {
         updatePaymentOverview();
       }
+      updateMemberFormVisibility();
     }, 100);
   } else {
     // When leaving step 2, reset main content margin
@@ -26153,7 +27327,6 @@ function showStep(stepNumber) {
   if (stepNumber === 4) {
     // Ensure countries are loaded (in case they weren't loaded on init)
     const countryCodeSelect = document.getElementById('countryCode');
-    const parentCountryCodeSelect = document.getElementById('parentCountryCode');
     if (countryCodeSelect && countryCodeSelect.options.length <= 1) {
       // Only one option (the default +45), so countries haven't been loaded yet
       const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
