@@ -157,7 +157,7 @@ function trackBeginCheckout(items = [], value = 0, currency = 'DKK') {
 
 /**
  * Track purchase event (when order is completed)
- * GA4 Event: purchase (or a dedicated event via metadata.eventName, e.g. purchase_99kr, purchase_fitness)
+ * GA4 Event: purchase (or a dedicated event via metadata.eventName, e.g. purchase_99kr, purchase_fitness, purchase_singlegym)
  * @param {string} transactionId - Order/transaction ID
  * @param {Array<object>} items - Array of purchased items
  * @param {number} value - Total purchase value
@@ -166,7 +166,7 @@ function trackBeginCheckout(items = [], value = 0, currency = 'DKK') {
  * @param {string} currency - Currency code (default: 'DKK')
  * @param {object} metadata - Optional top-level event parameters (gym_id, payment_type, etc.)
  *   Pass metadata.eventName to override the Data Layer event name (default: 'purchase').
- *   Dedicated names in use: purchase_99kr, purchase_fitness.
+ *   Dedicated names in use: purchase_99kr, purchase_fitness, purchase_singlegym.
  */
 function trackPurchase(transactionId, items = [], value = 0, tax = 0, shipping = 0, currency = 'DKK', metadata = {}) {
   const eventName = metadata?.eventName || 'purchase';
