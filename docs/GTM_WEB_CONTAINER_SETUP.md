@@ -179,6 +179,10 @@ Fitness Membership dual-fires: standard `purchase` (revenue) **and** `purchase_f
 
 7. Google Ads needs a conversion action created in Ads first. There is no Fitness conversion label yet.
 
+### 2.7 Purchase singlegym Event Tag (distinct conversion)
+
+Single Gym Membership dual-fires `purchase` and `purchase_singlegym`. Same setup as `purchase_fitness`, with event name `purchase_singlegym`, trigger `ce - purchase_singlegym`, and tag name `GA4 - Purchase singlegym`. Mark it as a GA4 key event. The tag is not in the published container yet, and there is no Google Ads conversion label yet.
+
 ---
 
 ## Step 3: Server-Side Forwarding (Alternative Method)
@@ -198,7 +202,7 @@ If your GA4 tags don't have built-in forwarding, you can use a separate forwardi
        var lastEvent = window.dataLayer[window.dataLayer.length - 1];
        
        // Only forward ecommerce events
-       var ecommerceEvents = ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr', 'purchase_fitness'];
+       var ecommerceEvents = ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr', 'purchase_fitness', 'purchase_singlegym'];
        if (lastEvent && lastEvent.event && ecommerceEvents.indexOf(lastEvent.event) !== -1) {
          // Forward to server-side container
          fetch('https://YOUR-STAPE-DOMAIN/collect', {
@@ -221,7 +225,7 @@ If your GA4 tags don't have built-in forwarding, you can use a separate forwardi
 
 3. **Triggering:**
    - Choose: **Custom Event**
-   - **Event name:** `select_item|add_to_cart|begin_checkout|purchase|purchase_99kr|purchase_fitness` (use regex)
+   - **Event name:** `select_item|add_to_cart|begin_checkout|purchase|purchase_99kr|purchase_fitness|purchase_singlegym` (use regex)
 
 4. **Name:** `Server Container - Forward Events`
 5. **Save**
@@ -283,6 +287,7 @@ Create variables to easily access ecommerce data:
    - Complete purchase → `purchase` should fire
    - Complete a `/99kr` day-ticket purchase → **both** `purchase` and `purchase_99kr` should fire (same `transaction_id` / value)
    - Complete a Fitness Membership purchase → **both** `purchase` and `purchase_fitness` should fire (same `transaction_id` / value)
+   - Complete a Single Gym Membership purchase → **both** `purchase` and `purchase_singlegym` should fire (same `transaction_id` / value)
 
 ### 5.2 Check DataLayer
 
@@ -292,7 +297,7 @@ In browser console:
 console.log(window.dataLayer);
 
 // Filter ecommerce events
-window.dataLayer.filter(e => e.event && ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr', 'purchase_fitness'].includes(e.event))
+window.dataLayer.filter(e => e.event && ['select_item', 'add_to_cart', 'begin_checkout', 'purchase', 'purchase_99kr', 'purchase_fitness', 'purchase_singlegym'].includes(e.event))
 ```
 
 ### 5.3 GA4 DebugView
@@ -391,6 +396,7 @@ In each GA4 tag:
 | GA4 - Purchase | purchase | Custom Event: purchase |
 | GA4 - Purchase 99kr | purchase_99kr | Custom Event: purchase_99kr |
 | GA4 - Purchase fitness | purchase_fitness | Custom Event: purchase_fitness |
+| GA4 - Purchase singlegym | purchase_singlegym | Custom Event: purchase_singlegym |
 
 ### DataLayer Event Structure
 

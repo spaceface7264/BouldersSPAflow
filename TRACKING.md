@@ -13,7 +13,7 @@ behind Consent Mode v2).
 
 | Platform | Status |
 |---|---|
-| GA4 | Firing via GTM (`select_item`, `add_to_cart`, `begin_checkout`, `purchase`, `purchase_99kr`, …). `purchase_fitness` is emitted by the site as of 2026-10-30; the GTM tag for it is not published yet (see below). |
+| GA4 | Firing via GTM (`select_item`, `add_to_cart`, `begin_checkout`, `purchase`, `purchase_99kr`, …). `purchase_fitness` and `purchase_singlegym` are emitted by the site as of 2026-10-30; the GTM tags for them are not published yet (see below). |
 | Meta / Facebook Pixel | Firing, with match-quality fields added 2026-07 |
 | TikTok Pixel | Firing (CSP unblocked in PR #127) |
 | Google Ads — `99 kr.` day ticket | **Live since 2026-08-04**, verified end to end |
@@ -103,6 +103,21 @@ Add, do not modify existing tags:
 5. Google Ads: create the conversion action in Ads first, then a `GAds -` tag on
    `ce - purchase_fitness` with `user_data` = `{{UPD - Purchase}}`. There is no conversion label
    for Fitness yet, so do not invent one.
+
+## Single Gym membership — `purchase_singlegym`
+
+Same pattern as Fitness. Single Gym is Aalborg-only climbing. Deeplinks:
+
+- `/single-gym` (also `/singlegym`)
+- `/?location=aalborg&type=single-gym`
+
+`trackConfirmedPurchase()` dual-fires `purchase` and `purchase_singlegym` for every completed
+Single Gym order. `event_id` is `purchase:<orderId>:singlegym`. A Fitness order does not also
+fire `purchase_singlegym`.
+
+GTM setup matches Fitness, with event name `purchase_singlegym`, trigger `ce - purchase_singlegym`,
+and tag `GA4 - Purchase singlegym`. Not published yet. Do not add it to `purchase` or to
+`purchase_membership`.
 
 ---
 
