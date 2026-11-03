@@ -863,7 +863,7 @@
                             </button>
                             <h3 class="info-section-title" id="createProfileTitle" data-i18n-key="form.createProfile">CREATE PROFILE</h3>
                             <div class="profile-role" id="buyerRole" hidden>
-                                <span class="profile-role-step" aria-hidden="true">1</span>
+                                <span class="profile-role-step" id="buyerRoleStep" aria-hidden="true">1</span>
                                 <div>
                                     <h3 class="profile-role-title" data-i18n-key="form.buyerRole.title">Parent or guardian</h3>
                                     <p class="profile-role-hint" data-i18n-key="form.buyerRole.hint">Your account. You must be 18, and you pay for the membership.</p>
@@ -985,43 +985,57 @@
                             </div>
                             <div class="parent-guardian-form" id="parentGuardianForm" hidden style="display: none;">
                                 <div class="profile-role">
-                                    <span class="profile-role-step" id="memberRoleStep" aria-hidden="true" hidden>2</span>
+                                    <span class="profile-role-step" id="memberRoleStep" aria-hidden="true" hidden>1</span>
                                     <div>
-                                        <h4 class="parent-form-title" data-i18n-key="form.member.title">The child</h4>
-                                        <p class="profile-role-hint" data-i18n-key="form.member.roleHint">The child's own details. The membership is for the child, not for you.</p>
+                                        <div class="member-title-row">
+                                            <h4 class="parent-form-title" id="memberFormTitle" data-member-copy data-i18n-key="form.member.title">Who is this membership for?</h4>
+                                            <span class="member-saved-mark" id="memberSavedMark" data-i18n-key="form.member.savedMark" hidden>Gemt</span>
+                                        </div>
+                                        <p class="profile-role-hint" id="memberFormHint" data-member-copy data-i18n-key="form.member.roleHint">The membership is for the child.</p>
                                     </div>
                                 </div>
                                 <div id="existingMemberList" class="existing-member-list" hidden></div>
-                                <button type="button" id="addAnotherMember" data-action="add-another-member" data-i18n-key="form.member.addAnother" hidden>Tilføj et andet barn</button>
+                                <button type="button" id="addAnotherMember" class="existing-member-option existing-member-add" data-action="add-another-member" data-i18n-key="form.member.addAnother" hidden>Tilføj et andet barn</button>
+                                <div id="memberSummary" class="member-summary" data-member-copy hidden>
+                                    <p class="member-summary-age" id="memberSummaryAge" hidden></p>
+                                    <p class="member-summary-email" id="memberSummaryEmail"></p>
+                                    <button type="button" class="member-summary-edit" data-action="edit-handoff-member" data-i18n-key="form.member.edit">Ret</button>
+                                </div>
                                 <div class="registration-form">
                                     <div id="memberNewFields">
                                     <div class="form-row">
                                         <div class="form-group">
                                             <label for="memberFirstName" data-i18n-key="form.firstName">First name*</label>
-                                            <input type="text" id="memberFirstName" name="memberFirstName" autocomplete="off" placeholder="" data-i18n-placeholder="form.firstName.placeholder" data-member-field="firstName">
+                                            <input type="text" id="memberFirstName" name="memberFirstName" autocomplete="off" placeholder="" data-i18n-placeholder="form.firstName.placeholder" data-member-field="firstName" aria-describedby="memberFirstNameError">
+                                            <div class="error-message" id="memberFirstNameError"></div>
                                         </div>
                                         <div class="form-group">
                                             <label for="memberLastName" data-i18n-key="form.lastName">Last name*</label>
-                                            <input type="text" id="memberLastName" name="memberLastName" autocomplete="off" placeholder="" data-i18n-placeholder="form.lastName.placeholder" data-member-field="lastName">
+                                            <input type="text" id="memberLastName" name="memberLastName" autocomplete="off" placeholder="" data-i18n-placeholder="form.lastName.placeholder" data-member-field="lastName" aria-describedby="memberLastNameError">
+                                            <div class="error-message" id="memberLastNameError"></div>
                                         </div>
                                     </div>
                                     <div class="form-group">
                                         <label for="memberDateOfBirth" data-i18n-key="form.dateOfBirth">Date of birth*</label>
                                         <div class="date-input-container">
-                                            <input type="date" id="memberDateOfBirth" name="memberDateOfBirth" class="date-input" autocomplete="off" data-member-field="dateOfBirth">
+                                            <input type="date" id="memberDateOfBirth" name="memberDateOfBirth" class="date-input" autocomplete="off" data-member-field="dateOfBirth" aria-describedby="memberDateOfBirthError memberAgeStatus">
                                         </div>
+                                        <p class="member-age-status" id="memberAgeStatus" aria-live="polite" hidden></p>
+                                        <div class="error-message" id="memberDateOfBirthError"></div>
                                     </div>
                                     <div class="form-group" id="memberEmailGroup" hidden>
                                         <label for="memberEmail" data-i18n-key="form.member.email">E-mail*</label>
-                                        <input type="email" id="memberEmail" name="memberEmail" autocomplete="off" data-member-field="email">
+                                        <input type="email" id="memberEmail" name="memberEmail" autocomplete="off" data-member-field="email" aria-describedby="memberEmailError">
                                         <p class="member-email-hint" data-i18n-key="form.member.emailOwn">E-mailen skal være den unges egen, ikke værgens.</p>
+                                        <div class="error-message" id="memberEmailError"></div>
                                     </div>
                                     <div class="form-group form-group-consent">
                                         <label class="consent-checkbox">
-                                            <input type="checkbox" id="memberGuardianConsent" data-member-field="guardianConsent">
+                                            <input type="checkbox" id="memberGuardianConsent" data-member-field="guardianConsent" aria-describedby="memberGuardianConsentError">
                                             <span class="checkmark"></span>
-                                            <span class="consent-text" data-i18n-key="form.member.consent">I am the child's guardian and I accept the membership on the child's behalf.</span>
+                                            <span class="consent-text" id="memberConsentText" data-member-copy data-i18n-key="form.member.consent">I am the child's guardian and I accept the membership on the child's behalf.</span>
                                         </label>
+                                        <div class="error-message" id="memberGuardianConsentError"></div>
                                     </div>
                                     </div>
                                     <div class="form-group" id="juniorFormActions"></div>

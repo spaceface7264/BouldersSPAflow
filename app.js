@@ -65,6 +65,7 @@ import {
   choosePricedCustomerType,
   memberKey,
 } from './utils/registrationIdentity.js';
+import { memberAgeStatus, possessive } from './utils/memberCopy.js';
 import { sanitizeHTML } from './sanitize.js';
 import confetti from 'canvas-confetti';
 
@@ -1193,6 +1194,14 @@ const REQUIRED_FIELDS = [
 ];
 
 const PARENT_REQUIRED_FIELDS = [
+  'memberGuardianConsent',
+];
+
+const MEMBER_ERROR_FIELDS = [
+  'memberFirstName',
+  'memberLastName',
+  'memberDateOfBirth',
+  'memberEmail',
   'memberGuardianConsent',
 ];
 
@@ -5899,6 +5908,12 @@ const state = {
   orderIsOtherPayer: null,
   orderMemberKey: null,
   pickedMemberId: null,
+  pickedMemberFirstName: null,
+  existingMemberCount: 0,
+  addingMember: false,
+  editingHandoffMember: false,
+  savedMemberCollapsed: false,
+  editingSavedMember: false,
   memberBirthDate: null,
   guardianHandoffActive: false,
   juniorCustomerTypeId: null,
@@ -7561,8 +7576,8 @@ const translations = {
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.buyerRole.title': 'Forælder eller værge',
     'form.buyerRole.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
-    'form.member.title': 'Barnet',
-    'form.member.roleHint': 'Barnets egne oplysninger. Medlemskabet gælder barnet, ikke dig.',
+    'form.member.title': 'Hvem er medlemskabet til?',
+    'form.member.roleHint': 'Medlemskabet gælder barnet.',
     'form.member.consent': 'Jeg er barnets værge og accepterer medlemskabet på barnets vegne.',
     'form.member.required': 'Udfyld barnets navn, fødselsdato og værgesamtykke.',
     'form.member.under16': 'Junior er til børn under 16 år.',
@@ -7574,12 +7589,28 @@ const translations = {
     'form.member.save': 'Gem',
     'form.member.saving': 'Gemmer...',
     'form.member.saved': 'Gemt.',
+    'form.member.savedMark': 'Gemt',
     'form.member.addAnother': 'Tilføj et andet barn',
     'form.member.youthTitle': 'Den unge',
     'form.member.youthAge': 'Værgen kan kun gennemføre for en 16- eller 17-årig.',
     'form.member.email': 'E-mail*',
     'form.member.emailRequired': 'E-mailen skal være den unges egen.',
     'form.member.emailOwn': 'E-mailen skal være den unges egen, ikke værgens.',
+    'form.member.youthHint': 'Medlemskabet gælder den unge.',
+    'form.member.productJunior': 'Junior',
+    'form.member.productYouth': 'Ungdom',
+    'form.member.consentNamed': 'Jeg er {possessive} værge og køber medlemskabet for {name}.',
+    'form.member.continueWith': 'Fortsæt med {name}',
+    'form.member.ageShort': '{age} år',
+    'form.member.ageJuniorOk': '{age} år. Junior passer.',
+    'form.member.ageJuniorBad': '{age} år. Junior er til børn under 16.',
+    'form.member.ageYouthOk': '{age} år. Ungdomsmedlemskabet passer.',
+    'form.member.ageYouthBad': '{age} år. Kun 16 eller 17 år.',
+    'form.member.error.firstName': 'Indtast fornavn.',
+    'form.member.error.lastName': 'Indtast efternavn.',
+    'form.member.error.birthDate': 'Angiv en gyldig fødselsdato.',
+    'form.member.error.consent': 'Bekræft, at du er værge.',
+    'form.member.edit': 'Ret',
     'form.member.ageTooYoung': 'Alderen skal være mindst {age} år.',
     'form.member.ageTooOld': 'Alderen må højst være {age} år.',
     'form.guardian.title': 'Værge',
@@ -7984,8 +8015,8 @@ const translations = {
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
     'form.buyerRole.title': 'Parent or guardian',
     'form.buyerRole.hint': 'Your account. You must be 18, and you pay for the membership.',
-    'form.member.title': 'The child',
-    'form.member.roleHint': 'The child\'s own details. The membership is for the child, not for you.',
+    'form.member.title': 'Who is this membership for?',
+    'form.member.roleHint': 'The membership is for the child.',
     'form.member.consent': 'I am the child\'s guardian and I accept the membership on the child\'s behalf.',
     'form.member.required': 'Enter the child\'s name, date of birth, and guardian consent.',
     'form.member.under16': 'Junior is for children under 16.',
@@ -7997,12 +8028,28 @@ const translations = {
     'form.member.save': 'Save',
     'form.member.saving': 'Saving...',
     'form.member.saved': 'Saved.',
+    'form.member.savedMark': 'Saved',
     'form.member.addAnother': 'Add another child',
     'form.member.youthTitle': 'The young person',
     'form.member.youthAge': 'A guardian can only complete this for a 16- or 17-year-old.',
     'form.member.email': 'Email*',
     'form.member.emailRequired': 'The email has to be the young person\'s own.',
     'form.member.emailOwn': 'The email has to be the young person\'s own, not the guardian\'s.',
+    'form.member.youthHint': 'The membership is for the young person.',
+    'form.member.productJunior': 'Junior',
+    'form.member.productYouth': 'Youth',
+    'form.member.consentNamed': 'I am {possessive} guardian and I am buying this membership for {name}.',
+    'form.member.continueWith': 'Continue with {name}',
+    'form.member.ageShort': '{age} years',
+    'form.member.ageJuniorOk': '{age} years. Junior fits.',
+    'form.member.ageJuniorBad': '{age} years. Junior is for children under 16.',
+    'form.member.ageYouthOk': '{age} years. The youth membership fits.',
+    'form.member.ageYouthBad': '{age} years. Only 16 or 17.',
+    'form.member.error.firstName': 'Enter a first name.',
+    'form.member.error.lastName': 'Enter a last name.',
+    'form.member.error.birthDate': 'Enter a valid date of birth.',
+    'form.member.error.consent': 'Confirm that you are the guardian.',
+    'form.member.edit': 'Edit',
     'form.member.ageTooYoung': 'Age must be at least {age}.',
     'form.member.ageTooOld': 'Age must be no more than {age}.',
     'form.guardian.title': 'Guardian',
@@ -8389,8 +8436,8 @@ const translations = {
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
     'form.buyerRole.title': 'Elternteil oder Vormund',
     'form.buyerRole.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
-    'form.member.title': 'Das Kind',
-    'form.member.roleHint': 'Die eigenen Angaben des Kindes. Die Mitgliedschaft gilt für das Kind, nicht für dich.',
+    'form.member.title': 'Für wen ist die Mitgliedschaft?',
+    'form.member.roleHint': 'Die Mitgliedschaft gilt für das Kind.',
     'form.member.consent': 'Ich bin der Vormund des Kindes und akzeptiere die Mitgliedschaft im Namen des Kindes.',
     'form.member.required': 'Gib den Namen und das Geburtsdatum des Kindes an und bestätige die Vormundschaft.',
     'form.member.under16': 'Junior ist für Kinder unter 16 Jahren.',
@@ -8402,12 +8449,28 @@ const translations = {
     'form.member.save': 'Speichern',
     'form.member.saving': 'Speichert...',
     'form.member.saved': 'Gespeichert.',
+    'form.member.savedMark': 'Gespeichert',
     'form.member.addAnother': 'Weiteres Kind hinzufügen',
     'form.member.youthTitle': 'Die junge Person',
     'form.member.youthAge': 'Ein Vormund kann das nur für eine 16- oder 17-jährige Person abschließen.',
     'form.member.email': 'E-Mail*',
     'form.member.emailRequired': 'Die E-Mail muss der jungen Person gehören.',
     'form.member.emailOwn': 'Die E-Mail muss der jungen Person gehören, nicht dem Vormund.',
+    'form.member.youthHint': 'Die Mitgliedschaft gilt für die junge Person.',
+    'form.member.productJunior': 'Junior',
+    'form.member.productYouth': 'Jugend',
+    'form.member.consentNamed': 'Ich bin {possessive} Vormund und kaufe die Mitgliedschaft für {name}.',
+    'form.member.continueWith': 'Weiter mit {name}',
+    'form.member.ageShort': '{age} Jahre',
+    'form.member.ageJuniorOk': '{age} Jahre. Junior passt.',
+    'form.member.ageJuniorBad': '{age} Jahre. Junior ist für Kinder unter 16.',
+    'form.member.ageYouthOk': '{age} Jahre. Die Jugendmitgliedschaft passt.',
+    'form.member.ageYouthBad': '{age} Jahre. Nur 16 oder 17.',
+    'form.member.error.firstName': 'Gib den Vornamen ein.',
+    'form.member.error.lastName': 'Gib den Nachnamen ein.',
+    'form.member.error.birthDate': 'Gib ein gültiges Geburtsdatum an.',
+    'form.member.error.consent': 'Bestätige, dass du Vormund bist.',
+    'form.member.edit': 'Bearbeiten',
     'form.member.ageTooYoung': 'Das Alter muss mindestens {age} Jahre sein.',
     'form.member.ageTooOld': 'Das Alter darf höchstens {age} Jahre sein.',
     'form.guardian.title': 'Vormund',
@@ -8738,6 +8801,7 @@ function updatePageTranslations() {
   
   // Update elements with data-i18n-key attribute
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
+    if (element.hasAttribute('data-member-copy')) return;
     const key = element.getAttribute('data-i18n-key');
     let translation = t(key);
     const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
@@ -9086,6 +9150,7 @@ function updateFormTranslations() {
   }
 
   renderPasswordResetPageCopy();
+  refreshMemberCopy();
 }
 
 // Update cart translations
@@ -12475,6 +12540,11 @@ async function handleSaveAccount() {
         highlightFieldError(field.id, true); // Animate when triggered from button click
       }
     });
+    rejectInvalidMemberFields({ animate: true, toast: false, scroll: false });
+    return;
+  }
+
+  if (rejectInvalidMemberFields({ animate: true, toast: true, scroll: true })) {
     return;
   }
   
@@ -13005,8 +13075,8 @@ function checkSaveAccountButtonState() {
     }
   });
   
-  // Add 'valid' class if all fields are filled
-  if (allFieldsFilled) {
+  const memberReady = !memberBlockIsVisible() || state.pickedMemberId != null || validateMemberFields().ok;
+  if (allFieldsFilled && memberReady) {
     saveBtn.classList.add('valid');
   } else {
     saveBtn.classList.remove('valid');
@@ -15052,12 +15122,26 @@ function handleGlobalClick(event) {
     }
     case 'pick-existing-member': {
       event.preventDefault();
-      pickExistingMember(actionable.dataset.memberId, actionable.dataset.birthDate || '');
+      pickExistingMember(
+        actionable.dataset.memberId,
+        actionable.dataset.birthDate || '',
+        actionable.dataset.firstName || '',
+      );
       break;
     }
     case 'add-another-member': {
       event.preventDefault();
       addAnotherMember();
+      break;
+    }
+    case 'edit-handoff-member': {
+      event.preventDefault();
+      editHandoffMember();
+      break;
+    }
+    case 'edit-saved-member': {
+      event.preventDefault();
+      editSavedMember();
       break;
     }
     case 'edit-gym': {
@@ -19194,6 +19278,9 @@ function clearStoredJuniorMember() {
   state.pickedMemberId = null;
   state.memberBirthDate = null;
   state.guardianHandoffActive = false;
+  state.savedMemberCollapsed = false;
+  state.editingSavedMember = false;
+  hideMemberSavedMark();
   state.existingMembersLoadedFor = null;
   document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
   try {
@@ -19633,6 +19720,382 @@ async function ensureMemberCustomerOnce() {
   return memberId;
 }
 
+function memberBlockIsVisible() {
+  const form = document.getElementById('parentGuardianForm');
+  return Boolean(form && !form.hidden && form.style.display !== 'none');
+}
+
+function createSectionIsVisible() {
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  return Boolean(createSection && createSection.style.display !== 'none');
+}
+
+function memberDraftHasValue() {
+  const form = readMemberForm();
+  return Boolean(form.firstName || form.lastName || form.birthDate || form.email);
+}
+
+function memberDisplayName() {
+  if (state.pickedMemberId != null && state.pickedMemberFirstName) {
+    return state.pickedMemberFirstName.trim();
+  }
+  return (document.getElementById('memberFirstName')?.value || '').trim();
+}
+
+function memberFullName() {
+  const first = (document.getElementById('memberFirstName')?.value || '').trim();
+  const last = (document.getElementById('memberLastName')?.value || '').trim();
+  const typed = [first, last].filter(Boolean).join(' ');
+  if (typed) return typed;
+  return memberDisplayName();
+}
+
+function memberBirthDateLabel() {
+  const birth = normalizeBuyerBirthDate(
+    document.getElementById('memberDateOfBirth')?.value || state.memberBirthDate || ''
+  );
+  if (!birth) return '';
+  const [year, month, day] = birth.split('-');
+  return `${day}.${month}.${year}`;
+}
+
+function memberSummaryDetail() {
+  const date = memberBirthDateLabel();
+  const age = memberAgeShort();
+  if (date && age) return `${date} · ${age}`;
+  return date || age;
+}
+
+function memberDescribedBy(id, hasError) {
+  if (id === 'memberDateOfBirth') {
+    return hasError ? 'memberDateOfBirthError memberAgeStatus' : 'memberAgeStatus';
+  }
+  return hasError ? `${id}Error` : '';
+}
+
+function applyMemberFieldErrors(errors, { animate = false, toast = false, scroll = false } = {}) {
+  let firstId = null;
+  MEMBER_ERROR_FIELDS.forEach((id) => {
+    const field = document.getElementById(id);
+    const message = errors[id];
+    const errorNode = document.getElementById(`${id}Error`);
+    const group = field?.closest('.form-group');
+    if (message) {
+      if (!firstId) firstId = id;
+      group?.classList.add('error');
+      if (errorNode) errorNode.textContent = message;
+      if (field) {
+        field.setAttribute('aria-invalid', 'true');
+        field.setAttribute('aria-describedby', memberDescribedBy(id, true));
+      }
+      if (animate) highlightFieldError(id, true);
+      if (id === 'memberEmail') {
+        const emailGroup = document.getElementById('memberEmailGroup');
+        if (emailGroup) emailGroup.hidden = false;
+      }
+    } else if (field) {
+      group?.classList.remove('error');
+      if (errorNode) errorNode.textContent = '';
+      field.removeAttribute('aria-invalid');
+      const describedBy = memberDescribedBy(id, false);
+      if (describedBy) field.setAttribute('aria-describedby', describedBy);
+      else field.removeAttribute('aria-describedby');
+    }
+  });
+  if (firstId && scroll) document.getElementById(firstId)?.scrollIntoView({ block: 'nearest' });
+  if (firstId && toast) showToast(errors[firstId], 'error');
+  return firstId;
+}
+
+function clearMemberFieldErrors() {
+  applyMemberFieldErrors({});
+}
+
+function validateMemberFields() {
+  if (state.pickedMemberId != null) return { ok: true, errors: {} };
+  const form = readMemberForm();
+  const errors = {};
+  const mode = state.guardianHandoffActive ? 'guardian' : 'junior';
+  if (!form.firstName) errors.memberFirstName = t('form.member.error.firstName', 'Indtast fornavn.');
+  if (!form.lastName) errors.memberLastName = t('form.member.error.lastName', 'Indtast efternavn.');
+  const birth = normalizeBuyerBirthDate(form.birthDate);
+  const age = birth ? ageInYears(birth, getTodayLocalDateString()) : null;
+  const status = memberAgeStatus(age, mode);
+  if (!birth || status === 'empty' || status === 'invalid') {
+    errors.memberDateOfBirth = t('form.member.error.birthDate', 'Angiv en gyldig fødselsdato.');
+  } else if (status === 'junior-bad' || status === 'youth-bad') {
+    const key = status === 'junior-bad' ? 'form.member.ageJuniorBad' : 'form.member.ageYouthBad';
+    errors.memberDateOfBirth = t(key).replaceAll('{age}', String(age));
+  }
+  if (mode === 'guardian' && !form.email) {
+    errors.memberEmail = t('form.member.emailRequired', 'E-mailen skal være den unges egen.');
+  }
+  const payer = payerContact();
+  if (form.email && payer.email && form.email.toLowerCase() === payer.email) {
+    errors.memberEmail = mode === 'guardian'
+      ? t('form.member.emailOwn', 'E-mailen skal være den unges egen, ikke værgens.')
+      : t('form.member.ownEmail', 'Barnets e-mail skal være barnets egen.');
+  }
+  if (!form.guardianConsent) {
+    errors.memberGuardianConsent = t('form.member.error.consent', 'Bekræft, at du er værge.');
+  }
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
+function rejectInvalidMemberFields(options) {
+  if (!memberBlockIsVisible() || state.pickedMemberId != null) return false;
+  const result = validateMemberFields();
+  if (result.ok) {
+    clearMemberFieldErrors();
+    return false;
+  }
+  if (state.guardianHandoffActive && !state.editingHandoffMember) {
+    state.editingHandoffMember = true;
+    syncMemberFieldVisibility();
+  }
+  applyMemberFieldErrors(result.errors, options);
+  return true;
+}
+
+function clearMemberFieldErrorIfPassing(id) {
+  const group = document.getElementById(id)?.closest('.form-group');
+  if (!group?.classList.contains('error')) return;
+  applyMemberFieldErrors(validateMemberFields().errors);
+}
+
+function savedMemberIsCollapsed() {
+  return state.savedMemberCollapsed === true && state.editingSavedMember !== true;
+}
+
+function memberAgeShort() {
+  const birth = normalizeBuyerBirthDate(
+    document.getElementById('memberDateOfBirth')?.value || state.memberBirthDate || ''
+  );
+  const age = birth ? ageInYears(birth, getTodayLocalDateString()) : null;
+  if (age == null || age < 0 || age > 120) return '';
+  return t('form.member.ageShort', '{age} år').replaceAll('{age}', String(age));
+}
+
+let memberSavedMarkTimer = null;
+
+function hideMemberSavedMark() {
+  clearTimeout(memberSavedMarkTimer);
+  const mark = document.getElementById('memberSavedMark');
+  if (!mark) return;
+  mark.hidden = true;
+  mark.classList.remove('is-leaving');
+}
+
+function showMemberSavedMark() {
+  const mark = document.getElementById('memberSavedMark');
+  if (!mark) return;
+  mark.classList.remove('is-leaving');
+  mark.hidden = false;
+  mark.textContent = t('form.member.savedMark', 'Gemt');
+  clearTimeout(memberSavedMarkTimer);
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  memberSavedMarkTimer = setTimeout(() => {
+    if (reduced || mark.hidden) {
+      mark.hidden = true;
+      return;
+    }
+    mark.classList.add('is-leaving');
+    mark.addEventListener('animationend', () => {
+      mark.hidden = true;
+      mark.classList.remove('is-leaving');
+    }, { once: true });
+  }, 2200);
+}
+
+function clearSavedMemberCollapse() {
+  state.savedMemberCollapsed = false;
+  state.editingSavedMember = false;
+  hideMemberSavedMark();
+}
+
+function ageStatusText() {
+  const birth = normalizeBuyerBirthDate(document.getElementById('memberDateOfBirth')?.value || '');
+  const age = birth ? ageInYears(birth, getTodayLocalDateString()) : null;
+  const mode = state.guardianHandoffActive ? 'guardian' : 'junior';
+  const status = memberAgeStatus(age, mode);
+  if (status === 'empty') return '';
+  if (status === 'invalid') return t('form.member.error.birthDate', 'Angiv en gyldig fødselsdato.');
+  const keys = {
+    'junior-ok': 'form.member.ageJuniorOk',
+    'junior-bad': 'form.member.ageJuniorBad',
+    'youth-ok': 'form.member.ageYouthOk',
+    'youth-bad': 'form.member.ageYouthBad',
+  };
+  return t(keys[status]).replaceAll('{age}', String(age));
+}
+
+function clearMemberBirthBounds() {
+  const field = document.getElementById('memberDateOfBirth');
+  if (!field || (!field.min && !field.max)) return;
+  field.min = '';
+  field.max = '';
+}
+
+function updateMemberAgeStatus() {
+  const el = document.getElementById('memberAgeStatus');
+  if (!el) return;
+  clearMemberBirthBounds();
+  const birth = normalizeBuyerBirthDate(document.getElementById('memberDateOfBirth')?.value || '');
+  const age = birth ? ageInYears(birth, getTodayLocalDateString()) : null;
+  const status = memberAgeStatus(age, state.guardianHandoffActive ? 'guardian' : 'junior');
+  el.classList.remove('is-ok', 'is-bad');
+  if (status === 'empty') {
+    el.hidden = true;
+    el.textContent = '';
+    return;
+  }
+  el.hidden = false;
+  el.textContent = ageStatusText();
+  el.classList.add(status === 'junior-ok' || status === 'youth-ok' ? 'is-ok' : 'is-bad');
+}
+
+function syncMemberFieldVisibility() {
+  const form = document.getElementById('parentGuardianForm');
+  const fields = document.getElementById('memberNewFields');
+  const summary = document.getElementById('memberSummary');
+  if (!form || !fields) return;
+  const people = Number(state.existingMemberCount) || 0;
+  const handoffCollapsed = state.guardianHandoffActive === true && state.editingHandoffMember !== true;
+  const pickerCollapsed = people > 0
+    && state.pickedMemberId == null
+    && state.addingMember !== true
+    && !memberDraftHasValue();
+  const picked = state.pickedMemberId != null;
+  const savedCollapsed = savedMemberIsCollapsed();
+  form.classList.toggle('member-existing-selected', picked);
+  form.classList.toggle('member-saved', savedCollapsed);
+  fields.hidden = handoffCollapsed || pickerCollapsed || picked || savedCollapsed;
+  if (summary) {
+    summary.hidden = !(handoffCollapsed || savedCollapsed);
+    const emailEl = document.getElementById('memberSummaryEmail');
+    const ageEl = document.getElementById('memberSummaryAge');
+    const edit = summary.querySelector('.member-summary-edit');
+    if (handoffCollapsed) {
+      if (emailEl) {
+        emailEl.hidden = false;
+        emailEl.textContent = (document.getElementById('memberEmail')?.value || '').trim();
+      }
+      if (ageEl) ageEl.hidden = true;
+      if (edit) edit.dataset.action = 'edit-handoff-member';
+    } else if (savedCollapsed) {
+      if (emailEl) emailEl.hidden = true;
+      if (ageEl) {
+        ageEl.hidden = false;
+        ageEl.textContent = memberSummaryDetail();
+      }
+      if (edit) edit.dataset.action = 'edit-saved-member';
+    }
+  }
+  if (savedCollapsed) {
+    const message = document.getElementById('saveAccountMessage');
+    if (message) message.style.display = 'none';
+  }
+}
+
+function updateMemberSaveButtonState() {
+  const button = document.getElementById('saveAccountButton');
+  if (!button || button.dataset.action !== 'save-member') return;
+  const ready = state.pickedMemberId != null || validateMemberFields().ok;
+  button.classList.toggle('valid', ready);
+}
+
+function refreshMemberCopy() {
+  const handoff = state.guardianHandoffActive === true;
+  const name = memberDisplayName();
+  const heading = savedMemberIsCollapsed() ? memberFullName() : name;
+  const title = document.getElementById('memberFormTitle');
+  const hint = document.getElementById('memberFormHint');
+  if (title) {
+    title.textContent = heading || t(handoff ? 'form.member.youthTitle' : 'form.member.title');
+  }
+  if (hint) {
+    if (savedMemberIsCollapsed()) {
+      hint.hidden = true;
+    } else {
+      hint.hidden = false;
+      if (handoff) {
+        hint.textContent = ageStatusText() || t('form.member.youthHint', 'Medlemskabet gælder den unge.');
+      } else if (name) {
+        hint.textContent = t('form.member.productJunior', 'Junior');
+      } else {
+        hint.textContent = t('form.member.roleHint', 'Medlemskabet gælder barnet.');
+      }
+    }
+  }
+  const consent = document.getElementById('memberConsentText');
+  if (consent) {
+    if (!name) {
+      consent.textContent = t('form.member.consent');
+    } else {
+      consent.textContent = t('form.member.consentNamed', 'Jeg er {possessive} værge og køber medlemskabet for {name}.')
+        .replaceAll('{possessive}', possessive(name, state.language || DEFAULT_LANGUAGE))
+        .replaceAll('{name}', name);
+    }
+  }
+  const both = memberBlockIsVisible() && createSectionIsVisible();
+  const buyerStep = document.getElementById('buyerRoleStep');
+  const memberStep = document.getElementById('memberRoleStep');
+  if (buyerStep) {
+    buyerStep.hidden = handoff || !both;
+    buyerStep.textContent = both && !handoff ? '2' : '1';
+  }
+  if (memberStep) {
+    memberStep.hidden = handoff || !both;
+    memberStep.textContent = '1';
+  }
+  const button = document.getElementById('saveAccountButton');
+  if (button && button.dataset.action === 'save-member' && button.dataset.saving !== '1') {
+    if (name) {
+      button.textContent = t('form.member.continueWith', 'Fortsæt med {name}').replaceAll('{name}', name);
+      button.setAttribute('data-i18n-key', 'form.member.continueWith');
+    } else {
+      button.textContent = t('form.member.save', 'Gem');
+      button.setAttribute('data-i18n-key', 'form.member.save');
+    }
+  }
+  updateMemberAgeStatus();
+  updateMemberSaveButtonState();
+  syncMemberFieldVisibility();
+}
+
+function placeMemberForm(show) {
+  const form = document.getElementById('parentGuardianForm');
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  if (!form || !createSection) return;
+  form.classList.remove('is-revealed');
+  if (show && createSectionIsVisible()) {
+    createSection.parentElement?.insertBefore(form, createSection);
+    return;
+  }
+  createSection.insertAdjacentElement('afterend', form);
+}
+
+function setupMemberFormUx() {
+  if (setupMemberFormUx.done) return;
+  setupMemberFormUx.done = true;
+  ['memberFirstName', 'memberLastName', 'memberDateOfBirth', 'memberEmail'].forEach((id) => {
+    const field = document.getElementById(id);
+    if (!field) return;
+    const onEdit = () => {
+      clearMemberFieldErrorIfPassing(id);
+      refreshMemberCopy();
+      checkSaveAccountButtonState();
+    };
+    field.addEventListener('input', onEdit);
+    field.addEventListener('change', onEdit);
+  });
+  document.getElementById('memberGuardianConsent')?.addEventListener('change', () => {
+    clearMemberFieldErrorIfPassing('memberGuardianConsent');
+    updateMemberSaveButtonState();
+    checkSaveAccountButtonState();
+  });
+}
+
 function renderExistingMembers(users) {
   const list = document.getElementById('existingMemberList');
   const addButton = document.getElementById('addAnotherMember');
@@ -19641,25 +20104,45 @@ function renderExistingMembers(users) {
   const people = (Array.isArray(users) ? users : []).filter((person) => {
     return person && person.id != null && String(person.id) !== String(state.customerId);
   });
+  state.existingMemberCount = people.length;
   if (!people.length) {
     list.hidden = true;
-    if (addButton && state.pickedMemberId == null) addButton.hidden = true;
+    if (addButton) addButton.hidden = true;
+    state.addingMember = false;
+    syncMemberFieldVisibility();
     return;
   }
   people.forEach((person) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'existing-member-option';
-    if (String(state.pickedMemberId) === String(person.id)) button.classList.add('selected');
+    const selected = String(state.pickedMemberId) === String(person.id);
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
     button.dataset.action = 'pick-existing-member';
     button.dataset.memberId = String(person.id);
     const birthDate = normalizeBuyerBirthDate(person.birthDate);
     if (birthDate) button.dataset.birthDate = birthDate;
-    const name = [person.firstName, person.lastName].filter(Boolean).join(' ').trim();
-    button.textContent = name || String(person.id);
-    list.appendChild(button);
+    const firstName = typeof person.firstName === 'string' ? person.firstName.trim() : '';
+    if (firstName) button.dataset.firstName = firstName;
+    const name = document.createElement('span');
+    name.className = 'existing-member-name';
+    name.textContent = [person.firstName, person.lastName].filter(Boolean).join(' ').trim() || String(person.id);
+    button.append(name);
+    if (birthDate) {
+      const age = ageInYears(birthDate, getTodayLocalDateString());
+      if (age != null && age >= 0) {
+        const ageEl = document.createElement('span');
+        ageEl.className = 'existing-member-age';
+        ageEl.textContent = t('form.member.ageShort', '{age} år').replaceAll('{age}', String(age));
+        button.append(ageEl);
+      }
+    }
+    list.append(button);
   });
   list.hidden = false;
+  if (addButton) addButton.hidden = false;
+  syncMemberFieldVisibility();
 }
 
 async function loadExistingMembers(payerId) {
@@ -19683,30 +20166,53 @@ async function loadExistingMembers(payerId) {
   }
 }
 
-function pickExistingMember(memberId, birthDate) {
+function pickExistingMember(memberId, birthDate, firstName) {
+  clearSavedMemberCollapse();
   state.pickedMemberId = Number(memberId);
+  state.pickedMemberFirstName = typeof firstName === 'string' ? firstName.trim() : '';
+  state.addingMember = false;
   if (birthDate) {
     state.memberBirthDate = birthDate;
     const field = document.getElementById('memberDateOfBirth');
     if (field) field.value = birthDate;
   }
-  document.getElementById('parentGuardianForm')?.classList.add('member-existing-selected');
-  const addButton = document.getElementById('addAnotherMember');
-  if (addButton) addButton.hidden = false;
-  document.querySelectorAll('.existing-member-option').forEach((button) => {
-    button.classList.toggle('selected', button.dataset.memberId === String(memberId));
+  clearMemberFieldErrors();
+  document.querySelectorAll('.existing-member-option[data-member-id]').forEach((button) => {
+    const selected = button.dataset.memberId === String(memberId);
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
   });
+  syncMemberFieldVisibility();
+  refreshMemberCopy();
 }
 
 function addAnotherMember() {
+  clearSavedMemberCollapse();
   state.pickedMemberId = null;
+  state.pickedMemberFirstName = null;
   state.memberBirthDate = null;
-  document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
-  const addButton = document.getElementById('addAnotherMember');
-  if (addButton) addButton.hidden = true;
-  document.querySelectorAll('.existing-member-option.selected').forEach((button) => {
+  state.addingMember = true;
+  document.querySelectorAll('.existing-member-option[data-member-id].selected').forEach((button) => {
     button.classList.remove('selected');
+    button.setAttribute('aria-pressed', 'false');
   });
+  syncMemberFieldVisibility();
+  refreshMemberCopy();
+  document.getElementById('memberFirstName')?.focus();
+}
+
+function editHandoffMember() {
+  state.editingHandoffMember = true;
+  syncMemberFieldVisibility();
+  document.getElementById('memberFirstName')?.focus();
+}
+
+function editSavedMember() {
+  state.editingSavedMember = true;
+  hideMemberSavedMark();
+  syncMemberFieldVisibility();
+  refreshMemberCopy();
+  document.getElementById('memberFirstName')?.focus();
 }
 
 function beginGuardianHandoff() {
@@ -19725,7 +20231,10 @@ function beginGuardianHandoff() {
   write('lastName', '');
   write('dateOfBirth', '');
   state.guardianHandoffActive = true;
+  state.editingHandoffMember = false;
   state.pickedMemberId = null;
+  state.pickedMemberFirstName = null;
+  clearSavedMemberCollapse();
   updateMemberFormVisibility();
   const message = t('form.guardian.prompt', 'Udfyld værgens oplysninger. Medlemskabet gælder den unge.');
   showSaveAccountMessage(message, 'info');
@@ -19798,25 +20307,30 @@ function restoreProfileSubmitButton(button) {
 
 function setMemberSaveButton(button) {
   setSubmitButtonLabel(button, 'save-member', 'form.member.save', 'Gem');
-  button.classList.add('valid');
 }
 
 async function handleSaveMember() {
   const button = document.getElementById('saveAccountButton');
   if (!button || button.dataset.saving === '1') return;
+  if (rejectInvalidMemberFields({ animate: true, toast: true, scroll: true })) return;
   button.dataset.saving = '1';
   button.disabled = true;
   const saving = t('form.member.saving');
   button.textContent = saving && saving !== 'form.member.saving' ? saving : 'Gemmer...';
   try {
     const memberId = await ensureMemberCustomer();
-    if (memberId) showSaveAccountMessage(t('form.member.saved', 'Gemt.'), 'success');
+    if (memberId) {
+      state.savedMemberCollapsed = true;
+      state.editingSavedMember = false;
+    }
   } catch (error) {
     const ageMessage = membershipDateAgeMessage(error);
     notifyMemberBlock(ageMessage || t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
   } finally {
     delete button.dataset.saving;
-    setMemberSaveButton(button);
+    button.disabled = false;
+    refreshMemberCopy();
+    if (savedMemberIsCollapsed()) showMemberSavedMark();
   }
 }
 
@@ -19827,17 +20341,10 @@ function placeJuniorFormSubmit(show) {
   const message = document.getElementById('saveAccountMessage');
   if (!juniorActions || !home || !button || !message) return;
 
-  const createSection = document.querySelector('[data-auth-section="create"]');
-  const createVisible = !!(createSection && createSection.style.display !== 'none');
-
-  if (show) {
+  if (show && !createSectionIsVisible()) {
     juniorActions.append(button, message);
     home.hidden = true;
-    if (!createVisible) {
-      setMemberSaveButton(button);
-      return;
-    }
-    restoreProfileSubmitButton(button);
+    setMemberSaveButton(button);
     return;
   }
 
@@ -19860,9 +20367,15 @@ function updateMemberFormVisibility() {
   const form = DOM.parentGuardianForm || document.getElementById('parentGuardianForm');
   const showJunior = juniorMemberFormVisible();
   const show = showJunior || state.guardianHandoffActive === true;
+  const wasHidden = !form || form.hidden || form.style.display === 'none';
+  placeMemberForm(show);
   if (form) {
     form.hidden = !show;
     form.style.display = show ? 'block' : 'none';
+    if (show && wasHidden) {
+      form.classList.add('is-revealed');
+      form.addEventListener('animationend', () => form.classList.remove('is-revealed'), { once: true });
+    }
   }
   const consent = document.getElementById('memberGuardianConsent');
   if (consent) consent.required = Boolean(show && state.pickedMemberId == null);
@@ -19880,23 +20393,20 @@ function updateMemberFormVisibility() {
   } else if (!showJunior) {
     renderExistingMembers([]);
   }
+  setupMemberFormUx();
+  refreshMemberCopy();
   recordStudentYouthProductIds();
 }
 
 function setJuniorRoleLabels(show) {
-  const createSection = document.querySelector('[data-auth-section="create"]');
-  const createVisible = !!(createSection && createSection.style.display !== 'none');
-  const bothVisible = Boolean(show && createVisible);
+  const bothVisible = Boolean(show && createSectionIsVisible());
   const buyerRole = document.getElementById('buyerRole');
   const profileTitle = document.getElementById('createProfileTitle');
-  const memberStep = document.getElementById('memberRoleStep');
   if (buyerRole) buyerRole.hidden = !bothVisible;
   if (profileTitle) profileTitle.hidden = bothVisible;
-  if (memberStep) memberStep.hidden = !bothVisible;
   const handoff = state.guardianHandoffActive === true;
   const title = document.querySelector('#buyerRole .profile-role-title');
   const hint = document.querySelector('#buyerRole .profile-role-hint');
-  const memberTitle = document.querySelector('#parentGuardianForm .parent-form-title');
   if (title) {
     const key = handoff ? 'form.guardian.title' : 'form.buyerRole.title';
     title.setAttribute('data-i18n-key', key);
@@ -19906,11 +20416,6 @@ function setJuniorRoleLabels(show) {
     const key = handoff ? 'form.guardian.hint' : 'form.buyerRole.hint';
     hint.setAttribute('data-i18n-key', key);
     hint.textContent = t(key);
-  }
-  if (memberTitle) {
-    const key = handoff ? 'form.member.youthTitle' : 'form.member.title';
-    memberTitle.setAttribute('data-i18n-key', key);
-    memberTitle.textContent = t(key);
   }
 }
 
@@ -26537,10 +27042,17 @@ function validateForm(animate = false) {
 
   const memberForm = DOM.parentGuardianForm;
   const memberFormVisible = memberForm && !memberForm.hidden && memberForm.style.display !== 'none';
-  if (memberFormVisible && state.pickedMemberId == null && !document.getElementById('memberGuardianConsent')?.checked) {
-    isValid = false;
-    errors.push('Missing guardian consent');
-    highlightFieldError('memberGuardianConsent', animate);
+  if (memberFormVisible && state.pickedMemberId == null) {
+    const memberResult = validateMemberFields();
+    if (!memberResult.ok) {
+      isValid = false;
+      errors.push('Invalid member fields');
+      if (state.guardianHandoffActive && !state.editingHandoffMember) {
+        state.editingHandoffMember = true;
+        syncMemberFieldVisibility();
+      }
+      applyMemberFieldErrors(memberResult.errors, { animate, toast: animate, scroll: animate });
+    }
   }
 
   // Re-cache consent elements in case they weren't found initially
@@ -26622,7 +27134,7 @@ function validateForm(animate = false) {
 }
 
 function clearErrorStates() {
-  [...REQUIRED_FIELDS, ...PARENT_REQUIRED_FIELDS, ...CARD_FIELDS].forEach((fieldId) => {
+  [...REQUIRED_FIELDS, ...PARENT_REQUIRED_FIELDS, ...CARD_FIELDS, ...MEMBER_ERROR_FIELDS].forEach((fieldId) => {
     const field = document.getElementById(fieldId);
     const formGroup = field?.closest('.form-group');
     if (formGroup) {
