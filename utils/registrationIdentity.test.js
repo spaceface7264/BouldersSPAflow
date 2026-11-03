@@ -8,6 +8,7 @@ import {
   membershipAgeRoute,
   buildOtherUserBody,
   buildOrderIdentity,
+  choosePricedCustomerType,
   memberKey,
 } from './registrationIdentity.js';
 
@@ -42,6 +43,24 @@ test('membership age routes', () => {
   assert.deepEqual(membershipAgeRoute({ buyerAge: 17, productKind: 'adult' }), { action: 'block', reason: 'choose_student_youth' });
   assert.deepEqual(membershipAgeRoute({ buyerAge: 15, productKind: 'adult' }), { action: 'block', reason: 'choose_junior' });
   assert.deepEqual(membershipAgeRoute({ buyerAge: 30, productKind: 'adult' }), { action: 'continue' });
+});
+
+test('an empty customer-type catalogue uses the only priced type', () => {
+  const only = [{ id: 1, productIds: [134, 538] }];
+  assert.equal(choosePricedCustomerType(only, 538), 1);
+  assert.equal(choosePricedCustomerType(only, 999), 1);
+  assert.equal(choosePricedCustomerType(only, null), 1);
+  assert.equal(choosePricedCustomerType([], 538), null);
+});
+
+test('several priced types resolve only when the product is on exactly one', () => {
+  const priced = [
+    { id: 1, productIds: [134, 538] },
+    { id: 4, productIds: [135, 538] },
+  ];
+  assert.equal(choosePricedCustomerType(priced, 134), 1);
+  assert.equal(choosePricedCustomerType(priced, 538), null);
+  assert.equal(choosePricedCustomerType(priced, 999), null);
 });
 
 test('otheruser body omits an empty junior email and never includes a password', () => {

@@ -87,6 +87,25 @@ export function membershipAgeRoute({ buyerAge, productKind: kind }) {
   return { action: 'continue' };
 }
 
+/**
+ * Pick a customer type from price-list probes when the name catalogue is empty.
+ * One priced type wins even if the selected product id is missing from it.
+ * Several priced types resolve only when the product sits on exactly one of them.
+ */
+export function choosePricedCustomerType(pricedTypes, productId) {
+  const priced = (Array.isArray(pricedTypes) ? pricedTypes : []).filter((type) =>
+    Number.isFinite(Number(type?.id)),
+  );
+  if (priced.length === 1) return Number(priced[0].id);
+  if (priced.length === 0) return null;
+  const product = Number(productId);
+  if (!Number.isFinite(product)) return null;
+  const matches = priced.filter((type) =>
+    (Array.isArray(type.productIds) ? type.productIds : []).some((id) => Number(id) === product),
+  );
+  return matches.length === 1 ? Number(matches[0].id) : null;
+}
+
 export function buildOtherUserBody({
   member,
   businessUnit,

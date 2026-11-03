@@ -62,6 +62,7 @@ import {
   membershipAgeRoute,
   buildOtherUserBody,
   buildOrderIdentity,
+  choosePricedCustomerType,
   memberKey,
 } from './utils/registrationIdentity.js';
 import { sanitizeHTML } from './sanitize.js';
@@ -5902,6 +5903,8 @@ const state = {
   guardianHandoffActive: false,
   juniorCustomerTypeId: null,
   studentYouthCustomerTypeId: null,
+  pricedCustomerTypes: null,
+  pricedCustomerTypesBusinessUnit: null,
   businessUnitSettings: null,
   businessUnitSettingsId: null,
   ageAvoidParentalConsent: null,
@@ -7568,6 +7571,9 @@ const translations = {
     'form.member.noJuniorType': 'Junior kan ikke oprettes lige nu.',
     'form.member.noYouthType': 'Student- og ungdomsmedlemskabet kan ikke oprettes lige nu.',
     'form.member.createFailed': 'Barnet kunne ikke oprettes. Prøv igen.',
+    'form.member.save': 'Gem',
+    'form.member.saving': 'Gemmer...',
+    'form.member.saved': 'Gemt.',
     'form.member.addAnother': 'Tilføj et andet barn',
     'form.member.youthTitle': 'Den unge',
     'form.member.youthAge': 'Værgen kan kun gennemføre for en 16- eller 17-årig.',
@@ -7988,6 +7994,9 @@ const translations = {
     'form.member.noJuniorType': 'Junior can\'t be created right now.',
     'form.member.noYouthType': 'The student and youth membership can\'t be created right now.',
     'form.member.createFailed': 'The child could not be created. Try again.',
+    'form.member.save': 'Save',
+    'form.member.saving': 'Saving...',
+    'form.member.saved': 'Saved.',
     'form.member.addAnother': 'Add another child',
     'form.member.youthTitle': 'The young person',
     'form.member.youthAge': 'A guardian can only complete this for a 16- or 17-year-old.',
@@ -8390,6 +8399,9 @@ const translations = {
     'form.member.noJuniorType': 'Junior kann gerade nicht angelegt werden.',
     'form.member.noYouthType': 'Die Studenten- und Jugendmitgliedschaft kann gerade nicht angelegt werden.',
     'form.member.createFailed': 'Das Kind konnte nicht angelegt werden. Versuch es erneut.',
+    'form.member.save': 'Speichern',
+    'form.member.saving': 'Speichert...',
+    'form.member.saved': 'Gespeichert.',
     'form.member.addAnother': 'Weiteres Kind hinzufügen',
     'form.member.youthTitle': 'Die junge Person',
     'form.member.youthAge': 'Ein Vormund kann das nur für eine 16- oder 17-jährige Person abschließen.',
@@ -9023,8 +9035,9 @@ function updateFormTranslations() {
   
   // Save account button
   const saveAccountBtn = document.querySelector('.save-account-btn[data-i18n-key]');
-  if (saveAccountBtn) {
-    saveAccountBtn.textContent = t('form.saveAccount');
+  if (saveAccountBtn && saveAccountBtn.dataset.saving !== '1') {
+    const key = saveAccountBtn.getAttribute('data-i18n-key') || 'form.saveAccount';
+    saveAccountBtn.textContent = t(key);
   }
   
   // Login button
@@ -12957,7 +12970,7 @@ function checkSaveAccountButtonState() {
   // Check if we're on the create account section
   const createSection = document.querySelector('[data-auth-section="create"]');
   if (!createSection || createSection.style.display === 'none') {
-    saveBtn.classList.remove('valid');
+    if (saveBtn.dataset.action !== 'save-member') saveBtn.classList.remove('valid');
     return;
   }
   
@@ -15025,6 +15038,11 @@ function handleGlobalClick(event) {
     case 'save-account': {
       event.preventDefault();
       handleSaveAccount();
+      break;
+    }
+    case 'save-member': {
+      event.preventDefault();
+      handleSaveMember();
       break;
     }
     case 'switch-to-junior': {
@@ -19277,6 +19295,13 @@ function restoreStoredMemberForPayer(payerId) {
 
 let memberBlockNoticeAt = 0;
 
+function clearMemberBlock() {
+  if (!state.memberCheckoutBlocked) return;
+  state.memberCheckoutBlocked = false;
+  const messageDiv = document.getElementById('saveAccountMessage');
+  if (messageDiv) messageDiv.style.display = 'none';
+}
+
 function notifyMemberBlock(message) {
   state.memberCheckoutBlocked = true;
   const now = Date.now();
@@ -19396,13 +19421,16 @@ async function resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey) {
   return id;
 }
 
-// The name catalogue is empty on this tenant. A type still prices the product:
-// GET .../products/subscriptions?customerType={id} returns the product only when
-// that type's price list includes it. Use the id when exactly one type does.
-async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) {
-  const product = Number(productId);
-  if (!Number.isFinite(product)) return null;
-  const matches = [];
+// The name catalogue is empty on this tenant. Scan subscription price lists until
+// BRP says the type id does not exist. One list that actually prices subscriptions
+// is the type adult signup already sends. Several lists resolve only when the
+// selected product sits on exactly one of them.
+async function loadPricedCustomerTypes(businessUnitId) {
+  const unitId = Number(businessUnitId);
+  if (state.pricedCustomerTypesBusinessUnit === unitId && Array.isArray(state.pricedCustomerTypes)) {
+    return state.pricedCustomerTypes;
+  }
+  const priced = [];
   for (let typeId = 1; typeId <= 30; typeId += 1) {
     const url = buildApiUrl({
       baseUrl: authAPI.baseUrl,
@@ -19417,15 +19445,34 @@ async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) 
       throw error;
     }
     const products = Array.isArray(data) ? data : [];
-    if (products.some((item) => Number(item?.id) === product)) matches.push(typeId);
+    const productIds = [];
+    products.forEach((item) => {
+      const id = Number(item?.id);
+      if (Number.isFinite(id)) productIds.push(id);
+    });
+    if (productIds.length) priced.push({ id: typeId, productIds });
   }
-  if (matches.length !== 1) {
-    originalConsoleLog('[other-payer] customer type price probe', { product, matches });
+  state.pricedCustomerTypes = priced;
+  state.pricedCustomerTypesBusinessUnit = unitId;
+  return priced;
+}
+
+async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) {
+  if (state[cacheKey] != null && state[`${cacheKey}BusinessUnit`] === Number(businessUnitId)) {
+    return state[cacheKey];
+  }
+  const priced = await loadPricedCustomerTypes(businessUnitId);
+  const chosen = choosePricedCustomerType(priced, productId);
+  if (chosen == null) {
+    originalConsoleLog('[other-payer] customer type price probe', {
+      product: Number(productId),
+      pricedTypeIds: priced.map((type) => type.id),
+    });
     return null;
   }
-  cacheCustomerTypeId(cacheKey, businessUnitId, matches[0]);
-  originalConsoleLog('[other-payer] customer type from product price', { id: matches[0], product });
-  return matches[0];
+  cacheCustomerTypeId(cacheKey, businessUnitId, chosen);
+  originalConsoleLog('[other-payer] customer type from product price', { id: chosen, product: Number(productId) });
+  return chosen;
 }
 
 async function resolveCustomerTypeId(businessUnitId, predicate, cacheKey) {
@@ -19496,6 +19543,7 @@ async function ensureMemberCustomerOnce() {
   if (stored && String(stored.payerId) === String(payerId) && stored.memberKey === key && stored.memberId != null) {
     state.subscriptionUserId = stored.memberId;
     state.orderMemberKey = key;
+    clearMemberBlock();
     return stored.memberId;
   }
   if (stored && stored.memberKey && stored.memberKey !== key) {
@@ -19505,6 +19553,7 @@ async function ensureMemberCustomerOnce() {
   if (state.pickedMemberId != null) {
     const memberId = Number(state.pickedMemberId);
     writeStoredMember({ payerId, memberId, memberKey: key });
+    clearMemberBlock();
     return memberId;
   }
 
@@ -19580,6 +19629,7 @@ async function ensureMemberCustomerOnce() {
   originalConsoleLog('[other-payer] otheruser', { id: memberId, created: created?.created === true, mode });
   state.memberBirthDate = form.birthDate;
   writeStoredMember({ payerId, memberId, memberKey: key });
+  clearMemberBlock();
   return memberId;
 }
 
@@ -19729,15 +19779,44 @@ function logOtherPayerOrder(stage, order) {
   });
 }
 
-function restoreProfileSubmitButton(button) {
-  button.dataset.action = 'save-account';
-  button.setAttribute('data-i18n-key', 'form.saveAccount');
+function setSubmitButtonLabel(button, action, key, fallback) {
+  button.dataset.action = action;
+  button.setAttribute('data-i18n-key', key);
   button.classList.add('save-account-btn');
   button.classList.remove('checkout-btn');
-  button.disabled = false;
   if (!button.dataset.saving) {
-    const label = t('form.saveAccount');
-    button.textContent = label && label !== 'form.saveAccount' ? label : 'Opret profil';
+    button.disabled = false;
+    const label = t(key);
+    button.textContent = label && label !== key ? label : fallback;
+  }
+}
+
+function restoreProfileSubmitButton(button) {
+  setSubmitButtonLabel(button, 'save-account', 'form.saveAccount', 'Opret profil');
+  button.classList.remove('valid');
+}
+
+function setMemberSaveButton(button) {
+  setSubmitButtonLabel(button, 'save-member', 'form.member.save', 'Gem');
+  button.classList.add('valid');
+}
+
+async function handleSaveMember() {
+  const button = document.getElementById('saveAccountButton');
+  if (!button || button.dataset.saving === '1') return;
+  button.dataset.saving = '1';
+  button.disabled = true;
+  const saving = t('form.member.saving');
+  button.textContent = saving && saving !== 'form.member.saving' ? saving : 'Gemmer...';
+  try {
+    const memberId = await ensureMemberCustomer();
+    if (memberId) showSaveAccountMessage(t('form.member.saved', 'Gemt.'), 'success');
+  } catch (error) {
+    const ageMessage = membershipDateAgeMessage(error);
+    notifyMemberBlock(ageMessage || t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
+  } finally {
+    delete button.dataset.saving;
+    setMemberSaveButton(button);
   }
 }
 
@@ -19755,13 +19834,7 @@ function placeJuniorFormSubmit(show) {
     juniorActions.append(button, message);
     home.hidden = true;
     if (!createVisible) {
-      button.dataset.action = 'submit-checkout';
-      button.setAttribute('data-i18n-key', 'cart.checkout');
-      button.classList.remove('save-account-btn');
-      button.classList.add('checkout-btn');
-      const label = t('cart.checkout');
-      button.textContent = label && label !== 'cart.checkout' ? label : 'Til kassen';
-      if (DOM.checkoutBtn) button.disabled = DOM.checkoutBtn.disabled;
+      setMemberSaveButton(button);
       return;
     }
     restoreProfileSubmitButton(button);
@@ -26654,10 +26727,6 @@ function updateCheckoutButton() {
   // Payment method no longer required from UI - card is used by default
   const hasProduct = hasMembership || hasPunchCards || hasAddons;
   DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
-  const juniorSubmit = document.getElementById('saveAccountButton');
-  if (juniorSubmit && juniorSubmit.dataset.action === 'submit-checkout') {
-    juniorSubmit.disabled = DOM.checkoutBtn.disabled;
-  }
   const { isFreeTrialSelected, isZeroTotal, isFreeFlow } = applyFreeFlowCartUi();
   
   const consentsSection = document.querySelector('.consents-section');
