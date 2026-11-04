@@ -549,9 +549,55 @@ const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
   '/membership-offer',
   '/99kr',
+  '/fitness',
+  '/single-gym',
+  '/singlegym',
+  '/single-gym-student-youth',
+  '/singlegym-student-youth',
   '/reset-password',
   '/resetpassword',
 ]));
+
+// Fitness, Single Gym, and Student & Youth Single Gym exist only at Boulders Aalborg (BRP business unit 13).
+const AALBORG_BUSINESS_UNIT_ID = '13';
+const AALBORG_GYM_NAME = 'Boulders Aalborg';
+const AALBORG_MEMBERSHIP_DEEPLINKS = Object.freeze([
+  Object.freeze({
+    id: 'fitness',
+    paths: Object.freeze(['/fitness']),
+    typeToken: 'fitness',
+    matchesProduct: (product) => isFitnessMembership(product),
+    logLabel: 'Fitness',
+    unavailable: Object.freeze({
+      en: 'Fitness membership could not be loaded. Choose it under Membership.',
+      da: 'Fitness Medlemskab kunne ikke indlæses. Vælg det under Medlemskab.',
+    }),
+  }),
+  Object.freeze({
+    id: 'singlegym',
+    paths: Object.freeze(['/single-gym', '/singlegym']),
+    typeToken: 'singlegym',
+    matchesProduct: (product) => isSingleGymMembership(product)
+      && !isFitnessMembership(product)
+      && !isStudentYouthSingleGymMembership(product),
+    logLabel: 'Single Gym',
+    unavailable: Object.freeze({
+      en: 'Single Gym membership could not be loaded. Choose it under Membership.',
+      da: 'Single Gym medlemskab kunne ikke indlæses. Vælg det under Medlemskab.',
+    }),
+  }),
+  Object.freeze({
+    id: 'singlegymstudentyouth',
+    paths: Object.freeze(['/single-gym-student-youth', '/singlegym-student-youth']),
+    typeToken: 'singlegymstudentyouth',
+    matchesProduct: (product) => isStudentYouthSingleGymMembership(product),
+    logLabel: 'Student & Youth Single Gym',
+    unavailable: Object.freeze({
+      en: 'Student & Youth Single Gym membership could not be loaded. Choose it under Membership.',
+      da: 'Student & Youth Single Gym medlemskab kunne ikke indlæses. Vælg det under Medlemskab.',
+    }),
+  }),
+]);
 
 function normalizePathname(pathname) {
   const raw = String(pathname || '/').trim().toLowerCase();
@@ -1064,6 +1110,131 @@ async function advanceFirstClimbFromGym() {
   try { updateCartSummary(); } catch (_) {}
   scrollToTop();
   setTimeout(() => scrollToTop(), 200);
+}
+
+// Deeplink straight into the cart with Aalborg and one membership already chosen.
+// /fitness                          /?location=aalborg&type=fitness
+// /single-gym                       /?location=aalborg&type=single-gym
+// /single-gym-student-youth         /?location=aalborg&type=single-gym-student-youth
+function compactDeeplinkToken(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function resolveAalborgMembershipDeeplink(pathname = window.location.pathname, search = window.location.search) {
+  const path = normalizePathname(pathname);
+  const byPath = AALBORG_MEMBERSHIP_DEEPLINKS.find((entry) => entry.paths.includes(path));
+  if (byPath) return byPath;
+  try {
+    const params = new URLSearchParams(search);
+    const location = compactDeeplinkToken(params.get('location') || params.get('gym'));
+    const type = compactDeeplinkToken(params.get('type'));
+    const locationMatch = location === 'aalborg' || location === AALBORG_BUSINESS_UNIT_ID;
+    if (!locationMatch || !type) return null;
+    return AALBORG_MEMBERSHIP_DEEPLINKS.find((entry) => entry.typeToken === type) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function findDeeplinkMembershipProduct(entry) {
+  const pools = [
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.allRawProducts || []),
+  ];
+  return pools.find((product) => entry.matchesProduct(product)) || null;
+}
+
+function highlightSelectedGymItem() {
+  if (state.selectedBusinessUnit == null) return;
+  const id = String(state.selectedBusinessUnit);
+  document.querySelectorAll('.gym-item').forEach((item) => {
+    const gymId = String(item.getAttribute('data-gym-id') || '').replace(/^gym-/, '');
+    item.classList.toggle('selected', gymId === id);
+  });
+}
+
+function markMembershipPlanSelected(productId) {
+  const category = document.querySelector('.category-item[data-category="membership"]');
+  if (category) category.classList.add('expanded', 'selected');
+  const card = document.querySelector(`.plan-card[data-product-id="${CSS.escape(String(productId))}"]`);
+  if (!card) return;
+  card.closest('.category-item')?.querySelectorAll('.plan-card').forEach((other) => {
+    other.classList.toggle('selected', other === card);
+  });
+}
+
+function parkAalborgCartStep() {
+  state.selectedGymId = AALBORG_BUSINESS_UNIT_ID;
+  state.selectedBusinessUnit = AALBORG_BUSINESS_UNIT_ID;
+  state.selectedGymName = AALBORG_GYM_NAME;
+  state.currentStep = 4;
+  showStep(4);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+}
+
+async function applyAalborgMembershipDeeplink() {
+  if (state.isPaymentReturnFlow || isPaymentReturnPage()) return;
+  const entry = resolveAalborgMembershipDeeplink();
+  if (!entry) return;
+  if (state.membershipDeeplinkApplied) return;
+  state.membershipDeeplinkApplied = true;
+
+  // Keep the loading overlay up until the product is actually in the cart,
+  // so the gym step and an empty cart never flash.
+  holdLoadingOverlayForPaymentReturn();
+  parkAalborgCartStep();
+  highlightSelectedGymItem();
+  try { loadReferenceData(); } catch (_) {}
+
+  let product = null;
+  try {
+    await loadProductsFromAPI();
+    product = findDeeplinkMembershipProduct(entry);
+  } catch (error) {
+    devWarn(`[${entry.logLabel} deeplink] product load failed`, error);
+  }
+
+  try {
+    if (!product) {
+      devWarn(`[${entry.logLabel} deeplink] product not in the Aalborg catalog`);
+      state.currentStep = 2;
+      showStep(2);
+      updateStepIndicator();
+      updateNavigationButtons();
+      updateMainSubtitle();
+      try { updateSelectedGymDisplay(); } catch (_) {}
+      const category = document.querySelector('.category-item[data-category="membership"]');
+      if (category) category.classList.add('expanded', 'selected');
+      const unavailable = state.language === 'en' ? entry.unavailable.en : entry.unavailable.da;
+      showToast(unavailable, 'error');
+      return;
+    }
+
+    state.membershipPlanId = `membership-${product.id}`;
+    state.selectedProductId = product.id;
+    state.selectedProductType = 'membership';
+    markMembershipPlanSelected(product.id);
+    try { loadSubscriptionAdditions(product.id); } catch (_) {}
+    trackSelectItemEvent({
+      product,
+      productId: product.id,
+      category: 'membership',
+      type: 'membership',
+    });
+    updateCartSummary();
+    applyConditionalSteps();
+    updateFAQVisibility();
+    try { renderFAQ(); } catch (_) {}
+    if (isUserAuthenticated()) {
+      try { switchAuthMode('login'); } catch (_) {}
+    }
+    devLog(`[${entry.logLabel} deeplink] cart ready`, { productId: product.id, name: product.name });
+  } finally {
+    releasePaymentReturnOverlay();
+  }
 }
 
 // firstclimb is a one-per-customer offer. Block only when we have positive
@@ -5154,6 +5325,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
       });
       setupGymEventListeners();
+      highlightSelectedGymItem();
     }
     return;
   }
@@ -5365,6 +5537,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
     
     // Re-setup event listeners for new gym items
     setupGymEventListeners();
+    highlightSelectedGymItem();
     
     // Re-render FAQ when on step 1 so opening hours table uses API gym list (and API opening hours if present)
     if (state.currentStep === 1) {
@@ -5393,6 +5566,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
       });
       setupGymEventListeners();
+      highlightSelectedGymItem();
       if (noResults) noResults.classList.add('hidden');
       scheduleGymListRecovery(error);
       return;
@@ -5848,6 +6022,7 @@ const state = {
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
   landingRouteConfig: null, // Active landing route config for path-specific product surfacing
+  membershipDeeplinkApplied: false, // /fitness or /single-gym cart deeplink already ran
   landingMatchedProducts: [], // Products matched by active landing route label
   firstclimbGuardPromise: null, // Resolves when /99kr eligibility check completes (blocks navigation until done)
   isPaymentReturnFlow: false, // True when this page load is a return from the payment provider / success render — skips only the automatic /99kr eligibility check on load (the just-bought product would otherwise misfire the blocker on the confirmation page). Checkout-time guards are unaffected.
@@ -5937,6 +6112,7 @@ const state = {
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
   testFitnessMembership: false, // Fitness Membership success-page preview (?testProductType=fitness)
+  testSingleGymMembership: false, // Single Gym success-page preview (?testProductType=singlegym)
 };
 
 let orderCreationPromise = null;
@@ -6940,8 +7116,12 @@ function populateBoostModal() {
 
 const BOOST_MODAL_OPEN_DELAY_MS = 50;
 
+// Temporary kill switch. Set to true to offer the boost upsell modal again.
+const BOOST_MODAL_ENABLED = false;
+
 // Show boost modal (uses same modal infrastructure as addons)
 async function showBoostModal(options = {}) {
+  if (!BOOST_MODAL_ENABLED) return;
   ensureAddonsModal();
   
   // Ensure products are loaded first
@@ -7007,6 +7187,7 @@ async function showBoostModal(options = {}) {
 }
 
 function prewarmBoostModalResources() {
+  if (!BOOST_MODAL_ENABLED) return;
   // Precreate modal DOM upfront to avoid first-open construction cost.
   ensureAddonsModal();
 
@@ -7063,6 +7244,7 @@ function resolveSelectedAccessProduct() {
 
 // Check if a product should trigger boost modal ("boost" or "boostCampaign")
 function hasBoostLabel(product) {
+  if (!BOOST_MODAL_ENABLED) return false;
   return hasProductLabel(product, 'boost') || hasProductLabel(product, 'boostcampaign');
 }
 
@@ -7103,6 +7285,18 @@ function isSingleGymMembership(product) {
   return labels.some((label) => compactProductToken(label?.name).includes('singlegym'));
 }
 
+function isStudentYouthSingleGymMembership(product) {
+  if (!isSingleGymMembership(product)) return false;
+  const labels = Array.isArray(product.productLabels) ? product.productLabels : [];
+  const token = compactProductToken([
+    product.name,
+    ...labels.map((label) => label?.name),
+  ].join(' '));
+  const hasStudent = token.includes('student') || token.includes('studie');
+  const hasYouth = token.includes('youth') || token.includes('ungdom');
+  return hasStudent && hasYouth;
+}
+
 function membershipAccessGroup(product) {
   if (isFitnessMembership(product)) return 2;
   if (isSingleGymMembership(product)) return 1;
@@ -7131,6 +7325,7 @@ function isFitnessMembershipSelected() {
 }
 
 function isSingleGymMembershipSelected() {
+  if (state.testSingleGymMembership === true) return true;
   if (isSingleGymMembership(resolveSelectedAccessProduct())) return true;
   if (isSingleGymMembership(state.fullOrder?.subscriptionItems?.[0]?.product)) return true;
   const cartItem = (state.cartItems || []).find((item) => item.type === 'membership');
@@ -7341,6 +7536,10 @@ function init() {
   
   // Load gyms from API
   loadGymsFromAPI();
+
+  // /fitness and /single-gym land in the cart with Aalborg and that membership set.
+  // Runs until its first await before the overlay hide below, so step 1 never paints.
+  applyAalborgMembershipDeeplink();
   
   // Load countries from API and populate country code selectors
   // Use setTimeout to ensure DOM is fully ready
@@ -7872,6 +8071,8 @@ const translations = {
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'homeGym.tooltip.title.fitness': 'Fitness Medlemskab gælder kun i Aalborg.',
     'homeGym.tooltip.desc.fitness': 'Du har adgang til styrketræningsområdet i Boulders Aalborg. Klatring og andre haller er ikke inkluderet.',
+    'homeGym.tooltip.title.singlegym': 'Single Gym medlemskab gælder kun i Aalborg.',
+    'homeGym.tooltip.desc.singlegym': 'Du har klatreadgang i Boulders Aalborg. Andre haller er ikke inkluderet.',
     'homeGym.tooltip.title.firstclimb': 'Din billet gælder i alle Boulders.',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
@@ -7953,11 +8154,11 @@ const translations = {
     'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
     'faq.firstclimb.included.a': 'Bliv så længe du vil i alle Boulders haller, plus lejesko og kalk. Ingen skjulte gebyrer.',
     'faq.firstclimb.eligibility.q': 'Hvem kan købe dagsbilletten?',
-    'faq.firstclimb.eligibility.a': 'Alle kan købe den — men kun én gang pr. person.',
+    'faq.firstclimb.eligibility.a': 'Alle over 16 år kan købe billetten. Kun én gang pr. person. Registrering af e-mail adresse er påkrævet for at købe billetten',
     'faq.firstclimb.validity.q': 'Hvor længe gælder den?',
     'faq.firstclimb.validity.a': 'Din billet skal bruges inden for 1 måned efter køb. Mød op hvilken som helst dag i den periode — du behøver ikke vælge en dato på forhånd.',
     'faq.firstclimb.howToUse.q': 'Hvordan bruger jeg den i hallen?',
-    'faq.firstclimb.howToUse.a': 'Mød op i hallen, når det passer dig (inden for en måned). Oplys dit telefonnummer eller email til personalet, så aktiverer de din dagsbillet og udleverer lejesko og kalk.',
+    'faq.firstclimb.howToUse.a': 'Mød op i hallen, når det passer dig (inden for en måned fra købet). Oplys dit telefonnummer eller email til personalet, så aktiverer de din dagsbillet og udleverer lejesko og kalk.',
     'faq.firstclimb.afterDay.q': 'Hvad sker der efter min første dag?',
     'faq.firstclimb.afterDay.a': 'Bliv hængende! Du kan opgradere til medlemskab, et 15-dages kort eller et klippekort direkte hos personalet — eller online når du er klar.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
@@ -8305,6 +8506,8 @@ const translations = {
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'homeGym.tooltip.title.fitness': 'Fitness Membership is valid in Aalborg only.',
     'homeGym.tooltip.desc.fitness': 'You get access to the strength-training area at Boulders Aalborg. Climbing and other gyms are not included.',
+    'homeGym.tooltip.title.singlegym': 'Single Gym Membership is valid in Aalborg only.',
+    'homeGym.tooltip.desc.singlegym': 'You get climbing access at Boulders Aalborg. Other gyms are not included.',
     'homeGym.tooltip.title.firstclimb': 'Your ticket is valid at any Boulders.',
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
@@ -8385,7 +8588,7 @@ const translations = {
     'faq.firstclimb.included.q': "What's included in the day ticket?",
     'faq.firstclimb.included.a': 'Stay as long as you like at any Boulders gym, plus rental shoes and chalk. No hidden fees.',
     'faq.firstclimb.eligibility.q': 'Who can buy the day ticket?',
-    'faq.firstclimb.eligibility.a': 'Anyone can buy it — but only once per person.',
+    'faq.firstclimb.eligibility.a': 'Anyone from 16 years and up can buy it, and only once per person. Registration of email adress is required for purchase.',
     'faq.firstclimb.validity.q': 'How long is it valid?',
     'faq.firstclimb.validity.a': 'Your ticket must be used within 1 month of purchase. Show up any day within that window — no need to pick a date in advance.',
     'faq.firstclimb.howToUse.q': 'How do I use it at the gym?',
@@ -8621,6 +8824,8 @@ const translations = {
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
     'homeGym.tooltip.title.fitness': 'Fitness-Mitgliedschaft gilt nur in Aalborg.',
     'homeGym.tooltip.desc.fitness': 'Sie haben Zugang zum Krafttrainingsbereich in Boulders Aalborg. Klettern und andere Hallen sind nicht enthalten.',
+    'homeGym.tooltip.title.singlegym': 'Single-Gym-Mitgliedschaft gilt nur in Aalborg.',
+    'homeGym.tooltip.desc.singlegym': 'Sie haben Kletterzugang in Boulders Aalborg. Andere Hallen sind nicht enthalten.',
     'homeGym.tooltip.title.firstclimb': 'Dein Ticket gilt in allen Boulders.',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
     'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
@@ -9677,20 +9882,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const testSuccess = urlParams.get('testSuccess') === 'true';
   const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
-  const rawTestProductType = urlParams.get('testProductType') || 'membership'; // membership, fitness, 15daypass, punch-card
+  const rawTestProductType = urlParams.get('testProductType') || 'membership'; // membership, fitness, singlegym, 15daypass, punch-card
   const testFitnessMembership = urlParams.get('testFitness') === 'true' || rawTestProductType === 'fitness';
-  const testProductType = rawTestProductType === 'fitness' ? 'membership' : rawTestProductType;
+  const testSingleGymMembership = !testFitnessMembership && (
+    rawTestProductType === 'singlegym' || rawTestProductType === 'single-gym'
+  );
+  const testProductType = (rawTestProductType === 'fitness' || testSingleGymMembership) ? 'membership' : rawTestProductType;
   const testStartDateParam = String(urlParams.get('testStartDate') || '').trim();
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
   const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
   
   if (testSuccess) {
-    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType, testFitnessMembership ? '(fitness)' : '');
+    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType, testFitnessMembership ? '(fitness)' : '', testSingleGymMembership ? '(single gym)' : '');
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
     state.testFitnessMembership = testFitnessMembership;
+    state.testSingleGymMembership = testSingleGymMembership;
   }
   
   if (testPaymentFailed) {
@@ -9850,20 +10059,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }]
       };
     } else {
-      // Default to membership (regular or Fitness)
+      // Default to membership (regular, Fitness, or Single Gym)
       const isFitness = state.testFitnessMembership === true;
-      const membershipName = isFitness ? 'Fitness Membership' : 'Medlemskab';
+      const isSingleGym = state.testSingleGymMembership === true;
+      const membershipName = isFitness
+        ? 'Fitness Membership'
+        : isSingleGym
+          ? 'Single Gym Medlemskab'
+          : 'Medlemskab';
       state.selectedProductType = 'membership';
-      state.membershipPlanId = isFitness ? 'fitness-membership-123' : 'membership-123';
+      state.membershipPlanId = isFitness
+        ? 'fitness-membership-123'
+        : isSingleGym
+          ? 'singlegym-membership-123'
+          : 'membership-123';
       state.order.items = [{ name: membershipName, amount: 469 }];
       state.order.membershipType = membershipName;
-      state.order.primaryGym = isFitness ? 'Boulders Aalborg' : 'Boulders Aarhus Nord';
+      state.order.primaryGym = (isFitness || isSingleGym) ? 'Boulders Aalborg' : 'Boulders Aarhus Nord';
       // Mock subscription items with price
       state.fullOrder = {
         subscriptionItems: [{
           product: {
             name: membershipName,
-            productLabels: isFitness ? [{ name: 'fitness' }] : [{ name: 'Public' }]
+            productLabels: isFitness
+              ? [{ name: 'fitness' }]
+              : isSingleGym
+                ? [{ name: 'singlegym' }]
+                : [{ name: 'Public' }]
           },
           price: { amount: 46900 } // 469.00 DKK in cents
         }]
@@ -17421,16 +17643,25 @@ function renderCartItems() {
     // Boulders, so only the headline is needed; skip the supporting paragraph.
     const isFirstClimb = isFirstClimbRoute();
     const isFitness = isFitnessMembershipSelected();
+    const isSingleGym = !isFitness && isSingleGymMembershipSelected();
     const tooltipTitle = t(
       isFirstClimb
         ? 'homeGym.tooltip.title.firstclimb'
         : isFitness
           ? 'homeGym.tooltip.title.fitness'
-          : 'homeGym.tooltip.title'
+          : isSingleGym
+            ? 'homeGym.tooltip.title.singlegym'
+            : 'homeGym.tooltip.title'
     );
     const tooltipDesc = isFirstClimb
       ? ''
-      : `<p>${t(isFitness ? 'homeGym.tooltip.desc.fitness' : 'homeGym.tooltip.desc')}</p>`;
+      : `<p>${t(
+          isFitness
+            ? 'homeGym.tooltip.desc.fitness'
+            : isSingleGym
+              ? 'homeGym.tooltip.desc.singlegym'
+              : 'homeGym.tooltip.desc'
+        )}</p>`;
     const tooltip = document.createElement('div');
     tooltip.className = 'home-gym-tooltip';
     tooltip.innerHTML = sanitizeHTML(`
@@ -18079,6 +18310,17 @@ function updatePaymentOverview() {
       .filter(Boolean)
       .join(' ')
       .toLowerCase();
+
+    // Student & Youth Single Gym is a regular price, not an intro offer.
+    // The student keyword below would otherwise invent 399 as the price after a campaign.
+    if (
+      isSingleGymMembership(sourceProduct) &&
+      /(student|studie)/i.test(text) &&
+      /(youth|ungdom)/i.test(text) &&
+      !/junior/i.test(text)
+    ) {
+      return 0;
+    }
 
     // Frontend fallback mapping (provided by business):
     // Adult: 469 DKK, Student: 399 DKK, Junior: 279 DKK.
@@ -19184,6 +19426,8 @@ function persistOrderSnapshot(orderId) {
       discountApplied: state.discountApplied,
       // Durable offer signal for post-payment tracking (path alone can be unreliable)
       landingRoute,
+      fitnessMembership: isFitnessMembershipSelected(),
+      singleGymMembership: isSingleGymMembershipSelected(),
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -24095,6 +24339,30 @@ function orderHasFirstclimbBlockingProduct(order) {
   return false;
 }
 
+/** True when this completed order should dual-fire purchase_singlegym. */
+function isSingleGymPurchase(order = null, storedOrder = null) {
+  if (isFitnessPurchase(order, storedOrder)) return false;
+  if (storedOrder?.singleGymMembership === true) return true;
+  const product = order?.subscriptionItems?.[0]?.product;
+  if (isSingleGymMembership(product)) return true;
+  const cartItems = Array.isArray(storedOrder?.cartItems) ? storedOrder.cartItems : [];
+  return cartItems.some((item) => (
+    item?.type === 'membership'
+    && compactProductToken(`${item.productName || ''} ${item.name || ''}`).includes('singlegym')
+  ));
+}
+
+/** True when this completed order should dual-fire purchase_fitness. */
+function isFitnessPurchase(order = null, storedOrder = null) {
+  if (storedOrder?.fitnessMembership === true) return true;
+  const product = order?.subscriptionItems?.[0]?.product;
+  if (isFitnessMembership(product)) return true;
+  const cartItems = Array.isArray(storedOrder?.cartItems) ? storedOrder.cartItems : [];
+  return cartItems.some((item) => (
+    item?.type === 'membership' && /fitness/i.test(`${item.productName || ''} ${item.name || ''}`)
+  ));
+}
+
 /** True when this completed order should dual-fire purchase_99kr. */
 function isFirstClimbPurchase(order = null, storedOrder = null) {
   if (isFirstClimbRoute()) return true;
@@ -24409,6 +24677,8 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
   const transactionId = resolvePurchaseTransactionId(order, orderId);
   const metadata = resolvePurchaseTrackingMetadata(order, storedOrder, storedCustomer, transactionId);
   const dualFire99kr = isFirstClimbPurchase(order, storedOrder);
+  const dualFireFitness = !state.testMode && isFitnessPurchase(order, storedOrder);
+  const dualFireSingleGym = !state.testMode && isSingleGymPurchase(order, storedOrder);
 
   try {
     window.GTM.trackPurchase(
@@ -24435,12 +24705,44 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
         }
       );
     }
+    if (dualFireFitness) {
+      window.GTM.trackPurchase(
+        transactionId,
+        purchaseItems,
+        purchaseValue,
+        0,
+        0,
+        'DKK',
+        {
+          ...metadata,
+          eventName: 'purchase_fitness',
+          ...(metadata.event_id ? { event_id: `${metadata.event_id}:fitness` } : {}),
+        }
+      );
+    }
+    if (dualFireSingleGym) {
+      window.GTM.trackPurchase(
+        transactionId,
+        purchaseItems,
+        purchaseValue,
+        0,
+        0,
+        'DKK',
+        {
+          ...metadata,
+          eventName: 'purchase_singlegym',
+          ...(metadata.event_id ? { event_id: `${metadata.event_id}:singlegym` } : {}),
+        }
+      );
+    }
     markPurchaseTracked(orderId);
     devLog('[GTM] purchase tracked:', {
       transactionId,
       purchaseValue,
       itemCount: purchaseItems.length,
       purchase_99kr: dualFire99kr,
+      purchase_fitness: dualFireFitness,
+      purchase_singlegym: dualFireSingleGym,
     });
     trackTikTokAttributedPurchase(transactionId, purchaseItems, purchaseValue, order, storedOrder);
     return true;
@@ -26615,8 +26917,8 @@ function renderConfirmationView() {
     if (headerPrice) headerPrice.textContent = priceLabel;
     const allGymsNote = membershipPill?.querySelector('.success-header-pill-note');
     if (allGymsNote) {
-      // Fitness is Aalborg-only and does not include climbing.
-      allGymsNote.hidden = isFitnessMembershipSelected();
+      // Fitness and Single Gym are Aalborg-only. The default note says every gym.
+      allGymsNote.hidden = isFitnessMembershipSelected() || isSingleGymMembershipSelected();
     }
     if (membershipPill) {
       membershipPill.style.display = hasMembershipHighlight ? 'block' : 'none';
@@ -27924,7 +28226,12 @@ function nextStep(fromStep) {
         const isFitness = state.testFitnessMembership === true
           || urlParams.get('testFitness') === 'true'
           || rawProductType === 'fitness';
-        const productType = rawProductType === 'fitness' ? 'membership' : rawProductType;
+        const isSingleGym = !isFitness && (
+          state.testSingleGymMembership === true
+          || rawProductType === 'singlegym'
+          || rawProductType === 'single-gym'
+        );
+        const productType = (rawProductType === 'fitness' || isSingleGym) ? 'membership' : rawProductType;
         console.log('[Test Mode] Creating mock order data for testing:', productType, isFitness ? '(fitness)' : '');
         
         // Create mock order data for testing
@@ -27932,13 +28239,13 @@ function nextStep(fromStep) {
           number: 'TEST-12345',
           date: new Date(),
           items: [
-            { name: productType === 'membership' ? (isFitness ? 'Fitness Membership' : 'Membership') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
+            { name: productType === 'membership' ? (isFitness ? 'Fitness Membership' : isSingleGym ? 'Single Gym Medlemskab' : 'Membership') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
           ],
           total: 469,
           memberName: 'Test User',
           membershipNumber: 'TEST-12345',
-          membershipType: productType === 'membership' ? (isFitness ? 'Fitness Membership' : 'Medlemskab') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
-          primaryGym: isFitness ? 'Boulders Aalborg' : 'Boulders Aarhus Nord',
+          membershipType: productType === 'membership' ? (isFitness ? 'Fitness Membership' : isSingleGym ? 'Single Gym Medlemskab' : 'Medlemskab') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
+          primaryGym: (isFitness || isSingleGym) ? 'Boulders Aalborg' : 'Boulders Aarhus Nord',
           membershipPrice: 469,
         };
         state.orderId = 'TEST-12345';
@@ -27947,6 +28254,7 @@ function nextStep(fromStep) {
         state.testMode = true;
         state.testProductType = productType;
         state.testFitnessMembership = isFitness;
+        state.testSingleGymMembership = isSingleGym;
         state.paymentConfirmed = true; // Set payment confirmed for test mode
         state.paymentFailed = false;
         state.paymentPending = false;
@@ -27977,16 +28285,28 @@ function nextStep(fromStep) {
             }]
           };
         } else {
-          // Default to membership (regular or Fitness)
-          const membershipName = isFitness ? 'Fitness Membership' : 'Medlemskab';
+          // Default to membership (regular, Fitness, or Single Gym)
+          const membershipName = isFitness
+            ? 'Fitness Membership'
+            : isSingleGym
+              ? 'Single Gym Medlemskab'
+              : 'Medlemskab';
           state.selectedProductType = 'membership';
-          state.membershipPlanId = isFitness ? 'fitness-membership-123' : 'membership-123';
+          state.membershipPlanId = isFitness
+            ? 'fitness-membership-123'
+            : isSingleGym
+              ? 'singlegym-membership-123'
+              : 'membership-123';
           // Mock subscription items with price
           state.fullOrder = {
             subscriptionItems: [{
               product: {
                 name: membershipName,
-                productLabels: isFitness ? [{ name: 'fitness' }] : [{ name: 'Public' }]
+                productLabels: isFitness
+                  ? [{ name: 'fitness' }]
+                  : isSingleGym
+                    ? [{ name: 'singlegym' }]
+                    : [{ name: 'Public' }]
               },
               price: { amount: 46900 } // 469.00 DKK in cents
             }]
@@ -28006,7 +28326,7 @@ function nextStep(fromStep) {
     } else {
       // If we somehow ended up on step 5 without an order, go back to step 1
       console.warn('[Navigation] Attempted to show success page without order data or payment not confirmed. Not rendering success page.');
-      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|fitness|15daypass|punch-card to URL');
+      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|fitness|singlegym|15daypass|punch-card to URL');
       // Don't redirect - let the payment failed/pending handlers show the appropriate message
     }
   }
