@@ -7051,8 +7051,12 @@ function populateBoostModal() {
 
 const BOOST_MODAL_OPEN_DELAY_MS = 50;
 
+// Temporary kill switch. Set to true to offer the boost upsell modal again.
+const BOOST_MODAL_ENABLED = false;
+
 // Show boost modal (uses same modal infrastructure as addons)
 async function showBoostModal(options = {}) {
+  if (!BOOST_MODAL_ENABLED) return;
   ensureAddonsModal();
   
   // Ensure products are loaded first
@@ -7118,6 +7122,7 @@ async function showBoostModal(options = {}) {
 }
 
 function prewarmBoostModalResources() {
+  if (!BOOST_MODAL_ENABLED) return;
   // Precreate modal DOM upfront to avoid first-open construction cost.
   ensureAddonsModal();
 
@@ -7174,6 +7179,7 @@ function resolveSelectedAccessProduct() {
 
 // Check if a product should trigger boost modal ("boost" or "boostCampaign")
 function hasBoostLabel(product) {
+  if (!BOOST_MODAL_ENABLED) return false;
   return hasProductLabel(product, 'boost') || hasProductLabel(product, 'boostcampaign');
 }
 
