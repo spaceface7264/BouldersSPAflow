@@ -5194,6 +5194,15 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     background: rgba(244, 1, 245, 0.08);
 }
 
+.existing-member-option:disabled {
+    cursor: default;
+    opacity: 0.72;
+}
+
+.existing-member-option:disabled:active {
+    transform: none;
+}
+
 .existing-member-main {
     display: flex;
     align-items: center;
@@ -5297,6 +5306,10 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
 .existing-member-age {
     color: #D1D5DB;
     font-size: var(--font-size-sm);
+}
+
+.existing-member-has-membership .existing-member-age {
+    white-space: normal;
 }
 
 .existing-member-new {

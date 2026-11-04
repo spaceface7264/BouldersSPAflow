@@ -5912,6 +5912,7 @@ const state = {
   pickedMemberLastName: null,
   existingMembers: [],
   existingMemberCount: 0,
+  payerSubscriptions: [],
   addingMember: false,
   memberPickBeforeAdd: null,
   editingHandoffMember: false,
@@ -7595,6 +7596,9 @@ const translations = {
     'form.member.savedMark': 'Gemt',
     'form.member.addAnother': 'Tilføj et andet barn',
     'form.member.onAccount': 'Allerede på din konto',
+    'form.member.alreadyHas': 'Har allerede {product}',
+    'form.member.pickWithoutMembership': 'Vælg et barn uden medlemskab, eller tilføj et nyt.',
+    'form.member.continue': 'Fortsæt',
     'form.member.newChild': 'Nyt barn',
     'form.member.addChild': 'Tilføj barn',
     'form.member.adding': 'Tilføjer...',
@@ -8043,6 +8047,9 @@ const translations = {
     'form.member.savedMark': 'Saved',
     'form.member.addAnother': 'Add another child',
     'form.member.onAccount': 'Already on your account',
+    'form.member.alreadyHas': 'Already has {product}',
+    'form.member.pickWithoutMembership': 'Choose a child without a membership, or add a new one.',
+    'form.member.continue': 'Continue',
     'form.member.newChild': 'New child',
     'form.member.addChild': 'Add child',
     'form.member.adding': 'Adding...',
@@ -8473,6 +8480,9 @@ const translations = {
     'form.member.savedMark': 'Gespeichert',
     'form.member.addAnother': 'Weiteres Kind hinzufügen',
     'form.member.onAccount': 'Bereits auf deinem Konto',
+    'form.member.alreadyHas': 'Hat bereits {product}',
+    'form.member.pickWithoutMembership': 'Wähle ein Kind ohne Mitgliedschaft, oder füge ein neues hinzu.',
+    'form.member.continue': 'Weiter',
     'form.member.newChild': 'Neues Kind',
     'form.member.addChild': 'Kind hinzufügen',
     'form.member.adding': 'Wird hinzugefügt...',
@@ -13105,7 +13115,10 @@ function checkSaveAccountButtonState() {
     }
   });
   
-  const memberReady = !memberBlockIsVisible() || state.pickedMemberId != null || validateMemberFields().ok;
+  const pickedBlocked = state.pickedMemberId != null && Boolean(memberBlockingMembership({ id: state.pickedMemberId }));
+  const memberReady = !memberBlockIsVisible()
+    || (state.pickedMemberId != null && !pickedBlocked)
+    || (state.pickedMemberId == null && validateMemberFields().ok);
   if (allFieldsFilled && memberReady) {
     saveBtn.classList.add('valid');
   } else {
@@ -19327,6 +19340,7 @@ function clearStoredJuniorMember() {
   state.memberPickBeforeAdd = null;
   hideMemberSavedMark();
   state.existingMembersLoadedFor = null;
+  state.payerSubscriptions = [];
   document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
   try {
     sessionStorage.removeItem(CHECKOUT_MEMBER_STORAGE_KEY);
@@ -19670,9 +19684,16 @@ async function ensureMemberCustomerOnce() {
     return null;
   }
 
+  if (mode === 'junior') await loadExistingMembers(payerId);
+
   const key = currentMemberKey();
   const stored = readStoredMember();
   if (stored && String(stored.payerId) === String(payerId) && stored.memberKey === key && stored.memberId != null) {
+    const storedBlocking = mode === 'junior' ? memberBlockingMembership({ id: stored.memberId }) : null;
+    if (storedBlocking) {
+      notifyMemberBlock(t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', storedBlocking));
+      return null;
+    }
     state.subscriptionUserId = stored.memberId;
     state.orderMemberKey = key;
     clearMemberBlock();
@@ -19684,9 +19705,19 @@ async function ensureMemberCustomerOnce() {
 
   if (state.pickedMemberId != null) {
     const memberId = Number(state.pickedMemberId);
+    const blocking = mode === 'junior' ? memberBlockingMembership({ id: memberId }) : null;
+    if (blocking) {
+      notifyMemberBlock(t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', blocking));
+      return null;
+    }
     writeStoredMember({ payerId, memberId, memberKey: key });
     clearMemberBlock();
     return memberId;
+  }
+
+  if (mode === 'junior' && state.addingMember !== true) {
+    notifyMemberBlock(t('form.member.pickWithoutMembership', 'Vælg et barn uden medlemskab, eller tilføj et nyt.'));
+    return null;
   }
 
   const form = readMemberForm();
@@ -20082,7 +20113,8 @@ function juniorPickerActive() {
 function updateMemberSaveButtonState() {
   const button = document.getElementById('saveAccountButton');
   if (!button || button.dataset.action !== 'save-member') return;
-  if (juniorPickerActive() && state.addingMember === true) {
+  const pickedBlocked = state.pickedMemberId != null && Boolean(memberBlockingMembership({ id: state.pickedMemberId }));
+  if (juniorPickerActive() && (state.addingMember === true || state.pickedMemberId == null || pickedBlocked)) {
     button.disabled = true;
     button.classList.remove('valid');
     return;
@@ -20149,6 +20181,9 @@ function refreshMemberCopy() {
     if (picker && state.addingMember === true) {
       button.textContent = t('form.member.saveChildFirst', 'Gem barnet først');
       button.setAttribute('data-i18n-key', 'form.member.saveChildFirst');
+    } else if (picker && state.pickedMemberId == null) {
+      button.textContent = t('form.member.continue', 'Fortsæt');
+      button.setAttribute('data-i18n-key', 'form.member.continue');
     } else if (state.pickedMemberId != null && name) {
       button.textContent = t('form.member.continueWith', 'Fortsæt med {name}').replaceAll('{name}', name);
       button.setAttribute('data-i18n-key', 'form.member.continueWith');
@@ -20233,6 +20268,53 @@ function memberInitials(person) {
   return letters || '?';
 }
 
+function subscriptionCoversMember(subscription, memberId) {
+  if (memberId == null) return false;
+  const users = Array.isArray(subscription?.users) ? subscription.users : [];
+  if (users.some((user) => user?.id != null && String(user.id) === String(memberId))) return true;
+  const payerId = subscription?.payer?.id;
+  return payerId != null && String(payerId) === String(memberId);
+}
+
+function catalogProduct(productRef) {
+  if (!productRef) return null;
+  if (productRef.id == null) return productRef;
+  return accessProductPools().find((product) => String(product?.id) === String(productRef.id)) || productRef;
+}
+
+function isTrialPassProduct(product) {
+  if (!product) return false;
+  if (has15DayPassLabel(product)) return true;
+  const name = String(product.name || '');
+  return /15\s*-?\s*(dag|day)|pr[øo]veperiode|free\s*trial|freetrial/i.test(name);
+}
+
+function memberBlockingMembership(person) {
+  if (!person || person.id == null) return null;
+  const subscriptions = Array.isArray(state.payerSubscriptions) ? state.payerSubscriptions : [];
+  for (const subscription of subscriptions) {
+    if (!subscriptionCoversMember(subscription, person.id)) continue;
+    const product = catalogProduct(subscription.subscriptionProduct);
+    if (!product || isTrialPassProduct(product)) continue;
+    const name = String(product.name || subscription.subscriptionProduct?.name || '').trim();
+    if (name) return name;
+  }
+  return null;
+}
+
+function firstSelectableMember(people) {
+  return (people || []).find((person) => !memberBlockingMembership(person)) || null;
+}
+
+function applyPickedMember(person) {
+  state.pickedMemberId = Number(person.id);
+  state.pickedMemberFirstName = person.firstName || null;
+  state.pickedMemberLastName = person.lastName || null;
+  state.memberBirthDate = person.birthDate || null;
+  const birthField = document.getElementById('memberDateOfBirth');
+  if (birthField) birthField.value = person.birthDate || '';
+}
+
 function renderExistingMembers(users) {
   const list = document.getElementById('existingMemberList');
   const addButton = document.getElementById('addAnotherMember');
@@ -20262,8 +20344,27 @@ function renderExistingMembers(users) {
   const draftStarted = memberDraftHasValue();
   if (!people.length) {
     if (picker && !draftStarted) state.addingMember = true;
-  } else if (picker && state.addingMember && !draftStarted && !state.memberPickBeforeAdd) {
+  } else if (
+    picker
+    && state.addingMember
+    && !draftStarted
+    && !state.memberPickBeforeAdd
+    && firstSelectableMember(people)
+  ) {
     state.addingMember = false;
+  }
+  if (picker && state.pickedMemberId != null) {
+    const picked = people.find((person) => String(person.id) === String(state.pickedMemberId));
+    if (!picked || memberBlockingMembership(picked)) {
+      state.pickedMemberId = null;
+      state.pickedMemberFirstName = null;
+      state.pickedMemberLastName = null;
+      state.memberBirthDate = null;
+      if (state.addingMember !== true) {
+        const birthField = document.getElementById('memberDateOfBirth');
+        if (birthField) birthField.value = '';
+      }
+    }
   }
   if (
     picker
@@ -20271,24 +20372,22 @@ function renderExistingMembers(users) {
     && state.addingMember !== true
     && state.pickedMemberId == null
   ) {
-    const first = people[0];
-    state.pickedMemberId = Number(first.id);
-    state.pickedMemberFirstName = first.firstName || null;
-    state.pickedMemberLastName = first.lastName || null;
-    state.memberBirthDate = first.birthDate || null;
-    const birthField = document.getElementById('memberDateOfBirth');
-    if (birthField) birthField.value = first.birthDate || '';
+    const first = firstSelectableMember(people);
+    if (first) applyPickedMember(first);
   }
   list.replaceChildren();
   const currentId = currentMemberId();
   people.forEach((person) => {
-    const selected = currentId != null && String(person.id) === String(currentId) && state.addingMember !== true;
+    const blocking = memberBlockingMembership(person);
+    const selected = !blocking && currentId != null && String(person.id) === String(currentId) && state.addingMember !== true;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'existing-member-option';
+    if (blocking) button.classList.add('existing-member-has-membership');
     if (selected) button.classList.add('selected');
+    button.disabled = Boolean(blocking);
     button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-    button.dataset.action = 'pick-existing-member';
+    if (!blocking) button.dataset.action = 'pick-existing-member';
     button.dataset.memberId = String(person.id);
     if (person.birthDate) button.dataset.birthDate = person.birthDate;
     if (person.firstName) button.dataset.firstName = person.firstName;
@@ -20307,7 +20406,12 @@ function renderExistingMembers(users) {
     copy.append(name);
     const meta = document.createElement('span');
     meta.className = 'existing-member-meta';
-    if (person.createdThisSession && person.birthDate) {
+    if (blocking) {
+      const hasMembership = document.createElement('span');
+      hasMembership.className = 'existing-member-age';
+      hasMembership.textContent = t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', blocking);
+      meta.append(hasMembership);
+    } else if (person.createdThisSession && person.birthDate) {
       const age = ageInYears(person.birthDate, getTodayLocalDateString());
       if (age != null && age >= 0 && age <= 120) {
         const ageEl = document.createElement('span');
@@ -20342,29 +20446,59 @@ function renderExistingMembers(users) {
   refreshMemberCopy();
 }
 
+let existingMembersLoad = null;
+
 async function loadExistingMembers(payerId) {
   if (!payerId || !isUserAuthenticated() || !juniorMemberFormVisible()) {
     renderExistingMembers([]);
     return;
   }
   if (String(state.existingMembersLoadedFor) === String(payerId)) return;
-  const url = buildApiUrl({
+  if (existingMembersLoad && existingMembersLoad.payerId === String(payerId)) {
+    return existingMembersLoad.promise;
+  }
+  const promise = loadExistingMembersOnce(payerId);
+  existingMembersLoad = { payerId: String(payerId), promise };
+  try {
+    await promise;
+  } finally {
+    if (existingMembersLoad?.promise === promise) existingMembersLoad = null;
+  }
+}
+
+async function loadExistingMembersOnce(payerId) {
+  const usersUrl = buildApiUrl({
     baseUrl: authAPI.baseUrl,
     useProxy: authAPI.useProxy,
     path: `/api/ver3/customers/${payerId}/subscriptions/users?forPayerSubscriptionsOnly=true`,
   });
+  const subscriptionsUrl = buildApiUrl({
+    baseUrl: authAPI.baseUrl,
+    useProxy: authAPI.useProxy,
+    path: `/api/ver3/customers/${payerId}/subscriptions`,
+  });
   try {
-    const users = await requestJson({ url, headers: bearerHeaders() });
+    const users = await requestJson({ url: usersUrl, headers: bearerHeaders() });
+    let subscriptions = [];
+    try {
+      const listed = await requestJson({ url: subscriptionsUrl, headers: bearerHeaders() });
+      subscriptions = Array.isArray(listed) ? listed : [];
+    } catch (error) {
+      devWarn('[member] Could not list payer subscriptions:', error);
+    }
+    state.payerSubscriptions = subscriptions;
     state.existingMembersLoadedFor = payerId;
     renderExistingMembers(users);
   } catch (error) {
     devWarn('[member] Could not list existing members:', error);
+    state.payerSubscriptions = [];
     renderExistingMembers([]);
   }
 }
 
 function pickExistingMember(memberId, birthDate, firstName, lastName) {
   const person = (state.existingMembers || []).find((item) => String(item.id) === String(memberId));
+  if (memberBlockingMembership(person || { id: memberId })) return false;
   clearSavedMemberCollapse();
   state.pickedMemberId = Number(memberId);
   state.pickedMemberFirstName = (person?.firstName || (typeof firstName === 'string' ? firstName : '')).trim();
@@ -20377,6 +20511,7 @@ function pickExistingMember(memberId, birthDate, firstName, lastName) {
   clearMemberFieldErrors();
   renderExistingMembers(state.existingMembers);
   refreshMemberCopy();
+  return true;
 }
 
 function addAnotherMember() {
@@ -20411,17 +20546,17 @@ function cancelAddMember() {
   state.memberPickBeforeAdd = null;
   state.addingMember = false;
   clearMemberFieldErrors();
-  if (restore?.id != null) {
-    pickExistingMember(restore.id, restore.birthDate || '', restore.firstName || '', restore.lastName || '');
+  if (restore?.id != null && pickExistingMember(restore.id, restore.birthDate || '', restore.firstName || '', restore.lastName || '')) {
     return;
   }
-  const first = (state.existingMembers || [])[0];
+  const first = firstSelectableMember(state.existingMembers);
   if (first) {
     pickExistingMember(first.id, first.birthDate || '', first.firstName || '', first.lastName || '');
     return;
   }
-  state.addingMember = true;
+  if (!(state.existingMembers || []).length) state.addingMember = true;
   renderExistingMembers(state.existingMembers);
+  refreshMemberCopy();
 }
 
 function rememberCreatedMember(memberId, draft) {
@@ -27313,7 +27448,20 @@ function validateForm(animate = false) {
 
   const memberForm = DOM.parentGuardianForm;
   const memberFormVisible = memberForm && !memberForm.hidden && memberForm.style.display !== 'none';
-  if (memberFormVisible && state.pickedMemberId == null) {
+  const blockingMembership = memberFormVisible && state.pickedMemberId != null
+    ? memberBlockingMembership({ id: state.pickedMemberId })
+    : null;
+  if (memberFormVisible && juniorPickerActive() && blockingMembership) {
+    isValid = false;
+    const message = t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', blockingMembership);
+    errors.push(message);
+    if (animate) showToast(message, 'error');
+  } else if (memberFormVisible && juniorPickerActive() && state.addingMember !== true && state.pickedMemberId == null) {
+    isValid = false;
+    const message = t('form.member.pickWithoutMembership', 'Vælg et barn uden medlemskab, eller tilføj et nyt.');
+    errors.push(message);
+    if (animate) showToast(message, 'error');
+  } else if (memberFormVisible && state.pickedMemberId == null) {
     const memberResult = validateMemberFields();
     if (!memberResult.ok) {
       isValid = false;
