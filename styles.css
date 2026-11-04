@@ -5069,6 +5069,30 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     padding-right: 0;
 }
 
+#parentGuardianForm .member-current {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+.member-section-label {
+    margin: 0 0 8px;
+    color: #F401F5;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.member-section-label[hidden] {
+    display: none;
+}
+
+#existingMemberLabel {
+    margin-top: 4px;
+    color: #9CA3AF;
+}
+
 .profile-role[hidden],
 .profile-role-step[hidden] {
     display: none;
@@ -5170,13 +5194,117 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     background: rgba(244, 1, 245, 0.08);
 }
 
+.existing-member-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.existing-member-avatar {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid #374151;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.existing-member-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.existing-member-mark {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: 1px solid #374151;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.existing-member-add {
+    justify-content: flex-start;
+    border-style: dashed;
+}
+
+.member-new-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.member-new-header[hidden],
+.member-new-cancel[hidden],
+#addChildButton[hidden] {
+    display: none;
+}
+
+.member-new-title {
+    margin: 0;
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    color: #fff;
+}
+
+.member-new-cancel {
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.member-add-child {
+    width: 100%;
+    margin-top: 16px;
+    justify-content: center;
+}
+
+#memberNewFields:not([hidden]):has(#memberNewChrome:not([hidden])) {
+    margin-bottom: 16px;
+    padding: 16px;
+    border: 1px solid #374151;
+    border-radius: 10px;
+}
+
 .existing-member-name {
     font-weight: 600;
+    min-width: 0;
+}
+
+.existing-member-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
 }
 
 .existing-member-age {
     color: #D1D5DB;
     font-size: var(--font-size-sm);
+}
+
+.existing-member-new {
+    color: #86EFAC;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 #addAnotherMember:not([hidden]) {
@@ -5189,7 +5317,7 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin: 0 0 16px;
+    margin: 8px 0 0;
 }
 
 .member-title-row {
@@ -5253,6 +5381,10 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     color: #fff;
     cursor: pointer;
     transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.member-summary-edit[hidden] {
+    display: none;
 }
 
 .member-summary-edit:active {

@@ -5909,8 +5909,11 @@ const state = {
   orderMemberKey: null,
   pickedMemberId: null,
   pickedMemberFirstName: null,
+  pickedMemberLastName: null,
+  existingMembers: [],
   existingMemberCount: 0,
   addingMember: false,
+  memberPickBeforeAdd: null,
   editingHandoffMember: false,
   savedMemberCollapsed: false,
   editingSavedMember: false,
@@ -7576,8 +7579,8 @@ const translations = {
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.buyerRole.title': 'Forælder eller værge',
     'form.buyerRole.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
-    'form.member.title': 'Hvem er medlemskabet til?',
-    'form.member.roleHint': 'Medlemskabet gælder barnet.',
+    'form.member.title': 'Hvem skal klatre?',
+    'form.member.roleHint': 'Vælg barnet, medlemskabet skal gælde for.',
     'form.member.consent': 'Jeg er barnets værge og accepterer medlemskabet på barnets vegne.',
     'form.member.required': 'Udfyld barnets navn, fødselsdato og værgesamtykke.',
     'form.member.under16': 'Junior er til børn under 16 år.',
@@ -7591,6 +7594,15 @@ const translations = {
     'form.member.saved': 'Gemt.',
     'form.member.savedMark': 'Gemt',
     'form.member.addAnother': 'Tilføj et andet barn',
+    'form.member.onAccount': 'Allerede på din konto',
+    'form.member.newChild': 'Nyt barn',
+    'form.member.addChild': 'Tilføj barn',
+    'form.member.adding': 'Tilføjer...',
+    'form.member.saveChildFirst': 'Gem barnet først',
+    'form.member.onThisOrder': 'På dette medlemskab',
+    'form.member.newOnThisOrder': 'Medlemskabet oprettes til',
+    'form.member.alreadySignedUp': 'Allerede oprettet',
+    'form.member.newBadge': 'Ny',
     'form.member.youthTitle': 'Den unge',
     'form.member.youthAge': 'Værgen kan kun gennemføre for en 16- eller 17-årig.',
     'form.member.email': 'E-mail*',
@@ -8015,8 +8027,8 @@ const translations = {
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
     'form.buyerRole.title': 'Parent or guardian',
     'form.buyerRole.hint': 'Your account. You must be 18, and you pay for the membership.',
-    'form.member.title': 'Who is this membership for?',
-    'form.member.roleHint': 'The membership is for the child.',
+    'form.member.title': 'Who is climbing?',
+    'form.member.roleHint': 'Choose the child this membership is for.',
     'form.member.consent': 'I am the child\'s guardian and I accept the membership on the child\'s behalf.',
     'form.member.required': 'Enter the child\'s name, date of birth, and guardian consent.',
     'form.member.under16': 'Junior is for children under 16.',
@@ -8030,6 +8042,15 @@ const translations = {
     'form.member.saved': 'Saved.',
     'form.member.savedMark': 'Saved',
     'form.member.addAnother': 'Add another child',
+    'form.member.onAccount': 'Already on your account',
+    'form.member.newChild': 'New child',
+    'form.member.addChild': 'Add child',
+    'form.member.adding': 'Adding...',
+    'form.member.saveChildFirst': 'Save the child first',
+    'form.member.onThisOrder': 'On this membership',
+    'form.member.newOnThisOrder': 'The membership will be created for',
+    'form.member.alreadySignedUp': 'Already signed up',
+    'form.member.newBadge': 'New',
     'form.member.youthTitle': 'The young person',
     'form.member.youthAge': 'A guardian can only complete this for a 16- or 17-year-old.',
     'form.member.email': 'Email*',
@@ -8436,8 +8457,8 @@ const translations = {
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
     'form.buyerRole.title': 'Elternteil oder Vormund',
     'form.buyerRole.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
-    'form.member.title': 'Für wen ist die Mitgliedschaft?',
-    'form.member.roleHint': 'Die Mitgliedschaft gilt für das Kind.',
+    'form.member.title': 'Wer soll klettern?',
+    'form.member.roleHint': 'Wähle das Kind, für das die Mitgliedschaft gelten soll.',
     'form.member.consent': 'Ich bin der Vormund des Kindes und akzeptiere die Mitgliedschaft im Namen des Kindes.',
     'form.member.required': 'Gib den Namen und das Geburtsdatum des Kindes an und bestätige die Vormundschaft.',
     'form.member.under16': 'Junior ist für Kinder unter 16 Jahren.',
@@ -8451,6 +8472,15 @@ const translations = {
     'form.member.saved': 'Gespeichert.',
     'form.member.savedMark': 'Gespeichert',
     'form.member.addAnother': 'Weiteres Kind hinzufügen',
+    'form.member.onAccount': 'Bereits auf deinem Konto',
+    'form.member.newChild': 'Neues Kind',
+    'form.member.addChild': 'Kind hinzufügen',
+    'form.member.adding': 'Wird hinzugefügt...',
+    'form.member.saveChildFirst': 'Speichere zuerst das Kind',
+    'form.member.onThisOrder': 'Auf dieser Mitgliedschaft',
+    'form.member.newOnThisOrder': 'Die Mitgliedschaft wird erstellt für',
+    'form.member.alreadySignedUp': 'Bereits angelegt',
+    'form.member.newBadge': 'Neu',
     'form.member.youthTitle': 'Die junge Person',
     'form.member.youthAge': 'Ein Vormund kann das nur für eine 16- oder 17-jährige Person abschließen.',
     'form.member.email': 'E-Mail*',
@@ -15126,12 +15156,23 @@ function handleGlobalClick(event) {
         actionable.dataset.memberId,
         actionable.dataset.birthDate || '',
         actionable.dataset.firstName || '',
+        actionable.dataset.lastName || '',
       );
       break;
     }
     case 'add-another-member': {
       event.preventDefault();
       addAnotherMember();
+      break;
+    }
+    case 'cancel-add-member': {
+      event.preventDefault();
+      cancelAddMember();
+      break;
+    }
+    case 'add-child': {
+      event.preventDefault();
+      addChildFromForm();
       break;
     }
     case 'edit-handoff-member': {
@@ -19276,10 +19317,14 @@ function clearStoredJuniorMember() {
   state.orderIsOtherPayer = null;
   state.orderMemberKey = null;
   state.pickedMemberId = null;
+  state.pickedMemberLastName = null;
+  state.existingMembers = [];
   state.memberBirthDate = null;
   state.guardianHandoffActive = false;
   state.savedMemberCollapsed = false;
   state.editingSavedMember = false;
+  state.addingMember = false;
+  state.memberPickBeforeAdd = null;
   hideMemberSavedMark();
   state.existingMembersLoadedFor = null;
   document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
@@ -19743,11 +19788,35 @@ function memberDisplayName() {
 }
 
 function memberFullName() {
+  if (state.pickedMemberId != null) {
+    const picked = [state.pickedMemberFirstName, state.pickedMemberLastName].filter(Boolean).join(' ').trim();
+    if (picked) return picked;
+  }
   const first = (document.getElementById('memberFirstName')?.value || '').trim();
   const last = (document.getElementById('memberLastName')?.value || '').trim();
   const typed = [first, last].filter(Boolean).join(' ');
   if (typed) return typed;
   return memberDisplayName();
+}
+
+function memberOnThisOrder() {
+  return state.pickedMemberId != null
+    || savedMemberIsCollapsed()
+    || state.editingSavedMember === true;
+}
+
+function currentMemberId() {
+  if (state.pickedMemberId != null) return String(state.pickedMemberId);
+  if (state.subscriptionUserId != null && (savedMemberIsCollapsed() || state.editingSavedMember === true)) {
+    return String(state.subscriptionUserId);
+  }
+  return null;
+}
+
+function currentMemberRecord() {
+  const id = currentMemberId();
+  if (!id) return null;
+  return (state.existingMembers || []).find((person) => String(person.id) === id) || null;
 }
 
 function memberBirthDateLabel() {
@@ -19967,11 +20036,12 @@ function syncMemberFieldVisibility() {
     && !memberDraftHasValue();
   const picked = state.pickedMemberId != null;
   const savedCollapsed = savedMemberIsCollapsed();
+  const showOrderSummary = handoffCollapsed || picked || savedCollapsed;
   form.classList.toggle('member-existing-selected', picked);
   form.classList.toggle('member-saved', savedCollapsed);
   fields.hidden = handoffCollapsed || pickerCollapsed || picked || savedCollapsed;
   if (summary) {
-    summary.hidden = !(handoffCollapsed || savedCollapsed);
+    summary.hidden = !showOrderSummary;
     const emailEl = document.getElementById('memberSummaryEmail');
     const ageEl = document.getElementById('memberSummaryAge');
     const edit = summary.querySelector('.member-summary-edit');
@@ -19981,14 +20051,22 @@ function syncMemberFieldVisibility() {
         emailEl.textContent = (document.getElementById('memberEmail')?.value || '').trim();
       }
       if (ageEl) ageEl.hidden = true;
-      if (edit) edit.dataset.action = 'edit-handoff-member';
-    } else if (savedCollapsed) {
+      if (edit) {
+        edit.hidden = false;
+        edit.dataset.action = 'edit-handoff-member';
+      }
+    } else if (picked || savedCollapsed) {
+      const detail = memberSummaryDetail();
       if (emailEl) emailEl.hidden = true;
       if (ageEl) {
-        ageEl.hidden = false;
-        ageEl.textContent = memberSummaryDetail();
+        ageEl.hidden = !detail;
+        ageEl.textContent = detail;
       }
-      if (edit) edit.dataset.action = 'edit-saved-member';
+      if (edit) {
+        edit.hidden = picked || !savedCollapsed;
+        edit.dataset.action = 'edit-saved-member';
+      }
+      summary.hidden = !detail && !(edit && !edit.hidden);
     }
   }
   if (savedCollapsed) {
@@ -19997,24 +20075,42 @@ function syncMemberFieldVisibility() {
   }
 }
 
+function juniorPickerActive() {
+  return state.guardianHandoffActive !== true && juniorMemberFormVisible();
+}
+
 function updateMemberSaveButtonState() {
   const button = document.getElementById('saveAccountButton');
   if (!button || button.dataset.action !== 'save-member') return;
-  const ready = state.pickedMemberId != null || validateMemberFields().ok;
-  button.classList.toggle('valid', ready);
+  if (juniorPickerActive() && state.addingMember === true) {
+    button.disabled = true;
+    button.classList.remove('valid');
+    return;
+  }
+  button.disabled = false;
+  button.classList.toggle('valid', state.pickedMemberId != null);
 }
 
 function refreshMemberCopy() {
   const handoff = state.guardianHandoffActive === true;
   const name = memberDisplayName();
-  const heading = savedMemberIsCollapsed() ? memberFullName() : name;
+  const onThisOrder = memberOnThisOrder() && !handoff;
+  const heading = onThisOrder || savedMemberIsCollapsed() ? memberFullName() : name;
   const title = document.getElementById('memberFormTitle');
   const hint = document.getElementById('memberFormHint');
+  const picker = juniorPickerActive();
+  const eyebrow = document.getElementById('memberProductEyebrow');
+  if (eyebrow) eyebrow.hidden = !picker;
   if (title) {
-    title.textContent = heading || t(handoff ? 'form.member.youthTitle' : 'form.member.title');
+    title.textContent = picker
+      ? t('form.member.title')
+      : (heading || t(handoff ? 'form.member.youthTitle' : 'form.member.title'));
   }
-  if (hint) {
-    if (savedMemberIsCollapsed()) {
+  if (hint && picker) {
+    hint.hidden = false;
+    hint.textContent = t('form.member.roleHint');
+  } else if (hint) {
+    if (savedMemberIsCollapsed() || onThisOrder) {
       hint.hidden = true;
     } else {
       hint.hidden = false;
@@ -20050,7 +20146,10 @@ function refreshMemberCopy() {
   }
   const button = document.getElementById('saveAccountButton');
   if (button && button.dataset.action === 'save-member' && button.dataset.saving !== '1') {
-    if (name) {
+    if (picker && state.addingMember === true) {
+      button.textContent = t('form.member.saveChildFirst', 'Gem barnet først');
+      button.setAttribute('data-i18n-key', 'form.member.saveChildFirst');
+    } else if (state.pickedMemberId != null && name) {
       button.textContent = t('form.member.continueWith', 'Fortsæt med {name}').replaceAll('{name}', name);
       button.setAttribute('data-i18n-key', 'form.member.continueWith');
     } else {
@@ -20058,9 +20157,40 @@ function refreshMemberCopy() {
       button.setAttribute('data-i18n-key', 'form.member.save');
     }
   }
+  const newChrome = document.getElementById('memberNewChrome');
+  const addChildButton = document.getElementById('addChildButton');
+  if (newChrome) newChrome.hidden = handoff;
+  if (addChildButton) addChildButton.hidden = handoff;
   updateMemberAgeStatus();
   updateMemberSaveButtonState();
   syncMemberFieldVisibility();
+  refreshMemberSectionLabels();
+}
+
+function refreshMemberSectionLabels() {
+  const current = document.getElementById('memberCurrentLabel');
+  const existingLabel = document.getElementById('existingMemberLabel');
+  const handoff = state.guardianHandoffActive === true;
+  const onThisOrder = memberOnThisOrder() && !handoff;
+  if (current) {
+    current.hidden = juniorPickerActive() || !onThisOrder;
+    if (onThisOrder) {
+      const isNew = state.pickedMemberId == null && currentMemberRecord()?.createdThisSession === true;
+      current.textContent = isNew
+        ? t('form.member.newOnThisOrder', 'Medlemskabet oprettes til')
+        : t('form.member.onThisOrder', 'På dette medlemskab');
+    }
+  }
+  if (existingLabel) {
+    if (juniorPickerActive()) {
+      existingLabel.hidden = true;
+      return;
+    }
+    const currentId = currentMemberId();
+    const others = (state.existingMembers || []).filter((person) => !currentId || String(person.id) !== currentId);
+    existingLabel.hidden = others.length === 0;
+    if (others.length) existingLabel.textContent = t('form.member.alreadySignedUp', 'Allerede oprettet');
+  }
 }
 
 function placeMemberForm(show) {
@@ -20096,53 +20226,120 @@ function setupMemberFormUx() {
   });
 }
 
+function memberInitials(person) {
+  const first = String(person?.firstName || '').trim();
+  const last = String(person?.lastName || '').trim();
+  const letters = `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
+  return letters || '?';
+}
+
 function renderExistingMembers(users) {
   const list = document.getElementById('existingMemberList');
   const addButton = document.getElementById('addAnotherMember');
+  const cancelAdd = document.getElementById('cancelAddMember');
   if (!list) return;
-  list.replaceChildren();
+  const previous = new Map((state.existingMembers || []).map((person) => [String(person.id), person]));
   const people = (Array.isArray(users) ? users : []).filter((person) => {
     return person && person.id != null && String(person.id) !== String(state.customerId);
+  }).map((person) => {
+    const prior = previous.get(String(person.id));
+    return {
+      id: person.id,
+      firstName: typeof person.firstName === 'string' ? person.firstName.trim() : (prior?.firstName || ''),
+      lastName: typeof person.lastName === 'string' ? person.lastName.trim() : (prior?.lastName || ''),
+      birthDate: normalizeBuyerBirthDate(person.birthDate) || prior?.birthDate || '',
+      createdThisSession: person.createdThisSession === true || prior?.createdThisSession === true,
+    };
   });
+  previous.forEach((person) => {
+    if (!person?.createdThisSession) return;
+    if (people.some((item) => String(item.id) === String(person.id))) return;
+    people.push(person);
+  });
+  state.existingMembers = people;
   state.existingMemberCount = people.length;
+  const picker = juniorPickerActive();
+  const draftStarted = memberDraftHasValue();
   if (!people.length) {
-    list.hidden = true;
-    if (addButton) addButton.hidden = true;
+    if (picker && !draftStarted) state.addingMember = true;
+  } else if (picker && state.addingMember && !draftStarted && !state.memberPickBeforeAdd) {
     state.addingMember = false;
-    syncMemberFieldVisibility();
-    return;
   }
+  if (
+    picker
+    && people.length
+    && state.addingMember !== true
+    && state.pickedMemberId == null
+  ) {
+    const first = people[0];
+    state.pickedMemberId = Number(first.id);
+    state.pickedMemberFirstName = first.firstName || null;
+    state.pickedMemberLastName = first.lastName || null;
+    state.memberBirthDate = first.birthDate || null;
+    const birthField = document.getElementById('memberDateOfBirth');
+    if (birthField) birthField.value = first.birthDate || '';
+  }
+  list.replaceChildren();
+  const currentId = currentMemberId();
   people.forEach((person) => {
+    const selected = currentId != null && String(person.id) === String(currentId) && state.addingMember !== true;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'existing-member-option';
-    const selected = String(state.pickedMemberId) === String(person.id);
-    button.classList.toggle('selected', selected);
+    if (selected) button.classList.add('selected');
     button.setAttribute('aria-pressed', selected ? 'true' : 'false');
     button.dataset.action = 'pick-existing-member';
     button.dataset.memberId = String(person.id);
-    const birthDate = normalizeBuyerBirthDate(person.birthDate);
-    if (birthDate) button.dataset.birthDate = birthDate;
-    const firstName = typeof person.firstName === 'string' ? person.firstName.trim() : '';
-    if (firstName) button.dataset.firstName = firstName;
+    if (person.birthDate) button.dataset.birthDate = person.birthDate;
+    if (person.firstName) button.dataset.firstName = person.firstName;
+    if (person.lastName) button.dataset.lastName = person.lastName;
+    const main = document.createElement('span');
+    main.className = 'existing-member-main';
+    const avatar = document.createElement('span');
+    avatar.className = 'existing-member-avatar';
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = memberInitials(person);
+    const copy = document.createElement('span');
+    copy.className = 'existing-member-copy';
     const name = document.createElement('span');
     name.className = 'existing-member-name';
     name.textContent = [person.firstName, person.lastName].filter(Boolean).join(' ').trim() || String(person.id);
-    button.append(name);
-    if (birthDate) {
-      const age = ageInYears(birthDate, getTodayLocalDateString());
-      if (age != null && age >= 0) {
+    copy.append(name);
+    const meta = document.createElement('span');
+    meta.className = 'existing-member-meta';
+    if (person.createdThisSession && person.birthDate) {
+      const age = ageInYears(person.birthDate, getTodayLocalDateString());
+      if (age != null && age >= 0 && age <= 120) {
         const ageEl = document.createElement('span');
         ageEl.className = 'existing-member-age';
         ageEl.textContent = t('form.member.ageShort', '{age} år').replaceAll('{age}', String(age));
-        button.append(ageEl);
+        meta.append(ageEl);
       }
+      const badge = document.createElement('span');
+      badge.className = 'existing-member-new';
+      badge.textContent = t('form.member.newBadge', 'Ny');
+      meta.append(badge);
+    } else {
+      const onAccount = document.createElement('span');
+      onAccount.className = 'existing-member-age';
+      onAccount.textContent = t('form.member.onAccount', 'Allerede på din konto');
+      meta.append(onAccount);
     }
+    copy.append(meta);
+    main.append(avatar, copy);
+    const mark = document.createElement('span');
+    mark.className = 'existing-member-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = selected ? '✓' : '';
+    button.append(main, mark);
     list.append(button);
   });
-  list.hidden = false;
-  if (addButton) addButton.hidden = false;
+  list.hidden = people.length === 0;
+  if (addButton) addButton.hidden = people.length === 0 || state.addingMember === true;
+  if (cancelAdd) cancelAdd.hidden = people.length === 0 || state.addingMember !== true;
   syncMemberFieldVisibility();
+  refreshMemberSectionLabels();
+  refreshMemberCopy();
 }
 
 async function loadExistingMembers(payerId) {
@@ -20166,39 +20363,107 @@ async function loadExistingMembers(payerId) {
   }
 }
 
-function pickExistingMember(memberId, birthDate, firstName) {
+function pickExistingMember(memberId, birthDate, firstName, lastName) {
+  const person = (state.existingMembers || []).find((item) => String(item.id) === String(memberId));
   clearSavedMemberCollapse();
   state.pickedMemberId = Number(memberId);
-  state.pickedMemberFirstName = typeof firstName === 'string' ? firstName.trim() : '';
+  state.pickedMemberFirstName = (person?.firstName || (typeof firstName === 'string' ? firstName : '')).trim();
+  state.pickedMemberLastName = (person?.lastName || (typeof lastName === 'string' ? lastName : '')).trim();
   state.addingMember = false;
-  if (birthDate) {
-    state.memberBirthDate = birthDate;
-    const field = document.getElementById('memberDateOfBirth');
-    if (field) field.value = birthDate;
-  }
+  const birth = person?.birthDate || birthDate || '';
+  state.memberBirthDate = birth || null;
+  const field = document.getElementById('memberDateOfBirth');
+  if (field) field.value = birth;
   clearMemberFieldErrors();
-  document.querySelectorAll('.existing-member-option[data-member-id]').forEach((button) => {
-    const selected = button.dataset.memberId === String(memberId);
-    button.classList.toggle('selected', selected);
-    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
-  });
-  syncMemberFieldVisibility();
+  renderExistingMembers(state.existingMembers);
   refreshMemberCopy();
 }
 
 function addAnotherMember() {
   clearSavedMemberCollapse();
+  state.memberPickBeforeAdd = state.pickedMemberId != null
+    ? {
+      id: state.pickedMemberId,
+      birthDate: state.memberBirthDate || '',
+      firstName: state.pickedMemberFirstName || '',
+      lastName: state.pickedMemberLastName || '',
+    }
+    : null;
   state.pickedMemberId = null;
   state.pickedMemberFirstName = null;
+  state.pickedMemberLastName = null;
   state.memberBirthDate = null;
   state.addingMember = true;
-  document.querySelectorAll('.existing-member-option[data-member-id].selected').forEach((button) => {
-    button.classList.remove('selected');
-    button.setAttribute('aria-pressed', 'false');
+  ['memberFirstName', 'memberLastName', 'memberDateOfBirth', 'memberEmail'].forEach((id) => {
+    const field = document.getElementById(id);
+    if (field) field.value = '';
   });
-  syncMemberFieldVisibility();
+  const consent = document.getElementById('memberGuardianConsent');
+  if (consent) consent.checked = false;
+  clearMemberFieldErrors();
+  renderExistingMembers(state.existingMembers);
   refreshMemberCopy();
   document.getElementById('memberFirstName')?.focus();
+}
+
+function cancelAddMember() {
+  const restore = state.memberPickBeforeAdd;
+  state.memberPickBeforeAdd = null;
+  state.addingMember = false;
+  clearMemberFieldErrors();
+  if (restore?.id != null) {
+    pickExistingMember(restore.id, restore.birthDate || '', restore.firstName || '', restore.lastName || '');
+    return;
+  }
+  const first = (state.existingMembers || [])[0];
+  if (first) {
+    pickExistingMember(first.id, first.birthDate || '', first.firstName || '', first.lastName || '');
+    return;
+  }
+  state.addingMember = true;
+  renderExistingMembers(state.existingMembers);
+}
+
+function rememberCreatedMember(memberId, draft) {
+  const people = Array.isArray(state.existingMembers) ? state.existingMembers.slice() : [];
+  const index = people.findIndex((person) => String(person.id) === String(memberId));
+  const next = {
+    id: memberId,
+    firstName: draft.firstName,
+    lastName: draft.lastName,
+    birthDate: normalizeBuyerBirthDate(draft.birthDate) || '',
+    createdThisSession: true,
+  };
+  if (index >= 0) people[index] = { ...people[index], ...next };
+  else people.push(next);
+  state.existingMembers = people;
+  return people;
+}
+
+async function addChildFromForm() {
+  const button = document.getElementById('addChildButton');
+  if (!button || button.dataset.saving === '1') return;
+  if (rejectInvalidMemberFields({ animate: true, toast: true, scroll: true })) return;
+  button.dataset.saving = '1';
+  button.disabled = true;
+  const saving = t('form.member.adding', 'Tilføjer...');
+  button.textContent = saving && saving !== 'form.member.adding' ? saving : 'Tilføjer...';
+  try {
+    const draft = readMemberForm();
+    const memberId = await ensureMemberCustomer();
+    if (!memberId) return;
+    state.memberPickBeforeAdd = null;
+    state.addingMember = false;
+    rememberCreatedMember(memberId, draft);
+    pickExistingMember(memberId, draft.birthDate, draft.firstName, draft.lastName);
+  } catch (error) {
+    const ageMessage = membershipDateAgeMessage(error);
+    notifyMemberBlock(ageMessage || t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
+  } finally {
+    delete button.dataset.saving;
+    button.disabled = false;
+    button.textContent = t('form.member.addChild', 'Tilføj barn');
+  }
 }
 
 function editHandoffMember() {
@@ -20234,6 +20499,7 @@ function beginGuardianHandoff() {
   state.editingHandoffMember = false;
   state.pickedMemberId = null;
   state.pickedMemberFirstName = null;
+  state.pickedMemberLastName = null;
   clearSavedMemberCollapse();
   updateMemberFormVisibility();
   const message = t('form.guardian.prompt', 'Udfyld værgens oplysninger. Medlemskabet gælder den unge.');
@@ -20312,16 +20578,21 @@ function setMemberSaveButton(button) {
 async function handleSaveMember() {
   const button = document.getElementById('saveAccountButton');
   if (!button || button.dataset.saving === '1') return;
+  if (juniorPickerActive() && state.addingMember === true) return;
   if (rejectInvalidMemberFields({ animate: true, toast: true, scroll: true })) return;
   button.dataset.saving = '1';
   button.disabled = true;
   const saving = t('form.member.saving');
   button.textContent = saving && saving !== 'form.member.saving' ? saving : 'Gemmer...';
   try {
+    const wasNew = state.pickedMemberId == null;
+    const draft = readMemberForm();
     const memberId = await ensureMemberCustomer();
     if (memberId) {
+      if (wasNew) rememberCreatedMember(memberId, draft);
       state.savedMemberCollapsed = true;
       state.editingSavedMember = false;
+      renderExistingMembers(state.existingMembers);
     }
   } catch (error) {
     const ageMessage = membershipDateAgeMessage(error);

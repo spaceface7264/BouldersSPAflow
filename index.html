@@ -986,23 +986,33 @@
                             <div class="parent-guardian-form" id="parentGuardianForm" hidden style="display: none;">
                                 <div class="profile-role">
                                     <span class="profile-role-step" id="memberRoleStep" aria-hidden="true" hidden>1</span>
-                                    <div>
+                                    <div class="member-current">
+                                        <p class="member-section-label" id="memberProductEyebrow" data-i18n-key="form.member.productJunior" hidden>Junior</p>
+                                        <p class="member-section-label" id="memberCurrentLabel" data-member-copy hidden>På dette medlemskab</p>
                                         <div class="member-title-row">
                                             <h4 class="parent-form-title" id="memberFormTitle" data-member-copy data-i18n-key="form.member.title">Who is this membership for?</h4>
                                             <span class="member-saved-mark" id="memberSavedMark" data-i18n-key="form.member.savedMark" hidden>Gemt</span>
                                         </div>
                                         <p class="profile-role-hint" id="memberFormHint" data-member-copy data-i18n-key="form.member.roleHint">The membership is for the child.</p>
+                                        <div id="memberSummary" class="member-summary" data-member-copy hidden>
+                                            <p class="member-summary-age" id="memberSummaryAge" hidden></p>
+                                            <p class="member-summary-email" id="memberSummaryEmail"></p>
+                                            <button type="button" class="member-summary-edit" data-action="edit-handoff-member" data-i18n-key="form.member.edit">Ret</button>
+                                        </div>
                                     </div>
                                 </div>
+                                <p class="member-section-label" id="existingMemberLabel" data-member-copy hidden>Allerede oprettet</p>
                                 <div id="existingMemberList" class="existing-member-list" hidden></div>
-                                <button type="button" id="addAnotherMember" class="existing-member-option existing-member-add" data-action="add-another-member" data-i18n-key="form.member.addAnother" hidden>Tilføj et andet barn</button>
-                                <div id="memberSummary" class="member-summary" data-member-copy hidden>
-                                    <p class="member-summary-age" id="memberSummaryAge" hidden></p>
-                                    <p class="member-summary-email" id="memberSummaryEmail"></p>
-                                    <button type="button" class="member-summary-edit" data-action="edit-handoff-member" data-i18n-key="form.member.edit">Ret</button>
-                                </div>
+                                <button type="button" id="addAnotherMember" class="existing-member-option existing-member-add" data-action="add-another-member" hidden>
+                                    <span class="existing-member-avatar existing-member-avatar-add" aria-hidden="true">+</span>
+                                    <span class="existing-member-name" data-i18n-key="form.member.addAnother">Tilføj et andet barn</span>
+                                </button>
                                 <div class="registration-form">
                                     <div id="memberNewFields">
+                                    <div class="member-new-header" id="memberNewChrome">
+                                        <h4 class="member-new-title" id="memberNewTitle" data-i18n-key="form.member.newChild">Nyt barn</h4>
+                                        <button type="button" class="member-new-cancel" id="cancelAddMember" data-action="cancel-add-member" data-i18n-key="button.cancel" hidden>Annuller</button>
+                                    </div>
                                     <div class="form-row">
                                         <div class="form-group">
                                             <label for="memberFirstName" data-i18n-key="form.firstName">First name*</label>
@@ -1037,6 +1047,7 @@
                                         </label>
                                         <div class="error-message" id="memberGuardianConsentError"></div>
                                     </div>
+                                    <button type="button" class="existing-member-option member-add-child" id="addChildButton" data-action="add-child" data-i18n-key="form.member.addChild">Tilføj barn</button>
                                     </div>
                                     <div class="form-group" id="juniorFormActions"></div>
                                 </div>
