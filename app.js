@@ -6124,6 +6124,7 @@ const state = {
   ageAvoidParentalConsent: null,
   studentYouthProductIds: [],
   memberCheckoutBlocked: false,
+  orderAlignFailed: false,
   lastReferralLinkGeneratedEventKey: null,
   checkoutConfirmAccepted: false,
   checkoutConfirmPreviousFocus: null,
@@ -7837,6 +7838,8 @@ const translations = {
     'form.member.alreadyHas': 'Har allerede {product}',
     'form.member.membershipUnknown': 'Medlemskab kunne ikke tjekkes',
     'form.member.pickWithoutMembership': 'Vælg et barn uden medlemskab, eller tilføj et nyt.',
+    'form.member.orderMoveFailed': 'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
+    'form.member.orderRestarted': 'Ordren starter forfra, fordi barnet blev skiftet.',
     'form.member.continue': 'Fortsæt',
     'form.member.newChild': 'Nyt barn',
     'form.member.addChild': 'Tilføj barn',
@@ -8291,6 +8294,8 @@ const translations = {
     'form.member.alreadyHas': 'Already has {product}',
     'form.member.membershipUnknown': 'Membership could not be checked',
     'form.member.pickWithoutMembership': 'Choose a child without a membership, or add a new one.',
+    'form.member.orderMoveFailed': 'The membership could not be moved to the selected child. Try again.',
+    'form.member.orderRestarted': 'The order is starting over because the child changed.',
     'form.member.continue': 'Continue',
     'form.member.newChild': 'New child',
     'form.member.addChild': 'Add child',
@@ -8727,6 +8732,8 @@ const translations = {
     'form.member.alreadyHas': 'Hat bereits {product}',
     'form.member.membershipUnknown': 'Mitgliedschaft konnte nicht geprüft werden',
     'form.member.pickWithoutMembership': 'Wähle ein Kind ohne Mitgliedschaft, oder füge ein neues hinzu.',
+    'form.member.orderMoveFailed': 'Die Mitgliedschaft konnte nicht auf das gewählte Kind übertragen werden. Versuch es erneut.',
+    'form.member.orderRestarted': 'Die Bestellung startet neu, weil das Kind gewechselt wurde.',
     'form.member.continue': 'Weiter',
     'form.member.newChild': 'Neues Kind',
     'form.member.addChild': 'Kind hinzufügen',
@@ -19648,7 +19655,7 @@ function clearStoredJuniorMember() {
   hideMemberSavedMark();
   state.existingMembersLoadedFor = null;
   state.payerSubscriptions = [];
-  state.payerSubscriptionsKnown = true;
+  state.payerSubscriptionsKnown = false;
   document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
   try {
     sessionStorage.removeItem(CHECKOUT_MEMBER_STORAGE_KEY);
@@ -19875,15 +19882,18 @@ async function resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey) {
   return id;
 }
 
-// The name catalogue is empty on this tenant. Scan subscription price lists until
-// BRP says the type id does not exist. One list is used when it contains the
-// selected product. Several lists resolve only when the product sits on exactly one.
+// The name catalogue is empty on this tenant. Scan subscription price lists.
+// A missing id is a gap, not the end of the catalogue: keep going so a later
+// type that lists the selected product is still found. Stop after several
+// misses in a row. One list is used when it contains the selected product.
+// Several lists resolve only when the product sits on exactly one.
 async function loadPricedCustomerTypes(businessUnitId) {
   const unitId = Number(businessUnitId);
   if (state.pricedCustomerTypesBusinessUnit === unitId && Array.isArray(state.pricedCustomerTypes)) {
     return state.pricedCustomerTypes;
   }
   const priced = [];
+  let consecutiveMisses = 0;
   for (let typeId = 1; typeId <= 30; typeId += 1) {
     const url = buildApiUrl({
       baseUrl: authAPI.baseUrl,
@@ -19894,9 +19904,14 @@ async function loadPricedCustomerTypes(businessUnitId) {
     try {
       data = await requestJson({ url, headers: bearerHeaders() });
     } catch (error) {
-      if (error?.status === 403 || error?.status === 400) break;
+      if (error?.status === 403 || error?.status === 400) {
+        consecutiveMisses += 1;
+        if (consecutiveMisses >= 5) break;
+        continue;
+      }
       throw error;
     }
+    consecutiveMisses = 0;
     const products = Array.isArray(data) ? data : [];
     const productIds = [];
     products.forEach((item) => {
@@ -20005,9 +20020,6 @@ async function ensureMemberCustomerOnce() {
     state.orderMemberKey = key;
     clearMemberBlock();
     return stored.memberId;
-  }
-  if (stored && stored.memberKey && stored.memberKey !== key) {
-    dropOrderForMemberChange();
   }
 
   if (state.pickedMemberId != null && Number(state.pickedMemberId) !== PENDING_MEMBER_ID) {
@@ -20642,15 +20654,6 @@ function firstSelectableMember(people) {
   return (people || []).find((person) => !memberBlockingMembership(person)) || null;
 }
 
-function applyPickedMember(person) {
-  state.pickedMemberId = Number(person.id);
-  state.pickedMemberFirstName = person.firstName || null;
-  state.pickedMemberLastName = person.lastName || null;
-  state.memberBirthDate = person.birthDate || null;
-  const birthField = document.getElementById('memberDateOfBirth');
-  if (birthField) birthField.value = person.birthDate || '';
-}
-
 function renderExistingMembers(users) {
   const list = document.getElementById('existingMemberList');
   const addButton = document.getElementById('addAnotherMember');
@@ -20701,15 +20704,6 @@ function renderExistingMembers(users) {
         if (birthField) birthField.value = '';
       }
     }
-  }
-  if (
-    picker
-    && people.length
-    && state.addingMember !== true
-    && state.pickedMemberId == null
-  ) {
-    const first = firstSelectableMember(people);
-    if (first) applyPickedMember(first);
   }
   list.replaceChildren();
   const currentId = currentMemberId();
@@ -20887,11 +20881,6 @@ function cancelAddMember() {
   state.addingMember = false;
   clearMemberFieldErrors();
   if (restore?.id != null && pickExistingMember(restore.id, restore.birthDate || '', restore.firstName || '', restore.lastName || '')) {
-    return;
-  }
-  const first = firstSelectableMember(state.existingMembers);
-  if (first) {
-    pickExistingMember(first.id, first.birthDate || '', first.firstName || '', first.lastName || '');
     return;
   }
   if (!(state.existingMembers || []).length) state.addingMember = true;
@@ -21372,7 +21361,6 @@ function orderEchoesOtherPayer(order) {
 
 async function retargetStoredOrder(memberId, memberKeyValue) {
   if (!state.orderId || memberId == null || Number(memberId) === PENDING_MEMBER_ID) return false;
-  if (state.subscriptionAttachedOrderId === state.orderId) return false;
   try {
     const updated = await orderAPI.updateOrder(state.orderId, buildOrderIdentity({
       payerId: Number(state.customerId),
@@ -21407,11 +21395,18 @@ async function ensureOrderCreated(context = 'auto') {
     if (!memberId) return null;
     const key = currentMemberKey();
     if (state.orderId && (state.orderIsOtherPayer !== true || state.orderMemberKey !== key)) {
+      const hadSubscription = state.subscriptionAttachedOrderId === state.orderId;
       const moved = await retargetStoredOrder(memberId, key);
       if (!moved) {
         dropOrderForMemberChange();
         state.subscriptionUserId = memberId;
         state.orderMemberKey = key;
+        if (hadSubscription) {
+          showToast(t(
+            'form.member.orderRestarted',
+            'Ordren starter forfra, fordi barnet blev skiftet.',
+          ), 'info');
+        }
       }
     }
   }
@@ -21462,12 +21457,19 @@ async function ensureOrderCreated(context = 'auto') {
       state.orderMemberKey = memberKeyAtCreate;
       state.subscriptionAttachedOrderId = null;
       persistOrderSnapshot(createdId);
-      const liveId = Number(state.pickedMemberId);
-      const moved = Number.isFinite(liveId) && liveId !== PENDING_MEMBER_ID
-        ? await retargetStoredOrder(liveId, currentMemberKey())
+      let liveId = null;
+      try {
+        liveId = await ensureMemberCustomer();
+      } catch (error) {
+        devWarn('[checkout] Could not finish the order for the selected child:', error);
+      }
+      const liveMemberId = liveId == null || liveId === '' ? NaN : Number(liveId);
+      const moved = Number.isFinite(liveMemberId) && liveMemberId !== PENDING_MEMBER_ID
+        ? await retargetStoredOrder(liveMemberId, currentMemberKey())
         : false;
       if (!moved) {
         devWarn('[checkout] Member changed while the order was created:', createdId);
+        if (!state.memberCheckoutBlocked) state.orderAlignFailed = true;
         return null;
       }
     }
@@ -22276,8 +22278,19 @@ async function handleCheckout() {
           state.checkoutInProgress = false;
           return;
         }
+        if (state.orderAlignFailed) {
+          state.orderAlignFailed = false;
+          showToast(t(
+            'form.member.orderMoveFailed',
+            'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
+          ), 'error');
+          setCheckoutLoadingState(false);
+          state.checkoutInProgress = false;
+          return;
+        }
         throw new Error('Order ID missing after ensureOrderCreated');
       }
+      state.orderAlignFailed = false;
       state.orderId = ensuredOrderId;
       
       persistOrderSnapshot(state.orderId);

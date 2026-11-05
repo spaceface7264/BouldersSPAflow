@@ -90,7 +90,8 @@ export function membershipAgeRoute({ buyerAge, productKind: kind }) {
 /**
  * Pick a customer type from price-list probes when the name catalogue is empty.
  * One priced type is used when it lists the product, lists no products, or the product id is unknown.
- * A known product that is not on that type does not match.
+ * A known product that is not on that type does not match. The probe has to keep
+ * scanning past gaps so the type that actually lists the product can still be found.
  * Several priced types resolve only when the product sits on exactly one of them.
  */
 export function choosePricedCustomerType(pricedTypes, productId) {
