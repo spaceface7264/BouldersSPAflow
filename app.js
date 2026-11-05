@@ -76,7 +76,9 @@ function capturePostHog(event, properties = {}) {
 
 const posthogCheckoutLogger = {
   info(message, attributes) {
-    if (isPostHogEnabled) posthog.logger.info(message, attributes);
+    if (isPostHogEnabled && typeof posthog.logger?.info === 'function') {
+      posthog.logger.info(message, attributes);
+    }
   },
 };
 
@@ -6108,6 +6110,7 @@ const state = {
   existingMemberCount: 0,
   payerSubscriptions: [],
   payerSubscriptionsKnown: true,
+  existingMembersSettled: false,
   addingMember: false,
   memberPickBeforeAdd: null,
   editingHandoffMember: false,
@@ -6137,6 +6140,7 @@ const state = {
 };
 
 let orderCreationPromise = null;
+let parkedMisalignedOrderId = null;
 let subscriptionAttachPromise = null;
 let productsLoadPromise = null;
 let tokenValidationCooldownUntil = 0;
@@ -16941,6 +16945,24 @@ async function handleApplyDiscount() {
   try {
     const orderAPI = new OrderAPI();
 
+    if (otherPayerMode()) {
+      const alignedId = await ensureOrderCreated('discount-application');
+      if (!alignedId) {
+        if (state.orderAlignFailed) {
+          showDiscountError(t(
+            'form.member.orderMoveFailed',
+            'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
+          ));
+        }
+        state.orderAlignFailed = false;
+        state.memberCheckoutBlocked = false;
+        endApplyDiscountLoading();
+        return;
+      }
+      orderIdToUse = alignedId;
+      state.orderId = alignedId;
+    }
+
     // Ensure the order has the selected items before applying coupon
     if (!state.customerId) {
       throw new Error('Please log in or create an account to apply a discount');
@@ -16956,6 +16978,7 @@ async function handleApplyDiscount() {
           console.warn('[Discount] Existing order is not accessible. Creating a new order.');
           state.orderId = null;
           state.subscriptionAttachedOrderId = null;
+          parkedMisalignedOrderId = null;
           await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
           if (blockMembershipAgeGate('checkout')) {
             endApplyDiscountLoading();
@@ -19656,6 +19679,7 @@ function clearStoredJuniorMember() {
   state.existingMembersLoadedFor = null;
   state.payerSubscriptions = [];
   state.payerSubscriptionsKnown = false;
+  state.existingMembersSettled = false;
   document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
   try {
     sessionStorage.removeItem(CHECKOUT_MEMBER_STORAGE_KEY);
@@ -19974,6 +19998,7 @@ function otherPayerMode() {
 }
 
 function dropOrderForMemberChange() {
+  parkedMisalignedOrderId = null;
   state.subscriptionUserId = null;
   state.orderId = null;
   state.subscriptionAttachedOrderId = null;
@@ -19981,6 +20006,50 @@ function dropOrderForMemberChange() {
   state.orderMemberKey = null;
   state.fullOrder = null;
   state.order = null;
+}
+
+function releaseOrderForMember(memberId) {
+  if (memberId == null || !state.orderId) return;
+  const key = memberKey({ memberId: Number(memberId) });
+  const ownsOrder = String(state.subscriptionUserId) === String(memberId) || state.orderMemberKey === key;
+  if (ownsOrder) dropOrderForMemberChange();
+}
+
+let memberOrderAlignQueue = Promise.resolve();
+
+function alignStoredOrderToPickedMember() {
+  const memberId = Number(state.pickedMemberId);
+  if (!state.orderId || !Number.isFinite(memberId) || memberId === PENDING_MEMBER_ID) return;
+  memberOrderAlignQueue = memberOrderAlignQueue.then(() => moveStoredOrderToMember(memberId)).catch((error) => {
+    devWarn('[checkout] Could not move the order after the child changed:', error);
+  });
+}
+
+async function moveStoredOrderToMember(memberId) {
+  if (!state.orderId || Number(state.pickedMemberId) !== Number(memberId)) return;
+  const key = currentMemberKey();
+  if (state.orderIsOtherPayer === true && state.orderMemberKey === key) {
+    state.subscriptionUserId = Number(memberId);
+    if (state.currentStep === 4) updatePaymentOverview();
+    return;
+  }
+  const hadSubscription = state.subscriptionAttachedOrderId === state.orderId;
+  const orderId = state.orderId;
+  const moved = await retargetStoredOrder(memberId, key);
+  if (Number(state.pickedMemberId) !== Number(memberId)) return;
+  if (String(state.orderId) !== String(orderId)) return;
+  if (!moved) {
+    dropOrderForMemberChange();
+    state.subscriptionUserId = Number(memberId);
+    state.orderMemberKey = key;
+    if (hadSubscription) {
+      showToast(t(
+        'form.member.orderRestarted',
+        'Ordren starter forfra, fordi barnet blev skiftet.',
+      ), 'info');
+    }
+  }
+  if (state.currentStep === 4) updatePaymentOverview();
 }
 
 let memberEnsureInflight = null;
@@ -20650,10 +20719,6 @@ function memberBlockingMembership(person) {
   return null;
 }
 
-function firstSelectableMember(people) {
-  return (people || []).find((person) => !memberBlockingMembership(person)) || null;
-}
-
 function renderExistingMembers(users) {
   const list = document.getElementById('existingMemberList');
   const addButton = document.getElementById('addAnotherMember');
@@ -20681,24 +20746,18 @@ function renderExistingMembers(users) {
   state.existingMemberCount = people.length;
   const picker = juniorPickerActive();
   const draftStarted = memberDraftHasValue();
-  if (!people.length) {
-    if (picker && !draftStarted) state.addingMember = true;
-  } else if (
-    picker
-    && state.addingMember
-    && !draftStarted
-    && !state.memberPickBeforeAdd
-    && firstSelectableMember(people)
-  ) {
-    state.addingMember = false;
+  if (!people.length && picker && !draftStarted && state.existingMembersSettled) {
+    state.addingMember = true;
   }
   if (picker && state.pickedMemberId != null) {
     const picked = people.find((person) => String(person.id) === String(state.pickedMemberId));
     if (!picked || memberBlockingMembership(picked)) {
+      const blockedId = state.pickedMemberId;
       state.pickedMemberId = null;
       state.pickedMemberFirstName = null;
       state.pickedMemberLastName = null;
       state.memberBirthDate = null;
+      releaseOrderForMember(blockedId);
       if (state.addingMember !== true) {
         const birthField = document.getElementById('memberDateOfBirth');
         if (birthField) birthField.value = '';
@@ -20821,11 +20880,13 @@ async function loadExistingMembersOnce(payerId) {
     state.payerSubscriptions = subscriptions;
     state.payerSubscriptionsKnown = subscriptionsKnown;
     state.existingMembersLoadedFor = payerId;
+    state.existingMembersSettled = true;
     renderExistingMembers(users);
   } catch (error) {
     devWarn('[member] Could not list existing members:', error);
     state.payerSubscriptions = [];
     state.payerSubscriptionsKnown = false;
+    state.existingMembersSettled = true;
     renderExistingMembers([]);
   }
 }
@@ -20845,6 +20906,7 @@ function pickExistingMember(memberId, birthDate, firstName, lastName) {
   clearMemberFieldErrors();
   renderExistingMembers(state.existingMembers);
   refreshMemberCopy();
+  alignStoredOrderToPickedMember();
   return true;
 }
 
@@ -21361,13 +21423,15 @@ function orderEchoesOtherPayer(order) {
 
 async function retargetStoredOrder(memberId, memberKeyValue) {
   if (!state.orderId || memberId == null || Number(memberId) === PENDING_MEMBER_ID) return false;
+  const orderId = state.orderId;
   try {
-    const updated = await orderAPI.updateOrder(state.orderId, buildOrderIdentity({
+    const updated = await orderAPI.updateOrder(orderId, buildOrderIdentity({
       payerId: Number(state.customerId),
       businessUnit: state.selectedBusinessUnit,
       memberId: Number(memberId),
       forOther: true,
     }));
+    if (String(state.orderId) !== String(orderId)) return false;
     state.orderIsOtherPayer = true;
     state.orderMemberKey = memberKeyValue;
     state.subscriptionUserId = Number(memberId);
@@ -21382,6 +21446,10 @@ async function retargetStoredOrder(memberId, memberKeyValue) {
 
 async function ensureOrderCreated(context = 'auto') {
   const mode = otherPayerMode();
+  if (mode && !state.orderId && parkedMisalignedOrderId != null) {
+    state.orderId = parkedMisalignedOrderId;
+    parkedMisalignedOrderId = null;
+  }
   if (mode) {
     let memberId;
     try {
@@ -21469,6 +21537,11 @@ async function ensureOrderCreated(context = 'auto') {
         : false;
       if (!moved) {
         devWarn('[checkout] Member changed while the order was created:', createdId);
+        parkedMisalignedOrderId = createdId;
+        state.orderId = null;
+        state.fullOrder = null;
+        state.order = null;
+        state.subscriptionAttachedOrderId = null;
         if (!state.memberCheckoutBlocked) state.orderAlignFailed = true;
         return null;
       }
