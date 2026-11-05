@@ -87,6 +87,61 @@ export function membershipAgeRoute({ buyerAge, productKind: kind }) {
   return { action: 'continue' };
 }
 
+/**
+ * Pick a customer type from price-list probes when the name catalogue is empty.
+ * One priced type is used when it lists the product, lists no products, or the product id is unknown.
+ * A known product that is not on that type does not match. The probe has to keep
+ * scanning past gaps so the type that actually lists the product can still be found.
+ * When several types list the product, use the narrowest list. A catch-all list that
+ * also contains every product on a smaller list loses to that smaller list. Identical
+ * lists use the lowest id. Different lists of the same size stay unresolved.
+ */
+function listedProductIds(type) {
+  return new Set(
+    (Array.isArray(type?.productIds) ? type.productIds : [])
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id)),
+  );
+}
+
+export function choosePricedCustomerType(pricedTypes, productId) {
+  const priced = (Array.isArray(pricedTypes) ? pricedTypes : []).filter((type) =>
+    Number.isFinite(Number(type?.id)),
+  );
+  if (priced.length === 0) return null;
+  const product = productId == null || productId === '' ? NaN : Number(productId);
+  if (!Number.isFinite(product)) {
+    return priced.length === 1 ? Number(priced[0].id) : null;
+  }
+  const matches = priced.filter((type) => listedProductIds(type).has(product));
+  if (matches.length === 0) {
+    if (priced.length === 1 && listedProductIds(priced[0]).size === 0) return Number(priced[0].id);
+    return null;
+  }
+  if (matches.length === 1) return Number(matches[0].id);
+
+  const sets = matches.map((type) => listedProductIds(type));
+  const specific = matches.filter((type, index) => {
+    const mine = sets[index];
+    return !sets.some((other, otherIndex) => {
+      if (otherIndex === index || other.size >= mine.size) return false;
+      for (const id of other) {
+        if (!mine.has(id)) return false;
+      }
+      return true;
+    });
+  });
+  const pool = specific.length > 0 ? specific : matches;
+  const smallest = Math.min(...pool.map((type) => listedProductIds(type).size));
+  const narrow = pool.filter((type) => listedProductIds(type).size === smallest);
+  if (narrow.length === 1) return Number(narrow[0].id);
+  const signatures = narrow.map((type) => [...listedProductIds(type)].sort((a, b) => a - b).join(','));
+  if (new Set(signatures).size === 1) {
+    return Math.min(...narrow.map((type) => Number(type.id)));
+  }
+  return null;
+}
+
 export function buildOtherUserBody({
   member,
   businessUnit,

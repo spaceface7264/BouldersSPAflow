@@ -1,0 +1,12 @@
+---
+description: Boost upsell modal is temporarily off. Flip BOOST_MODAL_ENABLED in app.js to turn it back on.
+alwaysApply: true
+---
+
+# Boost modal kill switch
+
+The boost upsell modal is temporarily disabled. Leave it off until someone asks to turn it back on.
+
+To re-enable: in `app.js`, change `const BOOST_MODAL_ENABLED = false` to `true`. The constant sits next to `BOOST_MODAL_OPEN_DELAY_MS`. It gates `showBoostModal`, `prewarmBoostModalResources`, and `hasBoostLabel`. While it is false, choosing a plan with a `boost` or `boostCampaign` label skips the modal and continues to the next step.
+
+After turning it on, select a membership that still has the boost label (for example Student & Youth Medlemskab, product 539, business unit 13). The boost modal should open instead of auto-advancing to checkout.

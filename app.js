@@ -62,10 +62,28 @@ import {
   membershipAgeRoute,
   buildOtherUserBody,
   buildOrderIdentity,
+  choosePricedCustomerType,
   memberKey,
 } from './utils/registrationIdentity.js';
+import { memberAgeStatus, possessive } from './utils/memberCopy.js';
 import { sanitizeHTML } from './sanitize.js';
 import confetti from 'canvas-confetti';
+import posthog, { isPostHogEnabled } from './posthog.js';
+
+function capturePostHog(event, properties = {}) {
+  if (isPostHogEnabled) posthog.capture(event, properties);
+}
+
+const posthogCheckoutLogger = {
+  info(message, attributes) {
+    if (isPostHogEnabled && typeof posthog.logger?.info === 'function') {
+      posthog.logger.info(message, attributes);
+    }
+  },
+};
+
+const posthogCapturedPurchaseOrderIds = new Set();
+let posthogIdentifiedCustomerId = null;
 
 /** GoActive / BRP app id for Boulders. Required so reset emails link to boulders.goactivebooking.com/resetPassword. */
 const BOULDERS_GOACTIVE_APP_ID = 416;
@@ -547,9 +565,55 @@ const NON_INDEXABLE_PATHS = Object.freeze(new Set([
   '/freetrial',
   '/membership-offer',
   '/99kr',
+  '/fitness',
+  '/single-gym',
+  '/singlegym',
+  '/single-gym-student-youth',
+  '/singlegym-student-youth',
   '/reset-password',
   '/resetpassword',
 ]));
+
+// Fitness, Single Gym, and Student & Youth Single Gym exist only at Boulders Aalborg (BRP business unit 13).
+const AALBORG_BUSINESS_UNIT_ID = '13';
+const AALBORG_GYM_NAME = 'Boulders Aalborg';
+const AALBORG_MEMBERSHIP_DEEPLINKS = Object.freeze([
+  Object.freeze({
+    id: 'fitness',
+    paths: Object.freeze(['/fitness']),
+    typeToken: 'fitness',
+    matchesProduct: (product) => isFitnessMembership(product),
+    logLabel: 'Fitness',
+    unavailable: Object.freeze({
+      en: 'Fitness membership could not be loaded. Choose it under Membership.',
+      da: 'Fitness Medlemskab kunne ikke indlæses. Vælg det under Medlemskab.',
+    }),
+  }),
+  Object.freeze({
+    id: 'singlegym',
+    paths: Object.freeze(['/single-gym', '/singlegym']),
+    typeToken: 'singlegym',
+    matchesProduct: (product) => isSingleGymMembership(product)
+      && !isFitnessMembership(product)
+      && !isStudentYouthSingleGymMembership(product),
+    logLabel: 'Single Gym',
+    unavailable: Object.freeze({
+      en: 'Single Gym membership could not be loaded. Choose it under Membership.',
+      da: 'Single Gym medlemskab kunne ikke indlæses. Vælg det under Medlemskab.',
+    }),
+  }),
+  Object.freeze({
+    id: 'singlegymstudentyouth',
+    paths: Object.freeze(['/single-gym-student-youth', '/singlegym-student-youth']),
+    typeToken: 'singlegymstudentyouth',
+    matchesProduct: (product) => isStudentYouthSingleGymMembership(product),
+    logLabel: 'Student & Youth Single Gym',
+    unavailable: Object.freeze({
+      en: 'Student & Youth Single Gym membership could not be loaded. Choose it under Membership.',
+      da: 'Student & Youth Single Gym medlemskab kunne ikke indlæses. Vælg det under Medlemskab.',
+    }),
+  }),
+]);
 
 function normalizePathname(pathname) {
   const raw = String(pathname || '/').trim().toLowerCase();
@@ -1064,6 +1128,131 @@ async function advanceFirstClimbFromGym() {
   setTimeout(() => scrollToTop(), 200);
 }
 
+// Deeplink straight into the cart with Aalborg and one membership already chosen.
+// /fitness                          /?location=aalborg&type=fitness
+// /single-gym                       /?location=aalborg&type=single-gym
+// /single-gym-student-youth         /?location=aalborg&type=single-gym-student-youth
+function compactDeeplinkToken(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function resolveAalborgMembershipDeeplink(pathname = window.location.pathname, search = window.location.search) {
+  const path = normalizePathname(pathname);
+  const byPath = AALBORG_MEMBERSHIP_DEEPLINKS.find((entry) => entry.paths.includes(path));
+  if (byPath) return byPath;
+  try {
+    const params = new URLSearchParams(search);
+    const location = compactDeeplinkToken(params.get('location') || params.get('gym'));
+    const type = compactDeeplinkToken(params.get('type'));
+    const locationMatch = location === 'aalborg' || location === AALBORG_BUSINESS_UNIT_ID;
+    if (!locationMatch || !type) return null;
+    return AALBORG_MEMBERSHIP_DEEPLINKS.find((entry) => entry.typeToken === type) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function findDeeplinkMembershipProduct(entry) {
+  const pools = [
+    ...(state.subscriptions || []),
+    ...(state.campaignSubscriptions || []),
+    ...(state.allRawProducts || []),
+  ];
+  return pools.find((product) => entry.matchesProduct(product)) || null;
+}
+
+function highlightSelectedGymItem() {
+  if (state.selectedBusinessUnit == null) return;
+  const id = String(state.selectedBusinessUnit);
+  document.querySelectorAll('.gym-item').forEach((item) => {
+    const gymId = String(item.getAttribute('data-gym-id') || '').replace(/^gym-/, '');
+    item.classList.toggle('selected', gymId === id);
+  });
+}
+
+function markMembershipPlanSelected(productId) {
+  const category = document.querySelector('.category-item[data-category="membership"]');
+  if (category) category.classList.add('expanded', 'selected');
+  const card = document.querySelector(`.plan-card[data-product-id="${CSS.escape(String(productId))}"]`);
+  if (!card) return;
+  card.closest('.category-item')?.querySelectorAll('.plan-card').forEach((other) => {
+    other.classList.toggle('selected', other === card);
+  });
+}
+
+function parkAalborgCartStep() {
+  state.selectedGymId = AALBORG_BUSINESS_UNIT_ID;
+  state.selectedBusinessUnit = AALBORG_BUSINESS_UNIT_ID;
+  state.selectedGymName = AALBORG_GYM_NAME;
+  state.currentStep = 4;
+  showStep(4);
+  updateStepIndicator();
+  updateNavigationButtons();
+  updateMainSubtitle();
+}
+
+async function applyAalborgMembershipDeeplink() {
+  if (state.isPaymentReturnFlow || isPaymentReturnPage()) return;
+  const entry = resolveAalborgMembershipDeeplink();
+  if (!entry) return;
+  if (state.membershipDeeplinkApplied) return;
+  state.membershipDeeplinkApplied = true;
+
+  // Keep the loading overlay up until the product is actually in the cart,
+  // so the gym step and an empty cart never flash.
+  holdLoadingOverlayForPaymentReturn();
+  parkAalborgCartStep();
+  highlightSelectedGymItem();
+  try { loadReferenceData(); } catch (_) {}
+
+  let product = null;
+  try {
+    await loadProductsFromAPI();
+    product = findDeeplinkMembershipProduct(entry);
+  } catch (error) {
+    devWarn(`[${entry.logLabel} deeplink] product load failed`, error);
+  }
+
+  try {
+    if (!product) {
+      devWarn(`[${entry.logLabel} deeplink] product not in the Aalborg catalog`);
+      state.currentStep = 2;
+      showStep(2);
+      updateStepIndicator();
+      updateNavigationButtons();
+      updateMainSubtitle();
+      try { updateSelectedGymDisplay(); } catch (_) {}
+      const category = document.querySelector('.category-item[data-category="membership"]');
+      if (category) category.classList.add('expanded', 'selected');
+      const unavailable = state.language === 'en' ? entry.unavailable.en : entry.unavailable.da;
+      showToast(unavailable, 'error');
+      return;
+    }
+
+    state.membershipPlanId = `membership-${product.id}`;
+    state.selectedProductId = product.id;
+    state.selectedProductType = 'membership';
+    markMembershipPlanSelected(product.id);
+    try { loadSubscriptionAdditions(product.id); } catch (_) {}
+    trackSelectItemEvent({
+      product,
+      productId: product.id,
+      category: 'membership',
+      type: 'membership',
+    });
+    updateCartSummary();
+    applyConditionalSteps();
+    updateFAQVisibility();
+    try { renderFAQ(); } catch (_) {}
+    if (isUserAuthenticated()) {
+      try { switchAuthMode('login'); } catch (_) {}
+    }
+    devLog(`[${entry.logLabel} deeplink] cart ready`, { productId: product.id, name: product.name });
+  } finally {
+    releasePaymentReturnOverlay();
+  }
+}
+
 // firstclimb is a one-per-customer offer. Block only when we have positive
 // evidence of a prior purchase; never block on API/profile gaps.
 function blockFirstClimbExistingCustomer({ email, source } = {}) {
@@ -1192,6 +1381,14 @@ const REQUIRED_FIELDS = [
 ];
 
 const PARENT_REQUIRED_FIELDS = [
+  'memberGuardianConsent',
+];
+
+const MEMBER_ERROR_FIELDS = [
+  'memberFirstName',
+  'memberLastName',
+  'memberDateOfBirth',
+  'memberEmail',
   'memberGuardianConsent',
 ];
 
@@ -2615,6 +2812,11 @@ class AuthAPI {
     }
 
     clearCookie();
+
+    if (isPostHogEnabled) {
+      posthog.reset();
+      posthogIdentifiedCustomerId = null;
+    }
     
     // Update header auth indicator when tokens are cleared
     refreshHeaderAuthIndicator();
@@ -5144,6 +5346,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
       });
       setupGymEventListeners();
+      highlightSelectedGymItem();
     }
     return;
   }
@@ -5355,6 +5558,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
     
     // Re-setup event listeners for new gym items
     setupGymEventListeners();
+    highlightSelectedGymItem();
     
     // Re-render FAQ when on step 1 so opening hours table uses API gym list (and API opening hours if present)
     if (state.currentStep === 1) {
@@ -5383,6 +5587,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (gym.name && gym.address) gymList.appendChild(createGymItem(gym, false));
       });
       setupGymEventListeners();
+      highlightSelectedGymItem();
       if (noResults) noResults.classList.add('hidden');
       scheduleGymListRecovery(error);
       return;
@@ -5838,6 +6043,7 @@ const state = {
   selectedBusinessUnit: null, // Step 3: Store chosen business unit for API requests
   selectedGymName: null, // Store selected gym name for display
   landingRouteConfig: null, // Active landing route config for path-specific product surfacing
+  membershipDeeplinkApplied: false, // /fitness or /single-gym cart deeplink already ran
   landingMatchedProducts: [], // Products matched by active landing route label
   firstclimbGuardPromise: null, // Resolves when /99kr eligibility check completes (blocks navigation until done)
   isPaymentReturnFlow: false, // True when this page load is a return from the payment provider / success render — skips only the automatic /99kr eligibility check on load (the just-bought product would otherwise misfire the blocker on the confirmation page). Checkout-time guards are unaffected.
@@ -5898,15 +6104,30 @@ const state = {
   orderIsOtherPayer: null,
   orderMemberKey: null,
   pickedMemberId: null,
+  pickedMemberFirstName: null,
+  pickedMemberLastName: null,
+  existingMembers: [],
+  existingMemberCount: 0,
+  payerSubscriptions: [],
+  payerSubscriptionsKnown: true,
+  existingMembersSettled: false,
+  addingMember: false,
+  memberPickBeforeAdd: null,
+  editingHandoffMember: false,
+  savedMemberCollapsed: false,
+  editingSavedMember: false,
   memberBirthDate: null,
   guardianHandoffActive: false,
   juniorCustomerTypeId: null,
   studentYouthCustomerTypeId: null,
+  pricedCustomerTypes: null,
+  pricedCustomerTypesBusinessUnit: null,
   businessUnitSettings: null,
   businessUnitSettingsId: null,
   ageAvoidParentalConsent: null,
   studentYouthProductIds: [],
   memberCheckoutBlocked: false,
+  orderAlignFailed: false,
   lastReferralLinkGeneratedEventKey: null,
   checkoutConfirmAccepted: false,
   checkoutConfirmPreviousFocus: null,
@@ -5915,9 +6136,11 @@ const state = {
   testMode: false, // Flag to enable test mode for success page (?testSuccess=true)
   testProductType: null, // Product type for test mode (membership, 15daypass, punch-card)
   testFitnessMembership: false, // Fitness Membership success-page preview (?testProductType=fitness)
+  testSingleGymMembership: false, // Single Gym success-page preview (?testProductType=singlegym)
 };
 
 let orderCreationPromise = null;
+let parkedMisalignedOrderId = null;
 let subscriptionAttachPromise = null;
 let productsLoadPromise = null;
 let tokenValidationCooldownUntil = 0;
@@ -6028,6 +6251,22 @@ function isLocalDevHost() {
   return host === 'localhost' || host === '127.0.0.1';
 }
 
+function identifyAuthenticatedCustomer() {
+  if (!isPostHogEnabled || !state.customerId || !isUserAuthenticated()) return;
+
+  const customerId = String(state.customerId);
+  if (posthogIdentifiedCustomerId === customerId) return;
+
+  // A second authenticated account in the same tab must not inherit the first account's analytics state.
+  if (posthogIdentifiedCustomerId && posthogIdentifiedCustomerId !== customerId) {
+    posthog.reset();
+  }
+
+  const email = state.authenticatedCustomer?.email || state.authenticatedEmail;
+  posthog.identify(customerId, email ? { email } : undefined);
+  posthogIdentifiedCustomerId = customerId;
+}
+
 async function syncAuthenticatedCustomerState(username = null, email = null) {
   const metadata = getTokenMetadata();
   const resolvedUsername = username || state.customerId || metadata?.username || metadata?.userName;
@@ -6050,6 +6289,7 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
       const secondsLeft = Math.ceil((customerSyncCooldownUntil - now) / 1000);
       console.log(`[Auth] Skipping customer profile refresh (cooldown ${secondsLeft}s remaining)`);
       refreshLoginUI();
+      identifyAuthenticatedCustomer();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('auth-state-changed'));
       }
@@ -6081,6 +6321,8 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
   } else {
     refreshLoginUI();
   }
+
+  identifyAuthenticatedCustomer();
   
   // Dispatch event to notify React components of auth state change
   if (typeof window !== 'undefined') {
@@ -6918,8 +7160,12 @@ function populateBoostModal() {
 
 const BOOST_MODAL_OPEN_DELAY_MS = 50;
 
+// Temporary kill switch. Set to true to offer the boost upsell modal again.
+const BOOST_MODAL_ENABLED = false;
+
 // Show boost modal (uses same modal infrastructure as addons)
 async function showBoostModal(options = {}) {
+  if (!BOOST_MODAL_ENABLED) return;
   ensureAddonsModal();
   
   // Ensure products are loaded first
@@ -6985,6 +7231,7 @@ async function showBoostModal(options = {}) {
 }
 
 function prewarmBoostModalResources() {
+  if (!BOOST_MODAL_ENABLED) return;
   // Precreate modal DOM upfront to avoid first-open construction cost.
   ensureAddonsModal();
 
@@ -7041,6 +7288,7 @@ function resolveSelectedAccessProduct() {
 
 // Check if a product should trigger boost modal ("boost" or "boostCampaign")
 function hasBoostLabel(product) {
+  if (!BOOST_MODAL_ENABLED) return false;
   return hasProductLabel(product, 'boost') || hasProductLabel(product, 'boostcampaign');
 }
 
@@ -7081,6 +7329,18 @@ function isSingleGymMembership(product) {
   return labels.some((label) => compactProductToken(label?.name).includes('singlegym'));
 }
 
+function isStudentYouthSingleGymMembership(product) {
+  if (!isSingleGymMembership(product)) return false;
+  const labels = Array.isArray(product.productLabels) ? product.productLabels : [];
+  const token = compactProductToken([
+    product.name,
+    ...labels.map((label) => label?.name),
+  ].join(' '));
+  const hasStudent = token.includes('student') || token.includes('studie');
+  const hasYouth = token.includes('youth') || token.includes('ungdom');
+  return hasStudent && hasYouth;
+}
+
 function membershipAccessGroup(product) {
   if (isFitnessMembership(product)) return 2;
   if (isSingleGymMembership(product)) return 1;
@@ -7109,6 +7369,7 @@ function isFitnessMembershipSelected() {
 }
 
 function isSingleGymMembershipSelected() {
+  if (state.testSingleGymMembership === true) return true;
   if (isSingleGymMembership(resolveSelectedAccessProduct())) return true;
   if (isSingleGymMembership(state.fullOrder?.subscriptionItems?.[0]?.product)) return true;
   const cartItem = (state.cartItems || []).find((item) => item.type === 'membership');
@@ -7319,6 +7580,10 @@ function init() {
   
   // Load gyms from API
   loadGymsFromAPI();
+
+  // /fitness and /single-gym land in the cart with Aalborg and that membership set.
+  // Runs until its first await before the overlay hide below, so step 1 never paints.
+  applyAalborgMembershipDeeplink();
   
   // Load countries from API and populate country code selectors
   // Use setTimeout to ensure DOM is fully ready
@@ -7558,8 +7823,11 @@ const translations = {
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.buyerRole.title': 'Forælder eller værge',
     'form.buyerRole.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
-    'form.member.title': 'Barnet',
-    'form.member.roleHint': 'Barnets egne oplysninger. Medlemskabet gælder barnet, ikke dig.',
+    'form.payer.title': 'Betalerens oplysninger',
+    'form.payer.hint': 'Du skal være fyldt 18 år. Når kontoen er oprettet, eller du er logget ind, udfylder du barnets oplysninger.',
+    'form.payer.save': 'Opret betalers konto',
+    'form.member.title': 'Hvem skal klatre?',
+    'form.member.roleHint': 'Vælg barnet, medlemskabet skal gælde for.',
     'form.member.consent': 'Jeg er barnets værge og accepterer medlemskabet på barnets vegne.',
     'form.member.required': 'Udfyld barnets navn, fødselsdato og værgesamtykke.',
     'form.member.under16': 'Junior er til børn under 16 år.',
@@ -7568,12 +7836,48 @@ const translations = {
     'form.member.noJuniorType': 'Junior kan ikke oprettes lige nu.',
     'form.member.noYouthType': 'Student- og ungdomsmedlemskabet kan ikke oprettes lige nu.',
     'form.member.createFailed': 'Barnet kunne ikke oprettes. Prøv igen.',
+    'form.member.save': 'Gem',
+    'form.member.saving': 'Gemmer...',
+    'form.member.saved': 'Gemt.',
+    'form.member.savedMark': 'Gemt',
     'form.member.addAnother': 'Tilføj et andet barn',
+    'form.member.onAccount': 'Allerede på din konto',
+    'form.member.alreadyHas': 'Har allerede {product}',
+    'form.member.membershipUnknown': 'Medlemskab kunne ikke tjekkes',
+    'form.member.pickWithoutMembership': 'Vælg et barn uden medlemskab, eller tilføj et nyt.',
+    'form.member.loginFirst': 'Log ind eller opret en konto for betaleren af medlemskabet.',
+    'form.member.waiting': 'Venter på login.',
+    'form.member.orderMoveFailed': 'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
+    'form.member.orderRestarted': 'Ordren starter forfra, fordi barnet blev skiftet.',
+    'form.member.continue': 'Fortsæt',
+    'form.member.newChild': 'Nyt barn',
+    'form.member.addChild': 'Tilføj barn',
+    'form.member.adding': 'Tilføjer...',
+    'form.member.saveChildFirst': 'Gem barnet først',
+    'form.member.onThisOrder': 'På dette medlemskab',
+    'form.member.newOnThisOrder': 'Medlemskabet oprettes til',
+    'form.member.alreadySignedUp': 'Allerede oprettet',
+    'form.member.newBadge': 'Ny',
     'form.member.youthTitle': 'Den unge',
     'form.member.youthAge': 'Værgen kan kun gennemføre for en 16- eller 17-årig.',
     'form.member.email': 'E-mail*',
     'form.member.emailRequired': 'E-mailen skal være den unges egen.',
     'form.member.emailOwn': 'E-mailen skal være den unges egen, ikke værgens.',
+    'form.member.youthHint': 'Medlemskabet gælder den unge.',
+    'form.member.productJunior': 'Junior',
+    'form.member.productYouth': 'Ungdom',
+    'form.member.consentNamed': 'Jeg er {possessive} værge og køber medlemskabet for {name}.',
+    'form.member.continueWith': 'Fortsæt med {name}',
+    'form.member.ageShort': '{age} år',
+    'form.member.ageJuniorOk': '{age} år. Junior passer.',
+    'form.member.ageJuniorBad': '{age} år. Junior er til børn under 16.',
+    'form.member.ageYouthOk': '{age} år. Ungdomsmedlemskabet passer.',
+    'form.member.ageYouthBad': '{age} år. Kun 16 eller 17 år.',
+    'form.member.error.firstName': 'Indtast fornavn.',
+    'form.member.error.lastName': 'Indtast efternavn.',
+    'form.member.error.birthDate': 'Angiv en gyldig fødselsdato.',
+    'form.member.error.consent': 'Bekræft, at du er værge.',
+    'form.member.edit': 'Ret',
     'form.member.ageTooYoung': 'Alderen skal være mindst {age} år.',
     'form.member.ageTooOld': 'Alderen må højst være {age} år.',
     'form.guardian.title': 'Værge',
@@ -7819,6 +8123,8 @@ const translations = {
     'cart.empty': 'Din kurv er tom', 'homeGym.tooltip.title': 'Du får adgang til alle haller.', 'homeGym.tooltip.desc': 'Dette er hallen hvor du henter dit kort.', 'homeGym.label': 'Hjemmehal:',
     'homeGym.tooltip.title.fitness': 'Fitness Medlemskab gælder kun i Aalborg.',
     'homeGym.tooltip.desc.fitness': 'Du har adgang til styrketræningsområdet i Boulders Aalborg. Klatring og andre haller er ikke inkluderet.',
+    'homeGym.tooltip.title.singlegym': 'Single Gym medlemskab gælder kun i Aalborg.',
+    'homeGym.tooltip.desc.singlegym': 'Du har klatreadgang i Boulders Aalborg. Andre haller er ikke inkluderet.',
     'homeGym.tooltip.title.firstclimb': 'Din billet gælder i alle Boulders.',
     'search.noResults': 'Ingen haller fundet der matcher din søgning.',
     'cart.campaignWarning.message': 'Vigtigt: Hvis du går videre til betaling uden at gennemføre købet, kan du blive blokeret fra at købe kampagnen senere.',
@@ -7900,11 +8206,11 @@ const translations = {
     'faq.firstclimb.included.q': 'Hvad er inkluderet i dagsbilletten?',
     'faq.firstclimb.included.a': 'Bliv så længe du vil i alle Boulders haller, plus lejesko og kalk. Ingen skjulte gebyrer.',
     'faq.firstclimb.eligibility.q': 'Hvem kan købe dagsbilletten?',
-    'faq.firstclimb.eligibility.a': 'Alle kan købe den — men kun én gang pr. person.',
+    'faq.firstclimb.eligibility.a': 'Alle over 16 år kan købe billetten. Kun én gang pr. person. Registrering af e-mail adresse er påkrævet for at købe billetten',
     'faq.firstclimb.validity.q': 'Hvor længe gælder den?',
     'faq.firstclimb.validity.a': 'Din billet skal bruges inden for 1 måned efter køb. Mød op hvilken som helst dag i den periode — du behøver ikke vælge en dato på forhånd.',
     'faq.firstclimb.howToUse.q': 'Hvordan bruger jeg den i hallen?',
-    'faq.firstclimb.howToUse.a': 'Mød op i hallen, når det passer dig (inden for en måned). Oplys dit telefonnummer eller email til personalet, så aktiverer de din dagsbillet og udleverer lejesko og kalk.',
+    'faq.firstclimb.howToUse.a': 'Mød op i hallen, når det passer dig (inden for en måned fra købet). Oplys dit telefonnummer eller email til personalet, så aktiverer de din dagsbillet og udleverer lejesko og kalk.',
     'faq.firstclimb.afterDay.q': 'Hvad sker der efter min første dag?',
     'faq.firstclimb.afterDay.a': 'Bliv hængende! Du kan opgradere til medlemskab, et 15-dages kort eller et klippekort direkte hos personalet — eller online når du er klar.',
     'faq.punchcard.howItWorks.q': 'Hvordan virker klippekortet?',
@@ -7978,8 +8284,11 @@ const translations = {
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
     'form.buyerRole.title': 'Parent or guardian',
     'form.buyerRole.hint': 'Your account. You must be 18, and you pay for the membership.',
-    'form.member.title': 'The child',
-    'form.member.roleHint': 'The child\'s own details. The membership is for the child, not for you.',
+    'form.payer.title': 'Payer\'s details',
+    'form.payer.hint': 'You must be 18. After the account is created, or you have logged in, you fill in the child\'s details.',
+    'form.payer.save': 'Create payer account',
+    'form.member.title': 'Who is climbing?',
+    'form.member.roleHint': 'Choose the child this membership is for.',
     'form.member.consent': 'I am the child\'s guardian and I accept the membership on the child\'s behalf.',
     'form.member.required': 'Enter the child\'s name, date of birth, and guardian consent.',
     'form.member.under16': 'Junior is for children under 16.',
@@ -7988,12 +8297,48 @@ const translations = {
     'form.member.noJuniorType': 'Junior can\'t be created right now.',
     'form.member.noYouthType': 'The student and youth membership can\'t be created right now.',
     'form.member.createFailed': 'The child could not be created. Try again.',
+    'form.member.save': 'Save',
+    'form.member.saving': 'Saving...',
+    'form.member.saved': 'Saved.',
+    'form.member.savedMark': 'Saved',
     'form.member.addAnother': 'Add another child',
+    'form.member.onAccount': 'Already on your account',
+    'form.member.alreadyHas': 'Already has {product}',
+    'form.member.membershipUnknown': 'Membership could not be checked',
+    'form.member.pickWithoutMembership': 'Choose a child without a membership, or add a new one.',
+    'form.member.loginFirst': 'Log in or create an account for the person paying for the membership.',
+    'form.member.waiting': 'Waiting for login.',
+    'form.member.orderMoveFailed': 'The membership could not be moved to the selected child. Try again.',
+    'form.member.orderRestarted': 'The order is starting over because the child changed.',
+    'form.member.continue': 'Continue',
+    'form.member.newChild': 'New child',
+    'form.member.addChild': 'Add child',
+    'form.member.adding': 'Adding...',
+    'form.member.saveChildFirst': 'Save the child first',
+    'form.member.onThisOrder': 'On this membership',
+    'form.member.newOnThisOrder': 'The membership will be created for',
+    'form.member.alreadySignedUp': 'Already signed up',
+    'form.member.newBadge': 'New',
     'form.member.youthTitle': 'The young person',
     'form.member.youthAge': 'A guardian can only complete this for a 16- or 17-year-old.',
     'form.member.email': 'Email*',
     'form.member.emailRequired': 'The email has to be the young person\'s own.',
     'form.member.emailOwn': 'The email has to be the young person\'s own, not the guardian\'s.',
+    'form.member.youthHint': 'The membership is for the young person.',
+    'form.member.productJunior': 'Junior',
+    'form.member.productYouth': 'Youth',
+    'form.member.consentNamed': 'I am {possessive} guardian and I am buying this membership for {name}.',
+    'form.member.continueWith': 'Continue with {name}',
+    'form.member.ageShort': '{age} years',
+    'form.member.ageJuniorOk': '{age} years. Junior fits.',
+    'form.member.ageJuniorBad': '{age} years. Junior is for children under 16.',
+    'form.member.ageYouthOk': '{age} years. The youth membership fits.',
+    'form.member.ageYouthBad': '{age} years. Only 16 or 17.',
+    'form.member.error.firstName': 'Enter a first name.',
+    'form.member.error.lastName': 'Enter a last name.',
+    'form.member.error.birthDate': 'Enter a valid date of birth.',
+    'form.member.error.consent': 'Confirm that you are the guardian.',
+    'form.member.edit': 'Edit',
     'form.member.ageTooYoung': 'Age must be at least {age}.',
     'form.member.ageTooOld': 'Age must be no more than {age}.',
     'form.guardian.title': 'Guardian',
@@ -8221,6 +8566,8 @@ const translations = {
     'cart.empty': 'Your cart is empty', 'homeGym.tooltip.title': 'You get access to all gyms.', 'homeGym.tooltip.desc': 'This is the gym where you pick up your card.', 'homeGym.label': 'Home Gym:',
     'homeGym.tooltip.title.fitness': 'Fitness Membership is valid in Aalborg only.',
     'homeGym.tooltip.desc.fitness': 'You get access to the strength-training area at Boulders Aalborg. Climbing and other gyms are not included.',
+    'homeGym.tooltip.title.singlegym': 'Single Gym Membership is valid in Aalborg only.',
+    'homeGym.tooltip.desc.singlegym': 'You get climbing access at Boulders Aalborg. Other gyms are not included.',
     'homeGym.tooltip.title.firstclimb': 'Your ticket is valid at any Boulders.',
     'search.noResults': 'No gyms found matching your search.',
     'cart.campaignWarning.message': 'Important: If you proceed to payment without completing the purchase, you may be blocked from purchasing this campaign later.',
@@ -8301,7 +8648,7 @@ const translations = {
     'faq.firstclimb.included.q': "What's included in the day ticket?",
     'faq.firstclimb.included.a': 'Stay as long as you like at any Boulders gym, plus rental shoes and chalk. No hidden fees.',
     'faq.firstclimb.eligibility.q': 'Who can buy the day ticket?',
-    'faq.firstclimb.eligibility.a': 'Anyone can buy it — but only once per person.',
+    'faq.firstclimb.eligibility.a': 'Anyone from 16 years and up can buy it, and only once per person. Registration of email adress is required for purchase.',
     'faq.firstclimb.validity.q': 'How long is it valid?',
     'faq.firstclimb.validity.a': 'Your ticket must be used within 1 month of purchase. Show up any day within that window — no need to pick a date in advance.',
     'faq.firstclimb.howToUse.q': 'How do I use it at the gym?',
@@ -8380,8 +8727,11 @@ const translations = {
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
     'form.buyerRole.title': 'Elternteil oder Vormund',
     'form.buyerRole.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
-    'form.member.title': 'Das Kind',
-    'form.member.roleHint': 'Die eigenen Angaben des Kindes. Die Mitgliedschaft gilt für das Kind, nicht für dich.',
+    'form.payer.title': 'Angaben der zahlenden Person',
+    'form.payer.hint': 'Du musst 18 Jahre alt sein. Wenn das Konto erstellt ist oder du angemeldet bist, füllst du die Angaben des Kindes aus.',
+    'form.payer.save': 'Konto der zahlenden Person erstellen',
+    'form.member.title': 'Wer soll klettern?',
+    'form.member.roleHint': 'Wähle das Kind, für das die Mitgliedschaft gelten soll.',
     'form.member.consent': 'Ich bin der Vormund des Kindes und akzeptiere die Mitgliedschaft im Namen des Kindes.',
     'form.member.required': 'Gib den Namen und das Geburtsdatum des Kindes an und bestätige die Vormundschaft.',
     'form.member.under16': 'Junior ist für Kinder unter 16 Jahren.',
@@ -8390,12 +8740,48 @@ const translations = {
     'form.member.noJuniorType': 'Junior kann gerade nicht angelegt werden.',
     'form.member.noYouthType': 'Die Studenten- und Jugendmitgliedschaft kann gerade nicht angelegt werden.',
     'form.member.createFailed': 'Das Kind konnte nicht angelegt werden. Versuch es erneut.',
+    'form.member.save': 'Speichern',
+    'form.member.saving': 'Speichert...',
+    'form.member.saved': 'Gespeichert.',
+    'form.member.savedMark': 'Gespeichert',
     'form.member.addAnother': 'Weiteres Kind hinzufügen',
+    'form.member.onAccount': 'Bereits auf deinem Konto',
+    'form.member.alreadyHas': 'Hat bereits {product}',
+    'form.member.membershipUnknown': 'Mitgliedschaft konnte nicht geprüft werden',
+    'form.member.pickWithoutMembership': 'Wähle ein Kind ohne Mitgliedschaft, oder füge ein neues hinzu.',
+    'form.member.loginFirst': 'Melde dich an oder erstelle ein Konto für die Person, die die Mitgliedschaft bezahlt.',
+    'form.member.waiting': 'Wartet auf Anmeldung.',
+    'form.member.orderMoveFailed': 'Die Mitgliedschaft konnte nicht auf das gewählte Kind übertragen werden. Versuch es erneut.',
+    'form.member.orderRestarted': 'Die Bestellung startet neu, weil das Kind gewechselt wurde.',
+    'form.member.continue': 'Weiter',
+    'form.member.newChild': 'Neues Kind',
+    'form.member.addChild': 'Kind hinzufügen',
+    'form.member.adding': 'Wird hinzugefügt...',
+    'form.member.saveChildFirst': 'Speichere zuerst das Kind',
+    'form.member.onThisOrder': 'Auf dieser Mitgliedschaft',
+    'form.member.newOnThisOrder': 'Die Mitgliedschaft wird erstellt für',
+    'form.member.alreadySignedUp': 'Bereits angelegt',
+    'form.member.newBadge': 'Neu',
     'form.member.youthTitle': 'Die junge Person',
     'form.member.youthAge': 'Ein Vormund kann das nur für eine 16- oder 17-jährige Person abschließen.',
     'form.member.email': 'E-Mail*',
     'form.member.emailRequired': 'Die E-Mail muss der jungen Person gehören.',
     'form.member.emailOwn': 'Die E-Mail muss der jungen Person gehören, nicht dem Vormund.',
+    'form.member.youthHint': 'Die Mitgliedschaft gilt für die junge Person.',
+    'form.member.productJunior': 'Junior',
+    'form.member.productYouth': 'Jugend',
+    'form.member.consentNamed': 'Ich bin {possessive} Vormund und kaufe die Mitgliedschaft für {name}.',
+    'form.member.continueWith': 'Weiter mit {name}',
+    'form.member.ageShort': '{age} Jahre',
+    'form.member.ageJuniorOk': '{age} Jahre. Junior passt.',
+    'form.member.ageJuniorBad': '{age} Jahre. Junior ist für Kinder unter 16.',
+    'form.member.ageYouthOk': '{age} Jahre. Die Jugendmitgliedschaft passt.',
+    'form.member.ageYouthBad': '{age} Jahre. Nur 16 oder 17.',
+    'form.member.error.firstName': 'Gib den Vornamen ein.',
+    'form.member.error.lastName': 'Gib den Nachnamen ein.',
+    'form.member.error.birthDate': 'Gib ein gültiges Geburtsdatum an.',
+    'form.member.error.consent': 'Bestätige, dass du Vormund bist.',
+    'form.member.edit': 'Bearbeiten',
     'form.member.ageTooYoung': 'Das Alter muss mindestens {age} Jahre sein.',
     'form.member.ageTooOld': 'Das Alter darf höchstens {age} Jahre sein.',
     'form.guardian.title': 'Vormund',
@@ -8506,6 +8892,8 @@ const translations = {
     'cart.empty': 'Ihr Warenkorb ist leer', 'homeGym.tooltip.title': 'Sie erhalten Zugang zu allen Hallen.', 'homeGym.tooltip.desc': 'Dies ist die Halle, in der Sie Ihre Karte abholen.', 'homeGym.label': 'Heimhalle:',
     'homeGym.tooltip.title.fitness': 'Fitness-Mitgliedschaft gilt nur in Aalborg.',
     'homeGym.tooltip.desc.fitness': 'Sie haben Zugang zum Krafttrainingsbereich in Boulders Aalborg. Klettern und andere Hallen sind nicht enthalten.',
+    'homeGym.tooltip.title.singlegym': 'Single-Gym-Mitgliedschaft gilt nur in Aalborg.',
+    'homeGym.tooltip.desc.singlegym': 'Sie haben Kletterzugang in Boulders Aalborg. Andere Hallen sind nicht enthalten.',
     'homeGym.tooltip.title.firstclimb': 'Dein Ticket gilt in allen Boulders.',
     'search.noResults': 'Keine Hallen gefunden, die Ihrer Suche entsprechen.',
     'cart.campaignWarning.message': 'Wichtig: Wenn Sie zur Zahlung fortfahren, ohne den Kauf abzuschließen, können Sie möglicherweise später daran gehindert werden, diese Kampagne zu kaufen.',
@@ -8726,6 +9114,7 @@ function updatePageTranslations() {
   
   // Update elements with data-i18n-key attribute
   document.querySelectorAll('[data-i18n-key]').forEach(element => {
+    if (element.hasAttribute('data-member-copy')) return;
     const key = element.getAttribute('data-i18n-key');
     let translation = t(key);
     const activeLandingRoute = state.landingRouteConfig || resolveLandingRouteConfig();
@@ -9023,8 +9412,9 @@ function updateFormTranslations() {
   
   // Save account button
   const saveAccountBtn = document.querySelector('.save-account-btn[data-i18n-key]');
-  if (saveAccountBtn) {
-    saveAccountBtn.textContent = t('form.saveAccount');
+  if (saveAccountBtn && saveAccountBtn.dataset.saving !== '1') {
+    const key = saveAccountBtn.getAttribute('data-i18n-key') || 'form.saveAccount';
+    saveAccountBtn.textContent = t(key);
   }
   
   // Login button
@@ -9073,6 +9463,8 @@ function updateFormTranslations() {
   }
 
   renderPasswordResetPageCopy();
+  setJuniorRoleLabels(juniorMemberFormVisible() || state.guardianHandoffActive === true);
+  refreshMemberCopy();
 }
 
 // Update cart translations
@@ -9559,20 +9951,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const testSuccess = urlParams.get('testSuccess') === 'true';
   const testPaymentFailed = urlParams.get('testPaymentFailed') === 'true';
-  const rawTestProductType = urlParams.get('testProductType') || 'membership'; // membership, fitness, 15daypass, punch-card
+  const rawTestProductType = urlParams.get('testProductType') || 'membership'; // membership, fitness, singlegym, 15daypass, punch-card
   const testFitnessMembership = urlParams.get('testFitness') === 'true' || rawTestProductType === 'fitness';
-  const testProductType = rawTestProductType === 'fitness' ? 'membership' : rawTestProductType;
+  const testSingleGymMembership = !testFitnessMembership && (
+    rawTestProductType === 'singlegym' || rawTestProductType === 'single-gym'
+  );
+  const testProductType = (rawTestProductType === 'fitness' || testSingleGymMembership) ? 'membership' : rawTestProductType;
   const testStartDateParam = String(urlParams.get('testStartDate') || '').trim();
   const paymentReturn = urlParams.get('payment');
   const paymentStatus = urlParams.get('status'); // Check for payment status (cancelled, failed, etc.)
   const paymentError = urlParams.get('error'); // Check for payment error (can be 'cancelled' or numeric error code like '205')
   
   if (testSuccess) {
-    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType, testFitnessMembership ? '(fitness)' : '');
+    console.log('[Test Mode] Test success page mode enabled for product type:', testProductType, testFitnessMembership ? '(fitness)' : '', testSingleGymMembership ? '(single gym)' : '');
     // Store test mode in state
     state.testMode = true;
     state.testProductType = testProductType;
     state.testFitnessMembership = testFitnessMembership;
+    state.testSingleGymMembership = testSingleGymMembership;
   }
   
   if (testPaymentFailed) {
@@ -9732,20 +10128,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }]
       };
     } else {
-      // Default to membership (regular or Fitness)
+      // Default to membership (regular, Fitness, or Single Gym)
       const isFitness = state.testFitnessMembership === true;
-      const membershipName = isFitness ? 'Fitness Membership' : 'Medlemskab';
+      const isSingleGym = state.testSingleGymMembership === true;
+      const membershipName = isFitness
+        ? 'Fitness Membership'
+        : isSingleGym
+          ? 'Single Gym Medlemskab'
+          : 'Medlemskab';
       state.selectedProductType = 'membership';
-      state.membershipPlanId = isFitness ? 'fitness-membership-123' : 'membership-123';
+      state.membershipPlanId = isFitness
+        ? 'fitness-membership-123'
+        : isSingleGym
+          ? 'singlegym-membership-123'
+          : 'membership-123';
       state.order.items = [{ name: membershipName, amount: 469 }];
       state.order.membershipType = membershipName;
-      state.order.primaryGym = isFitness ? 'Boulders Aalborg' : 'Boulders Aarhus Nord';
+      state.order.primaryGym = (isFitness || isSingleGym) ? 'Boulders Aalborg' : 'Boulders Aarhus Nord';
       // Mock subscription items with price
       state.fullOrder = {
         subscriptionItems: [{
           product: {
             name: membershipName,
-            productLabels: isFitness ? [{ name: 'fitness' }] : [{ name: 'Public' }]
+            productLabels: isFitness
+              ? [{ name: 'fitness' }]
+              : isSingleGym
+                ? [{ name: 'singlegym' }]
+                : [{ name: 'Public' }]
           },
           price: { amount: 46900 } // 469.00 DKK in cents
         }]
@@ -12462,6 +12871,11 @@ async function handleSaveAccount() {
         highlightFieldError(field.id, true); // Animate when triggered from button click
       }
     });
+    rejectInvalidMemberFields({ animate: true, toast: false, scroll: false });
+    return;
+  }
+
+  if (rejectInvalidMemberFields({ animate: true, toast: true, scroll: true })) {
     return;
   }
   
@@ -12957,7 +13371,7 @@ function checkSaveAccountButtonState() {
   // Check if we're on the create account section
   const createSection = document.querySelector('[data-auth-section="create"]');
   if (!createSection || createSection.style.display === 'none') {
-    saveBtn.classList.remove('valid');
+    if (saveBtn.dataset.action !== 'save-member') saveBtn.classList.remove('valid');
     return;
   }
   
@@ -12992,8 +13406,11 @@ function checkSaveAccountButtonState() {
     }
   });
   
-  // Add 'valid' class if all fields are filled
-  if (allFieldsFilled) {
+  const pickedBlocked = state.pickedMemberId != null && Boolean(memberBlockingMembership({ id: state.pickedMemberId }));
+  const memberReady = !memberBlockIsVisible()
+    || (state.pickedMemberId != null && !pickedBlocked)
+    || (state.pickedMemberId == null && validateMemberFields().ok);
+  if (allFieldsFilled && memberReady) {
     saveBtn.classList.add('valid');
   } else {
     saveBtn.classList.remove('valid');
@@ -13294,6 +13711,9 @@ function handleGymSelection(item) {
   
   state.selectedGymId = numericId; // Store numeric ID for API requests
   state.selectedBusinessUnit = numericId; // Also store as businessUnit for clarity
+  if (numericId) {
+    capturePostHog('gym_selected', { gym_id: String(numericId) });
+  }
   void loadBusinessUnitSignupSettings(numericId);
   
   // Store gym name for display - try multiple selectors
@@ -14544,6 +14964,11 @@ function setupNewAccessStep() {
         type: isMembership ? 'membership' : 'punch-card',
         card
       });
+      capturePostHog('product_selected', {
+        product_id: String(productId),
+        product_category: category,
+        product_type: isMembership ? 'membership' : 'punch_card',
+      });
       
       // Step 5: If membership is selected, fetch add-ons immediately.
       // Value cards (even in campaign category) should not fetch or keep add-ons.
@@ -15027,6 +15452,11 @@ function handleGlobalClick(event) {
       handleSaveAccount();
       break;
     }
+    case 'save-member': {
+      event.preventDefault();
+      handleSaveMember();
+      break;
+    }
     case 'switch-to-junior': {
       event.preventDefault();
       switchToJuniorMembership();
@@ -15034,12 +15464,37 @@ function handleGlobalClick(event) {
     }
     case 'pick-existing-member': {
       event.preventDefault();
-      pickExistingMember(actionable.dataset.memberId, actionable.dataset.birthDate || '');
+      pickExistingMember(
+        actionable.dataset.memberId,
+        actionable.dataset.birthDate || '',
+        actionable.dataset.firstName || '',
+        actionable.dataset.lastName || '',
+      );
       break;
     }
     case 'add-another-member': {
       event.preventDefault();
       addAnotherMember();
+      break;
+    }
+    case 'cancel-add-member': {
+      event.preventDefault();
+      cancelAddMember();
+      break;
+    }
+    case 'add-child': {
+      event.preventDefault();
+      addChildFromForm();
+      break;
+    }
+    case 'edit-handoff-member': {
+      event.preventDefault();
+      editHandoffMember();
+      break;
+    }
+    case 'edit-saved-member': {
+      event.preventDefault();
+      editSavedMember();
       break;
     }
     case 'edit-gym': {
@@ -16506,6 +16961,24 @@ async function handleApplyDiscount() {
   try {
     const orderAPI = new OrderAPI();
 
+    if (otherPayerMode()) {
+      const alignedId = await ensureOrderCreated('discount-application');
+      if (!alignedId) {
+        if (state.orderAlignFailed) {
+          showDiscountError(t(
+            'form.member.orderMoveFailed',
+            'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
+          ));
+        }
+        state.orderAlignFailed = false;
+        state.memberCheckoutBlocked = false;
+        endApplyDiscountLoading();
+        return;
+      }
+      orderIdToUse = alignedId;
+      state.orderId = alignedId;
+    }
+
     // Ensure the order has the selected items before applying coupon
     if (!state.customerId) {
       throw new Error('Please log in or create an account to apply a discount');
@@ -16521,6 +16994,7 @@ async function handleApplyDiscount() {
           console.warn('[Discount] Existing order is not accessible. Creating a new order.');
           state.orderId = null;
           state.subscriptionAttachedOrderId = null;
+          parkedMisalignedOrderId = null;
           await loadBusinessUnitSignupSettings(state.selectedBusinessUnit);
           if (blockMembershipAgeGate('checkout')) {
             endApplyDiscountLoading();
@@ -16684,6 +17158,11 @@ async function handleApplyDiscount() {
       
       // Show succinct success message
       showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
+      capturePostHog('discount_applied', {
+        discount_amount: state.totals.discountAmount,
+        order_value: newTotal,
+        currency: 'DKK',
+      });
       
       // Force a visual update by triggering a reflow
       if (DOM.cartTotal) {
@@ -16714,6 +17193,11 @@ async function handleApplyDiscount() {
         
         const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
         showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
+        capturePostHog('discount_applied', {
+          discount_amount: 0,
+          order_value: newTotal,
+          currency: 'DKK',
+        });
         
         // Highlight the new price in cart total elements and payment overview
         const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
@@ -17265,16 +17749,25 @@ function renderCartItems() {
     // Boulders, so only the headline is needed; skip the supporting paragraph.
     const isFirstClimb = isFirstClimbRoute();
     const isFitness = isFitnessMembershipSelected();
+    const isSingleGym = !isFitness && isSingleGymMembershipSelected();
     const tooltipTitle = t(
       isFirstClimb
         ? 'homeGym.tooltip.title.firstclimb'
         : isFitness
           ? 'homeGym.tooltip.title.fitness'
-          : 'homeGym.tooltip.title'
+          : isSingleGym
+            ? 'homeGym.tooltip.title.singlegym'
+            : 'homeGym.tooltip.title'
     );
     const tooltipDesc = isFirstClimb
       ? ''
-      : `<p>${t(isFitness ? 'homeGym.tooltip.desc.fitness' : 'homeGym.tooltip.desc')}</p>`;
+      : `<p>${t(
+          isFitness
+            ? 'homeGym.tooltip.desc.fitness'
+            : isSingleGym
+              ? 'homeGym.tooltip.desc.singlegym'
+              : 'homeGym.tooltip.desc'
+        )}</p>`;
     const tooltip = document.createElement('div');
     tooltip.className = 'home-gym-tooltip';
     tooltip.innerHTML = sanitizeHTML(`
@@ -17923,6 +18416,17 @@ function updatePaymentOverview() {
       .filter(Boolean)
       .join(' ')
       .toLowerCase();
+
+    // Student & Youth Single Gym is a regular price, not an intro offer.
+    // The student keyword below would otherwise invent 399 as the price after a campaign.
+    if (
+      isSingleGymMembership(sourceProduct) &&
+      /(student|studie)/i.test(text) &&
+      /(youth|ungdom)/i.test(text) &&
+      !/junior/i.test(text)
+    ) {
+      return 0;
+    }
 
     // Frontend fallback mapping (provided by business):
     // Adult: 469 DKK, Student: 399 DKK, Junior: 279 DKK.
@@ -19028,6 +19532,8 @@ function persistOrderSnapshot(orderId) {
       discountApplied: state.discountApplied,
       // Durable offer signal for post-payment tracking (path alone can be unreliable)
       landingRoute,
+      fitnessMembership: isFitnessMembershipSelected(),
+      singleGymMembership: isSingleGymMembershipSelected(),
     }));
   } catch (e) {
     console.warn('[checkout] Could not save order to sessionStorage:', e);
@@ -19168,15 +19674,28 @@ function routeCurrentMembership() {
 }
 
 const CHECKOUT_MEMBER_STORAGE_KEY = 'boulders_checkout_member';
+const PENDING_MEMBER_ID = -1;
 
 function clearStoredJuniorMember() {
   state.subscriptionUserId = null;
   state.orderIsOtherPayer = null;
   state.orderMemberKey = null;
   state.pickedMemberId = null;
+  state.pickedMemberFirstName = null;
+  state.pickedMemberLastName = null;
+  state.existingMembers = [];
   state.memberBirthDate = null;
   state.guardianHandoffActive = false;
+  state.editingHandoffMember = false;
+  state.savedMemberCollapsed = false;
+  state.editingSavedMember = false;
+  state.addingMember = false;
+  state.memberPickBeforeAdd = null;
+  hideMemberSavedMark();
   state.existingMembersLoadedFor = null;
+  state.payerSubscriptions = [];
+  state.payerSubscriptionsKnown = false;
+  state.existingMembersSettled = false;
   document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
   try {
     sessionStorage.removeItem(CHECKOUT_MEMBER_STORAGE_KEY);
@@ -19276,6 +19795,13 @@ function restoreStoredMemberForPayer(payerId) {
 }
 
 let memberBlockNoticeAt = 0;
+
+function clearMemberBlock() {
+  if (!state.memberCheckoutBlocked) return;
+  state.memberCheckoutBlocked = false;
+  const messageDiv = document.getElementById('saveAccountMessage');
+  if (messageDiv) messageDiv.style.display = 'none';
+}
 
 function notifyMemberBlock(message) {
   state.memberCheckoutBlocked = true;
@@ -19396,13 +19922,17 @@ async function resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey) {
   return id;
 }
 
-// The name catalogue is empty on this tenant. A type still prices the product:
-// GET .../products/subscriptions?customerType={id} returns the product only when
-// that type's price list includes it. Use the id when exactly one type does.
-async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) {
-  const product = Number(productId);
-  if (!Number.isFinite(product)) return null;
-  const matches = [];
+// The name catalogue is empty on this tenant. Scan subscription price lists.
+// A missing id is a gap, not the end of the catalogue: keep going so a later
+// type that lists the selected product is still found. Stop after several
+// misses in a row. The narrowest list that contains the product wins.
+async function loadPricedCustomerTypes(businessUnitId) {
+  const unitId = Number(businessUnitId);
+  if (state.pricedCustomerTypesBusinessUnit === unitId && Array.isArray(state.pricedCustomerTypes)) {
+    return state.pricedCustomerTypes;
+  }
+  const priced = [];
+  let consecutiveMisses = 0;
   for (let typeId = 1; typeId <= 30; typeId += 1) {
     const url = buildApiUrl({
       baseUrl: authAPI.baseUrl,
@@ -19413,19 +19943,46 @@ async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) 
     try {
       data = await requestJson({ url, headers: bearerHeaders() });
     } catch (error) {
-      if (error?.status === 403 || error?.status === 400) break;
+      if (error?.status === 403 || error?.status === 400) {
+        consecutiveMisses += 1;
+        if (consecutiveMisses >= 5) break;
+        continue;
+      }
       throw error;
     }
+    consecutiveMisses = 0;
     const products = Array.isArray(data) ? data : [];
-    if (products.some((item) => Number(item?.id) === product)) matches.push(typeId);
+    const productIds = [];
+    products.forEach((item) => {
+      const id = Number(item?.id);
+      if (Number.isFinite(id)) productIds.push(id);
+    });
+    if (productIds.length) priced.push({ id: typeId, productIds });
   }
-  if (matches.length !== 1) {
-    originalConsoleLog('[other-payer] customer type price probe', { product, matches });
+  state.pricedCustomerTypes = priced;
+  state.pricedCustomerTypesBusinessUnit = unitId;
+  return priced;
+}
+
+async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) {
+  if (state[cacheKey] != null && state[`${cacheKey}BusinessUnit`] === Number(businessUnitId)) {
+    return state[cacheKey];
+  }
+  const priced = await loadPricedCustomerTypes(businessUnitId);
+  const chosen = choosePricedCustomerType(priced, productId);
+  if (chosen == null) {
+    originalConsoleLog('[other-payer] customer type price probe', {
+      product: Number(productId),
+      pricedTypeIds: priced.map((type) => type.id),
+      listingProduct: priced
+        .filter((type) => (type.productIds || []).some((id) => Number(id) === Number(productId)))
+        .map((type) => ({ id: type.id, products: type.productIds.length })),
+    });
     return null;
   }
-  cacheCustomerTypeId(cacheKey, businessUnitId, matches[0]);
-  originalConsoleLog('[other-payer] customer type from product price', { id: matches[0], product });
-  return matches[0];
+  cacheCustomerTypeId(cacheKey, businessUnitId, chosen);
+  originalConsoleLog('[other-payer] customer type from product price', { id: chosen, product: Number(productId) });
+  return chosen;
 }
 
 async function resolveCustomerTypeId(businessUnitId, predicate, cacheKey) {
@@ -19459,6 +20016,7 @@ function otherPayerMode() {
 }
 
 function dropOrderForMemberChange() {
+  parkedMisalignedOrderId = null;
   state.subscriptionUserId = null;
   state.orderId = null;
   state.subscriptionAttachedOrderId = null;
@@ -19466,6 +20024,50 @@ function dropOrderForMemberChange() {
   state.orderMemberKey = null;
   state.fullOrder = null;
   state.order = null;
+}
+
+function releaseOrderForMember(memberId) {
+  if (memberId == null || !state.orderId) return;
+  const key = memberKey({ memberId: Number(memberId) });
+  const ownsOrder = String(state.subscriptionUserId) === String(memberId) || state.orderMemberKey === key;
+  if (ownsOrder) dropOrderForMemberChange();
+}
+
+let memberOrderAlignQueue = Promise.resolve();
+
+function alignStoredOrderToPickedMember() {
+  const memberId = Number(state.pickedMemberId);
+  if (!state.orderId || !Number.isFinite(memberId) || memberId === PENDING_MEMBER_ID) return;
+  memberOrderAlignQueue = memberOrderAlignQueue.then(() => moveStoredOrderToMember(memberId)).catch((error) => {
+    devWarn('[checkout] Could not move the order after the child changed:', error);
+  });
+}
+
+async function moveStoredOrderToMember(memberId) {
+  if (!state.orderId || Number(state.pickedMemberId) !== Number(memberId)) return;
+  const key = currentMemberKey();
+  if (state.orderIsOtherPayer === true && state.orderMemberKey === key) {
+    state.subscriptionUserId = Number(memberId);
+    if (state.currentStep === 4) updatePaymentOverview();
+    return;
+  }
+  const hadSubscription = state.subscriptionAttachedOrderId === state.orderId;
+  const orderId = state.orderId;
+  const moved = await retargetStoredOrder(memberId, key);
+  if (Number(state.pickedMemberId) !== Number(memberId)) return;
+  if (String(state.orderId) !== String(orderId)) return;
+  if (!moved) {
+    dropOrderForMemberChange();
+    state.subscriptionUserId = Number(memberId);
+    state.orderMemberKey = key;
+    if (hadSubscription) {
+      showToast(t(
+        'form.member.orderRestarted',
+        'Ordren starter forfra, fordi barnet blev skiftet.',
+      ), 'info');
+    }
+  }
+  if (state.currentStep === 4) updatePaymentOverview();
 }
 
 let memberEnsureInflight = null;
@@ -19491,21 +20093,40 @@ async function ensureMemberCustomerOnce() {
     return null;
   }
 
+  if (mode === 'junior') await loadExistingMembers(payerId);
+
   const key = currentMemberKey();
   const stored = readStoredMember();
   if (stored && String(stored.payerId) === String(payerId) && stored.memberKey === key && stored.memberId != null) {
+    const storedBlocking = mode === 'junior' ? memberBlockingMembership({ id: stored.memberId }) : null;
+    if (storedBlocking) {
+      notifyMemberBlock(memberBlockMessage(storedBlocking));
+      return null;
+    }
     state.subscriptionUserId = stored.memberId;
     state.orderMemberKey = key;
+    clearMemberBlock();
     return stored.memberId;
   }
-  if (stored && stored.memberKey && stored.memberKey !== key) {
-    dropOrderForMemberChange();
+
+  if (state.pickedMemberId != null && Number(state.pickedMemberId) !== PENDING_MEMBER_ID) {
+    const memberId = Number(state.pickedMemberId);
+    const blocking = mode === 'junior' ? memberBlockingMembership({ id: memberId }) : null;
+    if (blocking) {
+      notifyMemberBlock(memberBlockMessage(blocking));
+      return null;
+    }
+    writeStoredMember({ payerId, memberId, memberKey: key });
+    clearMemberBlock();
+    return memberId;
   }
 
-  if (state.pickedMemberId != null) {
-    const memberId = Number(state.pickedMemberId);
-    writeStoredMember({ payerId, memberId, memberKey: key });
-    return memberId;
+  const confirmingNewChild = state.addingMember === true
+    || Number(state.pickedMemberId) === PENDING_MEMBER_ID
+    || savedMemberIsCollapsed();
+  if (mode === 'junior' && !confirmingNewChild) {
+    notifyMemberBlock(t('form.member.pickWithoutMembership', 'Vælg et barn uden medlemskab, eller tilføj et nyt.'));
+    return null;
   }
 
   const form = readMemberForm();
@@ -19579,38 +20200,686 @@ async function ensureMemberCustomerOnce() {
   }
   originalConsoleLog('[other-payer] otheruser', { id: memberId, created: created?.created === true, mode });
   state.memberBirthDate = form.birthDate;
-  writeStoredMember({ payerId, memberId, memberKey: key });
+  if (Number(state.pickedMemberId) === PENDING_MEMBER_ID) {
+    state.existingMembers = (state.existingMembers || []).map((person) => (
+      Number(person.id) === PENDING_MEMBER_ID ? { ...person, id: memberId } : person
+    ));
+    state.pickedMemberId = memberId;
+    renderExistingMembers(state.existingMembers);
+  }
+  writeStoredMember({ payerId, memberId, memberKey: currentMemberKey() });
+  clearMemberBlock();
   return memberId;
+}
+
+function memberBlockIsVisible() {
+  const form = document.getElementById('parentGuardianForm');
+  return Boolean(
+    form
+    && !form.hidden
+    && form.style.display !== 'none'
+    && !form.classList.contains('is-awaiting-payer'),
+  );
+}
+
+function createSectionIsVisible() {
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  return Boolean(createSection && createSection.style.display !== 'none');
+}
+
+function memberDraftHasValue() {
+  const form = readMemberForm();
+  return Boolean(form.firstName || form.lastName || form.birthDate || form.email);
+}
+
+function memberDisplayName() {
+  if (state.pickedMemberId != null && state.pickedMemberFirstName) {
+    return state.pickedMemberFirstName.trim();
+  }
+  return (document.getElementById('memberFirstName')?.value || '').trim();
+}
+
+function memberFullName() {
+  if (state.pickedMemberId != null) {
+    const picked = [state.pickedMemberFirstName, state.pickedMemberLastName].filter(Boolean).join(' ').trim();
+    if (picked) return picked;
+  }
+  const first = (document.getElementById('memberFirstName')?.value || '').trim();
+  const last = (document.getElementById('memberLastName')?.value || '').trim();
+  const typed = [first, last].filter(Boolean).join(' ');
+  if (typed) return typed;
+  return memberDisplayName();
+}
+
+function memberOnThisOrder() {
+  return state.pickedMemberId != null
+    || savedMemberIsCollapsed()
+    || state.editingSavedMember === true;
+}
+
+function currentMemberId() {
+  if (state.pickedMemberId != null) return String(state.pickedMemberId);
+  if (state.subscriptionUserId != null && (savedMemberIsCollapsed() || state.editingSavedMember === true)) {
+    return String(state.subscriptionUserId);
+  }
+  return null;
+}
+
+function currentMemberRecord() {
+  const id = currentMemberId();
+  if (!id) return null;
+  return (state.existingMembers || []).find((person) => String(person.id) === id) || null;
+}
+
+function memberBirthDateLabel() {
+  const birth = normalizeBuyerBirthDate(
+    document.getElementById('memberDateOfBirth')?.value || state.memberBirthDate || ''
+  );
+  if (!birth) return '';
+  const [year, month, day] = birth.split('-');
+  return `${day}.${month}.${year}`;
+}
+
+function memberSummaryDetail() {
+  const date = memberBirthDateLabel();
+  const age = memberAgeShort();
+  if (date && age) return `${date} · ${age}`;
+  return date || age;
+}
+
+function memberDescribedBy(id, hasError) {
+  if (id === 'memberDateOfBirth') {
+    return hasError ? 'memberDateOfBirthError memberAgeStatus' : 'memberAgeStatus';
+  }
+  return hasError ? `${id}Error` : '';
+}
+
+function applyMemberFieldErrors(errors, { animate = false, toast = false, scroll = false } = {}) {
+  let firstId = null;
+  MEMBER_ERROR_FIELDS.forEach((id) => {
+    const field = document.getElementById(id);
+    const message = errors[id];
+    const errorNode = document.getElementById(`${id}Error`);
+    const group = field?.closest('.form-group');
+    if (message) {
+      if (!firstId) firstId = id;
+      group?.classList.add('error');
+      if (errorNode) errorNode.textContent = message;
+      if (field) {
+        field.setAttribute('aria-invalid', 'true');
+        field.setAttribute('aria-describedby', memberDescribedBy(id, true));
+      }
+      if (animate) highlightFieldError(id, true);
+      if (id === 'memberEmail') {
+        const emailGroup = document.getElementById('memberEmailGroup');
+        if (emailGroup) emailGroup.hidden = false;
+      }
+    } else if (field) {
+      group?.classList.remove('error');
+      if (errorNode) errorNode.textContent = '';
+      field.removeAttribute('aria-invalid');
+      const describedBy = memberDescribedBy(id, false);
+      if (describedBy) field.setAttribute('aria-describedby', describedBy);
+      else field.removeAttribute('aria-describedby');
+    }
+  });
+  if (firstId && scroll) document.getElementById(firstId)?.scrollIntoView({ block: 'nearest' });
+  if (firstId && toast) showToast(errors[firstId], 'error');
+  return firstId;
+}
+
+function clearMemberFieldErrors() {
+  applyMemberFieldErrors({});
+}
+
+function validateMemberFields() {
+  if (state.pickedMemberId != null) return { ok: true, errors: {} };
+  const form = readMemberForm();
+  const errors = {};
+  const mode = state.guardianHandoffActive ? 'guardian' : 'junior';
+  if (!form.firstName) errors.memberFirstName = t('form.member.error.firstName', 'Indtast fornavn.');
+  if (!form.lastName) errors.memberLastName = t('form.member.error.lastName', 'Indtast efternavn.');
+  const birth = normalizeBuyerBirthDate(form.birthDate);
+  const age = birth ? ageInYears(birth, getTodayLocalDateString()) : null;
+  const status = memberAgeStatus(age, mode);
+  if (!birth || status === 'empty' || status === 'invalid') {
+    errors.memberDateOfBirth = t('form.member.error.birthDate', 'Angiv en gyldig fødselsdato.');
+  } else if (status === 'junior-bad' || status === 'youth-bad') {
+    const key = status === 'junior-bad' ? 'form.member.ageJuniorBad' : 'form.member.ageYouthBad';
+    errors.memberDateOfBirth = t(key).replaceAll('{age}', String(age));
+  }
+  if (mode === 'guardian' && !form.email) {
+    errors.memberEmail = t('form.member.emailRequired', 'E-mailen skal være den unges egen.');
+  }
+  const payer = payerContact();
+  if (form.email && payer.email && form.email.toLowerCase() === payer.email) {
+    errors.memberEmail = mode === 'guardian'
+      ? t('form.member.emailOwn', 'E-mailen skal være den unges egen, ikke værgens.')
+      : t('form.member.ownEmail', 'Barnets e-mail skal være barnets egen.');
+  }
+  if (!form.guardianConsent) {
+    errors.memberGuardianConsent = t('form.member.error.consent', 'Bekræft, at du er værge.');
+  }
+  return { ok: Object.keys(errors).length === 0, errors };
+}
+
+function rejectInvalidMemberFields(options) {
+  if (!memberBlockIsVisible() || state.pickedMemberId != null) return false;
+  const result = validateMemberFields();
+  if (result.ok) {
+    clearMemberFieldErrors();
+    return false;
+  }
+  if (state.guardianHandoffActive && !state.editingHandoffMember) {
+    state.editingHandoffMember = true;
+    syncMemberFieldVisibility();
+  }
+  applyMemberFieldErrors(result.errors, options);
+  return true;
+}
+
+function clearMemberFieldErrorIfPassing(id) {
+  const group = document.getElementById(id)?.closest('.form-group');
+  if (!group?.classList.contains('error')) return;
+  applyMemberFieldErrors(validateMemberFields().errors);
+}
+
+function savedMemberIsCollapsed() {
+  return state.savedMemberCollapsed === true && state.editingSavedMember !== true;
+}
+
+function memberAgeShort() {
+  const birth = normalizeBuyerBirthDate(
+    document.getElementById('memberDateOfBirth')?.value || state.memberBirthDate || ''
+  );
+  const age = birth ? ageInYears(birth, getTodayLocalDateString()) : null;
+  if (age == null || age < 0 || age > 120) return '';
+  return t('form.member.ageShort', '{age} år').replaceAll('{age}', String(age));
+}
+
+let memberSavedMarkTimer = null;
+
+function hideMemberSavedMark() {
+  clearTimeout(memberSavedMarkTimer);
+  const mark = document.getElementById('memberSavedMark');
+  if (!mark) return;
+  mark.hidden = true;
+  mark.classList.remove('is-leaving');
+}
+
+function showMemberSavedMark() {
+  const mark = document.getElementById('memberSavedMark');
+  if (!mark) return;
+  mark.classList.remove('is-leaving');
+  mark.hidden = false;
+  mark.textContent = t('form.member.savedMark', 'Gemt');
+  clearTimeout(memberSavedMarkTimer);
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  memberSavedMarkTimer = setTimeout(() => {
+    if (reduced || mark.hidden) {
+      mark.hidden = true;
+      return;
+    }
+    mark.classList.add('is-leaving');
+    mark.addEventListener('animationend', () => {
+      mark.hidden = true;
+      mark.classList.remove('is-leaving');
+    }, { once: true });
+  }, 2200);
+}
+
+function clearSavedMemberCollapse() {
+  state.savedMemberCollapsed = false;
+  state.editingSavedMember = false;
+  hideMemberSavedMark();
+}
+
+function ageStatusText() {
+  const birth = normalizeBuyerBirthDate(document.getElementById('memberDateOfBirth')?.value || '');
+  const age = birth ? ageInYears(birth, getTodayLocalDateString()) : null;
+  const mode = state.guardianHandoffActive ? 'guardian' : 'junior';
+  const status = memberAgeStatus(age, mode);
+  if (status === 'empty') return '';
+  if (status === 'invalid') return t('form.member.error.birthDate', 'Angiv en gyldig fødselsdato.');
+  const keys = {
+    'junior-ok': 'form.member.ageJuniorOk',
+    'junior-bad': 'form.member.ageJuniorBad',
+    'youth-ok': 'form.member.ageYouthOk',
+    'youth-bad': 'form.member.ageYouthBad',
+  };
+  return t(keys[status]).replaceAll('{age}', String(age));
+}
+
+function clearMemberBirthBounds() {
+  const field = document.getElementById('memberDateOfBirth');
+  if (!field || (!field.min && !field.max)) return;
+  field.min = '';
+  field.max = '';
+}
+
+function updateMemberAgeStatus() {
+  const el = document.getElementById('memberAgeStatus');
+  if (!el) return;
+  clearMemberBirthBounds();
+  const birth = normalizeBuyerBirthDate(document.getElementById('memberDateOfBirth')?.value || '');
+  const age = birth ? ageInYears(birth, getTodayLocalDateString()) : null;
+  const status = memberAgeStatus(age, state.guardianHandoffActive ? 'guardian' : 'junior');
+  el.classList.remove('is-ok', 'is-bad');
+  if (status === 'empty') {
+    el.hidden = true;
+    el.textContent = '';
+    return;
+  }
+  el.hidden = false;
+  el.textContent = ageStatusText();
+  el.classList.add(status === 'junior-ok' || status === 'youth-ok' ? 'is-ok' : 'is-bad');
+}
+
+function syncMemberFieldVisibility() {
+  const form = document.getElementById('parentGuardianForm');
+  const fields = document.getElementById('memberNewFields');
+  const summary = document.getElementById('memberSummary');
+  if (!form || !fields) return;
+  const people = Number(state.existingMemberCount) || 0;
+  const handoffCollapsed = state.guardianHandoffActive === true && state.editingHandoffMember !== true;
+  const pickerCollapsed = people > 0
+    && state.pickedMemberId == null
+    && state.addingMember !== true
+    && !memberDraftHasValue();
+  const picked = state.pickedMemberId != null;
+  const savedCollapsed = savedMemberIsCollapsed();
+  const showOrderSummary = handoffCollapsed || picked || savedCollapsed;
+  form.classList.toggle('member-existing-selected', picked);
+  form.classList.toggle('member-saved', savedCollapsed);
+  fields.hidden = handoffCollapsed || pickerCollapsed || picked || savedCollapsed;
+  if (summary) {
+    summary.hidden = !showOrderSummary;
+    const emailEl = document.getElementById('memberSummaryEmail');
+    const ageEl = document.getElementById('memberSummaryAge');
+    const edit = summary.querySelector('.member-summary-edit');
+    if (handoffCollapsed) {
+      if (emailEl) {
+        emailEl.hidden = false;
+        emailEl.textContent = (document.getElementById('memberEmail')?.value || '').trim();
+      }
+      if (ageEl) ageEl.hidden = true;
+      if (edit) {
+        edit.hidden = false;
+        edit.dataset.action = 'edit-handoff-member';
+      }
+    } else if (picked || savedCollapsed) {
+      const detail = memberSummaryDetail();
+      if (emailEl) emailEl.hidden = true;
+      if (ageEl) {
+        ageEl.hidden = !detail;
+        ageEl.textContent = detail;
+      }
+      if (edit) {
+        edit.hidden = picked || !savedCollapsed;
+        edit.dataset.action = 'edit-saved-member';
+      }
+      summary.hidden = !detail && !(edit && !edit.hidden);
+    }
+  }
+  if (savedCollapsed) {
+    const message = document.getElementById('saveAccountMessage');
+    if (message) message.style.display = 'none';
+  }
+}
+
+function juniorPickerActive() {
+  return state.guardianHandoffActive !== true && juniorMemberFormVisible();
+}
+
+function updateMemberSaveButtonState() {
+  const button = document.getElementById('saveAccountButton');
+  if (!button || button.dataset.action !== 'save-member') return;
+  const pickedBlocked = state.pickedMemberId != null && Boolean(memberBlockingMembership({ id: state.pickedMemberId }));
+  if (juniorPickerActive() && (state.addingMember === true || state.pickedMemberId == null || pickedBlocked)) {
+    button.disabled = true;
+    button.classList.remove('valid');
+    return;
+  }
+  button.disabled = false;
+  button.classList.toggle('valid', state.pickedMemberId != null);
+}
+
+function refreshMemberCopy() {
+  const handoff = state.guardianHandoffActive === true;
+  const name = memberDisplayName();
+  const onThisOrder = memberOnThisOrder() && !handoff;
+  const heading = onThisOrder || savedMemberIsCollapsed() ? memberFullName() : name;
+  const title = document.getElementById('memberFormTitle');
+  const hint = document.getElementById('memberFormHint');
+  const picker = juniorPickerActive();
+  const eyebrow = document.getElementById('memberProductEyebrow');
+  if (eyebrow) eyebrow.hidden = !picker;
+  if (title) {
+    title.textContent = picker
+      ? t('form.member.title')
+      : (heading || t(handoff ? 'form.member.youthTitle' : 'form.member.title'));
+  }
+  if (hint && picker) {
+    hint.hidden = false;
+    hint.textContent = t('form.member.roleHint');
+  } else if (hint) {
+    if (savedMemberIsCollapsed() || onThisOrder) {
+      hint.hidden = true;
+    } else {
+      hint.hidden = false;
+      if (handoff) {
+        hint.textContent = ageStatusText() || t('form.member.youthHint', 'Medlemskabet gælder den unge.');
+      } else if (name) {
+        hint.textContent = t('form.member.productJunior', 'Junior');
+      } else {
+        hint.textContent = t('form.member.roleHint', 'Medlemskabet gælder barnet.');
+      }
+    }
+  }
+  const consent = document.getElementById('memberConsentText');
+  if (consent) {
+    if (!name) {
+      consent.textContent = t('form.member.consent');
+    } else {
+      consent.textContent = t('form.member.consentNamed', 'Jeg er {possessive} værge og køber medlemskabet for {name}.')
+        .replaceAll('{possessive}', possessive(name, state.language || DEFAULT_LANGUAGE))
+        .replaceAll('{name}', name);
+    }
+  }
+  const both = memberBlockIsVisible() && createSectionIsVisible();
+  const payerFirst = juniorAwaitingPayer() && createSectionIsVisible();
+  const buyerStep = document.getElementById('buyerRoleStep');
+  const memberStep = document.getElementById('memberRoleStep');
+  if (buyerStep) {
+    buyerStep.hidden = handoff || !(both || payerFirst);
+    buyerStep.textContent = payerFirst ? '1' : (both && !handoff ? '2' : '1');
+  }
+  if (memberStep) {
+    memberStep.hidden = handoff || !(both || payerFirst);
+    memberStep.textContent = payerFirst ? '2' : '1';
+  }
+  const button = document.getElementById('saveAccountButton');
+  if (button && button.dataset.action === 'save-member' && button.dataset.saving !== '1') {
+    if (picker && state.addingMember === true) {
+      button.textContent = t('form.member.saveChildFirst', 'Gem barnet først');
+      button.setAttribute('data-i18n-key', 'form.member.saveChildFirst');
+    } else if (picker && state.pickedMemberId == null) {
+      button.textContent = t('form.member.continue', 'Fortsæt');
+      button.setAttribute('data-i18n-key', 'form.member.continue');
+    } else if (state.pickedMemberId != null && name) {
+      button.textContent = t('form.member.continueWith', 'Fortsæt med {name}').replaceAll('{name}', name);
+      button.setAttribute('data-i18n-key', 'form.member.continueWith');
+    } else {
+      button.textContent = t('form.member.save', 'Gem');
+      button.setAttribute('data-i18n-key', 'form.member.save');
+    }
+  }
+  const newChrome = document.getElementById('memberNewChrome');
+  const addChildButton = document.getElementById('addChildButton');
+  if (newChrome) newChrome.hidden = handoff;
+  if (addChildButton) addChildButton.hidden = handoff;
+  updateMemberAgeStatus();
+  updateMemberSaveButtonState();
+  syncMemberFieldVisibility();
+  refreshMemberSectionLabels();
+}
+
+function refreshMemberSectionLabels() {
+  const current = document.getElementById('memberCurrentLabel');
+  const existingLabel = document.getElementById('existingMemberLabel');
+  const handoff = state.guardianHandoffActive === true;
+  const onThisOrder = memberOnThisOrder() && !handoff;
+  if (current) {
+    current.hidden = juniorPickerActive() || !onThisOrder;
+    if (onThisOrder) {
+      const isNew = state.pickedMemberId == null && currentMemberRecord()?.createdThisSession === true;
+      current.textContent = isNew
+        ? t('form.member.newOnThisOrder', 'Medlemskabet oprettes til')
+        : t('form.member.onThisOrder', 'På dette medlemskab');
+    }
+  }
+  if (existingLabel) {
+    if (juniorPickerActive()) {
+      existingLabel.hidden = true;
+      return;
+    }
+    const currentId = currentMemberId();
+    const others = (state.existingMembers || []).filter((person) => !currentId || String(person.id) !== currentId);
+    existingLabel.hidden = others.length === 0;
+    if (others.length) existingLabel.textContent = t('form.member.alreadySignedUp', 'Allerede oprettet');
+  }
+}
+
+function placeMemberForm(show, afterPayer) {
+  const form = document.getElementById('parentGuardianForm');
+  const createSection = document.querySelector('[data-auth-section="create"]');
+  if (!form || !createSection) return;
+  form.classList.remove('is-revealed');
+  if (show && createSectionIsVisible() && !afterPayer) {
+    createSection.parentElement?.insertBefore(form, createSection);
+    return;
+  }
+  createSection.insertAdjacentElement('afterend', form);
+}
+
+function juniorAwaitingPayer() {
+  if (selectedJuniorStatus() !== 'junior' || state.guardianHandoffActive === true) return false;
+  if (isUserAuthenticated() && state.customerId != null) return false;
+  const route = routeCurrentMembership();
+  return !(route?.action === 'block' && route.reason === 'buyer_under_18');
+}
+
+function setMemberAwaitingPayer(form, awaiting) {
+  if (!form) return;
+  form.classList.toggle('is-awaiting-payer', awaiting);
+  if (awaiting) form.setAttribute('aria-disabled', 'true');
+  else form.removeAttribute('aria-disabled');
+  const waiting = document.getElementById('memberWaiting');
+  if (waiting) waiting.hidden = !awaiting;
+  form.querySelectorAll(':scope > :not(#memberWaiting)').forEach((el) => {
+    if (awaiting) el.setAttribute('inert', '');
+    else el.removeAttribute('inert');
+  });
+}
+
+function setupMemberFormUx() {
+  if (setupMemberFormUx.done) return;
+  setupMemberFormUx.done = true;
+  ['memberFirstName', 'memberLastName', 'memberDateOfBirth', 'memberEmail'].forEach((id) => {
+    const field = document.getElementById(id);
+    if (!field) return;
+    const onEdit = () => {
+      clearMemberFieldErrorIfPassing(id);
+      refreshMemberCopy();
+      checkSaveAccountButtonState();
+    };
+    field.addEventListener('input', onEdit);
+    field.addEventListener('change', onEdit);
+  });
+  document.getElementById('memberGuardianConsent')?.addEventListener('change', () => {
+    clearMemberFieldErrorIfPassing('memberGuardianConsent');
+    updateMemberSaveButtonState();
+    checkSaveAccountButtonState();
+  });
+}
+
+function memberInitials(person) {
+  const first = String(person?.firstName || '').trim();
+  const last = String(person?.lastName || '').trim();
+  const letters = `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
+  return letters || '?';
+}
+
+function subscriptionCoversMember(subscription, memberId) {
+  if (memberId == null) return false;
+  const users = Array.isArray(subscription?.users) ? subscription.users : [];
+  if (users.some((user) => user?.id != null && String(user.id) === String(memberId))) return true;
+  const payerId = subscription?.payer?.id;
+  return payerId != null && String(payerId) === String(memberId);
+}
+
+function catalogProduct(productRef) {
+  if (!productRef) return null;
+  if (productRef.id == null) return productRef;
+  return accessProductPools().find((product) => String(product?.id) === String(productRef.id)) || productRef;
+}
+
+function isTrialPassProduct(product) {
+  if (!product) return false;
+  if (has15DayPassLabel(product)) return true;
+  const name = String(product.name || '');
+  return /15\s*-?\s*(dag|day)|pr[øo]veperiode|free\s*trial|freetrial/i.test(name);
+}
+
+const MEMBERSHIP_UNKNOWN = 'membership-unknown';
+
+function subscriptionIsTerminated(subscription) {
+  const statuses = Array.isArray(subscription?.statuses) ? subscription.statuses : [];
+  return statuses.some((status) => String(status?.code || status || '').toUpperCase() === 'TERMINATED');
+}
+
+function memberBlockMessage(blocking) {
+  if (blocking === MEMBERSHIP_UNKNOWN) {
+    return t('form.member.membershipUnknown', 'Medlemskab kunne ikke tjekkes');
+  }
+  return t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', blocking);
+}
+
+function memberBlockingMembership(person) {
+  if (!person || person.id == null) return null;
+  if (Number(person.id) === PENDING_MEMBER_ID) return null;
+  if (state.payerSubscriptionsKnown === false) {
+    return person.createdThisSession === true ? null : MEMBERSHIP_UNKNOWN;
+  }
+  const subscriptions = Array.isArray(state.payerSubscriptions) ? state.payerSubscriptions : [];
+  for (const subscription of subscriptions) {
+    if (subscriptionIsTerminated(subscription)) continue;
+    if (!subscriptionCoversMember(subscription, person.id)) continue;
+    const product = catalogProduct(subscription.subscriptionProduct);
+    if (!product || isTrialPassProduct(product)) continue;
+    const name = String(product.name || subscription.subscriptionProduct?.name || '').trim();
+    if (name) return name;
+  }
+  return null;
 }
 
 function renderExistingMembers(users) {
   const list = document.getElementById('existingMemberList');
   const addButton = document.getElementById('addAnotherMember');
+  const cancelAdd = document.getElementById('cancelAddMember');
   if (!list) return;
-  list.replaceChildren();
+  const previous = new Map((state.existingMembers || []).map((person) => [String(person.id), person]));
   const people = (Array.isArray(users) ? users : []).filter((person) => {
     return person && person.id != null && String(person.id) !== String(state.customerId);
+  }).map((person) => {
+    const prior = previous.get(String(person.id));
+    return {
+      id: person.id,
+      firstName: typeof person.firstName === 'string' ? person.firstName.trim() : (prior?.firstName || ''),
+      lastName: typeof person.lastName === 'string' ? person.lastName.trim() : (prior?.lastName || ''),
+      birthDate: normalizeBuyerBirthDate(person.birthDate) || prior?.birthDate || '',
+      createdThisSession: person.createdThisSession === true || prior?.createdThisSession === true,
+    };
   });
-  if (!people.length) {
-    list.hidden = true;
-    if (addButton && state.pickedMemberId == null) addButton.hidden = true;
-    return;
+  previous.forEach((person) => {
+    if (!person?.createdThisSession) return;
+    if (people.some((item) => String(item.id) === String(person.id))) return;
+    people.push(person);
+  });
+  state.existingMembers = people;
+  state.existingMemberCount = people.length;
+  const picker = juniorPickerActive();
+  const draftStarted = memberDraftHasValue();
+  if (!people.length && picker && !draftStarted && state.existingMembersSettled) {
+    state.addingMember = true;
   }
+  if (picker && state.pickedMemberId != null) {
+    const picked = people.find((person) => String(person.id) === String(state.pickedMemberId));
+    if (!picked || memberBlockingMembership(picked)) {
+      const blockedId = state.pickedMemberId;
+      state.pickedMemberId = null;
+      state.pickedMemberFirstName = null;
+      state.pickedMemberLastName = null;
+      state.memberBirthDate = null;
+      releaseOrderForMember(blockedId);
+      if (state.addingMember !== true) {
+        const birthField = document.getElementById('memberDateOfBirth');
+        if (birthField) birthField.value = '';
+      }
+    }
+  }
+  list.replaceChildren();
+  const currentId = currentMemberId();
   people.forEach((person) => {
+    const blocking = memberBlockingMembership(person);
+    const selected = !blocking && currentId != null && String(person.id) === String(currentId) && state.addingMember !== true;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'existing-member-option';
-    if (String(state.pickedMemberId) === String(person.id)) button.classList.add('selected');
-    button.dataset.action = 'pick-existing-member';
+    if (blocking) button.classList.add('existing-member-has-membership');
+    if (selected) button.classList.add('selected');
+    button.disabled = Boolean(blocking);
+    button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    if (!blocking) button.dataset.action = 'pick-existing-member';
     button.dataset.memberId = String(person.id);
-    const birthDate = normalizeBuyerBirthDate(person.birthDate);
-    if (birthDate) button.dataset.birthDate = birthDate;
-    const name = [person.firstName, person.lastName].filter(Boolean).join(' ').trim();
-    button.textContent = name || String(person.id);
-    list.appendChild(button);
+    if (person.birthDate) button.dataset.birthDate = person.birthDate;
+    if (person.firstName) button.dataset.firstName = person.firstName;
+    if (person.lastName) button.dataset.lastName = person.lastName;
+    const main = document.createElement('span');
+    main.className = 'existing-member-main';
+    const avatar = document.createElement('span');
+    avatar.className = 'existing-member-avatar';
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = memberInitials(person);
+    const copy = document.createElement('span');
+    copy.className = 'existing-member-copy';
+    const name = document.createElement('span');
+    name.className = 'existing-member-name';
+    name.textContent = [person.firstName, person.lastName].filter(Boolean).join(' ').trim() || String(person.id);
+    copy.append(name);
+    const meta = document.createElement('span');
+    meta.className = 'existing-member-meta';
+    if (blocking) {
+      const hasMembership = document.createElement('span');
+      hasMembership.className = 'existing-member-age';
+      hasMembership.textContent = memberBlockMessage(blocking);
+      meta.append(hasMembership);
+    } else if (person.createdThisSession && person.birthDate) {
+      const age = ageInYears(person.birthDate, getTodayLocalDateString());
+      if (age != null && age >= 0 && age <= 120) {
+        const ageEl = document.createElement('span');
+        ageEl.className = 'existing-member-age';
+        ageEl.textContent = t('form.member.ageShort', '{age} år').replaceAll('{age}', String(age));
+        meta.append(ageEl);
+      }
+      const badge = document.createElement('span');
+      badge.className = 'existing-member-new';
+      badge.textContent = t('form.member.newBadge', 'Ny');
+      meta.append(badge);
+    } else {
+      const onAccount = document.createElement('span');
+      onAccount.className = 'existing-member-age';
+      onAccount.textContent = t('form.member.onAccount', 'Allerede på din konto');
+      meta.append(onAccount);
+    }
+    copy.append(meta);
+    main.append(avatar, copy);
+    const mark = document.createElement('span');
+    mark.className = 'existing-member-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = selected ? '✓' : '';
+    button.append(main, mark);
+    list.append(button);
   });
-  list.hidden = false;
+  list.hidden = people.length === 0;
+  if (addButton) addButton.hidden = people.length === 0 || state.addingMember === true;
+  if (cancelAdd) cancelAdd.hidden = people.length === 0 || state.addingMember !== true;
+  syncMemberFieldVisibility();
+  refreshMemberSectionLabels();
+  refreshMemberCopy();
 }
+
+let existingMembersLoad = null;
 
 async function loadExistingMembers(payerId) {
   if (!payerId || !isUserAuthenticated() || !juniorMemberFormVisible()) {
@@ -19618,45 +20887,152 @@ async function loadExistingMembers(payerId) {
     return;
   }
   if (String(state.existingMembersLoadedFor) === String(payerId)) return;
-  const url = buildApiUrl({
+  if (existingMembersLoad && existingMembersLoad.payerId === String(payerId)) {
+    return existingMembersLoad.promise;
+  }
+  const promise = loadExistingMembersOnce(payerId);
+  existingMembersLoad = { payerId: String(payerId), promise };
+  try {
+    await promise;
+  } finally {
+    if (existingMembersLoad?.promise === promise) existingMembersLoad = null;
+  }
+}
+
+async function loadExistingMembersOnce(payerId) {
+  const usersUrl = buildApiUrl({
     baseUrl: authAPI.baseUrl,
     useProxy: authAPI.useProxy,
     path: `/api/ver3/customers/${payerId}/subscriptions/users?forPayerSubscriptionsOnly=true`,
   });
+  const subscriptionsUrl = buildApiUrl({
+    baseUrl: authAPI.baseUrl,
+    useProxy: authAPI.useProxy,
+    path: `/api/ver3/customers/${payerId}/subscriptions`,
+  });
   try {
-    const users = await requestJson({ url, headers: bearerHeaders() });
+    const users = await requestJson({ url: usersUrl, headers: bearerHeaders() });
+    let subscriptions = [];
+    let subscriptionsKnown = true;
+    try {
+      const listed = await requestJson({ url: subscriptionsUrl, headers: bearerHeaders() });
+      subscriptions = Array.isArray(listed) ? listed : [];
+    } catch (error) {
+      subscriptionsKnown = false;
+      devWarn('[member] Could not list payer subscriptions:', error);
+    }
+    state.payerSubscriptions = subscriptions;
+    state.payerSubscriptionsKnown = subscriptionsKnown;
     state.existingMembersLoadedFor = payerId;
+    state.existingMembersSettled = true;
     renderExistingMembers(users);
   } catch (error) {
     devWarn('[member] Could not list existing members:', error);
+    state.payerSubscriptions = [];
+    state.payerSubscriptionsKnown = false;
+    state.existingMembersSettled = true;
     renderExistingMembers([]);
   }
 }
 
-function pickExistingMember(memberId, birthDate) {
+function pickExistingMember(memberId, birthDate, firstName, lastName) {
+  const person = (state.existingMembers || []).find((item) => String(item.id) === String(memberId));
+  if (memberBlockingMembership(person || { id: memberId })) return false;
+  clearSavedMemberCollapse();
   state.pickedMemberId = Number(memberId);
-  if (birthDate) {
-    state.memberBirthDate = birthDate;
-    const field = document.getElementById('memberDateOfBirth');
-    if (field) field.value = birthDate;
-  }
-  document.getElementById('parentGuardianForm')?.classList.add('member-existing-selected');
-  const addButton = document.getElementById('addAnotherMember');
-  if (addButton) addButton.hidden = false;
-  document.querySelectorAll('.existing-member-option').forEach((button) => {
-    button.classList.toggle('selected', button.dataset.memberId === String(memberId));
-  });
+  state.pickedMemberFirstName = (person?.firstName || (typeof firstName === 'string' ? firstName : '')).trim();
+  state.pickedMemberLastName = (person?.lastName || (typeof lastName === 'string' ? lastName : '')).trim();
+  state.addingMember = false;
+  const birth = person?.birthDate || birthDate || '';
+  state.memberBirthDate = birth || null;
+  const field = document.getElementById('memberDateOfBirth');
+  if (field) field.value = birth;
+  clearMemberFieldErrors();
+  renderExistingMembers(state.existingMembers);
+  refreshMemberCopy();
+  alignStoredOrderToPickedMember();
+  return true;
 }
 
 function addAnotherMember() {
+  clearSavedMemberCollapse();
+  state.memberPickBeforeAdd = state.pickedMemberId != null
+    ? {
+      id: state.pickedMemberId,
+      birthDate: state.memberBirthDate || '',
+      firstName: state.pickedMemberFirstName || '',
+      lastName: state.pickedMemberLastName || '',
+    }
+    : null;
   state.pickedMemberId = null;
+  state.pickedMemberFirstName = null;
+  state.pickedMemberLastName = null;
   state.memberBirthDate = null;
-  document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
-  const addButton = document.getElementById('addAnotherMember');
-  if (addButton) addButton.hidden = true;
-  document.querySelectorAll('.existing-member-option.selected').forEach((button) => {
-    button.classList.remove('selected');
+  state.addingMember = true;
+  ['memberFirstName', 'memberLastName', 'memberDateOfBirth', 'memberEmail'].forEach((id) => {
+    const field = document.getElementById(id);
+    if (field) field.value = '';
   });
+  const consent = document.getElementById('memberGuardianConsent');
+  if (consent) consent.checked = false;
+  clearMemberFieldErrors();
+  renderExistingMembers(state.existingMembers);
+  refreshMemberCopy();
+  document.getElementById('memberFirstName')?.focus();
+}
+
+function cancelAddMember() {
+  const restore = state.memberPickBeforeAdd;
+  state.memberPickBeforeAdd = null;
+  state.addingMember = false;
+  clearMemberFieldErrors();
+  if (restore?.id != null && pickExistingMember(restore.id, restore.birthDate || '', restore.firstName || '', restore.lastName || '')) {
+    return;
+  }
+  if (!(state.existingMembers || []).length) state.addingMember = true;
+  renderExistingMembers(state.existingMembers);
+  refreshMemberCopy();
+}
+
+function rememberCreatedMember(memberId, draft) {
+  const people = Array.isArray(state.existingMembers) ? state.existingMembers.slice() : [];
+  const index = people.findIndex((person) => String(person.id) === String(memberId));
+  const next = {
+    id: memberId,
+    firstName: draft.firstName,
+    lastName: draft.lastName,
+    birthDate: normalizeBuyerBirthDate(draft.birthDate) || '',
+    createdThisSession: true,
+  };
+  if (index >= 0) people[index] = { ...people[index], ...next };
+  else people.push(next);
+  state.existingMembers = people;
+  return people;
+}
+
+async function addChildFromForm() {
+  const button = document.getElementById('addChildButton');
+  if (!button || button.dataset.saving === '1') return;
+  if (rejectInvalidMemberFields({ animate: true, toast: true, scroll: true })) return;
+  const draft = readMemberForm();
+  rememberCreatedMember(PENDING_MEMBER_ID, draft);
+  state.memberPickBeforeAdd = null;
+  state.addingMember = false;
+  pickExistingMember(PENDING_MEMBER_ID, draft.birthDate, draft.firstName, draft.lastName);
+}
+
+function editHandoffMember() {
+  state.editingHandoffMember = true;
+  syncMemberFieldVisibility();
+  document.getElementById('memberFirstName')?.focus();
+}
+
+function editSavedMember() {
+  state.editingSavedMember = true;
+  hideMemberSavedMark();
+  syncMemberFieldVisibility();
+  refreshMemberCopy();
+  document.getElementById('memberFirstName')?.focus();
 }
 
 function beginGuardianHandoff() {
@@ -19675,7 +21051,11 @@ function beginGuardianHandoff() {
   write('lastName', '');
   write('dateOfBirth', '');
   state.guardianHandoffActive = true;
+  state.editingHandoffMember = false;
   state.pickedMemberId = null;
+  state.pickedMemberFirstName = null;
+  state.pickedMemberLastName = null;
+  clearSavedMemberCollapse();
   updateMemberFormVisibility();
   const message = t('form.guardian.prompt', 'Udfyld værgens oplysninger. Medlemskabet gælder den unge.');
   showSaveAccountMessage(message, 'info');
@@ -19729,15 +21109,67 @@ function logOtherPayerOrder(stage, order) {
   });
 }
 
-function restoreProfileSubmitButton(button) {
-  button.dataset.action = 'save-account';
-  button.setAttribute('data-i18n-key', 'form.saveAccount');
+function setSubmitButtonLabel(button, action, key, fallback) {
+  button.dataset.action = action;
+  button.setAttribute('data-i18n-key', key);
   button.classList.add('save-account-btn');
   button.classList.remove('checkout-btn');
-  button.disabled = false;
   if (!button.dataset.saving) {
-    const label = t('form.saveAccount');
-    button.textContent = label && label !== 'form.saveAccount' ? label : 'Opret profil';
+    button.disabled = false;
+    const label = t(key);
+    button.textContent = label && label !== key ? label : fallback;
+  }
+}
+
+function restoreProfileSubmitButton(button) {
+  setSubmitButtonLabel(button, 'save-account', 'form.saveAccount', 'Opret profil');
+  button.classList.remove('valid');
+}
+
+function setMemberSaveButton(button) {
+  setSubmitButtonLabel(button, 'save-member', 'form.member.save', 'Gem');
+}
+
+async function handleSaveMember() {
+  const button = document.getElementById('saveAccountButton');
+  if (!button || button.dataset.saving === '1') return;
+  if (juniorPickerActive() && state.addingMember === true) return;
+  if (rejectInvalidMemberFields({ animate: true, toast: true, scroll: true })) return;
+  button.dataset.saving = '1';
+  button.disabled = true;
+  const saving = t('form.member.saving');
+  button.textContent = saving && saving !== 'form.member.saving' ? saving : 'Gemmer...';
+  try {
+    const deferCreate = Number(state.pickedMemberId) === PENDING_MEMBER_ID
+      || (state.pickedMemberId == null && state.guardianHandoffActive === true);
+    if (deferCreate) {
+      if (state.pickedMemberId == null) {
+        rememberCreatedMember(PENDING_MEMBER_ID, readMemberForm());
+        state.pickedMemberId = PENDING_MEMBER_ID;
+      }
+      state.savedMemberCollapsed = true;
+      state.editingSavedMember = false;
+      state.addingMember = false;
+      renderExistingMembers(state.existingMembers);
+    } else {
+      const wasNew = state.pickedMemberId == null;
+      const draft = readMemberForm();
+      const memberId = await ensureMemberCustomer();
+      if (memberId) {
+        if (wasNew) rememberCreatedMember(memberId, draft);
+        state.savedMemberCollapsed = true;
+        state.editingSavedMember = false;
+        renderExistingMembers(state.existingMembers);
+      }
+    }
+  } catch (error) {
+    const ageMessage = membershipDateAgeMessage(error);
+    notifyMemberBlock(ageMessage || t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
+  } finally {
+    delete button.dataset.saving;
+    button.disabled = false;
+    refreshMemberCopy();
+    if (savedMemberIsCollapsed()) showMemberSavedMark();
   }
 }
 
@@ -19748,23 +21180,10 @@ function placeJuniorFormSubmit(show) {
   const message = document.getElementById('saveAccountMessage');
   if (!juniorActions || !home || !button || !message) return;
 
-  const createSection = document.querySelector('[data-auth-section="create"]');
-  const createVisible = !!(createSection && createSection.style.display !== 'none');
-
-  if (show) {
+  if (show && !createSectionIsVisible()) {
     juniorActions.append(button, message);
     home.hidden = true;
-    if (!createVisible) {
-      button.dataset.action = 'submit-checkout';
-      button.setAttribute('data-i18n-key', 'cart.checkout');
-      button.classList.remove('save-account-btn');
-      button.classList.add('checkout-btn');
-      const label = t('cart.checkout');
-      button.textContent = label && label !== 'cart.checkout' ? label : 'Til kassen';
-      if (DOM.checkoutBtn) button.disabled = DOM.checkoutBtn.disabled;
-      return;
-    }
-    restoreProfileSubmitButton(button);
+    setMemberSaveButton(button);
     return;
   }
 
@@ -19775,8 +21194,42 @@ function placeJuniorFormSubmit(show) {
 
 function juniorMemberFormVisible() {
   if (selectedJuniorStatus() !== 'junior') return false;
+  if (!isUserAuthenticated() || state.customerId == null) return false;
   const route = routeCurrentMembership();
   return !(route?.action === 'block' && route.reason === 'buyer_under_18');
+}
+
+function kidFormFocusTarget() {
+  const fields = document.getElementById('memberNewFields');
+  if (fields && !fields.hidden) return document.getElementById('memberFirstName');
+  const list = document.getElementById('existingMemberList');
+  const option = list && !list.hidden
+    ? list.querySelector('.existing-member-option:not([disabled])')
+    : null;
+  if (option) return option;
+  const add = document.getElementById('addAnotherMember');
+  if (add && !add.hidden) return add;
+  return null;
+}
+
+async function focusActiveKidField() {
+  const focusBefore = document.activeElement;
+  if (state.customerId != null) {
+    try {
+      await loadExistingMembers(state.customerId);
+    } catch (_) {}
+  }
+  if (!juniorMemberFormVisible()) return;
+  const stillThere = !document.activeElement
+    || document.activeElement === focusBefore
+    || document.activeElement === document.body;
+  if (!stillThere) return;
+  const target = kidFormFocusTarget();
+  if (!target || target.disabled) return;
+  requestAnimationFrame(() => {
+    target.scrollIntoView({ block: 'center' });
+    target.focus({ preventScroll: true });
+  });
 }
 
 function updateMemberFormVisibility() {
@@ -19786,19 +21239,35 @@ function updateMemberFormVisibility() {
   }
   const form = DOM.parentGuardianForm || document.getElementById('parentGuardianForm');
   const showJunior = juniorMemberFormVisible();
-  const show = showJunior || state.guardianHandoffActive === true;
+  const awaitingPayer = juniorAwaitingPayer();
+  const show = showJunior || awaitingPayer || state.guardianHandoffActive === true;
+  const wasHidden = !form || form.hidden || form.style.display === 'none';
+  const wasAwaiting = Boolean(form?.classList.contains('is-awaiting-payer'));
+  placeMemberForm(show, awaitingPayer);
   if (form) {
     form.hidden = !show;
     form.style.display = show ? 'block' : 'none';
+    setMemberAwaitingPayer(form, awaitingPayer);
+    if (show && wasHidden && !awaitingPayer) {
+      form.classList.add('is-revealed');
+      form.addEventListener('animationend', () => form.classList.remove('is-revealed'), { once: true });
+      if (!showJunior) form.scrollIntoView({ block: 'nearest' });
+    }
+    if (showJunior && (wasAwaiting || wasHidden)) {
+      void focusActiveKidField();
+    }
   }
+  const loginFirst = document.getElementById('juniorLoginFirst');
+  if (loginFirst) loginFirst.hidden = !awaitingPayer || Boolean(show);
+  const showActive = showJunior || state.guardianHandoffActive === true;
   const consent = document.getElementById('memberGuardianConsent');
-  if (consent) consent.required = Boolean(show && state.pickedMemberId == null);
+  if (consent) consent.required = Boolean(showActive && state.pickedMemberId == null);
   const emailGroup = document.getElementById('memberEmailGroup');
   const emailField = document.getElementById('memberEmail');
   if (emailGroup) emailGroup.hidden = state.guardianHandoffActive !== true;
   if (emailField) emailField.required = state.guardianHandoffActive === true;
-  placeJuniorFormSubmit(show);
-  setJuniorRoleLabels(show);
+  placeJuniorFormSubmit(showActive);
+  setJuniorRoleLabels(showActive);
   if (selectedJuniorStatus() === 'other' && state.guardianHandoffActive !== true) {
     clearStoredJuniorMember();
   }
@@ -19807,37 +21276,40 @@ function updateMemberFormVisibility() {
   } else if (!showJunior) {
     renderExistingMembers([]);
   }
+  setupMemberFormUx();
+  refreshMemberCopy();
   recordStudentYouthProductIds();
 }
 
 function setJuniorRoleLabels(show) {
-  const createSection = document.querySelector('[data-auth-section="create"]');
-  const createVisible = !!(createSection && createSection.style.display !== 'none');
-  const bothVisible = Boolean(show && createVisible);
+  const handoff = state.guardianHandoffActive === true;
+  const payerFirst = juniorAwaitingPayer() && createSectionIsVisible() && !handoff;
+  const bothVisible = Boolean(show && createSectionIsVisible());
   const buyerRole = document.getElementById('buyerRole');
   const profileTitle = document.getElementById('createProfileTitle');
-  const memberStep = document.getElementById('memberRoleStep');
-  if (buyerRole) buyerRole.hidden = !bothVisible;
-  if (profileTitle) profileTitle.hidden = bothVisible;
-  if (memberStep) memberStep.hidden = !bothVisible;
-  const handoff = state.guardianHandoffActive === true;
+  if (buyerRole) buyerRole.hidden = !(bothVisible || payerFirst);
+  if (profileTitle) profileTitle.hidden = bothVisible || payerFirst;
   const title = document.querySelector('#buyerRole .profile-role-title');
   const hint = document.querySelector('#buyerRole .profile-role-hint');
-  const memberTitle = document.querySelector('#parentGuardianForm .parent-form-title');
   if (title) {
-    const key = handoff ? 'form.guardian.title' : 'form.buyerRole.title';
+    const key = payerFirst ? 'form.payer.title' : (handoff ? 'form.guardian.title' : 'form.buyerRole.title');
     title.setAttribute('data-i18n-key', key);
     title.textContent = t(key);
   }
   if (hint) {
-    const key = handoff ? 'form.guardian.hint' : 'form.buyerRole.hint';
+    const key = payerFirst ? 'form.payer.hint' : (handoff ? 'form.guardian.hint' : 'form.buyerRole.hint');
     hint.setAttribute('data-i18n-key', key);
     hint.textContent = t(key);
   }
-  if (memberTitle) {
-    const key = handoff ? 'form.member.youthTitle' : 'form.member.title';
-    memberTitle.setAttribute('data-i18n-key', key);
-    memberTitle.textContent = t(key);
+  const loginHint = document.getElementById('loginPayerHint');
+  const loginSection = document.querySelector('[data-auth-section="login"]');
+  const loginVisible = Boolean(loginSection && loginSection.style.display !== 'none' && !isUserAuthenticated());
+  if (loginHint) loginHint.hidden = !(juniorAwaitingPayer() && loginVisible);
+  const saveButton = document.getElementById('saveAccountButton');
+  if (saveButton && saveButton.dataset.action !== 'save-member' && saveButton.dataset.saving !== '1') {
+    const key = payerFirst ? 'form.payer.save' : 'form.saveAccount';
+    saveButton.setAttribute('data-i18n-key', key);
+    saveButton.textContent = t(key);
   }
 }
 
@@ -20048,8 +21520,35 @@ function orderEchoesOtherPayer(order) {
   return sources.some((item) => item.buySubscriptionForOtherUser === true);
 }
 
+async function retargetStoredOrder(memberId, memberKeyValue) {
+  if (!state.orderId || memberId == null || Number(memberId) === PENDING_MEMBER_ID) return false;
+  const orderId = state.orderId;
+  try {
+    const updated = await orderAPI.updateOrder(orderId, buildOrderIdentity({
+      payerId: Number(state.customerId),
+      businessUnit: state.selectedBusinessUnit,
+      memberId: Number(memberId),
+      forOther: true,
+    }));
+    if (String(state.orderId) !== String(orderId)) return false;
+    state.orderIsOtherPayer = true;
+    state.orderMemberKey = memberKeyValue;
+    state.subscriptionUserId = Number(memberId);
+    if (updated) state.fullOrder = updated;
+    persistOrderSnapshot(state.orderId);
+    return true;
+  } catch (error) {
+    devWarn('[checkout] Could not move the order to the selected child:', error);
+    return false;
+  }
+}
+
 async function ensureOrderCreated(context = 'auto') {
   const mode = otherPayerMode();
+  if (mode && !state.orderId && parkedMisalignedOrderId != null) {
+    state.orderId = parkedMisalignedOrderId;
+    parkedMisalignedOrderId = null;
+  }
   if (mode) {
     let memberId;
     try {
@@ -20063,9 +21562,19 @@ async function ensureOrderCreated(context = 'auto') {
     if (!memberId) return null;
     const key = currentMemberKey();
     if (state.orderId && (state.orderIsOtherPayer !== true || state.orderMemberKey !== key)) {
-      dropOrderForMemberChange();
-      state.subscriptionUserId = memberId;
-      state.orderMemberKey = key;
+      const hadSubscription = state.subscriptionAttachedOrderId === state.orderId;
+      const moved = await retargetStoredOrder(memberId, key);
+      if (!moved) {
+        dropOrderForMemberChange();
+        state.subscriptionUserId = memberId;
+        state.orderMemberKey = key;
+        if (hadSubscription) {
+          showToast(t(
+            'form.member.orderRestarted',
+            'Ordren starter forfra, fordi barnet blev skiftet.',
+          ), 'info');
+        }
+      }
     }
   }
 
@@ -20107,11 +21616,38 @@ async function ensureOrderCreated(context = 'auto') {
   orderCreationPromise = (async () => {
     console.log(`[checkout] Creating order (context: ${context})...`);
     const order = await orderAPI.createOrder(orderData);
-    if (mode && currentMemberKey() !== memberKeyAtCreate) return null;
-    state.orderId = order.id || order.orderId || order.data?.id || order.data?.orderId;
-    if (mode) {
+    const createdId = order.id || order.orderId || order.data?.id || order.data?.orderId;
+    state.orderId = createdId;
+    state.fullOrder = order;
+    if (mode && currentMemberKey() !== memberKeyAtCreate) {
       state.orderIsOtherPayer = true;
       state.orderMemberKey = memberKeyAtCreate;
+      state.subscriptionAttachedOrderId = null;
+      persistOrderSnapshot(createdId);
+      let liveId = null;
+      try {
+        liveId = await ensureMemberCustomer();
+      } catch (error) {
+        devWarn('[checkout] Could not finish the order for the selected child:', error);
+      }
+      const liveMemberId = liveId == null || liveId === '' ? NaN : Number(liveId);
+      const moved = Number.isFinite(liveMemberId) && liveMemberId !== PENDING_MEMBER_ID
+        ? await retargetStoredOrder(liveMemberId, currentMemberKey())
+        : false;
+      if (!moved) {
+        devWarn('[checkout] Member changed while the order was created:', createdId);
+        parkedMisalignedOrderId = createdId;
+        state.orderId = null;
+        state.fullOrder = null;
+        state.order = null;
+        state.subscriptionAttachedOrderId = null;
+        if (!state.memberCheckoutBlocked) state.orderAlignFailed = true;
+        return null;
+      }
+    }
+    if (mode) {
+      state.orderIsOtherPayer = true;
+      state.orderMemberKey = currentMemberKey();
       state.otherPayerFlagEchoed = orderEchoesOtherPayer(order);
       logOtherPayerOrder('create', order.data && !order.customer ? order.data : order);
       if (state.otherPayerFlagEchoed !== true) {
@@ -20125,7 +21661,7 @@ async function ensureOrderCreated(context = 'auto') {
     
     // Store full order object for payment overview
     // Note: This order might not have subscriptionItems yet, but we'll update it later
-    state.fullOrder = order;
+    if (!state.fullOrder) state.fullOrder = order;
     
     // Update payment overview if we're on step 4
     if (state.currentStep === 4) {
@@ -20384,6 +21920,16 @@ async function handleCheckout() {
 
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
+  capturePostHog('checkout_started', {
+    cart_value: state.totals.cartTotal,
+    currency: 'DKK',
+    product_type: state.selectedProductType,
+    has_discount: state.discountApplied,
+  });
+  posthogCheckoutLogger.info('checkout started', {
+    product_type: state.selectedProductType,
+    has_discount: state.discountApplied,
+  });
   
   // Hide FAQ section when checkout starts
   updateFAQVisibility();
@@ -20904,8 +22450,19 @@ async function handleCheckout() {
           state.checkoutInProgress = false;
           return;
         }
+        if (state.orderAlignFailed) {
+          state.orderAlignFailed = false;
+          showToast(t(
+            'form.member.orderMoveFailed',
+            'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
+          ), 'error');
+          setCheckoutLoadingState(false);
+          state.checkoutInProgress = false;
+          return;
+        }
         throw new Error('Order ID missing after ensureOrderCreated');
       }
+      state.orderAlignFailed = false;
       state.orderId = ensuredOrderId;
       
       persistOrderSnapshot(state.orderId);
@@ -23111,6 +24668,30 @@ function orderHasFirstclimbBlockingProduct(order) {
   return false;
 }
 
+/** True when this completed order should dual-fire purchase_singlegym. */
+function isSingleGymPurchase(order = null, storedOrder = null) {
+  if (isFitnessPurchase(order, storedOrder)) return false;
+  if (storedOrder?.singleGymMembership === true) return true;
+  const product = order?.subscriptionItems?.[0]?.product;
+  if (isSingleGymMembership(product)) return true;
+  const cartItems = Array.isArray(storedOrder?.cartItems) ? storedOrder.cartItems : [];
+  return cartItems.some((item) => (
+    item?.type === 'membership'
+    && compactProductToken(`${item.productName || ''} ${item.name || ''}`).includes('singlegym')
+  ));
+}
+
+/** True when this completed order should dual-fire purchase_fitness. */
+function isFitnessPurchase(order = null, storedOrder = null) {
+  if (storedOrder?.fitnessMembership === true) return true;
+  const product = order?.subscriptionItems?.[0]?.product;
+  if (isFitnessMembership(product)) return true;
+  const cartItems = Array.isArray(storedOrder?.cartItems) ? storedOrder.cartItems : [];
+  return cartItems.some((item) => (
+    item?.type === 'membership' && /fitness/i.test(`${item.productName || ''} ${item.name || ''}`)
+  ));
+}
+
 /** True when this completed order should dual-fire purchase_99kr. */
 function isFirstClimbPurchase(order = null, storedOrder = null) {
   if (isFirstClimbRoute()) return true;
@@ -23406,11 +24987,6 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
     return false;
   }
 
-  if (!window.GTM?.trackPurchase) {
-    devWarn('[GTM] purchase not tracked: GTM utilities not loaded');
-    return false;
-  }
-
   const purchaseItems = resolvePurchaseItems(order, storedOrder);
   if (!purchaseItems.length) {
     devWarn('[GTM] purchase not tracked: no items for order', orderId);
@@ -23423,8 +24999,28 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
   }
 
   const transactionId = resolvePurchaseTransactionId(order, orderId);
+  if (!posthogCapturedPurchaseOrderIds.has(String(orderId))) {
+    posthogCapturedPurchaseOrderIds.add(String(orderId));
+    capturePostHog('purchase_completed', {
+      purchase_value: purchaseValue,
+      currency: 'DKK',
+      item_count: purchaseItems.length,
+    });
+    posthogCheckoutLogger.info('checkout completed', {
+      purchase_value: purchaseValue,
+      currency: 'DKK',
+      item_count: purchaseItems.length,
+    });
+  }
+  if (!window.GTM?.trackPurchase) {
+    devWarn('[GTM] purchase not tracked: GTM utilities not loaded');
+    return false;
+  }
+
   const metadata = resolvePurchaseTrackingMetadata(order, storedOrder, storedCustomer, transactionId);
   const dualFire99kr = isFirstClimbPurchase(order, storedOrder);
+  const dualFireFitness = !state.testMode && isFitnessPurchase(order, storedOrder);
+  const dualFireSingleGym = !state.testMode && isSingleGymPurchase(order, storedOrder);
 
   try {
     window.GTM.trackPurchase(
@@ -23451,12 +25047,44 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
         }
       );
     }
+    if (dualFireFitness) {
+      window.GTM.trackPurchase(
+        transactionId,
+        purchaseItems,
+        purchaseValue,
+        0,
+        0,
+        'DKK',
+        {
+          ...metadata,
+          eventName: 'purchase_fitness',
+          ...(metadata.event_id ? { event_id: `${metadata.event_id}:fitness` } : {}),
+        }
+      );
+    }
+    if (dualFireSingleGym) {
+      window.GTM.trackPurchase(
+        transactionId,
+        purchaseItems,
+        purchaseValue,
+        0,
+        0,
+        'DKK',
+        {
+          ...metadata,
+          eventName: 'purchase_singlegym',
+          ...(metadata.event_id ? { event_id: `${metadata.event_id}:singlegym` } : {}),
+        }
+      );
+    }
     markPurchaseTracked(orderId);
     devLog('[GTM] purchase tracked:', {
       transactionId,
       purchaseValue,
       itemCount: purchaseItems.length,
       purchase_99kr: dualFire99kr,
+      purchase_fitness: dualFireFitness,
+      purchase_singlegym: dualFireSingleGym,
     });
     trackTikTokAttributedPurchase(transactionId, purchaseItems, purchaseValue, order, storedOrder);
     return true;
@@ -25631,8 +27259,8 @@ function renderConfirmationView() {
     if (headerPrice) headerPrice.textContent = priceLabel;
     const allGymsNote = membershipPill?.querySelector('.success-header-pill-note');
     if (allGymsNote) {
-      // Fitness is Aalborg-only and does not include climbing.
-      allGymsNote.hidden = isFitnessMembershipSelected();
+      // Fitness and Single Gym are Aalborg-only. The default note says every gym.
+      allGymsNote.hidden = isFitnessMembershipSelected() || isSingleGymMembershipSelected();
     }
     if (membershipPill) {
       membershipPill.style.display = hasMembershipHighlight ? 'block' : 'none';
@@ -26443,6 +28071,14 @@ function validateForm(animate = false) {
   let isValid = true;
   const errors = [];
   clearErrorStates();
+  if (selectedJuniorStatus() === 'junior' && !isUserAuthenticated()) {
+    const message = t(
+      'form.member.loginFirst',
+      'Log ind eller opret en konto for betaleren af medlemskabet.',
+    );
+    document.querySelector('#step-4 .info-form-section')?.scrollIntoView({ block: 'nearest' });
+    return { isValid: false, errors: [message], message };
+  }
   const skipPersonalValidation = isUserAuthenticated();
 
   if (!skipPersonalValidation) {
@@ -26464,10 +28100,30 @@ function validateForm(animate = false) {
 
   const memberForm = DOM.parentGuardianForm;
   const memberFormVisible = memberForm && !memberForm.hidden && memberForm.style.display !== 'none';
-  if (memberFormVisible && state.pickedMemberId == null && !document.getElementById('memberGuardianConsent')?.checked) {
+  const blockingMembership = memberFormVisible && state.pickedMemberId != null
+    ? memberBlockingMembership({ id: state.pickedMemberId })
+    : null;
+  if (memberFormVisible && juniorPickerActive() && blockingMembership) {
     isValid = false;
-    errors.push('Missing guardian consent');
-    highlightFieldError('memberGuardianConsent', animate);
+    const message = memberBlockMessage(blockingMembership);
+    errors.push(message);
+    if (animate) showToast(message, 'error');
+  } else if (memberFormVisible && juniorPickerActive() && state.addingMember !== true && state.pickedMemberId == null) {
+    isValid = false;
+    const message = t('form.member.pickWithoutMembership', 'Vælg et barn uden medlemskab, eller tilføj et nyt.');
+    errors.push(message);
+    if (animate) showToast(message, 'error');
+  } else if (memberFormVisible && state.pickedMemberId == null) {
+    const memberResult = validateMemberFields();
+    if (!memberResult.ok) {
+      isValid = false;
+      errors.push('Invalid member fields');
+      if (state.guardianHandoffActive && !state.editingHandoffMember) {
+        state.editingHandoffMember = true;
+        syncMemberFieldVisibility();
+      }
+      applyMemberFieldErrors(memberResult.errors, { animate, toast: animate, scroll: animate });
+    }
   }
 
   // Re-cache consent elements in case they weren't found initially
@@ -26549,12 +28205,22 @@ function validateForm(animate = false) {
 }
 
 function clearErrorStates() {
-  [...REQUIRED_FIELDS, ...PARENT_REQUIRED_FIELDS, ...CARD_FIELDS].forEach((fieldId) => {
+  [...REQUIRED_FIELDS, ...PARENT_REQUIRED_FIELDS, ...CARD_FIELDS, ...MEMBER_ERROR_FIELDS].forEach((fieldId) => {
     const field = document.getElementById(fieldId);
     const formGroup = field?.closest('.form-group');
     if (formGroup) {
       formGroup.classList.remove('error');
       formGroup.style.animation = ''; // Clear any animations
+    }
+    if (MEMBER_ERROR_FIELDS.includes(fieldId)) {
+      const errorNode = document.getElementById(`${fieldId}Error`);
+      if (errorNode) errorNode.textContent = '';
+      if (field) {
+        field.removeAttribute('aria-invalid');
+        const describedBy = memberDescribedBy(fieldId, false);
+        if (describedBy) field.setAttribute('aria-describedby', describedBy);
+        else field.removeAttribute('aria-describedby');
+      }
     }
   });
   
@@ -26654,10 +28320,6 @@ function updateCheckoutButton() {
   // Payment method no longer required from UI - card is used by default
   const hasProduct = hasMembership || hasPunchCards || hasAddons;
   DOM.checkoutBtn.disabled = !(privacyAccepted && termsAccepted && hasProduct);
-  const juniorSubmit = document.getElementById('saveAccountButton');
-  if (juniorSubmit && juniorSubmit.dataset.action === 'submit-checkout') {
-    juniorSubmit.disabled = DOM.checkoutBtn.disabled;
-  }
   const { isFreeTrialSelected, isZeroTotal, isFreeFlow } = applyFreeFlowCartUi();
   
   const consentsSection = document.querySelector('.consents-section');
@@ -26924,7 +28586,12 @@ function nextStep(fromStep) {
         const isFitness = state.testFitnessMembership === true
           || urlParams.get('testFitness') === 'true'
           || rawProductType === 'fitness';
-        const productType = rawProductType === 'fitness' ? 'membership' : rawProductType;
+        const isSingleGym = !isFitness && (
+          state.testSingleGymMembership === true
+          || rawProductType === 'singlegym'
+          || rawProductType === 'single-gym'
+        );
+        const productType = (rawProductType === 'fitness' || isSingleGym) ? 'membership' : rawProductType;
         console.log('[Test Mode] Creating mock order data for testing:', productType, isFitness ? '(fitness)' : '');
         
         // Create mock order data for testing
@@ -26932,13 +28599,13 @@ function nextStep(fromStep) {
           number: 'TEST-12345',
           date: new Date(),
           items: [
-            { name: productType === 'membership' ? (isFitness ? 'Fitness Membership' : 'Membership') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
+            { name: productType === 'membership' ? (isFitness ? 'Fitness Membership' : isSingleGym ? 'Single Gym Medlemskab' : 'Membership') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card', amount: 469 }
           ],
           total: 469,
           memberName: 'Test User',
           membershipNumber: 'TEST-12345',
-          membershipType: productType === 'membership' ? (isFitness ? 'Fitness Membership' : 'Medlemskab') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
-          primaryGym: isFitness ? 'Boulders Aalborg' : 'Boulders Aarhus Nord',
+          membershipType: productType === 'membership' ? (isFitness ? 'Fitness Membership' : isSingleGym ? 'Single Gym Medlemskab' : 'Medlemskab') : productType === '15daypass' ? '15-Day Trial Pass' : 'Punch Card',
+          primaryGym: (isFitness || isSingleGym) ? 'Boulders Aalborg' : 'Boulders Aarhus Nord',
           membershipPrice: 469,
         };
         state.orderId = 'TEST-12345';
@@ -26947,6 +28614,7 @@ function nextStep(fromStep) {
         state.testMode = true;
         state.testProductType = productType;
         state.testFitnessMembership = isFitness;
+        state.testSingleGymMembership = isSingleGym;
         state.paymentConfirmed = true; // Set payment confirmed for test mode
         state.paymentFailed = false;
         state.paymentPending = false;
@@ -26977,16 +28645,28 @@ function nextStep(fromStep) {
             }]
           };
         } else {
-          // Default to membership (regular or Fitness)
-          const membershipName = isFitness ? 'Fitness Membership' : 'Medlemskab';
+          // Default to membership (regular, Fitness, or Single Gym)
+          const membershipName = isFitness
+            ? 'Fitness Membership'
+            : isSingleGym
+              ? 'Single Gym Medlemskab'
+              : 'Medlemskab';
           state.selectedProductType = 'membership';
-          state.membershipPlanId = isFitness ? 'fitness-membership-123' : 'membership-123';
+          state.membershipPlanId = isFitness
+            ? 'fitness-membership-123'
+            : isSingleGym
+              ? 'singlegym-membership-123'
+              : 'membership-123';
           // Mock subscription items with price
           state.fullOrder = {
             subscriptionItems: [{
               product: {
                 name: membershipName,
-                productLabels: isFitness ? [{ name: 'fitness' }] : [{ name: 'Public' }]
+                productLabels: isFitness
+                  ? [{ name: 'fitness' }]
+                  : isSingleGym
+                    ? [{ name: 'singlegym' }]
+                    : [{ name: 'Public' }]
               },
               price: { amount: 46900 } // 469.00 DKK in cents
             }]
@@ -27006,7 +28686,7 @@ function nextStep(fromStep) {
     } else {
       // If we somehow ended up on step 5 without an order, go back to step 1
       console.warn('[Navigation] Attempted to show success page without order data or payment not confirmed. Not rendering success page.');
-      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|fitness|15daypass|punch-card to URL');
+      console.warn('[Navigation] To test success page, add ?testSuccess=true&testProductType=membership|fitness|singlegym|15daypass|punch-card to URL');
       // Don't redirect - let the payment failed/pending handlers show the appropriate message
     }
   }

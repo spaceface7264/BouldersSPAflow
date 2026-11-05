@@ -1710,8 +1710,21 @@ body.bg-ready::before {
 
 /* Center titles and subtitles in step 4 to match other steps */
 #step-4 .main-subtitle,
-#step-4 .secondary-subtitle {
+#step-4 .secondary-subtitle,
+#step-4 .junior-login-first {
     text-align: center;
+}
+
+#step-4 .junior-login-first {
+    margin: 8px auto 0;
+    max-width: 36rem;
+    color: #D1D5DB;
+    font-size: var(--font-size-sm);
+    line-height: 1.45;
+}
+
+#step-4 .junior-login-first[hidden] {
+    display: none;
 }
 
 /* Step 5 (Confirmation) - Full width layout for confirmation page */
@@ -5069,6 +5082,30 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     padding-right: 0;
 }
 
+#parentGuardianForm .member-current {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+}
+
+.member-section-label {
+    margin: 0 0 8px;
+    color: #F401F5;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.member-section-label[hidden] {
+    display: none;
+}
+
+#existingMemberLabel {
+    margin-top: 4px;
+    color: #9CA3AF;
+}
+
 .profile-role[hidden],
 .profile-role-step[hidden] {
     display: none;
@@ -5106,6 +5143,14 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     line-height: 1.45;
 }
 
+#loginPayerHint {
+    margin: -12px 0 20px;
+}
+
+#loginPayerHint[hidden] {
+    display: none;
+}
+
 /* Parent/Guardian Form */
 .parent-guardian-form {
     margin-top: 32px;
@@ -5113,7 +5158,83 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     background-color: #1a1a1a;
     border: 1px solid #374151;
     border-radius: 12px;
-    animation: slideDown 0.3s ease-out;
+}
+
+.parent-guardian-form.is-revealed {
+    animation: slideDown 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.parent-guardian-form.is-awaiting-payer {
+    position: relative;
+    border-color: #4b5563;
+    background-color: #141414;
+}
+
+.parent-guardian-form.is-awaiting-payer::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    background: rgba(10, 10, 10, 0.45);
+    pointer-events: none;
+}
+
+.parent-guardian-form.is-awaiting-payer > :not(#memberWaiting) {
+    opacity: 0.28;
+    filter: grayscale(1);
+    pointer-events: none;
+    user-select: none;
+}
+
+.member-waiting {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(244, 1, 245, 0.4);
+    border-radius: 8px;
+    background: rgba(244, 1, 245, 0.08);
+    color: #fff;
+    text-align: center;
+}
+
+.parent-guardian-form.is-awaiting-payer .member-waiting {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    margin: 0;
+    padding: 20px 22px;
+    transform: translateY(-50%);
+    background: #141414;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.member-waiting[hidden] {
+    display: none;
+}
+
+.member-waiting-label {
+    margin: 0 0 4px;
+    color: #F401F5;
+    font-size: var(--font-size-xs, 12px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.member-waiting p:last-child {
+    margin: 0;
+    color: #E5E7EB;
+    font-size: var(--font-size-sm);
+    line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .parent-guardian-form.is-revealed {
+        animation: none;
+    }
 }
 
 .parent-form-title {
@@ -5132,6 +5253,12 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
 }
 
 .existing-member-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 44px;
     text-align: left;
     padding: 12px 14px;
     border-radius: 10px;
@@ -5139,21 +5266,248 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     background: #111;
     color: #fff;
     cursor: pointer;
+    transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.existing-member-option[hidden] {
+    display: none;
+}
+
+.existing-member-option:active {
+    transform: scale(0.97);
 }
 
 .existing-member-option.selected {
-    border-color: #fff;
+    border-color: #F401F5;
+    background: rgba(244, 1, 245, 0.08);
+}
+
+.existing-member-option:disabled {
+    cursor: default;
+    opacity: 0.72;
+}
+
+.existing-member-option:disabled:active {
+    transform: none;
+}
+
+.existing-member-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.existing-member-avatar {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid #374151;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.existing-member-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.existing-member-mark {
+    flex: 0 0 22px;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: 1px solid #374151;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.existing-member-add {
+    justify-content: flex-start;
+    border-style: dashed;
+}
+
+.member-new-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.member-new-header[hidden],
+.member-new-cancel[hidden],
+#addChildButton[hidden] {
+    display: none;
+}
+
+.member-new-title {
+    margin: 0;
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    color: #fff;
+}
+
+.member-new-cancel {
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.member-add-child {
+    width: 100%;
+    margin-top: 16px;
+    justify-content: center;
+}
+
+#memberNewFields:not([hidden]):has(#memberNewChrome:not([hidden])) {
+    margin-bottom: 16px;
+    padding: 16px;
+    border: 1px solid #374151;
+    border-radius: 10px;
+}
+
+.existing-member-name {
+    font-weight: 600;
+    min-width: 0;
+}
+
+.existing-member-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.existing-member-age {
+    color: #D1D5DB;
+    font-size: var(--font-size-sm);
+}
+
+.existing-member-has-membership .existing-member-age {
+    white-space: normal;
+}
+
+.existing-member-new {
+    color: #86EFAC;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 #addAnotherMember:not([hidden]) {
-    display: inline-block;
+    display: flex;
     margin: 0 0 16px;
-    padding: 0;
-    background: none;
-    border: none;
+}
+
+.member-summary:not([hidden]) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 8px 0 0;
+}
+
+.member-title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.member-saved-mark {
+    flex: 0 0 auto;
+    color: #86EFAC;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.member-saved-mark[hidden],
+.member-summary-age[hidden],
+.member-summary-email[hidden] {
+    display: none;
+}
+
+.member-saved-mark.is-leaving {
+    animation: memberSavedFade 600ms ease forwards;
+}
+
+@keyframes memberSavedFade {
+    to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .member-saved-mark.is-leaving {
+        animation: none;
+    }
+}
+
+.parent-guardian-form.member-saved .registration-form,
+.parent-guardian-form.member-saved .member-summary {
+    margin-bottom: 0;
+}
+
+.parent-guardian-form.member-saved .registration-form {
+    display: none;
+}
+
+.member-summary-age,
+.member-summary-email {
+    margin: 0;
+    color: #D1D5DB;
+    font-size: var(--font-size-sm);
+    line-height: 1.45;
+}
+
+.member-summary-edit {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 16px;
+    border-radius: 8px;
+    border: 1px solid #374151;
+    background: #111;
     color: #fff;
-    text-decoration: underline;
     cursor: pointer;
+    transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.member-summary-edit[hidden] {
+    display: none;
+}
+
+.member-summary-edit:active {
+    transform: scale(0.97);
+}
+
+.member-age-status {
+    margin: 8px 0 0;
+    font-size: var(--font-size-sm);
+    line-height: 1.45;
+}
+
+.member-age-status.is-ok {
+    color: #86EFAC;
+}
+
+.member-age-status.is-bad {
+    color: #FCA5A5;
+}
+
+#memberNewFields[hidden] {
+    display: none;
 }
 
 #parentGuardianForm.member-existing-selected #memberNewFields {
