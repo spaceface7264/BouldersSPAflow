@@ -48,8 +48,9 @@ test('membership age routes', () => {
 test('an empty customer-type catalogue uses the only priced type', () => {
   const only = [{ id: 1, productIds: [134, 538] }];
   assert.equal(choosePricedCustomerType(only, 538), 1);
-  assert.equal(choosePricedCustomerType(only, 999), 1);
+  assert.equal(choosePricedCustomerType(only, 999), null);
   assert.equal(choosePricedCustomerType(only, null), 1);
+  assert.equal(choosePricedCustomerType([{ id: 1, productIds: [] }], 538), 1);
   assert.equal(choosePricedCustomerType([], 538), null);
 });
 

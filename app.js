@@ -68,6 +68,20 @@ import {
 import { memberAgeStatus, possessive } from './utils/memberCopy.js';
 import { sanitizeHTML } from './sanitize.js';
 import confetti from 'canvas-confetti';
+import posthog, { isPostHogEnabled } from './posthog.js';
+
+function capturePostHog(event, properties = {}) {
+  if (isPostHogEnabled) posthog.capture(event, properties);
+}
+
+const posthogCheckoutLogger = {
+  info(message, attributes) {
+    if (isPostHogEnabled) posthog.logger.info(message, attributes);
+  },
+};
+
+const posthogCapturedPurchaseOrderIds = new Set();
+let posthogIdentifiedCustomerId = null;
 
 /** GoActive / BRP app id for Boulders. Required so reset emails link to boulders.goactivebooking.com/resetPassword. */
 const BOULDERS_GOACTIVE_APP_ID = 416;
@@ -2796,6 +2810,11 @@ class AuthAPI {
     }
 
     clearCookie();
+
+    if (isPostHogEnabled) {
+      posthog.reset();
+      posthogIdentifiedCustomerId = null;
+    }
     
     // Update header auth indicator when tokens are cleared
     refreshHeaderAuthIndicator();
@@ -6088,6 +6107,7 @@ const state = {
   existingMembers: [],
   existingMemberCount: 0,
   payerSubscriptions: [],
+  payerSubscriptionsKnown: true,
   addingMember: false,
   memberPickBeforeAdd: null,
   editingHandoffMember: false,
@@ -6226,6 +6246,22 @@ function isLocalDevHost() {
   return host === 'localhost' || host === '127.0.0.1';
 }
 
+function identifyAuthenticatedCustomer() {
+  if (!isPostHogEnabled || !state.customerId || !isUserAuthenticated()) return;
+
+  const customerId = String(state.customerId);
+  if (posthogIdentifiedCustomerId === customerId) return;
+
+  // A second authenticated account in the same tab must not inherit the first account's analytics state.
+  if (posthogIdentifiedCustomerId && posthogIdentifiedCustomerId !== customerId) {
+    posthog.reset();
+  }
+
+  const email = state.authenticatedCustomer?.email || state.authenticatedEmail;
+  posthog.identify(customerId, email ? { email } : undefined);
+  posthogIdentifiedCustomerId = customerId;
+}
+
 async function syncAuthenticatedCustomerState(username = null, email = null) {
   const metadata = getTokenMetadata();
   const resolvedUsername = username || state.customerId || metadata?.username || metadata?.userName;
@@ -6248,6 +6284,7 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
       const secondsLeft = Math.ceil((customerSyncCooldownUntil - now) / 1000);
       console.log(`[Auth] Skipping customer profile refresh (cooldown ${secondsLeft}s remaining)`);
       refreshLoginUI();
+      identifyAuthenticatedCustomer();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('auth-state-changed'));
       }
@@ -6279,6 +6316,8 @@ async function syncAuthenticatedCustomerState(username = null, email = null) {
   } else {
     refreshLoginUI();
   }
+
+  identifyAuthenticatedCustomer();
   
   // Dispatch event to notify React components of auth state change
   if (typeof window !== 'undefined') {
@@ -7796,6 +7835,7 @@ const translations = {
     'form.member.addAnother': 'Tilføj et andet barn',
     'form.member.onAccount': 'Allerede på din konto',
     'form.member.alreadyHas': 'Har allerede {product}',
+    'form.member.membershipUnknown': 'Medlemskab kunne ikke tjekkes',
     'form.member.pickWithoutMembership': 'Vælg et barn uden medlemskab, eller tilføj et nyt.',
     'form.member.continue': 'Fortsæt',
     'form.member.newChild': 'Nyt barn',
@@ -8249,6 +8289,7 @@ const translations = {
     'form.member.addAnother': 'Add another child',
     'form.member.onAccount': 'Already on your account',
     'form.member.alreadyHas': 'Already has {product}',
+    'form.member.membershipUnknown': 'Membership could not be checked',
     'form.member.pickWithoutMembership': 'Choose a child without a membership, or add a new one.',
     'form.member.continue': 'Continue',
     'form.member.newChild': 'New child',
@@ -8684,6 +8725,7 @@ const translations = {
     'form.member.addAnother': 'Weiteres Kind hinzufügen',
     'form.member.onAccount': 'Bereits auf deinem Konto',
     'form.member.alreadyHas': 'Hat bereits {product}',
+    'form.member.membershipUnknown': 'Mitgliedschaft konnte nicht geprüft werden',
     'form.member.pickWithoutMembership': 'Wähle ein Kind ohne Mitgliedschaft, oder füge ein neues hinzu.',
     'form.member.continue': 'Weiter',
     'form.member.newChild': 'Neues Kind',
@@ -13642,6 +13684,9 @@ function handleGymSelection(item) {
   
   state.selectedGymId = numericId; // Store numeric ID for API requests
   state.selectedBusinessUnit = numericId; // Also store as businessUnit for clarity
+  if (numericId) {
+    capturePostHog('gym_selected', { gym_id: String(numericId) });
+  }
   void loadBusinessUnitSignupSettings(numericId);
   
   // Store gym name for display - try multiple selectors
@@ -14891,6 +14936,11 @@ function setupNewAccessStep() {
         category,
         type: isMembership ? 'membership' : 'punch-card',
         card
+      });
+      capturePostHog('product_selected', {
+        product_id: String(productId),
+        product_category: category,
+        product_type: isMembership ? 'membership' : 'punch_card',
       });
       
       // Step 5: If membership is selected, fetch add-ons immediately.
@@ -17062,6 +17112,11 @@ async function handleApplyDiscount() {
       
       // Show succinct success message
       showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
+      capturePostHog('discount_applied', {
+        discount_amount: state.totals.discountAmount,
+        order_value: newTotal,
+        currency: 'DKK',
+      });
       
       // Force a visual update by triggering a reflow
       if (DOM.cartTotal) {
@@ -17092,6 +17147,11 @@ async function handleApplyDiscount() {
         
         const newTotal = state.totals.cartTotal || state.totals.subtotal || 0;
         showDiscountMessage(t('cart.discount.applied', 'Discount code applied successfully!'), 'success');
+        capturePostHog('discount_applied', {
+          discount_amount: 0,
+          order_value: newTotal,
+          currency: 'DKK',
+        });
         
         // Highlight the new price in cart total elements and payment overview
         const cartTotalElements = document.querySelectorAll('[data-summary-field="cart-total"], .cart-total .total-amount, .total-amount[data-summary-field="cart-total"], [data-summary-field="order-total"], [data-summary-field="pay-now"], [data-summary-field="monthly-payment"]');
@@ -19568,16 +19628,19 @@ function routeCurrentMembership() {
 }
 
 const CHECKOUT_MEMBER_STORAGE_KEY = 'boulders_checkout_member';
+const PENDING_MEMBER_ID = -1;
 
 function clearStoredJuniorMember() {
   state.subscriptionUserId = null;
   state.orderIsOtherPayer = null;
   state.orderMemberKey = null;
   state.pickedMemberId = null;
+  state.pickedMemberFirstName = null;
   state.pickedMemberLastName = null;
   state.existingMembers = [];
   state.memberBirthDate = null;
   state.guardianHandoffActive = false;
+  state.editingHandoffMember = false;
   state.savedMemberCollapsed = false;
   state.editingSavedMember = false;
   state.addingMember = false;
@@ -19585,6 +19648,7 @@ function clearStoredJuniorMember() {
   hideMemberSavedMark();
   state.existingMembersLoadedFor = null;
   state.payerSubscriptions = [];
+  state.payerSubscriptionsKnown = true;
   document.getElementById('parentGuardianForm')?.classList.remove('member-existing-selected');
   try {
     sessionStorage.removeItem(CHECKOUT_MEMBER_STORAGE_KEY);
@@ -19812,9 +19876,8 @@ async function resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey) {
 }
 
 // The name catalogue is empty on this tenant. Scan subscription price lists until
-// BRP says the type id does not exist. One list that actually prices subscriptions
-// is the type adult signup already sends. Several lists resolve only when the
-// selected product sits on exactly one of them.
+// BRP says the type id does not exist. One list is used when it contains the
+// selected product. Several lists resolve only when the product sits on exactly one.
 async function loadPricedCustomerTypes(businessUnitId) {
   const unitId = Number(businessUnitId);
   if (state.pricedCustomerTypesBusinessUnit === unitId && Array.isArray(state.pricedCustomerTypes)) {
@@ -19935,7 +19998,7 @@ async function ensureMemberCustomerOnce() {
   if (stored && String(stored.payerId) === String(payerId) && stored.memberKey === key && stored.memberId != null) {
     const storedBlocking = mode === 'junior' ? memberBlockingMembership({ id: stored.memberId }) : null;
     if (storedBlocking) {
-      notifyMemberBlock(t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', storedBlocking));
+      notifyMemberBlock(memberBlockMessage(storedBlocking));
       return null;
     }
     state.subscriptionUserId = stored.memberId;
@@ -19947,11 +20010,11 @@ async function ensureMemberCustomerOnce() {
     dropOrderForMemberChange();
   }
 
-  if (state.pickedMemberId != null) {
+  if (state.pickedMemberId != null && Number(state.pickedMemberId) !== PENDING_MEMBER_ID) {
     const memberId = Number(state.pickedMemberId);
     const blocking = mode === 'junior' ? memberBlockingMembership({ id: memberId }) : null;
     if (blocking) {
-      notifyMemberBlock(t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', blocking));
+      notifyMemberBlock(memberBlockMessage(blocking));
       return null;
     }
     writeStoredMember({ payerId, memberId, memberKey: key });
@@ -19959,7 +20022,10 @@ async function ensureMemberCustomerOnce() {
     return memberId;
   }
 
-  if (mode === 'junior' && state.addingMember !== true) {
+  const confirmingNewChild = state.addingMember === true
+    || Number(state.pickedMemberId) === PENDING_MEMBER_ID
+    || savedMemberIsCollapsed();
+  if (mode === 'junior' && !confirmingNewChild) {
     notifyMemberBlock(t('form.member.pickWithoutMembership', 'Vælg et barn uden medlemskab, eller tilføj et nyt.'));
     return null;
   }
@@ -20035,7 +20101,14 @@ async function ensureMemberCustomerOnce() {
   }
   originalConsoleLog('[other-payer] otheruser', { id: memberId, created: created?.created === true, mode });
   state.memberBirthDate = form.birthDate;
-  writeStoredMember({ payerId, memberId, memberKey: key });
+  if (Number(state.pickedMemberId) === PENDING_MEMBER_ID) {
+    state.existingMembers = (state.existingMembers || []).map((person) => (
+      Number(person.id) === PENDING_MEMBER_ID ? { ...person, id: memberId } : person
+    ));
+    state.pickedMemberId = memberId;
+    renderExistingMembers(state.existingMembers);
+  }
+  writeStoredMember({ payerId, memberId, memberKey: currentMemberKey() });
   clearMemberBlock();
   return memberId;
 }
@@ -20533,10 +20606,29 @@ function isTrialPassProduct(product) {
   return /15\s*-?\s*(dag|day)|pr[øo]veperiode|free\s*trial|freetrial/i.test(name);
 }
 
+const MEMBERSHIP_UNKNOWN = 'membership-unknown';
+
+function subscriptionIsTerminated(subscription) {
+  const statuses = Array.isArray(subscription?.statuses) ? subscription.statuses : [];
+  return statuses.some((status) => String(status?.code || status || '').toUpperCase() === 'TERMINATED');
+}
+
+function memberBlockMessage(blocking) {
+  if (blocking === MEMBERSHIP_UNKNOWN) {
+    return t('form.member.membershipUnknown', 'Medlemskab kunne ikke tjekkes');
+  }
+  return t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', blocking);
+}
+
 function memberBlockingMembership(person) {
   if (!person || person.id == null) return null;
+  if (Number(person.id) === PENDING_MEMBER_ID) return null;
+  if (state.payerSubscriptionsKnown === false) {
+    return person.createdThisSession === true ? null : MEMBERSHIP_UNKNOWN;
+  }
   const subscriptions = Array.isArray(state.payerSubscriptions) ? state.payerSubscriptions : [];
   for (const subscription of subscriptions) {
+    if (subscriptionIsTerminated(subscription)) continue;
     if (!subscriptionCoversMember(subscription, person.id)) continue;
     const product = catalogProduct(subscription.subscriptionProduct);
     if (!product || isTrialPassProduct(product)) continue;
@@ -20653,7 +20745,7 @@ function renderExistingMembers(users) {
     if (blocking) {
       const hasMembership = document.createElement('span');
       hasMembership.className = 'existing-member-age';
-      hasMembership.textContent = t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', blocking);
+      hasMembership.textContent = memberBlockMessage(blocking);
       meta.append(hasMembership);
     } else if (person.createdThisSession && person.birthDate) {
       const age = ageInYears(person.birthDate, getTodayLocalDateString());
@@ -20724,18 +20816,22 @@ async function loadExistingMembersOnce(payerId) {
   try {
     const users = await requestJson({ url: usersUrl, headers: bearerHeaders() });
     let subscriptions = [];
+    let subscriptionsKnown = true;
     try {
       const listed = await requestJson({ url: subscriptionsUrl, headers: bearerHeaders() });
       subscriptions = Array.isArray(listed) ? listed : [];
     } catch (error) {
+      subscriptionsKnown = false;
       devWarn('[member] Could not list payer subscriptions:', error);
     }
     state.payerSubscriptions = subscriptions;
+    state.payerSubscriptionsKnown = subscriptionsKnown;
     state.existingMembersLoadedFor = payerId;
     renderExistingMembers(users);
   } catch (error) {
     devWarn('[member] Could not list existing members:', error);
     state.payerSubscriptions = [];
+    state.payerSubscriptionsKnown = false;
     renderExistingMembers([]);
   }
 }
@@ -20823,26 +20919,11 @@ async function addChildFromForm() {
   const button = document.getElementById('addChildButton');
   if (!button || button.dataset.saving === '1') return;
   if (rejectInvalidMemberFields({ animate: true, toast: true, scroll: true })) return;
-  button.dataset.saving = '1';
-  button.disabled = true;
-  const saving = t('form.member.adding', 'Tilføjer...');
-  button.textContent = saving && saving !== 'form.member.adding' ? saving : 'Tilføjer...';
-  try {
-    const draft = readMemberForm();
-    const memberId = await ensureMemberCustomer();
-    if (!memberId) return;
-    state.memberPickBeforeAdd = null;
-    state.addingMember = false;
-    rememberCreatedMember(memberId, draft);
-    pickExistingMember(memberId, draft.birthDate, draft.firstName, draft.lastName);
-  } catch (error) {
-    const ageMessage = membershipDateAgeMessage(error);
-    notifyMemberBlock(ageMessage || t('form.member.createFailed', 'Barnet kunne ikke oprettes. Prøv igen.'));
-  } finally {
-    delete button.dataset.saving;
-    button.disabled = false;
-    button.textContent = t('form.member.addChild', 'Tilføj barn');
-  }
+  const draft = readMemberForm();
+  rememberCreatedMember(PENDING_MEMBER_ID, draft);
+  state.memberPickBeforeAdd = null;
+  state.addingMember = false;
+  pickExistingMember(PENDING_MEMBER_ID, draft.birthDate, draft.firstName, draft.lastName);
 }
 
 function editHandoffMember() {
@@ -20964,14 +21045,27 @@ async function handleSaveMember() {
   const saving = t('form.member.saving');
   button.textContent = saving && saving !== 'form.member.saving' ? saving : 'Gemmer...';
   try {
-    const wasNew = state.pickedMemberId == null;
-    const draft = readMemberForm();
-    const memberId = await ensureMemberCustomer();
-    if (memberId) {
-      if (wasNew) rememberCreatedMember(memberId, draft);
+    const deferCreate = Number(state.pickedMemberId) === PENDING_MEMBER_ID
+      || (state.pickedMemberId == null && state.guardianHandoffActive === true);
+    if (deferCreate) {
+      if (state.pickedMemberId == null) {
+        rememberCreatedMember(PENDING_MEMBER_ID, readMemberForm());
+        state.pickedMemberId = PENDING_MEMBER_ID;
+      }
       state.savedMemberCollapsed = true;
       state.editingSavedMember = false;
+      state.addingMember = false;
       renderExistingMembers(state.existingMembers);
+    } else {
+      const wasNew = state.pickedMemberId == null;
+      const draft = readMemberForm();
+      const memberId = await ensureMemberCustomer();
+      if (memberId) {
+        if (wasNew) rememberCreatedMember(memberId, draft);
+        state.savedMemberCollapsed = true;
+        state.editingSavedMember = false;
+        renderExistingMembers(state.existingMembers);
+      }
     }
   } catch (error) {
     const ageMessage = membershipDateAgeMessage(error);
@@ -21276,6 +21370,28 @@ function orderEchoesOtherPayer(order) {
   return sources.some((item) => item.buySubscriptionForOtherUser === true);
 }
 
+async function retargetStoredOrder(memberId, memberKeyValue) {
+  if (!state.orderId || memberId == null || Number(memberId) === PENDING_MEMBER_ID) return false;
+  if (state.subscriptionAttachedOrderId === state.orderId) return false;
+  try {
+    const updated = await orderAPI.updateOrder(state.orderId, buildOrderIdentity({
+      payerId: Number(state.customerId),
+      businessUnit: state.selectedBusinessUnit,
+      memberId: Number(memberId),
+      forOther: true,
+    }));
+    state.orderIsOtherPayer = true;
+    state.orderMemberKey = memberKeyValue;
+    state.subscriptionUserId = Number(memberId);
+    if (updated) state.fullOrder = updated;
+    persistOrderSnapshot(state.orderId);
+    return true;
+  } catch (error) {
+    devWarn('[checkout] Could not move the order to the selected child:', error);
+    return false;
+  }
+}
+
 async function ensureOrderCreated(context = 'auto') {
   const mode = otherPayerMode();
   if (mode) {
@@ -21291,9 +21407,12 @@ async function ensureOrderCreated(context = 'auto') {
     if (!memberId) return null;
     const key = currentMemberKey();
     if (state.orderId && (state.orderIsOtherPayer !== true || state.orderMemberKey !== key)) {
-      dropOrderForMemberChange();
-      state.subscriptionUserId = memberId;
-      state.orderMemberKey = key;
+      const moved = await retargetStoredOrder(memberId, key);
+      if (!moved) {
+        dropOrderForMemberChange();
+        state.subscriptionUserId = memberId;
+        state.orderMemberKey = key;
+      }
     }
   }
 
@@ -21335,11 +21454,26 @@ async function ensureOrderCreated(context = 'auto') {
   orderCreationPromise = (async () => {
     console.log(`[checkout] Creating order (context: ${context})...`);
     const order = await orderAPI.createOrder(orderData);
-    if (mode && currentMemberKey() !== memberKeyAtCreate) return null;
-    state.orderId = order.id || order.orderId || order.data?.id || order.data?.orderId;
-    if (mode) {
+    const createdId = order.id || order.orderId || order.data?.id || order.data?.orderId;
+    state.orderId = createdId;
+    state.fullOrder = order;
+    if (mode && currentMemberKey() !== memberKeyAtCreate) {
       state.orderIsOtherPayer = true;
       state.orderMemberKey = memberKeyAtCreate;
+      state.subscriptionAttachedOrderId = null;
+      persistOrderSnapshot(createdId);
+      const liveId = Number(state.pickedMemberId);
+      const moved = Number.isFinite(liveId) && liveId !== PENDING_MEMBER_ID
+        ? await retargetStoredOrder(liveId, currentMemberKey())
+        : false;
+      if (!moved) {
+        devWarn('[checkout] Member changed while the order was created:', createdId);
+        return null;
+      }
+    }
+    if (mode) {
+      state.orderIsOtherPayer = true;
+      state.orderMemberKey = currentMemberKey();
       state.otherPayerFlagEchoed = orderEchoesOtherPayer(order);
       logOtherPayerOrder('create', order.data && !order.customer ? order.data : order);
       if (state.otherPayerFlagEchoed !== true) {
@@ -21353,7 +21487,7 @@ async function ensureOrderCreated(context = 'auto') {
     
     // Store full order object for payment overview
     // Note: This order might not have subscriptionItems yet, but we'll update it later
-    state.fullOrder = order;
+    if (!state.fullOrder) state.fullOrder = order;
     
     // Update payment overview if we're on step 4
     if (state.currentStep === 4) {
@@ -21612,6 +21746,16 @@ async function handleCheckout() {
 
   // Mark checkout as in progress to prevent state resets
   state.checkoutInProgress = true;
+  capturePostHog('checkout_started', {
+    cart_value: state.totals.cartTotal,
+    currency: 'DKK',
+    product_type: state.selectedProductType,
+    has_discount: state.discountApplied,
+  });
+  posthogCheckoutLogger.info('checkout started', {
+    product_type: state.selectedProductType,
+    has_discount: state.discountApplied,
+  });
   
   // Hide FAQ section when checkout starts
   updateFAQVisibility();
@@ -24658,11 +24802,6 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
     return false;
   }
 
-  if (!window.GTM?.trackPurchase) {
-    devWarn('[GTM] purchase not tracked: GTM utilities not loaded');
-    return false;
-  }
-
   const purchaseItems = resolvePurchaseItems(order, storedOrder);
   if (!purchaseItems.length) {
     devWarn('[GTM] purchase not tracked: no items for order', orderId);
@@ -24675,6 +24814,24 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
   }
 
   const transactionId = resolvePurchaseTransactionId(order, orderId);
+  if (!posthogCapturedPurchaseOrderIds.has(String(orderId))) {
+    posthogCapturedPurchaseOrderIds.add(String(orderId));
+    capturePostHog('purchase_completed', {
+      purchase_value: purchaseValue,
+      currency: 'DKK',
+      item_count: purchaseItems.length,
+    });
+    posthogCheckoutLogger.info('checkout completed', {
+      purchase_value: purchaseValue,
+      currency: 'DKK',
+      item_count: purchaseItems.length,
+    });
+  }
+  if (!window.GTM?.trackPurchase) {
+    devWarn('[GTM] purchase not tracked: GTM utilities not loaded');
+    return false;
+  }
+
   const metadata = resolvePurchaseTrackingMetadata(order, storedOrder, storedCustomer, transactionId);
   const dualFire99kr = isFirstClimbPurchase(order, storedOrder);
   const dualFireFitness = !state.testMode && isFitnessPurchase(order, storedOrder);
@@ -27755,7 +27912,7 @@ function validateForm(animate = false) {
     : null;
   if (memberFormVisible && juniorPickerActive() && blockingMembership) {
     isValid = false;
-    const message = t('form.member.alreadyHas', 'Har allerede {product}').replaceAll('{product}', blockingMembership);
+    const message = memberBlockMessage(blockingMembership);
     errors.push(message);
     if (animate) showToast(message, 'error');
   } else if (memberFormVisible && juniorPickerActive() && state.addingMember !== true && state.pickedMemberId == null) {
@@ -27861,6 +28018,16 @@ function clearErrorStates() {
     if (formGroup) {
       formGroup.classList.remove('error');
       formGroup.style.animation = ''; // Clear any animations
+    }
+    if (MEMBER_ERROR_FIELDS.includes(fieldId)) {
+      const errorNode = document.getElementById(`${fieldId}Error`);
+      if (errorNode) errorNode.textContent = '';
+      if (field) {
+        field.removeAttribute('aria-invalid');
+        const describedBy = memberDescribedBy(fieldId, false);
+        if (describedBy) field.setAttribute('aria-describedby', describedBy);
+        else field.removeAttribute('aria-describedby');
+      }
     }
   });
   

@@ -89,14 +89,23 @@ export function membershipAgeRoute({ buyerAge, productKind: kind }) {
 
 /**
  * Pick a customer type from price-list probes when the name catalogue is empty.
- * One priced type wins even if the selected product id is missing from it.
+ * One priced type is used when it lists the product, lists no products, or the product id is unknown.
+ * A known product that is not on that type does not match.
  * Several priced types resolve only when the product sits on exactly one of them.
  */
 export function choosePricedCustomerType(pricedTypes, productId) {
   const priced = (Array.isArray(pricedTypes) ? pricedTypes : []).filter((type) =>
     Number.isFinite(Number(type?.id)),
   );
-  if (priced.length === 1) return Number(priced[0].id);
+  if (priced.length === 1) {
+    const ids = Array.isArray(priced[0].productIds) ? priced[0].productIds : [];
+    const product = productId == null || productId === '' ? NaN : Number(productId);
+    const listed = ids.map((id) => Number(id)).filter((id) => Number.isFinite(id));
+    if (!Number.isFinite(product) || listed.length === 0 || listed.includes(product)) {
+      return Number(priced[0].id);
+    }
+    return null;
+  }
   if (priced.length === 0) return null;
   const product = Number(productId);
   if (!Number.isFinite(product)) return null;
