@@ -19925,8 +19925,7 @@ async function resolveNamedCustomerTypeId(businessUnitId, predicate, cacheKey) {
 // The name catalogue is empty on this tenant. Scan subscription price lists.
 // A missing id is a gap, not the end of the catalogue: keep going so a later
 // type that lists the selected product is still found. Stop after several
-// misses in a row. One list is used when it contains the selected product.
-// Several lists resolve only when the product sits on exactly one.
+// misses in a row. The narrowest list that contains the product wins.
 async function loadPricedCustomerTypes(businessUnitId) {
   const unitId = Number(businessUnitId);
   if (state.pricedCustomerTypesBusinessUnit === unitId && Array.isArray(state.pricedCustomerTypes)) {
@@ -19975,6 +19974,9 @@ async function resolvePricedCustomerTypeId(businessUnitId, productId, cacheKey) 
     originalConsoleLog('[other-payer] customer type price probe', {
       product: Number(productId),
       pricedTypeIds: priced.map((type) => type.id),
+      listingProduct: priced
+        .filter((type) => (type.productIds || []).some((id) => Number(id) === Number(productId)))
+        .map((type) => ({ id: type.id, products: type.productIds.length })),
     });
     return null;
   }

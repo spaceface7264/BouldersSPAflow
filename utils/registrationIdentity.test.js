@@ -64,6 +64,25 @@ test('several priced types resolve only when the product is on exactly one', () 
   assert.equal(choosePricedCustomerType(priced, 999), null);
 });
 
+test('a catch-all price list loses to the narrower list that also has the product', () => {
+  const priced = [
+    { id: 1, productIds: [134, 135, 538, 539] },
+    { id: 8, productIds: [56, 538] },
+    { id: 9, productIds: [135, 539] },
+  ];
+  assert.equal(choosePricedCustomerType(priced, 538), 8);
+  assert.equal(choosePricedCustomerType(priced, 539), 9);
+  assert.equal(choosePricedCustomerType(priced, 134), 1);
+});
+
+test('identical price lists fall back to the lowest customer type id', () => {
+  const priced = [
+    { id: 4, productIds: [538, 56] },
+    { id: 1, productIds: [56, 538] },
+  ];
+  assert.equal(choosePricedCustomerType(priced, 538), 1);
+});
+
 test('otheruser body omits an empty junior email and never includes a password', () => {
   const body = buildOtherUserBody({
     member: { firstName: 'Aya', lastName: 'Nielsen', birthDate: '2014-04-02', email: '', phone: null },
