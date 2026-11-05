@@ -7842,8 +7842,8 @@ const translations = {
     'form.member.alreadyHas': 'Har allerede {product}',
     'form.member.membershipUnknown': 'Medlemskab kunne ikke tjekkes',
     'form.member.pickWithoutMembership': 'Vælg et barn uden medlemskab, eller tilføj et nyt.',
-    'form.member.loginFirst': 'Log ind eller opret en konto. Så kan du vælge et barn, der allerede er på profilen.',
-    'form.member.waiting': 'Venter på login',
+    'form.member.loginFirst': 'Log ind eller opret en konto for betaleren af medlemskabet.',
+    'form.member.waiting': 'Venter på login.',
     'form.member.orderMoveFailed': 'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
     'form.member.orderRestarted': 'Ordren starter forfra, fordi barnet blev skiftet.',
     'form.member.continue': 'Fortsæt',
@@ -8300,8 +8300,8 @@ const translations = {
     'form.member.alreadyHas': 'Already has {product}',
     'form.member.membershipUnknown': 'Membership could not be checked',
     'form.member.pickWithoutMembership': 'Choose a child without a membership, or add a new one.',
-    'form.member.loginFirst': 'Log in or create an account. Then you can choose a child already on the profile.',
-    'form.member.waiting': 'Waiting for login',
+    'form.member.loginFirst': 'Log in or create an account for the person paying for the membership.',
+    'form.member.waiting': 'Waiting for login.',
     'form.member.orderMoveFailed': 'The membership could not be moved to the selected child. Try again.',
     'form.member.orderRestarted': 'The order is starting over because the child changed.',
     'form.member.continue': 'Continue',
@@ -8740,8 +8740,8 @@ const translations = {
     'form.member.alreadyHas': 'Hat bereits {product}',
     'form.member.membershipUnknown': 'Mitgliedschaft konnte nicht geprüft werden',
     'form.member.pickWithoutMembership': 'Wähle ein Kind ohne Mitgliedschaft, oder füge ein neues hinzu.',
-    'form.member.loginFirst': 'Melde dich an oder erstelle ein Konto. Danach kannst du ein Kind wählen, das schon auf dem Profil ist.',
-    'form.member.waiting': 'Wartet auf Anmeldung',
+    'form.member.loginFirst': 'Melde dich an oder erstelle ein Konto für die Person, die die Mitgliedschaft bezahlt.',
+    'form.member.waiting': 'Wartet auf Anmeldung.',
     'form.member.orderMoveFailed': 'Die Mitgliedschaft konnte nicht auf das gewählte Kind übertragen werden. Versuch es erneut.',
     'form.member.orderRestarted': 'Die Bestellung startet neu, weil das Kind gewechselt wurde.',
     'form.member.continue': 'Weiter',
@@ -28013,7 +28013,7 @@ function validateForm(animate = false) {
   if (selectedJuniorStatus() === 'junior' && !isUserAuthenticated()) {
     const message = t(
       'form.member.loginFirst',
-      'Log ind eller opret en konto. Så kan du vælge et barn, der allerede er på profilen.',
+      'Log ind eller opret en konto for betaleren af medlemskabet.',
     );
     document.querySelector('#step-4 .info-form-section')?.scrollIntoView({ block: 'nearest' });
     return { isValid: false, errors: [message], message };

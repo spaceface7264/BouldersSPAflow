@@ -5157,8 +5157,19 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
 }
 
 .parent-guardian-form.is-awaiting-payer {
+    position: relative;
     border-color: #4b5563;
     background-color: #141414;
+}
+
+.parent-guardian-form.is-awaiting-payer::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    background: rgba(10, 10, 10, 0.45);
+    pointer-events: none;
 }
 
 .parent-guardian-form.is-awaiting-payer > :not(#memberWaiting) {
@@ -5176,6 +5187,20 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     background: rgba(244, 1, 245, 0.08);
     color: #fff;
     text-align: center;
+}
+
+.parent-guardian-form.is-awaiting-payer .member-waiting {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    margin: 0;
+    padding: 20px 22px;
+    transform: translateY(-50%);
+    background: #141414;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
 
 .member-waiting[hidden] {
