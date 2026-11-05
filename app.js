@@ -7842,6 +7842,7 @@ const translations = {
     'form.member.alreadyHas': 'Har allerede {product}',
     'form.member.membershipUnknown': 'Medlemskab kunne ikke tjekkes',
     'form.member.pickWithoutMembership': 'Vælg et barn uden medlemskab, eller tilføj et nyt.',
+    'form.member.loginFirst': 'Log ind eller opret en konto. Så kan du vælge et barn, der allerede er på profilen.',
     'form.member.orderMoveFailed': 'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
     'form.member.orderRestarted': 'Ordren starter forfra, fordi barnet blev skiftet.',
     'form.member.continue': 'Fortsæt',
@@ -8298,6 +8299,7 @@ const translations = {
     'form.member.alreadyHas': 'Already has {product}',
     'form.member.membershipUnknown': 'Membership could not be checked',
     'form.member.pickWithoutMembership': 'Choose a child without a membership, or add a new one.',
+    'form.member.loginFirst': 'Log in or create an account. Then you can choose a child already on the profile.',
     'form.member.orderMoveFailed': 'The membership could not be moved to the selected child. Try again.',
     'form.member.orderRestarted': 'The order is starting over because the child changed.',
     'form.member.continue': 'Continue',
@@ -8736,6 +8738,7 @@ const translations = {
     'form.member.alreadyHas': 'Hat bereits {product}',
     'form.member.membershipUnknown': 'Mitgliedschaft konnte nicht geprüft werden',
     'form.member.pickWithoutMembership': 'Wähle ein Kind ohne Mitgliedschaft, oder füge ein neues hinzu.',
+    'form.member.loginFirst': 'Melde dich an oder erstelle ein Konto. Danach kannst du ein Kind wählen, das schon auf dem Profil ist.',
     'form.member.orderMoveFailed': 'Die Mitgliedschaft konnte nicht auf das gewählte Kind übertragen werden. Versuch es erneut.',
     'form.member.orderRestarted': 'Die Bestellung startet neu, weil das Kind gewechselt wurde.',
     'form.member.continue': 'Weiter',
@@ -21150,6 +21153,7 @@ function placeJuniorFormSubmit(show) {
 
 function juniorMemberFormVisible() {
   if (selectedJuniorStatus() !== 'junior') return false;
+  if (!isUserAuthenticated() || state.customerId == null) return false;
   const route = routeCurrentMembership();
   return !(route?.action === 'block' && route.reason === 'buyer_under_18');
 }
@@ -21170,8 +21174,11 @@ function updateMemberFormVisibility() {
     if (show && wasHidden) {
       form.classList.add('is-revealed');
       form.addEventListener('animationend', () => form.classList.remove('is-revealed'), { once: true });
+      if (showJunior) form.scrollIntoView({ block: 'nearest' });
     }
   }
+  const loginFirst = document.getElementById('juniorLoginFirst');
+  if (loginFirst) loginFirst.hidden = selectedJuniorStatus() !== 'junior' || isUserAuthenticated();
   const consent = document.getElementById('memberGuardianConsent');
   if (consent) consent.required = Boolean(show && state.pickedMemberId == null);
   const emailGroup = document.getElementById('memberEmailGroup');
@@ -27972,6 +27979,14 @@ function validateForm(animate = false) {
   let isValid = true;
   const errors = [];
   clearErrorStates();
+  if (selectedJuniorStatus() === 'junior' && !isUserAuthenticated()) {
+    const message = t(
+      'form.member.loginFirst',
+      'Log ind eller opret en konto. Så kan du vælge et barn, der allerede er på profilen.',
+    );
+    document.querySelector('#step-4 .info-form-section')?.scrollIntoView({ block: 'nearest' });
+    return { isValid: false, errors: [message], message };
+  }
   const skipPersonalValidation = isUserAuthenticated();
 
   if (!skipPersonalValidation) {

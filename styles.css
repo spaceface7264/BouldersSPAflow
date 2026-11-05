@@ -1710,8 +1710,21 @@ body.bg-ready::before {
 
 /* Center titles and subtitles in step 4 to match other steps */
 #step-4 .main-subtitle,
-#step-4 .secondary-subtitle {
+#step-4 .secondary-subtitle,
+#step-4 .junior-login-first {
     text-align: center;
+}
+
+#step-4 .junior-login-first {
+    margin: 8px auto 0;
+    max-width: 36rem;
+    color: #D1D5DB;
+    font-size: var(--font-size-sm);
+    line-height: 1.45;
+}
+
+#step-4 .junior-login-first[hidden] {
+    display: none;
 }
 
 /* Step 5 (Confirmation) - Full width layout for confirmation page */
