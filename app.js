@@ -7843,6 +7843,7 @@ const translations = {
     'form.member.membershipUnknown': 'Medlemskab kunne ikke tjekkes',
     'form.member.pickWithoutMembership': 'Vælg et barn uden medlemskab, eller tilføj et nyt.',
     'form.member.loginFirst': 'Log ind eller opret en konto. Så kan du vælge et barn, der allerede er på profilen.',
+    'form.member.waiting': 'Venter på login',
     'form.member.orderMoveFailed': 'Medlemskabet kunne ikke flyttes til det valgte barn. Prøv igen.',
     'form.member.orderRestarted': 'Ordren starter forfra, fordi barnet blev skiftet.',
     'form.member.continue': 'Fortsæt',
@@ -8300,6 +8301,7 @@ const translations = {
     'form.member.membershipUnknown': 'Membership could not be checked',
     'form.member.pickWithoutMembership': 'Choose a child without a membership, or add a new one.',
     'form.member.loginFirst': 'Log in or create an account. Then you can choose a child already on the profile.',
+    'form.member.waiting': 'Waiting for login',
     'form.member.orderMoveFailed': 'The membership could not be moved to the selected child. Try again.',
     'form.member.orderRestarted': 'The order is starting over because the child changed.',
     'form.member.continue': 'Continue',
@@ -8739,6 +8741,7 @@ const translations = {
     'form.member.membershipUnknown': 'Mitgliedschaft konnte nicht geprüft werden',
     'form.member.pickWithoutMembership': 'Wähle ein Kind ohne Mitgliedschaft, oder füge ein neues hinzu.',
     'form.member.loginFirst': 'Melde dich an oder erstelle ein Konto. Danach kannst du ein Kind wählen, das schon auf dem Profil ist.',
+    'form.member.waiting': 'Wartet auf Anmeldung',
     'form.member.orderMoveFailed': 'Die Mitgliedschaft konnte nicht auf das gewählte Kind übertragen werden. Versuch es erneut.',
     'form.member.orderRestarted': 'Die Bestellung startet neu, weil das Kind gewechselt wurde.',
     'form.member.continue': 'Weiter',
@@ -20199,7 +20202,12 @@ async function ensureMemberCustomerOnce() {
 
 function memberBlockIsVisible() {
   const form = document.getElementById('parentGuardianForm');
-  return Boolean(form && !form.hidden && form.style.display !== 'none');
+  return Boolean(
+    form
+    && !form.hidden
+    && form.style.display !== 'none'
+    && !form.classList.contains('is-awaiting-payer'),
+  );
 }
 
 function createSectionIsVisible() {
@@ -20629,16 +20637,36 @@ function refreshMemberSectionLabels() {
   }
 }
 
-function placeMemberForm(show) {
+function placeMemberForm(show, afterPayer) {
   const form = document.getElementById('parentGuardianForm');
   const createSection = document.querySelector('[data-auth-section="create"]');
   if (!form || !createSection) return;
   form.classList.remove('is-revealed');
-  if (show && createSectionIsVisible()) {
+  if (show && createSectionIsVisible() && !afterPayer) {
     createSection.parentElement?.insertBefore(form, createSection);
     return;
   }
   createSection.insertAdjacentElement('afterend', form);
+}
+
+function juniorAwaitingPayer() {
+  if (selectedJuniorStatus() !== 'junior' || state.guardianHandoffActive === true) return false;
+  if (isUserAuthenticated() && state.customerId != null) return false;
+  const route = routeCurrentMembership();
+  return !(route?.action === 'block' && route.reason === 'buyer_under_18');
+}
+
+function setMemberAwaitingPayer(form, awaiting) {
+  if (!form) return;
+  form.classList.toggle('is-awaiting-payer', awaiting);
+  if (awaiting) form.setAttribute('aria-disabled', 'true');
+  else form.removeAttribute('aria-disabled');
+  const waiting = document.getElementById('memberWaiting');
+  if (waiting) waiting.hidden = !awaiting;
+  form.querySelectorAll(':scope > :not(#memberWaiting)').forEach((el) => {
+    if (awaiting) el.setAttribute('inert', '');
+    else el.removeAttribute('inert');
+  });
 }
 
 function setupMemberFormUx() {
@@ -21165,28 +21193,31 @@ function updateMemberFormVisibility() {
   }
   const form = DOM.parentGuardianForm || document.getElementById('parentGuardianForm');
   const showJunior = juniorMemberFormVisible();
-  const show = showJunior || state.guardianHandoffActive === true;
+  const awaitingPayer = juniorAwaitingPayer();
+  const show = showJunior || awaitingPayer || state.guardianHandoffActive === true;
   const wasHidden = !form || form.hidden || form.style.display === 'none';
-  placeMemberForm(show);
+  placeMemberForm(show, awaitingPayer);
   if (form) {
     form.hidden = !show;
     form.style.display = show ? 'block' : 'none';
-    if (show && wasHidden) {
+    setMemberAwaitingPayer(form, awaitingPayer);
+    if (show && wasHidden && !awaitingPayer) {
       form.classList.add('is-revealed');
       form.addEventListener('animationend', () => form.classList.remove('is-revealed'), { once: true });
       if (showJunior) form.scrollIntoView({ block: 'nearest' });
     }
   }
   const loginFirst = document.getElementById('juniorLoginFirst');
-  if (loginFirst) loginFirst.hidden = selectedJuniorStatus() !== 'junior' || isUserAuthenticated();
+  if (loginFirst) loginFirst.hidden = !awaitingPayer || Boolean(show);
+  const showActive = showJunior || state.guardianHandoffActive === true;
   const consent = document.getElementById('memberGuardianConsent');
-  if (consent) consent.required = Boolean(show && state.pickedMemberId == null);
+  if (consent) consent.required = Boolean(showActive && state.pickedMemberId == null);
   const emailGroup = document.getElementById('memberEmailGroup');
   const emailField = document.getElementById('memberEmail');
   if (emailGroup) emailGroup.hidden = state.guardianHandoffActive !== true;
   if (emailField) emailField.required = state.guardianHandoffActive === true;
-  placeJuniorFormSubmit(show);
-  setJuniorRoleLabels(show);
+  placeJuniorFormSubmit(showActive);
+  setJuniorRoleLabels(showActive);
   if (selectedJuniorStatus() === 'other' && state.guardianHandoffActive !== true) {
     clearStoredJuniorMember();
   }

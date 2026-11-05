@@ -5156,6 +5156,48 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     animation: slideDown 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+.parent-guardian-form.is-awaiting-payer {
+    border-color: #4b5563;
+    background-color: #141414;
+}
+
+.parent-guardian-form.is-awaiting-payer > :not(#memberWaiting) {
+    opacity: 0.28;
+    filter: grayscale(1);
+    pointer-events: none;
+    user-select: none;
+}
+
+.member-waiting {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(244, 1, 245, 0.4);
+    border-radius: 8px;
+    background: rgba(244, 1, 245, 0.08);
+    color: #fff;
+    text-align: center;
+}
+
+.member-waiting[hidden] {
+    display: none;
+}
+
+.member-waiting-label {
+    margin: 0 0 4px;
+    color: #F401F5;
+    font-size: var(--font-size-xs, 12px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.member-waiting p:last-child {
+    margin: 0;
+    color: #E5E7EB;
+    font-size: var(--font-size-sm);
+    line-height: 1.45;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .parent-guardian-form.is-revealed {
         animation: none;
