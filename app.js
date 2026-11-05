@@ -7823,6 +7823,9 @@ const translations = {
     'form.buyer': 'Køber', 'form.createProfile': 'NY PROFIL', 'form.parentGuardian': 'Forælder/Værge Information',
     'form.buyerRole.title': 'Forælder eller værge',
     'form.buyerRole.hint': 'Din konto. Du skal være fyldt 18 år, og du betaler for medlemskabet.',
+    'form.payer.title': 'Betalerens oplysninger',
+    'form.payer.hint': 'Du skal være fyldt 18 år. Når kontoen er oprettet, eller du er logget ind, udfylder du barnets oplysninger.',
+    'form.payer.save': 'Opret betalers konto',
     'form.member.title': 'Hvem skal klatre?',
     'form.member.roleHint': 'Vælg barnet, medlemskabet skal gælde for.',
     'form.member.consent': 'Jeg er barnets værge og accepterer medlemskabet på barnets vegne.',
@@ -8281,6 +8284,9 @@ const translations = {
     'form.buyer': 'Buyer', 'form.createProfile': 'CREATE PROFILE', 'form.parentGuardian': 'Parent/Guardian Information',
     'form.buyerRole.title': 'Parent or guardian',
     'form.buyerRole.hint': 'Your account. You must be 18, and you pay for the membership.',
+    'form.payer.title': 'Payer\'s details',
+    'form.payer.hint': 'You must be 18. After the account is created, or you have logged in, you fill in the child\'s details.',
+    'form.payer.save': 'Create payer account',
     'form.member.title': 'Who is climbing?',
     'form.member.roleHint': 'Choose the child this membership is for.',
     'form.member.consent': 'I am the child\'s guardian and I accept the membership on the child\'s behalf.',
@@ -8721,6 +8727,9 @@ const translations = {
     'form.buyer': 'Käufer', 'form.createProfile': 'NEUES PROFIL', 'form.parentGuardian': 'Eltern/Erziehungsberechtigte Informationen',
     'form.buyerRole.title': 'Elternteil oder Vormund',
     'form.buyerRole.hint': 'Dein Konto. Du musst 18 Jahre alt sein und bezahlst die Mitgliedschaft.',
+    'form.payer.title': 'Angaben der zahlenden Person',
+    'form.payer.hint': 'Du musst 18 Jahre alt sein. Wenn das Konto erstellt ist oder du angemeldet bist, füllst du die Angaben des Kindes aus.',
+    'form.payer.save': 'Konto der zahlenden Person erstellen',
     'form.member.title': 'Wer soll klettern?',
     'form.member.roleHint': 'Wähle das Kind, für das die Mitgliedschaft gelten soll.',
     'form.member.consent': 'Ich bin der Vormund des Kindes und akzeptiere die Mitgliedschaft im Namen des Kindes.',
@@ -9454,6 +9463,7 @@ function updateFormTranslations() {
   }
 
   renderPasswordResetPageCopy();
+  setJuniorRoleLabels(juniorMemberFormVisible() || state.guardianHandoffActive === true);
   refreshMemberCopy();
 }
 
@@ -20575,15 +20585,16 @@ function refreshMemberCopy() {
     }
   }
   const both = memberBlockIsVisible() && createSectionIsVisible();
+  const payerFirst = juniorAwaitingPayer() && createSectionIsVisible();
   const buyerStep = document.getElementById('buyerRoleStep');
   const memberStep = document.getElementById('memberRoleStep');
   if (buyerStep) {
-    buyerStep.hidden = handoff || !both;
-    buyerStep.textContent = both && !handoff ? '2' : '1';
+    buyerStep.hidden = handoff || !(both || payerFirst);
+    buyerStep.textContent = payerFirst ? '1' : (both && !handoff ? '2' : '1');
   }
   if (memberStep) {
-    memberStep.hidden = handoff || !both;
-    memberStep.textContent = '1';
+    memberStep.hidden = handoff || !(both || payerFirst);
+    memberStep.textContent = payerFirst ? '2' : '1';
   }
   const button = document.getElementById('saveAccountButton');
   if (button && button.dataset.action === 'save-member' && button.dataset.saving !== '1') {
@@ -21186,6 +21197,39 @@ function juniorMemberFormVisible() {
   return !(route?.action === 'block' && route.reason === 'buyer_under_18');
 }
 
+function kidFormFocusTarget() {
+  const fields = document.getElementById('memberNewFields');
+  if (fields && !fields.hidden) return document.getElementById('memberFirstName');
+  const list = document.getElementById('existingMemberList');
+  const option = list && !list.hidden
+    ? list.querySelector('.existing-member-option:not([disabled])')
+    : null;
+  if (option) return option;
+  const add = document.getElementById('addAnotherMember');
+  if (add && !add.hidden) return add;
+  return null;
+}
+
+async function focusActiveKidField() {
+  const focusBefore = document.activeElement;
+  if (state.customerId != null) {
+    try {
+      await loadExistingMembers(state.customerId);
+    } catch (_) {}
+  }
+  if (!juniorMemberFormVisible()) return;
+  const stillThere = !document.activeElement
+    || document.activeElement === focusBefore
+    || document.activeElement === document.body;
+  if (!stillThere) return;
+  const target = kidFormFocusTarget();
+  if (!target || target.disabled) return;
+  requestAnimationFrame(() => {
+    target.scrollIntoView({ block: 'center' });
+    target.focus({ preventScroll: true });
+  });
+}
+
 function updateMemberFormVisibility() {
   const kind = productKind(resolveSelectedAccessProduct());
   if (state.guardianHandoffActive && kind !== 'studentYouth' && resolveSelectedAccessProduct()) {
@@ -21196,6 +21240,7 @@ function updateMemberFormVisibility() {
   const awaitingPayer = juniorAwaitingPayer();
   const show = showJunior || awaitingPayer || state.guardianHandoffActive === true;
   const wasHidden = !form || form.hidden || form.style.display === 'none';
+  const wasAwaiting = Boolean(form?.classList.contains('is-awaiting-payer'));
   placeMemberForm(show, awaitingPayer);
   if (form) {
     form.hidden = !show;
@@ -21204,7 +21249,10 @@ function updateMemberFormVisibility() {
     if (show && wasHidden && !awaitingPayer) {
       form.classList.add('is-revealed');
       form.addEventListener('animationend', () => form.classList.remove('is-revealed'), { once: true });
-      if (showJunior) form.scrollIntoView({ block: 'nearest' });
+      if (!showJunior) form.scrollIntoView({ block: 'nearest' });
+    }
+    if (showJunior && (wasAwaiting || wasHidden)) {
+      void focusActiveKidField();
     }
   }
   const loginFirst = document.getElementById('juniorLoginFirst');
@@ -21232,23 +21280,34 @@ function updateMemberFormVisibility() {
 }
 
 function setJuniorRoleLabels(show) {
+  const handoff = state.guardianHandoffActive === true;
+  const payerFirst = juniorAwaitingPayer() && createSectionIsVisible() && !handoff;
   const bothVisible = Boolean(show && createSectionIsVisible());
   const buyerRole = document.getElementById('buyerRole');
   const profileTitle = document.getElementById('createProfileTitle');
-  if (buyerRole) buyerRole.hidden = !bothVisible;
-  if (profileTitle) profileTitle.hidden = bothVisible;
-  const handoff = state.guardianHandoffActive === true;
+  if (buyerRole) buyerRole.hidden = !(bothVisible || payerFirst);
+  if (profileTitle) profileTitle.hidden = bothVisible || payerFirst;
   const title = document.querySelector('#buyerRole .profile-role-title');
   const hint = document.querySelector('#buyerRole .profile-role-hint');
   if (title) {
-    const key = handoff ? 'form.guardian.title' : 'form.buyerRole.title';
+    const key = payerFirst ? 'form.payer.title' : (handoff ? 'form.guardian.title' : 'form.buyerRole.title');
     title.setAttribute('data-i18n-key', key);
     title.textContent = t(key);
   }
   if (hint) {
-    const key = handoff ? 'form.guardian.hint' : 'form.buyerRole.hint';
+    const key = payerFirst ? 'form.payer.hint' : (handoff ? 'form.guardian.hint' : 'form.buyerRole.hint');
     hint.setAttribute('data-i18n-key', key);
     hint.textContent = t(key);
+  }
+  const loginHint = document.getElementById('loginPayerHint');
+  const loginSection = document.querySelector('[data-auth-section="login"]');
+  const loginVisible = Boolean(loginSection && loginSection.style.display !== 'none' && !isUserAuthenticated());
+  if (loginHint) loginHint.hidden = !(juniorAwaitingPayer() && loginVisible);
+  const saveButton = document.getElementById('saveAccountButton');
+  if (saveButton && saveButton.dataset.action !== 'save-member' && saveButton.dataset.saving !== '1') {
+    const key = payerFirst ? 'form.payer.save' : 'form.saveAccount';
+    saveButton.setAttribute('data-i18n-key', key);
+    saveButton.textContent = t(key);
   }
 }
 

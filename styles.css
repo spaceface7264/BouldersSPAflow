@@ -5143,6 +5143,14 @@ html[data-landing-route="LandingFirstClimb"] .category-item[data-category="first
     line-height: 1.45;
 }
 
+#loginPayerHint {
+    margin: -12px 0 20px;
+}
+
+#loginPayerHint[hidden] {
+    display: none;
+}
+
 /* Parent/Guardian Form */
 .parent-guardian-form {
     margin-top: 32px;
