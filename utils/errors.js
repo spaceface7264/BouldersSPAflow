@@ -28,6 +28,7 @@ const FIELD_LABELS = {
 // Error code mapping to user-friendly messages
 const ERROR_CODE_MESSAGES = {
   'PHONENUMBER_INVALID': 'Please enter a valid phone number',
+  'PHONE_ALREADY_EXISTS': 'This mobile number is already registered. Log in, or use a different number.',
   'PHONENUMBER_REQUIRED': 'Phone number is required',
   'DATE_AGE_TOO_YOUNG': (minAge) => `Age must be at least ${minAge} years old`,
   'DATE_AGE_TOO_OLD': (maxAge) => `Age must be no more than ${maxAge} years old`,
