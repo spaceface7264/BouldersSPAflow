@@ -1682,25 +1682,48 @@ class BusinessUnitsAPI {
   }
 
   async getValueCardById(productId, businessUnitId = null) {
-    try {
-      const cacheBuster = `_t=${Date.now()}`;
-      const query = businessUnitId != null
-        ? `?businessUnit=${businessUnitId}&${cacheBuster}`
-        : `?${cacheBuster}`;
-      const url = buildApiUrl({
-        baseUrl: this.baseUrl,
-        useProxy: this.useProxy,
-        path: `/api/products/valuecards/${productId}${query}`,
-      });
-      const headers = {
-        'Accept-Language': getAcceptLanguageHeader(),
-        'Content-Type': 'application/json',
-      };
-      return await requestJson({ url, headers });
-    } catch (error) {
-      console.warn('[Boost Modal] Could not load value card details:', { productId, error });
-      return null;
+    // Detail payloads are localized and per business unit; every list render
+    // (language switch, step navigation) refetched them all, which Sentry
+    // flags as an N+1 API call pattern (JOIN-BOULDERSDK-70). Cache per
+    // session with a short TTL and in-flight dedupe so campaign price flips
+    // still surface; transient failures are not cached.
+    const DETAIL_TTL_MS = 5 * 60 * 1000;
+    const cacheKey = `${productId}|${businessUnitId ?? ''}|${getAcceptLanguageHeader()}`;
+    this._valueCardDetailCache = this._valueCardDetailCache || new Map();
+    const cached = this._valueCardDetailCache.get(cacheKey);
+    if (cached) {
+      if (cached.promise) return cached.promise;
+      if (Date.now() - cached.at < DETAIL_TTL_MS) return cached.value;
+      this._valueCardDetailCache.delete(cacheKey);
     }
+
+    const fetchPromise = (async () => {
+      try {
+        const cacheBuster = `_t=${Date.now()}`;
+        const query = businessUnitId != null
+          ? `?businessUnit=${businessUnitId}&${cacheBuster}`
+          : `?${cacheBuster}`;
+        const url = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/products/valuecards/${productId}${query}`,
+        });
+        const headers = {
+          'Accept-Language': getAcceptLanguageHeader(),
+          'Content-Type': 'application/json',
+        };
+        const data = await requestJson({ url, headers });
+        this._valueCardDetailCache.set(cacheKey, { value: data, at: Date.now() });
+        return data;
+      } catch (error) {
+        this._valueCardDetailCache.delete(cacheKey);
+        console.warn('[Boost Modal] Could not load value card details:', { productId, error });
+        return null;
+      }
+    })();
+
+    this._valueCardDetailCache.set(cacheKey, { promise: fetchPromise });
+    return fetchPromise;
   }
 
   // Step 8: Get additional catalog items - GET /api/products
