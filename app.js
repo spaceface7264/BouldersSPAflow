@@ -1441,6 +1441,11 @@ function scheduleGymListRecovery(error) {
 }
 
 // API Integration Functions
+// Value-card detail payloads change rarely; cache them briefly so list
+// re-renders don't refetch (Sentry N+1: JOIN-BOULDERSDK-70) while campaign
+// price flips still surface within minutes.
+const VALUE_CARD_DETAIL_TTL_MS = 5 * 60 * 1000;
+
 class BusinessUnitsAPI {
   constructor(baseUrl = null) {
     const config = getApiConfig({ baseUrlOverride: baseUrl });
@@ -1682,25 +1687,46 @@ class BusinessUnitsAPI {
   }
 
   async getValueCardById(productId, businessUnitId = null) {
-    try {
-      const cacheBuster = `_t=${Date.now()}`;
-      const query = businessUnitId != null
-        ? `?businessUnit=${businessUnitId}&${cacheBuster}`
-        : `?${cacheBuster}`;
-      const url = buildApiUrl({
-        baseUrl: this.baseUrl,
-        useProxy: this.useProxy,
-        path: `/api/products/valuecards/${productId}${query}`,
-      });
-      const headers = {
-        'Accept-Language': getAcceptLanguageHeader(),
-        'Content-Type': 'application/json',
-      };
-      return await requestJson({ url, headers });
-    } catch (error) {
-      console.warn('[Boost Modal] Could not load value card details:', { productId, error });
-      return null;
+    // Detail payloads are localized and per business unit; every list render
+    // (language switch, step navigation) refetched them all, which Sentry
+    // flags as an N+1 API call pattern (JOIN-BOULDERSDK-70). Cache the fetch
+    // promise per session with a short TTL: concurrent callers share one
+    // request, failures delete the entry (not cached), and the TTL also
+    // bounds how long a hung request can pin the entry. Callers get a clone
+    // so in-place edits to a product object can never corrupt the cache.
+    const cacheKey = `${productId}|${businessUnitId ?? ''}|${getAcceptLanguageHeader()}`;
+    this._valueCardDetailCache = this._valueCardDetailCache || new Map();
+    const cached = this._valueCardDetailCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < VALUE_CARD_DETAIL_TTL_MS) {
+      return cached.promise.then((data) => (data ? structuredClone(data) : data));
     }
+    this._valueCardDetailCache.delete(cacheKey);
+
+    const fetchPromise = (async () => {
+      try {
+        const cacheBuster = `_t=${Date.now()}`;
+        const query = businessUnitId != null
+          ? `?businessUnit=${businessUnitId}&${cacheBuster}`
+          : `?${cacheBuster}`;
+        const url = buildApiUrl({
+          baseUrl: this.baseUrl,
+          useProxy: this.useProxy,
+          path: `/api/products/valuecards/${productId}${query}`,
+        });
+        const headers = {
+          'Accept-Language': getAcceptLanguageHeader(),
+          'Content-Type': 'application/json',
+        };
+        return await requestJson({ url, headers });
+      } catch (error) {
+        this._valueCardDetailCache.delete(cacheKey);
+        console.warn('[Boost Modal] Could not load value card details:', { productId, error });
+        return null;
+      }
+    })();
+
+    this._valueCardDetailCache.set(cacheKey, { promise: fetchPromise, at: Date.now() });
+    return fetchPromise.then((data) => (data ? structuredClone(data) : data));
   }
 
   // Step 8: Get additional catalog items - GET /api/products
