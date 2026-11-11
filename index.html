@@ -26,7 +26,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="./favicon-v2.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- The page background. Referenced only from styles.css, it was not
          discovered until the stylesheet had been parsed, so the request did
@@ -462,6 +462,7 @@
     </div>
     
     <header class="header" id="headerContent" style="display: none;">
+        <div id="blackWeekHeaderBar" hidden></div>
         <div class="header-container">
             <div class="header-content">
                 <!-- Logo Section -->
@@ -694,6 +695,17 @@
                                             <!-- Products will be loaded from API -->
                                         </div>
                                         <!-- Activation date choice now shown as full-page modal overlay -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Black Week shop (custom UI; shown only during Black Week window) -->
+                            <div class="category-item bw-shop-host" data-category="blackweek" style="display: none;">
+                                <div class="category-content" style="display: block;">
+                                    <div class="category-content-inner">
+                                        <div class="plans-list" id="blackWeekShopRoot" data-bw-shop-root>
+                                            <!-- Black Week shop rendered by app.js -->
+                                        </div>
                                     </div>
                                 </div>
                             </div>
