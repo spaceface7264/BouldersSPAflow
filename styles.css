@@ -3566,6 +3566,11 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     }
 }
 
+body.blackweek-flow .create-address-fields,
+body.blackweek-flow .create-optional-consent {
+    display: none;
+}
+
 .category-item {
     background: var(--color-item-bg);
     border: 2px solid var(--color-item-border);

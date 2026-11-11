@@ -902,6 +902,7 @@
                                  </div>
                              </div>
                              
+                            <div class="create-address-fields">
                             <div class="form-group">
                                 <label for="streetAddress" data-i18n-key="form.streetAddress">Street and house number*</label>
                                 <input type="text" id="streetAddress" name="streetAddress" placeholder="" data-i18n-placeholder="form.streetAddress.placeholder" data-api-field="customer.address.street" required>
@@ -918,6 +919,7 @@
                                      <input type="text" id="city" name="city" placeholder="" data-i18n-placeholder="form.city.placeholder" data-api-field="customer.address.city" readonly>
                             </div>
                         </div>
+                            </div>
                         
                         <div class="form-group">
                                  <label for="email" data-i18n-key="form.email.create">E-mail*</label>
@@ -958,7 +960,7 @@
                             </div>
                             
                             <!-- SMS Consent -->
-                            <div class="form-group form-group-consent">
+                            <div class="form-group form-group-consent create-optional-consent">
                                 <label class="consent-checkbox">
                                     <input type="checkbox" id="smsConsent" data-api-field="consent.sms">
                                     <span class="checkmark"></span>

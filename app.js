@@ -1640,6 +1640,16 @@ const REQUIRED_FIELDS = [
   'primaryGym',
 ];
 
+const BLACK_WEEK_SKIPPED_CREATE_FIELDS = new Set(['streetAddress', 'postalCode', 'city']);
+
+function isBlackWeekCreateForm() {
+  return document.body.classList.contains('blackweek-flow');
+}
+
+function isSkippedBlackWeekCreateField(fieldId) {
+  return isBlackWeekCreateForm() && BLACK_WEEK_SKIPPED_CREATE_FIELDS.has(fieldId);
+}
+
 const PARENT_REQUIRED_FIELDS = [
   'parentFullName',
   'parentDateOfBirth',
@@ -5172,9 +5182,7 @@ function updateBlackWeekStickyBar({ totalKr, summary, canContinue }) {
   if (summaryEl) summaryEl.textContent = summary || '';
   if (cta) {
     cta.disabled = !canContinue;
-    cta.textContent = state.blackWeekReview
-      ? (isDa ? 'Gå til betaling' : 'Go to payment')
-      : (isDa ? 'Fortsæt' : 'Continue');
+    cta.textContent = isDa ? 'Gå til betaling' : 'Go to payment';
   }
 }
 
@@ -5215,7 +5223,6 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
   const coffeeRoom = Math.max(0, caps.coffee - coffeeQty);
   const canContinue = (punchQty + coffeeQty) >= 1;
 
-  const gymName = state.selectedGymName || (isDa ? 'din hal' : 'your gym');
   const copy = {
     adult: { label: isDa ? 'Voksen' : 'Adult', hint: isDa ? 'Fra 21 år' : 'From 21' },
     youth: { label: isDa ? 'Studerende & Ung' : 'Student & youth', hint: isDa ? '16–20 år eller studiekort' : '16–20 or student ID' },
@@ -5245,8 +5252,6 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
     </div>`;
 
   let punchSpend = 0;
-  let punchWasSpend = 0;
-  const punchRows = [];
   const punchChoices = segments.map((seg) => {
     if (!seg.product) return '';
     const id = getProductNumericId(seg.product);
@@ -5256,8 +5261,6 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
     const names = copy[seg.key] || { label: seg.label || seg.product.name, hint: seg.hint || '' };
     if (qty > 0) {
       punchSpend += price * qty;
-      punchWasSpend += was * qty;
-      punchRows.push(`<div class="bw-row"><span>${qty} × ${isDa ? 'Klippekort' : 'Punch card'} ${names.label}</span><b>${formatBlackWeekKr(price * qty)}</b></div>`);
     }
     const clips = isDa ? '13 klip' : '13 punches';
     return choiceCard({
@@ -5275,9 +5278,7 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
   }).join('');
 
   let coffeeSpend = 0;
-  let coffeeSave = 0;
   let coffeeHalfPrice = false;
-  const coffeeRows = [];
   const coffeeChoices = coffeeProducts.map((product) => {
     const id = getProductNumericId(product);
     const qty = blackWeekQtyOf('coffee', id);
@@ -5287,8 +5288,6 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
     if (was > price) coffeeHalfPrice = true;
     if (qty > 0) {
       coffeeSpend += price * qty;
-      if (was > price) coffeeSave += (was - price) * qty;
-      coffeeRows.push(`<div class="bw-row"><span>${qty} × ${name}</span><b>${formatBlackWeekKr(price * qty)}</b></div>`);
     }
     return choiceCard({
       on: qty > 0,
@@ -5305,7 +5304,6 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
   }).join('');
 
   const totalKr = roundToHalfKrone(punchSpend + coffeeSpend);
-  const savingsKr = roundToHalfKrone(Math.max(0, punchWasSpend - punchSpend) + Math.max(0, coffeeSave));
   const summaryParts = [];
   if (punchQty > 0) {
     summaryParts.push(isDa
@@ -5317,42 +5315,10 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       ? `${coffeeQty} kaffekort`
       : `${coffeeQty} coffee card${coffeeQty === 1 ? '' : 's'}`);
   }
-  const offerCoffee = coffeeProducts[0] || null;
-  const offerPrice = offerCoffee ? getBlackWeekPriceKr(offerCoffee) : 0;
-  const offerWas = offerPrice > 0 && offerPrice < 300 ? roundToHalfKrone(offerPrice * 2) : 0;
 
-  const reviewHtml = `
+  root.innerHTML = sanitizeHTML(`
     <div class="bw-shop">
       <div class="bw-wrap">
-        <h2 class="bw-title">${isDa ? 'Din ordre' : 'Your order'}</h2>
-        <div class="bw-top">${isDa ? 'Hentes i' : 'Pick up at'} <button type="button" data-action="bw-change-gym">${gymName} ✎</button> · <button type="button" data-action="bw-review-back">${isDa ? 'skift kort' : 'change card'}</button></div>
-        ${offerCoffee && coffeeQty < 1 ? `
-        <div class="bw-add">
-          <div class="bw-add-ic" aria-hidden="true">☕</div>
-          <div class="bw-add-main">
-            <div class="bw-add-title">${offerWas > offerPrice ? (isDa ? 'Kaffekort til halv pris' : 'Coffee card at half price') : (isDa ? 'Kaffekort' : 'Coffee card')}</div>
-            <div class="bw-add-desc"><b>${formatBlackWeekKr(offerPrice)}</b>${offerWas > offerPrice ? ` <span class="bw-was">${formatBlackWeekKr(offerWas)}</span>` : ''} · ${isDa ? '11 varme drikke' : '11 hot drinks'}</div>
-          </div>
-          <button type="button" data-action="bw-qty" data-kind="coffee" data-delta="1" data-product-id="${getProductNumericId(offerCoffee) ?? ''}">${isDa ? '+ Tilføj' : '+ Add'}</button>
-        </div>` : ''}
-        <div class="bw-lab">${isDa ? 'OVERSIGT' : 'SUMMARY'}</div>
-        <div class="bw-sum">
-          ${punchRows.join('')}
-          ${coffeeRows.join('')}
-          ${savingsKr > 0 ? `<div class="bw-row bw-save"><span>${isDa ? 'Du sparer' : 'You save'}</span><b>${formatBlackWeekKr(savingsKr)}</b></div>` : ''}
-          <div class="bw-row bw-total"><span>${isDa ? 'I alt' : 'Total'}</span><b>${formatBlackWeekKr(totalKr)}</b></div>
-        </div>
-        ${landingMode ? `
-        <div class="bw-other">${isDa ? 'Leder du efter medlemskab eller prøvepas?' : 'Looking for membership or a trial pass?'}
-          <button type="button" data-action="bw-see-all">${isDa ? 'Se alle produkter' : 'See all products'}</button>
-        </div>` : ''}
-      </div>
-    </div>`;
-
-  root.innerHTML = sanitizeHTML(state.blackWeekReview ? reviewHtml : `
-    <div class="bw-shop">
-      <div class="bw-wrap">
-        <div class="bw-top">${isDa ? 'Hentes i' : 'Pick up at'} <button type="button" data-action="bw-change-gym">${gymName} ✎</button></div>
         <h2 class="bw-title">${isDa ? 'Vælg dit kort' : 'Choose your card'}</h2>
         <p class="bw-sub">${isDa ? 'Klippekort, kaffekort eller begge.' : 'Punch card, coffee card, or both.'}</p>
         ${punchChoices ? `
@@ -5373,7 +5339,7 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
   startBlackWeekCountdown();
   updateBlackWeekStickyBar({
     totalKr,
-    summary: state.blackWeekReview ? (isDa ? 'I alt' : 'Total') : summaryParts.join(' + '),
+    summary: summaryParts.join(' + '),
     canContinue,
   });
   updateCartSummary();
@@ -5562,12 +5528,7 @@ function handleBlackWeekContinue() {
     showToast(t('blackweek.selectRequired') || 'Select a punch card and/or a coffee card to continue.', 'error');
     return;
   }
-  if (!state.blackWeekReview) {
-    state.blackWeekReview = true;
-    syncBlackWeekQuantityUI();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
+  state.blackWeekReview = false;
   nextStep();
 }
 
@@ -13470,7 +13431,7 @@ async function handleSaveAccount() {
     { id: 'email', name: 'Email' },
     { id: 'phoneNumber', name: 'Phone number' },
     { id: 'password', name: 'Password' },
-  ];
+  ].filter((field) => !isSkippedBlackWeekCreateField(field.id));
   
   const missingFields = [];
   requiredFields.forEach(field => {
@@ -14040,7 +14001,7 @@ function checkSaveAccountButtonState() {
     'email',
     'phoneNumber',
     'password',
-  ];
+  ].filter((fieldId) => !isSkippedBlackWeekCreateField(fieldId));
   
   let allFieldsFilled = true;
   requiredFields.forEach(fieldId => {
@@ -26788,6 +26749,7 @@ function validateForm(animate = false) {
 
   if (!skipPersonalValidation) {
     REQUIRED_FIELDS.forEach((fieldId) => {
+      if (isSkippedBlackWeekCreateField(fieldId)) return;
       const field = document.getElementById(fieldId);
       if (!field) return;
 
