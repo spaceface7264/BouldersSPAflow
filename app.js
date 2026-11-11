@@ -19383,8 +19383,16 @@ async function ensureSubscriptionAttached(context = 'auto') {
     const is15DayPass =
       typeof state.membershipPlanId === 'string' &&
       (state.membershipPlanId.startsWith('15daypass-') || state.membershipPlanId.startsWith('freetrial-'));
-    const startDate = is15DayPass ? (state.subscriptionStartDate || getTodayLocalDateString()) : undefined;
-    
+    let startDate = is15DayPass ? (state.subscriptionStartDate || getTodayLocalDateString()) : undefined;
+    // BRP requires startDate >= today. A restored activation date can be in the
+    // past (payment retry the next day, stale-order rebuild) — clamp it so the
+    // re-attach doesn't loop on a 403 with a date that can never be ordered.
+    if (startDate && startDate < getTodayLocalDateString()) {
+      console.warn(`[checkout] Activation date ${startDate} is in the past - clamping to today (${context})`);
+      startDate = getTodayLocalDateString();
+      state.subscriptionStartDate = startDate;
+    }
+
     // Add subscription item - this may return updated order if startDate was fixed by re-adding
     const subscriptionResponse = await orderAPI.addSubscriptionItem(orderId, state.membershipPlanId, startDate);
     state.subscriptionAttachedOrderId = orderId;
@@ -20272,6 +20280,13 @@ async function handleCheckout() {
               console.warn('[checkout] Failed to apply coupon before payment link:', couponError);
               // Don't block checkout if coupon fails, but log warning
               console.warn('[checkout] Payment link may not reflect discount if coupon application failed');
+              // Keep the UI honest: the order carries no coupon, so drop the
+              // discounted totals before the payment link is generated from the
+              // full-price order — otherwise the summary shows a price lower
+              // than what the payment window will charge.
+              state.discountApplied = false;
+              state.totals.discountAmount = 0;
+              updateCartSummary();
             }
           } else if (discountCodeToApply && state.discountApplied) {
             // Discount code is stored and marked as applied, but verify it's actually on the order
@@ -20899,6 +20914,10 @@ async function handleCheckout() {
           
           if (isProductNotAllowed) {
             // Show modal with options instead of toast — expected campaign restriction, not a product bug
+            // Reset the in-progress guard before returning: closing the modal without
+            // picking an option must not leave every future checkout click swallowed.
+            state.checkoutInProgress = false;
+            setCheckoutLoadingState(false);
             showCampaignRejectionModal();
             return; // Stop checkout flow without throwing error
           }
@@ -20919,7 +20938,9 @@ async function handleCheckout() {
           
           // Check if this is a payment link generation error due to backend pricing bug
           const isPaymentLinkError = error.message && error.message.includes('Generate Payment Link Card failed');
-          const is403Error = error.message && error.message.includes('403');
+          // generatePaymentLink preserves the HTTP status on the rethrown error;
+          // sniffing the message would false-positive on payloads containing "403".
+          const is403Error = error.status === 403;
           
           if (isPaymentLinkError && is403Error) {
             try {
@@ -21163,7 +21184,7 @@ async function handleCheckout() {
           }
         } catch (error) {
           console.error('[checkout] Failed to generate payment link for non-membership order:', error);
-          const is403Error = error.message && error.message.includes('403');
+          const is403Error = error.status === 403;
           if (is403Error) {
             // Order can no longer produce a payment link (e.g. stale pre-created
             // order) — drop it so the next attempt rebuilds a fresh one
