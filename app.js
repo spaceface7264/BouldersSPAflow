@@ -19061,6 +19061,8 @@ function persistOrderSnapshot(orderId) {
       || (isFirstClimbRoute() ? 'firstclimb' : null);
     sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
       orderId,
+      orderCreatedAt: state.orderCreatedAt,
+      orderCreatedDate: state.orderCreatedDate,
       membershipPlanId: state.membershipPlanId,
       cartItems: state.cartItems || [],
       totals: state.totals,
@@ -19085,6 +19087,8 @@ function clearStoredOrderData(reason = 'manual') {
   console.log(`[checkout] Clearing stored order data (${reason})`);
   state.order = null;
   state.orderId = null;
+  state.orderCreatedAt = null;
+  state.orderCreatedDate = null;
   state.subscriptionAttachedOrderId = null;
   state.paymentLink = null;
   state.paymentLinkGenerated = false;
@@ -19134,6 +19138,8 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   state.order = null;
   state.fullOrder = null;
   state.orderId = null;
+  state.orderCreatedAt = null;
+  state.orderCreatedDate = null;
   state.subscriptionAttachedOrderId = null;
   state.subscriptionStartDate = null;
   state.paymentLink = null;
@@ -19238,7 +19244,52 @@ async function finalizePreliminaryZeroBalanceOrder(orderId, context = 'checkout-
   }
 }
 
+// BRP refuses payment-link generation for orders whose subscription item was
+// priced for an earlier moment (prorated start-date pricing goes stale) — seen
+// as 403 INVALID_INPUT from /api/payment/generate-link when a pre-created order
+// (e.g. from the discount flow) is reused after the user walked away for a
+// while (Sentry JOIN-BOULDERSDK-1T: 68 min and 21.5 h gaps). Only reuse an
+// order created the same local calendar day and within this age window.
+const ORDER_REUSE_MAX_AGE_MS = 30 * 60 * 1000;
+
+function isCheckoutOrderStale() {
+  if (!state.orderId) return false;
+  if (state.orderCreatedDate && state.orderCreatedDate !== getTodayLocalDateString()) return true;
+  if (state.orderCreatedAt && (Date.now() - state.orderCreatedAt) > ORDER_REUSE_MAX_AGE_MS) return true;
+  return false;
+}
+
+// Drop order-scoped state so checkout rebuilds a fresh BRP order, while keeping
+// the user's selections (plan, cart, addons, discount code) intact. The normal
+// checkout flow then re-attaches the subscription and re-applies the coupon.
+function invalidateCheckoutOrder(reason = 'stale') {
+  console.warn(`[checkout] Invalidating order ${state.orderId} (${reason})`);
+  state.orderId = null;
+  state.subscriptionAttachedOrderId = null;
+  state.subscriptionItemId = null;
+  state.order = null;
+  state.fullOrder = null;
+  state.orderCreatedAt = null;
+  state.orderCreatedDate = null;
+  state.paymentLink = null;
+  state.paymentLinkGenerated = false;
+  state.discountApplied = false; // coupon must be re-applied to the new order
+  try {
+    sessionStorage.removeItem('boulders_checkout_order');
+  } catch (error) {
+    console.warn('[checkout] Could not clear order session data:', error);
+  }
+}
+
 async function ensureOrderCreated(context = 'auto') {
+  if (state.orderId && isCheckoutOrderStale()) {
+    const ageMinutes = state.orderCreatedAt
+      ? Math.round((Date.now() - state.orderCreatedAt) / 60000)
+      : null;
+    console.warn(`[checkout] Order ${state.orderId} is stale (${context}) - created ${state.orderCreatedDate || 'unknown date'}${ageMinutes != null ? `, ${ageMinutes} min ago` : ''} - creating a fresh order`);
+    invalidateCheckoutOrder(`stale-${context}`);
+  }
+
   if (state.orderId) {
     console.log(`[checkout] Reusing existing order ${state.orderId} (${context})`);
     persistOrderSnapshot(state.orderId);
@@ -19270,6 +19321,8 @@ async function ensureOrderCreated(context = 'auto') {
     console.log(`[checkout] Creating order (context: ${context})...`);
     const order = await orderAPI.createOrder(orderData);
     state.orderId = order.id || order.orderId;
+    state.orderCreatedAt = Date.now();
+    state.orderCreatedDate = getTodayLocalDateString();
     state.subscriptionAttachedOrderId = null;
     
     // Store full order object for payment overview
@@ -20869,38 +20922,47 @@ async function handleCheckout() {
           const is403Error = error.message && error.message.includes('403');
           
           if (isPaymentLinkError && is403Error) {
-            // Check if order has incorrect pricing
-            const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
-            if (subscriptionItem) {
-              const productId = subscriptionItem?.product?.id;
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const startDateStr = getTodayLocalDateString();
-              const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
-              const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
-              
-              if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
-                console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO PRICING MISMATCH');
-                console.error('[checkout] ❌ Order has incorrect pricing - backend ignored startDate parameter');
-                console.error('[checkout] ❌ This is a backend issue that needs to be fixed on backend side');
-                console.error('[checkout] ❌ Product ID:', productId);
-                console.error('[checkout] ❌ Backend price:', verification.orderPriceDKK, 'DKK');
-                console.error('[checkout] ❌ Expected price:', verification.expectedPriceDKK || 'N/A', 'DKK');
-                
-                // Show user-friendly error message
-                showToast(
-                  'Unable to process payment due to a system issue. Please try again in a few moments or contact support.',
-                  'error'
-                );
-                
-                // Reset checkout state to allow retry
-                state.checkoutInProgress = false;
-                if (typeof setCheckoutLoadingState === 'function') {
-                  setCheckoutLoadingState(false);
+            try {
+              // Check if order has incorrect pricing
+              const subscriptionItem = state.fullOrder?.subscriptionItems?.[0];
+              if (subscriptionItem) {
+                const productId = subscriptionItem?.product?.id;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const startDateStr = getTodayLocalDateString();
+                const expectedPrice = orderAPI._calculateExpectedPartialMonthPrice(productId, startDateStr);
+                const verification = orderAPI._verifySubscriptionPricing(state.fullOrder, productId, expectedPrice, today);
+
+                if (!verification.isCorrect && (!verification.priceDifference || verification.priceDifference > 100)) {
+                  console.error('[checkout] ❌ PAYMENT LINK GENERATION FAILED DUE TO PRICING MISMATCH');
+                  console.error('[checkout] ❌ Order has incorrect pricing - backend ignored startDate parameter');
+                  console.error('[checkout] ❌ This is a backend issue that needs to be fixed on backend side');
+                  console.error('[checkout] ❌ Product ID:', productId);
+                  console.error('[checkout] ❌ Backend price:', verification.orderPriceDKK, 'DKK');
+                  console.error('[checkout] ❌ Expected price:', verification.expectedPriceDKK || 'N/A', 'DKK');
+
+                  // Show user-friendly error message
+                  showToast(
+                    'Unable to process payment due to a system issue. Please try again in a few moments or contact support.',
+                    'error'
+                  );
+
+                  // Reset checkout state to allow retry
+                  state.checkoutInProgress = false;
+                  if (typeof setCheckoutLoadingState === 'function') {
+                    setCheckoutLoadingState(false);
+                  }
+
+                  throw new Error(`Payment link generation failed due to backend pricing bug. Order price: ${verification.orderPriceDKK} DKK, Expected: ${verification.expectedPriceDKK || 'N/A'} DKK. Product ID: ${productId}. Backend ignored startDate parameter.`);
                 }
-                
-                throw new Error(`Payment link generation failed due to backend pricing bug. Order price: ${verification.orderPriceDKK} DKK, Expected: ${verification.expectedPriceDKK || 'N/A'} DKK. Product ID: ${productId}. Backend ignored startDate parameter.`);
               }
+            } finally {
+              // Whatever the 403 reason (stale start-date pricing, order state,
+              // price mismatch), this order can no longer produce a payment
+              // link. Drop it so the next checkout attempt rebuilds a fresh
+              // order instead of reusing the dead one forever
+              // (Sentry JOIN-BOULDERSDK-1T).
+              invalidateCheckoutOrder('payment-link-403');
             }
           }
           
@@ -21101,6 +21163,13 @@ async function handleCheckout() {
           }
         } catch (error) {
           console.error('[checkout] Failed to generate payment link for non-membership order:', error);
+          const is403Error = error.message && error.message.includes('403');
+          if (is403Error) {
+            // Order can no longer produce a payment link (e.g. stale pre-created
+            // order) — drop it so the next attempt rebuilds a fresh one
+            // (Sentry JOIN-BOULDERSDK-1T).
+            invalidateCheckoutOrder('payment-link-403-nonmembership');
+          }
           throw new Error('Failed to generate payment link');
         }
       }
@@ -21238,7 +21307,11 @@ async function handleCheckout() {
         // Show error message for actual errors
         showToast(getErrorMessage(error, 'Adding items'), 'error');
       }
-      
+
+      // Allow the user to retry — without this, the checkoutInProgress guard at
+      // the top of handleCheckout silently swallows every subsequent click
+      // (Sentry JOIN-BOULDERSDK-1T left users permanently stuck).
+      state.checkoutInProgress = false;
       setCheckoutLoadingState(false);
       return;
     }
@@ -23248,6 +23321,10 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
       }
       if (storedOrder.orderId) {
         state.orderId = storedOrder.orderId;
+        // Restore creation metadata so the staleness guard can tell whether this
+        // order is still valid for a payment retry (e.g. next-morning retries).
+        state.orderCreatedAt = storedOrder.orderCreatedAt || null;
+        state.orderCreatedDate = storedOrder.orderCreatedDate || null;
         console.log('[Payment Failed] ✅ Restored orderId:', state.orderId);
       }
     }
