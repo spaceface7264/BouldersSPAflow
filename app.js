@@ -5578,14 +5578,15 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
     if (qty > 0) {
       punchSpend += price * qty;
     }
-    const clips = isDa ? '13 klip' : '13 punches';
+    // No breaks inside "· 13 klip": a long name wraps before it, not inside it.
+    const clips = isDa ? '· 13 klip' : '· 13 punches';
     return choiceCard({
       on: qty > 0,
       kind: 'punch',
       productId: id,
       name: getBlackWeekCartLineName(seg.product),
-      title: names.label,
-      desc: names.hint ? `${names.hint} · ${clips}` : clips,
+      title: `${names.label} ${clips}`,
+      desc: names.hint,
       pill: isDa ? '3 klip gratis' : '3 free punches',
       price,
       was,

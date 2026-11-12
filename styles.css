@@ -2806,6 +2806,10 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     gap: 12px;
 }
 
+/* A card is two columns by three rows, and the two wrapper divs dissolve into
+   the grid (display: contents) so the leaf elements pair up: the name and the
+   price on one baseline, the hint and the old price on the next, the pill and
+   the quantity control at the bottom. */
 .bw-shop .bw-choice {
     width: 100%;
     background: #232323;
@@ -2813,9 +2817,9 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     border-radius: 14px;
     padding: 16px;
     margin: 0 0 10px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 14px;
     cursor: pointer;
     text-align: left;
     color: #fff;
@@ -2846,40 +2850,61 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     border: 7px solid #ff00ff;
 }
 
-.bw-shop .bw-choice-main {
-    flex: 1;
-    min-width: 0;
+.bw-shop .bw-choice-main,
+.bw-shop .bw-choice-price {
+    display: contents;
 }
 
 .bw-shop .bw-choice-title {
-    display: block;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: baseline;
+    min-width: 0;
     font-weight: 700;
     font-size: 16px;
 }
 
 .bw-shop .bw-choice-desc {
-    display: block;
+    grid-column: 1;
+    grid-row: 2;
+    min-width: 0;
     color: #999;
     font-size: 13px;
     margin-top: 2px;
 }
 
-.bw-shop .bw-choice-price {
-    text-align: right;
-    flex: none;
-    min-width: 96px;
-}
-
 .bw-shop .bw-choice-price b {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: baseline;
+    text-align: right;
+    white-space: nowrap;
     font-size: 20px;
     font-weight: 800;
-    display: block;
 }
 
 .bw-shop .bw-choice-price .bw-was {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: right;
+    white-space: nowrap;
     color: #777;
     font-size: 12px;
     text-decoration: line-through;
+}
+
+.bw-shop .bw-choice .bw-pill,
+.bw-shop .bw-choice .skeleton--pill {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
+    align-self: center;
+}
+
+.bw-shop .bw-choice .bw-q {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: center;
 }
 
 .bw-shop .bw-pill {
