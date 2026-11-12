@@ -5588,14 +5588,12 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
   }).join('');
 
   let coffeeSpend = 0;
-  let coffeeHalfPrice = false;
   const coffeeChoices = coffeeProducts.map((product) => {
     const id = getProductNumericId(product);
     const qty = blackWeekQtyOf('coffee', id);
     const price = getBlackWeekPriceKr(product);
     const was = getBlackWeekWasPriceKr(product);
     const name = product.name || (isDa ? 'Kaffekort' : 'Coffee card');
-    if (was > price) coffeeHalfPrice = true;
     if (qty > 0) {
       coffeeSpend += price * qty;
     }
@@ -5632,11 +5630,11 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       <div class="bw-wrap">
         ${blackWeekShopHeadingHtml()}
         ${punchChoices ? `
-        <div class="bw-lab"><span>${isDa ? 'KLIPPEKORT · 13 KLIP FOR 10' : 'PUNCH CARD · 13 FOR 10'}</span><span>MAX 3${caps.punch < BLACK_WEEK_PUNCH_CAP ? ` · ${caps.punch}` : ''}</span></div>
+        <div class="bw-lab"><span>${isDa ? 'Vælg dit klippekort' : 'Choose your punch card'}</span><span>MAX 3${caps.punch < BLACK_WEEK_PUNCH_CAP ? ` · ${caps.punch}` : ''}</span></div>
         ${punchChoices}
         <div class="bw-note">${isDa ? 'Max 3 klippekort pr. person' : 'Max 3 punch cards per person'}</div>` : ''}
         ${coffeeChoices ? `
-        <div class="bw-lab"><span>${isDa ? 'KAFFEKORT' : 'COFFEE CARD'}${coffeeHalfPrice ? (isDa ? ' · HALV PRIS' : ' · HALF PRICE') : ''}</span><span>MAX 5${caps.coffee < BLACK_WEEK_COFFEE_CAP ? ` · ${caps.coffee}` : ''}</span></div>
+        <div class="bw-lab"><span>${isDa ? 'Vælg antal Kaffekort' : 'Choose number of coffee cards'}</span><span>MAX 5${caps.coffee < BLACK_WEEK_COFFEE_CAP ? ` · ${caps.coffee}` : ''}</span></div>
         ${coffeeChoices}` : ''}
         ${landingMode ? `
         <div class="bw-other">${isDa ? 'Leder du efter medlemskab eller prøvepas?' : 'Looking for membership or a trial pass?'}
