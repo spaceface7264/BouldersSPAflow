@@ -2894,18 +2894,22 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
 }
 
 /* —— Quantity control ——
-   Minus, number and plus are always in the markup and data-qty on .bw-q is the
-   state. At 0 the minus button and the number are folded away behind the plus
-   button, so adding the first card opens the control and removing the last one
-   closes it. */
-.bw-shop .bw-q {
+   On the picker's cards and on the rows of the Black Week cart. Minus, number
+   and plus are always in the markup and data-qty on .bw-q is the state. At 0
+   the minus button and the number are folded away behind the plus button, so
+   adding the first card opens the control and removing the last one closes it. */
+.bw-q {
     display: flex;
     align-items: center;
     justify-content: flex-end;
+}
+
+/* On a picker card the control sits under the price. */
+.bw-shop .bw-q {
     margin-top: 10px;
 }
 
-.bw-shop .bw-q button {
+.bw-q button {
     width: 36px;
     height: 36px;
     min-width: 36px;
@@ -2923,11 +2927,11 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
-.bw-shop .bw-q button:not(.dis):active {
+.bw-q button:not(.dis):active {
     transform: scale(0.92);
 }
 
-.bw-shop .bw-q button.plus {
+.bw-q button.plus {
     background: #ff00ff;
     border-color: #ff00ff;
     /* Above the minus button and the number, which slide out from underneath it. */
@@ -2937,7 +2941,7 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
 
 /* At the cap. These are the colours of the plus button at 30% opacity over the
    card, set as solid colours so the button still covers what is folded under it. */
-.bw-shop .bw-q button.plus.dis {
+.bw-q button.plus.dis {
     background: #651965;
     border-color: #651965;
     color: #656565;
@@ -2946,7 +2950,7 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
 
 /* The number is a window over a column of digits, one digit per 18px line.
    Sliding the column rolls the count: up when it rises, down when it falls. */
-.bw-shop .bw-q-num {
+.bw-q-num {
     width: 34px;
     height: 24px;
     overflow: hidden;
@@ -2960,63 +2964,63 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     mask-image: linear-gradient(to bottom, transparent, #000 5px, #000 calc(100% - 5px), transparent);
 }
 
-.bw-shop .bw-q .minus,
-.bw-shop .bw-q-num {
+.bw-q .minus,
+.bw-q-num {
     transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1), opacity 180ms ease-out, visibility 220ms;
 }
 
 /* Closed: the minus button and the number are tucked behind the plus button,
    the number half as far in as the minus button, so the control fans open
    from the plus button and folds back into it. Closing is the quicker of the two. */
-.bw-shop .bw-q[data-qty="0"] .minus,
-.bw-shop .bw-q[data-qty="0"] .bw-q-num {
+.bw-q[data-qty="0"] .minus,
+.bw-q[data-qty="0"] .bw-q-num {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
     transition-duration: 160ms, 120ms, 160ms;
 }
 
-.bw-shop .bw-q[data-qty="0"] .minus {
+.bw-q[data-qty="0"] .minus {
     transform: translateX(70px);
 }
 
-.bw-shop .bw-q[data-qty="0"] .bw-q-num {
+.bw-q[data-qty="0"] .bw-q-num {
     transform: translateX(35px);
 }
 
-.bw-shop .bw-q-digits {
+.bw-q-digits {
     display: block;
     /* Centres an 18px line in the 24px window. */
     padding-top: 3px;
     transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.bw-shop .bw-q-digits span {
+.bw-q-digits span {
     display: block;
 }
 
 /* One line per card above the first, up to the larger cap (5 coffee cards).
    At 0 the column stays on "1", so the digit holds still while the control closes. */
-.bw-shop .bw-q[data-qty="2"] .bw-q-digits { transform: translateY(-18px); }
-.bw-shop .bw-q[data-qty="3"] .bw-q-digits { transform: translateY(-36px); }
-.bw-shop .bw-q[data-qty="4"] .bw-q-digits { transform: translateY(-54px); }
-.bw-shop .bw-q[data-qty="5"] .bw-q-digits { transform: translateY(-72px); }
+.bw-q[data-qty="2"] .bw-q-digits { transform: translateY(-18px); }
+.bw-q[data-qty="3"] .bw-q-digits { transform: translateY(-36px); }
+.bw-q[data-qty="4"] .bw-q-digits { transform: translateY(-54px); }
+.bw-q[data-qty="5"] .bw-q-digits { transform: translateY(-72px); }
 
 /* Reduced motion: the control fades open and closed, and the count changes at once. */
 @media (prefers-reduced-motion: reduce) {
-    .bw-shop .bw-q button {
+    .bw-q button {
         transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
     }
 
-    .bw-shop .bw-q .minus,
-    .bw-shop .bw-q-num,
-    .bw-shop .bw-q[data-qty="0"] .minus,
-    .bw-shop .bw-q[data-qty="0"] .bw-q-num {
+    .bw-q .minus,
+    .bw-q-num,
+    .bw-q[data-qty="0"] .minus,
+    .bw-q[data-qty="0"] .bw-q-num {
         transform: none;
         transition: opacity 160ms ease, visibility 160ms;
     }
 
-    .bw-shop .bw-q-digits {
+    .bw-q-digits {
         transition: none;
     }
 }
@@ -3729,6 +3733,236 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
 body.blackweek-flow .create-address-fields,
 body.blackweek-flow .create-optional-consent {
     display: none;
+}
+
+/* —— Black Week cart ——
+   The cart on the Black Week checkout. It lists every Black Week card, in the
+   cart or not: the picker's name and the line total, and under them the unit
+   price and the picker's quantity control (.bw-q), which adds the card, removes
+   it and changes how many. Under the rows come the total, the saving and the
+   pickup gym, and the note about the payment provider sits under the pay
+   button. app.js writes the rows (renderBlackWeekCartRows) and the texts
+   (applyBlackWeekCartUi). */
+
+/* Discount codes are not for Black Week cards, and the regular note above the
+   pay button is replaced by the one under it. */
+body.blackweek-flow .discount-section,
+body.blackweek-flow .payment-redirect-note {
+    display: none;
+}
+
+body.blackweek-flow .summary-header {
+    margin-bottom: 24px;
+}
+
+/* Edit button: the pencil plus a text label. */
+body.blackweek-flow .summary-edit-btn {
+    position: relative;
+    width: auto;
+    gap: 8px;
+    padding: 0 14px 0 12px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+/* 36px tall to the eye, 44px to the finger. */
+body.blackweek-flow .summary-edit-btn::after {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
+}
+
+body.blackweek-flow .cart-items {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* A row is two by two: the name and the line total, and under them the unit
+   price and the quantity control. The control is as wide at quantity 0 as at
+   any other and is the widest thing on the right, so the name has the same
+   room, and the row the same height, whether the card is in the cart or not.
+   Nothing moves under the finger when a quantity changes. */
+body.blackweek-flow .cart-item--bw {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 12px;
+    padding: 0;
+}
+
+body.blackweek-flow .cart-item-title,
+body.blackweek-flow .cart-item-total {
+    align-self: baseline;
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    color: #fff;
+}
+
+body.blackweek-flow .cart-item-title {
+    transition: color 180ms ease;
+}
+
+body.blackweek-flow .cart-item-total {
+    text-align: right;
+    white-space: nowrap;
+}
+
+body.blackweek-flow .cart-item-meta {
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+/* A card that is not in the cart: its name steps back and the plus button, the
+   one part of the control that shows at quantity 0, is what adds it. That
+   button is drawn as a ring, which leaves the pay button as the one filled
+   button under the rows. Its inside is the cart's own colour and not see-through,
+   so it still covers what is folded under it. */
+body.blackweek-flow .cart-item--bw-off .cart-item-title {
+    color: rgba(255, 255, 255, 0.65);
+}
+
+body.blackweek-flow .cart-item--bw-off .bw-q button.plus {
+    background: #2a2a2a;
+    color: #ff7aff;
+}
+
+body.blackweek-flow .cart-item--bw-off .bw-q button.plus.dis {
+    color: #656565;
+}
+
+/* Shown under the last card of a kind once its limit is reached, which is when
+   the plus buttons of that kind go off. It sits closer to its cards than the
+   next row does. */
+body.blackweek-flow .cart-item-limit {
+    margin: -10px 0 0;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.65);
+    hyphens: manual;
+}
+
+/* While the order is on its way to payment the cart is fixed, and its quantity
+   controls show it. app.js ignores them for that time (adjustBlackWeekProductQty). */
+body.blackweek-flow .order-summary:has(.checkout-btn.loading) .cart-items .bw-q {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* The info icon follows the name and wraps together with its last word. */
+body.blackweek-flow .cart-item-title-tail {
+    white-space: nowrap;
+}
+
+/* The tooltip is a child of the wrapper, so the wrapper hands it the text style
+   it has in the regular cart. */
+body.blackweek-flow .cart-item-title .product-info-wrapper {
+    margin-left: 6px;
+    vertical-align: -2px;
+    font-weight: 500;
+    white-space: normal;
+}
+
+/* The icon is 14px, so the finger gets a larger target around it. */
+body.blackweek-flow .cart-item-title .product-info-icon {
+    position: relative;
+}
+
+body.blackweek-flow .cart-item-title .product-info-icon::after {
+    content: '';
+    position: absolute;
+    inset: -13px;
+}
+
+body.blackweek-flow .payment-overview {
+    margin: 24px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* .payment-label is also the style of the old payment method rows, which is
+   where the pointer cursor comes from. A total is plain text. */
+body.blackweek-flow .payment-overview-paynow .payment-label {
+    font-weight: 700;
+    cursor: default;
+}
+
+body.blackweek-flow .payment-overview-paynow .payment-amount {
+    font-size: var(--font-size-lg);
+    font-weight: 800;
+}
+
+/* Label and amount share one baseline at every width. On narrow screens the
+   regular total row is a two-row grid, with room for a period under the label. */
+body.blackweek-flow #step-4 .payment-overview-paynow .payment-overview-paynow-row {
+    display: flex;
+    align-items: baseline;
+}
+
+body.blackweek-flow #step-4 .payment-overview-paynow .payment-paynow-amount-stack {
+    align-self: baseline;
+    margin-left: auto;
+}
+
+body.blackweek-flow .bw-cart-saving {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 4px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: #ff7aff;
+}
+
+body.blackweek-flow .bw-cart-saving[hidden] {
+    display: none;
+}
+
+body.blackweek-flow .bw-cart-pickup,
+body.blackweek-flow .bw-cart-note {
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.65);
+    hyphens: manual;
+}
+
+body.blackweek-flow .bw-cart-pickup {
+    margin: 14px 0 0;
+}
+
+body.blackweek-flow .bw-cart-pickup b {
+    font-weight: 600;
+    color: #fff;
+}
+
+/* The dot and the link wrap as one when the line is too long for the screen. */
+body.blackweek-flow .bw-cart-pickup-change {
+    white-space: nowrap;
+}
+
+/* A text link. The padding, taken back by the margin, widens the tap area
+   without moving the text around it. */
+body.blackweek-flow .bw-cart-pickup button {
+    margin: -12px -8px;
+    padding: 12px 8px;
+    border: none;
+    background: none;
+    font: inherit;
+    color: #ff7aff;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+body.blackweek-flow .consents-section {
+    margin: 24px 0;
+}
+
+body.blackweek-flow .bw-cart-note {
+    margin: 12px 0 0;
+    text-align: center;
 }
 
 .category-item {

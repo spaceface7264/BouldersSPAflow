@@ -26,6 +26,7 @@ const setUser = (user) => {
 import {
   formatCurrencyHalfKrone,
   formatPriceHalfKrone,
+  formatPriceTagHalfKrone,
   roundToHalfKrone,
 } from './utils/format.js';
 import { formatDistance } from './utils/geo.js';
@@ -268,7 +269,10 @@ function updatePunchCardPaymentOverview() {
   applyPaymentOverviewDiscountRows(payNowBreakdown);
 
   if (DOM.payNow) {
-    DOM.payNow.textContent = formatCurrencyHalfKrone(payNowAmount);
+    // The Black Week cart prints its total the way the picker prints prices.
+    DOM.payNow.textContent = isBlackWeekCart()
+      ? formatBlackWeekKr(payNowAmount)
+      : formatCurrencyHalfKrone(payNowAmount);
     const payNowRow = DOM.payNow.closest('.payment-overview-paynow-row');
     const periodElement = payNowRow?.querySelector('.payment-label-period');
     if (periodElement) periodElement.textContent = '';
@@ -804,6 +808,53 @@ function applyBlackWeekSelectionToCartState() {
     state.membershipPlanId = null;
     state.selectedProductType = null;
   }
+}
+
+// After a failed payment the cart the buyer tried to pay for is read back from
+// the order stored in the session (showPaymentFailedMessage, its retry button,
+// and showStep for the checkout step). On the Black Week checkout the cards are
+// counted in the quantity maps: the picker, the cart's quantity controls and
+// every later render go by the maps, and a cart the maps do not know is cleared
+// at the next render. So the restore passes its value card lines to this
+// function, which puts them in the maps and draws the picker and the cart from
+// them. Until the Black Week products are loaded the lines wait in
+// state.blackWeekRestoredCart, and the picker takes them at its next render
+// (ensureBlackWeekDefaultSelection).
+function adoptRestoredBlackWeekCart(valueCardLines) {
+  const isBlackWeekRoute = state.landingRouteConfig?.componentName === 'LandingBlackWeek';
+  state.blackWeekRestoredCart = isBlackWeekRoute ? valueCardLines : null;
+  if (takeRestoredBlackWeekCart()) syncBlackWeekQuantityUI();
+}
+
+// Writes the waiting lines of a restored cart into the Black Week quantity maps.
+// It takes the Black Week products to tell a punch card from a coffee card.
+// True when the maps now hold the restored cart.
+function takeRestoredBlackWeekCart() {
+  const lines = state.blackWeekRestoredCart;
+  const products = state.blackWeekProducts || [];
+  if (!Array.isArray(lines) || !lines.length || !products.length) return false;
+  state.blackWeekRestoredCart = null;
+
+  const cards = lines.map((line) => {
+    const id = getProductNumericId(line.productId ?? line.id);
+    return {
+      product: products.find((product) => getProductNumericId(product) === id),
+      quantity: Number(line.quantity) || 1,
+    };
+  });
+  // A cart with anything else in it stays the way it was restored.
+  if (cards.some((card) => !isBlackWeekProduct(card.product))) return false;
+
+  clearBlackWeekQty('punch');
+  clearBlackWeekQty('coffee');
+  cards.forEach(({ product, quantity }) => {
+    setBlackWeekQty(isBlackWeekCoffeeProduct(product) ? 'coffee' : 'punch', product, quantity);
+  });
+  // These lines are the cart until the next cart update builds it from the maps.
+  // That update reports new lines to tracking as added to the cart, and a
+  // restored cart has none.
+  if (!state.cartItems?.length) state.cartItems = lines;
+  return true;
 }
 
 async function refreshBlackWeekOwnedCaps(customerId = state.customerId) {
@@ -5069,8 +5120,18 @@ function getBlackWeekPunchWasPriceKr(priceKr) {
   return roundToHalfKrone(priceKr * 13 / 10);
 }
 
+// The normal price a Black Week card is compared with: the picker strikes it
+// through and the cart counts the saving from it. 0 when the card has none.
+function getBlackWeekWasPriceKr(product) {
+  const price = getBlackWeekPriceKr(product);
+  if (!isBlackWeekCoffeeProduct(product)) return getBlackWeekPunchWasPriceKr(price);
+  // Under 300 kr the coffee card price counts as the Black Week half price.
+  return price > 0 && price < 300 ? roundToHalfKrone(price * 2) : 0;
+}
+
+// Whole kroner without decimals, half kroner with two: "1.275 kr", "1.657,50 kr".
 function formatBlackWeekKr(amount) {
-  return `${formatPriceHalfKrone(roundToHalfKrone(amount))} kr`;
+  return `${formatPriceTagHalfKrone(amount)} kr`;
 }
 
 function formatBlackWeekCountdown(now = Date.now()) {
@@ -5146,10 +5207,169 @@ function getBlackWeekPunchSegments(products) {
   return segments;
 }
 
+// The picker's name and age hint for each known punch card, keyed like the
+// segments above. The cart names its lines from the same labels.
+function getBlackWeekPunchCopy() {
+  const isDa = isDaFallback();
+  return {
+    adult: { label: isDa ? 'Voksen' : 'Adult', hint: isDa ? 'Fra 21 år' : 'From 21' },
+    youth: { label: isDa ? 'Studerende & Ung' : 'Student & youth', hint: isDa ? '16–20 år eller studiekort' : '16–20 or student ID' },
+    junior: { label: isDa ? 'Junior' : 'Junior', hint: isDa ? 'Til og med 15 år' : 'Up to 15' },
+  };
+}
+
+// The Black Week checkout has its own cart: the picker's names, a price on
+// every line, the saving and the pickup gym. Same switch as its short create
+// form (isBlackWeekCreateForm).
+function isBlackWeekCart() {
+  return document.body.classList.contains('blackweek-flow');
+}
+
+// What the cart calls a Black Week card: the picker's section and card title,
+// e.g. "Klippekort · Voksen". BRP's product names read differently.
+function getBlackWeekCartLineName(product) {
+  const isDa = isDaFallback();
+  if (isBlackWeekCoffeeProduct(product)) return product.name || (isDa ? 'Kaffekort' : 'Coffee card');
+  const segment = getBlackWeekPunchSegments([product])[0];
+  const names = getBlackWeekPunchCopy()[segment?.key];
+  if (!names) return product.name || (isDa ? 'Klippekort' : 'Punch card');
+  return `${isDa ? 'Klippekort' : 'Punch card'} · ${names.label}`;
+}
+
+// What the Black Week cart lists: every Black Week card in the picker's order,
+// in the cart or not. A card that is not in the cart is a row with quantity 0,
+// so it can be added right there, and a row keeps its place when its quantity
+// changes. Quantities and line totals are the cart's own (state.cartItems).
+// Empty when the cart is not the Black Week one, or holds anything else than
+// Black Week cards: such a cart is drawn the regular way, line by line.
+function getBlackWeekCartRows() {
+  if (!isBlackWeekCart()) return [];
+  const products = Array.isArray(state.blackWeekProducts) ? state.blackWeekProducts : [];
+  const ordered = [
+    ...getBlackWeekPunchSegments(products).map((segment) => segment.product),
+    ...getBlackWeekCoffeeProducts(products),
+  ];
+  const items = state.cartItems || [];
+  const rows = ordered.map((product) => {
+    const id = getProductNumericId(product);
+    const item = items.find((candidate) => (
+      candidate.type === 'value-card' && getProductNumericId(candidate.productId ?? candidate.id) === id
+    ));
+    const quantity = Number(item?.quantity) || 0;
+    const unitKr = getBlackWeekPriceKr(product);
+    const wasKr = getBlackWeekWasPriceKr(product);
+    return {
+      item,
+      id,
+      kind: isBlackWeekCoffeeProduct(product) ? 'coffee' : 'punch',
+      name: getBlackWeekCartLineName(product),
+      description: product.externalDescription || product.description || '',
+      quantity,
+      unitKr,
+      totalKr: item ? item.amount : 0,
+      savingKr: wasKr > unitKr ? roundToHalfKrone((wasKr - unitKr) * quantity) : 0,
+    };
+  });
+  if (items.some((item) => !rows.some((row) => row.item === item))) return [];
+
+  // How many more cards of each kind the buyer may add, as in the picker.
+  const caps = getBlackWeekRemainingCaps();
+  const inCart = (kind) => rows.reduce((sum, row) => sum + (row.kind === kind ? row.quantity : 0), 0);
+  const room = {
+    punch: Math.max(0, caps.punch - inCart('punch')),
+    coffee: Math.max(0, caps.coffee - inCart('coffee')),
+  };
+  return rows.map((row) => ({ ...row, room: room[row.kind] }));
+}
+
+// Draws the rows of the Black Week cart into the cart list. Once they are on
+// screen a render updates them in place, like the picker: the quantity controls
+// animate with CSS transitions and hold the keyboard focus, and both need the
+// same elements before and after a change. `createInfoIcon` is the cart's
+// builder for the info icon after a product name. False when this cart has no
+// Black Week rows, and the caller then draws it the regular way.
+function renderBlackWeekCartRows(createInfoIcon) {
+  const rows = getBlackWeekCartRows();
+  if (!rows.length || !DOM.cartItems) return false;
+  const isDa = isDaFallback();
+
+  const next = document.createDocumentFragment();
+  rows.forEach((row, index) => {
+    const line = document.createElement('div');
+    line.className = row.quantity > 0 ? 'cart-item cart-item--bw' : 'cart-item cart-item--bw cart-item--bw-off';
+
+    const title = document.createElement('span');
+    title.className = 'cart-item-title';
+    const info = createInfoIcon(row.description);
+    if (info) {
+      // The info icon wraps together with the last word of the name, so a name
+      // that takes two lines on a phone keeps the icon next to its text.
+      const lastWordStart = row.name.lastIndexOf(' ') + 1;
+      const tail = document.createElement('span');
+      tail.className = 'cart-item-title-tail';
+      tail.append(row.name.slice(lastWordStart), info);
+      title.append(row.name.slice(0, lastWordStart), tail);
+    } else {
+      title.textContent = row.name;
+    }
+
+    const total = document.createElement('span');
+    total.className = 'cart-item-total';
+    total.textContent = row.quantity > 0 ? formatBlackWeekKr(row.totalKr) : '';
+
+    const meta = document.createElement('span');
+    meta.className = 'cart-item-meta';
+    meta.textContent = `${formatBlackWeekKr(row.unitKr)} ${isDa ? 'pr. kort' : 'per card'}`;
+
+    const control = document.createElement('template');
+    control.innerHTML = sanitizeHTML(blackWeekQtyControlHtml({
+      kind: row.kind,
+      productId: row.id,
+      qty: row.quantity,
+      room: row.room,
+      name: row.name,
+    }));
+
+    line.append(title, total, meta, control.content);
+    next.append(line);
+
+    // Under the last card of a kind: why its plus buttons are off, once the
+    // limit is reached.
+    if (rows[index + 1]?.kind !== row.kind) {
+      const limit = document.createElement('p');
+      limit.className = 'cart-item-limit';
+      limit.hidden = row.room > 0;
+      if (row.kind === 'coffee') {
+        limit.textContent = isDa
+          ? `Max ${BLACK_WEEK_COFFEE_CAP} kaffekort pr. person`
+          : `Max ${BLACK_WEEK_COFFEE_CAP} coffee cards per person`;
+      } else {
+        limit.textContent = isDa
+          ? `Max ${BLACK_WEEK_PUNCH_CAP} klippekort pr. person`
+          : `Max ${BLACK_WEEK_PUNCH_CAP} punch cards per person`;
+      }
+      next.append(limit);
+    }
+  });
+
+  if (DOM.cartItems.querySelector(':scope > .cart-item--bw')) {
+    patchChildren(DOM.cartItems, next);
+  } else {
+    DOM.cartItems.replaceChildren(next);
+  }
+  if (DOM.cartAddonItems) {
+    DOM.cartAddonItems.innerHTML = '';
+    DOM.cartAddonItems.style.display = 'none';
+  }
+  return true;
+}
+
 function ensureBlackWeekDefaultSelection(products) {
   state.subscriptionAdditions = [];
   state.selectedAddonIds = [];
   if (state.addonIds?.size) state.addonIds.clear();
+  // A cart restored after a failed payment that came in before the products did.
+  takeRestoredBlackWeekCart();
   applyBlackWeekSelectionToCartState();
 }
 
@@ -5186,7 +5406,10 @@ function updateBlackWeekStickyBar({ totalKr, summary, canContinue }) {
     bar.remove();
     return updateBlackWeekStickyBar({ totalKr, summary, canContinue });
   }
-  bar.hidden = false;
+  // The bar belongs to the picker's step. The picker also re-renders on other
+  // steps (a language switch on the checkout), and there the bar stays away
+  // until showStep() brings it back.
+  bar.hidden = state.currentStep !== 2;
   const totalEl = bar.querySelector('[data-bw-total]');
   const summaryEl = bar.querySelector('[data-bw-summary]');
   const cta = bar.querySelector('[data-action="continue-blackweek"]');
@@ -5195,7 +5418,9 @@ function updateBlackWeekStickyBar({ totalKr, summary, canContinue }) {
   if (summaryEl) summaryEl.textContent = summary || '';
   if (cta) {
     cta.disabled = !canContinue;
-    cta.textContent = isDa ? 'Gå til betaling' : 'Go to payment';
+    // This button leads to the checkout step. "Gå til betaling" is on the cart's
+    // pay button there, which is the one that opens the payment.
+    cta.textContent = isDa ? 'Til kassen' : 'Checkout';
   }
 }
 
@@ -5263,6 +5488,25 @@ function clearBlackWeekShopSkeleton() {
   document.querySelector('[data-bw-shop-root] .bw-shop--loading')?.remove();
 }
 
+// The quantity control of a Black Week card, in the picker and in the cart. All
+// three parts are always in the markup and data-qty carries the state. At 0 the
+// CSS folds the minus button and the number away behind the plus button, and
+// the number is a column of digits that the CSS slides to the current one. That
+// lets the control open, close and count with transitions. `room` is how many
+// more cards of this kind fit under the limit, and `name` is the card the two
+// buttons are named after for a screen reader.
+function blackWeekQtyControlHtml({ kind, productId, qty, room, name }) {
+  const isDa = isDaFallback();
+  const button = (delta, className, sign, label, isOff = false) => `<button type="button" class="${className}" data-action="bw-qty" data-kind="${kind}" data-delta="${delta}" data-product-id="${productId}" aria-label="${escapeHtml(label)}"${isOff ? ' aria-disabled="true"' : ''}>${sign}</button>`;
+  const cap = kind === 'coffee' ? BLACK_WEEK_COFFEE_CAP : BLACK_WEEK_PUNCH_CAP;
+  const digits = Array.from({ length: cap }, (_, i) => `<span>${i + 1}</span>`).join('');
+  const minus = button(-1, 'minus', '−', `${isDa ? 'Fjern' : 'Remove'} ${name}`);
+  const plus = room > 0
+    ? button(1, 'plus', '+', `${isDa ? 'Tilføj' : 'Add'} ${name}`)
+    : button(1, 'plus dis', '+', `${isDa ? 'Tilføj' : 'Add'} ${name}`, true);
+  return `<div class="bw-q" data-qty="${qty}">${minus}<span class="bw-q-num"><span class="visually-hidden">${qty}</span><span class="bw-q-digits" aria-hidden="true">${digits}</span></span>${plus}</div>`;
+}
+
 function renderBlackWeekCategory({ landingMode = false } = {}) {
   const categoryItem = document.querySelector('[data-category="blackweek"]');
   const root = categoryItem?.querySelector('[data-bw-shop-root]') || categoryItem?.querySelector('.plans-list');
@@ -5300,24 +5544,9 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
   const coffeeRoom = Math.max(0, caps.coffee - coffeeQty);
   const canContinue = (punchQty + coffeeQty) >= 1;
 
-  const copy = {
-    adult: { label: isDa ? 'Voksen' : 'Adult', hint: isDa ? 'Fra 21 år' : 'From 21' },
-    youth: { label: isDa ? 'Studerende & Ung' : 'Student & youth', hint: isDa ? '16–20 år eller studiekort' : '16–20 or student ID' },
-    junior: { label: isDa ? 'Junior' : 'Junior', hint: isDa ? 'Til og med 15 år' : 'Up to 15' },
-  };
+  const copy = getBlackWeekPunchCopy();
 
-  // All three parts are always in the markup and data-qty carries the state. At
-  // 0 the CSS folds the minus button and the number away behind the plus button,
-  // and the number is a column of digits that the CSS slides to the current one.
-  // That lets the control open, close and count with transitions.
-  const qtyControl = (kind, productId, qty, room) => {
-    const button = (delta, className, sign) => `<button type="button" class="${className}" data-action="bw-qty" data-kind="${kind}" data-delta="${delta}" data-product-id="${productId}">${sign}</button>`;
-    const cap = kind === 'coffee' ? BLACK_WEEK_COFFEE_CAP : BLACK_WEEK_PUNCH_CAP;
-    const digits = Array.from({ length: cap }, (_, i) => `<span>${i + 1}</span>`).join('');
-    return `<div class="bw-q" data-qty="${qty}">${button(-1, 'minus', '−')}<span class="bw-q-num"><span class="visually-hidden">${qty}</span><span class="bw-q-digits" aria-hidden="true">${digits}</span></span>${button(1, room > 0 ? 'plus' : 'plus dis', '+')}</div>`;
-  };
-
-  const choiceCard = ({ on, kind, productId, title, desc, pill, price, was, qty, room }) => `
+  const choiceCard = ({ on, kind, productId, name, title, desc, pill, price, was, qty, room }) => `
     <div class="bw-choice ${on ? 'on' : ''}">
       <div class="bw-choice-main">
         <div class="bw-choice-title">${title}</div>
@@ -5327,7 +5556,7 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       <div class="bw-choice-price">
         <b>${formatBlackWeekKr(price)}</b>
         ${was > price ? `<span class="bw-was">${formatBlackWeekKr(was)}</span>` : ''}
-        ${qtyControl(kind, productId, qty, room)}
+        ${blackWeekQtyControlHtml({ kind, productId, qty, room, name })}
       </div>
     </div>`;
 
@@ -5337,7 +5566,7 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
     const id = getProductNumericId(seg.product);
     const qty = blackWeekQtyOf('punch', id);
     const price = getBlackWeekPriceKr(seg.product);
-    const was = getBlackWeekPunchWasPriceKr(price);
+    const was = getBlackWeekWasPriceKr(seg.product);
     const names = copy[seg.key] || { label: seg.label || seg.product.name, hint: seg.hint || '' };
     if (qty > 0) {
       punchSpend += price * qty;
@@ -5347,6 +5576,7 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       on: qty > 0,
       kind: 'punch',
       productId: id,
+      name: getBlackWeekCartLineName(seg.product),
       title: names.label,
       desc: names.hint ? `${names.hint} · ${clips}` : clips,
       pill: isDa ? '3 klip gratis' : '3 free punches',
@@ -5363,7 +5593,7 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
     const id = getProductNumericId(product);
     const qty = blackWeekQtyOf('coffee', id);
     const price = getBlackWeekPriceKr(product);
-    const was = price > 0 && price < 300 ? roundToHalfKrone(price * 2) : 0;
+    const was = getBlackWeekWasPriceKr(product);
     const name = product.name || (isDa ? 'Kaffekort' : 'Coffee card');
     if (was > price) coffeeHalfPrice = true;
     if (qty > 0) {
@@ -5373,6 +5603,7 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       on: qty > 0,
       kind: 'coffee',
       productId: id,
+      name: getBlackWeekCartLineName(product),
       title: name,
       desc: isDa ? '11 varme drikke · alle 11 haller' : '11 hot drinks · all 11 gyms',
       pill: was > price ? '-50%' : '',
@@ -5456,7 +5687,29 @@ function syncBlackWeekQuantityUI() {
   }
 }
 
+// A started order holds the cards it was started with. When the buyer changes a
+// quantity, that order is let go and the next checkout starts a new one from
+// the cart as it is then. The total, and what is charged, would otherwise stay
+// with the old order.
+function dropStartedOrderForBlackWeekCart() {
+  if (!state.orderId && !state.fullOrder) return;
+  state.order = null;
+  state.fullOrder = null;
+  state.orderId = null;
+  state.subscriptionAttachedOrderId = null;
+  state.paymentLink = null;
+  state.paymentLinkGenerated = false;
+  try {
+    sessionStorage.removeItem('boulders_checkout_order');
+  } catch (_) {
+    // The stored copy is only read on the way back from the payment page.
+  }
+}
+
 function adjustBlackWeekProductQty(productId, kind, delta) {
+  // The cart is fixed, quantities included, while its order is on the way to
+  // payment (the cart's own renders stop for that time too).
+  if (state.checkoutInProgress) return;
   const id = getProductNumericId(productId);
   const step = Number(delta) || 0;
   if (id == null || !step) return;
@@ -5477,6 +5730,7 @@ function adjustBlackWeekProductQty(productId, kind, delta) {
   }
   setBlackWeekQty(resolvedKind, id, next);
   if (resolvedKind === 'punch' && next > 0) state.selectedProductType = 'punch-card';
+  if (next !== current) dropStartedOrderForBlackWeekCart();
   syncBlackWeekQuantityUI();
 }
 
@@ -5609,7 +5863,22 @@ function handleBlackWeekReviewBack() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// Discount codes are not for Black Week cards and the Black Week cart hides the
+// field. A code from the regular flow would still be sent at checkout, so it is
+// dropped on the way into the cart: an applied one together with the order it
+// sits on (the reset a product change gets), a typed one by clearing the field.
+function dropDiscountCodeForBlackWeekCart() {
+  if (state.discountApplied || state.discountCode) {
+    resetOrderStateForProductChange('black-week-cart');
+  }
+  if (DOM.discountInput?.value) {
+    resetLocalDiscountState();
+    clearDiscountMessage();
+  }
+}
+
 function handleBlackWeekContinue() {
+  dropDiscountCodeForBlackWeekCart();
   applyBlackWeekSelectionToCartState();
   const punchQty = Number(state.blackWeekPunchQty) || 0;
   const coffeeQty = Number(state.blackWeekCoffeeQty) || 0;
@@ -5663,6 +5932,9 @@ function navigateBlackWeekSurface(pathname) {
   if (state.selectedBusinessUnit) {
     renderProductsFromAPI({ force: true });
   }
+  // The Black Week checkout draws the cart its own way (renderBlackWeekCartRows),
+  // so the cart is redrawn for the surface that is now showing.
+  updateCartSummary();
   if (typeof updateMainSubtitle === 'function') updateMainSubtitle();
   if (typeof updateStepIndicator === 'function') updateStepIndicator();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -7079,6 +7351,7 @@ const state = {
   blackWeekCoffeeProductId: null,
   blackWeekCoffeeQty: 0,
   blackWeekCoffeeQtys: {},
+  blackWeekRestoredCart: null, // Value card lines restored after a failed payment, until adoptRestoredBlackWeekCart() has put them in the maps above
   blackWeekReview: false,
   blackWeekOwnedPunchCount: 0,
   blackWeekOwnedCoffeeCount: 0,
@@ -8559,6 +8832,8 @@ function init() {
     if (state.selectedBusinessUnit) {
       renderProductsFromAPI({ force: true });
     }
+    // Same as navigateBlackWeekSurface(): the cart follows the surface.
+    updateCartSummary();
     if (typeof updateMainSubtitle === 'function') updateMainSubtitle();
   });
 
@@ -18523,6 +18798,10 @@ function renderCartItems() {
     hideCampaignWarning();
   }
 
+  // The Black Week cart has its own rows, and has them when it is empty too:
+  // every Black Week card is listed there with a quantity control.
+  if (renderBlackWeekCartRows(createProductDescriptionInfo)) return;
+
   if (!state.cartItems || !state.cartItems.length) {
     DOM.cartItems.innerHTML = '';
     if (DOM.cartAddonItems) {
@@ -24486,6 +24765,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
             state.valueCardQuantities.set(planId, quantity);
             console.log('[Payment Failed] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
           });
+          // On the Black Week checkout the cards go back into its quantity maps.
+          adoptRestoredBlackWeekCart(punchCardItems);
         }
       }
       if (storedOrder.totals) {
@@ -24841,6 +25122,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
                     state.valueCardQuantities.set(planId, quantity);
                     console.log('[Payment Retry] ✅ Rebuilt valueCardQuantities:', planId, '=', quantity);
                   });
+                  // On the Black Week checkout the cards go back into its quantity maps.
+                  adoptRestoredBlackWeekCart(punchCardItems);
                 }
               }
               if (storedOrder.totals) {
@@ -27057,7 +27340,66 @@ function applyFreeFlowCartUi() {
     discountSection.style.display = isFreeTrialSelected ? 'none' : '';
   }
 
+  applyBlackWeekCartUi();
+
   return { isFreeTrialSelected, isZeroTotal, isFreeFlow };
+}
+
+// The Black Week cart's own wording and rows: "I alt" for the total, the
+// saving, the pickup gym, the pay button and the note under it. Runs last in
+// applyFreeFlowCartUi(), after the regular wording is set, so it only writes on
+// the Black Week checkout and only hides its own rows everywhere else. The
+// markup is in index.html; the layout and the hidden discount code field are in
+// styles.css under body.blackweek-flow.
+function applyBlackWeekCartUi() {
+  const isBlackWeek = isBlackWeekCart();
+  const isDa = isDaFallback();
+
+  const summary = document.querySelector('[data-bw-cart-summary]');
+  const note = document.querySelector('[data-bw-cart-note]');
+  const editBtn = document.querySelector('.summary-edit-btn');
+  const editLabel = editBtn?.querySelector('[data-summary-edit-label]');
+
+  if (summary) summary.hidden = !isBlackWeek;
+  if (note) note.hidden = !isBlackWeek;
+  if (editLabel) editLabel.textContent = isBlackWeek ? (isDa ? 'Ret' : 'Edit') : '';
+  if (editBtn) editBtn.setAttribute('aria-label', isBlackWeek && isDa ? 'Ret kurv' : 'Edit cart');
+  if (!isBlackWeek) return;
+
+  const payNowLabel = DOM.payNow?.closest('.payment-overview-paynow-row')?.querySelector('.payment-label');
+  if (payNowLabel) payNowLabel.textContent = isDa ? 'I alt' : 'Total';
+  if (DOM.checkoutBtn) DOM.checkoutBtn.textContent = isDa ? 'Gå til betaling' : 'Go to payment';
+  if (note) {
+    note.textContent = isDa
+      ? 'Du sendes videre til vores sikre betalingsudbyder.'
+      : 'You will be sent on to our secure payment provider.';
+  }
+  if (!summary) return;
+
+  // The saving is counted from the normal prices the picker strikes through.
+  const savingKr = roundToHalfKrone(getBlackWeekCartRows().reduce((sum, row) => sum + row.savingKr, 0));
+  const saving = summary.querySelector('[data-bw-cart-saving]');
+  if (saving) {
+    saving.hidden = savingKr <= 0;
+    saving.querySelector('[data-bw-cart-saving-label]').textContent = isDa ? 'Du sparer' : 'You save';
+    saving.querySelector('[data-bw-cart-saving-amount]').textContent = formatBlackWeekKr(savingKr);
+  }
+
+  // The cards are picked up at the chosen gym. It replaces the "Hjemmehal" line
+  // the regular cart prints under its first item.
+  const gymId = state.selectedGymId || state.selectedBusinessUnit;
+  const gym = gymId ? gymsWithDistances.find((candidate) => String(candidate.id) === String(gymId)) : null;
+  const gymName = String(gym?.name || state.selectedGymName || '').trim();
+  const pickup = summary.querySelector('[data-bw-cart-pickup]');
+  if (pickup) {
+    pickup.hidden = !gymName;
+    pickup.querySelector('[data-bw-cart-pickup-label]').textContent = isDa ? 'Afhentes i' : 'Pick up at';
+    pickup.querySelector('[data-bw-cart-pickup-gym]').textContent = gymName;
+    const change = pickup.querySelector('[data-bw-cart-pickup-change]');
+    change.textContent = isDa ? 'Skift' : 'Change';
+    // Read on its own by a screen reader, "Skift" needs its object.
+    change.setAttribute('aria-label', isDa ? 'Skift hal' : 'Change gym');
+  }
 }
 
 function updateCheckoutButton() {
@@ -27701,6 +28043,8 @@ function showStep(stepNumber) {
                   state.valueCardQuantities.set(planId, quantity);
                   console.log('[showStep] Step 4 - Rebuilt valueCardQuantities:', planId, '=', quantity);
                 });
+                // On the Black Week checkout the cards go back into its quantity maps.
+                adoptRestoredBlackWeekCart(punchCardItems);
               }
             }
             if (storedOrder.totals) {

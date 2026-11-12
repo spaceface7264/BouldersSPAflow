@@ -1086,6 +1086,8 @@
                                             <path d="M12 20h9"/>
                                             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                                         </svg>
+                                        <!-- Black Week cart only: a text label next to the pencil, set by applyBlackWeekCartUi() -->
+                                        <span class="summary-edit-label" data-summary-edit-label></span>
                                     </button>
                                 </div>
                                 <!-- Cart Items -->
@@ -1163,6 +1165,19 @@
                                         </div>
                                         <div class="payment-overview-bound-until" data-summary-field="payment-bound-until" style="display: none;"></div>
                                     </div>
+
+                                    <!-- Black Week cart only: the saving and the pickup gym under the total, filled by applyBlackWeekCartUi() -->
+                                    <div class="bw-cart-summary" data-bw-cart-summary hidden>
+                                        <div class="bw-cart-saving" data-bw-cart-saving>
+                                            <span data-bw-cart-saving-label></span>
+                                            <span data-bw-cart-saving-amount></span>
+                                        </div>
+                                        <p class="bw-cart-pickup" data-bw-cart-pickup>
+                                            <span data-bw-cart-pickup-label></span>
+                                            <b data-bw-cart-pickup-gym></b>
+                                            <span class="bw-cart-pickup-change"><span aria-hidden="true">·</span> <button type="button" data-action="bw-change-gym" data-bw-cart-pickup-change></button></span>
+                                        </p>
+                                    </div>
                                 </div>
                                 
                                 <!-- Cart total (below addons) -->
@@ -1200,7 +1215,7 @@
                                 </div>
                                 
                                 <!-- Payment Methods - REMOVED: Users are redirected to payment provider for card entry -->
-                                <p style="font-size: 0.875rem; color: #666; margin-bottom: 1rem; margin-top: 0.5rem;" data-i18n-key="cart.paymentRedirect">
+                                <p class="payment-redirect-note" style="font-size: 0.875rem; color: #666; margin-bottom: 1rem; margin-top: 0.5rem;" data-i18n-key="cart.paymentRedirect">
                                     You will be redirected to our secure payment provider to complete your payment.
                                 </p>
                                 
@@ -1241,6 +1256,9 @@
                                 <button class="checkout-btn" data-action="submit-checkout" disabled data-i18n-key="cart.checkout">
                                     Checkout
                                 </button>
+
+                                <!-- Black Week cart only: where the pay button leads, set by applyBlackWeekCartUi() -->
+                                <p class="bw-cart-note" data-bw-cart-note hidden></p>
                                 
                                 <!-- FAQ Help Link -->
                                 <div class="faq-help-link-section">
