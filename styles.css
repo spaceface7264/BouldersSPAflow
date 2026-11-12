@@ -2281,6 +2281,59 @@ button.bw-header-bar {
     }
 }
 
+/* —— Skeleton loading ——
+   Placeholders that hold a list's place while its data is on the way, so the
+   real content lands where the placeholders were. .skeleton is one shimmering
+   bar, sized in em so it follows the text it stands in for. The element around
+   it keeps its normal font size and line height, which is what makes a
+   placeholder the same height as the content that replaces it. */
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton {
+    display: inline-block;
+    height: 0.75em;
+    border-radius: 4px;
+    vertical-align: middle;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.17) 50%, rgba(255, 255, 255, 0.08) 100%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+.skeleton--xs { width: 4em; }
+.skeleton--sm { width: 7em; }
+.skeleton--md { width: 10em; }
+.skeleton--lg { width: 14em; }
+.skeleton--xl { width: 24em; max-width: 100%; }
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+        background: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* Gym list placeholder rows, shown until the first gym list renders. Same box
+   as .gym-item and the same inner classes, so a row is the height of the gym
+   that replaces it at every breakpoint. */
+.gym-skeleton {
+    background: var(--color-item-bg);
+    border: 2px solid var(--color-item-border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+@media (max-width: 640px) {
+    .gym-skeleton {
+        padding: 14px 16px;
+    }
+}
+
 .no-results {
     text-align: center;
     padding: 40px 20px;
@@ -2767,6 +2820,7 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     text-align: left;
     color: #fff;
     font: inherit;
+    transition: border-color 180ms ease, background-color 180ms ease;
 }
 
 .bw-shop .bw-choice.on {
@@ -2839,6 +2893,11 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     margin-top: 6px;
 }
 
+/* —— Quantity control ——
+   Minus, number and plus are always in the markup and data-qty on .bw-q is the
+   state. At 0 the minus button and the number are folded away behind the plus
+   button, so adding the first card opens the control and removing the last one
+   closes it. */
 .bw-shop .bw-q {
     display: flex;
     align-items: center;
@@ -2861,24 +2920,105 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     cursor: pointer;
     display: grid;
     place-items: center;
+    transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.bw-shop .bw-q button:not(.dis):active {
+    transform: scale(0.92);
 }
 
 .bw-shop .bw-q button.plus {
     background: #ff00ff;
     border-color: #ff00ff;
+    /* Above the minus button and the number, which slide out from underneath it. */
+    position: relative;
+    z-index: 1;
 }
 
-.bw-shop .bw-q button.dis {
-    opacity: 0.3;
+/* At the cap. These are the colours of the plus button at 30% opacity over the
+   card, set as solid colours so the button still covers what is folded under it. */
+.bw-shop .bw-q button.plus.dis {
+    background: #651965;
+    border-color: #651965;
+    color: #656565;
     cursor: default;
 }
 
-.bw-shop .bw-q > span {
+/* The number is a window over a column of digits, one digit per 18px line.
+   Sliding the column rolls the count: up when it rises, down when it falls. */
+.bw-shop .bw-q-num {
     width: 34px;
+    height: 24px;
+    overflow: hidden;
     text-align: center;
     font-weight: 700;
     font-size: 16px;
+    line-height: 18px;
     color: #fff;
+    /* Digits fade at the window's top and bottom edge as they roll through it. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 5px, #000 calc(100% - 5px), transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 5px, #000 calc(100% - 5px), transparent);
+}
+
+.bw-shop .bw-q .minus,
+.bw-shop .bw-q-num {
+    transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1), opacity 180ms ease-out, visibility 220ms;
+}
+
+/* Closed: the minus button and the number are tucked behind the plus button,
+   the number half as far in as the minus button, so the control fans open
+   from the plus button and folds back into it. Closing is the quicker of the two. */
+.bw-shop .bw-q[data-qty="0"] .minus,
+.bw-shop .bw-q[data-qty="0"] .bw-q-num {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition-duration: 160ms, 120ms, 160ms;
+}
+
+.bw-shop .bw-q[data-qty="0"] .minus {
+    transform: translateX(70px);
+}
+
+.bw-shop .bw-q[data-qty="0"] .bw-q-num {
+    transform: translateX(35px);
+}
+
+.bw-shop .bw-q-digits {
+    display: block;
+    /* Centres an 18px line in the 24px window. */
+    padding-top: 3px;
+    transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bw-shop .bw-q-digits span {
+    display: block;
+}
+
+/* One line per card above the first, up to the larger cap (5 coffee cards).
+   At 0 the column stays on "1", so the digit holds still while the control closes. */
+.bw-shop .bw-q[data-qty="2"] .bw-q-digits { transform: translateY(-18px); }
+.bw-shop .bw-q[data-qty="3"] .bw-q-digits { transform: translateY(-36px); }
+.bw-shop .bw-q[data-qty="4"] .bw-q-digits { transform: translateY(-54px); }
+.bw-shop .bw-q[data-qty="5"] .bw-q-digits { transform: translateY(-72px); }
+
+/* Reduced motion: the control fades open and closed, and the count changes at once. */
+@media (prefers-reduced-motion: reduce) {
+    .bw-shop .bw-q button {
+        transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+
+    .bw-shop .bw-q .minus,
+    .bw-shop .bw-q-num,
+    .bw-shop .bw-q[data-qty="0"] .minus,
+    .bw-shop .bw-q[data-qty="0"] .bw-q-num {
+        transform: none;
+        transition: opacity 160ms ease, visibility 160ms;
+    }
+
+    .bw-shop .bw-q-digits {
+        transition: none;
+    }
 }
 
 .bw-shop .bw-note {
@@ -3507,6 +3647,26 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     text-decoration: underline;
     cursor: pointer;
     font: inherit;
+}
+
+/* Loading state of the card picker: the shop's own markup with .skeleton bars
+   where the copy goes, so each card is already the size the real one will be. */
+.bw-shop--loading .bw-choice {
+    cursor: default;
+}
+
+.bw-shop--loading .skeleton--pill {
+    display: block;
+    width: 78px;
+    height: 22px;
+    margin-top: 6px;
+    border-radius: 99px;
+}
+
+.bw-shop--loading .skeleton--round {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
 }
 
 .bw-shop-bar {
@@ -10767,11 +10927,6 @@ main {
     margin: 0 0.35em;
 }
 
-@keyframes confirmation-skeleton-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
 .confirmation-skeleton {
     display: inline-block;
     height: 1em;
@@ -10779,7 +10934,7 @@ main {
     vertical-align: middle;
     background: linear-gradient(90deg, #2c2c31 0%, #3a3a40 50%, #2c2c31 100%);
     background-size: 200% 100%;
-    animation: confirmation-skeleton-shimmer 1.4s linear infinite;
+    animation: skeleton-shimmer 1.4s linear infinite;
 }
 
 .confirmation-skeleton--sm { width: 64px; }

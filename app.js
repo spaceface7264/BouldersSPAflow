@@ -45,7 +45,7 @@ import { formatDateDMY } from './utils/date.js';
 import { showToast } from './utils/toast.js';
 import { getErrorMessage, extractErrorFields } from './utils/errors.js';
 import { isValidCardNumber, isValidExpiryDate } from './utils/validation.js';
-import { highlightFieldError } from './utils/dom.js';
+import { highlightFieldError, patchChildren } from './utils/dom.js';
 import { getApiConfig } from './utils/apiConfig.js';
 import {
   calculateGymDistances,
@@ -558,6 +558,8 @@ const NON_INDEXABLE_PATHS = Object.freeze(new Set([
 const BLACK_WEEK_PUNCH_LABELS = Object.freeze(['blackweekpunchcard', 'blackweekpunchcards']);
 const BLACK_WEEK_COFFEE_LABELS = Object.freeze(['blackweekcoffee']);
 // Known punch numbers only pick the age-band copy (Voksen / Ung / Junior).
+// The quantity control slides its number with one CSS rule per quantity, up to
+// 5 (.bw-q-digits in styles.css). A cap above 5 needs more rules there.
 const BLACK_WEEK_PUNCH_CAP = 3;
 const BLACK_WEEK_COFFEE_CAP = 5;
 const BLACK_WEEK_START_MS = Date.parse('2026-11-22T23:00:00.000Z'); // Mon 23 Nov 00:00 CET
@@ -4655,6 +4657,14 @@ async function loadProductsFromAPI() {
     return productsLoadPromise;
   }
 
+  // Black Week landing: placeholder cards while the request is out, so step 2
+  // opens on the picker's outline instead of an empty page. Mounted here, at
+  // the start of the load, so the preload on gym click has them in place
+  // before the step is shown.
+  if (isBlackWeekLandingRoute && blackWeekWindowOpen) {
+    showBlackWeekShopSkeleton();
+  }
+
   productsLoadPromise = (async () => {
   try {
     // Fetch subscriptions and value cards in parallel
@@ -4986,7 +4996,9 @@ async function loadProductsFromAPI() {
     }
 
 
-    // Re-render the membership plans with API data
+    // Re-render the membership plans with API data. The placeholders go first:
+    // renderProductsFromAPI() skips when the lists already have children.
+    clearBlackWeekShopSkeleton();
     renderProductsFromAPI();
     updateCartSummary();
     // Access-step FAQ mentions Single Gym and Fitness only when those products are in the catalog.
@@ -5006,6 +5018,7 @@ async function loadProductsFromAPI() {
     prewarmBoostModalResources();
   } catch (error) {
     console.error('Failed to load products from API:', error);
+    clearBlackWeekShopSkeleton();
     // Show error message to user
     showToast('Failed to load membership options. Please try again later.', 'error');
     throw error;
@@ -5186,6 +5199,70 @@ function updateBlackWeekStickyBar({ totalKr, summary, canContinue }) {
   }
 }
 
+// True when the real card picker is on screen. Its loading skeleton borrows the
+// .bw-shop wrapper for the styles and does not count as the shop.
+function isBlackWeekShopMounted() {
+  return Boolean(document.querySelector('[data-bw-shop-root] .bw-shop:not(.bw-shop--loading)'));
+}
+
+// Heading shared by the card picker and its loading skeleton.
+function blackWeekShopHeadingHtml() {
+  const isDa = isDaFallback();
+  return `
+        <h2 class="bw-title">${isDa ? 'Vælg dit kort' : 'Choose your card'}</h2>
+        <p class="bw-sub">${isDa ? 'Klippekort, kaffekort eller begge.' : 'Punch card, coffee card, or both.'}</p>`;
+}
+
+// Placeholder cards for the Black Week picker while the catalog request is out.
+// Built from the shop's own markup (three punch cards, one coffee card) so it
+// takes up the room the real picker will. Only fills an empty picker: once
+// cards are on screen, a reload keeps them until the fresh ones arrive.
+function showBlackWeekShopSkeleton() {
+  const host = document.querySelector('[data-category="blackweek"]');
+  const root = host?.querySelector('[data-bw-shop-root]');
+  if (!root || root.children.length > 0) return;
+
+  const bar = (variant) => `<span class="skeleton skeleton--${variant}"></span>`;
+  const label = `<div class="bw-lab"><span>${bar('lg')}</span><span>${bar('xs')}</span></div>`;
+  const card = `
+          <div class="bw-choice">
+            <div class="bw-choice-main">
+              <div class="bw-choice-title">${bar('sm')}</div>
+              <div class="bw-choice-desc">${bar('md')}</div>
+              ${bar('pill')}
+            </div>
+            <div class="bw-choice-price">
+              <b>${bar('xs')}</b>
+              <span class="bw-was">${bar('xs')}</span>
+              <div class="bw-q">${bar('round')}</div>
+            </div>
+          </div>`;
+
+  // The host is collapsed until something renders into it; open it the way the
+  // shop render does so the placeholders are visible.
+  host.classList.add('expanded', 'selected');
+  root.innerHTML = sanitizeHTML(`
+    <div class="bw-shop bw-shop--loading">
+      <div class="bw-wrap">
+        ${blackWeekShopHeadingHtml()}
+        <span class="visually-hidden">${t('modal.loading')}</span>
+        <div aria-hidden="true">
+          ${label}
+          ${card.repeat(3)}
+          <div class="bw-note">${bar('lg')}</div>
+          ${label}
+          ${card}
+          <div class="bw-other">${bar('xl')}</div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+function clearBlackWeekShopSkeleton() {
+  document.querySelector('[data-bw-shop-root] .bw-shop--loading')?.remove();
+}
+
 function renderBlackWeekCategory({ landingMode = false } = {}) {
   const categoryItem = document.querySelector('[data-category="blackweek"]');
   const root = categoryItem?.querySelector('[data-bw-shop-root]') || categoryItem?.querySelector('.plans-list');
@@ -5229,12 +5306,15 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
     junior: { label: isDa ? 'Junior' : 'Junior', hint: isDa ? 'Til og med 15 år' : 'Up to 15' },
   };
 
+  // All three parts are always in the markup and data-qty carries the state. At
+  // 0 the CSS folds the minus button and the number away behind the plus button,
+  // and the number is a column of digits that the CSS slides to the current one.
+  // That lets the control open, close and count with transitions.
   const qtyControl = (kind, productId, qty, room) => {
-    const plusClass = room > 0 ? 'plus' : 'plus dis';
-    if (qty > 0) {
-      return `<div class="bw-q"><button type="button" data-action="bw-qty" data-kind="${kind}" data-delta="-1" data-product-id="${productId}">−</button><span>${qty}</span><button type="button" class="${plusClass}" data-action="bw-qty" data-kind="${kind}" data-delta="1" data-product-id="${productId}">+</button></div>`;
-    }
-    return `<div class="bw-q bw-q-solo"><button type="button" class="${plusClass}" data-action="bw-qty" data-kind="${kind}" data-delta="1" data-product-id="${productId}">+</button></div>`;
+    const button = (delta, className, sign) => `<button type="button" class="${className}" data-action="bw-qty" data-kind="${kind}" data-delta="${delta}" data-product-id="${productId}">${sign}</button>`;
+    const cap = kind === 'coffee' ? BLACK_WEEK_COFFEE_CAP : BLACK_WEEK_PUNCH_CAP;
+    const digits = Array.from({ length: cap }, (_, i) => `<span>${i + 1}</span>`).join('');
+    return `<div class="bw-q" data-qty="${qty}">${button(-1, 'minus', '−')}<span class="bw-q-num"><span class="visually-hidden">${qty}</span><span class="bw-q-digits" aria-hidden="true">${digits}</span></span>${button(1, room > 0 ? 'plus' : 'plus dis', '+')}</div>`;
   };
 
   const choiceCard = ({ on, kind, productId, title, desc, pill, price, was, qty, room }) => `
@@ -5316,11 +5396,10 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       : `${coffeeQty} coffee card${coffeeQty === 1 ? '' : 's'}`);
   }
 
-  root.innerHTML = sanitizeHTML(`
+  const shopHtml = sanitizeHTML(`
     <div class="bw-shop">
       <div class="bw-wrap">
-        <h2 class="bw-title">${isDa ? 'Vælg dit kort' : 'Choose your card'}</h2>
-        <p class="bw-sub">${isDa ? 'Klippekort, kaffekort eller begge.' : 'Punch card, coffee card, or both.'}</p>
+        ${blackWeekShopHeadingHtml()}
         ${punchChoices ? `
         <div class="bw-lab"><span>${isDa ? 'KLIPPEKORT · 13 KLIP FOR 10' : 'PUNCH CARD · 13 FOR 10'}</span><span>MAX 3${caps.punch < BLACK_WEEK_PUNCH_CAP ? ` · ${caps.punch}` : ''}</span></div>
         ${punchChoices}
@@ -5335,6 +5414,16 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       </div>
     </div>
   `);
+  // Once the picker is on screen, a render updates it in place. The quantity
+  // controls animate with CSS transitions, and those need the same elements
+  // before and after the change.
+  if (isBlackWeekShopMounted()) {
+    const next = document.createElement('template');
+    next.innerHTML = shopHtml;
+    patchChildren(root, next.content);
+  } else {
+    root.innerHTML = shopHtml;
+  }
 
   startBlackWeekCountdown();
   updateBlackWeekStickyBar({
@@ -5588,8 +5677,7 @@ function openBlackWeekStorefront() {
   navigateBlackWeekSurface('/black-week');
   // If pushState render somehow left us without the shop, hard-navigate.
   requestAnimationFrame(() => {
-    const shop = document.querySelector('[data-bw-shop-root] .bw-shop');
-    if (!shop && isBlackWeekWindowOpen()) {
+    if (!isBlackWeekShopMounted() && isBlackWeekWindowOpen()) {
       window.location.assign(buildBlackWeekPath('/black-week'));
     }
   });
@@ -6221,6 +6309,33 @@ async function loadSubscriptionAdditions(productId) {
 let userLocation = null;
 let gymsWithDistances = [];
 
+// Placeholder rows while the first gym list is on its way. One row per baked-in
+// gym, so the page below the list stays where it is when the real rows arrive.
+// Only fills an empty list: later reloads (language switch, distance sort) keep
+// the gyms that are already on screen.
+function renderGymListSkeleton() {
+  const gymList = document.querySelector('.gym-list');
+  if (!gymList || gymList.children.length > 0) return;
+  const row = `
+    <div class="gym-skeleton" aria-hidden="true">
+      <div class="gym-info">
+        <div class="gym-name"><span class="skeleton skeleton--md"></span></div>
+        <div class="gym-details">
+          <div class="gym-address">
+            <div class="gym-address-street"><span class="skeleton skeleton--md"></span></div>
+            <div class="gym-address-postal-city"><span class="skeleton skeleton--sm"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="check-circle"></div>
+    </div>`;
+  gymList.innerHTML = sanitizeHTML(
+    `<span class="visually-hidden">${t('modal.loading')}</span>${row.repeat(BUSINESS_UNITS_FALLBACK.length)}`
+  );
+  // An earlier failed load may have left its message under the list.
+  document.getElementById('noResults')?.classList.add('hidden');
+}
+
 // Load gyms from API and update UI
 async function loadGymsFromAPI({ forceNetwork = false } = {}) {
   const now = Date.now();
@@ -6253,6 +6368,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
       clearTimeout(gymLoadRetryTimeoutId);
       gymLoadRetryTimeoutId = null;
     }
+    renderGymListSkeleton();
     const response = await businessUnitsAPI.getBusinessUnits({ forceNetwork });
     
     // Handle different response formats - could be array or object with data property
@@ -6271,6 +6387,9 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
     
     // Clear existing gym list
     const gymList = document.querySelector('.gym-list');
+    // Placeholder rows already hold the list's place, so the gyms that replace
+    // them appear in place rather than fading in over a list that just emptied.
+    const replacingSkeleton = Boolean(gymList?.querySelector('.gym-skeleton'));
     if (gymList) {
       gymList.innerHTML = '';
     }
@@ -6379,7 +6498,7 @@ async function loadGymsFromAPI({ forceNetwork = false } = {}) {
         if (existingData && existingData.oldIndex !== i) {
           // Item moved - add animation class
           gymItem.classList.add('reordering');
-        } else if (!existingData) {
+        } else if (!existingData && !replacingSkeleton) {
           // New item - fade in with staggered delay
           gymItem.classList.add('fade-in');
           gymItem.style.animationDelay = `${i * 0.05}s`;
@@ -9998,7 +10117,7 @@ function updatePageTranslations() {
     }
   });
 
-  if (isBlackWeekWindowOpen() && document.querySelector('[data-bw-shop-root] .bw-shop')) {
+  if (isBlackWeekWindowOpen() && isBlackWeekShopMounted()) {
     syncBlackWeekQuantityUI();
   }
   
@@ -14549,6 +14668,9 @@ function setupFormFieldFocus() {
 }
 
 function handleGymSearch(event) {
+  // Gyms are still loading: nothing to filter yet, so "no results" would be wrong.
+  if (document.querySelector('.gym-list .gym-skeleton')) return;
+
   const searchTerm = event.target.value.toLowerCase();
   const gymItems = document.querySelectorAll('.gym-item');
   const noResults = document.getElementById('noResults');
@@ -15878,6 +16000,12 @@ function handleGlobalClick(event) {
         actionable.dataset.kind === 'coffee' ? 'coffee' : 'punch',
         Number(actionable.dataset.delta) || 0
       );
+      // At quantity 0 the minus button folds away. If it held the focus, pass
+      // that to the plus button so a keyboard user stays on the control.
+      const control = actionable.closest('.bw-q');
+      if (control?.dataset.qty === '0' && document.activeElement === actionable) {
+        control.querySelector('.plus')?.focus();
+      }
       break;
     }
     case 'bw-select-segment': {
@@ -27450,7 +27578,7 @@ function showStep(stepNumber) {
   if (bwBar) {
     const showBwBar = stepNumber === 2
       && isBlackWeekWindowOpen()
-      && Boolean(document.querySelector('[data-bw-shop-root] .bw-shop'));
+      && isBlackWeekShopMounted();
     bwBar.hidden = !showBwBar;
   }
 
