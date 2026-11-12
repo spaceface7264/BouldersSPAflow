@@ -1,8 +1,4 @@
 const numberFormatter = new Intl.NumberFormat('da-DK');
-const twoDecimalFormatter = new Intl.NumberFormat('da-DK', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 const currencyFormatter = new Intl.NumberFormat('da-DK', {
   style: 'currency',
   currency: 'DKK',
@@ -27,19 +23,6 @@ export function roundToHalfKrone(amount) {
 export function formatPriceHalfKrone(amount) {
   const rounded = roundToHalfKrone(amount);
   return numberFormatter.format(rounded);
-}
-
-/**
- * Formats a price with rounding to half krone the way a price tag reads:
- * whole kroner without decimals ("1.275"), half kroner with two ("1.657,50")
- * @param {number} amount - Amount to format
- * @returns {string} Formatted price string
- */
-export function formatPriceTagHalfKrone(amount) {
-  const rounded = roundToHalfKrone(amount);
-  return Number.isInteger(rounded)
-    ? numberFormatter.format(rounded)
-    : twoDecimalFormatter.format(rounded);
 }
 
 /**

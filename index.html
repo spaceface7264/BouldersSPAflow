@@ -771,6 +771,12 @@
                     <p class="main-subtitle" data-i18n-key="step4.completePurchase">Complete your purchase</p>
                     <p class="secondary-subtitle" data-i18n-key="step4.loginPrompt">Log in to your existing account or create a new one.</p>
 
+                    <!-- Black Week cart only: the cart in one line above the form on a phone, filled by applyBlackWeekCartUi(). The full cart stays below. -->
+                    <button type="button" class="bw-mini-summary" data-bw-mini-summary data-action="edit-cart" hidden>
+                        <span data-bw-mini-text></span>
+                        <span class="bw-mini-edit" data-bw-mini-edit></span>
+                    </button>
+
                     <div class="info-layout">
                         <div class="info-form-section">
                             <!-- Login Section -->
@@ -2104,7 +2110,9 @@
     <script>
       // Load postal codes script with error handling
       const postalCodesScript = document.createElement('script');
-      postalCodesScript.src = './postal-codes-dk.js';
+      // Absolute: a relative path resolves against nested routes like
+      // /black-week/ and gets the SPA HTML fallback instead of the script.
+      postalCodesScript.src = '/postal-codes-dk.js';
       postalCodesScript.onerror = function() {
         console.warn('postal-codes-dk.js not found - postal code auto-fill will be disabled');
       };

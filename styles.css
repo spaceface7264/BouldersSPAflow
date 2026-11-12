@@ -3770,6 +3770,13 @@ body.blackweek-flow .payment-redirect-note {
     display: none;
 }
 
+/* One button: "Gå til betaling" saves the profile as part of the payment click
+   (handleCheckout), so the create form's own button goes away. Its message area
+   stays — save errors and the duplicate-email login land there. */
+body.blackweek-flow .save-account-btn {
+    display: none;
+}
+
 body.blackweek-flow .summary-header {
     margin-bottom: 24px;
 }
@@ -3835,22 +3842,80 @@ body.blackweek-flow .cart-item-meta {
     color: rgba(255, 255, 255, 0.65);
 }
 
-/* A card that is not in the cart: its name steps back and the plus button, the
-   one part of the control that shows at quantity 0, is what adds it. That
-   button is drawn as a ring, which leaves the pay button as the one filled
-   button under the rows. Its inside is the cart's own colour and not see-through,
-   so it still covers what is folded under it. */
-body.blackweek-flow .cart-item--bw-off .cart-item-title {
-    color: rgba(255, 255, 255, 0.65);
+/* The coffee add-on line, shown when no coffee card is in the cart: the offer
+   and its price on the left, the old price struck through, and a "+ Tilføj"
+   ring button on the right that puts the card in the cart. */
+body.blackweek-flow .cart-item--bw-upsell .cart-item-title {
+    grid-column: 1;
+    grid-row: 1;
 }
 
-body.blackweek-flow .cart-item--bw-off .bw-q button.plus {
-    background: #2a2a2a;
+body.blackweek-flow .cart-item--bw-upsell .cart-item-meta {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+body.blackweek-flow .cart-item--bw-upsell .cart-item-meta b {
+    font-weight: 700;
+    color: #fff;
+}
+
+body.blackweek-flow .bw-upsell-was {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+body.blackweek-flow .bw-upsell-add {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    align-self: center;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1.5px solid #ff00ff;
+    background: none;
     color: #ff7aff;
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
 }
 
-body.blackweek-flow .cart-item--bw-off .bw-q button.plus.dis {
-    color: #656565;
+body.blackweek-flow .bw-upsell-add:active {
+    transform: scale(0.95);
+}
+
+/* The cart in one line above the profile form, phones only: the full cart is
+   below the form, this is the glance and the way back ("Ret"). */
+.bw-mini-summary {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    body.blackweek-flow .bw-mini-summary:not([hidden]) {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        margin: 4px 0 16px;
+        padding: 12px 16px;
+        background: #232323;
+        border: 1.5px solid #333;
+        border-radius: 12px;
+        color: #fff;
+        font: inherit;
+        font-size: var(--font-size-sm);
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    body.blackweek-flow .bw-mini-summary .bw-mini-edit {
+        color: #ff7aff;
+        text-decoration: underline;
+        white-space: nowrap;
+    }
 }
 
 /* Shown under the last card of a kind once its limit is reached, which is when
