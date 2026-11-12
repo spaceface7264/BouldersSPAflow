@@ -9472,6 +9472,22 @@ const translations = {
     'faq.punchcard.remainingClips.a': 'Hvis du stadig har klip på dit klippekort, men er klar til medlemskab, kan du få det ombyttet til medlemskab. For ombytning skal du sende en mail til medlem@boulders.dk. Eller giv det som gave til en, der fortjener det.',
     'faq.punchcard.multiple.q': 'Kan jeg have flere klippekort?',
     'faq.punchcard.multiple.a': 'Du kan have ubegrænset antal klippekort tilknyttet din profil.',
+    'faq.blackweek.punchCard.q': 'Hvordan virker Black Week-klippekortet?',
+    'faq.blackweek.punchCard.a': 'Du får 13 klip for 10\'eres pris. Ét klip giver én entré i alle Boulders-haller, i alle åbne timer. Kortet er gyldigt i 12 måneder fra købsdatoen.',
+    'faq.blackweek.coffeeCard.q': 'Hvordan virker kaffekortet?',
+    'faq.blackweek.coffeeCard.a': 'Et fysisk stempelkort med 11 valgfri varme drikke fra caféen — espresso, americano, cortado, cappuccino, café latte, flat white, te og varm kakao — i alle 11 haller. Under Black Week til halv pris. Kortet udløber ikke.',
+    'faq.blackweek.pickup.q': 'Hvordan får jeg mine kort?',
+    'faq.blackweek.pickup.a': 'Begge kort er fysiske. Du henter dem i receptionen i den hal, du vælger i kurven, og de kan bruges med det samme.',
+    'faq.blackweek.caps.q': 'Hvor mange kort kan jeg købe?',
+    'faq.blackweek.caps.a': 'Under Black Week kan du købe op til 3 klippekort og 5 kaffekort pr. person.',
+    'faq.blackweek.gift.q': 'Kan jeg give kortene i gave?',
+    'faq.blackweek.gift.a': 'Ja. Kortene er ikke personlige, så du kan dele dem eller give dem væk — f.eks. som julegave.',
+    'faq.blackweek.convert.q': 'Kan klippekortet konverteres til et medlemskab?',
+    'faq.blackweek.convert.a': 'Ja, altid — også hvis du har klip tilbage. Skriv til medlem@boulders.dk.',
+    'faq.blackweek.withdrawal.q': 'Kan jeg fortryde mit køb?',
+    'faq.blackweek.withdrawal.a': 'Du har 14 dages fortrydelsesret fra købsdagen, så længe kortet ikke er taget i brug. Skriv til medlem@boulders.dk.',
+    'faq.blackweek.period.q': 'Hvor længe gælder Black Week-priserne?',
+    'faq.blackweek.period.a': 'Tilbuddene gælder 23.–29. november. Kortene, du køber, gælder som beskrevet ovenfor — det er kun prisen, der er Black Week.',
     'faq.productChoice.difference.q': 'Hvad er forskellen mellem medlemskab, 15-dages pas og klippekort?',
     'faq.productChoice.difference.a': 'Medlemskab er et løbende abonnement med ubegrænset adgang. 15-dages kortet giver 15 dages ubegrænset adgang – ideelt til at prøve klatring. Klippekortet giver 10 indgange, er gyldigt i 12 måneder og kan deles med andre.',
     'faq.productChoice.membershipBest.q': 'Hvornår vælger jeg medlemskab?',
@@ -9857,6 +9873,22 @@ const translations = {
     'faq.punchcard.remainingClips.a': 'If you still have punches left but are ready for a membership, you can have it converted to a membership. To convert, email medlem@boulders.dk. Or give the remaining clips as a gift to someone who deserves it.',
     'faq.punchcard.multiple.q': 'Can I have multiple punch cards?',
     'faq.punchcard.multiple.a': 'Yes you can have unlimited punch cards on your profile.',
+    'faq.blackweek.punchCard.q': 'How does the Black Week punch card work?',
+    'faq.blackweek.punchCard.a': 'You get 13 punches for the price of 10. One punch is one entry to all Boulders gyms, during all open hours. The card is valid for 12 months from the purchase date.',
+    'faq.blackweek.coffeeCard.q': 'How does the coffee card work?',
+    'faq.blackweek.coffeeCard.a': 'A physical stamp card with 11 hot drinks of your choice from the café — espresso, americano, cortado, cappuccino, café latte, flat white, tea and hot chocolate — in all 11 gyms. Half price during Black Week. The card never expires.',
+    'faq.blackweek.pickup.q': 'How do I get my cards?',
+    'faq.blackweek.pickup.a': 'Both cards are physical. You pick them up at the front desk of the gym you choose in the cart, and they can be used right away.',
+    'faq.blackweek.caps.q': 'How many cards can I buy?',
+    'faq.blackweek.caps.a': 'During Black Week you can buy up to 3 punch cards and 5 coffee cards per person.',
+    'faq.blackweek.gift.q': 'Can I give the cards as a gift?',
+    'faq.blackweek.gift.a': 'Yes. The cards are not personal, so you can share them or give them away — for example as a Christmas gift.',
+    'faq.blackweek.convert.q': 'Can the punch card be converted to a membership?',
+    'faq.blackweek.convert.a': 'Yes, always — even if you have punches left. Email medlem@boulders.dk.',
+    'faq.blackweek.withdrawal.q': 'Can I cancel my purchase?',
+    'faq.blackweek.withdrawal.a': 'You have a 14-day right of withdrawal from the day of purchase, as long as the card has not been used. Email medlem@boulders.dk.',
+    'faq.blackweek.period.q': 'How long do the Black Week prices last?',
+    'faq.blackweek.period.a': 'The offers run 23–29 November. The cards you buy are valid as described above — only the price is Black Week.',
     'faq.productChoice.difference.q': 'What is the difference between membership, 15-Day Trial Pass, and punch card?',
     'faq.productChoice.difference.a': 'Membership is an ongoing subscription with unlimited access. The 15-Day Trial Pass gives you 15 days of unlimited access – ideal for trying out climbing. The punch card gives you typically 10 entries, unless anything else is specified, is valid for 12 months, and can be shared with others.',
     'faq.productChoice.membershipBest.q': 'When should I choose membership?',
@@ -29422,6 +29454,16 @@ const FAQ_DATA = {
     { q: 'faq.firstclimb.validity.q', a: 'faq.firstclimb.validity.a' },
     { q: 'faq.firstclimb.howToUse.q', a: 'faq.firstclimb.howToUse.a' },
     { q: 'faq.firstclimb.afterDay.q', a: 'faq.firstclimb.afterDay.a' }
+  ],
+  blackweek: [
+    { q: 'faq.blackweek.punchCard.q', a: 'faq.blackweek.punchCard.a' },
+    { q: 'faq.blackweek.coffeeCard.q', a: 'faq.blackweek.coffeeCard.a' },
+    { q: 'faq.blackweek.pickup.q', a: 'faq.blackweek.pickup.a' },
+    { q: 'faq.blackweek.caps.q', a: 'faq.blackweek.caps.a' },
+    { q: 'faq.blackweek.gift.q', a: 'faq.blackweek.gift.a' },
+    { q: 'faq.blackweek.convert.q', a: 'faq.blackweek.convert.a' },
+    { q: 'faq.blackweek.withdrawal.q', a: 'faq.blackweek.withdrawal.a' },
+    { q: 'faq.blackweek.period.q', a: 'faq.blackweek.period.a' }
   ]
 };
 
@@ -29478,6 +29520,11 @@ function getActiveFAQs() {
   // firstclimb landing route: dedicated FAQ on every visible step.
   if (state.landingRouteConfig?.componentName === 'LandingFirstClimb') {
     return ['firstclimb'];
+  }
+
+  // Black Week: campaign FAQ on the picker and the checkout; the gym FAQ stays on step 1.
+  if (state.landingRouteConfig?.componentName === 'LandingBlackWeek') {
+    return step === 1 ? ['gyms'] : ['blackweek'];
   }
 
   // Step 1: gym info only
