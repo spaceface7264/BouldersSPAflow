@@ -3131,6 +3131,8 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     font-weight: 700;
 }
 
+/* One header per card kind. The punch header opens the shop and the coffee
+   header starts its section further down. */
 .bw-shop .bw-title {
     text-align: center;
     font-size: 26px;
@@ -3140,21 +3142,13 @@ html[data-landing-route="LandingBlackWeek"] #step-2 .secondary-subtitle {
     font-weight: 700;
 }
 
-.bw-shop .bw-sub {
-    text-align: center;
-    color: #999;
-    font-size: 14px;
-    margin: 0 0 8px;
+.bw-shop .bw-title--coffee {
+    margin-top: 34px;
 }
 
-.bw-shop .bw-sub button {
-    background: none;
-    border: none;
-    padding: 0;
-    color: #c9cad3;
-    text-decoration: underline;
-    cursor: pointer;
-    font: inherit;
+/* The label row sits closer to its header than its default 22px. */
+.bw-shop .bw-title + .bw-lab {
+    margin-top: 10px;
 }
 
 .bw-shop .bw-section {
