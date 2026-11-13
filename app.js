@@ -5631,9 +5631,10 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       title: names.label,
       // The punch count sits in the hint line, where it doesn't wrap the title.
       desc: names.hint ? `${names.hint} · ${isDa ? '13 klip' : '13 punches'}` : (isDa ? '13 klip' : '13 punches'),
-      // Next to "13 klip" in the hint, "+3 klip" read as 13+3. The pill states
-      // the deal itself instead.
-      pill: '13 for 10',
+      // The deal is already on the card as the struck-through price; the pill
+      // says what it comes to. Display rounding keeps the three numbers
+      // consistent: 1.658 − 1.275 = Spar 383.
+      pill: was > price ? `${isDa ? 'Spar' : 'Save'} ${formatBlackWeekKr(was - price)}` : '',
       price,
       was,
       qty,
