@@ -5324,7 +5324,10 @@ function renderBlackWeekCartRows(createInfoIcon) {
 
     const meta = document.createElement('span');
     meta.className = 'cart-item-meta';
-    meta.textContent = `${formatBlackWeekKr(row.unitKr)} ${isDa ? 'pr. kort' : 'per card'}`;
+    const perCard = `${formatBlackWeekKr(row.unitKr)} ${isDa ? 'pr. kort' : 'per card'}`;
+    meta.textContent = row.kind === 'punch'
+      ? `${isDa ? '13 klip' : '13 punches'} · ${perCard}`
+      : perCard;
 
     const control = document.createElement('template');
     control.innerHTML = sanitizeHTML(blackWeekQtyControlHtml({
@@ -5625,9 +5628,9 @@ function renderBlackWeekCategory({ landingMode = false } = {}) {
       kind: 'punch',
       productId: id,
       name: getBlackWeekCartLineName(seg.product),
-      // The punch count is in the section label right above the cards.
       title: names.label,
-      desc: names.hint,
+      // The punch count sits in the hint line, where it doesn't wrap the title.
+      desc: names.hint ? `${names.hint} · ${isDa ? '13 klip' : '13 punches'}` : (isDa ? '13 klip' : '13 punches'),
       pill: isDa ? '+3 klip' : '+3 punches',
       price,
       was,
