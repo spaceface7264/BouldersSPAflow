@@ -91,6 +91,16 @@ function setPaymentOutcome(outcome) {
 /** Emails already used for account creation, persisted across sessions. */
 const CREATED_EMAILS_STORAGE_KEY = 'boulders_created_emails';
 
+/** Checkout order/customer snapshots survive the redirect to the payment portal. */
+const CHECKOUT_ORDER_STORAGE_KEY = CHECKOUT_ORDER_STORAGE_KEY;
+const CHECKOUT_CUSTOMER_STORAGE_KEY = CHECKOUT_CUSTOMER_STORAGE_KEY;
+
+/** Consent checkboxes persist so a returning user doesn't re-tick them. */
+const PRIVACY_CONSENT_STORAGE_KEY = PRIVACY_CONSENT_STORAGE_KEY;
+const PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY = PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY;
+const TERMS_CONSENT_STORAGE_KEY = TERMS_CONSENT_STORAGE_KEY;
+const TERMS_CONSENT_TIMESTAMP_STORAGE_KEY = TERMS_CONSENT_TIMESTAMP_STORAGE_KEY;
+
 function rememberCreatedEmail(email) {
   if (!email) return;
   state.createdEmails.add(email);
@@ -2841,8 +2851,8 @@ class AuthAPI {
     
     try {
       sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-      sessionStorage.removeItem('boulders_checkout_customer');
-      sessionStorage.removeItem('boulders_checkout_order');
+      sessionStorage.removeItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
+      sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
     } catch (error) {
       console.warn('[Step 6] Could not clear tokens from sessionStorage:', error);
     }
@@ -10192,16 +10202,16 @@ function setupEventListeners() {
     if (DOM.privacyConsent.checked) {
       try {
         const timestamp = new Date().toISOString(); // ISO 8601 format for API
-        localStorage.setItem('boulders_privacy_consent', 'true');
-        localStorage.setItem('boulders_privacy_consent_timestamp', timestamp);
+        localStorage.setItem(PRIVACY_CONSENT_STORAGE_KEY, 'true');
+        localStorage.setItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY, timestamp);
         console.log('[Privacy Consent] Saved to localStorage with timestamp:', timestamp);
       } catch (e) {
         console.warn('[Privacy Consent] Could not save to localStorage:', e);
       }
     } else {
       try {
-        localStorage.removeItem('boulders_privacy_consent');
-        localStorage.removeItem('boulders_privacy_consent_timestamp');
+        localStorage.removeItem(PRIVACY_CONSENT_STORAGE_KEY);
+        localStorage.removeItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY);
         console.log('[Privacy Consent] Removed from localStorage');
       } catch (e) {
         console.warn('[Privacy Consent] Could not remove from localStorage:', e);
@@ -10214,16 +10224,16 @@ function setupEventListeners() {
     if (DOM.termsConsent.checked) {
       try {
         const timestamp = new Date().toISOString(); // ISO 8601 format for API
-        localStorage.setItem('boulders_terms_consent', 'true');
-        localStorage.setItem('boulders_terms_consent_timestamp', timestamp);
+        localStorage.setItem(TERMS_CONSENT_STORAGE_KEY, 'true');
+        localStorage.setItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY, timestamp);
         console.log('[Terms Consent] Saved to localStorage with timestamp:', timestamp);
       } catch (e) {
         console.warn('[Terms Consent] Could not save to localStorage:', e);
       }
     } else {
       try {
-        localStorage.removeItem('boulders_terms_consent');
-        localStorage.removeItem('boulders_terms_consent_timestamp');
+        localStorage.removeItem(TERMS_CONSENT_STORAGE_KEY);
+        localStorage.removeItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY);
         console.log('[Terms Consent] Removed from localStorage');
       } catch (e) {
         console.warn('[Terms Consent] Could not remove from localStorage:', e);
@@ -12588,7 +12598,7 @@ async function handleSaveAccount() {
     const privacyConsent = document.getElementById('privacyConsent');
     if (privacyConsent && privacyConsent.checked) {
       try {
-        const privacyTimestamp = localStorage.getItem('boulders_privacy_consent_timestamp');
+        const privacyTimestamp = localStorage.getItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY);
         if (privacyTimestamp) {
           acceptedRegistrationTerms = privacyTimestamp;
         } else {
@@ -13191,8 +13201,8 @@ function handleLogout() {
   state.valueCardQuantities.clear();
   state.createdEmails.clear();
   try {
-    sessionStorage.removeItem('boulders_checkout_customer');
-    sessionStorage.removeItem('boulders_checkout_order');
+    sessionStorage.removeItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
+    sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
   } catch (error) {
     console.warn('[checkout] Could not clear checkout session snapshots on logout:', error);
   }
@@ -19126,7 +19136,7 @@ function persistOrderSnapshot(orderId) {
   try {
     const landingRoute = state.landingRouteConfig?.labelKey
       || (isFirstClimbRoute() ? 'firstclimb' : null);
-    sessionStorage.setItem('boulders_checkout_order', JSON.stringify({
+    sessionStorage.setItem(CHECKOUT_ORDER_STORAGE_KEY, JSON.stringify({
       orderId,
       orderCreatedAt: state.orderCreatedAt,
       orderCreatedDate: state.orderCreatedDate,
@@ -19168,7 +19178,7 @@ function clearStoredOrderData(reason = 'manual') {
   };
 
   try {
-    sessionStorage.removeItem('boulders_checkout_order');
+    sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
   } catch (error) {
     console.warn('[checkout] Could not clear order session data:', error);
   }
@@ -19223,7 +19233,7 @@ function resetOrderStateForProductChange(reason = 'product-change') {
   updateDiscountDisplay();
 
   try {
-    sessionStorage.removeItem('boulders_checkout_order');
+    sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
   } catch (error) {
     console.warn('[checkout] Could not clear order session data:', error);
   }
@@ -19342,7 +19352,7 @@ function invalidateCheckoutOrder(reason = 'stale') {
   state.paymentLinkGenerated = false;
   state.discountApplied = false; // coupon must be re-applied to the new order
   try {
-    sessionStorage.removeItem('boulders_checkout_order');
+    sessionStorage.removeItem(CHECKOUT_ORDER_STORAGE_KEY);
   } catch (error) {
     console.warn('[checkout] Could not clear order session data:', error);
   }
@@ -19725,8 +19735,8 @@ async function handleCheckout() {
         let acceptedRegistrationTerms = null;
         if (payload.consent?.privacy || payload.consent?.terms) {
           try {
-            const privacyTimestamp = localStorage.getItem('boulders_privacy_consent_timestamp');
-            const termsTimestamp = localStorage.getItem('boulders_terms_consent_timestamp');
+            const privacyTimestamp = localStorage.getItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY);
+            const termsTimestamp = localStorage.getItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY);
             // Use the earliest timestamp if both are present, otherwise use whichever is available
             if (privacyTimestamp && termsTimestamp) {
               acceptedRegistrationTerms = privacyTimestamp < termsTimestamp ? privacyTimestamp : termsTimestamp;
@@ -19826,7 +19836,7 @@ async function handleCheckout() {
         state.customerId = customerId;
         // Store customer data in sessionStorage for payment return
         try {
-          sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
+          sessionStorage.setItem(CHECKOUT_CUSTOMER_STORAGE_KEY, JSON.stringify({
             id: customerId,
             ...buildStoredCheckoutCustomer(payload.customer),
           }));
@@ -20014,7 +20024,7 @@ async function handleCheckout() {
                 }
               }
               try {
-                sessionStorage.setItem('boulders_checkout_customer', JSON.stringify({
+                sessionStorage.setItem(CHECKOUT_CUSTOMER_STORAGE_KEY, JSON.stringify({
                   id: customerId,
                   ...buildStoredCheckoutCustomer(payload.customer),
                 }));
@@ -21598,8 +21608,8 @@ window.exportPaymentDiagnostics = function() {
     orderId: state.orderId,
     customerId: state.customerId,
     sessionStorage: {
-      customer: sessionStorage.getItem('boulders_checkout_customer'),
-      order: sessionStorage.getItem('boulders_checkout_order'),
+      customer: sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY),
+      order: sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY),
     },
     state: {
       selectedBusinessUnit: state.selectedBusinessUnit,
@@ -22646,7 +22656,7 @@ function trackConfirmedPurchase({ order, orderId, storedOrder = null, storedCust
 
 function readStoredCheckoutOrder() {
   try {
-    const orderData = sessionStorage.getItem('boulders_checkout_order');
+    const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
     return orderData ? JSON.parse(orderData) : null;
   } catch (_) {
     return null;
@@ -22655,7 +22665,7 @@ function readStoredCheckoutOrder() {
 
 function readStoredCheckoutCustomer() {
   try {
-    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    const customerData = sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
     return customerData ? JSON.parse(customerData) : null;
   } catch (_) {
     return null;
@@ -22698,8 +22708,8 @@ async function loadOrderForConfirmation(orderId) {
     let storedCustomer = null;
     let storedOrder = null;
     try {
-      const customerData = sessionStorage.getItem('boulders_checkout_customer');
-      const orderData = sessionStorage.getItem('boulders_checkout_order');
+      const customerData = sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
+      const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
       if (customerData) {
         storedCustomer = JSON.parse(customerData);
         state.customerId = storedCustomer.id;
@@ -23200,8 +23210,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
   // CRITICAL: Restore cart and state from sessionStorage BEFORE showing failure page
   // This ensures cart is populated when user clicks "Try Payment Again"
   try {
-    const orderData = sessionStorage.getItem('boulders_checkout_order');
-    const customerData = sessionStorage.getItem('boulders_checkout_customer');
+    const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
+    const customerData = sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
     
     if (orderData) {
       const storedOrder = JSON.parse(orderData);
@@ -23556,8 +23566,8 @@ async function showPaymentFailedMessage(order, orderId, reason = null) {
           // CRITICAL: Restore cart and state from sessionStorage BEFORE navigating
           // This ensures cart is populated when showStep(4) runs
           try {
-            const orderData = sessionStorage.getItem('boulders_checkout_order');
-            const customerData = sessionStorage.getItem('boulders_checkout_customer');
+            const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
+            const customerData = sessionStorage.getItem(CHECKOUT_CUSTOMER_STORAGE_KEY);
             
             if (orderData) {
               const storedOrder = JSON.parse(orderData);
@@ -26361,7 +26371,7 @@ function showStep(stepNumber) {
       // CRITICAL: Restore selectedBusinessUnit from sessionStorage if missing
       if (!state.selectedBusinessUnit) {
         try {
-          const orderData = sessionStorage.getItem('boulders_checkout_order');
+          const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
           if (orderData) {
             const storedOrder = JSON.parse(orderData);
             if (storedOrder.selectedBusinessUnit) {
@@ -26408,7 +26418,7 @@ function showStep(stepNumber) {
       const needsRestore = (!state.cartItems || state.cartItems.length === 0) && state.orderId;
       if (needsRestore) {
         try {
-          const orderData = sessionStorage.getItem('boulders_checkout_order');
+          const orderData = sessionStorage.getItem(CHECKOUT_ORDER_STORAGE_KEY);
           if (orderData) {
             const storedOrder = JSON.parse(orderData);
             if (storedOrder.cartItems) {
@@ -27666,14 +27676,14 @@ function restoreConsentCheckboxes() {
     // Restore privacy consent - use cached DOM element if available, otherwise query
     const privacyConsent = DOM.privacyConsent || document.getElementById('privacyConsent');
     if (privacyConsent) {
-      const savedPrivacyConsent = localStorage.getItem('boulders_privacy_consent');
+      const savedPrivacyConsent = localStorage.getItem(PRIVACY_CONSENT_STORAGE_KEY);
       if (savedPrivacyConsent === 'true') {
         privacyConsent.checked = true;
         // Ensure timestamp exists - if consent is restored but timestamp is missing, create one
         // This handles edge cases where localStorage was partially cleared
-        if (!localStorage.getItem('boulders_privacy_consent_timestamp')) {
+        if (!localStorage.getItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY)) {
           const timestamp = new Date().toISOString();
-          localStorage.setItem('boulders_privacy_consent_timestamp', timestamp);
+          localStorage.setItem(PRIVACY_CONSENT_TIMESTAMP_STORAGE_KEY, timestamp);
           console.log('[Privacy Consent] Restored from localStorage, created new timestamp:', timestamp);
         } else {
           console.log('[Privacy Consent] Restored from localStorage with existing timestamp');
@@ -27686,14 +27696,14 @@ function restoreConsentCheckboxes() {
     // Restore terms consent - use cached DOM element if available, otherwise query
     const termsConsent = DOM.termsConsent || document.getElementById('termsConsent');
     if (termsConsent) {
-      const savedTermsConsent = localStorage.getItem('boulders_terms_consent');
+      const savedTermsConsent = localStorage.getItem(TERMS_CONSENT_STORAGE_KEY);
       if (savedTermsConsent === 'true') {
         termsConsent.checked = true;
         // Ensure timestamp exists - if consent is restored but timestamp is missing, create one
         // This handles edge cases where localStorage was partially cleared
-        if (!localStorage.getItem('boulders_terms_consent_timestamp')) {
+        if (!localStorage.getItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY)) {
           const timestamp = new Date().toISOString();
-          localStorage.setItem('boulders_terms_consent_timestamp', timestamp);
+          localStorage.setItem(TERMS_CONSENT_TIMESTAMP_STORAGE_KEY, timestamp);
           console.log('[Terms Consent] Restored from localStorage, created new timestamp:', timestamp);
         } else {
           console.log('[Terms Consent] Restored from localStorage with existing timestamp');
